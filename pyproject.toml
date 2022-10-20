@@ -1,0 +1,13 @@
+#[tool.usort]
+
+[build-system]
+requires = ["setuptools", "wheel", "torch"]
+
+first_party_detection = false
+
+target-version = ["py38"]
+
+excludes = [
+    "gallery",
+    "tutorials",
+]
