@@ -231,7 +231,6 @@ if hasattr(math, "prod"):
         """
         return math.prod(sequence)
 
-
 else:
 
     def prod(sequence):
