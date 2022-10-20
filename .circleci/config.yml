@@ -417,14 +417,6 @@ jobs:
           paths:
             - conda
             - env
-#      - run:
-#          # Here we create an envlist file that contains some env variables that we want the docker container to be aware of.
-#          # Normally, the CIRCLECI variable is set and available on all CI workflows: https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables.
-#          # They're available in all the other workflows (OSX and Windows).
-#          # But here, we're running the unittest_linux_gpu workflows in a docker container, where those variables aren't accessible.
-#          # So instead we dump the variables we need in env.list and we pass that file when invoking "docker run".
-#          name: export CIRCLECI env var
-#          command: echo "CIRCLECI=true" >> ./env.list
       - run:
           name: Install tensordict
 #          command: bash .circleci/unittest/linux_stable/scripts/install.sh
@@ -520,62 +512,6 @@ workflows:
           name: binary_linux_wheel_py3.10_cpu
           python_version: '3.10'
           wheel_docker_image: pytorch/manylinux-cuda102
-
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda102
-#          cu_version: cu102
-#          name: binary_linux_wheel_py3.7_cu102
-#          python_version: '3.7'
-#          wheel_docker_image: pytorch/manylinux-cuda102
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda102
-#          cu_version: cu102
-#          name: binary_linux_wheel_py3.8_cu102
-#          python_version: '3.8'
-#          wheel_docker_image: pytorch/manylinux-cuda102
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda102
-#          cu_version: cu102
-#          name: binary_linux_wheel_py3.9_cu102
-#          python_version: '3.9'
-#          wheel_docker_image: pytorch/manylinux-cuda102
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda102
-#          cu_version: cu102
-#          name: binary_linux_wheel_py3.10_cu102
-#          python_version: '3.10'
-#          wheel_docker_image: pytorch/manylinux-cuda102
-
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda113
-#          cu_version: cu113
-#          name: binary_linux_wheel_py3.7_cu113
-#          python_version: '3.7'
-#          wheel_docker_image: pytorch/manylinux-cuda113
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda113
-#          cu_version: cu113
-#          name: binary_linux_wheel_py3.8_cu113
-#          python_version: '3.8'
-#          wheel_docker_image: pytorch/manylinux-cuda113
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda113
-#          cu_version: cu113
-#          name: binary_linux_wheel_py3.9_cu113
-#          python_version: '3.9'
-#          wheel_docker_image: pytorch/manylinux-cuda113
-#
-#      - binary_linux_wheel:
-#          conda_docker_image: pytorch/conda-builder:cuda113
-#          cu_version: cu113
-#          name: binary_linux_wheel_py3.10_cu113
-#          python_version: '3.10'
-#          wheel_docker_image: pytorch/manylinux-cuda113
 
       - binary_macos_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
