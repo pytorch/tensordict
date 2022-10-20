@@ -19,5 +19,4 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$lib_dir
 export MKL_THREADING_LAYER=GNU
 
 pytest test/smoke_test.py -v --durations 20
-pytest test/smoke_test_deps.py -v --durations 20
 pytest --instafail -v --durations 20
