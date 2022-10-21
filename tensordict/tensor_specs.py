@@ -475,8 +475,9 @@ class BoundedTensorSpec(TensorSpec):
         except ValueError:
             minimum = minimum.expand_as(val)
             maximum = maximum.expand_as(val)
-            val[val < minimum] = minimum[val < minimum]
-            val[val > maximum] = maximum[val > maximum]
+            val = torch.where(
+                val < minimum, minimum, torch.where(val > maximum, maximum, val)
+            )
         return val
 
     def is_in(self, val: torch.Tensor) -> bool:
