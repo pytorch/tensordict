@@ -159,27 +159,27 @@ jobs:
           when: on_fail
           command: git --no-pager diff
 
-  lint_c:
-    docker:
-      - image: circleci/python:3.7
-    steps:
-      - apt_install:
-          args: libtinfo5
-          descr: Install additional system libraries
-      - checkout
-      - run:
-          name: Install lint utilities
-          command: |
-            curl https://oss-clang-format.s3.us-east-2.amazonaws.com/linux64/clang-format-linux64 -o clang-format
-            chmod +x clang-format
-            sudo mv clang-format /opt/clang-format
-      - run:
-          name: Lint C code
-          command: ./.circleci/unittest/linux/scripts/run-clang-format.py -r tensordict/csrc --clang-format-executable /opt/clang-format
-      - run:
-          name: Required lint modifications
-          when: on_fail
-          command: git --no-pager diff
+  # lint_c:
+  #   docker:
+  #     - image: circleci/python:3.7
+  #   steps:
+  #     - apt_install:
+  #         args: libtinfo5
+  #         descr: Install additional system libraries
+  #     - checkout
+  #     - run:
+  #         name: Install lint utilities
+  #         command: |
+  #           curl https://oss-clang-format.s3.us-east-2.amazonaws.com/linux64/clang-format-linux64 -o clang-format
+  #           chmod +x clang-format
+  #           sudo mv clang-format /opt/clang-format
+  #     - run:
+  #         name: Lint C code
+  #         command: ./.circleci/unittest/linux/scripts/run-clang-format.py -r tensordict/csrc --clang-format-executable /opt/clang-format
+  #     - run:
+  #         name: Required lint modifications
+  #         when: on_fail
+  #         command: git --no-pager diff
 
   type_check_python:
     docker:
@@ -480,7 +480,7 @@ workflows:
     jobs:
 #      - circleci_consistency
       - lint_python_and_config
-      - lint_c
+#      - lint_c
 #      - type_check_python
 
   build:
