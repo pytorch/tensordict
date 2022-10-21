@@ -12,3 +12,14 @@ from .tensordict import (
     LazyStackedTensorDict,
     SavedTensorDict,
 )
+
+__all__ = [
+    "LazyStackedTensorDict",
+    "MemmapTensor",
+    "MetaTensor",
+    "SavedTensorDict",
+    "SubTensorDict",
+    "TensorDict",
+    "merge_tensordicts",
+    "set_transfer_ownership",
+]

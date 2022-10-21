@@ -6,30 +6,55 @@
 import re
 from copy import deepcopy
 from textwrap import indent
-from typing import List, Sequence, Union, Type, Optional, Tuple
+from typing import Any, List, Optional, Sequence, Tuple, Type, Union
 
 from torch import Tensor
 from torch import distributions as d
-
-# TO REMOVE:
-from torchrl.envs.utils import exploration_mode, set_exploration_mode
-
-# TO REMOVE:
-from torchrl.modules.distributions import distributions_maps, Delta
+from torch.autograd.grad_mode import _DecoratorContextManager
 
 from tensordict.nn.common import TensorDictModule, _check_all_str
+from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.tensor_specs import TensorSpec
 from tensordict.tensordict import TensorDictBase
 
 __all__ = ["ProbabilisticTensorDictModule"]
 
 
+_INTERACTION_MODE = None
+
+
+def interaction_mode() -> Union[str, None]:
+    """Returns the current sampling mode."""
+    return _INTERACTION_MODE
+
+
+class set_interaction_mode(_DecoratorContextManager):
+    """Sets the sampling mode of all ProbabilisticTDModules to the desired mode.
+
+    Args:
+        mode (str): mode to use when the policy is being called.
+    """
+
+    def __init__(self, mode: str = "mode"):
+        super().__init__()
+        self.mode = mode
+
+    def __enter__(self) -> None:
+        global _INTERACTION_MODE
+        self.prev = _INTERACTION_MODE
+        _INTERACTION_MODE = self.mode
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        global _INTERACTION_MODE
+        _INTERACTION_MODE = self.prev
+
+
 class ProbabilisticTensorDictModule(TensorDictModule):
     """A probabilistic TD Module.
 
-    `ProbabilisticTDModule` is a special case of a TDModule where the output is
-    sampled given some rule, specified by the input :obj:`default_interaction_mode`
-    argument and the :obj:`exploration_mode()` global function.
+    `ProbabilisticTensorDictModule` is a special case of a TensorDictModule where the
+    output is sampled given some rule, specified by the input :obj:`default_interaction_mode`
+    argument and the :obj:`interaction_mode()` global function.
 
     It consists in a wrapper around another TDModule that returns a tensordict
     updated with the distribution parameters. :obj:`ProbabilisticTensorDictModule` is
@@ -76,9 +101,9 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             'mode', 'median', 'mean' or 'random' (in which case the value is sampled randomly from the distribution).
             Default is 'mode'.
             Note: When a sample is drawn, the :obj:`ProbabilisticTDModule` instance will fist look for the interaction mode
-            dictated by the `exploration_mode()` global function. If this returns `None` (its default value),
+            dictated by the `interaction_mode()` global function. If this returns `None` (its default value),
             then the `default_interaction_mode` of the `ProbabilisticTDModule` instance will be used.
-            Note that DataCollector instances will use `set_exploration_mode` to `"random"` by default.
+            Note that DataCollector instances will use `set_interaction_mode` to `"random"` by default.
         distribution_class (Type, optional): a torch.distributions.Distribution class to be used for sampling.
             Default is Delta.
         distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
@@ -232,10 +257,10 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> Tuple[d.Distribution, TensorDictBase]:
-        interaction_mode = exploration_mode()
-        if interaction_mode is None:
-            interaction_mode = self.default_interaction_mode
-        with set_exploration_mode(interaction_mode):
+        mode = interaction_mode()
+        if mode is None:
+            mode = self.default_interaction_mode
+        with set_interaction_mode(mode):
             tensordict_out = self._call_module(
                 tensordict,
                 tensordict_out=tensordict_out,
@@ -285,7 +310,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             **kwargs,
         )
         if self._requires_sample:
-            out_tensors = self._dist_sample(dist, interaction_mode=exploration_mode())
+            out_tensors = self._dist_sample(dist, interaction_mode=interaction_mode())
             if isinstance(out_tensors, Tensor):
                 out_tensors = (out_tensors,)
             tensordict_out.update(
