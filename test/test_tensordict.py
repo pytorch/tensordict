@@ -10,6 +10,7 @@ import re
 import numpy as np
 import pytest
 import torch
+from _utils_internal import get_available_devices, prod
 from tensordict import (
     LazyStackedTensorDict,
     MemmapTensor,
@@ -21,8 +22,6 @@ from tensordict.tensordict import _stack as stack_td
 from tensordict.tensordict import assert_allclose_td, make_tensordict, pad
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 from torch import multiprocessing as mp
-
-from _utils_internal import get_available_devices, prod
 
 
 @pytest.mark.parametrize("device", get_available_devices())

@@ -14,8 +14,8 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
-from tensordict.nn.probabilistic import set_interaction_mode
 from tensordict.nn.distributions import NormalParamWrapper
+from tensordict.nn.probabilistic import set_interaction_mode
 from tensordict.tensor_specs import (
     CompositeSpec,
     NdBoundedTensorSpec,
