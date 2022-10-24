@@ -14,7 +14,6 @@ from torch.autograd.grad_mode import _DecoratorContextManager
 
 from tensordict.nn.common import TensorDictModule, _check_all_str
 from tensordict.nn.distributions import Delta, distributions_maps
-from tensordict.tensor_specs import TensorSpec
 from tensordict.tensordict import TensorDictBase
 
 __all__ = ["ProbabilisticTensorDictModule"]
@@ -88,15 +87,6 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         out_key_sample (str or iterable of str): keys where the sampled values will be
             written. Importantly, if this key is part of the :obj:`out_keys` of the inner model,
             the sampling step will be skipped.
-        spec (TensorSpec): specs of the first output tensor. Used when calling td_module.random() to generate random
-            values in the target space.
-        safe (bool, optional): if True, the value of the sample is checked against the input spec. Out-of-domain sampling can
-            occur because of exploration policies or numerical under/overflow issues. As for the :obj:`spec` argument,
-            this check will only occur for the distribution sample, but not the other tensors returned by the input
-            module. If the sample is out of bounds, it is projected back onto the desired space using the
-            `TensorSpec.project`
-            method.
-            Default is :obj:`False`.
         default_interaction_mode (str, optional): default method to be used to retrieve the output value. Should be one of:
             'mode', 'median', 'mean' or 'random' (in which case the value is sampled randomly from the distribution).
             Default is 'mode'.
@@ -118,23 +108,21 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             Default is 1000
 
     Examples:
-        >>> from torchrl.modules import ProbabilisticTensorDictModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import  TanhNormal, NormalParamWrapper
         >>> import functorch, torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import ProbabilisticTensorDictModule
+        >>> from tensordict.nn.distributions import NormalParamWrapper
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
-        >>> spec = NdUnboundedContinuousTensorSpec(4)
         >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
         >>> fnet, params, buffers = functorch.make_functional_with_buffers(net)
         >>> module = TensorDictModule(fnet, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticTensorDictModule(
-        ...    module=module,
-        ...    spec=spec,
-        ...    dist_param_keys=["loc", "scale"],
-        ...    out_key_sample=["action"],
-        ...    distribution_class=TanhNormal,
-        ...    return_log_prob=True,
-        ...    )
+        ...     module=module,
+        ...     dist_param_keys=["loc", "scale"],
+        ...     out_key_sample=["action"],
+        ...     distribution_class=TanhNormal,
+        ...     return_log_prob=True,
+        ... )
         >>> _ = td_module(td, params=params, buffers=buffers)
         >>> print(td)
         TensorDict(
@@ -173,8 +161,6 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         module: TensorDictModule,
         dist_param_keys: Union[str, Sequence[str], dict],
         out_key_sample: Union[str, Sequence[str]],
-        spec: Optional[TensorSpec] = None,
-        safe: bool = False,
         default_interaction_mode: str = "mode",
         distribution_class: Type = Delta,
         distribution_kwargs: Optional[dict] = None,
@@ -203,9 +189,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         out_key_sample = [key for key in out_key_sample if key not in module_out_keys]
         self._requires_sample = bool(len(out_key_sample))
         out_keys = out_key_sample + module_out_keys
-        super().__init__(
-            module=module, spec=spec, in_keys=in_keys, out_keys=out_keys, safe=safe
-        )
+        super().__init__(module=module, in_keys=in_keys, out_keys=out_keys)
         self.dist_param_keys = dist_param_keys
         _check_all_str(self.dist_param_keys.keys())
         _check_all_str(self.dist_param_keys.values())
