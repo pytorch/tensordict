@@ -372,8 +372,10 @@ class TensorDictModule(nn.Module):
         # check if there is a non-initialized lazy module
         for m in self_copy.module.modules():
             if hasattr(m, "has_uninitialized_params") and m.has_uninitialized_params():
-                # TODO: what would we do here in the absence of a spec?
-                raise RuntimeError("Module has uninitialised parameters...")
+                raise ValueError(
+                    "Modules with uninitialized lazy components cannot be converted to "
+                    "functional modules."
+                )
 
         module = self_copy.module
         if native:
