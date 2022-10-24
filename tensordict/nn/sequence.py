@@ -374,8 +374,10 @@ class TensorDictSequential(TensorDictModule):
             >>> td_module1 = TensorDictModule(module=lazy_module1, in_keys=["some_input"], out_keys=["hidden"])
             >>> td_module2 = TensorDictModule(module=lazy_module2, in_keys=["hidden"], out_keys=["some_output"])
             >>> td_module = TensorDictSequential(td_module1, td_module2)
+            >>> # initialize lazy layers
+            >>> td_module(TensorDict({"some_input": torch.randn(18)}, batch_size=[]))
             >>> _, (params, buffers) = td_module.make_functional_with_buffers()
-            >>> print(params[0].shape) # the lazy module has been initialized
+            >>> print(params[0].shape)
             torch.Size([4, 18])
             >>> print(td_module(
             ...    TensorDict({'some_input': torch.randn(18)}, batch_size=[]),

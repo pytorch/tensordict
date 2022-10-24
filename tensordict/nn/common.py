@@ -69,6 +69,7 @@ class TensorDictModule(nn.Module):
 
     Examples:
         >>> import torch, functorch
+        >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> module = torch.nn.GRUCell(4, 8)
@@ -323,14 +324,15 @@ class TensorDictModule(nn.Module):
             A tuple of parameter and buffer tuples
 
         Examples:
+            >>> import torch.nn as nn
             >>> from tensordict import TensorDict
             >>> from tensordict.nn import TensorDictModule
-            >>> lazy_module = nn.LazyLinear(4)
+            >>> module = nn.Linear(18, 4)
             >>> td_module = TensorDictModule(
             ...     lazy_module, ["some_input"], ["some_output"]
             ... )
             >>> _, (params, buffers) = td_module.make_functional_with_buffers()
-            >>> print(params[0].shape)  # the lazy module has been initialized
+            >>> print(params[0].shape)
             torch.Size([4, 18])
             >>> print(td_module(
             ...    TensorDict({'some_input': torch.randn(18)}, batch_size=[]),
@@ -422,36 +424,6 @@ class TensorDictModuleWrapper(nn.Module):
 
     Args:
         td_module (TensorDictModule): operator to be wrapped.
-
-    Examples:
-        >>> #     This class can be used for exploration wrappers
-        >>> import functorch
-        >>> import torch
-        >>> from tensordict import TensorDict
-        >>> from tensordict.nn import TensorDictModuleWrapper, TensorDictModule
-        >>> from tensordict.utils import expand_as_right
-        >>>
-        >>> class EpsilonGreedyExploration(TensorDictModuleWrapper):
-        ...     eps = 0.5
-        ...     def forward(self, tensordict, params, buffers):
-        ...         rand_output_clone = self.random(tensordict.clone())
-        ...         det_output_clone = self.td_module(tensordict.clone(), params, buffers)
-        ...         rand_output_idx = torch.rand(tensordict.shape, device=rand_output_clone.device) < self.eps
-        ...         for key in self.out_keys:
-        ...             _rand_output = rand_output_clone.get(key)
-        ...             _det_output =  det_output_clone.get(key)
-        ...             rand_output_idx_expand = expand_as_right(rand_output_idx, _rand_output).to(_rand_output.dtype)
-        ...             tensordict.set(key,
-        ...                 rand_output_idx_expand * _rand_output + (1-rand_output_idx_expand) * _det_output)
-        ...         return tensordict
-        >>>
-        >>> td = TensorDict({"input": torch.zeros(10, 4)}, [10])
-        >>> module = torch.nn.Linear(4, 4, bias=False)  # should return a zero tensor if input is a zero tensor
-        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
-        >>> tensordict_module = TensorDictModule(module=fmodule, in_keys=["input"], out_keys=["output"])
-        >>> tensordict_module_wrapped = EpsilonGreedyExploration(tensordict_module)
-        >>> tensordict_module_wrapped(td, params=params, buffers=buffers)
-        >>> print(td.get("output"))
 
     """
 

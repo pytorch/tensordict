@@ -112,6 +112,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import ProbabilisticTensorDictModule
         >>> from tensordict.nn.distributions import NormalParamWrapper
+        >>> from torch.distributions import Normal
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
         >>> fnet, params, buffers = functorch.make_functional_with_buffers(net)
@@ -120,7 +121,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         ...     module=module,
         ...     dist_param_keys=["loc", "scale"],
         ...     out_key_sample=["action"],
-        ...     distribution_class=TanhNormal,
+        ...     distribution_class=Normal,
         ...     return_log_prob=True,
         ... )
         >>> _ = td_module(td, params=params, buffers=buffers)
