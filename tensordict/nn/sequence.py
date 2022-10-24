@@ -28,7 +28,6 @@ from tensordict.nn.common import TensorDictModule
 from tensordict.nn.probabilistic import (
     ProbabilisticTensorDictModule,
 )
-from tensordict.tensor_specs import CompositeSpec
 from tensordict.tensordict import (
     LazyStackedTensorDict,
     TensorDict,
@@ -57,32 +56,27 @@ class TensorDictSequential(TensorDictModule):
 
     TensorDictSequence supports functional, modular and vmap coding:
     Examples:
-        >>> from torchrl.modules.tensordict_module import ProbabilisticTensorDictModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import  TanhNormal, TensorDictSequential, NormalParamWrapper
         >>> import torch, functorch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import ProbabilisticTensorDictModule, TensorDictSequential
+        >>> from tensordict.nn.distributions import NormalParamWrapper
+        >>> from torch.distributions import Normal
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
-        >>> spec1 = NdUnboundedContinuousTensorSpec(4)
         >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
         >>> fnet1, params1, buffers1 = functorch.make_functional_with_buffers(net1)
         >>> fmodule1 = TensorDictModule(fnet1, in_keys=["input"], out_keys=["loc", "scale"])
         >>> td_module1 = ProbabilisticTensorDictModule(
         ...    module=fmodule1,
-        ...    spec=spec1,
         ...    dist_param_keys=["loc", "scale"],
         ...    out_key_sample=["hidden"],
-        ...    distribution_class=TanhNormal,
+        ...    distribution_class=Normal,
         ...    return_log_prob=True,
         ...    )
-        >>> spec2 = NdUnboundedContinuousTensorSpec(8)
         >>> module2 = torch.nn.Linear(4, 8)
         >>> fmodule2, params2, buffers2 = functorch.make_functional_with_buffers(module2)
         >>> td_module2 = TensorDictModule(
-        ...    module=fmodule2,
-        ...    spec=spec2,
-        ...    in_keys=["hidden"],
-        ...    out_keys=["output"],
-        ...    )
+        ...    module=fmodule2, in_keys=["hidden"], out_keys=["output"]
+        ... )
         >>> td_module = TensorDictSequential(td_module1, td_module2)
         >>> params = params1 + params2
         >>> buffers = buffers1 + buffers2
@@ -99,14 +93,6 @@ class TensorDictSequential(TensorDictModule):
             batch_size=torch.Size([3]),
             device=cpu,
             is_shared=False)
-
-        >>> # The module spec aggregates all the input specs:
-        >>> print(td_module.spec)
-        CompositeSpec(
-            hidden: NdUnboundedContinuousTensorSpec(
-                 shape=torch.Size([4]),space=None,device=cpu,dtype=torch.float32,domain=continuous),
-            output: NdUnboundedContinuousTensorSpec(
-                 shape=torch.Size([8]),space=None,device=cpu,dtype=torch.float32,domain=continuous))
 
     In the vmap case:
         >>> params = tuple(p.expand(4, *p.shape).contiguous().normal_() for p in params)
@@ -137,17 +123,8 @@ class TensorDictSequential(TensorDictModule):
     ):
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
 
-        spec = CompositeSpec()
-        for module in modules:
-            if isinstance(module, TensorDictModule) or hasattr(module, "spec"):
-                spec.update(module.spec)
-            else:
-                spec.update(CompositeSpec(**{key: None for key in module.out_keys}))
         super().__init__(
-            spec=spec,
-            module=nn.ModuleList(list(modules)),
-            in_keys=in_keys,
-            out_keys=out_keys,
+            module=nn.ModuleList(list(modules)), in_keys=in_keys, out_keys=out_keys
         )
 
         self.partial_tolerant = partial_tolerant
@@ -391,16 +368,16 @@ class TensorDictSequential(TensorDictModule):
             A tuple of parameter and buffer tuples
 
         Examples:
-            >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict
+            >>> from tensordict import TensorDict
             >>> lazy_module1 = nn.LazyLinear(4)
             >>> lazy_module2 = nn.LazyLinear(3)
-            >>> spec1 = NdUnboundedContinuousTensorSpec(18)
-            >>> spec2 = NdUnboundedContinuousTensorSpec(4)
-            >>> td_module1 = TensorDictModule(spec=spec1, module=lazy_module1, in_keys=["some_input"], out_keys=["hidden"])
-            >>> td_module2 = TensorDictModule(spec=spec2, module=lazy_module2, in_keys=["hidden"], out_keys=["some_output"])
+            >>> td_module1 = TensorDictModule(module=lazy_module1, in_keys=["some_input"], out_keys=["hidden"])
+            >>> td_module2 = TensorDictModule(module=lazy_module2, in_keys=["hidden"], out_keys=["some_output"])
             >>> td_module = TensorDictSequential(td_module1, td_module2)
+            >>> # initialize lazy layers
+            >>> td_module(TensorDict({"some_input": torch.randn(18)}, batch_size=[]))
             >>> _, (params, buffers) = td_module.make_functional_with_buffers()
-            >>> print(params[0].shape) # the lazy module has been initialized
+            >>> print(params[0].shape)
             torch.Size([4, 18])
             >>> print(td_module(
             ...    TensorDict({'some_input': torch.randn(18)}, batch_size=[]),

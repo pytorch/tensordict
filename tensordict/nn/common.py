@@ -33,14 +33,7 @@ from tensordict.nn.functional_modules import (
     FunctionalModule as rlFunctionalModule,
     FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,
 )
-from tensordict.tensor_specs import (
-    TensorSpec,
-    CompositeSpec,
-)
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import (
-    DEVICE_TYPING,
-)
 
 __all__ = [
     "TensorDictModule",
@@ -57,36 +50,6 @@ def _check_all_str(list_of_str):
         raise TypeError(f"Expected a list of strings but got: {list_of_str}")
 
 
-def _forward_hook_safe_action(module, tensordict_in, tensordict_out):
-    spec = module.spec
-    if len(module.out_keys) > 1 and not isinstance(spec, CompositeSpec):
-        raise RuntimeError(
-            "safe TensorDictModules with multiple out_keys require a CompositeSpec with matching keys. Got "
-            f"keys {module.out_keys}."
-        )
-    elif not isinstance(spec, CompositeSpec):
-        out_key = module.out_keys[0]
-        keys = [out_key]
-        values = [spec]
-    else:
-        keys = list(spec.keys())
-        values = [spec[key] for key in keys]
-    for _spec, _key in zip(values, keys):
-        if _spec is None:
-            continue
-        if not _spec.is_in(tensordict_out.get(_key)):
-            try:
-                tensordict_out.set_(
-                    _key,
-                    _spec.project(tensordict_out.get(_key)),
-                )
-            except RuntimeError:
-                tensordict_out.set(
-                    _key,
-                    _spec.project(tensordict_out.get(_key)),
-                )
-
-
 class TensorDictModule(nn.Module):
     """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
 
@@ -98,31 +61,22 @@ class TensorDictModule(nn.Module):
             contains more than one element, the values will be passed in the order given by the in_keys iterable.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
             number of tensors returned by the embedded module. Using "_" as a key avoid writing tensor to output.
-        spec (TensorSpec): specs of the output tensor. If the module outputs multiple output tensors,
-            spec characterize the space of the first output tensor.
-        safe (bool): if True, the value of the output is checked against the input spec. Out-of-domain sampling can
-            occur because of exploration policies or numerical under/overflow issues.
-            If this value is out of bounds, it is projected back onto the desired space using the :obj:`TensorSpec.project`
-            method. Default is :obj:`False`.
 
-    Embedding a neural network in a TensorDictModule only requires to specify the input and output keys. The domain spec can
-        be passed along if needed. TensorDictModule support functional and regular :obj:`nn.Module` objects. In the functional
-        case, the 'params' (and 'buffers') keyword argument must be specified:
+    Embedding a neural network in a TensorDictModule only requires to specify the input
+    and output keys. TensorDictModule support functional and regular :obj:`nn.Module`
+    objects. In the functional case, the 'params' (and 'buffers') keyword argument must
+    be specified:
 
     Examples:
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.modules import TensorDictModule
         >>> import torch, functorch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
-        >>> spec = NdUnboundedContinuousTensorSpec(8)
         >>> module = torch.nn.GRUCell(4, 8)
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> td_fmodule = TensorDictModule(
-        ...    module=fmodule,
-        ...    spec=spec,
-        ...    in_keys=["input", "hidden"],
-        ...    out_keys=["output"],
-        ...    )
+        ...    module=fmodule, in_keys=["input", "hidden"], out_keys=["output"]
+        ... )
         >>> td_functional = td_fmodule(td.clone(), params=params, buffers=buffers)
         >>> print(td_functional)
         TensorDict(
@@ -135,11 +89,8 @@ class TensorDictModule(nn.Module):
 
     In the stateful case:
         >>> td_module = TensorDictModule(
-        ...    module=module,
-        ...    spec=spec,
-        ...    in_keys=["input", "hidden"],
-        ...    out_keys=["output"],
-        ...    )
+        ...    module=module, in_keys=["input", "hidden"], out_keys=["output"]
+        ... )
         >>> td_stateful = td_module(td.clone())
         >>> print(td_stateful)
         TensorDict(
@@ -174,8 +125,6 @@ class TensorDictModule(nn.Module):
         ],
         in_keys: Iterable[str],
         out_keys: Iterable[str],
-        spec: Optional[TensorSpec] = None,
-        safe: bool = False,
     ):
 
         super().__init__()
@@ -194,45 +143,6 @@ class TensorDictModule(nn.Module):
                 'key "_" is for ignoring output, it should not be used in input keys'
             )
 
-        if spec is not None and not isinstance(spec, TensorSpec):
-            raise TypeError("spec must be a TensorSpec subclass")
-        elif spec is not None and not isinstance(spec, CompositeSpec):
-            if len(self.out_keys) > 1:
-                raise RuntimeError(
-                    f"got more than one out_key for the TensorDictModule: {self.out_keys},\nbut only one spec. "
-                    "Consider using a CompositeSpec object or no spec at all."
-                )
-            spec = CompositeSpec(**{self.out_keys[0]: spec})
-        elif spec is not None and isinstance(spec, CompositeSpec):
-            if "_" in spec.keys():
-                warnings.warn('got a spec with key "_": it will be ignored')
-        elif spec is None:
-            spec = CompositeSpec()
-
-        if set(spec.keys()) != set(self.out_keys):
-            # then assume that all the non indicated specs are None
-            for key in self.out_keys:
-                if key not in spec:
-                    spec[key] = None
-
-        if set(spec.keys()) != set(self.out_keys):
-            raise RuntimeError(
-                f"spec keys and out_keys do not match, got: {spec.keys()} and {self.out_keys} respectively"
-            )
-
-        self._spec = spec
-        self.safe = safe
-        if safe:
-            if spec is None or (
-                isinstance(spec, CompositeSpec)
-                and all(_spec is None for _spec in spec.values())
-            ):
-                raise RuntimeError(
-                    "`TensorDictModule(spec=None, safe=True)` is not a valid configuration as the tensor "
-                    "specs are not specified"
-                )
-            self.register_forward_hook(_forward_hook_safe_action)
-
         self.module = module
 
     @property
@@ -241,18 +151,6 @@ class TensorDictModule(nn.Module):
             self.module,
             (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
         )
-
-    @property
-    def spec(self) -> CompositeSpec:
-        return self._spec
-
-    @spec.setter
-    def spec(self, spec: CompositeSpec) -> None:
-        if not isinstance(spec, CompositeSpec):
-            raise RuntimeError(
-                f"Trying to set an object of type {type(spec)} as a tensorspec but expected a CompositeSpec instance."
-            )
-        self._spec = spec
 
     def _write_to_tensordict(
         self,
@@ -392,37 +290,11 @@ class TensorDictModule(nn.Module):
         )
         return tensordict_out
 
-    def random(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """Samples a random element in the target space, irrespective of any input.
-
-        If multiple output keys are present, only the first will be written in the input :obj:`tensordict`.
-
-        Args:
-            tensordict (TensorDictBase): tensordict where the output value should be written.
-
-        Returns:
-            the original tensordict with a new/updated value for the output key.
-
-        """
-        key0 = self.out_keys[0]
-        tensordict.set(key0, self.spec.rand(tensordict.batch_size))
-        return tensordict
-
-    def random_sample(self, tensordict: TensorDictBase) -> TensorDictBase:
-        """See :obj:`TensorDictModule.random(...)`."""
-        return self.random(tensordict)
-
     @property
     def device(self):
         for p in self.parameters():
             return p.device
         return torch.device("cpu")
-
-    def to(self, dest: Union[torch.dtype, DEVICE_TYPING]) -> TensorDictModule:
-        if hasattr(self, "spec") and self.spec is not None:
-            self.spec = self.spec.to(dest)
-        out = super().to(dest)
-        return out
 
     def __repr__(self) -> str:
         fields = indent(
@@ -452,13 +324,15 @@ class TensorDictModule(nn.Module):
             A tuple of parameter and buffer tuples
 
         Examples:
-            >>> from torchrl.data import NdUnboundedContinuousTensorSpec, TensorDict
-            >>> lazy_module = nn.LazyLinear(4)
-            >>> spec = NdUnboundedContinuousTensorSpec(18)
-            >>> td_module = TensorDictModule(lazy_module, spec, ["some_input"],
-            ...     ["some_output"])
+            >>> import torch.nn as nn
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import TensorDictModule
+            >>> module = nn.Linear(18, 4)
+            >>> td_module = TensorDictModule(
+            ...     lazy_module, ["some_input"], ["some_output"]
+            ... )
             >>> _, (params, buffers) = td_module.make_functional_with_buffers()
-            >>> print(params[0].shape)  # the lazy module has been initialized
+            >>> print(params[0].shape)
             torch.Size([4, 18])
             >>> print(td_module(
             ...    TensorDict({'some_input': torch.randn(18)}, batch_size=[]),
@@ -498,9 +372,10 @@ class TensorDictModule(nn.Module):
         # check if there is a non-initialized lazy module
         for m in self_copy.module.modules():
             if hasattr(m, "has_uninitialized_params") and m.has_uninitialized_params():
-                pseudo_input = self_copy.spec.rand()
-                self_copy.module(pseudo_input)
-                break
+                raise ValueError(
+                    "Modules with uninitialized lazy components cannot be converted to "
+                    "functional modules."
+                )
 
         module = self_copy.module
         if native:
@@ -551,37 +426,6 @@ class TensorDictModuleWrapper(nn.Module):
 
     Args:
         td_module (TensorDictModule): operator to be wrapped.
-
-    Examples:
-        >>> #     This class can be used for exploration wrappers
-        >>> import functorch
-        >>> from torchrl.modules import TensorDictModuleWrapper, TensorDictModule
-        >>> from torchrl.data import TensorDict, NdUnboundedContinuousTensorSpec
-        >>> from torchrl.data.utils import expand_as_right
-        >>> import torch
-        >>>
-        >>> class EpsilonGreedyExploration(TensorDictModuleWrapper):
-        ...     eps = 0.5
-        ...     def forward(self, tensordict, params, buffers):
-        ...         rand_output_clone = self.random(tensordict.clone())
-        ...         det_output_clone = self.td_module(tensordict.clone(), params, buffers)
-        ...         rand_output_idx = torch.rand(tensordict.shape, device=rand_output_clone.device) < self.eps
-        ...         for key in self.out_keys:
-        ...             _rand_output = rand_output_clone.get(key)
-        ...             _det_output =  det_output_clone.get(key)
-        ...             rand_output_idx_expand = expand_as_right(rand_output_idx, _rand_output).to(_rand_output.dtype)
-        ...             tensordict.set(key,
-        ...                 rand_output_idx_expand * _rand_output + (1-rand_output_idx_expand) * _det_output)
-        ...         return tensordict
-        >>>
-        >>> td = TensorDict({"input": torch.zeros(10, 4)}, [10])
-        >>> module = torch.nn.Linear(4, 4, bias=False)  # should return a zero tensor if input is a zero tensor
-        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
-        >>> spec = NdUnboundedContinuousTensorSpec(4)
-        >>> tensordict_module = TensorDictModule(module=fmodule, spec=spec, in_keys=["input"], out_keys=["output"])
-        >>> tensordict_module_wrapped = EpsilonGreedyExploration(tensordict_module)
-        >>> tensordict_module_wrapped(td, params=params, buffers=buffers)
-        >>> print(td.get("output"))
 
     """
 
