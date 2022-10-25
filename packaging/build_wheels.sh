@@ -17,9 +17,6 @@ if [[ "$(uname)" == Darwin || "$OSTYPE" == "msys" ]]; then
     python_exec="$(which python)"
     bin_path=$(dirname $python_exec)
 else
-    # Install auditwheel to get some inspection utilities
-    pip_install auditwheel
-
     # Point to custom libraries
     export LD_LIBRARY_PATH=$(pwd)/ext_libraries/lib:$LD_LIBRARY_PATH
 fi

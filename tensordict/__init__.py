@@ -13,6 +13,11 @@ from .tensordict import (
     SavedTensorDict,
 )
 
+try:
+    from .version import __version__
+except ImportError:
+    __version__ = None
+
 __all__ = [
     "LazyStackedTensorDict",
     "MemmapTensor",
