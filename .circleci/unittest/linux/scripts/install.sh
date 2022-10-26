@@ -40,4 +40,4 @@ python -c "import functorch"
 pip3 install torchsnapshot-nightly
 
 printf "* Installing tensordict\n"
-python setup.py develop
+pip3 install -e .
