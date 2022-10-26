@@ -43,4 +43,4 @@ printf "* Installing tensordict\n"
 printf "g++ version: "
 gcc --version
 
-python setup.py develop
+pip3 install -e .
