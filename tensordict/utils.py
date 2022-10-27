@@ -21,6 +21,8 @@ try:
     except ImportError:
         from torch._C._functorch import is_batchedtensor, get_unwrapped
 
+    import functorch.dim
+
     _has_functorch = True
 except ImportError:
     _has_functorch = False
@@ -117,6 +119,10 @@ def _getitem_batch_size(
                 raise RuntimeError(
                     f"The shape {shape} is incompatible with " f"the index {items}."
                 )
+            continue
+        elif _has_functorch and isinstance(_item, functorch.dim.Dim):
+            # any first class dimensions are ommited from the new batch size
+            next(iter_bs)
             continue
         else:
             raise NotImplementedError(

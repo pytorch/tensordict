@@ -62,6 +62,8 @@ try:
     except ImportError:
         from torch._C._functorch import is_batchedtensor
 
+    import functorch.dim
+
     _has_functorch = True
 except ImportError:
     _has_functorch = False
@@ -1532,7 +1534,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         if isinstance(idx, np.ndarray):
             idx = torch.tensor(idx, device=self.device)
-        if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
+        if idx is Ellipsis or (
+            isinstance(idx, tuple)
+            and any(
+                Ellipsis == item
+                for item in idx
+                # equality check against a functorch.dim.Dim can fail if dim is unbound
+                # so we filter them out since the equality cannot be satisfied anyway
+                if not (_has_functorch and isinstance(item, functorch.dim.Dim))
+            )
+        ):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
         # if return_simple_view and not self.is_memmap():
@@ -1844,12 +1855,17 @@ class TensorDict(TensorDictBase):
             if self._is_memmap is not None
             else isinstance(proc_value, MemmapTensor)
         )
+        underlying_tensor = (
+            proc_value._tensor
+            if _has_functorch and isinstance(proc_value, functorch.dim.Tensor)
+            else proc_value
+        )
         is_shared = (
             self._is_shared
             if self._is_shared is not None
-            else proc_value.is_shared()
-            if isinstance(proc_value, (TensorDictBase, MemmapTensor))
-            or not is_batchedtensor(proc_value)
+            else underlying_tensor.is_shared()
+            if isinstance(underlying_tensor, (TensorDictBase, MemmapTensor))
+            or not is_batchedtensor(underlying_tensor)
             else False
         )
         return MetaTensor(
@@ -4651,6 +4667,9 @@ def _check_keys(
 
 
 _accepted_classes = (Tensor, MemmapTensor, TensorDictBase)
+
+if _has_functorch:
+    _accepted_classes = _accepted_classes + (functorch.dim.Tensor,)
 
 
 def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_device):
