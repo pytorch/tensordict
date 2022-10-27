@@ -291,6 +291,11 @@ class MetaTensor:
         )
 
 
+class MetaTensorFirstClassDim(MetaTensor):
+    def order(self, *args):
+        ...
+
+
 def _stack_meta(
     list_of_meta_tensors: Sequence[MetaTensor],
     dim: int = 0,

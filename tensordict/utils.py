@@ -8,8 +8,9 @@ from __future__ import annotations
 import collections
 import math
 import typing
+from itertools import chain, repeat
 from numbers import Number
-from typing import Tuple, List, Union, Any
+from typing import Optional, Tuple, List, Union, Any
 
 import numpy as np
 import torch
@@ -24,6 +25,7 @@ try:
     import functorch.dim
 
     _has_functorch = True
+    LEVELS_TYPING = Tuple[Union[int, functorch.dim.Dim], ...]
 except ImportError:
     _has_functorch = False
 
@@ -134,6 +136,42 @@ def _getitem_batch_size(
     return torch.Size(bs)
 
 
+def _get_first_class_dim_levels(
+    idx: INDEX_TYPING, batch_size: torch.Size, levels: Optional[LEVELS_TYPING]
+) -> LEVELS_TYPING:
+    # utility function to calculate levels of TensorDict that has been indexed
+    # (possibly multiple times) with first class dimensions. We can't rely on
+    # recovering the levels from items in the TensorDict because it should be possible
+    # to slice a TensorDict with defined batch_size but no items
+    batch_dims = len(batch_size)
+
+    if levels is None:
+        levels = list(range(-batch_dims, 0))
+    else:
+        levels = list(levels)
+
+    n_dims = sum(isinstance(item, functorch.dim.Dim) for item in idx) + sum(
+        isinstance(item, functorch.dim.Dim) for item in levels
+    )
+
+    level = n_dims - batch_dims
+    # pad idx with None in case it isn't as long as batch_size
+    idx_iter = chain(idx, repeat(None))
+
+    for i in range(batch_dims):
+        if isinstance(levels[i], functorch.dim.Dim):
+            continue
+
+        item = next(idx_iter)
+        if isinstance(item, functorch.dim.Dim):
+            levels[i] = item
+        else:
+            levels[i] = level
+            level += 1
+
+    return tuple(levels)
+
+
 def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
     """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
 
@@ -236,7 +274,6 @@ if hasattr(math, "prod"):
 
         """
         return math.prod(sequence)
-
 
 else:
 
