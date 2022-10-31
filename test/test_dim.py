@@ -1,6 +1,14 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+from itertools import permutations
+
 import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import MetaTensor, TensorDict
+from tensordict.metatensor import _MetaTensorWithDims
 
 try:
     from functorch.dim import Dim, dims
@@ -64,3 +72,47 @@ def test_reshape():
     # FIXME: equality comparison of functorch.dim.Tensor with torch.Tensor causes
     # an exception, so compare to underlying tensor for now.
     assert (td_dim.reshape(3, 1)["a"]._tensor == td["a"].reshape(2, 3, 1, -1)).all()
+
+
+def test_metatensor_indexing():
+    t = torch.empty(2, 3, 4, 5)
+    mt = MetaTensor(2, 3, 4, 5)
+
+    d1, d2, d3 = dims(3)
+
+    t_dim = t[d1]
+    mt_dim = mt[d1]
+
+    assert t_dim.shape == mt_dim.shape
+    assert t_dim._levels == mt_dim._levels
+
+
+def test_metatensor_order():
+    t = torch.empty(2, 3, 4, 5, 6, 7)
+    mt = MetaTensor(2, 3, 4, 5, 6, 7)
+
+    d1, d2, d3 = dims(3)
+
+    t_dim = t[d1, :, d2, ..., d3]
+    mt_dim = mt[d1, :, d2, ..., d3]
+
+    for r in range(4):
+        for args in permutations((d1, d2, d3), r=r):
+            mt_ordered = mt_dim.order(*args)
+            t_ordered = t_dim.order(*args)
+
+            assert mt_ordered.shape == t_ordered.shape
+            if r == 3:
+                assert not isinstance(mt_ordered, _MetaTensorWithDims)
+            else:
+                assert mt_ordered.underlying_shape == t_ordered._tensor.shape
+                try:
+                    mt_ordered._levels == t_ordered._levels
+                except RuntimeError:
+                    # FIXME: If the levels are not equal, we get a confusing
+                    # RuntimeError rather than simply False. Catch this error and raise
+                    # a saner AssertionError to help debugging
+                    raise AssertionError(
+                        "Levels do not match: "
+                        f"{mt_ordered._levels} != {t_ordered._levels}"
+                    )
