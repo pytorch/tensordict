@@ -1,4 +1,4 @@
-# pad_size, value Copyright (c) Meta Platforms, Inc. and affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
@@ -43,13 +43,14 @@ from tensordict.memmap import MemmapTensor
 from tensordict.metatensor import MetaTensor
 from tensordict.utils import (
     DEVICE_TYPING,
+    INDEX_TYPING,
+    LEVELS_TYPING,
     expand_right,
     expand_as_right,
-    INDEX_TYPING,
 )
 from tensordict.utils import (
     _getitem_batch_size,
-    _get_first_class_dim_levels,
+    _get_updated_levels,
     _sub_index,
     convert_ellipsis_to_idx,
     KeyDependentDefaultDict,
@@ -57,15 +58,20 @@ from tensordict.utils import (
 )
 
 _has_functorch = False
+_has_functorch_dim = False
 try:
     try:
         from functorch._C import is_batchedtensor
     except ImportError:
         from torch._C._functorch import is_batchedtensor
 
-    import functorch.dim
+    try:
+        import functorch.dim
 
-    LEVELS_TYPING = Tuple[Union[int, functorch.dim.Dim], ...]
+        _has_functorch_dim = True
+    except:
+        _has_functorch_dim = False
+
     _has_functorch = True
 except ImportError:
     _has_functorch = False
@@ -1518,7 +1524,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             isinstance(_idx, str) for _idx in idx
         ) not in [len(idx), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
-        elif isinstance(idx, (Number, functorch.dim.Dim)):
+        elif isinstance(idx, Number) or (
+            _has_functorch_dim and isinstance(idx, functorch.dim.Dim)
+        ):
             idx = (idx,)
         elif isinstance(idx, tuple) and all(
             isinstance(sub_idx, str) for sub_idx in idx
@@ -1543,14 +1551,17 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 for item in idx
                 # equality check against a functorch.dim.Dim can fail if dim is unbound
                 # so we filter them out since the equality cannot be satisfied anyway
-                if not isinstance(item, functorch.dim.Dim)
+                if not (_has_functorch_dim and isinstance(item, functorch.dim.Dim))
             )
         ):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
-        if _has_functorch and (
+        if _has_functorch_dim and (
             isinstance(self, _TensorDictWithDims)
-            or any(isinstance(item, functorch.dim.Dim) for item in idx)
+            or (
+                isinstance(idx, tuple)
+                and any(isinstance(item, functorch.dim.Dim) for item in idx)
+            )
         ):
             if isinstance(self, _TensorDictWithDims):
                 levels = self._levels
@@ -1559,7 +1570,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 levels = None
                 original_batch_size = self.batch_size
 
-            levels = _get_first_class_dim_levels(idx, original_batch_size, levels)
+            levels = _get_updated_levels(idx, original_batch_size, levels)
 
             return _TensorDictWithDims(
                 source={key: item[idx] for key, item in self.items()},
@@ -1889,7 +1900,7 @@ class TensorDict(TensorDictBase):
         )
         underlying_tensor = (
             proc_value._tensor
-            if _has_functorch and isinstance(proc_value, functorch.dim.Tensor)
+            if _has_functorch_dim and isinstance(proc_value, functorch.dim.Tensor)
             else proc_value
         )
         is_shared = (
@@ -2411,11 +2422,12 @@ class _TensorDictWithDims(TensorDict):
             device=self.device,
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         repr_ = super().__repr__()
         sizes = tuple(self.original_batch_size)
         dims = tuple(
-            l + self.batch_dims if isinstance(l, int) else l for l in self._levels
+            lvl + self.batch_dims if isinstance(lvl, int) else lvl
+            for lvl in self._levels
         )
         return f"{repr_}\nwith dims={dims} sizes={sizes}"
 
@@ -4763,7 +4775,7 @@ def _check_keys(
 
 _accepted_classes = (Tensor, MemmapTensor, TensorDictBase)
 
-if _has_functorch:
+if _has_functorch_dim:
     _accepted_classes = _accepted_classes + (functorch.dim.Tensor,)
 
 

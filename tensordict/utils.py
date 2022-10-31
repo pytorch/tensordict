@@ -16,18 +16,24 @@ import numpy as np
 import torch
 from torch import Tensor
 
+DIM_TYPING = Any
+LEVELS_TYPING = Any
 try:
     try:
         from functorch._C import is_batchedtensor, get_unwrapped
     except ImportError:
         from torch._C._functorch import is_batchedtensor, get_unwrapped
 
-    import functorch.dim
+    try:
+        import functorch.dim
 
-    _has_functorch = True
-    LEVELS_TYPING = Tuple[Union[int, functorch.dim.Dim], ...]
+        LEVELS_TYPING = Tuple[Union[int, functorch.dim.Dim], ...]
+        DIM_TYPING = functorch.dim.Dim
+        _has_functorch_dim = True
+    except ImportError:
+        _has_functorch_dim = False
 except ImportError:
-    _has_functorch = False
+    pass
 
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DEVICE_TYPING = Union[torch.device, str, int]
@@ -122,7 +128,7 @@ def _getitem_batch_size(
                     f"The shape {shape} is incompatible with " f"the index {items}."
                 )
             continue
-        elif _has_functorch and isinstance(_item, functorch.dim.Dim):
+        elif _has_functorch_dim and isinstance(_item, functorch.dim.Dim):
             # any first class dimensions are ommited from the new batch size
             next(iter_bs)
             continue
@@ -136,7 +142,7 @@ def _getitem_batch_size(
     return torch.Size(bs)
 
 
-def _get_first_class_dim_levels(
+def _get_updated_levels(
     idx: INDEX_TYPING, batch_size: torch.Size, levels: Optional[LEVELS_TYPING]
 ) -> LEVELS_TYPING:
     # utility function to calculate levels of TensorDict that has been indexed
@@ -170,6 +176,43 @@ def _get_first_class_dim_levels(
             level += 1
 
     return tuple(levels)
+
+
+# FIXME: this is a workaround since equality comparisons with unbound
+# functorch.dim.Tensors results in a ValueError.
+def _is_in(d: DIM_TYPING, args: LEVELS_TYPING) -> bool:
+    return any(d is item for item in args)
+
+
+def _get_ordered_levels(args: LEVELS_TYPING, levels: LEVELS_TYPING):
+    # computes updated levels after a call to order
+
+    # the number of positional dimensions is the number of arguments plus the existing
+    # number of positional arguments.
+    level = -(
+        len(args) + sum(not isinstance(level, functorch.dim.Dim) for level in levels)
+    )
+
+    new_levels = []
+
+    # any leading first-class dimensions that don't appear in args stay where they are
+    i = 0
+    while isinstance(levels[i], functorch.dim.Dim) and not _is_in(levels[i], args):
+        new_levels.append(levels[i])
+        i += 1
+
+    # next we position all of the ordered levels
+    for _ in args:
+        new_levels.append(level)
+        level += 1
+
+    # finally we add the remaining levels, skipping any entries that we just ordered
+    while i < len(levels):
+        if not (isinstance(levels[i], functorch.dim.Dim) and _is_in(levels[i], args)):
+            new_levels.append(levels[i])
+        i += 1
+
+    return tuple(new_levels)
 
 
 def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
