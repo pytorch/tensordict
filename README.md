@@ -1,3 +1,9 @@
+# Disclaimer
+
+TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
+Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility 
+with the broader pytorch ecosystem.
+
 # TensorDict
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.
@@ -58,7 +64,7 @@ assert tensordict["key 3"].device is torch.device("cuda:0")
 ### Tensor-like features
 
 TensorDict objects can be indexed exactly like tensors. The resulting of indexing
-a TensorDict is another TensorDict containing tensors indexed along the required dimentiosn:
+a TensorDict is another TensorDict containing tensors indexed along the required dimension:
 ```python
 tensordict = TensorDict({
     "key 1": torch.ones(3, 4, 5),
@@ -69,7 +75,7 @@ assert sub_tensordict.shape == torch.Size([3, 2])
 assert sub_tensordict["key 1"].shape == torch.Size([3, 2, 5])
 ```
 
-Similary, one can build tensordicts by stacking or concatenating single tensordicts:
+Similarly, one can build tensordicts by stacking or concatenating single tensordicts:
 ```python
 tensordicts = [TensorDict({
     "key 1": torch.ones(3, 4, 5),
