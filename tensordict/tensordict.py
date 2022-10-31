@@ -50,6 +50,7 @@ from tensordict.utils import (
 )
 from tensordict.utils import (
     _getitem_batch_size,
+    _get_ordered_levels,
     _get_updated_levels,
     _sub_index,
     convert_ellipsis_to_idx,
@@ -1599,22 +1600,23 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         ):
             if isinstance(self, _TensorDictWithDims):
                 levels = self._levels
-                original_batch_size = self.original_batch_size
+                source_batch_size = self._source_batch_size
             else:
                 levels = None
-                original_batch_size = self.batch_size
+                source_batch_size = self.batch_size
 
-            levels = _get_updated_levels(idx, original_batch_size, levels)
+            levels = _get_updated_levels(idx, source_batch_size, levels)
 
             return _TensorDictWithDims(
                 source={key: item[idx] for key, item in self.items()},
                 levels=levels,
                 batch_size=_getitem_batch_size(self.batch_size, idx),
-                original_batch_size=original_batch_size,
+                source_batch_size=source_batch_size,
                 device=self.device,
                 _meta_source={
                     key: item[idx]
-                    for key, item in self.items_meta(make_unset=False)
+                    # make_unset so that all items are indexed with the first-class dims
+                    for key, item in self.items_meta(make_unset=True)
                     if not item.is_tensordict()
                 },
             )
@@ -2413,22 +2415,22 @@ class _TensorDictWithDims(TensorDict):
         source: Union[TensorDictBase, dict],
         levels: LEVELS_TYPING,
         batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
-        original_batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
+        source_batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
         _run_checks: bool = True,
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
     ) -> None:
-        if len(levels) != len(original_batch_size):
+        if len(levels) != len(source_batch_size):
             raise ValueError(
                 "The number of dimensions specified by levels should match the number "
-                "of batch dimensions (length of original_batch_size)"
+                "of batch dimensions (length of source_batch_size)"
             )
 
         self._levels = levels
         self._dims = tuple(d for d in levels if isinstance(d, functorch.dim.Dim))
-        self.original_batch_size = self._parse_batch_size(source, original_batch_size)
+        self._source_batch_size = self._parse_batch_size(source, source_batch_size)
 
         super().__init__(
             source,
@@ -2452,20 +2454,50 @@ class _TensorDictWithDims(TensorDict):
         )
 
     def order(self, *args) -> TensorDict:
+        ordered_levels = _get_ordered_levels(args, self._levels)
+        ordered_batch_size = torch.Size([d.size for d in args] + list(self.batch_size))
+
+        if any(isinstance(level, functorch.dim.Dim) for level in ordered_levels):
+            ordered_source_shape = torch.Size(
+                [
+                    level.size
+                    if isinstance(level, functorch.dim.Dim)
+                    else ordered_batch_size[level]
+                    for level in ordered_levels
+                ]
+            )
+
+            return _TensorDictWithDims(
+                source={key: item.order(*args) for key, item in self.items()},
+                levels=ordered_levels,
+                batch_size=ordered_batch_size,
+                source_batch_size=ordered_source_shape,
+                device=self.device,
+                _meta_source={
+                    key: item.order(*args)
+                    for key, item in self.items_meta()
+                    if not item.is_tensordict()
+                },
+                _is_shared=self._is_shared,
+                _is_memmap=self._is_memmap,
+            )
+
         return TensorDict(
             source={key: item.order(*args) for key, item in self.items()},
+            batch_size=ordered_batch_size,
+            device=self.device,
             _meta_source={
                 key: item.order(*args)
                 for key, item in self.items_meta()
                 if not item.is_tensordict()
             },
-            batch_size=self._original_batch_size,
-            device=self.device,
+            _is_shared=self._is_shared,
+            _is_memmap=self._is_memmap,
         )
 
     def __repr__(self) -> str:
         repr_ = super().__repr__()
-        sizes = tuple(self.original_batch_size)
+        sizes = tuple(self._source_batch_size)
         dims = self.all_dims
         return f"{repr_}\nwith dims={dims} sizes={sizes}"
 

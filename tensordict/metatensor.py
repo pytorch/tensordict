@@ -201,7 +201,14 @@ class MetaTensor:
 
     def __getitem__(self, item: INDEX_TYPING) -> MetaTensor:
         if item is Ellipsis or (
-            isinstance(item, tuple) and any(i == Ellipsis for i in item)
+            isinstance(item, tuple)
+            and any(
+                i == Ellipsis
+                for i in item
+                # equality check against a functorch.dim.Dim can fail if dim is unbound
+                # so we filter them out since the equality cannot be satisfied anyway
+                if not (_has_functorch_dim and isinstance(i, functorch.dim.Dim))
+            )
         ):
             item = convert_ellipsis_to_idx(item, self.shape)
 
@@ -391,16 +398,16 @@ class _MetaTensorWithDims(MetaTensor):
     def order(self, *args) -> MetaTensor:
         ordered_levels = _get_ordered_levels(args, self._levels)
         ordered_shape = torch.Size([d.size for d in args] + list(self.shape))
-        ordered_underlying_shape = torch.Size(
-            [
-                level.size
-                if isinstance(level, functorch.dim.Dim)
-                else ordered_shape[level]
-                for level in ordered_levels
-            ]
-        )
 
         if any(isinstance(level, functorch.dim.Dim) for level in ordered_levels):
+            ordered_underlying_shape = torch.Size(
+                [
+                    level.size
+                    if isinstance(level, functorch.dim.Dim)
+                    else ordered_shape[level]
+                    for level in ordered_levels
+                ]
+            )
             return _MetaTensorWithDims(
                 *ordered_shape,
                 levels=ordered_levels,

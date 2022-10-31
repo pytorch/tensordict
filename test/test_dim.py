@@ -9,6 +9,7 @@ import pytest
 import torch
 from tensordict import MetaTensor, TensorDict
 from tensordict.metatensor import _MetaTensorWithDims
+from tensordict.tensordict import _TensorDictWithDims
 
 try:
     from functorch.dim import Tensor, dims
@@ -95,6 +96,44 @@ def test_reshape():
     )
 
 
+def test_checks_at_set():
+    td = TensorDict({}, batch_size=[2, 3])
+
+    d1, d2 = dims(2)
+    td_dim = td[d1]
+
+    with pytest.raises(ValueError, match="First-class and positional dimensions"):
+        td_dim["a"] = torch.rand(2, 3, 4)[:, d2]
+
+    with pytest.raises(ValueError, match="First-class and positional dimensions"):
+        td_dim["b"] = torch.rand(2, 3, 4)[d1, d2]
+
+    t = torch.rand(2, 3, 4)
+    td_dim["c"] = t[d1]
+    assert td_dim["c"].dims == (d1,)
+    torch.testing.assert_close(td_dim["c"]._tensor, t)
+
+
+def test_tensordict_order():
+    t = torch.rand(2, 3, 4, 5, 6)
+    td = TensorDict({"a": torch.rand(2, 3, 4, 5, 6, 7, 8)}, batch_size=[2, 3, 4, 5, 6])
+    d1, d2, d3 = dims(3)
+
+    t_dim = t[d1, :, d2, :, d3]
+    td_dim = td[d1, :, d2, :, d3]
+
+    for r in range(4):
+        for args in permutations((d1, d2, d3), r=r):
+            t_ordered = t_dim.order(*args)
+            td_ordered = td_dim.order(*args)
+
+            assert td_ordered.shape == t_ordered.shape[: td_ordered.batch_dims]
+            if r == 3:
+                assert not isinstance(td_ordered, _TensorDictWithDims)
+            else:
+                td_ordered._source_batch_size == t_ordered._tensor.shape
+
+
 def test_metatensor_indexing():
     t = torch.empty(2, 3, 4, 5)
     mt = MetaTensor(2, 3, 4, 5)
@@ -104,8 +143,20 @@ def test_metatensor_indexing():
     t_dim = t[d1]
     mt_dim = mt[d1]
 
+    t_dim2 = t_dim[:, d2]
+    mt_dim2 = mt_dim[:, d2]
+
+    t_dim3 = t_dim2[d3]
+    mt_dim3 = mt_dim2[d3]
+
     assert t_dim.shape == mt_dim.shape
     assert t_dim._levels == mt_dim._levels
+
+    assert t_dim2.shape == mt_dim2.shape
+    assert t_dim2._levels == mt_dim2._levels
+
+    assert t_dim3.shape == mt_dim3.shape
+    assert t_dim3._levels == mt_dim3._levels
 
 
 def test_metatensor_order():
@@ -137,21 +188,3 @@ def test_metatensor_order():
                         "Levels do not match: "
                         f"{mt_ordered._levels} != {t_ordered._levels}"
                     )
-
-
-def test_checks_at_set():
-    td = TensorDict({}, batch_size=[2, 3])
-
-    d1, d2 = dims(2)
-    td_dim = td[d1]
-
-    with pytest.raises(ValueError, match="First-class and positional dimensions"):
-        td_dim["a"] = torch.rand(2, 3, 4)[:, d2]
-
-    with pytest.raises(ValueError, match="First-class and positional dimensions"):
-        td_dim["b"] = torch.rand(2, 3, 4)[d1, d2]
-
-    t = torch.rand(2, 3, 4)
-    td_dim["c"] = t[d1]
-    assert td_dim["c"].dims == (d1,)
-    torch.testing.assert_close(td_dim["c"]._tensor, t)
