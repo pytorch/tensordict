@@ -79,7 +79,7 @@ def test_view():
 
     # FIXME: equality comparison of functorch.dim.Tensor with torch.Tensor causes
     # an exception, so compare to underlying tensor for now.
-    assert (td_dim.view(20)["a"]._tensor == td["a"].view(3, 20, 6)).all()
+    torch.testing.assert_close(td_dim.view(20)["a"]._tensor, td["a"].view(3, 20, 6))
 
 
 def test_reshape():
@@ -90,7 +90,9 @@ def test_reshape():
 
     # FIXME: equality comparison of functorch.dim.Tensor with torch.Tensor causes
     # an exception, so compare to underlying tensor for now.
-    assert (td_dim.reshape(3, 1)["a"]._tensor == td["a"].reshape(2, 3, 1, -1)).all()
+    torch.testing.assert_close(
+        td_dim.reshape(3, 1)["a"]._tensor, td["a"].reshape(2, 3, 1, -1)
+    )
 
 
 def test_metatensor_indexing():
@@ -144,12 +146,12 @@ def test_checks_at_set():
     td_dim = td[d1]
 
     with pytest.raises(ValueError, match="First-class and positional dimensions"):
-        td_dim["a"] = torch.empty(2, 3, 4)[:, d2]
+        td_dim["a"] = torch.rand(2, 3, 4)[:, d2]
 
     with pytest.raises(ValueError, match="First-class and positional dimensions"):
-        td_dim["b"] = torch.empty(2, 3, 4)[d1, d2]
+        td_dim["b"] = torch.rand(2, 3, 4)[d1, d2]
 
-    t = torch.empty(2, 3, 4)
+    t = torch.rand(2, 3, 4)
     td_dim["c"] = t[d1]
     assert td_dim["c"].dims == (d1,)
-    assert (td_dim["c"]._tensor == t).all()
+    torch.testing.assert_close(td_dim["c"]._tensor, t)
