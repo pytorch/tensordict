@@ -561,6 +561,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         check_device: bool = True,
         check_tensor_shape: bool = True,
         check_shared: bool = False,
+        check_first_class_dims: bool = True,
     ) -> Union[Tensor, MemmapTensor]:
 
         if isinstance(input, dict):
@@ -581,6 +582,39 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         if check_shared:
             raise DeprecationWarning("check_shared is not authorized anymore")
+
+        # checking first-class dims are compatible should happen before batch_size
+        # checks otherwise there's the potential for confusion since indexing with
+        # first-class dims changes self.batch_size
+        if (
+            check_first_class_dims
+            and _has_functorch_dim
+            and isinstance(self, _TensorDictWithDims)
+        ):
+            if not isinstance(tensor, (functorch.dim.Tensor, _TensorDictWithDims)):
+                raise ValueError(
+                    f"TensorDict has first-class dimensions {self.dims}, any added "
+                    "values must have compatible first class dimensions."
+                )
+
+            tensor_dims = tuple(
+                lvl + tensor.dim() if isinstance(lvl, int) else lvl
+                for lvl in tensor._levels[: len(self._levels)]
+            )
+            self_dims = self.all_dims
+
+            dim_mismatch_error = (
+                "First-class and positional dimensions of tensordict and value are not "
+                f"compatible. TensorDict has {self_dims} whereas input has "
+                f"{tensor_dims}."
+            )
+            try:
+                if self_dims != tensor_dims:
+                    raise ValueError(dim_mismatch_error)
+            except RuntimeError:
+                # FIXME: equality comparison of first-class dims can result in confusing
+                # RuntimeError, so we intercept and raise something more descriptive.
+                raise ValueError(dim_mismatch_error)
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
@@ -2386,16 +2420,6 @@ class _TensorDictWithDims(TensorDict):
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
     ) -> None:
-        super().__init__(
-            source,
-            batch_size=batch_size,
-            device=device,
-            _meta_source=_meta_source,
-            _run_checks=_run_checks,
-            _is_shared=_is_shared,
-            _is_memmap=_is_memmap,
-        )
-
         if len(levels) != len(original_batch_size):
             raise ValueError(
                 "The number of dimensions specified by levels should match the number "
@@ -2406,9 +2430,26 @@ class _TensorDictWithDims(TensorDict):
         self._dims = tuple(d for d in levels if isinstance(d, functorch.dim.Dim))
         self.original_batch_size = self._parse_batch_size(source, original_batch_size)
 
+        super().__init__(
+            source,
+            batch_size=batch_size,
+            device=device,
+            _meta_source=_meta_source,
+            _run_checks=_run_checks,
+            _is_shared=_is_shared,
+            _is_memmap=_is_memmap,
+        )
+
     @property
     def dims(self):
         return self._dims
+
+    @property
+    def all_dims(self):
+        ndim = self.dim()
+        return tuple(
+            lvl + ndim if isinstance(lvl, int) else lvl for lvl in self._levels
+        )
 
     def order(self, *args) -> TensorDict:
         return TensorDict(
@@ -2425,10 +2466,7 @@ class _TensorDictWithDims(TensorDict):
     def __repr__(self) -> str:
         repr_ = super().__repr__()
         sizes = tuple(self.original_batch_size)
-        dims = tuple(
-            lvl + self.batch_dims if isinstance(lvl, int) else lvl
-            for lvl in self._levels
-        )
+        dims = self.all_dims
         return f"{repr_}\nwith dims={dims} sizes={sizes}"
 
 

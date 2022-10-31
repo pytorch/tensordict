@@ -170,6 +170,7 @@ def _get_updated_levels(
 
         item = next(idx_iter)
         if isinstance(item, functorch.dim.Dim):
+            item.size = batch_size[i]
             levels[i] = item
         else:
             levels[i] = level
