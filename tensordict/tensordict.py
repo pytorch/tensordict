@@ -69,7 +69,7 @@ try:
         import functorch.dim
 
         _has_functorch_dim = True
-    except:
+    except ImportError:
         _has_functorch_dim = False
 
     _has_functorch = True

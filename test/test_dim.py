@@ -18,7 +18,7 @@ except ImportError:
 
 def _get_all_dims(tensor: Tensor):
     tensor, levels, ndim = tensor._tensor, tensor._levels, tensor.ndim
-    return tuple(l + ndim if isinstance(l, int) else l for l in levels)
+    return tuple(lvl + ndim if isinstance(lvl, int) else lvl for lvl in levels)
 
 
 def test_batch_size():
