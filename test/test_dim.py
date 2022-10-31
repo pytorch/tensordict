@@ -11,9 +11,14 @@ from tensordict import MetaTensor, TensorDict
 from tensordict.metatensor import _MetaTensorWithDims
 
 try:
-    from functorch.dim import Dim, dims
+    from functorch.dim import Tensor, dims
 except ImportError:
     pytest.skip(reason="functorch.dim not found")
+
+
+def _get_all_dims(tensor: Tensor):
+    tensor, levels, ndim = tensor._tensor, tensor._levels, tensor.ndim
+    return tuple(l + ndim if isinstance(l, int) else l for l in levels)
 
 
 def test_batch_size():
@@ -49,7 +54,21 @@ def test_levels():
     td_dim2 = td_dim[:, d2]
     td_dim3 = td_dim2[d3]
 
-    assert td_dim3._levels == td_dim3["a"]._levels[:3] == td_dim3["b"]._levels[:3]
+    assert (
+        td_dim.all_dims
+        == _get_all_dims(td_dim["a"])[:3]
+        == _get_all_dims(td_dim["b"])[:3]
+    )
+    assert (
+        td_dim2.all_dims
+        == _get_all_dims(td_dim2["a"])[:3]
+        == _get_all_dims(td_dim2["b"])[:3]
+    )
+    assert (
+        td_dim3.all_dims
+        == _get_all_dims(td_dim3["a"])[:3]
+        == _get_all_dims(td_dim3["b"])[:3]
+    )
 
 
 def test_view():
@@ -116,3 +135,21 @@ def test_metatensor_order():
                         "Levels do not match: "
                         f"{mt_ordered._levels} != {t_ordered._levels}"
                     )
+
+
+def test_checks_at_set():
+    td = TensorDict({}, batch_size=[2, 3])
+
+    d1, d2 = dims(2)
+    td_dim = td[d1]
+
+    with pytest.raises(ValueError, match="First-class and positional dimensions"):
+        td_dim["a"] = torch.empty(2, 3, 4)[:, d2]
+
+    with pytest.raises(ValueError, match="First-class and positional dimensions"):
+        td_dim["b"] = torch.empty(2, 3, 4)[d1, d2]
+
+    t = torch.empty(2, 3, 4)
+    td_dim["c"] = t[d1]
+    assert td_dim["c"].dims == (d1,)
+    assert (td_dim["c"]._tensor == t).all()
