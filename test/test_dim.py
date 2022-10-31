@@ -177,7 +177,7 @@ def test_metatensor_order():
             if r == 3:
                 assert not isinstance(mt_ordered, _MetaTensorWithDims)
             else:
-                assert mt_ordered.underlying_shape == t_ordered._tensor.shape
+                assert mt_ordered._tensor.shape == t_ordered._tensor.shape
                 try:
                     mt_ordered._levels == t_ordered._levels
                 except RuntimeError:
