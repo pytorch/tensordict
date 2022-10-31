@@ -2469,6 +2469,11 @@ class _TensorDictWithDims(TensorDict):
         dims = self.all_dims
         return f"{repr_}\nwith dims={dims} sizes={sizes}"
 
+    def permute(self, *dims_list: int, dims=None):
+        raise NotImplementedError(
+            "permute is not yet supported on TensorDicts with first-class dimensions."
+        )
+
 
 class _ErrorInteceptor:
     """Context manager for catching errors and modifying message.
