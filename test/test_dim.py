@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from itertools import permutations
-from multiprocessing.sharedctypes import Value
 
 import pytest
 import torch
