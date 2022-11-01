@@ -116,7 +116,7 @@ jobs:
           export IN_CI=1
           mkdir test-reports
           python -m torch.utils.collect_env
-          python -c "import tensordict; print(tensordict.__version__);from tensordict.data import ReplayBuffer"
+          python -c "import tensordict; print(tensordict.__version__);from tensordict import TensorDict"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 20
           exit $EXIT_STATUS
