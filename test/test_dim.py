@@ -116,21 +116,27 @@ def test_checks_at_set():
 
 def test_tensordict_order():
     t = torch.rand(2, 3, 4, 5, 6)
-    td = TensorDict({"a": torch.rand(2, 3, 4, 5, 6, 7, 8)}, batch_size=[2, 3, 4, 5, 6])
+    a = torch.rand(2, 3, 4, 5, 6, 7, 8)
+    td = TensorDict({"a": a}, batch_size=[2, 3, 4, 5, 6])
     d1, d2, d3 = dims(3)
 
     t_dim = t[d1, :, d2, :, d3]
+    a_dim = a[d1, :, d2, :, d3]
     td_dim = td[d1, :, d2, :, d3]
 
     for r in range(4):
         for args in permutations((d1, d2, d3), r=r):
             t_ordered = t_dim.order(*args)
+            a_ordered = a_dim.order(*args)
             td_ordered = td_dim.order(*args)
 
             assert td_ordered.shape == t_ordered.shape[: td_ordered.batch_dims]
             if r == 3:
                 assert not isinstance(td_ordered, _TensorDictWithDims)
+                assert not isinstance(td_ordered["a"], Tensor)
+                torch.testing.assert_close(td_ordered["a"], a_ordered)
             else:
+                torch.testing.assert_close(td_ordered["a"]._tensor, a_ordered._tensor)
                 td_ordered._source_batch_size == t_ordered._tensor.shape
 
 
