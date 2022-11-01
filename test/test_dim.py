@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from itertools import permutations
+from multiprocessing.sharedctypes import Value
 
 import pytest
 import torch
@@ -138,6 +139,22 @@ def test_tensordict_order():
             else:
                 torch.testing.assert_close(td_ordered["a"]._tensor, a_ordered._tensor)
                 td_ordered._source_batch_size == t_ordered._tensor.shape
+
+
+def test_error_on_reuse():
+    td = TensorDict({}, [2, 2])
+    mt = MetaTensor(2, 2)
+    d = dims(1)
+
+    with pytest.raises(
+        ValueError, match="Indexing a TensorDict or MetaTensor more than once"
+    ):
+        td[d, d]
+
+    with pytest.raises(
+        ValueError, match="Indexing a TensorDict or MetaTensor more than once"
+    ):
+        mt[d, d]
 
 
 def test_metatensor_indexing():

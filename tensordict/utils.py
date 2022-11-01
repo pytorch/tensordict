@@ -176,6 +176,18 @@ def _get_updated_levels(
             levels[i] = level
             level += 1
 
+    # TODO: we need to do some extra work to support re-use of first-class dims to
+    # extract diagonal entries etc. For now we just detect re-use and raise an error
+    seen = set()
+    for lvl in levels:
+        if isinstance(lvl, functorch.dim.Dim):
+            if lvl in seen:
+                raise ValueError(
+                    "Indexing a TensorDict or MetaTensor more than once with "
+                    "the same first-class dimension is currently not supported."
+                )
+            seen.add(lvl)
+
     return tuple(levels)
 
 
