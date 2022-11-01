@@ -21,9 +21,6 @@
 
 
 # -- Project information -----------------------------------------------------
-import os.path
-import sys
-
 import pytorch_sphinx_theme
 import tensordict
 
