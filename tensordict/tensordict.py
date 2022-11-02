@@ -1950,10 +1950,16 @@ class TensorDict(TensorDictBase):
         if _has_functorch_dim and isinstance(
             proc_value, (functorch.dim.Tensor, _TensorDictWithDims)
         ):
+            tensor_shape = (
+                underlying_tensor.shape
+                if isinstance(proc_value, functorch.dim.Tensor)
+                else proc_value._source_batch_size
+            )
             return _MetaTensorWithDims(
                 *proc_value.shape,
                 levels=proc_value._levels,
-                tensor_shape=underlying_tensor.shape,
+                tensor_shape=tensor_shape,
+                device=proc_value.device,
                 _is_memmap=is_memmap,
                 _is_shared=is_shared,
                 _is_tensordict=isinstance(proc_value, TensorDictBase),
@@ -1961,6 +1967,7 @@ class TensorDict(TensorDictBase):
 
         return MetaTensor(
             proc_value,
+            device=proc_value.device,
             _is_memmap=is_memmap,
             _is_shared=is_shared,
             _is_tensordict=isinstance(proc_value, TensorDictBase),
