@@ -6,6 +6,7 @@ import math
 
 import numpy as np
 import torch.cuda
+from tensordict import TensorDict
 
 
 def prod(sequence):
@@ -22,3 +23,10 @@ def get_available_devices():
         for i in range(n_cuda):
             devices += [torch.device(f"cuda:{i}")]
     return devices
+
+
+def expand_list(list_of_tensors, *dims):
+    n = len(list_of_tensors)
+    td = TensorDict({str(i): tensor for i, tensor in enumerate(list_of_tensors)}, [])
+    td = td.expand(*dims).contiguous()
+    return [td[str(i)] for i in range(n)]
