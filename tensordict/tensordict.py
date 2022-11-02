@@ -40,7 +40,7 @@ from torch.jit._shape_functions import infer_size_impl
 # from torch.utils._pytree import _register_pytree_node
 
 from tensordict.memmap import MemmapTensor
-from tensordict.metatensor import MetaTensor
+from tensordict.metatensor import MetaTensor, _MetaTensorWithDims
 from tensordict.utils import (
     DEVICE_TYPING,
     INDEX_TYPING,
@@ -1615,8 +1615,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 device=self.device,
                 _meta_source={
                     key: item[idx]
-                    # make_unset so that all items are indexed with the first-class dims
-                    for key, item in self.items_meta(make_unset=True)
+                    for key, item in self.items_meta(make_unset=False)
                     if not item.is_tensordict()
                 },
             )
@@ -1947,6 +1946,19 @@ class TensorDict(TensorDictBase):
             or not is_batchedtensor(underlying_tensor)
             else False
         )
+
+        if _has_functorch_dim and isinstance(
+            proc_value, (functorch.dim.Tensor, _TensorDictWithDims)
+        ):
+            return _MetaTensorWithDims(
+                *proc_value.shape,
+                levels=proc_value._levels,
+                tensor_shape=underlying_tensor.shape,
+                _is_memmap=is_memmap,
+                _is_shared=is_shared,
+                _is_tensordict=isinstance(proc_value, TensorDictBase),
+            )
+
         return MetaTensor(
             proc_value,
             _is_memmap=is_memmap,
