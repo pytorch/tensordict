@@ -228,6 +228,32 @@ def _get_ordered_levels(args: LEVELS_TYPING, levels: LEVELS_TYPING):
     return tuple(new_levels)
 
 
+def _reslice_without_first_class_dims(
+    idx: INDEX_TYPING,
+) -> Tuple[INDEX_TYPING, INDEX_TYPING]:
+    # separates an index into parts with first-class dimensions and parts without
+    if not isinstance(idx, tuple):
+        idx = (idx,)
+
+    idx_with = tuple(
+        item if isinstance(item, functorch.dim.Dim) else slice(None) for item in idx
+    )
+
+    trim = 0
+    for item in reversed(idx_with):
+        if isinstance(item, functorch.dim.Dim):
+            break
+        else:
+            trim += 1
+
+    idx_without = tuple(item for item in idx if not isinstance(item, functorch.dim.Dim))
+
+    if trim > 0:
+        return idx_with[:-trim], idx_without
+
+    return idx, idx_without
+
+
 def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
     """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
 

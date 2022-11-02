@@ -45,6 +45,7 @@ from tensordict.utils import (
     DEVICE_TYPING,
     INDEX_TYPING,
     LEVELS_TYPING,
+    _reslice_without_first_class_dims,
     expand_right,
     expand_as_right,
 )
@@ -1441,11 +1442,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def get_sub_tensordict(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Returns a SubTensorDict with the desired index."""
-        sub_td = SubTensorDict(
-            source=self,
-            idx=idx,
-        )
-        return sub_td
+        if _has_functorch and (
+            isinstance(idx, functorch.dim.Dim)
+            or (
+                isinstance(idx, tuple)
+                and any(isinstance(i, functorch.dim.Dim) for i in idx)
+            )
+        ):
+            idx_with, idx_without = _reslice_without_first_class_dims(idx)
+            if len(idx_without) > 0:
+                return SubTensorDict(source=self[idx_with], idx=idx_without)
+            else:
+                return self[idx_with]
+        return SubTensorDict(source=self, idx=idx)
 
     def __iter__(self) -> Generator:
         if not self.batch_dims:
@@ -4339,6 +4348,17 @@ class SavedTensorDict(TensorDictBase):
         return super().__reduce__(*args, **kwargs)
 
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
+        if _has_functorch and (
+            isinstance(idx, functorch.dim.Dim)
+            or (
+                isinstance(idx, tuple)
+                and any(isinstance(i, functorch.dim.Dim) for i in idx)
+            )
+        ):
+            raise ValueError(
+                "SavedTensorDict currently does not support first-class dimensions"
+            )
+
         if isinstance(idx, list):
             idx = torch.tensor(idx, device=self.device)
         if isinstance(idx, tuple) and any(
