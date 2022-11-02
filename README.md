@@ -1,9 +1,3 @@
-# Disclaimer
-
-TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
-Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility
-with the broader pytorch ecosystem.
-
 # TensorDict
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.
@@ -200,6 +194,12 @@ For instance, the following code will result in a single-level tensordict with k
 ... }, batch_size=[3, 4])
 >>> tensordict = tensordict.unflatten_keys(separator=".")
 ```
+
+# Disclaimer
+
+TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
+Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility
+with the broader pytorch ecosystem.
 
 ## License
 TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.
