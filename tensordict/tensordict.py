@@ -2771,6 +2771,34 @@ def _stack(
                     "batch sizes, got td1.batch_size={td.batch_size} and "
                     f"td2.batch_size{list_of_tensordicts[0].batch_size}"
                 )
+
+        if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
+            # _TensorDictWithDims is not yet supported by LazyStackedTensorDict, we
+            # will stack the tensordicts contiguously
+            contiguous = True
+
+            dims0 = list_of_tensordicts[0].all_dims
+
+            for i, td in enumerate(list_of_tensordicts, start=1):
+                if not isinstance(td, _TensorDictWithDims):
+                    raise ValueError(
+                        "TensorDicts with first-class dimensions can only be stacked "
+                        "on other TensorDicts with matching first-class dimensions"
+                    )
+
+                td_dims = td.all_dims
+                dim_mismatch_error = (
+                    "First-class and positional dimensions of tensordicts are not "
+                    f"compatible. Got td0.all_dims={dims0} and td{i}.all_dims={td_dims}"
+                )
+                try:
+                    if dims0 != td_dims:
+                        raise ValueError(dim_mismatch_error)
+                except RuntimeError:
+                    # FIXME: equality comparison of first-class dims can result in
+                    # confusing RuntimeError, so we raise something more descriptive.
+                    raise ValueError(dim_mismatch_error)
+
     # check that all tensordict match
     keys = _check_keys(list_of_tensordicts)
 
@@ -3797,6 +3825,28 @@ class LazyStackedTensorDict(TensorDictBase):
         return super().__setitem__(item, value)
 
     def __getitem__(self, item: INDEX_TYPING) -> TensorDictBase:
+        if _has_functorch_dim and (
+            isinstance(item, functorch.dim.Dim)
+            or (
+                isinstance(item, tuple)
+                and any(isinstance(i, functorch.dim.Dim) for i in item)
+            )
+        ):
+            # LazyStackedTensorDict currently doesn't support first-class dims, so we
+            # stack all items and then index the result
+            device = self.tensordicts[0].device
+            out = {}
+            for key in self.tensordicts[0].keys():
+                out[key] = torch.stack(
+                    [_tensordict.get(key) for _tensordict in self.tensordicts],
+                    self.stack_dim,
+                )
+            out = TensorDict(
+                out, batch_size=self.batch_size, device=device, _run_checks=False
+            )
+
+            return out[item]
+
         if item is Ellipsis or (isinstance(item, tuple) and Ellipsis in item):
             item = convert_ellipsis_to_idx(item, self.batch_size)
         if isinstance(item, tuple) and sum(
