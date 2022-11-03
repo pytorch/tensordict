@@ -15,15 +15,16 @@ import torch
 from tensordict.memmap import MemmapTensor
 from tensordict.utils import (
     DEVICE_TYPING,
+    DIM_TYPING,
     INDEX_TYPING,
-    LEVELS_TYPING,
     convert_ellipsis_to_idx,
 )
 from tensordict.utils import (
     _getitem_batch_size,
-    _get_ordered_levels,
+    _get_indexed_dims,
+    _get_ordered_shape,
+    _get_ordered_dims,
     _get_shape,
-    _get_updated_levels,
 )
 
 try:
@@ -218,21 +219,21 @@ class MetaTensor:
         shape = _getitem_batch_size(self.shape, item)
         if _has_functorch_dim and (
             isinstance(self, _MetaTensorWithDims)
-            or any(isinstance(i, functorch.dim.Dim) for i in item)
+            or (
+                isinstance(item, tuple)
+                and any(isinstance(i, functorch.dim.Dim) for i in item)
+            )
         ):
-            if isinstance(self, _MetaTensorWithDims):
-                levels = self._levels
-                tensor_shape = self._tensor.shape
-            else:
-                levels = None
-                tensor_shape = self.shape
-
-            levels = _get_updated_levels(item, tensor_shape, levels)
+            item = item if isinstance(item, tuple) else (item,)
+            dims = _get_indexed_dims(
+                item,
+                self.dims if isinstance(self, _MetaTensorWithDims) else (),
+                self.shape,
+            )
 
             return _MetaTensorWithDims(
                 *shape,
-                levels=levels,
-                tensor_shape=tensor_shape,
+                dims=dims,
                 dtype=self.dtype,
                 device=self.device,
                 requires_grad=self.requires_grad,
@@ -353,8 +354,7 @@ class _MetaTensorWithDims(MetaTensor):
     def __init__(
         self,
         *shape: Union[int, torch.Tensor, "MemmapTensor"],
-        levels: LEVELS_TYPING = None,
-        tensor_shape: Optional[Union[Sequence[int], torch.Size, int]] = None,
+        dims: Optional[Tuple[DIM_TYPING, ...]] = None,
         device: Optional[DEVICE_TYPING] = "cpu",
         dtype: torch.dtype = None,
         requires_grad: bool = False,
@@ -363,6 +363,8 @@ class _MetaTensorWithDims(MetaTensor):
         _is_tensordict: Optional[bool] = None,
         _repr_tensordict: Optional[str] = None,
     ):
+        self._dims = dims
+
         super().__init__(
             *shape,
             device=device,
@@ -373,28 +375,6 @@ class _MetaTensorWithDims(MetaTensor):
             _is_tensordict=_is_tensordict,
             _repr_tensordict=_repr_tensordict,
         )
-        # TODO: rather than have _MetaTensorWithDims subclass MetaTensor and resulting
-        # duplication, we could define __getattr__ and pass through anything that isn't
-        # defined on _MetaTensorWithDims to self._tensor?
-        self._tensor = MetaTensor(
-            *tensor_shape,
-            device=device,
-            dtype=dtype,
-            requires_grad=requires_grad,
-            _is_shared=_is_shared,
-            _is_memmap=_is_memmap,
-            _is_tensordict=_is_tensordict,
-            _repr_tensordict=_repr_tensordict,
-        )
-
-        if len(levels) != len(self._tensor.shape):
-            raise ValueError(
-                "The number of dimensions specified by levels should match the number"
-                "of dimensions (length of tensor_shape)"
-            )
-
-        self._levels = levels
-        self._dims = tuple(d for d in levels if isinstance(d, functorch.dim.Dim))
 
     @property
     def dims(self):
@@ -402,28 +382,17 @@ class _MetaTensorWithDims(MetaTensor):
 
     @property
     def all_dims(self):
-        ndim = self.dim()
-        return tuple(
-            lvl + ndim if isinstance(lvl, int) else lvl for lvl in self._levels
-        )
+        ndim = self.ndimension()
+        return self.dims + tuple(range(ndim))
 
     def order(self, *args) -> MetaTensor:
-        ordered_levels = _get_ordered_levels(args, self._levels)
-        ordered_shape = torch.Size([d.size for d in args] + list(self.shape))
+        ordered_dims = _get_ordered_dims(self.dims, args)
+        ordered_shape = _get_ordered_shape(self.shape, args)
 
-        if any(isinstance(level, functorch.dim.Dim) for level in ordered_levels):
-            ordered_tensor_shape = torch.Size(
-                [
-                    level.size
-                    if isinstance(level, functorch.dim.Dim)
-                    else ordered_shape[level]
-                    for level in ordered_levels
-                ]
-            )
+        if len(ordered_dims) > 0:
             return _MetaTensorWithDims(
                 *ordered_shape,
-                levels=ordered_levels,
-                tensor_shape=ordered_tensor_shape,
+                dims=ordered_dims,
                 device=self.device,
                 dtype=self.dtype,
                 requires_grad=self.requires_grad,
@@ -446,11 +415,8 @@ class _MetaTensorWithDims(MetaTensor):
 
     def __repr__(self) -> str:
         repr_ = super().__repr__()
-        sizes = tuple(self._tensor.shape)
-        ndim = sum(isinstance(lvl, int) for lvl in self._levels)
-        dims = tuple(
-            lvl + ndim if isinstance(lvl, int) else lvl for lvl in self._levels
-        )
+        sizes = tuple(d.size for d in self.dims) + tuple(self.shape)
+        dims = self.all_dims
         return f"{repr_}\nwith dims={dims} sizes={sizes}"
 
 

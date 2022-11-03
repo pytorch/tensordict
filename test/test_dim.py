@@ -18,9 +18,12 @@ except ImportError:
     pytest.skip(reason="functorch.dim not found")
 
 
-def _get_all_dims(tensor: Tensor):
-    tensor, levels, ndim = tensor._tensor, tensor._levels, tensor.ndim
-    return tuple(lvl + ndim if isinstance(lvl, int) else lvl for lvl in levels)
+def _is_in(d, args):
+    return any(d is item for item in args)
+
+
+def _contains_all(tensordict_dims, tensor_dims):
+    return all(_is_in(d, tensor_dims) for d in tensordict_dims)
 
 
 @pytest.mark.parametrize(
@@ -69,21 +72,20 @@ class TestTensorDicts(TestTensorDictsBase):
         td_dim2 = td_dim[:, d2]
         td_dim3 = td_dim2[d3]
 
-        assert (
-            td_dim.all_dims
-            == _get_all_dims(td_dim["a"])[:4]
-            == _get_all_dims(td_dim["b"])[:4]
-        )
-        assert (
-            td_dim2.all_dims
-            == _get_all_dims(td_dim2["a"])[:4]
-            == _get_all_dims(td_dim2["b"])[:4]
-        )
-        assert (
-            td_dim3.all_dims
-            == _get_all_dims(td_dim3["a"])[:4]
-            == _get_all_dims(td_dim3["b"])[:4]
-        )
+        assert _contains_all(td_dim.dims, td_dim["a"].dims)
+        assert td_dim.batch_size == td_dim["a"].shape[: td_dim.batch_dims]
+        assert _contains_all(td_dim.dims, td_dim["b"].dims)
+        assert td_dim.batch_size == td_dim["b"].shape[: td_dim.batch_dims]
+
+        assert _contains_all(td_dim2.dims, td_dim2["a"].dims)
+        assert td_dim2.batch_size == td_dim2["a"].shape[: td_dim2.batch_dims]
+        assert _contains_all(td_dim2.dims, td_dim2["b"].dims)
+        assert td_dim2.batch_size == td_dim2["a"].shape[: td_dim2.batch_dims]
+
+        assert _contains_all(td_dim3.dims, td_dim3["a"].dims)
+        assert td_dim3.batch_size == td_dim3["a"].shape[: td_dim3.batch_dims]
+        assert _contains_all(td_dim3.dims, td_dim3["b"].dims)
+        assert td_dim3.batch_size == td_dim3["a"].shape[: td_dim3.batch_dims]
 
     def test_view(self, td_name, device):
         if td_name == "permute_td":
@@ -101,7 +103,6 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_reshape(self, td_name, device):
         td = getattr(self, td_name)(device)
-        # td = TensorDict({"a": torch.rand(2, 3, 4)}, [2, 3])
 
         d = dims(1)
         td_dim = td[d]
@@ -114,15 +115,17 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_checks_at_set(self, td_name, device):
         td = getattr(self, td_name)(device)
-        # td = TensorDict({}, batch_size=[2, 3])
 
-        d1, d2, d3, d4 = dims(4)
+        d1, d2, d3 = dims(3)
         td_dim = td[d1]
 
-        with pytest.raises(ValueError, match="First-class and positional dimensions"):
+        with pytest.raises(
+            ValueError,
+            match="First-class dimensions of tensordict and value are not compatible.",
+        ):
             td_dim["a"] = torch.rand(4, 3, 2, 1, 5)[:, d2]
 
-        with pytest.raises(ValueError, match="First-class and positional dimensions"):
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
             td_dim["b"] = torch.rand(4, 3, 2, 1, 5)[d1, d3]
 
         t = torch.rand(4, 3, 2, 1, 5)
@@ -156,7 +159,7 @@ class TestTensorDicts(TestTensorDictsBase):
                     torch.testing.assert_close(
                         td_ordered["a"]._tensor, a_ordered._tensor
                     )
-                    td_ordered._source_batch_size == t_ordered._tensor.shape
+                    assert td_ordered.dims == t_ordered.dims
 
 
 def test_error_on_reuse():
@@ -191,13 +194,16 @@ def test_metatensor_indexing():
     mt_dim3 = mt_dim2[d3]
 
     assert t_dim.shape == mt_dim.shape
-    assert t_dim._levels == mt_dim._levels
+    assert _contains_all(t_dim.dims, mt_dim.dims)
+    assert _contains_all(mt_dim.dims, t_dim.dims)
 
     assert t_dim2.shape == mt_dim2.shape
-    assert t_dim2._levels == mt_dim2._levels
+    assert _contains_all(t_dim2.dims, mt_dim2.dims)
+    assert _contains_all(mt_dim2.dims, t_dim2.dims)
 
     assert t_dim3.shape == mt_dim3.shape
-    assert t_dim3._levels == mt_dim3._levels
+    assert _contains_all(t_dim3.dims, mt_dim3.dims)
+    assert _contains_all(mt_dim3.dims, t_dim3.dims)
 
 
 def test_metatensor_order():
@@ -218,14 +224,12 @@ def test_metatensor_order():
             if r == 3:
                 assert not isinstance(mt_ordered, _MetaTensorWithDims)
             else:
-                assert mt_ordered._tensor.shape == t_ordered._tensor.shape
                 try:
-                    mt_ordered._levels == t_ordered._levels
+                    mt_ordered.dims == t_ordered.dims
                 except RuntimeError:
-                    # FIXME: If the levels are not equal, we get a confusing
+                    # FIXME: If the dims are not equal, we get a confusing
                     # RuntimeError rather than simply False. Catch this error and raise
                     # a saner AssertionError to help debugging
                     raise AssertionError(
-                        "Levels do not match: "
-                        f"{mt_ordered._levels} != {t_ordered._levels}"
+                        f"Dims do not match: {mt_ordered.dims} != {t_ordered.dims}"
                     )

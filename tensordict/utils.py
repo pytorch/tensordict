@@ -142,53 +142,28 @@ def _getitem_batch_size(
     return torch.Size(bs)
 
 
-def _get_updated_levels(
-    idx: INDEX_TYPING, batch_size: torch.Size, levels: Optional[LEVELS_TYPING]
-) -> LEVELS_TYPING:
-    # utility function to calculate levels of TensorDict that has been indexed
-    # (possibly multiple times) with first class dimensions. We can't rely on
-    # recovering the levels from items in the TensorDict because it should be possible
-    # to slice a TensorDict with defined batch_size but no items
-    batch_dims = len(batch_size)
-
-    if levels is None:
-        levels = list(range(-batch_dims, 0))
-    else:
-        levels = list(levels)
-
-    n_dims = sum(isinstance(item, functorch.dim.Dim) for item in idx) + sum(
-        isinstance(item, functorch.dim.Dim) for item in levels
-    )
-
-    level = n_dims - batch_dims
-    # pad idx with None in case it isn't as long as batch_size
-    idx_iter = chain(idx, repeat(None))
-
-    for i in range(batch_dims):
-        if isinstance(levels[i], functorch.dim.Dim):
-            continue
-
-        item = next(idx_iter)
+def _get_indexed_dims(
+    idx: INDEX_TYPING, dims: Tuple[DIM_TYPING, ...], shape
+) -> Tuple[DIM_TYPING, ...]:
+    # bind dimensions to the size of the dimensions they are indexing
+    for item, size in zip(idx, shape):
         if isinstance(item, functorch.dim.Dim):
-            item.size = batch_size[i]
-            levels[i] = item
-        else:
-            levels[i] = level
-            level += 1
+            item.size = size
+
+    dims = dims + tuple(d for d in idx if isinstance(d, functorch.dim.Dim))
 
     # TODO: we need to do some extra work to support re-use of first-class dims to
     # extract diagonal entries etc. For now we just detect re-use and raise an error
     seen = set()
-    for lvl in levels:
-        if isinstance(lvl, functorch.dim.Dim):
-            if lvl in seen:
-                raise ValueError(
-                    "Indexing a TensorDict or MetaTensor more than once with "
-                    "the same first-class dimension is currently not supported."
-                )
-            seen.add(lvl)
+    for dim in dims:
+        if dim in seen:
+            raise ValueError(
+                "Indexing a TensorDict or MetaTensor more than once with "
+                "the same first-class dimension is currently not supported."
+            )
+        seen.add(dim)
 
-    return tuple(levels)
+    return dims
 
 
 # FIXME: this is a workaround since equality comparisons with unbound
@@ -197,35 +172,20 @@ def _is_in(d: DIM_TYPING, args: LEVELS_TYPING) -> bool:
     return any(d is item for item in args)
 
 
-def _get_ordered_levels(args: LEVELS_TYPING, levels: LEVELS_TYPING):
-    # computes updated levels after a call to order
+def _get_ordered_dims(
+    dims: Tuple[DIM_TYPING, ...], args: LEVELS_TYPING
+) -> Tuple[DIM_TYPING, ...]:
+    return tuple(d for d in dims if not _is_in(d, args))
 
-    # the number of positional dimensions is the number of arguments plus the existing
-    # number of positional arguments.
-    level = -(
-        len(args) + sum(not isinstance(level, functorch.dim.Dim) for level in levels)
+
+def _get_ordered_shape(batch_size, args):
+    # place all ordered dimensions at the front, dropping any re-ordered positional
+    # arguments from the existing batch_size.
+    positional_args = {arg for arg in args if isinstance(arg, int)}
+    return torch.Size(
+        [d.size if isinstance(d, functorch.dim.Dim) else batch_size[d] for d in args]
+        + [size for i, size in enumerate(batch_size) if i not in positional_args]
     )
-
-    new_levels = []
-
-    # any leading first-class dimensions that don't appear in args stay where they are
-    i = 0
-    while isinstance(levels[i], functorch.dim.Dim) and not _is_in(levels[i], args):
-        new_levels.append(levels[i])
-        i += 1
-
-    # next we position all of the ordered levels
-    for _ in args:
-        new_levels.append(level)
-        level += 1
-
-    # finally we add the remaining levels, skipping any entries that we just ordered
-    while i < len(levels):
-        if not (isinstance(levels[i], functorch.dim.Dim) and _is_in(levels[i], args)):
-            new_levels.append(levels[i])
-        i += 1
-
-    return tuple(new_levels)
 
 
 def _reslice_without_first_class_dims(
@@ -356,7 +316,6 @@ if hasattr(math, "prod"):
 
         """
         return math.prod(sequence)
-
 
 else:
 

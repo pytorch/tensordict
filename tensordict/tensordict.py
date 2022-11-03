@@ -43,6 +43,7 @@ from tensordict.memmap import MemmapTensor
 from tensordict.metatensor import MetaTensor, _MetaTensorWithDims
 from tensordict.utils import (
     DEVICE_TYPING,
+    DIM_TYPING,
     INDEX_TYPING,
     LEVELS_TYPING,
     _reslice_without_first_class_dims,
@@ -51,8 +52,10 @@ from tensordict.utils import (
 )
 from tensordict.utils import (
     _getitem_batch_size,
-    _get_ordered_levels,
-    _get_updated_levels,
+    _get_indexed_dims,
+    _get_ordered_shape,
+    _get_ordered_dims,
+    _is_in,
     _sub_index,
     convert_ellipsis_to_idx,
     KeyDependentDefaultDict,
@@ -599,24 +602,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     "values must have compatible first class dimensions."
                 )
 
-            tensor_dims = tuple(
-                lvl + tensor.dim() if isinstance(lvl, int) else lvl
-                for lvl in tensor._levels[: len(self._levels)]
-            )
-            self_dims = self.all_dims
-
-            dim_mismatch_error = (
-                "First-class and positional dimensions of tensordict and value are not "
-                f"compatible. TensorDict has {self_dims} whereas input has "
-                f"{tensor_dims}."
-            )
-            try:
-                if self_dims != tensor_dims:
-                    raise ValueError(dim_mismatch_error)
-            except RuntimeError:
-                # FIXME: equality comparison of first-class dims can result in confusing
-                # RuntimeError, so we intercept and raise something more descriptive.
-                raise ValueError(dim_mismatch_error)
+            if not all(_is_in(d, tensor.dims) for d in self.dims):
+                raise ValueError(
+                    "First-class dimensions of tensordict and value are not "
+                    "compatible. value.dims must contain all of tensordict.dims. Got "
+                    f"tensordict.dims={self.dims} and value.dims={tensor.dims}."
+                )
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
@@ -1607,20 +1598,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 and any(isinstance(item, functorch.dim.Dim) for item in idx)
             )
         ):
-            if isinstance(self, _TensorDictWithDims):
-                levels = self._levels
-                source_batch_size = self._source_batch_size
-            else:
-                levels = None
-                source_batch_size = self.batch_size
-
-            levels = _get_updated_levels(idx, source_batch_size, levels)
+            dims = _get_indexed_dims(
+                idx if isinstance(idx, tuple) else (idx,),
+                self.dims if isinstance(self, _TensorDictWithDims) else (),
+                self.batch_size,
+            )
 
             return _TensorDictWithDims(
                 source={key: item[idx] for key, item in self.items()},
-                levels=levels,
+                dims=dims,
                 batch_size=_getitem_batch_size(self.batch_size, idx),
-                source_batch_size=source_batch_size,
                 device=self.device,
                 _meta_source={
                     key: item[idx]
@@ -1959,15 +1946,9 @@ class TensorDict(TensorDictBase):
         if _has_functorch_dim and isinstance(
             proc_value, (functorch.dim.Tensor, _TensorDictWithDims)
         ):
-            tensor_shape = (
-                underlying_tensor.shape
-                if isinstance(proc_value, functorch.dim.Tensor)
-                else proc_value._source_batch_size
-            )
             return _MetaTensorWithDims(
                 *proc_value.shape,
-                levels=proc_value._levels,
-                tensor_shape=tensor_shape,
+                dims=proc_value.dims,
                 device=proc_value.device,
                 _is_memmap=is_memmap,
                 _is_shared=is_shared,
@@ -2441,24 +2422,15 @@ class _TensorDictWithDims(TensorDict):
     def __init__(
         self,
         source: Union[TensorDictBase, dict],
-        levels: LEVELS_TYPING,
+        dims: Optional[Tuple[DIM_TYPING, ...]],
         batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
-        source_batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
         _run_checks: bool = True,
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
     ) -> None:
-        if len(levels) != len(source_batch_size):
-            raise ValueError(
-                "The number of dimensions specified by levels should match the number "
-                "of batch dimensions (length of source_batch_size)"
-            )
-
-        self._levels = levels
-        self._dims = tuple(d for d in levels if isinstance(d, functorch.dim.Dim))
-        self._source_batch_size = self._parse_batch_size(source, source_batch_size)
+        self._dims = dims
 
         super().__init__(
             source,
@@ -2477,29 +2449,17 @@ class _TensorDictWithDims(TensorDict):
     @property
     def all_dims(self):
         ndim = self.dim()
-        return tuple(
-            lvl + ndim if isinstance(lvl, int) else lvl for lvl in self._levels
-        )
+        return self.dims + tuple(range(ndim))
 
     def order(self, *args) -> TensorDict:
-        ordered_levels = _get_ordered_levels(args, self._levels)
-        ordered_batch_size = torch.Size([d.size for d in args] + list(self.batch_size))
+        ordered_dims = _get_ordered_dims(self.dims, args)
+        ordered_batch_size = _get_ordered_shape(self.batch_size, args)
 
-        if any(isinstance(level, functorch.dim.Dim) for level in ordered_levels):
-            ordered_source_shape = torch.Size(
-                [
-                    level.size
-                    if isinstance(level, functorch.dim.Dim)
-                    else ordered_batch_size[level]
-                    for level in ordered_levels
-                ]
-            )
-
+        if len(ordered_dims) > 0:
             return _TensorDictWithDims(
                 source={key: item.order(*args) for key, item in self.items()},
-                levels=ordered_levels,
+                dims=ordered_dims,
                 batch_size=ordered_batch_size,
-                source_batch_size=ordered_source_shape,
                 device=self.device,
                 _meta_source={
                     key: item.order(*args)
@@ -2525,7 +2485,7 @@ class _TensorDictWithDims(TensorDict):
 
     def __repr__(self) -> str:
         repr_ = super().__repr__()
-        sizes = tuple(self._source_batch_size)
+        sizes = tuple(d.size for d in self.dims) + tuple(self.batch_size)
         dims = self.all_dims
         return f"{repr_}\nwith dims={dims} sizes={sizes}"
 
