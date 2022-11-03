@@ -15,15 +15,24 @@ import numpy as np
 import torch
 from torch import Tensor
 
+DIM_TYPING = Any
+LEVELS_TYPING = Any
 try:
     try:
         from functorch._C import is_batchedtensor, get_unwrapped
     except ImportError:
         from torch._C._functorch import is_batchedtensor, get_unwrapped
 
-    _has_functorch = True
+    try:
+        import functorch.dim
+
+        LEVELS_TYPING = Tuple[Union[int, functorch.dim.Dim], ...]
+        DIM_TYPING = functorch.dim.Dim
+        _has_functorch_dim = True
+    except ImportError:
+        _has_functorch_dim = False
 except ImportError:
-    _has_functorch = False
+    pass
 
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DEVICE_TYPING = Union[torch.device, str, int]
@@ -118,6 +127,10 @@ def _getitem_batch_size(
                     f"The shape {shape} is incompatible with " f"the index {items}."
                 )
             continue
+        elif _has_functorch_dim and isinstance(_item, functorch.dim.Dim):
+            # any first class dimensions are ommited from the new batch size
+            next(iter_bs)
+            continue
         else:
             raise NotImplementedError(
                 f"batch dim cannot be computed for type {type(_item)}"
@@ -126,6 +139,84 @@ def _getitem_batch_size(
     list_iter_bs = list(iter_bs)
     bs += list_iter_bs
     return torch.Size(bs)
+
+
+def _get_indexed_dims(
+    idx: INDEX_TYPING, dims: Tuple[DIM_TYPING, ...], shape
+) -> Tuple[DIM_TYPING, ...]:
+    # bind dimensions to the size of the dimensions they are indexing
+    for item, size in zip(idx, shape):
+        if isinstance(item, functorch.dim.Dim):
+            item.size = size
+
+    dims = dims + tuple(d for d in idx if isinstance(d, functorch.dim.Dim))
+
+    # remove duplicate first-class dims. when first-class dims are reused the diagonal
+    # entries are extracted and that dim only appears once in the resulting dims
+    dims_out = []
+    seen = set()
+    for dim in dims:
+        if dim not in seen:
+            dims_out.append(dim)
+        seen.add(dim)
+
+    return tuple(dims_out)
+
+
+# FIXME: this is a workaround since equality comparisons with unbound
+# functorch.dim.Tensors results in a ValueError.
+def _is_in(d: DIM_TYPING, args: LEVELS_TYPING) -> bool:
+    return any(d is item for item in args)
+
+
+def _get_ordered_dims(
+    dims: Tuple[DIM_TYPING, ...], args: LEVELS_TYPING
+) -> Tuple[DIM_TYPING, ...]:
+    return tuple(d for d in dims if not _is_in(d, args))
+
+
+def _get_ordered_shape(batch_size, args):
+    # place all ordered dimensions at the front, dropping any re-ordered positional
+    # arguments from the existing batch_size.
+    positional_args = {arg for arg in args if isinstance(arg, int)}
+    return torch.Size(
+        [d.size if isinstance(d, functorch.dim.Dim) else batch_size[d] for d in args]
+        + [size for i, size in enumerate(batch_size) if i not in positional_args]
+    )
+
+
+def _reslice_without_first_class_dims(
+    idx: INDEX_TYPING,
+) -> Tuple[INDEX_TYPING, INDEX_TYPING]:
+    # separates an index into parts with first-class dimensions and parts without
+    if not isinstance(idx, tuple):
+        idx = (idx,)
+
+    idx_with = tuple(
+        item if isinstance(item, functorch.dim.Dim) else slice(None) for item in idx
+    )
+
+    trim = 0
+    for item in reversed(idx_with):
+        if isinstance(item, functorch.dim.Dim):
+            break
+        else:
+            trim += 1
+
+    idx_without = tuple(item for item in idx if not isinstance(item, functorch.dim.Dim))
+
+    if trim > 0:
+        return idx_with[:-trim], idx_without
+
+    return idx, idx_without
+
+
+def _dims_are_compatible(dims1, dims2):
+    return (
+        len(dims1) == len(dims2)
+        and all(_is_in(d, dims1) for d in dims2)
+        and all(_is_in(d, dims2) for d in dims1)
+    )
 
 
 def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):

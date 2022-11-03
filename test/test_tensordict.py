@@ -10,7 +10,7 @@ import re
 import numpy as np
 import pytest
 import torch
-from _utils_internal import get_available_devices, prod
+from _utils_internal import TestTensorDictsBase, get_available_devices, prod
 from tensordict import (
     LazyStackedTensorDict,
     MemmapTensor,
@@ -618,114 +618,7 @@ TD_BATCH_SIZE = 4
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
-class TestTensorDicts:
-    def td(self, device):
-        return TensorDict(
-            source={
-                "a": torch.randn(4, 3, 2, 1, 5),
-                "b": torch.randn(4, 3, 2, 1, 10),
-                "c": torch.randint(10, (4, 3, 2, 1, 3)),
-            },
-            batch_size=[4, 3, 2, 1],
-            device=device,
-        )
-
-    def nested_td(self, device):
-        return TensorDict(
-            source={
-                "a": torch.randn(4, 3, 2, 1, 5),
-                "b": torch.randn(4, 3, 2, 1, 10),
-                "c": torch.randint(10, (4, 3, 2, 1, 3)),
-                "my_nested_td": TensorDict(
-                    {"inner": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
-                ),
-            },
-            batch_size=[4, 3, 2, 1],
-            device=device,
-        )
-
-    def stacked_td(self, device):
-        td1 = TensorDict(
-            source={
-                "a": torch.randn(4, 3, 1, 5),
-                "b": torch.randn(4, 3, 1, 10),
-                "c": torch.randint(10, (4, 3, 1, 3)),
-            },
-            batch_size=[4, 3, 1],
-            device=device,
-        )
-        td2 = TensorDict(
-            source={
-                "a": torch.randn(4, 3, 1, 5),
-                "b": torch.randn(4, 3, 1, 10),
-                "c": torch.randint(10, (4, 3, 1, 3)),
-            },
-            batch_size=[4, 3, 1],
-            device=device,
-        )
-        return stack_td([td1, td2], 2)
-
-    def idx_td(self, device):
-        td = TensorDict(
-            source={
-                "a": torch.randn(2, 4, 3, 2, 1, 5),
-                "b": torch.randn(2, 4, 3, 2, 1, 10),
-                "c": torch.randint(10, (2, 4, 3, 2, 1, 3)),
-            },
-            batch_size=[2, 4, 3, 2, 1],
-            device=device,
-        )
-        return td[1]
-
-    def sub_td(self, device):
-        td = TensorDict(
-            source={
-                "a": torch.randn(2, 4, 3, 2, 1, 5),
-                "b": torch.randn(2, 4, 3, 2, 1, 10),
-                "c": torch.randint(10, (2, 4, 3, 2, 1, 3)),
-            },
-            batch_size=[2, 4, 3, 2, 1],
-            device=device,
-        )
-        return td.get_sub_tensordict(1)
-
-    def sub_td2(self, device):
-        td = TensorDict(
-            source={
-                "a": torch.randn(4, 2, 3, 2, 1, 5),
-                "b": torch.randn(4, 2, 3, 2, 1, 10),
-                "c": torch.randint(10, (4, 2, 3, 2, 1, 3)),
-            },
-            batch_size=[4, 2, 3, 2, 1],
-            device=device,
-        )
-        return td.get_sub_tensordict((slice(None), 1))
-
-    def saved_td(self, device):
-        return SavedTensorDict(source=self.td(device))
-
-    def memmap_td(self, device):
-        return self.td(device).memmap_(lock=False)
-
-    def permute_td(self, device):
-        return TensorDict(
-            source={
-                "a": torch.randn(3, 1, 4, 2, 5),
-                "b": torch.randn(3, 1, 4, 2, 10),
-                "c": torch.randint(10, (3, 1, 4, 2, 3)),
-            },
-            batch_size=[3, 1, 4, 2],
-            device=device,
-        ).permute(2, 0, 3, 1)
-        # return TensorDict(
-        #     source={
-        #         "a": torch.randn(3, 1, 2, 4, 5, device=device),
-        #         "b": torch.randn(3, 1, 2, 4, 10, device=device),
-        #         "c": torch.randint(10, (3, 1, 2, 4, 3), device=device),
-        #     },
-        #     batch_size=[3, 1, 2, 4],
-        # ).permute(2, 0, 1, 3)
-
+class TestTensorDicts(TestTensorDictsBase):
     def test_permute_applied_twice(self, td_name, device):
         torch.manual_seed(0)
         tensordict = getattr(self, td_name)(device)
@@ -737,43 +630,6 @@ class TestTensorDicts:
                 other_p = torch.randperm(4)
             assert tensordict.permute(*p).permute(*inv_p) is tensordict
             assert tensordict.permute(*p).permute(*other_p) is not tensordict
-
-    def unsqueezed_td(self, device):
-        td = TensorDict(
-            source={
-                "a": torch.randn(4, 3, 2, 5),
-                "b": torch.randn(4, 3, 2, 10),
-                "c": torch.randint(10, (4, 3, 2, 3)),
-            },
-            batch_size=[4, 3, 2],
-            device=device,
-        )
-        return td.unsqueeze(-1)
-
-    def squeezed_td(self, device):
-        td = TensorDict(
-            source={
-                "a": torch.randn(4, 3, 1, 2, 1, 5),
-                "b": torch.randn(4, 3, 1, 2, 1, 10),
-                "c": torch.randint(10, (4, 3, 1, 2, 1, 3)),
-            },
-            batch_size=[4, 3, 1, 2, 1],
-            device=device,
-        )
-        return td.squeeze(2)
-
-    def td_reset_bs(self, device):
-        td = TensorDict(
-            source={
-                "a": torch.randn(4, 3, 2, 1, 5),
-                "b": torch.randn(4, 3, 2, 1, 10),
-                "c": torch.randint(10, (4, 3, 2, 1, 3)),
-            },
-            batch_size=[4, 3, 2],
-            device=device,
-        )
-        td.batch_size = torch.Size([4, 3, 2, 1])
-        return td
 
     def test_to_tensordict(self, td_name, device):
         torch.manual_seed(1)

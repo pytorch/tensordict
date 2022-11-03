@@ -1,3 +1,5 @@
 # Python artifacts
 __pycache__
 *.egg-info
+tensordict/version.py
+.pytest_cache
