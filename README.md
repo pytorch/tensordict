@@ -162,7 +162,7 @@ td_fc["mask"]
 # with dims=(batch, width, height, 0) sizes=(10, 28, 28, 1)
 ```
 
-You can add new items provided they have compatible first class dimensions, i.e. there must be agreement in first-class and positional dimensions along the batch dimensions, though the item can have additional first-class non-batch dimensions.
+You can add new items provided they have compatible first class dimensions, i.e. the new item must have all of the first-class dimensions of the TensorDict, though the item can have additional first-class non-batch dimensions, and the remaining positional dimensions are compatible with the TensorDict's batch size.
 
 ```python
 td_fc["input"] = torch.rand(10, 28, 28, 3)[batch, width, height, channel]
