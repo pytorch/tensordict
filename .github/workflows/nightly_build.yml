@@ -34,7 +34,7 @@ jobs:
           - version: "3.7"
             tag: py37
           - version: "3.8"
-            tag: py39
+            tag: py38
           - version: "3.9"
             tag: py39
           - version: "3.10"
@@ -71,7 +71,7 @@ jobs:
           - version: "3.7"
             tag: py37
           - version: "3.8"
-            tag: py39
+            tag: py38
           - version: "3.9"
             tag: py39
           - version: "3.10"
@@ -141,7 +141,7 @@ jobs:
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
-          name: tensordict-nightly-${{ matrix.python.version }}-cpu.whl
+          name: tensordict-nightly-${{ matrix.python.version }}.whl
           path: /tmp/wheels
       - name: Push TensorDict Binary to PYPI
         env:
