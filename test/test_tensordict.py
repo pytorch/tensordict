@@ -2479,6 +2479,12 @@ class TestMakeTensorDict:
         assert tensordict["c"].device == device
 
 
+@pytest.mark.parametrize("separator", [".", "-"])
+def test_unflatten_keys_collision(separator):
+    td = TensorDict({"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, [])
+    ref = TensorDict({"a": [1, 2], "c": TensorDict({"a": [1, 2], "b": [1, 2]}, [])}, [])
+    assert repr(td.unflatten_keys(separator)) == repr(ref)
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

@@ -1515,6 +1515,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 tensordict[new_key] = value
                 if inplace:
                     del self[old_key]
+                if key in self:
+                    tensordict.update(self[key])
             out.set(key, tensordict.unflatten_keys(separator=separator))
         return out
 
