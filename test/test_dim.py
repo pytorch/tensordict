@@ -123,12 +123,12 @@ class TestTensorDicts(TestTensorDictsBase):
             ValueError,
             match="First-class dimensions of tensordict and value are not compatible.",
         ):
-            td_dim["a"] = torch.rand(4, 3, 2, 1, 5)[:, d2]
+            td_dim["a"] = torch.rand(4, 3, 2, 1, 5, device=device)[:, d2]
 
         with pytest.raises(RuntimeError, match="batch dimension mismatch"):
-            td_dim["b"] = torch.rand(4, 3, 2, 1, 5)[d1, d3]
+            td_dim["b"] = torch.rand(4, 3, 2, 1, 5, device=device)[d1, d3]
 
-        t = torch.rand(4, 3, 2, 1, 5)
+        t = torch.rand(4, 3, 2, 1, 5, device=device)
         td_dim["c"] = t[d1]
         assert td_dim["c"].dims == (d1,)
         torch.testing.assert_close(td_dim["c"]._tensor, t)
