@@ -152,18 +152,16 @@ def _get_indexed_dims(
 
     dims = dims + tuple(d for d in idx if isinstance(d, functorch.dim.Dim))
 
-    # TODO: we need to do some extra work to support re-use of first-class dims to
-    # extract diagonal entries etc. For now we just detect re-use and raise an error
+    # remove duplicate first-class dims. when first-class dims are reused the diagonal
+    # entries are extracted and that dim only appears once in the resulting dims
+    dims_out = []
     seen = set()
     for dim in dims:
-        if dim in seen:
-            raise ValueError(
-                "Indexing a TensorDict or MetaTensor more than once with "
-                "the same first-class dimension is currently not supported."
-            )
+        if dim not in seen:
+            dims_out.append(dim)
         seen.add(dim)
 
-    return dims
+    return tuple(dims_out)
 
 
 # FIXME: this is a workaround since equality comparisons with unbound

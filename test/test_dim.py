@@ -13,7 +13,7 @@ from tensordict.metatensor import _MetaTensorWithDims
 from tensordict.tensordict import _TensorDictWithDims
 
 try:
-    from functorch.dim import Tensor, dims
+    from functorch.dim import Dim, Tensor, dims
 except ImportError:
     pytest.skip(reason="functorch.dim not found")
 
@@ -144,14 +144,14 @@ class TestTensorDicts(TestTensorDictsBase):
         a_dim = a[d1, :, d2, d3]
         td_dim = td[d1, :, d2, d3]
 
-        for r in range(4):
-            for args in permutations((d1, d2, d3), r=r):
+        for r in range(5):
+            for args in permutations((0, d1, d2, d3), r=r):
                 t_ordered = t_dim.order(*args)
                 a_ordered = a_dim.order(*args)
                 td_ordered = td_dim.order(*args)
 
                 assert td_ordered.shape == t_ordered.shape[: td_ordered.batch_dims]
-                if r == 3:
+                if sum(isinstance(arg, Dim) for arg in args) == 3:
                     assert not isinstance(td_ordered, _TensorDictWithDims)
                     assert not isinstance(td_ordered["a"], Tensor)
                     torch.testing.assert_close(td_ordered["a"], a_ordered)
@@ -162,20 +162,28 @@ class TestTensorDicts(TestTensorDictsBase):
                     assert td_ordered.dims == t_ordered.dims
 
 
-def test_error_on_reuse():
-    td = TensorDict({}, [2, 2])
-    mt = MetaTensor(2, 2)
+def test_dim_reuse():
+    t = torch.rand(2, 3, 2)
+    td = TensorDict({"a": torch.rand(2, 3, 2, 4)}, [2, 3, 2])
+    mt = MetaTensor(2, 3, 2)
+
     d = dims(1)
 
-    with pytest.raises(
-        ValueError, match="Indexing a TensorDict or MetaTensor more than once"
-    ):
-        td[d, d]
+    t_dim = t[d, :, d]
+    td_dim = td[d, :, d]
+    mt_dim = mt[d, :, d]
 
-    with pytest.raises(
-        ValueError, match="Indexing a TensorDict or MetaTensor more than once"
-    ):
-        mt[d, d]
+    # repeated dim should only appear once
+    assert td_dim.dims == t_dim.dims
+    assert mt_dim.dims == t_dim.dims
+
+    assert td_dim.batch_size == t_dim.shape
+    assert td_dim["a"].shape == torch.Size([3, 4])
+    assert mt_dim.shape == t_dim.shape
+
+    torch.testing.assert_close(
+        td_dim["a"].order(0, 1, d), torch.diagonal(td["a"], dim1=0, dim2=2)
+    )
 
 
 def test_metatensor_indexing():
