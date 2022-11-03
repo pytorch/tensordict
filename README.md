@@ -136,14 +136,23 @@ y.shape  # torch.Size([2, 10, 4])
 
 ## Nesting TensorDicts
 
-It is possible to nest tensordict and switch easily between hierarchical and flat representations.
+It is possible to nest tensordict. The only requirement is that the sub-tensordict should be indexable
+under the parent tensordict, i.e. its batch size should match (but could be longer than) the parent
+batch size.
+
+We can switch easily between hierarchical and flat representations.
 For instance, the following code will result in a single-level tensordict with keys `"key 1"` and `"key 2.sub-key"`:
 ```python
 >>> tensordict = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": TensorDict({"sub-key": torch.randn(3, 4, 5, 6)}, [3, 4, 5])
 ... }, batch_size=[3, 4])
->>> tensordict = tensordict.unflatten_keys(separator=".")
+>>> tensordict_unflatten = tensordict.unflatten_keys(separator=".")
+```
+
+Accessing nested tensordicts can be achieved with a single index:
+```python
+>>> sub_value = tensordict["key 2", "sub-key"]
 ```
 
 ## License
