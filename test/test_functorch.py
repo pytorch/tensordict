@@ -243,6 +243,7 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
 
 def test_nested_modules():
     class LinearWithKwargs(Linear):
+        """Checks that modules with kwargs work equally well."""
         def forward(self, x, stuff="ha"):
             return super().forward(x)
 
@@ -253,13 +254,15 @@ def test_nested_modules():
     params = make_functional(net)
 
     x = torch.zeros(3)
-    y = net(x, params=params)
-    assert y.shape == torch.Size([5])
+    z = net(x, params=params)
+    assert z.shape == torch.Size([5])
 
     y = net[0](x, params=params["0"])
     assert y.shape == torch.Size([4])
-    y = net[1](y, params=params["1"])
-    assert y.shape == torch.Size([5])
+    z_bis = net[1](y, params=params["1"])
+    assert z_bis.shape == torch.Size([5])
+
+    assert torch.allclose(z, z_bis)
 
     y = vmap(net[0], (0, None))(x.expand(10, 3), params["0"])
     assert y.shape == torch.Size([10, 4])
