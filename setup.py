@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 from typing import List
 
@@ -17,29 +18,17 @@ from torch.utils.cpp_extension import (
     BuildExtension,
 )
 
-cwd = os.path.dirname(os.path.abspath(__file__))
-version_txt = os.path.join(cwd, "version.txt")
-with open(version_txt, "r") as f:
-    version = f.readline().strip()
-
-
 ROOT_DIR = Path(__file__).parent.resolve()
-
 
 try:
     sha = (
-        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd)
+        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT_DIR)
         .decode("ascii")
         .strip()
     )
 except Exception:
     sha = "Unknown"
 package_name = "tensordict"
-
-if os.getenv("BUILD_VERSION"):
-    version = os.getenv("BUILD_VERSION")
-elif sha != "Unknown":
-    version += "+" + sha[:7]
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -53,9 +42,22 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return parser.parse_known_args(argv)
 
 
-def write_version_file():
-    version_path = os.path.join(cwd, "tensordict", "version.py")
-    with open(version_path, "w") as f:
+def get_version():
+    version = (ROOT_DIR / "version.txt").read_text().strip()
+    if os.getenv("BUILD_VERSION"):
+        version = os.getenv("BUILD_VERSION")
+    elif sha != "Unknown":
+        version += "+" + sha[:7]
+    return version
+
+
+def get_nightly_version():
+    return f"{date.today():%Y.%m.%d}"
+
+
+def write_version_file(version):
+    version_path = ROOT_DIR / "tensordict" / "version.py"
+    with version_path.open("w") as f:
         f.write("__version__ = '{}'\n".format(version))
         f.write("git_version = {}\n".format(repr(sha)))
 
@@ -76,9 +78,6 @@ def _get_packages():
     return find_packages(exclude=exclude)
 
 
-ROOT_DIR = Path(__file__).parent.resolve()
-
-
 class clean(distutils.command.clean.clean):
     def run(self):
         # Run default behavior first
@@ -89,9 +88,7 @@ class clean(distutils.command.clean.clean):
             print(f"removing '{path}'")
             path.unlink()
         # Remove build directory
-        build_dirs = [
-            ROOT_DIR / "build",
-        ]
+        build_dirs = [ROOT_DIR / "build"]
         for path in build_dirs:
             if path.exists():
                 print(f"removing '{path}' (and everything under it)")
@@ -101,11 +98,21 @@ class clean(distutils.command.clean.clean):
 def _main(argv):
     args, unknown = parse_args(argv)
     name = args.package_name
+    is_nightly = "nightly" in name
+
+    if is_nightly:
+        version = get_nightly_version()
+    else:
+        version = get_version()
+
+    write_version_file(version)
+    print(f"Building wheel {package_name}-{version}")
+    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
+
     pytorch_package_dep = _get_pytorch_version()
     print("-- PyTorch dependency:", pytorch_package_dep)
 
-    this_directory = Path(__file__).parent
-    long_description = (this_directory / "README.md").read_text()
+    long_description = (ROOT_DIR / "README.md").read_text()
     sys.argv = [sys.argv[0]] + unknown
 
     setup(
@@ -134,8 +141,4 @@ def _main(argv):
 
 
 if __name__ == "__main__":
-
-    write_version_file()
-    print("Building wheel {}-{}".format(package_name, version))
-    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
     _main(sys.argv[1:])
