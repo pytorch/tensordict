@@ -16,6 +16,7 @@ from copy import copy, deepcopy
 from numbers import Number
 from textwrap import indent
 from typing import (
+    Any,
     Callable,
     Dict,
     Generator,
@@ -28,7 +29,6 @@ from typing import (
     Tuple,
     Type,
     Union,
-    Any,
 )
 from warnings import warn
 
@@ -37,30 +37,29 @@ import torch
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
 
-# from torch.utils._pytree import _register_pytree_node
-
 from tensordict.memmap import MemmapTensor
 from tensordict.metatensor import MetaTensor, _MetaTensorWithDims
 from tensordict.utils import (
     DEVICE_TYPING,
     DIM_TYPING,
     INDEX_TYPING,
-    LEVELS_TYPING,
-    _reslice_without_first_class_dims,
-    expand_right,
-    expand_as_right,
-)
-from tensordict.utils import (
-    _getitem_batch_size,
+    KeyDependentDefaultDict,
+    _dims_are_compatible,
     _get_indexed_dims,
-    _get_ordered_shape,
     _get_ordered_dims,
+    _get_ordered_shape,
+    _getitem_batch_size,
     _is_in,
+    _reslice_without_first_class_dims,
     _sub_index,
     convert_ellipsis_to_idx,
-    KeyDependentDefaultDict,
+    expand_as_right,
+    expand_right,
     prod,
 )
+
+# from torch.utils._pytree import _register_pytree_node
+
 
 _has_functorch = False
 _has_functorch_dim = False
@@ -2494,6 +2493,34 @@ class _TensorDictWithDims(TensorDict):
             "permute is not yet supported on TensorDicts with first-class dimensions."
         )
 
+    def has_compatible_dims(self, tensordict: "_TensorDictWithDims") -> bool:
+        """Returns True if tensordict has compatible dims.
+
+        Compatible means that the `dims` attributes of the tensordicts contain the same
+        first-class dimensions, and that for each key in the TensorDict, each entry has
+        the same first-class dimensions.
+        """
+        if not isinstance(tensordict, _TensorDictWithDims) or not _dims_are_compatible(
+            self.dims, tensordict.dims
+        ):
+            return False
+
+        for key in self.keys():
+            if key not in tensordict:
+                return False
+
+            self_value = self[key]
+            tensordict_value = tensordict[key]
+
+            if isinstance(self_value, _TensorDictWithDims):
+                if not self_value.has_compatible_dims(tensordict_value):
+                    return False
+            else:
+                if not _dims_are_compatible(self_value.dims, tensordict_value.dims):
+                    return False
+
+        return True
+
 
 class _ErrorInteceptor:
     """Context manager for catching errors and modifying message.
@@ -2679,6 +2706,15 @@ def _cat(
             f"negative dim in torch.dim(list_of_tensordicts, dim=dim) not "
             f"allowed, got dim={dim}"
         )
+    if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
+        if not all(
+            list_of_tensordicts[0].has_compatible_dims(td)
+            for td in list_of_tensordicts[1:]
+        ):
+            raise ValueError(
+                "TensorDicts with first-class dimensions can only be concatenated "
+                "with other TensorDicts with matching first-class dimensions"
+            )
 
     batch_size = list(list_of_tensordicts[0].batch_size)
     if dim >= len(batch_size):
@@ -2698,7 +2734,19 @@ def _cat(
                 key, "Attempted to concatenate tensors on different devices at key"
             ):
                 out[key] = torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-        out = TensorDict(out, device=device, batch_size=batch_size, _run_checks=False)
+
+        if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
+            out = _TensorDictWithDims(
+                out,
+                dims=list_of_tensordicts[0].dims,
+                batch_size=batch_size,
+                device=device,
+                _run_checks=False,
+            )
+        else:
+            out = TensorDict(
+                out, device=device, batch_size=batch_size, _run_checks=False
+            )
         return out
     else:
         if out.batch_size != batch_size:
@@ -2732,48 +2780,31 @@ def _stack(
     batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
         dim = len(batch_size) + dim + 1
-    if len(list_of_tensordicts) > 1:
-        for td in list_of_tensordicts[1:]:
-            if td.batch_size != list_of_tensordicts[0].batch_size:
-                raise RuntimeError(
-                    "stacking tensordicts requires them to have congruent "
-                    "batch sizes, got td1.batch_size={td.batch_size} and "
-                    f"td2.batch_size{list_of_tensordicts[0].batch_size}"
-                )
 
-        if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
-            # _TensorDictWithDims is not yet supported by LazyStackedTensorDict, we
-            # will stack the tensordicts contiguously
-            contiguous = True
+    if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
+        if not all(
+            list_of_tensordicts[0].has_compatible_dims(td)
+            for td in list_of_tensordicts[1:]
+        ):
+            raise ValueError(
+                "TensorDicts with first-class dimensions can only be stacked on other "
+                "TensorDicts with matching first-class dimensions"
+            )
 
-            dims0 = list_of_tensordicts[0].all_dims
-
-            for i, td in enumerate(list_of_tensordicts, start=1):
-                if not isinstance(td, _TensorDictWithDims):
-                    raise ValueError(
-                        "TensorDicts with first-class dimensions can only be stacked "
-                        "on other TensorDicts with matching first-class dimensions"
-                    )
-
-                td_dims = td.all_dims
-                dim_mismatch_error = (
-                    "First-class and positional dimensions of tensordicts are not "
-                    f"compatible. Got td0.all_dims={dims0} and td{i}.all_dims={td_dims}"
-                )
-                try:
-                    if dims0 != td_dims:
-                        raise ValueError(dim_mismatch_error)
-                except RuntimeError:
-                    # FIXME: equality comparison of first-class dims can result in
-                    # confusing RuntimeError, so we raise something more descriptive.
-                    raise ValueError(dim_mismatch_error)
+    for td in list_of_tensordicts[1:]:
+        if td.batch_size != list_of_tensordicts[0].batch_size:
+            raise RuntimeError(
+                "stacking tensordicts requires them to have congruent batch sizes, "
+                f"got td1.batch_size={td.batch_size} and td2.batch_size="
+                f"{list_of_tensordicts[0].batch_size}"
+            )
 
     # check that all tensordict match
     keys = _check_keys(list_of_tensordicts)
 
     if out is None:
         device = list_of_tensordicts[0].device
-        if contiguous:
+        if contiguous or isinstance(list_of_tensordicts[0], _TensorDictWithDims):
             out = {}
             for key in keys:
                 with _ErrorInteceptor(
@@ -2783,21 +2814,30 @@ def _stack(
                         [_tensordict.get(key) for _tensordict in list_of_tensordicts],
                         dim,
                     )
-            out = TensorDict(
-                out,
-                batch_size=LazyStackedTensorDict._compute_batch_size(
-                    batch_size, dim, len(list_of_tensordicts)
-                ),
-                device=device,
-                _run_checks=False,
-            )
-
+            if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
+                out = _TensorDictWithDims(
+                    out,
+                    dims=list_of_tensordicts[0].dims,
+                    batch_size=LazyStackedTensorDict._compute_batch_size(
+                        batch_size, dim, len(list_of_tensordicts)
+                    ),
+                    device=device,
+                    _run_checks=False,
+                )
+            else:
+                out = TensorDict(
+                    out,
+                    batch_size=LazyStackedTensorDict._compute_batch_size(
+                        batch_size, dim, len(list_of_tensordicts)
+                    ),
+                    device=device,
+                    _run_checks=False,
+                )
         else:
             out = LazyStackedTensorDict(
                 *list_of_tensordicts,
                 stack_dim=dim,
             )
-
     else:
         batch_size = list(batch_size)
         batch_size.insert(dim, len(list_of_tensordicts))

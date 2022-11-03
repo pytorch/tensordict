@@ -20,6 +20,7 @@ from tensordict.utils import (
     convert_ellipsis_to_idx,
 )
 from tensordict.utils import (
+    _dims_are_compatible,
     _getitem_batch_size,
     _get_indexed_dims,
     _get_ordered_shape,
@@ -431,6 +432,7 @@ def _stack_meta(
     if not len(list_of_meta_tensors):
         raise RuntimeError("empty list of meta tensors is not supported")
     is_tensordict = list_of_meta_tensors[0].is_tensordict()
+    has_dims = isinstance(list_of_meta_tensors[0], _MetaTensorWithDims)
     shape = list_of_meta_tensors[0].shape
     if safe:
         for tensor in list_of_meta_tensors:
@@ -449,8 +451,30 @@ def _stack_meta(
                     f"Stacking meta tensors of different dtype is not "
                     f"allowed, got shapes {dtype} and {tensor.dtype}"
                 )
+            if has_dims:
+                if not isinstance(
+                    tensor, _MetaTensorWithDims
+                ) or not _dims_are_compatible(
+                    list_of_meta_tensors[0].dims, tensor.dims
+                ):
+                    raise TypeError(
+                        "MetaTensors with first-class dimensions can only be "
+                        "concatenated with other MetaTensors with matching first-class "
+                        "dimensions"
+                    )
+
     shape = [s for s in shape]
     shape.insert(dim, len(list_of_meta_tensors))
+
+    if has_dims:
+        return _MetaTensorWithDims(
+            *shape,
+            dims=list_of_meta_tensors[0].dims,
+            dtype=dtype,
+            device=device,
+            _is_tensordict=is_tensordict,
+            requires_grad=requires_grad,
+        )
     return MetaTensor(
         *shape,
         dtype=dtype,

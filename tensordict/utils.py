@@ -8,9 +8,8 @@ from __future__ import annotations
 import collections
 import math
 import typing
-from itertools import chain, repeat
 from numbers import Number
-from typing import Optional, Tuple, List, Union, Any
+from typing import Tuple, List, Union, Any
 
 import numpy as np
 import torch
@@ -212,6 +211,14 @@ def _reslice_without_first_class_dims(
     return idx, idx_without
 
 
+def _dims_are_compatible(dims1, dims2):
+    return (
+        len(dims1) == len(dims2)
+        and all(_is_in(d, dims1) for d in dims2)
+        and all(_is_in(d, dims2) for d in dims1)
+    )
+
+
 def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
     """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
 
@@ -314,6 +321,7 @@ if hasattr(math, "prod"):
 
         """
         return math.prod(sequence)
+
 
 else:
 

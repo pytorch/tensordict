@@ -161,6 +161,40 @@ class TestTensorDicts(TestTensorDictsBase):
                     )
                     assert td_ordered.dims == t_ordered.dims
 
+    @pytest.mark.parametrize("dim", range(4))
+    def test_stack(self, td_name, device, dim):
+        td = getattr(self, td_name)(device)
+
+        d = dims(1)
+        td_dim = td[d]
+
+        stacked = torch.stack([td_dim, td_dim, td_dim], dim=dim)
+
+        shape = list(td_dim.batch_size)
+        shape.insert(dim, 3)
+
+        assert stacked.batch_size == torch.Size(shape)
+        torch.testing.assert_close(
+            stacked["a"].order(d), torch.stack([td["a"]] * 3, dim=dim + 1)
+        )
+
+    @pytest.mark.parametrize("dim", range(3))
+    def test_cat(self, td_name, device, dim):
+        td = getattr(self, td_name)(device)
+
+        d = dims(1)
+        td_dim = td[d]
+
+        catted = torch.cat([td_dim, td_dim, td_dim], dim=dim)
+
+        shape = list(td_dim.batch_size)
+        shape[dim] *= 3
+
+        assert catted.batch_size == torch.Size(shape)
+        torch.testing.assert_close(
+            catted["a"].order(d), torch.cat([td["a"]] * 3, dim=dim + 1)
+        )
+
 
 def test_dim_reuse():
     t = torch.rand(2, 3, 2)
@@ -241,3 +275,19 @@ def test_metatensor_order():
                     raise AssertionError(
                         f"Dims do not match: {mt_ordered.dims} != {t_ordered.dims}"
                     )
+
+
+@pytest.mark.parametrize("dim", range(4))
+def test_metatensor_stack(dim):
+    mt = MetaTensor(2, 3, 4, 5)
+    d = dims(1)
+    mt_dim = mt[d]
+
+    stacked = torch.stack([mt_dim] * 3, dim=dim)
+
+    shape = list(mt_dim.shape)
+    shape.insert(dim, 3)
+
+    assert stacked.shape == torch.Size(shape)
+    assert stacked.dims == (d,)
+    assert isinstance(stacked, _MetaTensorWithDims)
