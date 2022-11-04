@@ -1673,7 +1673,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def is_locked(self, value: bool):
         self._is_locked = value
 
-    def set_default(self, key: str, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs) -> COMPATIBLE_TYPES:
+    def set_default(
+        self, key: str, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
+    ) -> COMPATIBLE_TYPES:
         """
         Returns the value of the key if the key is in the tensordict
         If not, insert key with a value of item, and returns item
@@ -2021,7 +2023,7 @@ class TensorDict(TensorDictBase):
         inplace: bool = False,
         _run_checks: bool = True,
         _meta_val: Optional[MetaTensor] = None,
-        **kwargs
+        **kwargs,
     ) -> TensorDictBase:
         """Sets a value in the TensorDict.
 
@@ -2872,7 +2874,7 @@ torch.Size([3, 2])
         tensor: Union[dict, COMPATIBLE_TYPES],
         inplace: bool = False,
         _run_checks: bool = True,
-        **kwargs
+        **kwargs,
     ) -> TensorDictBase:
         keys = set(self.keys())
         if self.is_locked:
@@ -3365,7 +3367,11 @@ class LazyStackedTensorDict(TensorDictBase):
         return torch.Size(s)
 
     def set(
-        self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], inplace: bool = False, **kwargs
+        self,
+        key: str,
+        tensor: Union[dict, COMPATIBLE_TYPES],
+        inplace: bool = False,
+        **kwargs,
     ) -> TensorDictBase:
         if self.is_locked:
             if key not in self.keys():
@@ -3875,7 +3881,11 @@ class SavedTensorDict(TensorDictBase):
         return td.get(key, default=default)
 
     def set(
-        self, key: str, value: Union[dict, COMPATIBLE_TYPES], inplace: bool = False, **kwargs
+        self,
+        key: str,
+        value: Union[dict, COMPATIBLE_TYPES],
+        inplace: bool = False,
+        **kwargs,
     ) -> TensorDictBase:
         if self.is_locked:
             if key not in self.keys():
@@ -4269,7 +4279,11 @@ class _CustomOpTensorDict(TensorDictBase):
             return self._default_get(key, default)
 
     def set(
-        self, key: str, value: Union[dict, COMPATIBLE_TYPES], inplace: bool = False, **kwargs
+        self,
+        key: str,
+        value: Union[dict, COMPATIBLE_TYPES],
+        inplace: bool = False,
+        **kwargs,
     ) -> TensorDictBase:
         if self.inv_op is None:
             raise Exception(
