@@ -26,6 +26,7 @@ from tensordict.utils import (
     _get_ordered_shape,
     _get_ordered_dims,
     _get_shape,
+    _is_first_class_dim,
 )
 
 try:
@@ -220,14 +221,10 @@ class MetaTensor:
         shape = _getitem_batch_size(self.shape, item)
         if _has_functorch_dim and (
             isinstance(self, _MetaTensorWithDims)
-            or (
-                isinstance(item, tuple)
-                and any(isinstance(i, functorch.dim.Dim) for i in item)
-            )
+            or (isinstance(item, tuple) and any(_is_first_class_dim(i) for i in item))
         ):
-            item = item if isinstance(item, tuple) else (item,)
             dims = _get_indexed_dims(
-                item,
+                item if isinstance(item, tuple) else (item,),
                 self.dims if isinstance(self, _MetaTensorWithDims) else (),
                 self.shape,
             )
