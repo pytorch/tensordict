@@ -149,7 +149,7 @@ def foo():
 and you would like to call this function repeatedly. You could do this in two ways.
 The first would simply be to stack the calls to the function:
 ```python
-tensordict = torch.stack([foor() for _ in range(N)])
+tensordict = torch.stack([foo() for _ in range(N)])
 ```
 However, you could also choose to preallocate the tensordict:
 ```python
