@@ -143,19 +143,10 @@ def _getitem_batch_size(
 
 def _is_first_class_dim(idx: INDEX_TYPING) -> bool:
     # return True if idx is a first-class dimension or a tuple of first-class dimensions
-    # raise a TypeError if tuple and not all entries are first-class dimensions
-    if isinstance(idx, functorch.dim.Dim):
-        return True
-    elif isinstance(idx, tuple) and any(
-        isinstance(item, functorch.dim.Dim) for item in idx
-    ):
-        if not all(isinstance(item, functorch.dim.Dim) for item in idx):
-            raise TypeError(
-                "When indexing or ordering with a tuple of first-class dimensions, all "
-                "entries of the tuple must be a first-class dimension"
-            )
-        return True
-    return False
+    return isinstance(idx, functorch.dim.Dim) or (
+        isinstance(idx, tuple)
+        and any(isinstance(item, functorch.dim.Dim) for item in idx)
+    )
 
 
 def _get_indexed_dims(
@@ -233,12 +224,15 @@ def _get_ordered_shape(batch_size, args):
         if isinstance(dim, functorch.dim.Dim):
             return dim.size
         elif isinstance(dim, tuple):
-            return prod(d.size for d in dim)
+            return prod(_parse_size(d) for d in dim)
         return batch_size[dim]
 
     # place all ordered dimensions at the front, dropping any re-ordered positional
     # arguments from the existing batch_size.
     positional_args = {arg for arg in args if isinstance(arg, int)}
+    for arg in args:
+        if isinstance(arg, tuple):
+            positional_args.update({d for d in arg if isinstance(d, int)})
     return torch.Size(
         [_parse_size(d) for d in args]
         + [size for i, size in enumerate(batch_size) if i not in positional_args]

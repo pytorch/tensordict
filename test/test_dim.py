@@ -245,6 +245,14 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.testing.assert_close(td2["a"], td_dim["a"].order(d1, (d2, d3)))
         torch.testing.assert_close(td2["a"], td["a"].reshape(4, 6, 1, -1))
 
+        # test nested in in order
+        td3 = td_dim.order((d1, d2, d3, 0))
+
+        assert td3.batch_size == torch.Size([24])
+
+        torch.testing.assert_close(td3["a"], td_dim["a"].order((d1, d2, d3, 0)))
+        torch.testing.assert_close(td3["a"], td["a"].reshape(24, -1))
+
 
 def test_dim_reuse():
     t = torch.rand(2, 3, 2)
@@ -366,12 +374,15 @@ def test_metatensor_splitting():
 def test_metatensor_flatten():
     mt = MetaTensor(4, 3, 2, 1)
 
-    d1, d2, d3 = dims(3)
-    mt_dim = mt[d1, d2, d3]
+    d1, d2 = dims(2)
+    mt_dim = mt[d1, d2]
 
-    mt2 = mt_dim.order(d1, (d2, d3))
+    mt2 = mt_dim.order((d1, d2))
 
-    assert mt2.shape == torch.Size([4, 6, 1])
+    assert mt2.shape == torch.Size([12, 2, 1])
+
+    mt3 = mt_dim.order((d1, d2, 0, 1))
+    assert mt3.shape == torch.Size([24])
 
 
 @pytest.mark.parametrize("dim", range(4))
