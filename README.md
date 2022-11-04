@@ -134,7 +134,51 @@ y = vmap(fmodule, (0, None))(weights, x)
 y.shape  # torch.Size([2, 10, 4])
 ```
 
-## Nesting TensorDicts
+### Lazy preallocation
+
+Pre-allocating tensors can be cumbersome and hard to scale if the list of preallocated
+items varies according to the script configuration. TensorDict solves this in an elegant way.
+Assume you are working with a function `foo() -> TensorDict`, e.g.
+```python
+def foo():
+    tensordict = TensorDict({}, [])
+    tensordict["a"] = torch.randn(3)
+    tensordict["b"] = TensorDict({"c": torch.zeros(2)}, [])
+    return tensordict
+```
+and you would like to call this function repeatedly. You could do this in two ways.
+The first would simply be to stack the calls to the function:
+```python
+tensordict = torch.stack([foor() for _ in range(N)])
+```
+However, you could also choose to preallocate the tensordict:
+```python
+tensordict = TensorDict({}, [N])
+for i in range(N):
+    tensordict[i] = foo()
+```
+which also results in a tensordict
+```
+TensorDict(
+    fields={
+        a: Tensor(torch.Size([10, 3]), dtype=torch.float32),
+        b: TensorDict(
+            fields={
+                c: Tensor(torch.Size([10, 2]), dtype=torch.float32)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)},
+    batch_size=torch.Size([10]),
+    device=None,
+    is_shared=False)
+```
+When `i==0`, your empty tensordict will automatically be populated with empty tensors
+of batch-size `N`. After that, updates will be written in-place.
+Note that this would also work with a shuffled series of indices (pre-allocation does
+not require you to go through the tensordict in an ordered fashion).
+
+
+### Nesting TensorDicts
 
 It is possible to nest tensordict. The only requirement is that the sub-tensordict should be indexable
 under the parent tensordict, i.e. its batch size should match (but could be longer than) the parent
