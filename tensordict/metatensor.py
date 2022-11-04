@@ -89,11 +89,7 @@ class MetaTensor:
                 dtype = None
                 _repr_tensordict = str(tensor)
 
-            requires_grad = (
-                tensor.requires_grad
-                if isinstance(tensor, torch.Tensor)
-                else requires_grad
-            )
+            requires_grad = tensor.requires_grad
 
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)

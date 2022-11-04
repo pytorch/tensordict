@@ -143,6 +143,34 @@ def test_vmap_tdmodule_nativebuilt(moduletype, batch_params):
         assert y.shape == torch.Size([10, 2, 3])
 
 
+def test_swap():
+    def zero_grad(p):
+        p.grad = torch.zeros_like(p.grad)
+
+    net = nn.Sequential(
+        nn.Linear(2, 2),
+        nn.Linear(2, 2),
+        nn.Linear(2, 2),
+        nn.Sequential(nn.Linear(2, 2), nn.Linear(2, 2), nn.Linear(2, 2)),
+    )
+    x = torch.randn(2, 2)
+    params = make_functional(net)
+    assert len(list(net.parameters())) == 0
+    assert len(list(net.buffers())) == 0
+    for _ in range(2):
+        y = net(x, params)
+        assert len(list(net.parameters())) == 0
+        assert len(list(net.buffers())) == 0
+        y.sum().backward()
+        assert all(
+            p.grad.pow(2).sum() > 0 if p.requires_grad else True
+            for p in params.flatten_keys().values()
+        )
+        assert params.requires_grad
+        params.apply_(zero_grad)
+        assert params.requires_grad
+
+
 @pytest.mark.parametrize(
     "moduletype,batch_params",
     [
@@ -244,6 +272,7 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
 def test_nested_modules():
     class LinearWithKwargs(Linear):
         """Checks that modules with kwargs work equally well."""
+
         def forward(self, x, stuff="ha"):
             return super().forward(x)
 

@@ -133,7 +133,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     @property
     def requires_grad(self):
-        return any(v.requires_grad for v in self._dict_meta.values())
+        return any(v.requires_grad for v in self.values_meta())
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
@@ -2023,7 +2023,7 @@ class TensorDict(TensorDictBase):
         if self._is_memmap is None:
             self._is_memmap = isinstance(value, MemmapTensor)
 
-        present = key in self._tensordict
+        present = key in self._tensordict.keys()
         if present and value is self._tensordict[key]:
             return self
 

@@ -190,27 +190,32 @@ def extract_weights_and_buffers(model: nn.Module):
         return None
 
 
-def _swap_state(model, tensordict, return_old_tensordict=False):
+def _swap_state(model, tensordict, return_old_tensordict=False, old_tensordict=None):
 
-    if return_old_tensordict:
-        old_tensordict = TensorDict({}, [], device=tensordict.device)
+    if return_old_tensordict and old_tensordict is None:
+        old_tensordict = TensorDict(
+            {}, torch.Size([]), device=tensordict.device, _run_checks=False
+        )
 
     for key, value in list(tensordict.items()):
         if isinstance(value, TensorDictBase):
-            out = _swap_state(
-                getattr(model, key), value, return_old_tensordict=return_old_tensordict
+            if return_old_tensordict:
+                _old_value = old_tensordict.get(key, None)
+            _old_value = _swap_state(
+                getattr(model, key),
+                value,
+                return_old_tensordict=return_old_tensordict,
+                old_tensordict=_old_value,
             )
-            if out is not None:
-                old_tensordict.set(key, out)
+            old_tensordict._tensordict[key] = _old_value
         else:
             if return_old_tensordict:
                 old_attr = getattr(model, key)
                 if old_attr is None:
-                    old_attr = torch.tensor([]).view(*value.shape, 0)
+                    old_attr = torch.zeros(*value.shape, 0)
+                old_tensordict._tensordict[key] = old_attr
             delattr(model, key)
             setattr(model, key, value)
-            if return_old_tensordict:
-                old_tensordict.set(key, old_attr)
     if return_old_tensordict:
         return old_tensordict
 
@@ -268,7 +273,5 @@ def _forward_decorator(module):
 
 
 def _assign_params(module, params):
-    old_td = None
     if params is not None:
-        old_td = _swap_state(module, params, True)
-    return old_td
+        return _swap_state(module, params, True)
