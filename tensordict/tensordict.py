@@ -1510,13 +1510,13 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         for key, list_of_keys in to_unflatten.items():
             tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
+            if key in self:
+                tensordict.update(self[key])
             for (old_key, new_key) in list_of_keys:
                 value = self[old_key]
                 tensordict[new_key] = value
                 if inplace:
                     del self[old_key]
-                if key in self:
-                    tensordict.update(self[key])
             out.set(key, tensordict.unflatten_keys(separator=separator))
         return out
 
