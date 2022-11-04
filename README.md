@@ -1,9 +1,3 @@
-# Disclaimer
-
-TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
-Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility 
-with the broader pytorch ecosystem.
-
 # TensorDict
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.
@@ -20,7 +14,7 @@ for i, tensordict in enumerate(dataset):
 ```
 With this level of abstraction, one can recycle a training loop for highly heterogeneous task.
 Each individual step of the training loop (data collection and transform, model prediction, loss computation etc.)
-can be tailored to the use case at hand without impacting the others. 
+can be tailored to the use case at hand without impacting the others.
 For instance, the above example can be easily used across classification and segmentation tasks, among many others.
 
 ## Installation
@@ -110,7 +104,7 @@ tensordict_uniform = tensordict.apply(lambda tensor: tensor.uniform_())
 
 ### TensorDict for functional programming using FuncTorch
 
-We also provide an API to use TensorDict in conjunction with [FuncTorch](https://pytorch.org/functorch). 
+We also provide an API to use TensorDict in conjunction with [FuncTorch](https://pytorch.org/functorch).
 For instance, TensorDict makes it easy to concatenate model weights to do model ensembling:
 ```python
 from torch import nn
@@ -132,6 +126,61 @@ fmodule, _ = FunctionalModule._create_from(model1)
 x = torch.randn(10, 3)
 y = vmap(fmodule, (0, None))(weights, x)
 y.shape  # torch.Size([2, 10, 4])
+```
+
+#### First-class dimensions
+
+**Note: first-class dimensions are themselves experimental, you will need to install `torch-nightly` to try this out.**
+
+We also support use of first-class dimensions from `functorch`. Indexing a `TensorDict` with first-class dimensions will result in all items in the `TensorDict` being indexed in the same way. Once a `TensorDict` has been indexed with first-class dimensions, any new entries must themselves have been indexed in a compatible way. First-class dimensions can be added to any of the batch dimensions, since they are guaranteed to exist for all entries. You can call `order` directly on the `TensorDict`, or access items individually according to your need.
+
+Here's a simple example. Create a TensorDict as usual
+
+```python
+import torch
+from functorch.dim import dims
+from tensordict import TensorDict
+
+td = TensorDict(
+    {"mask": torch.randint(2, (10, 28, 28), dtype=torch.uint8)},
+    batch_size=[10, 28, 28],
+)
+```
+
+You can then index the TensorDict with first class dimensions as you would a tensor
+
+```python
+batch, width, height, channel = dims(4)
+td_fc = td[batch, width, height]
+```
+
+All entries of the TensorDict will now have been indexed in the same way
+
+```python
+td_fc["mask"]
+# tensor(..., dtype=torch.uint8)
+# with dims=(batch, width, height, 0) sizes=(10, 28, 28, 1)
+```
+
+You can add new items provided they have compatible first class dimensions, i.e. the new item must have all of the first-class dimensions of the TensorDict, though the item can have additional first-class non-batch dimensions, and the remaining positional dimensions are compatible with the TensorDict's batch size.
+
+```python
+td_fc["input"] = torch.rand(10, 28, 28, 3)[batch, width, height, channel]
+```
+
+You can now take advantage of first-class dimensions when accessing the items
+
+```python
+(td_fc["input"] * td_fc["mask"]).mean(channel)
+```
+
+Or can call `order` on the TensorDict to arrange dimensions of all items
+
+```python
+td_ordered = td_fc.order(batch, height, width)
+torch.testing.assert_close(
+    td_ordered["mask"], td_fc["mask"].order(batch, height, width)
+)
 ```
 
 ### Lazy preallocation
@@ -198,6 +247,12 @@ Accessing nested tensordicts can be achieved with a single index:
 ```python
 >>> sub_value = tensordict["key 2", "sub-key"]
 ```
+
+# Disclaimer
+
+TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
+Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility
+with the broader pytorch ecosystem.
 
 ## License
 TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.

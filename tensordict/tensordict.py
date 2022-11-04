@@ -1,4 +1,4 @@
-# pad_size, value Copyright (c) Meta Platforms, Inc. and affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
@@ -16,6 +16,7 @@ from copy import copy, deepcopy
 from numbers import Number
 from textwrap import indent
 from typing import (
+    Any,
     Callable,
     Dict,
     Generator,
@@ -28,7 +29,6 @@ from typing import (
     Tuple,
     Type,
     Union,
-    Any,
 )
 from warnings import warn
 
@@ -37,30 +37,44 @@ import torch
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
 
-# from torch.utils._pytree import _register_pytree_node
-
 from tensordict.memmap import MemmapTensor
-from tensordict.metatensor import MetaTensor
+from tensordict.metatensor import MetaTensor, _MetaTensorWithDims
 from tensordict.utils import (
     DEVICE_TYPING,
-    expand_right,
-    expand_as_right,
+    DIM_TYPING,
     INDEX_TYPING,
-)
-from tensordict.utils import (
+    KeyDependentDefaultDict,
+    _dims_are_compatible,
+    _get_indexed_dims,
+    _get_ordered_dims,
+    _get_ordered_shape,
     _getitem_batch_size,
+    _is_in,
+    _reslice_without_first_class_dims,
     _sub_index,
     convert_ellipsis_to_idx,
-    KeyDependentDefaultDict,
+    expand_as_right,
+    expand_right,
     prod,
 )
 
+# from torch.utils._pytree import _register_pytree_node
+
+
 _has_functorch = False
+_has_functorch_dim = False
 try:
     try:
         from functorch._C import is_batchedtensor
     except ImportError:
         from torch._C._functorch import is_batchedtensor
+
+    try:
+        import functorch.dim
+
+        _has_functorch_dim = True
+    except ImportError:
+        _has_functorch_dim = False
 
     _has_functorch = True
 except ImportError:
@@ -551,6 +565,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         check_device: bool = True,
         check_tensor_shape: bool = True,
         check_shared: bool = False,
+        check_first_class_dims: bool = True,
     ) -> Union[Tensor, MemmapTensor]:
 
         if isinstance(input, dict):
@@ -571,6 +586,27 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         if check_shared:
             raise DeprecationWarning("check_shared is not authorized anymore")
+
+        # checking first-class dims are compatible should happen before batch_size
+        # checks otherwise there's the potential for confusion since indexing with
+        # first-class dims changes self.batch_size
+        if (
+            check_first_class_dims
+            and _has_functorch_dim
+            and isinstance(self, _TensorDictWithDims)
+        ):
+            if not isinstance(tensor, (functorch.dim.Tensor, _TensorDictWithDims)):
+                raise ValueError(
+                    f"TensorDict has first-class dimensions {self.dims}, any added "
+                    "values must have compatible first class dimensions."
+                )
+
+            if not all(_is_in(d, tensor.dims) for d in self.dims):
+                raise ValueError(
+                    "First-class dimensions of tensordict and value are not "
+                    "compatible. value.dims must contain all of tensordict.dims. Got "
+                    f"tensordict.dims={self.dims} and value.dims={tensor.dims}."
+                )
 
         if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
@@ -1396,11 +1432,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def get_sub_tensordict(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Returns a SubTensorDict with the desired index."""
-        sub_td = SubTensorDict(
-            source=self,
-            idx=idx,
-        )
-        return sub_td
+        if _has_functorch and (
+            isinstance(idx, functorch.dim.Dim)
+            or (
+                isinstance(idx, tuple)
+                and any(isinstance(i, functorch.dim.Dim) for i in idx)
+            )
+        ):
+            idx_with, idx_without = _reslice_without_first_class_dims(idx)
+            if len(idx_without) > 0:
+                return SubTensorDict(source=self[idx_with], idx=idx_without)
+            else:
+                return self[idx_with]
+        return SubTensorDict(source=self, idx=idx)
 
     def __iter__(self) -> Generator:
         if not self.batch_dims:
@@ -1514,7 +1558,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             isinstance(_idx, str) for _idx in idx
         ) not in [len(idx), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
-        elif isinstance(idx, Number):
+        elif isinstance(idx, Number) or (
+            _has_functorch_dim and isinstance(idx, functorch.dim.Dim)
+        ):
             idx = (idx,)
         elif isinstance(idx, tuple) and all(
             isinstance(sub_idx, str) for sub_idx in idx
@@ -1532,8 +1578,42 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         if isinstance(idx, np.ndarray):
             idx = torch.tensor(idx, device=self.device)
-        if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
+        if idx is Ellipsis or (
+            isinstance(idx, tuple)
+            and any(
+                Ellipsis == item
+                for item in idx
+                # equality check against a functorch.dim.Dim can fail if dim is unbound
+                # so we filter them out since the equality cannot be satisfied anyway
+                if not (_has_functorch_dim and isinstance(item, functorch.dim.Dim))
+            )
+        ):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
+
+        if _has_functorch_dim and (
+            isinstance(self, _TensorDictWithDims)
+            or (
+                isinstance(idx, tuple)
+                and any(isinstance(item, functorch.dim.Dim) for item in idx)
+            )
+        ):
+            dims = _get_indexed_dims(
+                idx if isinstance(idx, tuple) else (idx,),
+                self.dims if isinstance(self, _TensorDictWithDims) else (),
+                self.batch_size,
+            )
+
+            return _TensorDictWithDims(
+                source={key: item[idx] for key, item in self.items()},
+                dims=dims,
+                batch_size=_getitem_batch_size(self.batch_size, idx),
+                device=self.device,
+                _meta_source={
+                    key: item[idx]
+                    for key, item in self.items_meta(make_unset=False)
+                    if not item.is_tensordict()
+                },
+            )
 
         # if return_simple_view and not self.is_memmap():
         return TensorDict(
@@ -1787,21 +1867,7 @@ class TensorDict(TensorDictBase):
                 "A TensorDict source is expected to be a TensorDictBase "
                 f"sub-type or a dictionary, found type(source)={type(source)}."
             )
-        if isinstance(batch_size, (Number, Sequence)):
-            if not isinstance(batch_size, torch.Size):
-                if isinstance(batch_size, int):
-                    batch_size = torch.Size([batch_size])
-                else:
-                    batch_size = torch.Size(batch_size)
-            self._batch_size = batch_size
-
-        elif isinstance(source, TensorDictBase):
-            self._batch_size = source.batch_size
-        else:
-            raise ValueError(
-                "batch size was not specified when creating the TensorDict "
-                "instance and it could not be retrieved from source."
-            )
+        self._batch_size = self._parse_batch_size(source, batch_size)
 
         if device is not None:
             device = torch.device(device)
@@ -1837,6 +1903,24 @@ class TensorDict(TensorDictBase):
             self._check_batch_size()
             self._check_device()
 
+    @staticmethod
+    def _parse_batch_size(
+        source: Union[TensorDictBase, dict],
+        batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
+    ):
+        if isinstance(batch_size, (Number, Sequence)):
+            if not isinstance(batch_size, torch.Size):
+                if isinstance(batch_size, int):
+                    return torch.Size([batch_size])
+                return torch.Size(batch_size)
+            return batch_size
+        elif isinstance(source, TensorDictBase):
+            return source.batch_size
+        raise ValueError(
+            "batch size was not specified when creating the TensorDict "
+            "instance and it could not be retrieved from source."
+        )
+
     def _make_meta(self, key: str) -> MetaTensor:
         proc_value = self._tensordict[key]
         is_memmap = (
@@ -1844,16 +1928,35 @@ class TensorDict(TensorDictBase):
             if self._is_memmap is not None
             else isinstance(proc_value, MemmapTensor)
         )
+        underlying_tensor = (
+            proc_value._tensor
+            if _has_functorch_dim and isinstance(proc_value, functorch.dim.Tensor)
+            else proc_value
+        )
         is_shared = (
             self._is_shared
             if self._is_shared is not None
-            else proc_value.is_shared()
-            if isinstance(proc_value, (TensorDictBase, MemmapTensor))
-            or not is_batchedtensor(proc_value)
+            else underlying_tensor.is_shared()
+            if isinstance(underlying_tensor, (TensorDictBase, MemmapTensor))
+            or not is_batchedtensor(underlying_tensor)
             else False
         )
+
+        if _has_functorch_dim and isinstance(
+            proc_value, (functorch.dim.Tensor, _TensorDictWithDims)
+        ):
+            return _MetaTensorWithDims(
+                *proc_value.shape,
+                dims=proc_value.dims,
+                device=proc_value.device,
+                _is_memmap=is_memmap,
+                _is_shared=is_shared,
+                _is_tensordict=isinstance(proc_value, TensorDictBase),
+            )
+
         return MetaTensor(
             proc_value,
+            device=proc_value.device,
             _is_memmap=is_memmap,
             _is_shared=is_shared,
             _is_tensordict=isinstance(proc_value, TensorDictBase),
@@ -2309,6 +2412,116 @@ class TensorDict(TensorDictBase):
         return self._tensordict.keys()
 
 
+class _TensorDictWithDims(TensorDict):
+    """A TensorDict that has been sliced with first class dimensions. This class is not
+    intended to be instantiated directly, rather it will be created if you slice an
+    existing TensorDict with first-class dimensions.
+    """
+
+    def __init__(
+        self,
+        source: Union[TensorDictBase, dict],
+        dims: Optional[Tuple[DIM_TYPING, ...]],
+        batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
+        device: Optional[DEVICE_TYPING] = None,
+        _meta_source: Optional[dict] = None,
+        _run_checks: bool = True,
+        _is_shared: Optional[bool] = None,
+        _is_memmap: Optional[bool] = None,
+    ) -> None:
+        self._dims = dims
+
+        super().__init__(
+            source,
+            batch_size=batch_size,
+            device=device,
+            _meta_source=_meta_source,
+            _run_checks=_run_checks,
+            _is_shared=_is_shared,
+            _is_memmap=_is_memmap,
+        )
+
+    @property
+    def dims(self):
+        return self._dims
+
+    @property
+    def all_dims(self):
+        ndim = self.dim()
+        return self.dims + tuple(range(ndim))
+
+    def order(self, *args) -> TensorDict:
+        ordered_dims = _get_ordered_dims(self.dims, args)
+        ordered_batch_size = _get_ordered_shape(self.batch_size, args)
+
+        if len(ordered_dims) > 0:
+            return _TensorDictWithDims(
+                source={key: item.order(*args) for key, item in self.items()},
+                dims=ordered_dims,
+                batch_size=ordered_batch_size,
+                device=self.device,
+                _meta_source={
+                    key: item.order(*args)
+                    for key, item in self.items_meta()
+                    if not item.is_tensordict()
+                },
+                _is_shared=self._is_shared,
+                _is_memmap=self._is_memmap,
+            )
+
+        return TensorDict(
+            source={key: item.order(*args) for key, item in self.items()},
+            batch_size=ordered_batch_size,
+            device=self.device,
+            _meta_source={
+                key: item.order(*args)
+                for key, item in self.items_meta()
+                if not item.is_tensordict()
+            },
+            _is_shared=self._is_shared,
+            _is_memmap=self._is_memmap,
+        )
+
+    def __repr__(self) -> str:
+        repr_ = super().__repr__()
+        sizes = tuple(d.size for d in self.dims) + tuple(self.batch_size)
+        dims = self.all_dims
+        return f"{repr_}\nwith dims={dims} sizes={sizes}"
+
+    def permute(self, *dims_list: int, dims=None):
+        raise NotImplementedError(
+            "permute is not yet supported on TensorDicts with first-class dimensions."
+        )
+
+    def has_compatible_dims(self, tensordict: "_TensorDictWithDims") -> bool:
+        """Returns True if tensordict has compatible dims.
+
+        Compatible means that the `dims` attributes of the tensordicts contain the same
+        first-class dimensions, and that for each key in the TensorDict, each entry has
+        the same first-class dimensions.
+        """
+        if not isinstance(tensordict, _TensorDictWithDims) or not _dims_are_compatible(
+            self.dims, tensordict.dims
+        ):
+            return False
+
+        for key in self.keys():
+            if key not in tensordict:
+                return False
+
+            self_value = self[key]
+            tensordict_value = tensordict[key]
+
+            if isinstance(self_value, _TensorDictWithDims):
+                if not self_value.has_compatible_dims(tensordict_value):
+                    return False
+            else:
+                if not _dims_are_compatible(self_value.dims, tensordict_value.dims):
+                    return False
+
+        return True
+
+
 class _ErrorInteceptor:
     """Context manager for catching errors and modifying message.
 
@@ -2493,6 +2706,15 @@ def _cat(
             f"negative dim in torch.dim(list_of_tensordicts, dim=dim) not "
             f"allowed, got dim={dim}"
         )
+    if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
+        if not all(
+            list_of_tensordicts[0].has_compatible_dims(td)
+            for td in list_of_tensordicts[1:]
+        ):
+            raise ValueError(
+                "TensorDicts with first-class dimensions can only be concatenated "
+                "with other TensorDicts with matching first-class dimensions"
+            )
 
     batch_size = list(list_of_tensordicts[0].batch_size)
     if dim >= len(batch_size):
@@ -2512,7 +2734,19 @@ def _cat(
                 key, "Attempted to concatenate tensors on different devices at key"
             ):
                 out[key] = torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-        out = TensorDict(out, device=device, batch_size=batch_size, _run_checks=False)
+
+        if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
+            out = _TensorDictWithDims(
+                out,
+                dims=list_of_tensordicts[0].dims,
+                batch_size=batch_size,
+                device=device,
+                _run_checks=False,
+            )
+        else:
+            out = TensorDict(
+                out, device=device, batch_size=batch_size, _run_checks=False
+            )
         return out
     else:
         if out.batch_size != batch_size:
@@ -2546,20 +2780,31 @@ def _stack(
     batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
         dim = len(batch_size) + dim + 1
-    if len(list_of_tensordicts) > 1:
-        for td in list_of_tensordicts[1:]:
-            if td.batch_size != list_of_tensordicts[0].batch_size:
-                raise RuntimeError(
-                    "stacking tensordicts requires them to have congruent "
-                    "batch sizes, got td1.batch_size={td.batch_size} and "
-                    f"td2.batch_size{list_of_tensordicts[0].batch_size}"
-                )
+
+    if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
+        if not all(
+            list_of_tensordicts[0].has_compatible_dims(td)
+            for td in list_of_tensordicts[1:]
+        ):
+            raise ValueError(
+                "TensorDicts with first-class dimensions can only be stacked on other "
+                "TensorDicts with matching first-class dimensions"
+            )
+
+    for td in list_of_tensordicts[1:]:
+        if td.batch_size != list_of_tensordicts[0].batch_size:
+            raise RuntimeError(
+                "stacking tensordicts requires them to have congruent batch sizes, "
+                f"got td1.batch_size={td.batch_size} and td2.batch_size="
+                f"{list_of_tensordicts[0].batch_size}"
+            )
+
     # check that all tensordict match
     keys = _check_keys(list_of_tensordicts)
 
     if out is None:
         device = list_of_tensordicts[0].device
-        if contiguous:
+        if contiguous or isinstance(list_of_tensordicts[0], _TensorDictWithDims):
             out = {}
             for key in keys:
                 with _ErrorInteceptor(
@@ -2569,21 +2814,30 @@ def _stack(
                         [_tensordict.get(key) for _tensordict in list_of_tensordicts],
                         dim,
                     )
-            out = TensorDict(
-                out,
-                batch_size=LazyStackedTensorDict._compute_batch_size(
-                    batch_size, dim, len(list_of_tensordicts)
-                ),
-                device=device,
-                _run_checks=False,
-            )
-
+            if isinstance(list_of_tensordicts[0], _TensorDictWithDims):
+                out = _TensorDictWithDims(
+                    out,
+                    dims=list_of_tensordicts[0].dims,
+                    batch_size=LazyStackedTensorDict._compute_batch_size(
+                        batch_size, dim, len(list_of_tensordicts)
+                    ),
+                    device=device,
+                    _run_checks=False,
+                )
+            else:
+                out = TensorDict(
+                    out,
+                    batch_size=LazyStackedTensorDict._compute_batch_size(
+                        batch_size, dim, len(list_of_tensordicts)
+                    ),
+                    device=device,
+                    _run_checks=False,
+                )
         else:
             out = LazyStackedTensorDict(
                 *list_of_tensordicts,
                 stack_dim=dim,
             )
-
     else:
         batch_size = list(batch_size)
         batch_size.insert(dim, len(list_of_tensordicts))
@@ -3580,6 +3834,28 @@ class LazyStackedTensorDict(TensorDictBase):
         return super().__setitem__(item, value)
 
     def __getitem__(self, item: INDEX_TYPING) -> TensorDictBase:
+        if _has_functorch_dim and (
+            isinstance(item, functorch.dim.Dim)
+            or (
+                isinstance(item, tuple)
+                and any(isinstance(i, functorch.dim.Dim) for i in item)
+            )
+        ):
+            # LazyStackedTensorDict currently doesn't support first-class dims, so we
+            # stack all items and then index the result
+            device = self.tensordicts[0].device
+            out = {}
+            for key in self.tensordicts[0].keys():
+                out[key] = torch.stack(
+                    [_tensordict.get(key) for _tensordict in self.tensordicts],
+                    self.stack_dim,
+                )
+            out = TensorDict(
+                out, batch_size=self.batch_size, device=device, _run_checks=False
+            )
+
+            return out[item]
+
         if item is Ellipsis or (isinstance(item, tuple) and Ellipsis in item):
             item = convert_ellipsis_to_idx(item, self.batch_size)
         if isinstance(item, tuple) and sum(
@@ -4072,6 +4348,17 @@ class SavedTensorDict(TensorDictBase):
         return super().__reduce__(*args, **kwargs)
 
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
+        if _has_functorch and (
+            isinstance(idx, functorch.dim.Dim)
+            or (
+                isinstance(idx, tuple)
+                and any(isinstance(i, functorch.dim.Dim) for i in idx)
+            )
+        ):
+            raise ValueError(
+                "SavedTensorDict currently does not support first-class dimensions"
+            )
+
         if isinstance(idx, list):
             idx = torch.tensor(idx, device=self.device)
         if isinstance(idx, tuple) and any(
@@ -4651,6 +4938,9 @@ def _check_keys(
 
 
 _accepted_classes = (Tensor, MemmapTensor, TensorDictBase)
+
+if _has_functorch_dim:
+    _accepted_classes = _accepted_classes + (functorch.dim.Tensor,)
 
 
 def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_device):
