@@ -1756,9 +1756,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def set_default(
         self, key: str, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
     ) -> COMPATIBLE_TYPES:
-        """
-        Returns the value of the key if the key is in the tensordict
-        If not, insert key with a value of item, and returns item
+        """Returns the value of the key if the key is in the tensordict. If not, insert key with a value of item and returns item.
 
         Args:
             key (str): name of the item
