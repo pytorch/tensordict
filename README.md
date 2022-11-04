@@ -157,7 +157,7 @@ tensordict = TensorDict({}, [N])
 for i in range(N):
     tensordict[i] = foo()
 ```
-which also results in a tensordict
+which also results in a tensordict (when `N = 10`)
 ```
 TensorDict(
     fields={
