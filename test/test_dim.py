@@ -13,7 +13,7 @@ from tensordict.metatensor import _MetaTensorWithDims
 from tensordict.tensordict import _TensorDictWithDims
 
 try:
-    from functorch.dim import Dim, Tensor, dims
+    from functorch.dim import Dim, DimensionBindError, Tensor, dims
 except ImportError:
     pytest.skip(reason="functorch.dim not found")
 
@@ -195,6 +195,56 @@ class TestTensorDicts(TestTensorDictsBase):
             catted["a"].order(d), torch.cat([td["a"]] * 3, dim=dim + 1)
         )
 
+    def test_splitting(self, td_name, device):
+        td = getattr(self, td_name)(device)
+
+        d1, d2, d3 = dims(3)
+        d1.size = 2
+        td_dim = td[(d1, d2), d3]
+
+        assert td_dim.batch_size == torch.Size([2, 1])
+
+        td2 = td_dim.order(d1, d2, d3)
+
+        assert td2.batch_size == torch.Size([2, 2, 3, 2, 1])
+        torch.testing.assert_close(td2["a"], td_dim["a"].order(d1, d2, d3))
+        torch.testing.assert_close(td2["a"], td["a"].reshape(2, 2, 3, 2, 1, -1))
+
+        d1, d2, d3 = dims(3)
+        with pytest.raises(
+            DimensionBindError,
+            match=r"cannot infer the sizes of 2 dimensions at once \(d1, d2\)",
+        ):
+            td[(d1, d2), d3]
+
+        d1, d2, d3 = dims(3)
+        d1.size = 3
+        with pytest.raises(
+            DimensionBindError,
+            match="inferred dimension does not evenly fit into larger dimension",
+        ):
+            td[(d1, d2), d3]
+
+        d1, d2, d3 = dims(3)
+        d1.size = d2.size = 3
+        with pytest.raises(
+            DimensionBindError, match=r"Dimension sizes do not match \(4 != 9\)"
+        ):
+            td[(d1, d2), d3]
+
+    def test_flatten(self, td_name, device):
+        td = getattr(self, td_name)(device)
+
+        d1, d2, d3 = dims(3)
+        td_dim = td[d1, d2, d3]
+
+        td2 = td_dim.order(d1, (d2, d3))
+
+        assert td2.batch_size == torch.Size([4, 6, 1])
+
+        torch.testing.assert_close(td2["a"], td_dim["a"].order(d1, (d2, d3)))
+        torch.testing.assert_close(td2["a"], td["a"].reshape(4, 6, 1, -1))
+
 
 def test_dim_reuse():
     t = torch.rand(2, 3, 2)
@@ -275,6 +325,53 @@ def test_metatensor_order():
                     raise AssertionError(
                         f"Dims do not match: {mt_ordered.dims} != {t_ordered.dims}"
                     )
+
+
+def test_metatensor_splitting():
+    mt = MetaTensor(4, 3, 2, 1)
+
+    d1, d2, d3 = dims(3)
+    d1.size = 2
+    mt_dim = mt[(d1, d2), d3]
+
+    assert mt_dim.shape == torch.Size([2, 1])
+
+    mt2 = mt_dim.order(d1, d2, d3)
+
+    assert mt2.shape == torch.Size([2, 2, 3, 2, 1])
+
+    d1, d2, d3 = dims(3)
+    with pytest.raises(
+        DimensionBindError,
+        match=r"cannot infer the sizes of 2 dimensions at once \(d1, d2\)",
+    ):
+        mt[(d1, d2), d3]
+
+    d1, d2, d3 = dims(3)
+    d1.size = 3
+    with pytest.raises(
+        DimensionBindError,
+        match="inferred dimension does not evenly fit into larger dimension",
+    ):
+        mt[(d1, d2), d3]
+
+    d1, d2, d3 = dims(3)
+    d1.size = d2.size = 3
+    with pytest.raises(
+        DimensionBindError, match=r"Dimension sizes do not match \(4 != 9\)"
+    ):
+        mt[(d1, d2), d3]
+
+
+def test_metatensor_flatten():
+    mt = MetaTensor(4, 3, 2, 1)
+
+    d1, d2, d3 = dims(3)
+    mt_dim = mt[d1, d2, d3]
+
+    mt2 = mt_dim.order(d1, (d2, d3))
+
+    assert mt2.shape == torch.Size([4, 6, 1])
 
 
 @pytest.mark.parametrize("dim", range(4))
