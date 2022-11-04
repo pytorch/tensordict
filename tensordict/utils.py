@@ -169,7 +169,7 @@ def _get_indexed_dims(
                     f"{tuple(d for d in item if not d.is_bound)}"
                 )
             elif n_unbound == 1:
-                d_size, rem = divmod(size, prod(d.size for d in item if d.is_bound))
+                d_size, rem = divmod(size, prod([d.size for d in item if d.is_bound]))
                 if rem != 0:
                     raise functorch.dim.DimensionBindError(
                         "inferred dimension does not evenly fit into larger dimension: "
@@ -180,7 +180,7 @@ def _get_indexed_dims(
                 (unbound_dim,) = tuple(d for d in item if not d.is_bound)
                 unbound_dim.size = d_size
             else:
-                size_prod = prod(d.size for d in item)
+                size_prod = prod([d.size for d in item])
                 if size_prod != size:
                     raise functorch.dim.DimensionBindError(
                         f"Dimension sizes do not match ({size} != {size_prod}) when "
@@ -224,7 +224,7 @@ def _get_ordered_shape(batch_size, args):
         if isinstance(dim, functorch.dim.Dim):
             return dim.size
         elif isinstance(dim, tuple):
-            return prod(_parse_size(d) for d in dim)
+            return prod([_parse_size(d) for d in dim])
         return batch_size[dim]
 
     # place all ordered dimensions at the front, dropping any re-ordered positional
