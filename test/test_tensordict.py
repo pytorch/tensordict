@@ -2412,6 +2412,22 @@ def test_setitem_nested():
     assert (tensordict["a", "b", "c"] == 1).all()
 
 
+def test_set_nested_keys():
+    tensor = torch.randn(4, 5, 6, 7)
+    tensor2 = torch.ones(4, 5, 6, 7)
+    tensordict = TensorDict({}, [4])
+    sub_tensordict = TensorDict({}, [4, 5])
+    sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
+    sub_sub_tensordict2 = TensorDict({"c": tensor2}, [4, 5, 6])
+    sub_tensordict.set("b", sub_sub_tensordict)
+    tensordict.set("a", sub_tensordict)
+    assert tensordict.get(("a", "b")) is sub_sub_tensordict
+
+    tensordict.set(("a", "b"), sub_sub_tensordict2)
+    assert tensordict.get(("a", "b")) is sub_sub_tensordict2
+    assert (tensordict.get(("a", "b", "c")) == 1).all()
+
+
 def test_keys_view():
     tensor = torch.randn(4, 5, 6, 7)
     sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
