@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import collections
 import functools
 import tempfile
 import textwrap
@@ -29,6 +30,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    OrderedDict,
 )
 from warnings import warn
 
@@ -90,7 +92,7 @@ _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-
 
 
 class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
-    """TensorDictBase is an abstract parent class for TensorDicts, the torchrl data container."""
+    """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
     _safe = False
     _lazy = False
@@ -226,6 +228,30 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 self._is_shared = _is_shared
             return self._is_shared
         return all(item.is_shared() for item in self.values_meta())
+
+    def state_dict(self) -> OrderedDict:
+        out = collections.OrderedDict()
+        for key, item in self.flatten_keys().items():
+            out[key] = item
+        if "__batch_size" in out:
+            raise KeyError(
+                "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
+            )
+        if "__device" in out:
+            raise KeyError(
+                "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
+            )
+        out["__batch_size"] = self.batch_size
+        out["__device"] = self.device
+        return out
+
+    def load_state_dict(self, state_dict: OrderedDict) -> TensorDictBase:
+        self.batch_size = state_dict.pop("__batch_size")
+        device = state_dict.pop("__device")
+        if device is not None:
+            self.to(device)
+        self.update(state_dict, inplace=True)
+        return self
 
     def is_memmap(self, no_check: bool = True) -> bool:
         """Checks if tensordict is stored with MemmapTensors.
@@ -418,6 +444,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             if batch_size is not None
             else copy(self)
         )
+        is_locked = out.is_locked
+        if not inplace and is_locked:
+            out.unlock()
         for key, item in self.items():
             if isinstance(item, TensorDictBase):
                 item_trsf = item.apply(fn, inplace=inplace, batch_size=batch_size)
@@ -425,6 +454,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 item_trsf = fn(item)
             if item_trsf is not None:
                 out.set(key, item_trsf, inplace=inplace)
+        if not inplace and is_locked:
+            out.lock()
         return out
 
     def update(
@@ -1188,13 +1219,28 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             inv_op_kwargs={"dim": dim},
         )
 
-    def squeeze(self, dim: int) -> TensorDictBase:
+    def squeeze(self, dim: Optional[int] = None) -> TensorDictBase:
         """Squeezes all tensors for a dimension comprised in between `-td.batch_dims+1` and `td.batch_dims-1` and returns them in a new tensordict.
 
         Args:
-            dim (int): dimension along which to squeeze
+            dim (Optional[int]): dimension along which to squeeze. If dim is None, all singleton dimensions will be squeezed. dim is None by default.
 
         """
+        if dim is None:
+            size = self.size()
+            if len(self.size()) == 1 or size.count(1) == 0:
+                return self
+            first_singleton_dim = size.index(1)
+
+            squeezed_dict = SqueezedTensorDict(
+                source=self,
+                custom_op="squeeze",
+                inv_op="unsqueeze",
+                custom_op_kwargs={"dim": first_singleton_dim},
+                inv_op_kwargs={"dim": first_singleton_dim},
+            )
+            return squeezed_dict.squeeze(dim=None)
+
         if dim < 0:
             dim = self.batch_dims + dim
 
@@ -1454,7 +1500,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             yield self[i]
 
     def flatten_keys(
-        self, separator: str = ",", inplace: bool = False
+        self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
         to_flatten = []
         for key, meta_value in self.items_meta():
@@ -1487,7 +1533,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return tensordict_out
 
     def unflatten_keys(
-        self, separator: str = ",", inplace: bool = False
+        self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
         to_unflatten = defaultdict(lambda: list())
         for key in self.keys():
@@ -1755,6 +1801,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def is_locked(self, value: bool):
         self._is_locked = value
 
+    def lock(self):
+        self.is_locked = True
+
+    def unlock(self):
+        self.is_locked = False
+
 
 class TensorDict(TensorDictBase):
     """A batched dictionary of tensors.
@@ -1820,7 +1872,7 @@ class TensorDict(TensorDictBase):
 
     Examples:
         >>> import torch
-        >>> from torchrl.data import TensorDict
+        >>> from tensordict import TensorDict
         >>> source = {'random': torch.randn(3, 4),
         ...     'zeros': torch.zeros(3, 4, 5)}
         >>> batch_size = [3]
@@ -2913,7 +2965,7 @@ def pad(tensordict: TensorDictBase, pad_size: Sequence[int], value: float = 0.0)
         A new TensorDict padded along the batch dimensions
 
     Examples:
-        >>> from torchrl.data import TensorDict
+        >>> from tensordict import TensorDict
         >>> from tensordict.tensordict import pad
         >>> import torch
         >>> td = TensorDict({'a': torch.ones(3, 4, 1),
@@ -3005,7 +3057,7 @@ class SubTensorDict(TensorDictBase):
     memory location (unlike regular indexing of tensors).
 
     Examples:
-        >>> from torchrl.data import TensorDict, SubTensorDict
+        >>> from tensordict import TensorDict, SubTensorDict
         >>> source = {'random': torch.randn(3, 4, 5, 6),
         ...    'zeros': torch.zeros(3, 4, 1, dtype=torch.bool)}
         >>> batch_size = torch.Size([3, 4])
@@ -3460,7 +3512,7 @@ class LazyStackedTensorDict(TensorDictBase):
             `td.ndimension()-1` along which the stack should be performed.
 
     Examples:
-        >>> from torchrl.data import TensorDict
+        >>> from tensordict import TensorDict
         >>> import torch
         >>> tds = [TensorDict({'a': torch.randn(3, 4)}, batch_size=[3])
         ...     for _ in range(10)]
@@ -4718,7 +4770,7 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
         >>> assert tensordict.unsqueeze(dim).squeeze(dim) is tensordict
 
     Examples:
-        >>> from torchrl.data import TensorDict
+        >>> from tensordict import TensorDict
         >>> import torch
         >>> td = TensorDict({'a': torch.randn(3, 4)}, batch_size=[3])
         >>> td_unsqueeze = td.unsqueeze(-1)
@@ -4728,8 +4780,8 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
         True
     """
 
-    def squeeze(self, dim: int) -> TensorDictBase:
-        if dim < 0:
+    def squeeze(self, dim: Optional[int]) -> TensorDictBase:
+        if dim is not None and dim < 0:
             dim = self.batch_dims + dim
         if dim == self.custom_op_kwargs.get("dim"):
             return self._source
@@ -4827,7 +4879,7 @@ class PermutedTensorDict(_CustomOpTensorDict):
         >>> assert tensordict.permute(dims_list, dim).permute(dims_list, dim) is tensordict
 
     Examples:
-        >>> from torchrl.data import TensorDict
+        >>> from tensordict import TensorDict
         >>> import torch
         >>> td = TensorDict({'a': torch.randn(4, 5, 6, 9)}, batch_size=[3])
         >>> td_permute = td.permute(dims=(2, 1, 0))
