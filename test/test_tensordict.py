@@ -2530,9 +2530,12 @@ class TestMakeTensorDict:
 
 @pytest.mark.parametrize("separator", [".", "-"])
 def test_unflatten_keys_collision(separator):
-    td = TensorDict({"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, [])
+    td = TensorDict(
+        {"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, []
+    )
     ref = TensorDict({"a": [1, 2], "c": TensorDict({"a": [1, 2], "b": [1, 2]}, [])}, [])
     assert assert_allclose_td(td.unflatten_keys(separator), ref)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
