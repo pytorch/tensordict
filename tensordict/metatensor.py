@@ -26,6 +26,7 @@ from tensordict.utils import (
     _get_ordered_shape,
     _get_ordered_dims,
     _get_shape,
+    _is_first_class_dim,
 )
 
 try:
@@ -220,14 +221,23 @@ class MetaTensor:
         shape = _getitem_batch_size(self.shape, item)
         if _has_functorch_dim and (
             isinstance(self, _MetaTensorWithDims)
-            or (
-                isinstance(item, tuple)
-                and any(isinstance(i, functorch.dim.Dim) for i in item)
-            )
+            or (isinstance(item, tuple) and any(_is_first_class_dim(i) for i in item))
         ):
-            item = item if isinstance(item, tuple) else (item,)
+            if isinstance(item, tuple):
+                for i in item:
+                    if (
+                        isinstance(i, tuple)
+                        and any(isinstance(d, functorch.dim.Dim) for d in i)
+                        and not all(isinstance(d, functorch.dim.Dim) for d in i)
+                    ):
+                        raise TypeError(
+                            "If indexing a dimension with a tuple of first-class "
+                            "dimensions, all entries of that tuple must be a "
+                            "first-class dimension"
+                        )
+
             dims = _get_indexed_dims(
-                item,
+                item if isinstance(item, tuple) else (item,),
                 self.dims if isinstance(self, _MetaTensorWithDims) else (),
                 self.shape,
             )
@@ -387,6 +397,12 @@ class _MetaTensorWithDims(MetaTensor):
         return self.dims + tuple(range(ndim))
 
     def order(self, *args) -> MetaTensor:
+        if not all(_is_first_class_dim(arg) or isinstance(arg, int) for arg in args):
+            raise TypeError(
+                "All arguments to order must either be an integer, a first-class "
+                "dimension, or a tuple of first-class dimensions"
+            )
+
         ordered_dims = _get_ordered_dims(self.dims, args)
         ordered_shape = _get_ordered_shape(self.shape, args)
 

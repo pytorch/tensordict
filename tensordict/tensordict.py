@@ -50,6 +50,7 @@ from tensordict.utils import (
     _get_ordered_dims,
     _get_ordered_shape,
     _getitem_batch_size,
+    _is_first_class_dim,
     _is_in,
     _reslice_without_first_class_dims,
     _sub_index,
@@ -1684,11 +1685,20 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         if _has_functorch_dim and (
             isinstance(self, _TensorDictWithDims)
-            or (
-                isinstance(idx, tuple)
-                and any(isinstance(item, functorch.dim.Dim) for item in idx)
-            )
+            or (isinstance(idx, tuple) and any(_is_first_class_dim(i) for i in idx))
         ):
+            if isinstance(idx, tuple):
+                for item in idx:
+                    if (
+                        isinstance(item, tuple)
+                        and any(isinstance(d, functorch.dim.Dim) for d in item)
+                        and not all(isinstance(d, functorch.dim.Dim) for d in item)
+                    ):
+                        raise TypeError(
+                            "If indexing a dimension with a tuple of first-class "
+                            "dimensions, all entries of that tuple must be a "
+                            "first-class dimension"
+                        )
             dims = _get_indexed_dims(
                 idx if isinstance(idx, tuple) else (idx,),
                 self.dims if isinstance(self, _TensorDictWithDims) else (),
@@ -2549,6 +2559,12 @@ class _TensorDictWithDims(TensorDict):
         return self.dims + tuple(range(ndim))
 
     def order(self, *args) -> TensorDict:
+        if not all(_is_first_class_dim(arg) or isinstance(arg, int) for arg in args):
+            raise TypeError(
+                "All arguments to order must either be an integer, a first-class "
+                "dimension, or a tuple of first-class dimensions"
+            )
+
         ordered_dims = _get_ordered_dims(self.dims, args)
         ordered_batch_size = _get_ordered_shape(self.batch_size, args)
 
@@ -3955,10 +3971,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def __getitem__(self, item: INDEX_TYPING) -> TensorDictBase:
         if _has_functorch_dim and (
             isinstance(item, functorch.dim.Dim)
-            or (
-                isinstance(item, tuple)
-                and any(isinstance(i, functorch.dim.Dim) for i in item)
-            )
+            or (isinstance(item, tuple) and any(_is_first_class_dim(i) for i in item))
         ):
             # LazyStackedTensorDict currently doesn't support first-class dims, so we
             # stack all items and then index the result
