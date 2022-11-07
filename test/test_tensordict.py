@@ -2385,6 +2385,11 @@ def test_getitem_nested():
     assert (tensordict["a", "b"] == sub_sub_tensordict).all()
     assert (tensordict["a", "b", "c"] == tensor).all()
 
+    # check that get method returns same contents
+    assert (tensordict.get("a") == sub_tensordict).all()
+    assert (tensordict.get(("a", "b")) == sub_sub_tensordict).all()
+    assert (tensordict.get(("a", "b", "c")) == tensor).all()
+
     # check that shapes are kept
     assert tensordict.shape == torch.Size([4])
     assert sub_tensordict.shape == torch.Size([4, 5])
