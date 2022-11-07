@@ -22,7 +22,6 @@ from typing import (
     Dict,
     Generator,
     Iterator,
-    KeysView,
     List,
     Optional,
     Sequence,
@@ -89,6 +88,38 @@ COMPATIBLE_TYPES = Union[
 ]  # None? # leaves space for TensorDictBase
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
+
+
+class _TensorDictKeysView:
+    """
+    Wrapper class that enables richer behaviour of `key in tensordict.keys()`
+    """
+
+    def __init__(self, tensordict):
+        self.tensordict = tensordict
+
+    def __iter__(self):
+        return iter(self.tensordict._tensordict.keys())
+
+    def __len__(self):
+        return len(self.tensordict._tensordict.keys())
+
+    def __contains__(self, key):
+        if isinstance(key, str):
+            return key in self.tensordict._tensordict.keys()
+        elif isinstance(key, tuple):
+            if len(key) == 1:
+                return key[0] in self
+            elif len(key) > 1:
+                return (
+                    key[0] in self
+                    and isinstance(self.tensordict[key[0]], TensorDictBase)
+                    and key[1:] in self.tensordict[key[0]].keys()
+                )
+        raise TypeError(
+            "TensorDict keys are always strings. Membership checks are only supported "
+            "for strings or non-empty tuples of strings (for nested TensorDicts)"
+        )
 
 
 class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
@@ -702,7 +733,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return self._dict_meta.values()
 
     @abc.abstractmethod
-    def keys(self) -> KeysView:
+    def keys(self) -> _TensorDictKeysView:
         """Returns a generator of tensordict keys."""
         raise NotImplementedError(f"{self.__class__.__name__}")
 
@@ -1535,7 +1566,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def unflatten_keys(
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
-        to_unflatten = defaultdict(lambda: list())
+        to_unflatten = defaultdict(list)
         for key in self.keys():
             if separator in key[1:-1]:
                 split_key = key.split(separator)
@@ -1556,7 +1587,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         for key, list_of_keys in to_unflatten.items():
             tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
-            if key in self:
+            if key in self.keys():
                 tensordict.update(self[key])
             for (old_key, new_key) in list_of_keys:
                 value = self[old_key]
@@ -1569,6 +1600,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def __len__(self) -> int:
         """Returns the length of first dimension, if there is, otherwise 0."""
         return self.shape[0] if self.batch_dims else 0
+
+    def __contains__(self, key):
+        # by default a Mapping will implement __contains__ by calling __getitem__ and
+        # returning False if a KeyError is raised, True otherwise. TensorDict has a
+        # complex __getitem__ method since we support more than just retrieval of values
+        # by key, and so this can be quite inefficient, particularly if values are
+        # evaluated lazily on access. Hence we don't support use of __contains__ and
+        # direct the user to use TensorDict.keys() instead
+        raise NotImplementedError(
+            "TensorDict does not support membership checks with the `in` keyword. If "
+            "you want to check if a particular key is in your TensorDict, please use "
+            "`key in tensordict.keys()` instead."
+        )
 
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Indexes all tensors according to the provided index.
@@ -2462,8 +2506,8 @@ class TensorDict(TensorDictBase):
             _is_shared=self._is_shared,
         )
 
-    def keys(self) -> KeysView:
-        return self._tensordict.keys()
+    def keys(self) -> _TensorDictKeysView:
+        return _TensorDictKeysView(self)
 
 
 class _TensorDictWithDims(TensorDict):
@@ -2560,7 +2604,7 @@ class _TensorDictWithDims(TensorDict):
             return False
 
         for key in self.keys():
-            if key not in tensordict:
+            if key not in tensordict.keys():
                 return False
 
             self_value = self[key]
@@ -3205,7 +3249,7 @@ torch.Size([3, 2])
             self._dict_meta[key].requires_grad = tensor.requires_grad
         return self
 
-    def keys(self) -> KeysView:
+    def keys(self) -> _TensorDictKeysView:
         return self._source.keys()
 
     def set_(
@@ -3495,6 +3539,23 @@ def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
     for td in tensordicts[1:]:
         d.update(td.to_dict())
     return TensorDict({}, [], device=td.device).update(d)
+
+
+class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
+    def __len__(self):
+        return len(self.tensordict.valid_keys)
+
+    def __iter__(self):
+        return iter(self.tensordict.valid_keys)
+
+    def __contains__(self, key):
+        if isinstance(key, str):
+            return key in self.tensordict.valid_keys
+        raise TypeError(
+            "TensorDict keys are always strings. Membership checks on a "
+            "LazyStackedTensorDict do not currently support tuples of strings for "
+            "nested lookups, so only strings are allowed."
+        )
 
 
 class LazyStackedTensorDict(TensorDictBase):
@@ -3827,9 +3888,8 @@ class LazyStackedTensorDict(TensorDictBase):
             del self._orig_batch_size
         self._batch_size = new_size
 
-    def keys(self) -> Iterator[str]:
-        for key in self.valid_keys:
-            yield key
+    def keys(self) -> _LazyStackedTensorDictKeysView:
+        return _LazyStackedTensorDictKeysView(self)
 
     def _update_valid_keys(self) -> None:
         valid_keys = set(self.tensordicts[0].keys())
@@ -3886,6 +3946,11 @@ class LazyStackedTensorDict(TensorDictBase):
                     td[item] = sub_td
             return self
         return super().__setitem__(item, value)
+
+    def __contains__(self, item) -> bool:
+        if isinstance(item, TensorDictBase):
+            return any(item is td for td in self.tensordicts)
+        super().__contains__(item)
 
     def __getitem__(self, item: INDEX_TYPING) -> TensorDictBase:
         if _has_functorch_dim and (
@@ -4667,7 +4732,7 @@ class _CustomOpTensorDict(TensorDictBase):
             f"\n\top={self.custom_op}({custom_op_kwargs_str}))"
         )
 
-    def keys(self) -> KeysView:
+    def keys(self) -> _TensorDictKeysView:
         return self._source.keys()
 
     def select(self, *keys: str, inplace: bool = False) -> _CustomOpTensorDict:

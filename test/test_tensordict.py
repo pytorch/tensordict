@@ -2407,6 +2407,55 @@ def test_setitem_nested():
     assert (tensordict["a", "b", "c"] == 1).all()
 
 
+def test_keys_view():
+    tensor = torch.randn(4, 5, 6, 7)
+    sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
+    sub_tensordict = TensorDict({}, [4, 5])
+    tensordict = TensorDict({}, [4])
+
+    sub_tensordict["b"] = sub_sub_tensordict
+    tensordict["a"] = sub_tensordict
+
+    assert "a" in tensordict.keys()
+    assert ("a",) in tensordict.keys()
+    assert ("a", "b", "c") in tensordict.keys()
+    assert ("a", "c", "b") not in tensordict.keys()
+    assert "random_string" not in tensordict.keys()
+
+    with pytest.raises(TypeError, match="TensorDict keys are always strings."):
+        42 in tensordict.keys()
+
+    with pytest.raises(TypeError, match="TensorDict keys are always strings."):
+        ("a", 42) in tensordict.keys()
+
+
+def test_error_on_contains():
+    td = TensorDict(
+        {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
+    )
+    with pytest.raises(
+        NotImplementedError,
+        match="TensorDict does not support membership checks with the `in` keyword",
+    ):
+        "random_string" in td
+
+
+def test_lazy_stacked_contains():
+    td = TensorDict(
+        {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
+    )
+    lstd = torch.stack([td, td, td])
+
+    assert td in lstd
+    assert td.clone() not in lstd
+
+    with pytest.raises(
+        NotImplementedError,
+        match="TensorDict does not support membership checks with the `in` keyword",
+    ):
+        "random_string" in lstd
+
+
 @pytest.mark.parametrize("method", ["share_memory", "memmap"])
 def test_memory_lock(method):
     torch.manual_seed(1)
