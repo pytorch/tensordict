@@ -90,6 +90,8 @@ COMPATIBLE_TYPES = Union[
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
+NESTED_KEY = Union[str, Tuple[str, ...]]
+
 
 class _TensorDictKeysView:
     """
@@ -121,6 +123,33 @@ class _TensorDictKeysView:
             "TensorDict keys are always strings. Membership checks are only supported "
             "for strings or non-empty tuples of strings (for nested TensorDicts)"
         )
+
+
+def _nested_key_type_check(fn):
+    @functools.wraps(fn)
+    def wrapper(self, key: NESTED_KEY, *args, **kwargs):
+        is_tuple = isinstance(key, tuple)
+        if not (
+            isinstance(key, str)
+            or (
+                is_tuple
+                and len(key) > 0
+                and all(isinstance(subkey, str) for subkey in key)
+            )
+        ):
+            key_repr = (
+                f"tuple({', '.join(str(type(i)) for i in key)})"
+                if is_tuple
+                else type(key)
+            )
+            raise TypeError(
+                "Expected key to be a string or non-empty tuple of strings, but found "
+                f"{key_repr}"
+            )
+
+        return fn(self, key, *args, **kwargs)
+
+    return wrapper
 
 
 class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
@@ -411,7 +440,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def get(
-        self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+        self, key: NESTED_KEY, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
     ) -> COMPATIBLE_TYPES:
         """Gets the value stored with the input key.
 
@@ -422,13 +451,17 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def _get_meta(self, key) -> MetaTensor:
-        if not isinstance(key, str):
-            raise TypeError(f"Expected key to be a string but found {type(key)}")
-
+    @_nested_key_type_check
+    def _get_meta(self, key: NESTED_KEY) -> MetaTensor:
         try:
+            if isinstance(key, tuple):
+                if len(key) > 1:
+                    return self.get(key[0])._get_meta(key[1:])
+                key = key[0]
             return self._dict_meta[key]
         except KeyError:
+            # TODO: this error message will make more sense if `.keys()` returns nested
+            # keys rather than just the top level ones
             raise KeyError(
                 f"key {key} not found in {self.__class__.__name__} with keys"
                 f" {sorted(list(self.keys()))}"
@@ -1645,7 +1678,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 else sub_index
                 for sub_index in idx
             )
-        if isinstance(idx, str):
+        if isinstance(idx, str) or (
+            isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
+        ):
             return self.get(idx)
         if isinstance(idx, tuple) and sum(
             isinstance(_idx, str) for _idx in idx
@@ -1655,14 +1690,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             _has_functorch_dim and isinstance(idx, functorch.dim.Dim)
         ):
             idx = (idx,)
-        elif isinstance(idx, tuple) and all(
-            isinstance(sub_idx, str) for sub_idx in idx
-        ):
-            out = self.get(idx[0])
-            if len(idx) > 1:
-                return out[idx[1:]]
-            else:
-                return out
 
         if not self.batch_size:
             raise RuntimeError(
@@ -2372,13 +2399,15 @@ class TensorDict(TensorDictBase):
             self._dict_meta[key].requires_grad = tensor_in.requires_grad
         return self
 
+    @_nested_key_type_check
     def get(
         self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
     ) -> COMPATIBLE_TYPES:
-        if not isinstance(key, str):
-            raise TypeError(f"Expected key to be a string but found {type(key)}")
-
-        if key in self._tensordict.keys():
+        if key in self.keys():
+            if isinstance(key, tuple):
+                if len(key) > 1:
+                    return self.get(key[0]).get(key[1:])
+                return self.get(key[0])
             return self._tensordict[key]
         else:
             return self._default_get(key, default)
@@ -3334,7 +3363,7 @@ torch.Size([3, 2])
 
     def get(
         self,
-        key: str,
+        key: NESTED_KEY,
         default: Optional[Union[Tensor, str]] = "_no_default_",
     ) -> COMPATIBLE_TYPES:
         return self._source.get_at(key, self.idx, default=default)
@@ -3809,9 +3838,13 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def get(
         self,
-        key: str,
+        key: NESTED_KEY,
         default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
     ) -> COMPATIBLE_TYPES:
+        # TODO: the stacking logic below works for nested keys, but the key in
+        # self.valid_keys check will fail and we'll return the default instead.
+        # For now we'll advise user that nested keys aren't supported, but it should be
+        # fairly easy to add support if we could add nested keys to valid_keys.
         if not (key in self.valid_keys):
             # first, let's try to update the valid keys
             self._update_valid_keys()
@@ -4253,7 +4286,7 @@ class SavedTensorDict(TensorDictBase):
             yield k
 
     def get(
-        self, key: str, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+        self, key: NESTED_KEY, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
     ) -> COMPATIBLE_TYPES:
         td = self._load()
         return td.get(key, default=default)
@@ -4642,7 +4675,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def get(
         self,
-        key: str,
+        key: NESTED_KEY,
         default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
         _return_original_tensor: bool = False,
     ) -> COMPATIBLE_TYPES:
