@@ -788,6 +788,20 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_masked3.batch_size[0] == mask.sum()
         assert td_masked3.batch_dims == 1
 
+    def test_equal(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert (td == td.to_tensordict()).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td != td0).any()
+
+    def test_equal_dict(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert (td == td.to_dict()).all()
+        td0 = td.to_tensordict().zero_().to_dict()
+        assert (td != td0).any()
+
     @pytest.mark.parametrize("from_list", [True, False])
     def test_masking_set(self, td_name, device, from_list):
         def zeros_like(item, n, d):
@@ -931,6 +945,18 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td_squeeze.unsqueeze(squeeze_dim) is td
         else:
             assert td_squeeze is td._source
+        assert (td_squeeze.get("a") == 1).all()
+        assert (td.get("a") == 1).all()
+
+    def test_squeeze_with_none(self, td_name, device, squeeze_dim=None):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td_squeeze = torch.squeeze(td, dim=None)
+        tensor = torch.ones_like(td.get("a").squeeze())
+        td_squeeze.set_("a", tensor)
+        assert (td_squeeze.get("a") == tensor).all()
+        if td_name == "unsqueezed_td":
+            assert td_squeeze._source is td
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
@@ -2481,9 +2507,12 @@ class TestMakeTensorDict:
 
 @pytest.mark.parametrize("separator", [".", "-"])
 def test_unflatten_keys_collision(separator):
-    td = TensorDict({"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, [])
+    td = TensorDict(
+        {"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, []
+    )
     ref = TensorDict({"a": [1, 2], "c": TensorDict({"a": [1, 2], "b": [1, 2]}, [])}, [])
     assert assert_allclose_td(td.unflatten_keys(separator), ref)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
