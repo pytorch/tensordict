@@ -3489,6 +3489,23 @@ def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
     return TensorDict({}, [], device=td.device).update(d)
 
 
+class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
+    def __len__(self):
+        return len(self.tensordict.valid_keys)
+
+    def __iter__(self):
+        return iter(self.tensordict.valid_keys)
+
+    def __contains__(self, key):
+        if isinstance(key, str):
+            return key in self.tensordict.valid_keys
+        raise TypeError(
+            "TensorDict keys are always strings. Membership checks on a "
+            "LazyStackedTensorDict do not currently support tuples of strings for "
+            "nested lookups, so only strings are allowed."
+        )
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A Lazy stack of TensorDicts.
 
@@ -3819,9 +3836,8 @@ class LazyStackedTensorDict(TensorDictBase):
             del self._orig_batch_size
         self._batch_size = new_size
 
-    def keys(self) -> Iterator[str]:
-        for key in self.valid_keys:
-            yield key
+    def keys(self) -> _LazyStackedTensorDictKeysView:
+        return _LazyStackedTensorDictKeysView(self)
 
     def _update_valid_keys(self) -> None:
         valid_keys = set(self.tensordicts[0].keys())
