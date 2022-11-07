@@ -1520,7 +1520,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def unflatten_keys(
         self, separator: str = ",", inplace: bool = False
     ) -> TensorDictBase:
-        to_unflatten = defaultdict(lambda: list())
+        to_unflatten = defaultdict(list)
         for key in self.keys():
             if separator in key[1:-1]:
                 split_key = key.split(separator)
@@ -1541,7 +1541,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         for key, list_of_keys in to_unflatten.items():
             tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
-            if key in self:
+            if key in self.keys():
                 tensordict.update(self[key])
             for (old_key, new_key) in list_of_keys:
                 value = self[old_key]
