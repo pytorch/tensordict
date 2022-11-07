@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 import torch
 from _utils_internal import get_available_devices
-from torch import multiprocessing as mp
 from tensordict import MemmapTensor
+from torch import multiprocessing as mp
 
 
 def test_memmap_type():
