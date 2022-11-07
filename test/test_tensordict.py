@@ -788,6 +788,20 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_masked3.batch_size[0] == mask.sum()
         assert td_masked3.batch_dims == 1
 
+    def test_equal(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert (td == td.to_tensordict()).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td != td0).any()
+
+    def test_equal_dict(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert (td == td.to_dict()).all()
+        td0 = td.to_tensordict().zero_().to_dict()
+        assert (td != td0).any()
+
     @pytest.mark.parametrize("from_list", [True, False])
     def test_masking_set(self, td_name, device, from_list):
         def zeros_like(item, n, d):
@@ -931,6 +945,18 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td_squeeze.unsqueeze(squeeze_dim) is td
         else:
             assert td_squeeze is td._source
+        assert (td_squeeze.get("a") == 1).all()
+        assert (td.get("a") == 1).all()
+
+    def test_squeeze_with_none(self, td_name, device, squeeze_dim=None):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td_squeeze = torch.squeeze(td, dim=None)
+        tensor = torch.ones_like(td.get("a").squeeze())
+        td_squeeze.set_("a", tensor)
+        assert (td_squeeze.get("a") == tensor).all()
+        if td_name == "unsqueezed_td":
+            assert td_squeeze._source is td
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
@@ -2393,6 +2419,55 @@ def test_setitem_nested():
     assert (tensordict["a", "b", "c"] == 1).all()
 
 
+def test_keys_view():
+    tensor = torch.randn(4, 5, 6, 7)
+    sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
+    sub_tensordict = TensorDict({}, [4, 5])
+    tensordict = TensorDict({}, [4])
+
+    sub_tensordict["b"] = sub_sub_tensordict
+    tensordict["a"] = sub_tensordict
+
+    assert "a" in tensordict.keys()
+    assert ("a",) in tensordict.keys()
+    assert ("a", "b", "c") in tensordict.keys()
+    assert ("a", "c", "b") not in tensordict.keys()
+    assert "random_string" not in tensordict.keys()
+
+    with pytest.raises(TypeError, match="TensorDict keys are always strings."):
+        42 in tensordict.keys()
+
+    with pytest.raises(TypeError, match="TensorDict keys are always strings."):
+        ("a", 42) in tensordict.keys()
+
+
+def test_error_on_contains():
+    td = TensorDict(
+        {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
+    )
+    with pytest.raises(
+        NotImplementedError,
+        match="TensorDict does not support membership checks with the `in` keyword",
+    ):
+        "random_string" in td
+
+
+def test_lazy_stacked_contains():
+    td = TensorDict(
+        {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
+    )
+    lstd = torch.stack([td, td, td])
+
+    assert td in lstd
+    assert td.clone() not in lstd
+
+    with pytest.raises(
+        NotImplementedError,
+        match="TensorDict does not support membership checks with the `in` keyword",
+    ):
+        "random_string" in lstd
+
+
 @pytest.mark.parametrize("method", ["share_memory", "memmap"])
 def test_memory_lock(method):
     torch.manual_seed(1)
@@ -2489,6 +2564,15 @@ class TestMakeTensorDict:
         assert tensordict["a"].device == device
         assert tensordict["b"].device == device
         assert tensordict["c"].device == device
+
+
+@pytest.mark.parametrize("separator", [".", "-"])
+def test_unflatten_keys_collision(separator):
+    td = TensorDict(
+        {"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, []
+    )
+    ref = TensorDict({"a": [1, 2], "c": TensorDict({"a": [1, 2], "b": [1, 2]}, [])}, [])
+    assert assert_allclose_td(td.unflatten_keys(separator), ref)
 
 
 if __name__ == "__main__":
