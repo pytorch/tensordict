@@ -1494,7 +1494,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_set_default_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         expected = torch.ones_like(td.get("a"))
-        inserted = td.set_default("z", expected, _run_checks_0=True)
+        inserted = td.set_default("z", expected, _run_checks=True)
         assert (inserted == expected).all()
 
     def test_set_default_existing_key(self, td_name, device):
