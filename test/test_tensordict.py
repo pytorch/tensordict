@@ -1491,6 +1491,18 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         _ = str(td)
 
+    def test_set_default_missing_key(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        expected = torch.ones_like(td.get("a"))
+        inserted = td.set_default("z", expected, _run_checks_0=True)
+        assert (inserted == expected).all()
+
+    def test_set_default_existing_key(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        expected = td.get("a")
+        inserted = td.set_default("a", torch.ones_like(td.get("b")))
+        assert (inserted == expected).all()
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
