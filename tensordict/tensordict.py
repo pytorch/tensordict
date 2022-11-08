@@ -5062,7 +5062,7 @@ class PermutedTensorDict(_CustomOpTensorDict):
 
 def _make_repr(key, item: MetaTensor, tensordict):
     if item.is_tensordict():
-        return str(tensordict[key])
+        return f"{key}: {repr(tensordict[key])}"
     return f"{key}: {item.get_repr()}"
 
 

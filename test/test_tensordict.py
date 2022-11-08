@@ -1642,6 +1642,30 @@ class TestTensorDictRepr:
     is_shared={is_shared})"""
         assert repr(nested_td) == expected
 
+    def test_repr_nested_update(self, device, dtype):
+        nested_td = self.nested_td(device, dtype)
+        nested_td["my_nested_td"].rename_key("a", "z")
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
+            is_shared = True
+        else:
+            is_shared = False
+        tensor_class = "Tensor"
+        expected = f"""TensorDict(
+    fields={{
+        b: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype}),
+        my_nested_td: TensorDict(
+            fields={{
+                z: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
+            batch_size=torch.Size([4, 3, 2, 1]),
+            device={str(device)},
+            is_shared={is_shared})}},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared})"""
+        assert repr(nested_td) == expected
+
     def test_repr_stacked(self, device, dtype):
         stacked_td = self.stacked_td(device, dtype)
         if (device is None and (torch.cuda.device_count() > 0)) or (
