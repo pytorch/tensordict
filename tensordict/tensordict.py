@@ -95,7 +95,25 @@ NESTED_KEY = Union[str, Tuple[str, ...]]
 
 class _TensorDictKeysView:
     """
-    Wrapper class that enables richer behaviour of `key in tensordict.keys()`
+    _TensorDictKeysView is returned when accessing tensordict.keys() and holds a
+    reference to the original TensorDict. This class enables us to support nested keys
+    when performing membership checks and when iterating over keys.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+
+        >>> td = TensorDict(
+        >>>     {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)},
+        >>>     [1],
+        >>> )
+
+        >>> assert "a" in td.keys()
+        >>> assert ("a",) in td.keys()
+        >>> assert ("a", "b") in td.keys()
+        >>> assert ("a", "c") not in td.keys()
+
+        >>> assert set(td.keys()) == {("a", "b"), "c"}
     """
 
     def __init__(self, tensordict):
