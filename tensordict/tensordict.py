@@ -1874,7 +1874,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if key in self.keys():
             return self.get(key)
         else:
-            self.set(key, item, inplace, **kwargs)
+            self.set(key, item, inplace=inplace, **kwargs)
             return item
 
     def lock(self):
