@@ -5060,11 +5060,17 @@ class PermutedTensorDict(_CustomOpTensorDict):
         return self
 
 
+def _make_repr(key, item: MetaTensor, tensordict):
+    if item.is_tensordict():
+        return str(tensordict[key])
+    return f"{key}: {item.get_repr()}"
+
+
 def _td_fields(td: TensorDictBase) -> str:
     return indent(
         "\n"
         + ",\n".join(
-            sorted([f"{key}: {item.get_repr()}" for key, item in td.items_meta()])
+            sorted([_make_repr(key, item, td) for key, item in td.items_meta()])
         ),
         4 * " ",
     )
