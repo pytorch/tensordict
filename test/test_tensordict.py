@@ -2421,6 +2421,11 @@ def test_getitem_nested():
     assert (tensordict["a", "b"] == sub_sub_tensordict).all()
     assert (tensordict["a", "b", "c"] == tensor).all()
 
+    # check that get method returns same contents
+    assert (tensordict.get("a") == sub_tensordict).all()
+    assert (tensordict.get(("a", "b")) == sub_sub_tensordict).all()
+    assert (tensordict.get(("a", "b", "c")) == tensor).all()
+
     # check that shapes are kept
     assert tensordict.shape == torch.Size([4])
     assert sub_tensordict.shape == torch.Size([4, 5])
@@ -2443,6 +2448,22 @@ def test_setitem_nested():
     assert (tensordict["a", "b", "c"] == 1).all()
 
 
+def test_set_nested_keys():
+    tensor = torch.randn(4, 5, 6, 7)
+    tensor2 = torch.ones(4, 5, 6, 7)
+    tensordict = TensorDict({}, [4])
+    sub_tensordict = TensorDict({}, [4, 5])
+    sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
+    sub_sub_tensordict2 = TensorDict({"c": tensor2}, [4, 5, 6])
+    sub_tensordict.set("b", sub_sub_tensordict)
+    tensordict.set("a", sub_tensordict)
+    assert tensordict.get(("a", "b")) is sub_sub_tensordict
+
+    tensordict.set(("a", "b"), sub_sub_tensordict2)
+    assert tensordict.get(("a", "b")) is sub_sub_tensordict2
+    assert (tensordict.get(("a", "b", "c")) == 1).all()
+
+
 def test_keys_view():
     tensor = torch.randn(4, 5, 6, 7)
     sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
@@ -2453,16 +2474,31 @@ def test_keys_view():
     tensordict["a"] = sub_tensordict
 
     assert "a" in tensordict.keys()
-    assert ("a",) in tensordict.keys()
-    assert ("a", "b", "c") in tensordict.keys()
-    assert ("a", "c", "b") not in tensordict.keys()
     assert "random_string" not in tensordict.keys()
+
+    assert ("a",) in tensordict.keys(include_nested=True)
+    assert ("a", "b", "c") in tensordict.keys(include_nested=True)
+    assert ("a", "c", "b") not in tensordict.keys(include_nested=True)
+
+    with pytest.raises(
+        TypeError, match="checks with tuples of strings is only supported"
+    ):
+        ("a", "b", "c") in tensordict.keys()
 
     with pytest.raises(TypeError, match="TensorDict keys are always strings."):
         42 in tensordict.keys()
 
     with pytest.raises(TypeError, match="TensorDict keys are always strings."):
         ("a", 42) in tensordict.keys()
+
+    keys = set(tensordict.keys())
+    keys_nested = set(tensordict.keys(include_nested=True))
+
+    assert keys == {"a"}
+    assert keys_nested == {"a", ("a", "b"), ("a", "b", "c")}
+
+    assert keys == {key for key, _ in tensordict.items_meta()}
+    assert keys_nested == {key for key, _ in tensordict.items_meta(include_nested=True)}
 
 
 def test_error_on_contains():
