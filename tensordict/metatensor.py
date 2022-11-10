@@ -13,28 +13,8 @@ import numpy as np
 import torch
 
 from tensordict.memmap import MemmapTensor
-from tensordict.utils import (
-    DEVICE_TYPING,
-    DIM_TYPING,
-    INDEX_TYPING,
-    convert_ellipsis_to_idx,
-)
-from tensordict.utils import (
-    _dims_are_compatible,
-    _getitem_batch_size,
-    _get_indexed_dims,
-    _get_ordered_shape,
-    _get_ordered_dims,
-    _get_shape,
-    _is_first_class_dim,
-)
-
-try:
-    import functorch.dim
-
-    _has_functorch_dim = True
-except ImportError:
-    _has_functorch_dim = False
+from tensordict.utils import DEVICE_TYPING, INDEX_TYPING
+from tensordict.utils import _getitem_batch_size, _get_shape
 
 META_HANDLED_FUNCTIONS = dict()
 
@@ -203,57 +183,7 @@ class MetaTensor:
         return torch.empty(*self.shape, dtype=self.dtype, device="meta")
 
     def __getitem__(self, item: INDEX_TYPING) -> MetaTensor:
-        if item is Ellipsis or (
-            isinstance(item, tuple)
-            and any(
-                i == Ellipsis
-                for i in item
-                # equality check against a functorch.dim.Dim can fail if dim is unbound
-                # so we filter them out since the equality cannot be satisfied anyway
-                if not (_has_functorch_dim and isinstance(i, functorch.dim.Dim))
-            )
-        ):
-            item = convert_ellipsis_to_idx(item, self.shape)
-
-        if _has_functorch_dim and isinstance(item, functorch.dim.Dim):
-            item = (item,)
-
         shape = _getitem_batch_size(self.shape, item)
-        if _has_functorch_dim and (
-            isinstance(self, _MetaTensorWithDims)
-            or (isinstance(item, tuple) and any(_is_first_class_dim(i) for i in item))
-        ):
-            if isinstance(item, tuple):
-                for i in item:
-                    if (
-                        isinstance(i, tuple)
-                        and any(isinstance(d, functorch.dim.Dim) for d in i)
-                        and not all(isinstance(d, functorch.dim.Dim) for d in i)
-                    ):
-                        raise TypeError(
-                            "If indexing a dimension with a tuple of first-class "
-                            "dimensions, all entries of that tuple must be a "
-                            "first-class dimension"
-                        )
-
-            dims = _get_indexed_dims(
-                item if isinstance(item, tuple) else (item,),
-                self.dims if isinstance(self, _MetaTensorWithDims) else (),
-                self.shape,
-            )
-
-            return _MetaTensorWithDims(
-                *shape,
-                dims=dims,
-                dtype=self.dtype,
-                device=self.device,
-                requires_grad=self.requires_grad,
-                _is_shared=self.is_shared(),
-                _is_memmap=self.is_memmap(),
-                _is_tensordict=self.is_tensordict(),
-                _repr_tensordict=self._repr_tensordict,
-            )
-
         return MetaTensor(
             *shape,
             dtype=self.dtype,
@@ -361,82 +291,6 @@ class MetaTensor:
         )
 
 
-class _MetaTensorWithDims(MetaTensor):
-    def __init__(
-        self,
-        *shape: Union[int, torch.Tensor, "MemmapTensor"],
-        dims: Optional[Tuple[DIM_TYPING, ...]] = None,
-        device: Optional[DEVICE_TYPING] = "cpu",
-        dtype: torch.dtype = None,
-        requires_grad: bool = False,
-        _is_shared: Optional[bool] = None,
-        _is_memmap: Optional[bool] = None,
-        _is_tensordict: Optional[bool] = None,
-        _repr_tensordict: Optional[str] = None,
-    ):
-        self._dims = dims
-
-        super().__init__(
-            *shape,
-            device=device,
-            dtype=dtype,
-            requires_grad=requires_grad,
-            _is_shared=_is_shared,
-            _is_memmap=_is_memmap,
-            _is_tensordict=_is_tensordict,
-            _repr_tensordict=_repr_tensordict,
-        )
-
-    @property
-    def dims(self):
-        return self._dims
-
-    @property
-    def all_dims(self):
-        ndim = self.ndimension()
-        return self.dims + tuple(range(ndim))
-
-    def order(self, *args) -> MetaTensor:
-        if not all(_is_first_class_dim(arg) or isinstance(arg, int) for arg in args):
-            raise TypeError(
-                "All arguments to order must either be an integer, a first-class "
-                "dimension, or a tuple of first-class dimensions"
-            )
-
-        ordered_dims = _get_ordered_dims(self.dims, args)
-        ordered_shape = _get_ordered_shape(self.shape, args)
-
-        if len(ordered_dims) > 0:
-            return _MetaTensorWithDims(
-                *ordered_shape,
-                dims=ordered_dims,
-                device=self.device,
-                dtype=self.dtype,
-                requires_grad=self.requires_grad,
-                _is_shared=self._is_shared,
-                _is_memmap=self._is_memmap,
-                _is_tensordict=self._is_tensordict,
-                _repr_tensordict=self._repr_tensordict,
-            )
-
-        return MetaTensor(
-            *ordered_shape,
-            device=self.device,
-            dtype=self.dtype,
-            requires_grad=self.requires_grad,
-            _is_shared=self._is_shared,
-            _is_memmap=self._is_memmap,
-            _is_tensordict=self._is_tensordict,
-            _repr_tensordict=self._repr_tensordict,
-        )
-
-    def __repr__(self) -> str:
-        repr_ = super().__repr__()
-        sizes = tuple(d.size for d in self.dims) + tuple(self.shape)
-        dims = self.all_dims
-        return f"{repr_}\nwith dims={dims} sizes={sizes}"
-
-
 def _stack_meta(
     list_of_meta_tensors: Sequence[MetaTensor],
     dim: int = 0,
@@ -448,7 +302,6 @@ def _stack_meta(
     if not len(list_of_meta_tensors):
         raise RuntimeError("empty list of meta tensors is not supported")
     is_tensordict = list_of_meta_tensors[0].is_tensordict()
-    has_dims = isinstance(list_of_meta_tensors[0], _MetaTensorWithDims)
     shape = list_of_meta_tensors[0].shape
     if safe:
         for tensor in list_of_meta_tensors:
@@ -467,30 +320,10 @@ def _stack_meta(
                     f"Stacking meta tensors of different dtype is not "
                     f"allowed, got shapes {dtype} and {tensor.dtype}"
                 )
-            if has_dims:
-                if not isinstance(
-                    tensor, _MetaTensorWithDims
-                ) or not _dims_are_compatible(
-                    list_of_meta_tensors[0].dims, tensor.dims
-                ):
-                    raise TypeError(
-                        "MetaTensors with first-class dimensions can only be "
-                        "concatenated with other MetaTensors with matching first-class "
-                        "dimensions"
-                    )
 
     shape = [s for s in shape]
     shape.insert(dim, len(list_of_meta_tensors))
 
-    if has_dims:
-        return _MetaTensorWithDims(
-            *shape,
-            dims=list_of_meta_tensors[0].dims,
-            dtype=dtype,
-            device=device,
-            _is_tensordict=is_tensordict,
-            requires_grad=requires_grad,
-        )
     return MetaTensor(
         *shape,
         dtype=dtype,
