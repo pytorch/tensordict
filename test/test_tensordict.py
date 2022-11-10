@@ -2438,10 +2438,16 @@ def test_keys_view():
     tensordict["a"] = sub_tensordict
 
     assert "a" in tensordict.keys()
-    assert ("a",) in tensordict.keys()
-    assert ("a", "b", "c") in tensordict.keys()
-    assert ("a", "c", "b") not in tensordict.keys()
     assert "random_string" not in tensordict.keys()
+
+    assert ("a",) in tensordict.keys(include_nested=True)
+    assert ("a", "b", "c") in tensordict.keys(include_nested=True)
+    assert ("a", "c", "b") not in tensordict.keys(include_nested=True)
+
+    with pytest.raises(
+        TypeError, match="checks with tuples of strings is only supported"
+    ):
+        ("a", "b", "c") in tensordict.keys()
 
     with pytest.raises(TypeError, match="TensorDict keys are always strings."):
         42 in tensordict.keys()
