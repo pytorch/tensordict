@@ -2495,7 +2495,7 @@ def test_keys_view():
     keys_nested = set(tensordict.keys(include_nested=True))
 
     assert keys == {"a"}
-    assert keys_nested == {"a", ("a", "b"), ("a", "b", 'c')}
+    assert keys_nested == {"a", ("a", "b"), ("a", "b", "c")}
 
     assert keys == {key for key, _ in tensordict.items_meta()}
     assert keys_nested == {key for key, _ in tensordict.items_meta(include_nested=True)}
