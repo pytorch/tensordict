@@ -1491,6 +1491,18 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         _ = str(td)
 
+    def test_set_default_missing_key(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        expected = torch.ones_like(td.get("a"))
+        inserted = td.set_default("z", expected, _run_checks=True)
+        assert (inserted == expected).all()
+
+    def test_set_default_existing_key(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        expected = td.get("a")
+        inserted = td.set_default("a", torch.ones_like(td.get("b")))
+        assert (inserted == expected).all()
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
@@ -1622,6 +1634,30 @@ class TestTensorDictRepr:
         my_nested_td: TensorDict(
             fields={{
                 a: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
+            batch_size=torch.Size([4, 3, 2, 1]),
+            device={str(device)},
+            is_shared={is_shared})}},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared})"""
+        assert repr(nested_td) == expected
+
+    def test_repr_nested_update(self, device, dtype):
+        nested_td = self.nested_td(device, dtype)
+        nested_td["my_nested_td"].rename_key("a", "z")
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
+            is_shared = True
+        else:
+            is_shared = False
+        tensor_class = "Tensor"
+        expected = f"""TensorDict(
+    fields={{
+        b: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype}),
+        my_nested_td: TensorDict(
+            fields={{
+                z: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
             batch_size=torch.Size([4, 3, 2, 1]),
             device={str(device)},
             is_shared={is_shared})}},

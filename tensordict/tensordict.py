@@ -1932,6 +1932,28 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def is_locked(self, value: bool):
         self._is_locked = value
 
+    def set_default(
+        self, key: str, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
+    ) -> COMPATIBLE_TYPES:
+        """Returns the value of the key if the key is in the tensordict. If not, insert key with a value of item and returns item.
+
+        Args:
+            key (str): name of the item
+            item (torch.Tensor): value to be stored in the tensordict
+            inplace (bool, optional): if True and if a key matches an existing
+                key in the tensordict, then the update will occur in-place
+                for that key-value pair. Default is :obj:`False`.
+
+        Returns:
+            the value of the key or item if the key is not in the tensordict
+
+        """
+        if key in self.keys():
+            return self.get(key)
+        else:
+            self.set(key, item, inplace=inplace, **kwargs)
+            return item
+
     def lock(self):
         self.is_locked = True
 
@@ -5248,13 +5270,17 @@ class PermutedTensorDict(_CustomOpTensorDict):
         return self
 
 
+def _make_repr(key, item: MetaTensor, tensordict):
+    if item.is_tensordict():
+        return f"{key}: {repr(tensordict[key])}"
+    return f"{key}: {item.get_repr()}"
+
+
 def _td_fields(td: TensorDictBase) -> str:
     return indent(
         "\n"
         + ",\n".join(
-            sorted(
-                [f"{key}: {item.get_repr()}" for key, item in td.items_meta()], key=str
-            )
+            sorted([_make_repr(key, item, td) for key, item in td.items_meta()])
         ),
         4 * " ",
     )
