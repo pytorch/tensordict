@@ -18,19 +18,21 @@ from torch import Tensor
 DIM_TYPING = Any
 LEVELS_TYPING = Any
 try:
+    import functorch
+
     try:
         from functorch._C import is_batchedtensor, get_unwrapped
     except ImportError:
         from torch._C._functorch import is_batchedtensor, get_unwrapped
 
-    try:
-        import functorch.dim
-
-        LEVELS_TYPING = Tuple[Union[int, functorch.dim.Dim], ...]
-        DIM_TYPING = functorch.dim.Dim
-        _has_functorch_dim = True
-    except ImportError:
-        _has_functorch_dim = False
+    # try:
+    #     import functorch.dim
+    #
+    #     LEVELS_TYPING = Tuple[Union[int, functorch.dim.Dim], ...]
+    #     DIM_TYPING = functorch.dim.Dim
+    #     _has_functorch_dim = True
+    # except ImportError:
+    _has_functorch_dim = False
 except ImportError:
     pass
 
@@ -112,7 +114,7 @@ def _getitem_batch_size(
             batch = next(iter_bs)
             v = len(range(*_item.indices(batch)))
         elif isinstance(_item, (list, torch.Tensor, np.ndarray)):
-            batch = next(iter_bs)
+            _ = next(iter_bs)
             if isinstance(_item, torch.Tensor) and _item.dtype is torch.bool:
                 v = _item.sum()
             else:
@@ -121,7 +123,7 @@ def _getitem_batch_size(
             v = 1
         elif isinstance(_item, Number):
             try:
-                batch = next(iter_bs)
+                _ = next(iter_bs)
             except StopIteration:
                 raise RuntimeError(
                     f"The shape {shape} is incompatible with " f"the index {items}."

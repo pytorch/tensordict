@@ -12,11 +12,12 @@ from tensordict import MetaTensor, TensorDict
 from tensordict.metatensor import _MetaTensorWithDims
 from tensordict.tensordict import _TensorDictWithDims
 
-try:
-    from functorch.dim import Dim, DimensionBindError, Tensor, dims
-except ImportError:
-    pytest.skip(reason="functorch.dim not found")
-
+# try:
+#     from functorch.dim import Dim, DimensionBindError, Tensor, dims
+# except ImportError:
+#     pytest.skip(reason="functorch.dim not found")
+# for linting purposes
+dims = None
 
 def _is_in(d, args):
     return any(d is item for item in args)
@@ -26,6 +27,7 @@ def _contains_all(tensordict_dims, tensor_dims):
     return all(_is_in(d, tensor_dims) for d in tensordict_dims)
 
 
+@pytest.mark.skip(reason="functorch.dim disabled")
 @pytest.mark.parametrize(
     "td_name",
     [
@@ -254,6 +256,7 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.testing.assert_close(td3["a"], td["a"].reshape(24, -1))
 
 
+@pytest.mark.skip(reason="functorch.dim disabled")
 def test_dim_reuse():
     t = torch.rand(2, 3, 2)
     td = TensorDict({"a": torch.rand(2, 3, 2, 4)}, [2, 3, 2])
@@ -278,6 +281,7 @@ def test_dim_reuse():
     )
 
 
+@pytest.mark.skip(reason="functorch.dim disabled")
 def test_metatensor_indexing():
     t = torch.empty(2, 3, 4, 5)
     mt = MetaTensor(2, 3, 4, 5)
@@ -306,6 +310,7 @@ def test_metatensor_indexing():
     assert _contains_all(mt_dim3.dims, t_dim3.dims)
 
 
+@pytest.mark.skip(reason="functorch.dim disabled")
 def test_metatensor_order():
     t = torch.empty(2, 3, 4, 5, 6, 7)
     mt = MetaTensor(2, 3, 4, 5, 6, 7)
@@ -335,6 +340,7 @@ def test_metatensor_order():
                     )
 
 
+@pytest.mark.skip(reason="functorch.dim disabled")
 def test_metatensor_splitting():
     mt = MetaTensor(4, 3, 2, 1)
 
@@ -371,6 +377,7 @@ def test_metatensor_splitting():
         mt[(d1, d2), d3]
 
 
+@pytest.mark.skip(reason="functorch.dim disabled")
 def test_metatensor_flatten():
     mt = MetaTensor(4, 3, 2, 1)
 
@@ -385,6 +392,7 @@ def test_metatensor_flatten():
     assert mt3.shape == torch.Size([24])
 
 
+@pytest.mark.skip(reason="functorch.dim disabled")
 @pytest.mark.parametrize("dim", range(4))
 def test_metatensor_stack(dim):
     mt = MetaTensor(2, 3, 4, 5)

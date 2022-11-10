@@ -30,11 +30,15 @@ from tensordict.utils import (
 )
 
 try:
-    import functorch.dim
-
-    _has_functorch_dim = True
+    import functorch
 except ImportError:
-    _has_functorch_dim = False
+    pass
+# try:
+#     import functorch.dim
+#
+#     _has_functorch_dim = True
+# except ImportError:
+_has_functorch_dim = False
 
 META_HANDLED_FUNCTIONS = dict()
 
