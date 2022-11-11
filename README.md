@@ -1,9 +1,3 @@
-# Disclaimer
-
-TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
-Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility 
-with the broader pytorch ecosystem.
-
 # TensorDict
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.
@@ -20,7 +14,7 @@ for i, tensordict in enumerate(dataset):
 ```
 With this level of abstraction, one can recycle a training loop for highly heterogeneous task.
 Each individual step of the training loop (data collection and transform, model prediction, loss computation etc.)
-can be tailored to the use case at hand without impacting the others. 
+can be tailored to the use case at hand without impacting the others.
 For instance, the above example can be easily used across classification and segmentation tasks, among many others.
 
 ## Installation
@@ -110,7 +104,7 @@ tensordict_uniform = tensordict.apply(lambda tensor: tensor.uniform_())
 
 ### TensorDict for functional programming using FuncTorch
 
-We also provide an API to use TensorDict in conjunction with [FuncTorch](https://pytorch.org/functorch). 
+We also provide an API to use TensorDict in conjunction with [FuncTorch](https://pytorch.org/functorch).
 For instance, TensorDict makes it easy to concatenate model weights to do model ensembling:
 ```python
 from torch import nn
@@ -134,17 +128,76 @@ y = vmap(fmodule, (0, None))(weights, x)
 y.shape  # torch.Size([2, 10, 4])
 ```
 
-## Nesting TensorDicts
+### Lazy preallocation
 
-It is possible to nest tensordict and switch easily between hierarchical and flat representations.
+Pre-allocating tensors can be cumbersome and hard to scale if the list of preallocated
+items varies according to the script configuration. TensorDict solves this in an elegant way.
+Assume you are working with a function `foo() -> TensorDict`, e.g.
+```python
+def foo():
+    tensordict = TensorDict({}, batch_size=[])
+    tensordict["a"] = torch.randn(3)
+    tensordict["b"] = TensorDict({"c": torch.zeros(2)}, batch_size=[])
+    return tensordict
+```
+and you would like to call this function repeatedly. You could do this in two ways.
+The first would simply be to stack the calls to the function:
+```python
+tensordict = torch.stack([foo() for _ in range(N)])
+```
+However, you could also choose to preallocate the tensordict:
+```python
+tensordict = TensorDict({}, batch_size=[N])
+for i in range(N):
+    tensordict[i] = foo()
+```
+which also results in a tensordict (when `N = 10`)
+```
+TensorDict(
+    fields={
+        a: Tensor(torch.Size([10, 3]), dtype=torch.float32),
+        b: TensorDict(
+            fields={
+                c: Tensor(torch.Size([10, 2]), dtype=torch.float32)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)},
+    batch_size=torch.Size([10]),
+    device=None,
+    is_shared=False)
+```
+When `i==0`, your empty tensordict will automatically be populated with empty tensors
+of batch-size `N`. After that, updates will be written in-place.
+Note that this would also work with a shuffled series of indices (pre-allocation does
+not require you to go through the tensordict in an ordered fashion).
+
+
+### Nesting TensorDicts
+
+It is possible to nest tensordict. The only requirement is that the sub-tensordict should be indexable
+under the parent tensordict, i.e. its batch size should match (but could be longer than) the parent
+batch size.
+
+We can switch easily between hierarchical and flat representations.
 For instance, the following code will result in a single-level tensordict with keys `"key 1"` and `"key 2.sub-key"`:
 ```python
 >>> tensordict = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
-...     "key 2": TensorDict({"sub-key": torch.randn(3, 4, 5, 6)}, [3, 4, 5])
+...     "key 2": TensorDict({"sub-key": torch.randn(3, 4, 5, 6)}, batch_size=[3, 4, 5])
 ... }, batch_size=[3, 4])
->>> tensordict = tensordict.unflatten_keys(separator=".")
+>>> tensordict_unflatten = tensordict.unflatten_keys(separator=".")
 ```
+
+Accessing nested tensordicts can be achieved with a single index:
+```python
+>>> sub_value = tensordict["key 2", "sub-key"]
+```
+
+# Disclaimer
+
+TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
+Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility
+with the broader pytorch ecosystem.
 
 ## License
 TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.

@@ -316,8 +316,10 @@ def _stack_meta(
                     f"Stacking meta tensors of different dtype is not "
                     f"allowed, got shapes {dtype} and {tensor.dtype}"
                 )
+
     shape = [s for s in shape]
     shape.insert(dim, len(list_of_meta_tensors))
+
     return MetaTensor(
         *shape,
         dtype=dtype,
