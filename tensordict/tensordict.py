@@ -70,6 +70,11 @@ try:
 except ImportError:
     _has_functorch = False
 
+    def is_batchedtensor(tensor):
+        """Placeholder for the functorch function."""
+        return False
+
+
 TD_HANDLED_FUNCTIONS: Dict = dict()
 COMPATIBLE_TYPES = Union[
     Tensor,
