@@ -36,7 +36,11 @@ from warnings import warn
 import numpy as np
 import torch
 from torch import Tensor
-from torch.jit._shape_functions import infer_size_impl
+
+try:
+    from torch.jit._shape_functions import infer_size_impl
+except ImportError:
+    from tensordict.utils import infer_size_impl
 
 from tensordict.memmap import MemmapTensor
 from tensordict.metatensor import MetaTensor
