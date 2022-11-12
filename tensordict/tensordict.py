@@ -1297,7 +1297,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 f"`-td.batch_dims` and `td.batch_dims` only. Got "
                 f"dim={dim} with a batch size of {self.batch_size}."
             )
-        return UnsqueezedTensorDict(
+        return _UnsqueezedTensorDict(
             source=self,
             custom_op="unsqueeze",
             inv_op="squeeze",
@@ -1318,7 +1318,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 return self
             first_singleton_dim = size.index(1)
 
-            squeezed_dict = SqueezedTensorDict(
+            squeezed_dict = _SqueezedTensorDict(
                 source=self,
                 custom_op="squeeze",
                 inv_op="unsqueeze",
@@ -1339,7 +1339,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         if dim >= self.batch_dims or self.batch_size[dim] != 1:
             return self
-        return SqueezedTensorDict(
+        return _SqueezedTensorDict(
             source=self,
             custom_op="squeeze",
             inv_op="unsqueeze",
@@ -1416,7 +1416,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             shape = torch.Size(shape)
         if shape == self.shape:
             return self
-        return ViewedTensorDict(
+        return _ViewedTensorDict(
             source=self,
             custom_op="view",
             inv_op="view",
@@ -1493,7 +1493,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 raise RuntimeError("repeated dim in permute")
             seen[idx] = True
 
-        return PermutedTensorDict(
+        return _PermutedTensorDict(
             source=self,
             custom_op="permute",
             inv_op="permute",
@@ -4766,7 +4766,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self.is_locked = lock
 
 
-class UnsqueezedTensorDict(_CustomOpTensorDict):
+class _UnsqueezedTensorDict(_CustomOpTensorDict):
     """A lazy view on an unsqueezed TensorDict.
 
     When calling `tensordict.unsqueeze(dim)`, a lazy view of this operation is
@@ -4807,7 +4807,7 @@ class UnsqueezedTensorDict(_CustomOpTensorDict):
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
 
-class SqueezedTensorDict(_CustomOpTensorDict):
+class _SqueezedTensorDict(_CustomOpTensorDict):
     """A lazy view on a squeezed TensorDict.
 
     See the `UnsqueezedTensorDict` class documentation for more information.
@@ -4841,7 +4841,7 @@ class SqueezedTensorDict(_CustomOpTensorDict):
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
 
-class ViewedTensorDict(_CustomOpTensorDict):
+class _ViewedTensorDict(_CustomOpTensorDict):
     def _update_custom_op_kwargs(
         self, source_meta_tensor: MetaTensor
     ) -> Dict[str, Any]:
@@ -4875,7 +4875,7 @@ class ViewedTensorDict(_CustomOpTensorDict):
         return super().view(*shape)
 
 
-class PermutedTensorDict(_CustomOpTensorDict):
+class _PermutedTensorDict(_CustomOpTensorDict):
     """A lazy view on a TensorDict with the batch dimensions permuted.
 
     When calling `tensordict.permute(dims_list, dim)`, a lazy view of this operation is
