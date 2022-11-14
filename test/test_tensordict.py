@@ -2576,6 +2576,10 @@ def test_exclude_nested(inplace):
             ("nested", "double_nested", "t2"),
         }
 
+    # excluding "nested" should exclude all subkeys also
+    excluded2 = tensordict.exclude("nested", inplace=inplace)
+    assert set(excluded2.keys(include_nested=True)) == {"a", "b", "c"}
+
 
 def test_set_nested_keys():
     tensor = torch.randn(4, 5, 6, 7)
