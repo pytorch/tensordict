@@ -117,25 +117,18 @@ class _TensorDictKeysView:
         return self._iter_helper(self.tensordict)
 
     def _iter_helper(self, tensordict, prefix=None):
-        if isinstance(tensordict, (LazyStackedTensorDict, _CustomOpTensorDict)):
-            # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
-            # or _CustomOpTensorDict, so as we iterate through the contents we need to
-            # be careful to not rely on tensordict._tensordict existing.
-            items_iter = tensordict.items(include_nested=False)
-        else:
-            items_iter = tensordict._tensordict.items()
+        items_iter = self._items(tensordict)
 
         for key, value in items_iter:
             full_key = self._combine_keys(prefix, key)
-            if isinstance(value, TensorDictBase):
+            if isinstance(value, TensorDictBase) and self.include_nested:
                 subkeys = tuple(
                     self._iter_helper(
                         value,
                         full_key if isinstance(full_key, tuple) else (full_key,),
                     )
                 )
-                if self.include_nested:
-                    yield from subkeys
+                yield from subkeys
             yield full_key
 
     def _combine_keys(self, prefix, key):
@@ -148,9 +141,26 @@ class _TensorDictKeysView:
     def __len__(self):
         return len([key for key in self])
 
+    def _items(self, tensordict=None):
+        if tensordict is None:
+            tensordict = self.tensordict
+        if isinstance(tensordict, TensorDict):
+            return tensordict._tensordict.items()
+        elif isinstance(tensordict, LazyStackedTensorDict):
+            return ((key, tensordict.get(key)) for key in tensordict.valid_keys)
+        elif isinstance(tensordict, _CustomOpTensorDict):
+            # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
+            # or _CustomOpTensorDict, so as we iterate through the contents we need to
+            # be careful to not rely on tensordict._tensordict existing.
+            return ((key, tensordict.get(key)) for key in tensordict._source.keys())
+
+    def _keys(self):
+        return self.tensordict._tensordict.keys()
+
     def __contains__(self, key):
         if isinstance(key, str):
-            return key in self.tensordict._tensordict.keys()
+            return key in self._keys()
+
         elif isinstance(key, tuple):
             if len(key) == 1:
                 return key[0] in self
@@ -158,10 +168,9 @@ class _TensorDictKeysView:
                 if self.include_nested:
                     if key[0] in self:
                         val = self.tensordict.get(key[0])
-                        # TODO: LazyStackedTensorDict and SavedTensorDict currently
-                        # don't support nested memebership checks
+                        # TODO: SavedTensorDict currently doesn't support nested memebership checks
                         include_nested = self.include_nested and not isinstance(
-                            val, (SavedTensorDict, LazyStackedTensorDict)
+                            val, (SavedTensorDict,)
                         )
                         return isinstance(val, TensorDictBase) and key[1:] in val.keys(
                             include_nested=include_nested
@@ -3492,17 +3501,8 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     def __len__(self):
         return len(self.tensordict.valid_keys)
 
-    def __iter__(self):
-        return iter(self.tensordict.valid_keys)
-
-    def __contains__(self, key):
-        if isinstance(key, str):
-            return key in self.tensordict.valid_keys
-        raise TypeError(
-            "TensorDict keys are always strings. Membership checks on a "
-            "LazyStackedTensorDict do not currently support tuples of strings for "
-            "nested lookups, so only strings are allowed."
-        )
+    def _keys(self):
+        return self.tensordict.valid_keys
 
 
 class LazyStackedTensorDict(TensorDictBase):
@@ -3756,13 +3756,19 @@ class LazyStackedTensorDict(TensorDictBase):
         # we can handle the case where the key is a tuple of length 1
         if isinstance(key, tuple) and len(key) == 1:
             key = key[0]
+        elif isinstance(key, tuple):
+            tensordict, key = _get_leaf_tensordict(self, key)
+            return tensordict[key]
 
-        if not (key in self.valid_keys):
+        keys = self.valid_keys
+        if not (key in keys):
             # first, let's try to update the valid keys
             self._update_valid_keys()
+            keys = self.valid_keys
 
-        if not (key in self.valid_keys):
+        if not (key in keys):
             return self._default_get(key, default)
+
         tensors = [td.get(key, default=default) for td in self.tensordicts]
         shapes = set(tensor.shape for tensor in tensors)
         if len(shapes) != 1:
@@ -3850,13 +3856,8 @@ class LazyStackedTensorDict(TensorDictBase):
         self._batch_size = new_size
 
     def keys(self, include_nested: bool = False) -> _LazyStackedTensorDictKeysView:
-        if include_nested:
-            # TODO: support nested keys
-            raise ValueError(
-                "LazyStackedTensorDict does not currently support iterating over "
-                "nested keys. Please set `include_nested=False`."
-            )
-        return _LazyStackedTensorDictKeysView(self, include_nested=include_nested)
+        keys = _LazyStackedTensorDictKeysView(self, include_nested=include_nested)
+        return keys
 
     def _update_valid_keys(self) -> None:
         valid_keys = set(self.tensordicts[0].keys())

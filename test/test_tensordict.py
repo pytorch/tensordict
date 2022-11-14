@@ -2299,6 +2299,30 @@ def test_stack_keys():
     td.get("e")
 
 
+def test_stacked_td_nested_keys():
+    td = torch.stack(
+        [
+            TensorDict({"a": {"b": {"d": [1]}, "c": [2]}}, []),
+            TensorDict({"a": {"b": {"d": [1]}, "d": [2]}}, []),
+        ],
+        0,
+    )
+    assert ("a", "b") in td.keys(True)
+    assert ("a", "c") not in td.keys(True)
+    assert ("a", "b", "d") in td.keys(True)
+    td["a", "c"] = [[2], [3]]
+    assert ("a", "c") in td.keys(True)
+
+    print("ITEMS")
+    keys, items = zip(*td.items(True))
+    assert ("a", "b") in keys
+    assert ("a", "c") in keys
+    assert ("a", "d") not in keys
+
+    td["a", "c"] = td["a", "c"] + 1
+    assert (td["a", "c"] == torch.tensor([[3], [4]], device=td.device)).all()
+
+
 @pytest.mark.parametrize(
     "idx",
     [
