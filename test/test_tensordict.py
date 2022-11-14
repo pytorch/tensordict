@@ -2523,6 +2523,60 @@ def test_select_nested(inplace):
         }
 
 
+@pytest.mark.parametrize("inplace", [True, False])
+def test_exclude_nested(inplace):
+    tensor_1 = torch.rand(4, 5, 6, 7)
+    tensor_2 = torch.rand(4, 5, 6, 7)
+    sub_sub_tensordict = TensorDict(
+        {"t1": tensor_1, "t2": tensor_2}, batch_size=[4, 5, 6]
+    )
+    sub_tensordict = TensorDict(
+        {"double_nested": sub_sub_tensordict}, batch_size=[4, 5]
+    )
+    tensordict = TensorDict(
+        {
+            "a": torch.rand(4, 3),
+            "b": torch.rand(4, 2),
+            "c": torch.rand(4, 1),
+            "nested": sub_tensordict,
+        },
+        batch_size=[4],
+    )
+
+    excluded = tensordict.exclude(
+        "b", ("nested", "double_nested", "t2"), inplace=inplace
+    )
+
+    assert set(excluded.keys(include_nested=True)) == {
+        "a",
+        "c",
+        "nested",
+        ("nested", "double_nested"),
+        ("nested", "double_nested", "t1"),
+    }
+
+    if inplace:
+        assert excluded is tensordict
+        assert set(tensordict.keys(include_nested=True)) == {
+            "a",
+            "c",
+            "nested",
+            ("nested", "double_nested"),
+            ("nested", "double_nested", "t1"),
+        }
+    else:
+        assert excluded is not tensordict
+        assert set(tensordict.keys(include_nested=True)) == {
+            "a",
+            "b",
+            "c",
+            "nested",
+            ("nested", "double_nested"),
+            ("nested", "double_nested", "t1"),
+            ("nested", "double_nested", "t2"),
+        }
+
+
 def test_set_nested_keys():
     tensor = torch.randn(4, 5, 6, 7)
     tensor2 = torch.ones(4, 5, 6, 7)
