@@ -2542,6 +2542,8 @@ def test_exclude_nested(inplace):
         },
         batch_size=[4],
     )
+    # making a copy for inplace tests
+    tensordict2 = tensordict.clone()
 
     excluded = tensordict.exclude(
         "b", ("nested", "double_nested", "t2"), inplace=inplace
@@ -2577,7 +2579,7 @@ def test_exclude_nested(inplace):
         }
 
     # excluding "nested" should exclude all subkeys also
-    excluded2 = tensordict.exclude("nested", inplace=inplace)
+    excluded2 = tensordict2.exclude("nested", inplace=inplace)
     assert set(excluded2.keys(include_nested=True)) == {"a", "b", "c"}
 
 
