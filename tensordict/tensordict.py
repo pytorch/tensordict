@@ -8,6 +8,7 @@ from __future__ import annotations
 import abc
 import collections
 import functools
+import operator
 import tempfile
 import textwrap
 import uuid
@@ -1535,9 +1536,17 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
         to_flatten = []
+        already_flat = []
         for key, meta_value in self.items_meta():
             if meta_value.is_tensordict():
                 to_flatten.append(key)
+            else:
+                already_flat.append(key)
+
+        for key in already_flat:             
+            _existing_val = functools.reduce(operator.getitem, key.split(separator), self.to_dict())
+            if isinstance(_existing_val, Tensor): 
+                raise ValueError(f"Flattening keys in tensordict will override existing key '{key}'")
 
         if inplace:
             for key in to_flatten:
@@ -1565,7 +1574,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return tensordict_out
 
     def unflatten_keys(
-        self, separator: str = ".", inplace: bool = False
+        self, separator: str = ".", inplace: bool = False, collision=False,
     ) -> TensorDictBase:
         to_unflatten = defaultdict(list)
         for key in self.keys():
@@ -1587,6 +1596,15 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             out = self
 
         for key, list_of_keys in to_unflatten.items():
+
+            for k in list(sum(list_of_keys, ())):
+                if not separator in k:
+                    try:
+                        _key_exists = out[key][k]
+                        collision = True
+                    except:
+                        pass
+                        
             tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
             if key in self.keys():
                 tensordict.update(self[key])
@@ -1595,7 +1613,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 tensordict[new_key] = value
                 if inplace:
                     del self[old_key]
-            out.set(key, tensordict.unflatten_keys(separator=separator))
+            out.set(key, tensordict.unflatten_keys(separator=separator, collision=collision))
+
+        if collision:
+            raise ValueError("Unflattening keys in tensordict will override existing key(s)")
         return out
 
     def __len__(self) -> int:
