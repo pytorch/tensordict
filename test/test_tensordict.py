@@ -2313,7 +2313,6 @@ def test_stacked_td_nested_keys():
     td["a", "c"] = [[2], [3]]
     assert ("a", "c") in td.keys(True)
 
-    print("ITEMS")
     keys, items = zip(*td.items(True))
     assert ("a", "b") in keys
     assert ("a", "c") in keys
