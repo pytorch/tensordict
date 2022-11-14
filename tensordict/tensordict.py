@@ -2256,21 +2256,22 @@ class TensorDict(TensorDictBase):
         else:
             # since we call _nested_key_type_check above, we may assume that the key is
             # a tuple of strings
-            def hook(td, k):
-                if k[0] not in td.keys():
-                    td.set(k[0], td.select())
-
-            td, subkey = _get_leaf_tensordict(self, key, hook)
+            td, subkey = _get_leaf_tensordict(self, key, _default_hook)
             td.set(subkey, proc_value)
 
             if _meta_val:
                 td._dict_meta[subkey] = _meta_val
-            elif present and subkey in self._dict_meta:
-                del td._dict_meta[key]
+            elif present and subkey in td._dict_meta:
+                del td._dict_meta[subkey]
 
         return self
 
     def del_(self, key: str) -> TensorDictBase:
+        if isinstance(key, tuple):
+            td, subkey = _get_leaf_tensordict(self, key)
+            del td[subkey]
+            return self
+
         del self._tensordict[key]
         if key in self._dict_meta:
             del self._dict_meta[key]
@@ -2305,7 +2306,7 @@ class TensorDict(TensorDictBase):
         if not no_check:
             _nested_key_type_check(key)
 
-        if no_check or key in self.keys():
+        if no_check or key in self.keys(include_nested=True):
             if not no_check:
                 proc_value = self._process_input(
                     value, check_device=False, check_shared=False
@@ -2603,6 +2604,11 @@ def _nested_key_type_check(key):
             "Expected key to be a string or non-empty tuple of strings, but found "
             f"{key_repr}"
         )
+
+
+def _default_hook(td, k):
+    if k[0] not in td.keys():
+        td.set(k[0], td.select())
 
 
 def _get_leaf_tensordict(tensordict: TensorDictBase, key: NESTED_KEY, hook=None):
@@ -3653,6 +3659,10 @@ class LazyStackedTensorDict(TensorDictBase):
     def set(
         self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], **kwargs
     ) -> TensorDictBase:
+        if isinstance(key, tuple):
+            raise TypeError(
+                f"Support for setting and getting keys in LazyStackedTensorDict instances is currently limited."
+            )
         # TODO: what should support for nested keys look like here?
         if self.is_locked:
             if key not in self.keys():
