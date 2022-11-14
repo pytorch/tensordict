@@ -2448,6 +2448,58 @@ def test_setitem_nested():
     assert (tensordict["a", "b", "c"] == 1).all()
 
 
+@pytest.mark.parametrize("inplace", [True, False])
+def test_select_nested(inplace):
+    tensor_1 = torch.rand(4, 5, 6, 7)
+    tensor_2 = torch.rand(4, 5, 6, 7)
+    sub_sub_tensordict = TensorDict(
+        {"t1": tensor_1, "t2": tensor_2}, batch_size=[4, 5, 6]
+    )
+    sub_tensordict = TensorDict(
+        {"double_nested": sub_sub_tensordict}, batch_size=[4, 5]
+    )
+    tensordict = TensorDict(
+        {
+            "a": torch.rand(4, 3),
+            "b": torch.rand(4, 2),
+            "c": torch.rand(4, 1),
+            "nested": sub_tensordict,
+        },
+        batch_size=[4],
+    )
+
+    selected = tensordict.select(
+        "b", ("nested", "double_nested", "t2"), inplace=inplace
+    )
+
+    assert set(selected.keys(include_nested=True)) == {
+        "b",
+        "nested",
+        ("nested", "double_nested"),
+        ("nested", "double_nested", "t2"),
+    }
+
+    if inplace:
+        assert selected is tensordict
+        assert set(tensordict.keys(include_nested=True)) == {
+            "b",
+            "nested",
+            ("nested", "double_nested"),
+            ("nested", "double_nested", "t2"),
+        }
+    else:
+        assert selected is not tensordict
+        assert set(tensordict.keys(include_nested=True)) == {
+            "a",
+            "b",
+            "c",
+            "nested",
+            ("nested", "double_nested"),
+            ("nested", "double_nested", "t1"),
+            ("nested", "double_nested", "t2"),
+        }
+
+
 def test_set_nested_keys():
     tensor = torch.randn(4, 5, 6, 7)
     tensor2 = torch.ones(4, 5, 6, 7)
