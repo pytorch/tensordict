@@ -3661,7 +3661,7 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
         if isinstance(key, tuple):
             raise TypeError(
-                f"Support for setting and getting keys in LazyStackedTensorDict instances is currently limited."
+                "Support for setting and getting keys in LazyStackedTensorDict instances is currently limited."
             )
         # TODO: what should support for nested keys look like here?
         if self.is_locked:
