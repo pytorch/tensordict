@@ -2530,8 +2530,9 @@ class TensorDict(TensorDictBase):
         return self
 
     def select(self, *keys: NESTED_KEY, inplace: bool = False) -> TensorDictBase:
+        existing_keys = self.keys(include_nested=True)
         for key in keys:
-            if key not in self.keys(include_nested=True):
+            if key not in existing_keys:
                 raise KeyError(f"Key {key} was not found.")
 
         nested_keys = defaultdict(list)
