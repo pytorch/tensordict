@@ -950,7 +950,31 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
-        keys = [key for key in self.keys() if key not in keys]
+        if any(isinstance(key, tuple) for key in keys):
+            # parse keys into nested dict structure
+            nested_keys = _nested_keys_to_dict(self.keys(include_nested=True))
+
+            # delete all keys to be excluded
+            for key in keys:
+                _nested_key_type_check(key)
+                if isinstance(key, str):
+                    del nested_keys[key]
+                else:
+                    d = nested_keys
+                    for subkey in key[:-1]:
+                        if subkey not in d:
+                            break
+                        d = d[subkey]
+                    else:
+                        if key[-1] in d:
+                            # if each subkey was found, we delete the final one
+                            del d[key[-1]]
+
+            # convert remaining keys into keys for selection
+            keys = [key for key in _dict_to_nested_keys(nested_keys)]
+        else:
+            keys = [key for key in self.keys() if key not in keys]
+
         return self.select(*keys, inplace=inplace)
 
     @abc.abstractmethod
@@ -2641,6 +2665,28 @@ def _nested_key_type_check(key):
         )
 
 
+def _nested_keys_to_dict(keys: Iterator[NESTED_KEY]) -> Dict[str, Any]:
+    nested_keys = {}
+    for key in keys:
+        if isinstance(key, str):
+            nested_keys.setdefault(key, {})
+        else:
+            d = nested_keys
+            for subkey in key:
+                d = d.setdefault(subkey, {})
+    return nested_keys
+
+
+def _dict_to_nested_keys(nested_keys, prefix=()):
+    for key, subkeys in nested_keys.items():
+        if subkeys:
+            yield from _dict_to_nested_keys(subkeys, prefix=prefix + (key,))
+        elif prefix:
+            yield prefix + (key,)
+        else:
+            yield key
+
+
 def _default_hook(td, k):
     if k[0] not in td.keys():
         td.set(k[0], td.select())
@@ -3911,6 +3957,18 @@ class LazyStackedTensorDict(TensorDictBase):
             *tensordicts,
             stack_dim=self.stack_dim,
         )
+
+    def exclude(self, *keys: str, inplace: bool = False) -> LazyStackedTensorDict:
+        # TODO: Add support for nested keys.
+        for key in keys:
+            if not isinstance(key, str):
+                raise TypeError(
+                    "All keys passed to LazyStackedTensorDict.exclude must be strings. "
+                    f"Found {key} of type {type(key)}. Note that LazyStackedTensorDict "
+                    "does not yet support nested keys."
+                )
+
+        return super().exclude(*keys, inplace=inplace)
 
     def __setitem__(self, item: INDEX_TYPING, value: TensorDictBase) -> TensorDictBase:
         if isinstance(item, list):
