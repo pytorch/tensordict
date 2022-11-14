@@ -2539,18 +2539,44 @@ class TensorDict(TensorDictBase):
             return self.clone()
         return self
 
-    def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
-        d = {key: value for (key, value) in self.items() if key in keys}
-        d_meta = {
-            key: value
-            for (key, value) in self.items_meta(make_unset=False)
-            if key in keys
-        }
+    def select(self, *keys: NESTED_KEY, inplace: bool = False) -> TensorDictBase:
+        existing_keys = self.keys(include_nested=True)
+        for key in keys:
+            if key not in existing_keys:
+                raise KeyError(f"Key {key} was not found.")
+
+        nested_keys = defaultdict(list)
+        for key in keys:
+            _nested_key_type_check(key)
+            if isinstance(key, str):
+                # ensure key is in the top level of the dict
+                nested_keys[key]
+            elif len(key) == 1:
+                nested_keys[key[0]]
+            else:
+                nested_keys[key[0]].append(key[1:])
+
+        d = {}
+        d_meta = {}
+
+        for key, subkeys in nested_keys.items():
+            value = self.get(key)
+            if len(subkeys) > 0 and isinstance(value, TensorDictBase):
+                value = value.select(*subkeys, inplace=inplace)
+                d_meta[key] = MetaTensor(value)
+            elif key in self._dict_meta:
+                d_meta[key] = self._dict_meta[key]
+
+            d[key] = value
+
         if inplace:
             self._tensordict = d
             for key in list(self._dict_meta.keys()):
-                if key not in keys:
+                if key not in nested_keys:
                     del self._dict_meta[key]
+                elif len(nested_keys[key]) > 0:
+                    # meta value needs to be updated as not all keys present in children
+                    self._dict_meta[key] = d_meta[key]
             return self
         return TensorDict(
             device=self.device,
@@ -3866,6 +3892,14 @@ class LazyStackedTensorDict(TensorDictBase):
         self._valid_keys = sorted(valid_keys)
 
     def select(self, *keys: str, inplace: bool = False) -> LazyStackedTensorDict:
+        # TODO: Add support for nested keys.
+        for key in keys:
+            if not isinstance(key, str):
+                raise TypeError(
+                    "All keys passed to LazyStackedTensorDict.select must be strings. "
+                    f"Found {key} of type {type(key)}. Note that LazyStackedTensorDict "
+                    "does not yet support nested keys."
+                )
         # the following implementation keeps the hidden keys in the tensordicts
         excluded_keys = set(self.valid_keys) - set(keys)
         tensordicts = [
