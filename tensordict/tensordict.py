@@ -950,7 +950,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
-        keys = [key for key in self.keys() if key not in keys]
+        include_nested = any(isinstance(key, tuple) for key in keys)
+        keys = [
+            key for key in self.keys(include_nested=include_nested) if key not in keys
+        ]
         return self.select(*keys, inplace=inplace)
 
     @abc.abstractmethod
@@ -3911,6 +3914,18 @@ class LazyStackedTensorDict(TensorDictBase):
             *tensordicts,
             stack_dim=self.stack_dim,
         )
+
+    def exclude(self, *keys: str, inplace: bool = False) -> LazyStackedTensorDict:
+        # TODO: Add support for nested keys.
+        for key in keys:
+            if not isinstance(key, str):
+                raise TypeError(
+                    "All keys passed to LazyStackedTensorDict.exclude must be strings. "
+                    f"Found {key} of type {type(key)}. Note that LazyStackedTensorDict "
+                    "does not yet support nested keys."
+                )
+
+        return super().exclude(*keys, inplace=inplace)
 
     def __setitem__(self, item: INDEX_TYPING, value: TensorDictBase) -> TensorDictBase:
         if isinstance(item, list):
