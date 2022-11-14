@@ -1884,7 +1884,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._is_locked = value
 
     def set_default(
-        self, key: str, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
+        self, key: NESTED_KEY, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
     ) -> COMPATIBLE_TYPES:
         """Returns the value of the key if the key is in the tensordict. If not, insert key with a value of item and returns item.
 
@@ -1899,7 +1899,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             the value of the key or item if the key is not in the tensordict
 
         """
-        if key in self.keys():
+        if key in self.keys(include_nested=isinstance(key, tuple)):
             return self.get(key)
         else:
             self.set(key, item, inplace=inplace, **kwargs)
@@ -4320,6 +4320,27 @@ class SavedTensorDict(TensorDictBase):
         td.set(key, value, **kwargs)
         self._save(td)
         return self
+
+    def set_default(
+        self, key: NESTED_KEY, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
+    ) -> COMPATIBLE_TYPES:
+        """Returns the value of the key if the key is in the tensordict. If not, insert
+        key with a value of item and returns item.
+
+        Args:
+            key (str): name of the item
+            item (torch.Tensor): value to be stored in the tensordict
+            inplace (bool, optional): if True and if a key matches an existing
+                key in the tensordict, then the update will occur in-place
+                for that key-value pair. Default is :obj:`False`.
+
+        Returns:
+            the value of the key or item if the key is not in the tensordict
+
+        """
+        if isinstance(key, tuple):
+            raise TypeError("SavedTensorDict does not currently support nested keys.")
+        return super().set_default(key=key, item=item, inplace=inplace, **kwargs)
 
     def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
         if len(shape) == 1 and isinstance(shape[0], Sequence):
