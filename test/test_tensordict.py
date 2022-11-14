@@ -2488,6 +2488,21 @@ def test_setitem_nested():
     assert (tensordict["a", "b", "c"] == 1).all()
 
 
+def test_setdefault_nested():
+    tensor = torch.randn(4, 5, 6, 7)
+    tensor2 = torch.ones(4, 5, 6, 7)
+    sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
+    sub_tensordict = TensorDict({"b": sub_sub_tensordict}, [4, 5])
+    tensordict = TensorDict({"a": sub_tensordict}, [4])
+
+    # if key exists we return the existing value
+    assert tensordict.set_default(("a", "b", "c"), tensor2) is tensor
+
+    assert tensordict.set_default(("a", "b", "d"), tensor2) is tensor2
+    assert (tensordict["a", "b", "d"] == 1).all()
+    assert tensordict.get(("a", "b", "d")) is tensor2
+
+
 @pytest.mark.parametrize("inplace", [True, False])
 def test_select_nested(inplace):
     tensor_1 = torch.rand(4, 5, 6, 7)
