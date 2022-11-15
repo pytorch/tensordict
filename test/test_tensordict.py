@@ -2566,14 +2566,82 @@ class TestMakeTensorDict:
         assert tensordict["c"].device == device
 
 
-@pytest.mark.parametrize("separator", [".", "-"])
-def test_unflatten_keys_collision(separator):
-    td = TensorDict(
-        {"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, []
+@pytest.mark.parametrize("inplace", [True, False])
+@pytest.mark.parametrize("separator", [",", "-"])
+def test_flatten_unflatten_key_collision(inplace, separator):
+    td1 = TensorDict(
+        {
+            f"a{separator}b{separator}c": torch.zeros(3),
+            "a": {
+                "b": {
+                    "c": torch.zeros(3)
+                }
+            }
+        },
+        []
     )
-    ref = TensorDict({"a": [1, 2], "c": TensorDict({"a": [1, 2], "b": [1, 2]}, [])}, [])
-    assert assert_allclose_td(td.unflatten_keys(separator), ref)
+    td2 = TensorDict(
+        {
+            f"a{separator}b": torch.zeros(3),
+            "a": {
+                "b": torch.zeros(3)
+            },
+            'g': {
+                'd': torch.randn(3) 
+            }
+        },
+        []
+    )
+    td3 = TensorDict(
+        {
+            f"a{separator}b{separator}c": torch.zeros(3),
+            "a": {
+                "b": {
+                    "c": torch.zeros(3),
+                    "d": torch.zeros(3)
+                }
+            }
+        },
+        []
+    )
 
+    td4 = TensorDict(
+        {
+            f"a{separator}b{separator}c{separator}d": torch.zeros(3),
+            "a": {
+                "b": {
+                    "c": torch.zeros(3)
+                }
+            }
+        },
+        []
+    )
+
+    td5 = TensorDict(
+        {
+            f"a{separator}b": torch.zeros(3),
+            "a": {
+                "b": {
+                    "c": torch.zeros(3)
+                }
+            }
+        },
+        []
+    )
+
+    with pytest.raises(Exception):
+        _ = td1.flatten_keys(separator)
+        _ = td2.flatten_keys(separator)
+        _ = td3.flatten_keys(separator)
+
+        _ = td1.unflatten_keys(separator)
+        _ = td2.unflatten_keys(separator)
+        _ = td3.unflatten_keys(separator)
+        _ = td4.unflatten_keys(separator)
+        _ = td5.unflatten_keys(separator)
+
+    _ = td4.flatten_keys(separator)
+    _ = td5.flatten_keys(separator)
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
