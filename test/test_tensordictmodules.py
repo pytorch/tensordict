@@ -320,6 +320,33 @@ class TestTDModule:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
+    def test_nested_keys(self):
+        class Net(nn.Module):
+            def __init__(self, input_size=100, hidden=10):
+                super().__init__()
+                self.fc1 = nn.Linear(input_size, hidden)
+                self.fc2 = nn.Linear(hidden, 1)
+
+            def forward(self, x):
+                x = nn.functional.relu(self.fc1(x))
+                logits = self.fc2(x)
+                return nn.functional.sigmoid(logits), logits
+
+        module = TensorDictModule(
+            Net(),
+            in_keys=[("inputs", "x")],
+            out_keys=[("outputs", "probabilities"), ("outputs", "logits")],
+        )
+
+        x = torch.rand(5, 100)
+        tensordict = TensorDict({"inputs": TensorDict({"x": x}, [5])}, [5])
+
+        tensordict = module(tensordict)
+
+        assert tensordict["inputs", "x"] is x
+        assert ("outputs", "probabilities") in tensordict.keys(include_nested=True)
+        assert ("outputs", "logits") in tensordict.keys(include_nested=True)
+
 
 class TestTDSequence:
     def test_key_exclusion(self):
