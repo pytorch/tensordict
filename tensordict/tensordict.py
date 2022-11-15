@@ -2308,7 +2308,6 @@ class TensorDict(TensorDictBase):
             # since we call _nested_key_type_check above, we may assume that the key is
             # a tuple of strings
             td, subkey = _get_leaf_tensordict(self, key, _default_hook)
-            print("set:", td)
             td.set(subkey, proc_value)
 
             if _meta_val:
