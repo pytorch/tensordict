@@ -3447,9 +3447,11 @@ torch.Size([3, 2])
                     elif isinstance(value, (dict, TensorDictBase)):
                         target.update(value)
                         continue
-                raise ValueError(
-                    f"Tried to replace a tensordict with an incompatible object of type {type(value)}"
-                )
+                    raise ValueError(
+                        f"Tried to replace a tensordict with an incompatible object of type {type(value)}"
+                    )
+                else:
+                    self.set_(key, value)
             else:
                 self.set(key, value, inplace=inplace, **kwargs)
         return self
