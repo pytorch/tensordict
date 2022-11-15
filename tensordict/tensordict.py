@@ -5130,7 +5130,7 @@ def _check_keys(
     return keys
 
 
-_accepted_classes = (Tensor, MemmapTensor, TensorDictBase)
+_accepted_classes = (Tensor, MemmapTensor, TensorDictBase, dict)
 
 
 def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_device):
