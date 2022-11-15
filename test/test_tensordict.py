@@ -1004,7 +1004,11 @@ class TestTensorDicts(TestTensorDictsBase):
         td.update(
             {("newnested",): {"v": torch.zeros(td.shape)}},
         )
-        keys = keys.union({("newnested", "v"),})
+        keys = keys.union(
+            {
+                ("newnested", "v"),
+            }
+        )
         assert keys == set(td.keys(True))
 
     def test_write_on_subtd(self, td_name, device):
