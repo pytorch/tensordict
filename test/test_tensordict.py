@@ -977,6 +977,57 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_exclude_missing(self, td_name, device, nested):
+        if td_name == "saved_td" and nested:
+            pytest.skip(
+                "SavedTensorDict does not currently support iteration over nested keys."
+            )
+        td = getattr(self, td_name)(device)
+        if nested:
+            td2 = td.exclude("this key is missing", ("this one too",))
+        else:
+            td2 = td.exclude(
+                "this key is missing",
+            )
+        assert (td == td2).all()
+
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_exclude_nested(self, td_name, device, nested):
+        if td_name == "saved_td" and nested:
+            pytest.skip(
+                "SavedTensorDict does not currently support iteration over nested keys."
+            )
+        td = getattr(self, td_name)(device)
+        if td_name == "stacked_td":
+            for _td in td.tensordicts:
+                _td["newnested", "first"] = torch.randn(_td.shape)
+            td._update_valid_keys()
+        else:
+            td["newnested", "first"] = torch.randn(td.shape)
+        if nested:
+            td2 = td.exclude("a", ("newnested", "first"))
+            assert "a" in td.keys(), list(td.keys())
+            assert "a" not in td2.keys()
+            assert ("newnested", "first") in td.keys(True), list(td.keys(True))
+            assert ("newnested", "first") not in td2.keys(True)
+        else:
+            td2 = td.exclude(
+                "a",
+            )
+            assert "a" in td.keys()
+            assert "a" not in td2.keys()
+        if td_name not in (
+            "sub_td",
+            "sub_td2",
+            "unsqueezed_td",
+            "squeezed_td",
+            "permute_td",
+        ):
+            # TODO: document this as an edge-case: with a sub-tensordict, exclude acts on the parent tensordict
+            # perhaps exclude should return an error in these cases?
+            assert type(td2) is type(td)
+
     @pytest.mark.parametrize("clone", [True, False])
     def test_update(self, td_name, device, clone):
         if td_name == "saved_td":
@@ -1478,10 +1529,7 @@ class TestTensorDicts(TestTensorDictsBase):
         other_sub_sub_td = TensorDict({"b": b}, [*td.shape, 2, 2])
 
         if td_name in ("sub_td", "sub_td2"):
-            with pytest.raises(
-                RuntimeError, match="with another one with non-matching keys"
-            ):
-                td["sub_td", "sub_sub_td"] = other_sub_sub_td
+            td["sub_td", "sub_sub_td"] = other_sub_sub_td
         else:
             td["sub_td", "sub_sub_td"] = other_sub_sub_td
             assert (td["sub_td", "sub_sub_td", "b"] == 1).all()
