@@ -966,35 +966,45 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
-        if any(isinstance(key, tuple) for key in keys):
-            # parse keys into nested dict structure
-            nested_keys = _nested_keys_to_dict(self.keys(include_nested=True))
-
-            # delete all keys to be excluded
-            for key in keys:
-                _nested_key_type_check(key)
-                if isinstance(key, str):
-                    if key in nested_keys:
-                        del nested_keys[key]
-                    else:
-                        continue
-                else:
-                    d = nested_keys
-                    for subkey in key[:-1]:
-                        if subkey not in d:
-                            break
-                        d = d[subkey]
-                    else:
-                        if key[-1] in d:
-                            # if each subkey was found, we delete the final one
-                            del d[key[-1]]
-
-            # convert remaining keys into keys for selection
-            keys = [key for key in _dict_to_nested_keys(nested_keys)]
+        target = self if inplace else self.clone(recurse=False)
+        is_nested = any(isinstance(key, tuple) for key in keys)
+        if len(keys) > 1:
+            tdkeys = set(self.keys(is_nested))
         else:
-            keys = [key for key in self.keys() if key not in keys]
-
-        return self.select(*keys, inplace=inplace)
+            tdkeys = self.keys(is_nested)
+        for key in keys:
+            if key in tdkeys:
+                del target[key]
+        return target
+        # if any(isinstance(key, tuple) for key in keys):
+        #     # parse keys into nested dict structure
+        #     nested_keys = _nested_keys_to_dict(self.keys(include_nested=True))
+        #
+        #     # delete all keys to be excluded
+        #     for key in keys:
+        #         _nested_key_type_check(key)
+        #         if isinstance(key, str):
+        #             if key in nested_keys:
+        #                 del nested_keys[key]
+        #             else:
+        #                 continue
+        #         else:
+        #             d = nested_keys
+        #             for subkey in key[:-1]:
+        #                 if subkey not in d:
+        #                     break
+        #                 d = d[subkey]
+        #             else:
+        #                 if key[-1] in d:
+        #                     # if each subkey was found, we delete the final one
+        #                     del d[key[-1]]
+        #
+        #     # convert remaining keys into keys for selection
+        #     keys = [key for key in _dict_to_nested_keys(nested_keys)]
+        # else:
+        #     keys = [key for key in self.keys() if key not in keys]
+        #
+        # return self.select(*keys, inplace=inplace)
 
     @abc.abstractmethod
     def set_at_(
@@ -1168,10 +1178,17 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 TensorDict will be copied too. Default is `True`.
 
         """
+
+        def _clone(value):
+            if recurse:
+                return value.clone()
+            elif isinstance(value, TensorDictBase):
+                return value.clone(recurse=recurse)
+            else:
+                return value
+
         return TensorDict(
-            source={
-                key: value.clone() if recurse else value for key, value in self.items()
-            },
+            source={key: _clone(value) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
         )
@@ -1802,9 +1819,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     return self.set(
                         index[0], value, inplace=isinstance(self, SubTensorDict)
                     )
-                self.set(
-                    index, value, inplace=isinstance(self, SubTensorDict)
-                )
+                self.set(index, value, inplace=isinstance(self, SubTensorDict))
             except AttributeError as err:
                 if "for populating tensordict with new key-value pair" in str(err):
                     raise RuntimeError(
@@ -1833,9 +1848,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     subtd.set(key, item)
 
     def __delitem__(self, index: INDEX_TYPING) -> TensorDictBase:
-        if isinstance(index, str):
-            return self.del_(index)
-        raise IndexError(f"Index has to a string but received {index}.")
+        # if isinstance(index, str):
+        return self.del_(index)
+        # raise IndexError(f"Index has to a string but received {index}.")
 
     @abc.abstractmethod
     def rename_key(
@@ -2427,13 +2442,13 @@ class TensorDict(TensorDictBase):
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
         _nested_key_type_check(key)
-
+        is_nested = isinstance(key, tuple)
         # do we need this?
         if not isinstance(value, _accepted_classes):
             value = self._process_input(
                 value, check_tensor_shape=False, check_device=False
             )
-        if key not in self.keys():
+        if key not in self.keys(is_nested):
             raise KeyError(f"did not find key {key} in {self.__class__.__name__}")
         tensor_in = self.get(key)
 
@@ -3239,7 +3254,8 @@ torch.Size([3, 2])
         inplace: bool = False,
         _run_checks: bool = True,
     ) -> TensorDictBase:
-        keys = self.keys()
+        is_nested = isinstance(key, tuple)
+        keys = self.keys(is_nested)
         if self.is_locked:
             if not inplace or key not in keys:
                 raise RuntimeError("Cannot modify locked TensorDict")
@@ -3303,11 +3319,12 @@ torch.Size([3, 2])
         tensor: Union[dict, COMPATIBLE_TYPES],
         no_check: bool = False,
     ) -> SubTensorDict:
+        is_nested = isinstance(key, tuple)
         if not no_check:
             tensor = self._process_input(
                 tensor, check_device=False, check_tensor_shape=False
             )
-            if key not in self.keys():
+            if key not in self.keys(is_nested):
                 raise KeyError(f"key {key} not found in {self.keys()}")
             if (
                 not isinstance(tensor, dict)
@@ -4036,7 +4053,10 @@ class LazyStackedTensorDict(TensorDictBase):
         )
 
     def exclude(self, *keys: str, inplace: bool = False) -> LazyStackedTensorDict:
-        tensordicts = [tensordict.exclude(*keys, inplace=inplace) for tensordict in self.tensordicts]
+        tensordicts = [
+            tensordict.exclude(*keys, inplace=inplace)
+            for tensordict in self.tensordicts
+        ]
         if inplace:
             self.tensordicts = tensordicts
             self._update_valid_keys()
