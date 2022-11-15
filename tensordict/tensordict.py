@@ -976,35 +976,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             if key in tdkeys:
                 del target[key]
         return target
-        # if any(isinstance(key, tuple) for key in keys):
-        #     # parse keys into nested dict structure
-        #     nested_keys = _nested_keys_to_dict(self.keys(include_nested=True))
-        #
-        #     # delete all keys to be excluded
-        #     for key in keys:
-        #         _nested_key_type_check(key)
-        #         if isinstance(key, str):
-        #             if key in nested_keys:
-        #                 del nested_keys[key]
-        #             else:
-        #                 continue
-        #         else:
-        #             d = nested_keys
-        #             for subkey in key[:-1]:
-        #                 if subkey not in d:
-        #                     break
-        #                 d = d[subkey]
-        #             else:
-        #                 if key[-1] in d:
-        #                     # if each subkey was found, we delete the final one
-        #                     del d[key[-1]]
-        #
-        #     # convert remaining keys into keys for selection
-        #     keys = [key for key in _dict_to_nested_keys(nested_keys)]
-        # else:
-        #     keys = [key for key in self.keys() if key not in keys]
-        #
-        # return self.select(*keys, inplace=inplace)
 
     @abc.abstractmethod
     def set_at_(
