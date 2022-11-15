@@ -1529,10 +1529,7 @@ class TestTensorDicts(TestTensorDictsBase):
         other_sub_sub_td = TensorDict({"b": b}, [*td.shape, 2, 2])
 
         if td_name in ("sub_td", "sub_td2"):
-            with pytest.raises(
-                RuntimeError, match="with another one with non-matching keys"
-            ):
-                td["sub_td", "sub_sub_td"] = other_sub_sub_td
+            td["sub_td", "sub_sub_td"] = other_sub_sub_td
         else:
             td["sub_td", "sub_sub_td"] = other_sub_sub_td
             assert (td["sub_td", "sub_sub_td", "b"] == 1).all()

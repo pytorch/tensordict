@@ -3797,13 +3797,9 @@ class LazyStackedTensorDict(TensorDictBase):
         return torch.Size(s)
 
     def set(
-        self, key: str, tensor: Union[dict, COMPATIBLE_TYPES], **kwargs
+        self, key: NESTED_KEY, tensor: Union[dict, COMPATIBLE_TYPES], **kwargs
     ) -> TensorDictBase:
-        if isinstance(key, tuple):
-            raise TypeError(
-                "Support for setting and getting keys in LazyStackedTensorDict instances is currently limited."
-            )
-        # TODO: what should support for nested keys look like here?
+
         if self.is_locked:
             if key not in self.keys():
                 raise RuntimeError("Cannot modify locked TensorDict")
@@ -3824,10 +3820,11 @@ class LazyStackedTensorDict(TensorDictBase):
         proc_tensor = tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensordicts, proc_tensor):
             td.set(key, _item, **kwargs)
+        first_key = key if isinstance(key, str) else key[0]
         if key not in self._valid_keys:
-            self._valid_keys = sorted([*self._valid_keys, key], key=str)
-        if key in self._dict_meta:
-            del self._dict_meta[key]
+            self._valid_keys = sorted([*self._valid_keys, first_key], key=str)
+        if first_key in self._dict_meta:
+            del self._dict_meta[first_key]
         return self
 
     def set_(
