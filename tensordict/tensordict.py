@@ -931,7 +931,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+    def select(
+        self, *keys: str, inplace: bool = False, strict: bool = True
+    ) -> TensorDictBase:
         """Selects the keys of the tensordict and returns an new tensordict with only the selected keys.
 
         The values are not copied: in-place modifications a tensor of either
@@ -942,6 +944,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             *keys (str): keys to select
             inplace (bool): if True, the tensordict is pruned in place.
                 Default is :obj:`False`.
+            strict (bool, optional): whether selecting a key that is not present
+                will return an error or not. Default: :obj:`True`.
 
         Returns:
             A new tensordict with the selected keys only.
@@ -2563,11 +2567,18 @@ class TensorDict(TensorDictBase):
             return self.clone()
         return self
 
-    def select(self, *keys: NESTED_KEY, inplace: bool = False) -> TensorDictBase:
-        existing_keys = self.keys(include_nested=True)
-        for key in keys:
-            if key not in existing_keys:
-                raise KeyError(f"Key {key} was not found.")
+    def select(
+        self, *keys: NESTED_KEY, inplace: bool = False, strict: bool = True
+    ) -> TensorDictBase:
+        existing_keys = set(self.keys(include_nested=True))
+        keys = {
+            key[0] if isinstance(key, tuple) and len(key) == 1 else key for key in keys
+        }
+        if strict:
+            if len(keys.difference(existing_keys)):
+                raise KeyError(f"Keys {keys.difference(existing_keys)} were not found.")
+        else:
+            keys = keys.intersection(existing_keys)
 
         nested_keys = defaultdict(list)
         for key in keys:
@@ -3453,11 +3464,13 @@ torch.Size([3, 2])
             device=self.device,
         )
 
-    def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+    def select(
+        self, *keys: str, inplace: bool = False, strict: bool = True
+    ) -> TensorDictBase:
         if inplace:
-            self._source = self._source.select(*keys)
+            self._source = self._source.select(*keys, strict=strict)
             return self
-        return self._source.select(*keys)[self.idx]
+        return self._source.select(*keys, strict=strict)[self.idx]
 
     def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
         if len(shape) == 1 and isinstance(shape[0], Sequence):
@@ -3937,7 +3950,9 @@ class LazyStackedTensorDict(TensorDictBase):
             valid_keys = valid_keys.intersection(td.keys())
         self._valid_keys = sorted(valid_keys)
 
-    def select(self, *keys: str, inplace: bool = False) -> LazyStackedTensorDict:
+    def select(
+        self, *keys: str, inplace: bool = False, strict: bool = None
+    ) -> LazyStackedTensorDict:
         # TODO: Add support for nested keys.
         for key in keys:
             if not isinstance(key, str):
@@ -3946,6 +3961,11 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"Found {key} of type {type(key)}. Note that LazyStackedTensorDict "
                     "does not yet support nested keys."
                 )
+        # TODO: implement strict=True
+        if strict:
+            raise NotImplementedError(
+                "strict=True is not yet implemented for LazyStackedTensorDict.select()"
+            )
         # the following implementation keeps the hidden keys in the tensordicts
         excluded_keys = set(self.valid_keys) - set(keys)
         tensordicts = [
@@ -4416,8 +4436,10 @@ class SavedTensorDict(TensorDictBase):
     def clone(self, recurse: bool = True) -> TensorDictBase:
         return SavedTensorDict(self, device=self.device)
 
-    def select(self, *keys: str, inplace: bool = False) -> TensorDictBase:
-        _source = self.contiguous().select(*keys)
+    def select(
+        self, *keys: str, inplace: bool = False, strict: bool = True
+    ) -> TensorDictBase:
+        _source = self.contiguous().select(*keys, strict=strict)
         if inplace:
             self._save(_source)
             return self
@@ -4779,12 +4801,14 @@ class _CustomOpTensorDict(TensorDictBase):
     def keys(self, include_nested: bool = False) -> _TensorDictKeysView:
         return self._source.keys(include_nested=include_nested)
 
-    def select(self, *keys: str, inplace: bool = False) -> _CustomOpTensorDict:
+    def select(
+        self, *keys: str, inplace: bool = False, strict: bool = True
+    ) -> _CustomOpTensorDict:
         if inplace:
-            self._source.select(*keys, inplace=inplace)
+            self._source.select(*keys, inplace=inplace, strict=strict)
             return self
         self_copy = copy(self)
-        self_copy._source = self_copy._source.select(*keys)
+        self_copy._source = self_copy._source.select(*keys, strict=strict)
         return self_copy
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
