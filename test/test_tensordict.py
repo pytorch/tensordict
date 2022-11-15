@@ -648,6 +648,23 @@ class TestTensorDicts(TestTensorDictsBase):
         td2 = td.select("a", inplace=True)
         assert td2 is td
 
+    @pytest.mark.parametrize("strict", [True, False])
+    def test_select_exception(self, td_name, device, strict):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        if strict:
+            if td_name == "stacked_td":
+                with pytest.raises(NotImplementedError):
+                    _ = td.select("tada", strict=strict)
+            else:
+                with pytest.raises(KeyError):
+                    _ = td.select("tada", strict=strict)
+            return
+        else:
+            td2 = td.select("tada", strict=strict)
+        assert td2 is not td
+        assert len(list(td2.keys())) == 0
+
     def test_exclude(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
