@@ -974,7 +974,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             for key in keys:
                 _nested_key_type_check(key)
                 if isinstance(key, str):
-                    del nested_keys[key]
+                    if key in nested_keys:
+                        del nested_keys[key]
+                    else:
+                        continue
                 else:
                     d = nested_keys
                     for subkey in key[:-1]:
@@ -1799,8 +1802,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     return self.set(
                         index[0], value, inplace=isinstance(self, SubTensorDict)
                     )
-                self[index[:-1]] = self[index[:-1]].set(
-                    index[-1], value, inplace=isinstance(self, SubTensorDict)
+                self.set(
+                    index, value, inplace=isinstance(self, SubTensorDict)
                 )
             except AttributeError as err:
                 if "for populating tensordict with new key-value pair" in str(err):
@@ -4033,16 +4036,12 @@ class LazyStackedTensorDict(TensorDictBase):
         )
 
     def exclude(self, *keys: str, inplace: bool = False) -> LazyStackedTensorDict:
-        # TODO: Add support for nested keys.
-        for key in keys:
-            if not isinstance(key, str):
-                raise TypeError(
-                    "All keys passed to LazyStackedTensorDict.exclude must be strings. "
-                    f"Found {key} of type {type(key)}. Note that LazyStackedTensorDict "
-                    "does not yet support nested keys."
-                )
-
-        return super().exclude(*keys, inplace=inplace)
+        tensordicts = [tensordict.exclude(*keys, inplace=inplace) for tensordict in self.tensordicts]
+        if inplace:
+            self.tensordicts = tensordicts
+            self._update_valid_keys()
+            return self
+        return torch.stack(tensordicts, dim=self.stack_dim)
 
     def __setitem__(self, item: INDEX_TYPING, value: TensorDictBase) -> TensorDictBase:
         if isinstance(item, list):

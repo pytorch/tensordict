@@ -977,6 +977,41 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_except_missing(self, td_name, device, nested):
+        if td_name == "saved_td" and nested:
+            pytest.skip(
+                "SavedTensorDict does not currently support iteration over nested keys."
+            )
+        td = getattr(self, td_name)(device)
+        if nested:
+            td2 = td.exclude("this key is missing", ("this one too",))
+        else:
+            td2 = td.exclude(
+                "this key is missing",
+            )
+        assert (td == td2).all()
+
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_except_nested(self, td_name, device, nested):
+        if td_name == "saved_td" and nested:
+            pytest.skip(
+                "SavedTensorDict does not currently support iteration over nested keys."
+            )
+        td = getattr(self, td_name)(device)
+        td["newnested", "first"] = torch.randn(td.shape)
+        if nested:
+            td2 = td.exclude("a", ("newnested", "first"))
+            assert "a" in td.keys()
+            assert "a" not in td2.keys()
+            assert ("newnested", "first") in td.keys(True)
+            assert ("newnested", "first") not in td2.keys(True)
+        else:
+            td2 = td.exclude("a",)
+            assert "a" in td.keys()
+            assert "a" not in td2.keys()
+        assert type(td2) is type(td)
+
     @pytest.mark.parametrize("clone", [True, False])
     def test_update(self, td_name, device, clone):
         if td_name == "saved_td":
