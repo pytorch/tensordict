@@ -1550,7 +1550,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     _existing_val = functools.reduce(
                         operator.getitem, key.split(separator), self.to_dict()
                     )
-                except:
+                except TypeError:
                     pass
                 if isinstance(_existing_val, Tensor):
                     raise ValueError(
@@ -1608,7 +1608,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
             if key in out.to_dict():
                 raise ValueError(
-                    f"Unflattening key(s) in tensordict will override existing unflattened key"
+                    "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
 
             tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
