@@ -3199,6 +3199,16 @@ torch.Size([3, 2])
         out = self._source._get_meta(key)[self.idx]
         return out
 
+    def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+        if inplace:
+            return super().exclude(*keys, inplace=True)
+        return TensorDict(
+            {key: value for key, value in self.items()},
+            batch_size=self.batch_size,
+            device=self.device,
+            _run_checks=False,
+        ).exclude(*keys, inplace=True)
+
     @property
     def batch_size(self) -> torch.Size:
         return self._batch_size
@@ -4891,6 +4901,16 @@ class _CustomOpTensorDict(TensorDictBase):
         self_copy = copy(self)
         self_copy._source = self_copy._source.select(*keys, strict=strict)
         return self_copy
+
+    def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+        if inplace:
+            return super().exclude(*keys, inplace=True)
+        return TensorDict(
+            {key: value.clone() for key, value in self.items()},
+            batch_size=self.batch_size,
+            device=self.device,
+            _run_checks=False,
+        ).exclude(*keys, inplace=True)
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
         if not recurse:

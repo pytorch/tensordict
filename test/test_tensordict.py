@@ -978,7 +978,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td.get("a") == 1).all()
 
     @pytest.mark.parametrize("nested", [True, False])
-    def test_except_missing(self, td_name, device, nested):
+    def test_exclude_missing(self, td_name, device, nested):
         if td_name == "saved_td" and nested:
             pytest.skip(
                 "SavedTensorDict does not currently support iteration over nested keys."
@@ -993,7 +993,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td == td2).all()
 
     @pytest.mark.parametrize("nested", [True, False])
-    def test_except_nested(self, td_name, device, nested):
+    def test_exclude_nested(self, td_name, device, nested):
         if td_name == "saved_td" and nested:
             pytest.skip(
                 "SavedTensorDict does not currently support iteration over nested keys."
@@ -1007,40 +1007,26 @@ class TestTensorDicts(TestTensorDictsBase):
             td["newnested", "first"] = torch.randn(td.shape)
         if nested:
             td2 = td.exclude("a", ("newnested", "first"))
-            if td_name not in (
-                "sub_td",
-                "sub_td2",
-                "unsqueezed_td",
-                "squeezed_td",
-                "permute_td",
-            ):
-                # TODO: document this as an edge-case: with a sub-tensordict, exclude acts on the parent tensordict
-                # perhaps exclude should return an error in these cases?
-                assert "a" in td.keys(), list(td.keys())
+            assert "a" in td.keys(), list(td.keys())
             assert "a" not in td2.keys()
-            if td_name not in (
-                "sub_td",
-                "sub_td2",
-                "unsqueezed_td",
-                "squeezed_td",
-                "permute_td",
-            ):
-                assert ("newnested", "first") in td.keys(True), list(td.keys(True))
+            assert ("newnested", "first") in td.keys(True), list(td.keys(True))
             assert ("newnested", "first") not in td2.keys(True)
         else:
             td2 = td.exclude(
                 "a",
             )
-            if td_name not in (
-                "sub_td",
-                "sub_td2",
-                "unsqueezed_td",
-                "squeezed_td",
-                "permute_td",
-            ):
-                assert "a" in td.keys()
+            assert "a" in td.keys()
             assert "a" not in td2.keys()
-        assert type(td2) is type(td)
+        if td_name not in (
+            "sub_td",
+            "sub_td2",
+            "unsqueezed_td",
+            "squeezed_td",
+            "permute_td",
+        ):
+            # TODO: document this as an edge-case: with a sub-tensordict, exclude acts on the parent tensordict
+            # perhaps exclude should return an error in these cases?
+            assert type(td2) is type(td)
 
     @pytest.mark.parametrize("clone", [True, False])
     def test_update(self, td_name, device, clone):
