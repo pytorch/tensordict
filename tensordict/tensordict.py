@@ -2407,7 +2407,7 @@ class TensorDict(TensorDictBase):
         return self
 
     def set_at_(
-        self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
+        self, key: NESTED_KEY, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
         _nested_key_type_check(key)
 
@@ -2416,7 +2416,7 @@ class TensorDict(TensorDictBase):
             value = self._process_input(
                 value, check_tensor_shape=False, check_device=False
             )
-        if key not in self.keys():
+        if key not in self.keys(include_nested=isinstance(key, tuple)):
             raise KeyError(f"did not find key {key} in {self.__class__.__name__}")
         tensor_in = self.get(key)
 
@@ -3205,7 +3205,7 @@ torch.Size([3, 2])
         inplace: bool = False,
         _run_checks: bool = True,
     ) -> TensorDictBase:
-        keys = self.keys()
+        keys = self.keys(include_nested=isinstance(key, tuple))
         if self.is_locked:
             if not inplace or key not in keys:
                 raise RuntimeError("Cannot modify locked TensorDict")
@@ -3272,7 +3272,7 @@ torch.Size([3, 2])
             tensor = self._process_input(
                 tensor, check_device=False, check_tensor_shape=False
             )
-            if key not in self.keys():
+            if key not in self.keys(include_nested=isinstance(key, tuple)):
                 raise KeyError(f"key {key} not found in {self.keys()}")
             if (
                 not isinstance(tensor, dict)
