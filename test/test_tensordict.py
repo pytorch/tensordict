@@ -17,7 +17,7 @@ from tensordict import (
     SavedTensorDict,
     TensorDict,
 )
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import TensorDictBase, SubTensorDict
 from tensordict.tensordict import _stack as stack_td
 from tensordict.tensordict import assert_allclose_td, make_tensordict, pad
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
@@ -1520,6 +1520,37 @@ class TestTensorDicts(TestTensorDictsBase):
         inserted = td.set_default("a", torch.ones_like(td.get("b")))
         assert (inserted == expected).all()
 
+    def test_setdefault_nested(self, td_name, device):
+        if td_name == "saved_td":
+            pytest.skip("SavedTensorDict does not support nested keys")
+
+        td = getattr(self, td_name)(device)
+
+        tensor = torch.randn(4, 3, 2, 1, 5)
+        tensor2 = torch.ones(4, 3, 2, 1, 5)
+        sub_sub_tensordict = TensorDict({"c": tensor}, [4, 3, 2, 1])
+        sub_tensordict = TensorDict({"b": sub_sub_tensordict}, [4, 3, 2, 1])
+
+        if td_name == "sub_td":
+            td = td._source.set(
+                "a", sub_tensordict.expand(2, *sub_tensordict.shape)
+            ).get_sub_tensordict(1)
+        elif td_name == "sub_td2":
+            td = td._source.set(
+                "a", sub_tensordict.expand(2, *sub_tensordict.shape).permute(1, 0, 2, 3, 4)
+            ).get_sub_tensordict((slice(None), 1))
+        else:
+            td.set("a", sub_tensordict)
+
+        # if key exists we return the existing value
+        torch.testing.assert_close(td.set_default(("a", "b", "c"), tensor2), tensor)
+
+        if not td_name == "stacked_td":
+            torch.testing.assert_close(
+                td.set_default(("a", "b", "d"), tensor2), tensor2
+            )
+            torch.testing.assert_close(td.get(("a", "b", "d")), tensor2)
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
@@ -2486,21 +2517,6 @@ def test_setitem_nested():
     tensordict["a", "b"] = sub_sub_tensordict2
     assert tensordict["a", "b"] is sub_sub_tensordict2
     assert (tensordict["a", "b", "c"] == 1).all()
-
-
-def test_setdefault_nested():
-    tensor = torch.randn(4, 5, 6, 7)
-    tensor2 = torch.ones(4, 5, 6, 7)
-    sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
-    sub_tensordict = TensorDict({"b": sub_sub_tensordict}, [4, 5])
-    tensordict = TensorDict({"a": sub_tensordict}, [4])
-
-    # if key exists we return the existing value
-    assert tensordict.set_default(("a", "b", "c"), tensor2) is tensor
-
-    assert tensordict.set_default(("a", "b", "d"), tensor2) is tensor2
-    assert (tensordict["a", "b", "d"] == 1).all()
-    assert tensordict.get(("a", "b", "d")) is tensor2
 
 
 @pytest.mark.parametrize("inplace", [True, False])
