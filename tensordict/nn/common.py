@@ -34,7 +34,7 @@ from tensordict.nn.functional_modules import (
     FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,
 )
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import NESTED_KEY, _nested_key_type_check
+from tensordict.utils import NESTED_KEY, _nested_key_type_check, _normalize_key
 
 __all__ = [
     "TensorDictModule",
@@ -144,10 +144,10 @@ class TensorDictModule(nn.Module):
             raise RuntimeError(f"out_keys were not passed to {self.__class__.__name__}")
         if not in_keys:
             raise RuntimeError(f"in_keys were not passed to {self.__class__.__name__}")
-        self.out_keys = out_keys
-        _check_all_nested(self.out_keys)
-        self.in_keys = in_keys
-        _check_all_nested(self.in_keys)
+        _check_all_nested(out_keys)
+        self.out_keys = [_normalize_key(key) for key in out_keys]
+        _check_all_nested(in_keys)
+        self.in_keys = [_normalize_key(key) for key in in_keys]
 
         if "_" in in_keys:
             warnings.warn(

@@ -33,6 +33,7 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
+from tensordict.utils import NESTED_KEY, _normalize_key
 
 __all__ = ["TensorDictSequential"]
 
@@ -205,7 +206,9 @@ class TensorDictSequential(TensorDictModule):
         return out
 
     def select_subsequence(
-        self, in_keys: Iterable[str] = None, out_keys: Iterable[str] = None
+        self,
+        in_keys: Iterable[NESTED_KEY] = None,
+        out_keys: Iterable[NESTED_KEY] = None,
     ) -> "TensorDictSequential":
         """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 
@@ -218,8 +221,12 @@ class TensorDictSequential(TensorDictModule):
         """
         if in_keys is None:
             in_keys = deepcopy(self.in_keys)
+        else:
+            in_keys = [_normalize_key(key) for key in in_keys]
         if out_keys is None:
             out_keys = deepcopy(self.out_keys)
+        else:
+            out_keys = [_normalize_key(key) for key in out_keys]
         id_to_keep = {i for i in range(len(self.module))}
         for i, module in enumerate(self.module):
             if all(key in in_keys for key in module.in_keys):
@@ -251,7 +258,7 @@ class TensorDictSequential(TensorDictModule):
         buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ):
-        tensordict_keys = set(tensordict.keys())
+        tensordict_keys = set(tensordict.keys(include_nested=True))
         if not self.partial_tolerant or all(
             key in tensordict_keys for key in module.in_keys
         ):
@@ -263,7 +270,7 @@ class TensorDictSequential(TensorDictModule):
                 tensordict = module(tensordict, **kwargs)
         elif self.partial_tolerant and isinstance(tensordict, LazyStackedTensorDict):
             for sub_td in tensordict.tensordicts:
-                tensordict_keys = set(sub_td.keys())
+                tensordict_keys = set(sub_td.keys(include_nested=True))
                 if all(key in tensordict_keys for key in module.in_keys):
                     if params is not None or buffers is not None:
                         module(sub_td, params=params, buffers=buffers, **kwargs)

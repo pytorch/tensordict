@@ -377,3 +377,8 @@ def _nested_key_type_check(key):
             "Expected key to be a string or non-empty tuple of strings, but found "
             f"{key_repr}"
         )
+
+
+def _normalize_key(key: NESTED_KEY) -> NESTED_KEY:
+    # normalises tuples of length one to their string contents
+    return key if not isinstance(key, tuple) or len(key) > 1 else key[0]
