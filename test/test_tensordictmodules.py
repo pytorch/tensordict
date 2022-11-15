@@ -328,9 +328,9 @@ class TestTDModule:
                 self.fc2 = nn.Linear(hidden, 1)
 
             def forward(self, x):
-                x = nn.functional.relu(self.fc1(x))
+                x = torch.relu(self.fc1(x))
                 logits = self.fc2(x)
-                return nn.functional.sigmoid(logits), logits
+                return torch.sigmoid(logits), logits
 
         module = TensorDictModule(
             Net(),
