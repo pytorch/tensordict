@@ -977,6 +977,31 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
+    def test_update(self, td_name, device):
+        if td_name == "saved_td":
+            pytest.skip(
+                "SavedTensorDict does not currently support iteration over nested keys."
+            )
+        td = getattr(self, td_name)(device)
+        keys = set(td.keys())
+        td.update({"x": torch.zeros(td.shape)})
+        assert set(td.keys()) == keys.union({"x"})
+        # now with nested
+        td["newnested"] = {"z": torch.zeros(td.shape)}
+        keys = set(td.keys(True))
+        assert ("newnested", "z") in keys
+        td.update({"newnested": {"y": torch.zeros(td.shape)}})
+        keys = keys.union({("newnested", "y")})
+        assert keys == set(td.keys(True))
+        td.update(
+            {
+                ("newnested", "x"): torch.zeros(td.shape),
+                ("newnested", "w"): torch.zeros(td.shape),
+            }
+        )
+        keys = keys.union({("newnested", "x"), ("newnested", "w")})
+        assert keys == set(td.keys(True))
+
     def test_write_on_subtd(self, td_name, device):
         td = getattr(self, td_name)(device)
         sub_td = td.get_sub_tensordict(0)
@@ -2779,9 +2804,13 @@ class TestMakeTensorDict:
 
 
 def test_update_nested_dict():
-    t = TensorDict({}, [2, 3])
-    t.update({"a": {"b": [[[1], [1], [1]]] * 2}})
+    t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
+    assert ("a", "d") in t.keys(include_nested=True)
+    t.update({"a": {"b": [[[1]] * 3] * 2}})
+    assert ("a", "d") in t.keys(include_nested=True)
+    assert ("a", "b") in t.keys(include_nested=True)
     assert t["a", "b"].shape == torch.Size([2, 3, 1])
+    t.update({"a": {"d": [[[1]] * 3] * 2}})
 
 
 @pytest.mark.parametrize("separator", [".", "-"])
