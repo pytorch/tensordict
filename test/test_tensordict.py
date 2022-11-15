@@ -2572,61 +2572,36 @@ def test_flatten_unflatten_key_collision(inplace, separator):
     td1 = TensorDict(
         {
             f"a{separator}b{separator}c": torch.zeros(3),
-            "a": {
-                "b": {
-                    "c": torch.zeros(3)
-                }
-            }
+            "a": {"b": {"c": torch.zeros(3)}},
         },
-        []
+        [],
     )
     td2 = TensorDict(
         {
             f"a{separator}b": torch.zeros(3),
-            "a": {
-                "b": torch.zeros(3)
-            },
-            'g': {
-                'd': torch.randn(3) 
-            }
+            "a": {"b": torch.zeros(3)},
+            "g": {"d": torch.randn(3)},
         },
-        []
+        [],
     )
     td3 = TensorDict(
         {
             f"a{separator}b{separator}c": torch.zeros(3),
-            "a": {
-                "b": {
-                    "c": torch.zeros(3),
-                    "d": torch.zeros(3)
-                }
-            }
+            "a": {"b": {"c": torch.zeros(3), "d": torch.zeros(3)}},
         },
-        []
+        [],
     )
 
     td4 = TensorDict(
         {
             f"a{separator}b{separator}c{separator}d": torch.zeros(3),
-            "a": {
-                "b": {
-                    "c": torch.zeros(3)
-                }
-            }
+            "a": {"b": {"c": torch.zeros(3)}},
         },
-        []
+        [],
     )
 
     td5 = TensorDict(
-        {
-            f"a{separator}b": torch.zeros(3),
-            "a": {
-                "b": {
-                    "c": torch.zeros(3)
-                }
-            }
-        },
-        []
+        {f"a{separator}b": torch.zeros(3), "a": {"b": {"c": torch.zeros(3)}}}, []
     )
 
     with pytest.raises(Exception):
@@ -2642,6 +2617,7 @@ def test_flatten_unflatten_key_collision(inplace, separator):
 
     _ = td4.flatten_keys(separator)
     _ = td5.flatten_keys(separator)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

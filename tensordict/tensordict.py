@@ -1544,20 +1544,18 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 already_flat.append(key)
 
         for key in already_flat:
-            if separator in key: 
-                _existing_val = None 
-                try:         
+            if separator in key:
+                _existing_val = None
+                try:
                     _existing_val = functools.reduce(
-                        operator.getitem, 
-                        key.split(separator), 
-                        self.to_dict()
-                        )
+                        operator.getitem, key.split(separator), self.to_dict()
+                    )
                 except:
                     pass
-                if isinstance(_existing_val, Tensor): 
+                if isinstance(_existing_val, Tensor):
                     raise ValueError(
                         f"Flattening keys in tensordict collides with existing key '{key}'"
-                        )
+                    )
 
         if inplace:
             for key in to_flatten:
@@ -1611,8 +1609,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             if key in out.to_dict():
                 raise ValueError(
                     f"Unflattening key(s) in tensordict will override existing unflattened key"
-                    )
-                        
+                )
+
             tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
             if key in self.keys():
                 tensordict.update(self[key])
@@ -1621,7 +1619,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 tensordict[new_key] = value
                 if inplace:
                     del self[old_key]
-            out.set(key, tensordict.unflatten_keys(separator=separator))   
+            out.set(key, tensordict.unflatten_keys(separator=separator))
         return out
 
     def __len__(self) -> int:
