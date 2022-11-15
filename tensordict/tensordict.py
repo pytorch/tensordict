@@ -170,7 +170,7 @@ class _TensorDictKeysView:
                         val = self.tensordict.get(key[0])
                         # TODO: SavedTensorDict currently doesn't support nested memebership checks
                         include_nested = self.include_nested and not isinstance(
-                            val, (SavedTensorDict,)
+                            val, SavedTensorDict
                         )
                         return isinstance(val, TensorDictBase) and key[1:] in val.keys(
                             include_nested=include_nested
@@ -3274,9 +3274,8 @@ torch.Size([3, 2])
         return self
 
     def keys(self, include_nested: bool = False) -> _TensorDictKeysView:
-        # TODO: temporary hack while SavedTensorDict and LazyStackedTensorDict don't
-        # support nested iteration
-        if isinstance(self._source, (LazyStackedTensorDict, SavedTensorDict)):
+        # TODO: temporary hack while SavedTensorDict doesn't support nested iteration
+        if isinstance(self._source, SavedTensorDict):
             include_nested = False
         return self._source.keys(include_nested=include_nested)
 
