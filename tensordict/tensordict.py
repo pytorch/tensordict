@@ -24,12 +24,12 @@ from typing import (
     Iterator,
     List,
     Optional,
+    OrderedDict,
     Sequence,
     Set,
     Tuple,
     Type,
     Union,
-    OrderedDict,
 )
 from warnings import warn
 
@@ -47,8 +47,10 @@ from tensordict.metatensor import MetaTensor
 from tensordict.utils import (
     DEVICE_TYPING,
     INDEX_TYPING,
+    NESTED_KEY,
     KeyDependentDefaultDict,
     _getitem_batch_size,
+    _nested_key_type_check,
     _sub_index,
     convert_ellipsis_to_idx,
     expand_as_right,
@@ -82,8 +84,6 @@ COMPATIBLE_TYPES = Union[
 ]  # None? # leaves space for TensorDictBase
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
-
-NESTED_KEY = Union[str, Tuple[str, ...]]
 
 
 class _TensorDictKeysView:
@@ -2657,23 +2657,6 @@ class _ErrorInteceptor:
             self.exc_msg is None or self.exc_msg in str(exc_value)
         ):
             exc_value.args = (self._add_key_to_error_msg(str(exc_value)),)
-
-
-def _nested_key_type_check(key):
-    is_tuple = isinstance(key, tuple)
-    if not (
-        isinstance(key, str)
-        or (
-            is_tuple and len(key) > 0 and all(isinstance(subkey, str) for subkey in key)
-        )
-    ):
-        key_repr = (
-            f"tuple({', '.join(str(type(i)) for i in key)})" if is_tuple else type(key)
-        )
-        raise TypeError(
-            "Expected key to be a string or non-empty tuple of strings, but found "
-            f"{key_repr}"
-        )
 
 
 def _nested_keys_to_dict(keys: Iterator[NESTED_KEY]) -> Dict[str, Any]:
