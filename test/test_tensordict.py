@@ -2777,10 +2777,12 @@ class TestMakeTensorDict:
         assert tensordict["b"].device == device
         assert tensordict["c"].device == device
 
+
 def test_update_nested_dict():
     t = TensorDict({}, [2, 3])
-    t.update({'a': {'b': [[[1], [1], [1]]] * 2}})
+    t.update({"a": {"b": [[[1], [1], [1]]] * 2}})
     assert t["a", "b"].shape == torch.Size([2, 3, 1])
+
 
 @pytest.mark.parametrize("separator", [".", "-"])
 def test_unflatten_keys_collision(separator):
