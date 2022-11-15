@@ -36,6 +36,7 @@ from warnings import warn
 import numpy as np
 import torch
 from torch import Tensor
+from torch.utils._pytree import tree_map
 
 try:
     from torch.jit._shape_functions import infer_size_impl
@@ -588,7 +589,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return self
         keys = set(self.keys(False))
         for key, value in input_dict_or_td.items():
-            if clone and hasattr(value, clone):
+            if clone and hasattr(value, "clone"):
                 value = value.clone()
             if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]
@@ -601,9 +602,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     target = self.get(key)
                     if len(subkey):
                         target.update({subkey: value})
-                    else:
+                        continue
+                    elif isinstance(value, (dict, TensorDictBase)):
                         target.update(value)
-                    continue
+                        continue
             self.set(key, value, inplace=inplace, **kwargs)
         return self
 
@@ -2278,6 +2280,7 @@ class TensorDict(TensorDictBase):
         if self._is_memmap is None:
             self._is_memmap = isinstance(value, MemmapTensor)
 
+        key = key if not isinstance(key, tuple) or len(key) > 1 else key[0]
         present = key in keys
         if present and value is self.get(key):
             return self
@@ -3426,8 +3429,10 @@ torch.Size([3, 2])
             return self
         keys = set(self.keys(False))
         for key, value in input_dict_or_td.items():
-            if clone and hasattr(value, clone):
+            if clone and hasattr(value, "clone"):
                 value = value.clone()
+            else:
+                value = tree_map(torch.clone, value)
             if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]
             else:
@@ -3439,10 +3444,15 @@ torch.Size([3, 2])
                     target = self._source.get(key).get_sub_tensordict(self.idx)
                     if len(subkey):
                         target.update({subkey: value})
-                    else:
+                        continue
+                    elif isinstance(value, (dict, TensorDictBase)):
                         target.update(value)
-                    continue
-            self.set(key, value, inplace=inplace, **kwargs)
+                        continue
+                raise ValueError(
+                    f"Tried to replace a tensordict with an incompatible object of type {type(value)}"
+                )
+            else:
+                self.set(key, value, inplace=inplace, **kwargs)
         return self
 
     def update_(
@@ -4210,8 +4220,10 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         keys = set(self.keys(False))
         for key, value in input_dict_or_td.items():
-            if clone and hasattr(value, clone):
+            if clone and hasattr(value, "clone"):
                 value = value.clone()
+            else:
+                value = tree_map(torch.clone, value)
             if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]
             else:
