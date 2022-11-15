@@ -2616,7 +2616,7 @@ def test_flatten_unflatten_key_collision(inplace, separator):
         _ = td5.unflatten_keys(separator)
 
     _ = td4.flatten_keys(separator)
-    # _ = td5.flatten_keys(separator)
+    _ = td5.flatten_keys(separator)
 
 
 if __name__ == "__main__":
