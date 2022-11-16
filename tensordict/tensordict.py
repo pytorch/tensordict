@@ -24,12 +24,12 @@ from typing import (
     Iterator,
     List,
     Optional,
+    OrderedDict,
     Sequence,
     Set,
     Tuple,
     Type,
     Union,
-    OrderedDict,
 )
 from warnings import warn
 
@@ -48,8 +48,10 @@ from tensordict.metatensor import MetaTensor
 from tensordict.utils import (
     DEVICE_TYPING,
     INDEX_TYPING,
+    NESTED_KEY,
     KeyDependentDefaultDict,
     _getitem_batch_size,
+    _nested_key_type_check,
     _sub_index,
     convert_ellipsis_to_idx,
     expand_as_right,
@@ -83,8 +85,6 @@ COMPATIBLE_TYPES = Union[
 ]  # None? # leaves space for TensorDictBase
 
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
-
-NESTED_KEY = Union[str, Tuple[str, ...]]
 
 
 class _TensorDictKeysView:
@@ -171,7 +171,7 @@ class _TensorDictKeysView:
                         val = self.tensordict.get(key[0])
                         # TODO: SavedTensorDict currently doesn't support nested memebership checks
                         include_nested = self.include_nested and not isinstance(
-                            val, (SavedTensorDict,)
+                            val, SavedTensorDict
                         )
                         return isinstance(val, TensorDictBase) and key[1:] in val.keys(
                             include_nested=include_nested
@@ -1885,26 +1885,25 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._is_locked = value
 
     def set_default(
-        self, key: str, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
+        self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
     ) -> COMPATIBLE_TYPES:
-        """Returns the value of the key if the key is in the tensordict. If not, insert key with a value of item and returns item.
+        """Insert key with a value of default if key is not in the dictionary.
+
+        Return the value for key if key is in the dictionary, else default.
 
         Args:
-            key (str): name of the item
-            item (torch.Tensor): value to be stored in the tensordict
-            inplace (bool, optional): if True and if a key matches an existing
-                key in the tensordict, then the update will occur in-place
-                for that key-value pair. Default is :obj:`False`.
+            key (str): the name of the value.
+            default (torch.Tensor): value to be stored in the tensordict if the key is
+                not already present.
 
         Returns:
-            the value of the key or item if the key is not in the tensordict
+            The value of key in the tensordict. Will be default if the key was not
+            previously set.
 
         """
-        if key in self.keys():
-            return self.get(key)
-        else:
-            self.set(key, item, inplace=inplace, **kwargs)
-            return item
+        if key not in self.keys(include_nested=isinstance(key, tuple)):
+            self.set(key, default, **kwargs)
+        return self.get(key)
 
     def lock(self):
         self.is_locked = True
@@ -2410,7 +2409,7 @@ class TensorDict(TensorDictBase):
         return self
 
     def set_at_(
-        self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
+        self, key: NESTED_KEY, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
         _nested_key_type_check(key)
         is_nested = isinstance(key, tuple)
@@ -2660,23 +2659,6 @@ class _ErrorInteceptor:
             self.exc_msg is None or self.exc_msg in str(exc_value)
         ):
             exc_value.args = (self._add_key_to_error_msg(str(exc_value)),)
-
-
-def _nested_key_type_check(key):
-    is_tuple = isinstance(key, tuple)
-    if not (
-        isinstance(key, str)
-        or (
-            is_tuple and len(key) > 0 and all(isinstance(subkey, str) for subkey in key)
-        )
-    ):
-        key_repr = (
-            f"tuple({', '.join(str(type(i)) for i in key)})" if is_tuple else type(key)
-        )
-        raise TypeError(
-            "Expected key to be a string or non-empty tuple of strings, but found "
-            f"{key_repr}"
-        )
 
 
 def _nested_keys_to_dict(keys: Iterator[NESTED_KEY]) -> Dict[str, Any]:
@@ -3288,9 +3270,8 @@ torch.Size([3, 2])
         return self
 
     def keys(self, include_nested: bool = False) -> _TensorDictKeysView:
-        # TODO: temporary hack while SavedTensorDict and LazyStackedTensorDict don't
-        # support nested iteration
-        if isinstance(self._source, (LazyStackedTensorDict, SavedTensorDict)):
+        # TODO: temporary hack while SavedTensorDict doesn't support nested iteration
+        if isinstance(self._source, SavedTensorDict):
             include_nested = False
         return self._source.keys(include_nested=include_nested)
 
@@ -4390,6 +4371,27 @@ class SavedTensorDict(TensorDictBase):
         td.set(key, value, **kwargs)
         self._save(td)
         return self
+
+    def set_default(
+        self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
+    ) -> COMPATIBLE_TYPES:
+        """Insert key with a value of default if key is not in the dictionary.
+
+        Return the value for key if key is in the dictionary, else default.
+
+        Args:
+            key (str): the name of the value.
+            default (torch.Tensor): value to be stored in the tensordict if the key is
+                not already present.
+
+        Returns:
+            The value of key in the tensordict. Will be default if the key was not
+            previously set.
+
+        """
+        if isinstance(key, tuple):
+            raise TypeError("SavedTensorDict does not currently support nested keys.")
+        return super().set_default(key=key, default=default, **kwargs)
 
     def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
         if len(shape) == 1 and isinstance(shape[0], Sequence):

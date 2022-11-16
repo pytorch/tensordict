@@ -31,6 +31,8 @@ if hasattr(typing, "get_args"):
 else:
     DEVICE_TYPING_ARGS = (torch.device, str, int)
 
+NESTED_KEY = Union[str, Tuple[str, ...]]
+
 
 def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
     """Allows indexing of tensors with nested tuples.
@@ -358,3 +360,20 @@ numpy_to_torch_dtype_dict = {
 torch_to_numpy_dtype_dict = {
     value: key for key, value in numpy_to_torch_dtype_dict.items()
 }
+
+
+def _nested_key_type_check(key):
+    is_tuple = isinstance(key, tuple)
+    if not (
+        isinstance(key, str)
+        or (
+            is_tuple and len(key) > 0 and all(isinstance(subkey, str) for subkey in key)
+        )
+    ):
+        key_repr = (
+            f"tuple({', '.join(str(type(i)) for i in key)})" if is_tuple else type(key)
+        )
+        raise TypeError(
+            "Expected key to be a string or non-empty tuple of strings, but found "
+            f"{key_repr}"
+        )
