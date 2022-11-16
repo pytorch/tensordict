@@ -2829,10 +2829,6 @@ def test_update_nested_dict():
     t.update({"a": {"d": [[[1]] * 3] * 2}})
 
 
-@pytest.mark.parametrize("separator", [".", "-"])
-def test_unflatten_keys_collision(separator):
-    td = TensorDict(
-        {"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, []
 @pytest.mark.parametrize("inplace", [True, False])
 @pytest.mark.parametrize("separator", [",", "-"])
 def test_flatten_unflatten_key_collision(inplace, separator):
