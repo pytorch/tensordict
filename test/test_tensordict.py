@@ -2580,7 +2580,7 @@ def test_flatten_unflatten_key_collision(inplace, separator):
         {
             f"a{separator}b": torch.zeros(3),
             "a": {"b": torch.zeros(3)},
-            "g": {"d": torch.randn(3)},
+            "g": {"d": torch.zeros(3)},
         },
         [],
     )
@@ -2604,19 +2604,37 @@ def test_flatten_unflatten_key_collision(inplace, separator):
         {f"a{separator}b": torch.zeros(3), "a": {"b": {"c": torch.zeros(3)}}}, []
     )
 
-    with pytest.raises(Exception):
+    with pytest.raises(KeyError):
         _ = td1.flatten_keys(separator)
+
+    with pytest.raises(KeyError):
         _ = td2.flatten_keys(separator)
+
+    with pytest.raises(KeyError):
         _ = td3.flatten_keys(separator)
 
+    with pytest.raises(KeyError):
         _ = td1.unflatten_keys(separator)
+
+    with pytest.raises(KeyError):
         _ = td2.unflatten_keys(separator)
+
+    with pytest.raises(KeyError):
         _ = td3.unflatten_keys(separator)
+
+    with pytest.raises(KeyError):
         _ = td4.unflatten_keys(separator)
+
+    with pytest.raises(KeyError):
         _ = td5.unflatten_keys(separator)
 
-    _ = td4.flatten_keys(separator)
-    _ = td5.flatten_keys(separator)
+    td4_flat = td4.flatten_keys(separator)
+    assert (f"a{separator}b{separator}c{separator}d") in td4_flat.keys()
+    assert (f"a{separator}b{separator}c") in td4_flat.keys()
+
+    td5_flat = td5.flatten_keys(separator)
+    assert (f"a{separator}b") in td5_flat.keys()
+    assert (f"a{separator}b{separator}c") in td5_flat.keys()
 
 
 if __name__ == "__main__":

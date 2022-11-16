@@ -8,7 +8,6 @@ from __future__ import annotations
 import abc
 import collections
 import functools
-import operator
 import tempfile
 import textwrap
 import uuid
@@ -1543,17 +1542,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             else:
                 already_flat.append(key)
 
+        def exists(obj, chain):
+            _key = chain.pop(0)
+            if isinstance(obj, Tensor):
+                return None
+            if _key in obj:
+                return exists(obj[_key], chain) if chain else obj[_key]
+
         for key in already_flat:
             if separator in key:
-                _existing_val = None
-                try:
-                    _existing_val = functools.reduce(
-                        operator.getitem, key.split(separator), self.to_dict()
-                    )
-                except TypeError:
-                    pass
+                _existing_val = exists(self.to_dict(), key.split(separator))
+
                 if isinstance(_existing_val, Tensor):
-                    raise ValueError(
+                    raise KeyError(
                         f"Flattening keys in tensordict collides with existing key '{key}'"
                     )
 
@@ -1607,7 +1608,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         for key, list_of_keys in to_unflatten.items():
 
             if key in out.to_dict():
-                raise ValueError(
+                raise KeyError(
                     "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
 
