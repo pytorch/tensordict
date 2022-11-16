@@ -17,7 +17,7 @@ from tensordict import (
     SavedTensorDict,
     TensorDict,
 )
-from tensordict.tensordict import TensorDictBase, SubTensorDict
+from tensordict.tensordict import TensorDictBase
 from tensordict.tensordict import _stack as stack_td
 from tensordict.tensordict import assert_allclose_td, make_tensordict, pad
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
@@ -1526,10 +1526,12 @@ class TestTensorDicts(TestTensorDictsBase):
 
         td = getattr(self, td_name)(device)
 
-        tensor = torch.randn(4, 3, 2, 1, 5)
-        tensor2 = torch.ones(4, 3, 2, 1, 5)
-        sub_sub_tensordict = TensorDict({"c": tensor}, [4, 3, 2, 1])
-        sub_tensordict = TensorDict({"b": sub_sub_tensordict}, [4, 3, 2, 1])
+        tensor = torch.randn(4, 3, 2, 1, 5, device=device)
+        tensor2 = torch.ones(4, 3, 2, 1, 5, device=device)
+        sub_sub_tensordict = TensorDict({"c": tensor}, [4, 3, 2, 1], device=device)
+        sub_tensordict = TensorDict(
+            {"b": sub_sub_tensordict}, [4, 3, 2, 1], device=device
+        )
 
         if td_name == "sub_td":
             td = td._source.set(
@@ -1537,7 +1539,8 @@ class TestTensorDicts(TestTensorDictsBase):
             ).get_sub_tensordict(1)
         elif td_name == "sub_td2":
             td = td._source.set(
-                "a", sub_tensordict.expand(2, *sub_tensordict.shape).permute(1, 0, 2, 3, 4)
+                "a",
+                sub_tensordict.expand(2, *sub_tensordict.shape).permute(1, 0, 2, 3, 4),
             ).get_sub_tensordict((slice(None), 1))
         else:
             td.set("a", sub_tensordict)
