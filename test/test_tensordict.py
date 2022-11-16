@@ -1504,6 +1504,20 @@ class TestTensorDicts(TestTensorDictsBase):
 
         assert (td_clone == td_dict_init).all()
 
+    def test_sorting_keys(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        for _ in range(10):
+            for (key, _), key2 in zip(td.items(), td.keys()):
+                assert key == key2
+            for (_, item), item2 in zip(td.items(), td.values()):
+                assert (item == item2).all()
+            for (_, item), (_, item2) in zip(td.items(), td.items_meta()):
+                assert item.shape == item2.shape
+            for (_, item), item2 in zip(td.items(), td.values_meta()):
+                assert item.shape == item2.shape
+            for (key, _), (key2, _) in zip(td.items(), td.items_meta()):
+                assert key == key2
+
     def test_nested_td_index(self, td_name, device):
         td = getattr(self, td_name)(device)
 
