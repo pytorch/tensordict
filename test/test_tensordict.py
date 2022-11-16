@@ -977,6 +977,98 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_exclude_missing(self, td_name, device, nested):
+        if td_name == "saved_td" and nested:
+            pytest.skip(
+                "SavedTensorDict does not currently support iteration over nested keys."
+            )
+        td = getattr(self, td_name)(device)
+        if nested:
+            td2 = td.exclude("this key is missing", ("this one too",))
+        else:
+            td2 = td.exclude(
+                "this key is missing",
+            )
+        assert (td == td2).all()
+
+    @pytest.mark.parametrize("nested", [True, False])
+    def test_exclude_nested(self, td_name, device, nested):
+        if td_name == "saved_td" and nested:
+            pytest.skip(
+                "SavedTensorDict does not currently support iteration over nested keys."
+            )
+        td = getattr(self, td_name)(device)
+        if td_name == "stacked_td":
+            for _td in td.tensordicts:
+                _td["newnested", "first"] = torch.randn(_td.shape)
+            td._update_valid_keys()
+        else:
+            td["newnested", "first"] = torch.randn(td.shape)
+        if nested:
+            td2 = td.exclude("a", ("newnested", "first"))
+            assert "a" in td.keys(), list(td.keys())
+            assert "a" not in td2.keys()
+            assert ("newnested", "first") in td.keys(True), list(td.keys(True))
+            assert ("newnested", "first") not in td2.keys(True)
+        else:
+            td2 = td.exclude(
+                "a",
+            )
+            assert "a" in td.keys()
+            assert "a" not in td2.keys()
+        if td_name not in (
+            "sub_td",
+            "sub_td2",
+            "unsqueezed_td",
+            "squeezed_td",
+            "permute_td",
+        ):
+            # TODO: document this as an edge-case: with a sub-tensordict, exclude acts on the parent tensordict
+            # perhaps exclude should return an error in these cases?
+            assert type(td2) is type(td)
+
+    @pytest.mark.parametrize("clone", [True, False])
+    def test_update(self, td_name, device, clone):
+        if td_name == "saved_td":
+            pytest.skip(
+                "SavedTensorDict does not currently support iteration over nested keys."
+            )
+        td = getattr(self, td_name)(device)
+        keys = set(td.keys())
+        td.update({"x": torch.zeros(td.shape)}, clone=clone)
+        assert set(td.keys()) == keys.union({"x"})
+        # now with nested
+        td["newnested"] = {"z": torch.zeros(td.shape)}
+        keys = set(td.keys(True))
+        assert ("newnested", "z") in keys
+        td.update({"newnested": {"y": torch.zeros(td.shape)}}, clone=clone)
+        keys = keys.union({("newnested", "y")})
+        assert keys == set(td.keys(True))
+        td.update(
+            {
+                ("newnested", "x"): torch.zeros(td.shape),
+                ("newnested", "w"): torch.zeros(td.shape),
+            },
+            clone=clone,
+        )
+        keys = keys.union({("newnested", "x"), ("newnested", "w")})
+        assert keys == set(td.keys(True))
+        td.update({("newnested",): {"v": torch.zeros(td.shape)}}, clone=clone)
+        keys = keys.union(
+            {
+                ("newnested", "v"),
+            }
+        )
+        assert keys == set(td.keys(True))
+
+        if td_name in ("sub_td", "sub_td2"):
+            with pytest.raises(ValueError, match="Tried to replace a tensordict with"):
+                td.update({"newnested": torch.zeros(td.shape)}, clone=clone)
+        else:
+            td.update({"newnested": torch.zeros(td.shape)}, clone=clone)
+            assert isinstance(td["newnested"], torch.Tensor)
+
     def test_write_on_subtd(self, td_name, device):
         td = getattr(self, td_name)(device)
         sub_td = td.get_sub_tensordict(0)
@@ -1437,10 +1529,7 @@ class TestTensorDicts(TestTensorDictsBase):
         other_sub_sub_td = TensorDict({"b": b}, [*td.shape, 2, 2])
 
         if td_name in ("sub_td", "sub_td2"):
-            with pytest.raises(
-                RuntimeError, match="with another one with non-matching keys"
-            ):
-                td["sub_td", "sub_sub_td"] = other_sub_sub_td
+            td["sub_td", "sub_sub_td"] = other_sub_sub_td
         else:
             td["sub_td", "sub_sub_td"] = other_sub_sub_td
             assert (td["sub_td", "sub_sub_td", "b"] == 1).all()
@@ -2810,6 +2899,16 @@ class TestMakeTensorDict:
         assert tensordict["a"].device == device
         assert tensordict["b"].device == device
         assert tensordict["c"].device == device
+
+
+def test_update_nested_dict():
+    t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
+    assert ("a", "d") in t.keys(include_nested=True)
+    t.update({"a": {"b": [[[1]] * 3] * 2}})
+    assert ("a", "d") in t.keys(include_nested=True)
+    assert ("a", "b") in t.keys(include_nested=True)
+    assert t["a", "b"].shape == torch.Size([2, 3, 1])
+    t.update({"a": {"d": [[[1]] * 3] * 2}})
 
 
 @pytest.mark.parametrize("separator", [".", "-"])
