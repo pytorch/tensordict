@@ -128,61 +128,6 @@ y = vmap(fmodule, (0, None))(weights, x)
 y.shape  # torch.Size([2, 10, 4])
 ```
 
-#### First-class dimensions
-
-**Note: first-class dimensions are themselves experimental, you will need to install `torch-nightly` to try this out.**
-
-We also support use of first-class dimensions from `functorch`. Indexing a `TensorDict` with first-class dimensions will result in all items in the `TensorDict` being indexed in the same way. Once a `TensorDict` has been indexed with first-class dimensions, any new entries must themselves have been indexed in a compatible way. First-class dimensions can be added to any of the batch dimensions, since they are guaranteed to exist for all entries. You can call `order` directly on the `TensorDict`, or access items individually according to your need.
-
-Here's a simple example. Create a TensorDict as usual
-
-```python
-import torch
-from functorch.dim import dims
-from tensordict import TensorDict
-
-td = TensorDict(
-    {"mask": torch.randint(2, (10, 28, 28), dtype=torch.uint8)},
-    batch_size=[10, 28, 28],
-)
-```
-
-You can then index the TensorDict with first class dimensions as you would a tensor
-
-```python
-batch, width, height, channel = dims(4)
-td_fc = td[batch, width, height]
-```
-
-All entries of the TensorDict will now have been indexed in the same way
-
-```python
-td_fc["mask"]
-# tensor(..., dtype=torch.uint8)
-# with dims=(batch, width, height, 0) sizes=(10, 28, 28, 1)
-```
-
-You can add new items provided they have compatible first class dimensions, i.e. the new item must have all of the first-class dimensions of the TensorDict, though the item can have additional first-class non-batch dimensions, and the remaining positional dimensions are compatible with the TensorDict's batch size.
-
-```python
-td_fc["input"] = torch.rand(10, 28, 28, 3)[batch, width, height, channel]
-```
-
-You can now take advantage of first-class dimensions when accessing the items
-
-```python
-(td_fc["input"] * td_fc["mask"]).mean(channel)
-```
-
-Or can call `order` on the TensorDict to arrange dimensions of all items
-
-```python
-td_ordered = td_fc.order(batch, height, width)
-torch.testing.assert_close(
-    td_ordered["mask"], td_fc["mask"].order(batch, height, width)
-)
-```
-
 ### Lazy preallocation
 
 Pre-allocating tensors can be cumbersome and hard to scale if the list of preallocated
@@ -190,9 +135,9 @@ items varies according to the script configuration. TensorDict solves this in an
 Assume you are working with a function `foo() -> TensorDict`, e.g.
 ```python
 def foo():
-    tensordict = TensorDict({}, [])
+    tensordict = TensorDict({}, batch_size=[])
     tensordict["a"] = torch.randn(3)
-    tensordict["b"] = TensorDict({"c": torch.zeros(2)}, [])
+    tensordict["b"] = TensorDict({"c": torch.zeros(2)}, batch_size=[])
     return tensordict
 ```
 and you would like to call this function repeatedly. You could do this in two ways.
@@ -202,7 +147,7 @@ tensordict = torch.stack([foo() for _ in range(N)])
 ```
 However, you could also choose to preallocate the tensordict:
 ```python
-tensordict = TensorDict({}, [N])
+tensordict = TensorDict({}, batch_size=[N])
 for i in range(N):
     tensordict[i] = foo()
 ```
@@ -238,7 +183,7 @@ For instance, the following code will result in a single-level tensordict with k
 ```python
 >>> tensordict = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
-...     "key 2": TensorDict({"sub-key": torch.randn(3, 4, 5, 6)}, [3, 4, 5])
+...     "key 2": TensorDict({"sub-key": torch.randn(3, 4, 5, 6)}, batch_size=[3, 4, 5])
 ... }, batch_size=[3, 4])
 >>> tensordict_unflatten = tensordict.unflatten_keys(separator=".")
 ```

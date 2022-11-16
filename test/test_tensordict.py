@@ -648,6 +648,23 @@ class TestTensorDicts(TestTensorDictsBase):
         td2 = td.select("a", inplace=True)
         assert td2 is td
 
+    @pytest.mark.parametrize("strict", [True, False])
+    def test_select_exception(self, td_name, device, strict):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        if strict:
+            if td_name == "stacked_td":
+                with pytest.raises(NotImplementedError):
+                    _ = td.select("tada", strict=strict)
+            else:
+                with pytest.raises(KeyError):
+                    _ = td.select("tada", strict=strict)
+            return
+        else:
+            td2 = td.select("tada", strict=strict)
+        assert td2 is not td
+        assert len(list(td2.keys())) == 0
+
     def test_exclude(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -959,6 +976,47 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td_squeeze._source is td
         assert (td_squeeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
+
+    @pytest.mark.parametrize("clone", [True, False])
+    def test_update(self, td_name, device, clone):
+        if td_name == "saved_td":
+            pytest.skip(
+                "SavedTensorDict does not currently support iteration over nested keys."
+            )
+        td = getattr(self, td_name)(device)
+        keys = set(td.keys())
+        td.update({"x": torch.zeros(td.shape)}, clone=clone)
+        assert set(td.keys()) == keys.union({"x"})
+        # now with nested
+        td["newnested"] = {"z": torch.zeros(td.shape)}
+        keys = set(td.keys(True))
+        assert ("newnested", "z") in keys
+        td.update({"newnested": {"y": torch.zeros(td.shape)}}, clone=clone)
+        keys = keys.union({("newnested", "y")})
+        assert keys == set(td.keys(True))
+        td.update(
+            {
+                ("newnested", "x"): torch.zeros(td.shape),
+                ("newnested", "w"): torch.zeros(td.shape),
+            },
+            clone=clone,
+        )
+        keys = keys.union({("newnested", "x"), ("newnested", "w")})
+        assert keys == set(td.keys(True))
+        td.update({("newnested",): {"v": torch.zeros(td.shape)}}, clone=clone)
+        keys = keys.union(
+            {
+                ("newnested", "v"),
+            }
+        )
+        assert keys == set(td.keys(True))
+
+        if td_name in ("sub_td", "sub_td2"):
+            with pytest.raises(ValueError, match="Tried to replace a tensordict with"):
+                td.update({"newnested": torch.zeros(td.shape)}, clone=clone)
+        else:
+            td.update({"newnested": torch.zeros(td.shape)}, clone=clone)
+            assert isinstance(td["newnested"], torch.Tensor)
 
     def test_write_on_subtd(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -1494,7 +1552,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_set_default_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         expected = torch.ones_like(td.get("a"))
-        inserted = td.set_default("z", expected, _run_checks_0=True)
+        inserted = td.set_default("z", expected, _run_checks=True)
         assert (inserted == expected).all()
 
     def test_set_default_existing_key(self, td_name, device):
@@ -1634,6 +1692,30 @@ class TestTensorDictRepr:
         my_nested_td: TensorDict(
             fields={{
                 a: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
+            batch_size=torch.Size([4, 3, 2, 1]),
+            device={str(device)},
+            is_shared={is_shared})}},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared})"""
+        assert repr(nested_td) == expected
+
+    def test_repr_nested_update(self, device, dtype):
+        nested_td = self.nested_td(device, dtype)
+        nested_td["my_nested_td"].rename_key("a", "z")
+        if (device is None and (torch.cuda.device_count() > 0)) or (
+            device is not None and device.type == "cuda"
+        ):
+            is_shared = True
+        else:
+            is_shared = False
+        tensor_class = "Tensor"
+        expected = f"""TensorDict(
+    fields={{
+        b: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype}),
+        my_nested_td: TensorDict(
+            fields={{
+                z: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
             batch_size=torch.Size([4, 3, 2, 1]),
             device={str(device)},
             is_shared={is_shared})}},
@@ -2275,6 +2357,29 @@ def test_stack_keys():
     td.get("e")
 
 
+def test_stacked_td_nested_keys():
+    td = torch.stack(
+        [
+            TensorDict({"a": {"b": {"d": [1]}, "c": [2]}}, []),
+            TensorDict({"a": {"b": {"d": [1]}, "d": [2]}}, []),
+        ],
+        0,
+    )
+    assert ("a", "b") in td.keys(True)
+    assert ("a", "c") not in td.keys(True)
+    assert ("a", "b", "d") in td.keys(True)
+    td["a", "c"] = [[2], [3]]
+    assert ("a", "c") in td.keys(True)
+
+    keys, items = zip(*td.items(True))
+    assert ("a", "b") in keys
+    assert ("a", "c") in keys
+    assert ("a", "d") not in keys
+
+    td["a", "c"] = td["a", "c"] + 1
+    assert (td["a", "c"] == torch.tensor([[3], [4]], device=td.device)).all()
+
+
 @pytest.mark.parametrize(
     "idx",
     [
@@ -2397,6 +2502,11 @@ def test_getitem_nested():
     assert (tensordict["a", "b"] == sub_sub_tensordict).all()
     assert (tensordict["a", "b", "c"] == tensor).all()
 
+    # check that get method returns same contents
+    assert (tensordict.get("a") == sub_tensordict).all()
+    assert (tensordict.get(("a", "b")) == sub_sub_tensordict).all()
+    assert (tensordict.get(("a", "b", "c")) == tensor).all()
+
     # check that shapes are kept
     assert tensordict.shape == torch.Size([4])
     assert sub_tensordict.shape == torch.Size([4, 5])
@@ -2419,6 +2529,134 @@ def test_setitem_nested():
     assert (tensordict["a", "b", "c"] == 1).all()
 
 
+@pytest.mark.parametrize("inplace", [True, False])
+def test_select_nested(inplace):
+    tensor_1 = torch.rand(4, 5, 6, 7)
+    tensor_2 = torch.rand(4, 5, 6, 7)
+    sub_sub_tensordict = TensorDict(
+        {"t1": tensor_1, "t2": tensor_2}, batch_size=[4, 5, 6]
+    )
+    sub_tensordict = TensorDict(
+        {"double_nested": sub_sub_tensordict}, batch_size=[4, 5]
+    )
+    tensordict = TensorDict(
+        {
+            "a": torch.rand(4, 3),
+            "b": torch.rand(4, 2),
+            "c": torch.rand(4, 1),
+            "nested": sub_tensordict,
+        },
+        batch_size=[4],
+    )
+
+    selected = tensordict.select(
+        "b", ("nested", "double_nested", "t2"), inplace=inplace
+    )
+
+    assert set(selected.keys(include_nested=True)) == {
+        "b",
+        "nested",
+        ("nested", "double_nested"),
+        ("nested", "double_nested", "t2"),
+    }
+
+    if inplace:
+        assert selected is tensordict
+        assert set(tensordict.keys(include_nested=True)) == {
+            "b",
+            "nested",
+            ("nested", "double_nested"),
+            ("nested", "double_nested", "t2"),
+        }
+    else:
+        assert selected is not tensordict
+        assert set(tensordict.keys(include_nested=True)) == {
+            "a",
+            "b",
+            "c",
+            "nested",
+            ("nested", "double_nested"),
+            ("nested", "double_nested", "t1"),
+            ("nested", "double_nested", "t2"),
+        }
+
+
+@pytest.mark.parametrize("inplace", [True, False])
+def test_exclude_nested(inplace):
+    tensor_1 = torch.rand(4, 5, 6, 7)
+    tensor_2 = torch.rand(4, 5, 6, 7)
+    sub_sub_tensordict = TensorDict(
+        {"t1": tensor_1, "t2": tensor_2}, batch_size=[4, 5, 6]
+    )
+    sub_tensordict = TensorDict(
+        {"double_nested": sub_sub_tensordict}, batch_size=[4, 5]
+    )
+    tensordict = TensorDict(
+        {
+            "a": torch.rand(4, 3),
+            "b": torch.rand(4, 2),
+            "c": torch.rand(4, 1),
+            "nested": sub_tensordict,
+        },
+        batch_size=[4],
+    )
+    # making a copy for inplace tests
+    tensordict2 = tensordict.clone()
+
+    excluded = tensordict.exclude(
+        "b", ("nested", "double_nested", "t2"), inplace=inplace
+    )
+
+    assert set(excluded.keys(include_nested=True)) == {
+        "a",
+        "c",
+        "nested",
+        ("nested", "double_nested"),
+        ("nested", "double_nested", "t1"),
+    }
+
+    if inplace:
+        assert excluded is tensordict
+        assert set(tensordict.keys(include_nested=True)) == {
+            "a",
+            "c",
+            "nested",
+            ("nested", "double_nested"),
+            ("nested", "double_nested", "t1"),
+        }
+    else:
+        assert excluded is not tensordict
+        assert set(tensordict.keys(include_nested=True)) == {
+            "a",
+            "b",
+            "c",
+            "nested",
+            ("nested", "double_nested"),
+            ("nested", "double_nested", "t1"),
+            ("nested", "double_nested", "t2"),
+        }
+
+    # excluding "nested" should exclude all subkeys also
+    excluded2 = tensordict2.exclude("nested", inplace=inplace)
+    assert set(excluded2.keys(include_nested=True)) == {"a", "b", "c"}
+
+
+def test_set_nested_keys():
+    tensor = torch.randn(4, 5, 6, 7)
+    tensor2 = torch.ones(4, 5, 6, 7)
+    tensordict = TensorDict({}, [4])
+    sub_tensordict = TensorDict({}, [4, 5])
+    sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
+    sub_sub_tensordict2 = TensorDict({"c": tensor2}, [4, 5, 6])
+    sub_tensordict.set("b", sub_sub_tensordict)
+    tensordict.set("a", sub_tensordict)
+    assert tensordict.get(("a", "b")) is sub_sub_tensordict
+
+    tensordict.set(("a", "b"), sub_sub_tensordict2)
+    assert tensordict.get(("a", "b")) is sub_sub_tensordict2
+    assert (tensordict.get(("a", "b", "c")) == 1).all()
+
+
 def test_keys_view():
     tensor = torch.randn(4, 5, 6, 7)
     sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
@@ -2429,16 +2667,31 @@ def test_keys_view():
     tensordict["a"] = sub_tensordict
 
     assert "a" in tensordict.keys()
-    assert ("a",) in tensordict.keys()
-    assert ("a", "b", "c") in tensordict.keys()
-    assert ("a", "c", "b") not in tensordict.keys()
     assert "random_string" not in tensordict.keys()
+
+    assert ("a",) in tensordict.keys(include_nested=True)
+    assert ("a", "b", "c") in tensordict.keys(include_nested=True)
+    assert ("a", "c", "b") not in tensordict.keys(include_nested=True)
+
+    with pytest.raises(
+        TypeError, match="checks with tuples of strings is only supported"
+    ):
+        ("a", "b", "c") in tensordict.keys()
 
     with pytest.raises(TypeError, match="TensorDict keys are always strings."):
         42 in tensordict.keys()
 
     with pytest.raises(TypeError, match="TensorDict keys are always strings."):
         ("a", 42) in tensordict.keys()
+
+    keys = set(tensordict.keys())
+    keys_nested = set(tensordict.keys(include_nested=True))
+
+    assert keys == {"a"}
+    assert keys_nested == {"a", ("a", "b"), ("a", "b", "c")}
+
+    assert keys == {key for key, _ in tensordict.items_meta()}
+    assert keys_nested == {key for key, _ in tensordict.items_meta(include_nested=True)}
 
 
 def test_error_on_contains():
@@ -2566,6 +2819,20 @@ class TestMakeTensorDict:
         assert tensordict["c"].device == device
 
 
+def test_update_nested_dict():
+    t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
+    assert ("a", "d") in t.keys(include_nested=True)
+    t.update({"a": {"b": [[[1]] * 3] * 2}})
+    assert ("a", "d") in t.keys(include_nested=True)
+    assert ("a", "b") in t.keys(include_nested=True)
+    assert t["a", "b"].shape == torch.Size([2, 3, 1])
+    t.update({"a": {"d": [[[1]] * 3] * 2}})
+
+
+@pytest.mark.parametrize("separator", [".", "-"])
+def test_unflatten_keys_collision(separator):
+    td = TensorDict(
+        {"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, []
 @pytest.mark.parametrize("inplace", [True, False])
 @pytest.mark.parametrize("separator", [",", "-"])
 def test_flatten_unflatten_key_collision(inplace, separator):
