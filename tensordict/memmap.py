@@ -23,13 +23,6 @@ from tensordict.utils import (
 from tensordict.utils import _getitem_batch_size
 from tensordict.utils import prod
 
-try:
-    import functorch.dim
-
-    _has_functorch_dim = True
-except ImportError:
-    _has_functorch_dim = False
-
 MEMMAP_HANDLED_FN = {}
 
 __all__ = ["MemmapTensor", "set_transfer_ownership"]
@@ -535,16 +528,6 @@ MemmapTensor of shape {self.shape}."""
     def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
         # return self._load_item(memmap_array=self.memmap_array[item])#[item]
         # return self._load_item()[item]
-        if _has_functorch_dim and (
-            isinstance(item, functorch.dim.Dim)
-            or (
-                isinstance(item, tuple)
-                and any(isinstance(i, functorch.dim.Dim) for i in item)
-            )
-        ):
-            raise ValueError(
-                "MemmapTensor does not support indexing with first-class dimensions"
-            )
         if isinstance(item, (NoneType, EllipsisType, int, np.integer, slice)):
             item = (item,)
         return MemmapTensor._create_memmap_with_index(self, item)
