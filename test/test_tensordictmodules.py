@@ -918,6 +918,50 @@ class TestTDSequence:
         assert not torch.allclose(copy, sub_seq_1[0].module.weight)
         assert torch.allclose(td_module[0].module.weight, sub_seq_1[0].module.weight)
 
+    def test_nested_keys(self):
+        class Net(nn.Module):
+            def __init__(self, input_size=100, hidden_size=50, output_size=10):
+                super().__init__()
+                self.fc1 = nn.Linear(input_size, hidden_size)
+                self.fc2 = nn.Linear(hidden_size, output_size)
+
+            def forward(self, x):
+                x = torch.relu(self.fc1(x))
+                return self.fc2(x)
+
+        class Masker(nn.Module):
+            def forward(self, x, mask):
+                return torch.softmax(x * mask, dim=1)
+
+        net = TensorDictModule(
+            Net(), in_keys=[("input", "x")], out_keys=[("intermediate", "x")]
+        )
+        masker = TensorDictModule(
+            Masker(),
+            in_keys=[("intermediate", "x"), ("input", "mask")],
+            out_keys=[("output", "probabilities")],
+        )
+        module = TensorDictSequential(net, masker)
+
+        x = torch.rand(32, 100)
+        mask = torch.randint(low=0, high=2, size=(32, 10), dtype=torch.uint8)
+        tensordict = TensorDict(
+            {"input": TensorDict({"x": x, "mask": mask}, batch_size=[32])},
+            batch_size=[32],
+        )
+        tensordict = module(tensordict)
+
+        assert tensordict["input", "x"] is x
+        assert set(tensordict.keys(include_nested=True)) == {
+            "input",
+            ("input", "x"),
+            ("input", "mask"),
+            "intermediate",
+            ("intermediate", "x"),
+            "output",
+            ("output", "probabilities"),
+        }
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
