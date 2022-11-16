@@ -1885,26 +1885,25 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._is_locked = value
 
     def set_default(
-        self, key: NESTED_KEY, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
+        self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
     ) -> COMPATIBLE_TYPES:
-        """Returns the value of the key if the key is in the tensordict. If not, insert key with a value of item and returns item.
+        """Insert key with a value of default if key is not in the dictionary.
+
+        Return the value for key if key is in the dictionary, else default.
 
         Args:
-            key (str): name of the item
-            item (torch.Tensor): value to be stored in the tensordict
-            inplace (bool, optional): if True and if a key matches an existing
-                key in the tensordict, then the update will occur in-place
-                for that key-value pair. Default is :obj:`False`.
+            key (str): the name of the value.
+            default (torch.Tensor): value to be stored in the tensordict if the key is
+                not already present.
 
         Returns:
-            the value of the key or item if the key is not in the tensordict
+            The value of key in the tensordict. Will be default if the key was not
+            previously set.
 
         """
-        if key in self.keys(include_nested=isinstance(key, tuple)):
-            return self.get(key)
-        else:
-            self.set(key, item, inplace=inplace, **kwargs)
-            return item
+        if key not in self.keys(include_nested=isinstance(key, tuple)):
+            self.set(key, default, **kwargs)
+        return self.get(key)
 
     def lock(self):
         self.is_locked = True
@@ -4374,25 +4373,25 @@ class SavedTensorDict(TensorDictBase):
         return self
 
     def set_default(
-        self, key: NESTED_KEY, item: COMPATIBLE_TYPES, inplace: bool = False, **kwargs
+        self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
     ) -> COMPATIBLE_TYPES:
-        """Returns the value of the key if the key is in the tensordict. If not, insert
-        key with a value of item and returns item.
+        """Insert key with a value of default if key is not in the dictionary.
+
+        Return the value for key if key is in the dictionary, else default.
 
         Args:
-            key (str): name of the item
-            item (torch.Tensor): value to be stored in the tensordict
-            inplace (bool, optional): if True and if a key matches an existing
-                key in the tensordict, then the update will occur in-place
-                for that key-value pair. Default is :obj:`False`.
+            key (str): the name of the value.
+            default (torch.Tensor): value to be stored in the tensordict if the key is
+                not already present.
 
         Returns:
-            the value of the key or item if the key is not in the tensordict
+            The value of key in the tensordict. Will be default if the key was not
+            previously set.
 
         """
         if isinstance(key, tuple):
             raise TypeError("SavedTensorDict does not currently support nested keys.")
-        return super().set_default(key=key, item=item, inplace=inplace, **kwargs)
+        return super().set_default(key=key, default=default, **kwargs)
 
     def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
         if len(shape) == 1 and isinstance(shape[0], Sequence):
