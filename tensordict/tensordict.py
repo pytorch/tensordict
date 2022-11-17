@@ -1729,6 +1729,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             >>> print(td.get("a"))  # values have not changed
 
         """
+        if isinstance(idx, str) or (
+            isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
+        ):
+            return self.get(idx)
+
         if not self.batch_size:
             raise RuntimeError(
                 "indexing a tensordict with td.batch_dims==0 is not permitted"
@@ -1741,10 +1746,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             idx = torch.tensor(idx, device=self.device)
             return self._index_tensordict(idx)
 
-        if isinstance(idx, str) or (
-            isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
-        ):
-            return self.get(idx)
 
         if isinstance(idx, np.ndarray):
             idx = torch.tensor(idx, device=self.device)
