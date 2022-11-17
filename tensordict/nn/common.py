@@ -28,6 +28,7 @@ from functorch import FunctionalModule, FunctionalModuleWithBuffers
 from torch import nn, Tensor
 
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import NESTED_KEY, _nested_key_type_check, _normalize_key
 
 __all__ = [
     "TensorDictModule",
@@ -42,6 +43,16 @@ def _check_all_str(list_of_str):
         )
     if any(not isinstance(key, str) for key in list_of_str):
         raise TypeError(f"Expected a list of strings but got: {list_of_str}")
+
+
+def _check_all_nested(list_of_keys):
+    if isinstance(list_of_keys, str):
+        raise RuntimeError(
+            "Expected a list of strings, or tuples of strings but got a string: "
+            f"{list_of_keys}"
+        )
+    for key in list_of_keys:
+        _nested_key_type_check(key)
 
 
 class TensorDictModule(nn.Module):
@@ -117,8 +128,8 @@ class TensorDictModule(nn.Module):
         module: Union[
             FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
         ],
-        in_keys: Iterable[str],
-        out_keys: Iterable[str],
+        in_keys: Iterable[NESTED_KEY],
+        out_keys: Iterable[NESTED_KEY],
     ):
 
         super().__init__()
@@ -127,10 +138,10 @@ class TensorDictModule(nn.Module):
             raise RuntimeError(f"out_keys were not passed to {self.__class__.__name__}")
         if not in_keys:
             raise RuntimeError(f"in_keys were not passed to {self.__class__.__name__}")
-        self.out_keys = out_keys
-        _check_all_str(self.out_keys)
-        self.in_keys = in_keys
-        _check_all_str(self.in_keys)
+        _check_all_nested(out_keys)
+        self.out_keys = [_normalize_key(key) for key in out_keys]
+        _check_all_nested(in_keys)
+        self.in_keys = [_normalize_key(key) for key in in_keys]
 
         if "_" in in_keys:
             warnings.warn(
@@ -151,7 +162,7 @@ class TensorDictModule(nn.Module):
         tensordict: TensorDictBase,
         tensors: List,
         tensordict_out: Optional[TensorDictBase] = None,
-        out_keys: Optional[Iterable[str]] = None,
+        out_keys: Optional[Iterable[NESTED_KEY]] = None,
     ) -> TensorDictBase:
 
         if out_keys is None:
