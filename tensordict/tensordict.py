@@ -1758,6 +1758,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             },
             batch_size=_getitem_batch_size(self.batch_size, idx),
             device=self.device,
+            _run_checks=False,
         )
 
     def __setitem__(
@@ -1802,7 +1803,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         else:
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = TensorDict(value, batch_size=indexed_bs, device=self.device)
+                value = TensorDict(
+                    value, batch_size=indexed_bs, device=self.device, _run_checks=False
+                )
             if value.batch_size != indexed_bs:
                 raise RuntimeError(
                     f"indexed destination TensorDict batch size is {indexed_bs} "
@@ -2234,6 +2237,7 @@ class TensorDict(TensorDictBase):
             source=d,
             batch_size=[*shape],
             device=self.device,
+            _run_checks=False,
         )
 
     def set(
@@ -3045,7 +3049,7 @@ def pad(tensordict: TensorDictBase, pad_size: Sequence[int], value: float = 0.0)
     for i in range(0, len(reverse_pad), 2):
         reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
 
-    out = TensorDict({}, new_batch_size, device=tensordict.device)
+    out = TensorDict({}, new_batch_size, device=tensordict.device, _run_checks=False)
     for key, tensor in tensordict.items():
         cur_pad = reverse_pad
         if len(pad_size) < len(tensor.shape) * 2:
@@ -3073,7 +3077,7 @@ def pad_sequence_td(
     # check that all tensordict match
     keys = _check_keys(list_of_tensordicts)
     if out is None:
-        out = TensorDict({}, [], device=device)
+        out = TensorDict({}, [], device=device, _run_checks=False)
         for key in keys:
             out.set(
                 key,
@@ -3498,6 +3502,7 @@ torch.Size([3, 2])
             batch_size=self.batch_size,
             source={key: value for key, value in self.items()},
             device=self.device,
+            _run_checks=False,
         )
 
     def select(
@@ -3613,9 +3618,12 @@ def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
             f"at least 2 tensordicts must be provided, got" f" {len(tensordicts)}"
         )
     d = tensordicts[0].to_dict()
+    batch_size = tensordicts[0].batch_size
     for td in tensordicts[1:]:
         d.update(td.to_dict())
-    return TensorDict({}, [], device=td.device).update(d)
+        if td.batch_dims < len(batch_size):
+            batch_size = td.batch_size
+    return TensorDict(d, batch_size, device=td.device, _run_checks=False)
 
 
 class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
@@ -3916,6 +3924,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # we could probably just infer the items_meta by extending them
             # _meta_source=meta_source,
             device=device,
+            _run_checks=False,
         )
         return out
 
@@ -4599,6 +4608,7 @@ class SavedTensorDict(TensorDictBase):
             },
             device=self.device,
             batch_size=self.batch_size,
+            _run_checks=False,
         )
 
     def _change_batch_size(self, new_size: torch.Size):
@@ -4918,6 +4928,7 @@ class _CustomOpTensorDict(TensorDictBase):
             source=self.to_dict(),
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
         )
 
     def is_contiguous(self) -> bool:
@@ -5301,7 +5312,7 @@ def make_tensordict(
     """
     if batch_size is None:
         batch_size = _find_max_batch_size(kwargs)
-    return TensorDict(kwargs, batch_size=batch_size, device=device)
+    return TensorDict(kwargs, batch_size=batch_size, device=device, _run_checks=False)
 
 
 def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
