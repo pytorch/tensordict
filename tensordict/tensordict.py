@@ -2200,6 +2200,7 @@ class TensorDict(TensorDictBase):
     def _index_tensordict(self, idx: INDEX_TYPING):
         self_copy = copy(self)
         self_copy._tensordict = {key: item[idx] for key, item in self.items()}
+        self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
         self_copy.batch_size = _getitem_batch_size(self.batch_size, idx)
         self_copy.device = self.device
         return self_copy
