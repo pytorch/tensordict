@@ -1765,7 +1765,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         ) not in [len(idx), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
 
-
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
@@ -2202,7 +2201,7 @@ class TensorDict(TensorDictBase):
         self_copy._tensordict = {key: item[idx] for key, item in self.items()}
         self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
         self_copy.batch_size = _getitem_batch_size(self.batch_size, idx)
-        self_copy.device = self.device
+        self_copy._device = self.device
         return self_copy
 
     def pin_memory(self) -> TensorDictBase:
