@@ -1746,7 +1746,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             idx = torch.tensor(idx, device=self.device)
             return self._index_tensordict(idx)
 
-
         if isinstance(idx, np.ndarray):
             idx = torch.tensor(idx, device=self.device)
             return self._index_tensordict(idx)
