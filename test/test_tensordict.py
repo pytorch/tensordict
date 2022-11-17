@@ -2964,28 +2964,59 @@ def test_flatten_unflatten_key_collision(inplace, separator):
         {f"a{separator}b": torch.zeros(3), "a": {"b": {"c": torch.zeros(3)}}}, []
     )
 
-    with pytest.raises(KeyError):
+    with pytest.raises(
+        KeyError, match="Flattening keys in tensordict collides with existing key *"
+    ):
         _ = td1.flatten_keys(separator)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(
+        KeyError, match="Flattening keys in tensordict collides with existing key *"
+    ):
         _ = td2.flatten_keys(separator)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(
+        KeyError, match="Flattening keys in tensordict collides with existing key *"
+    ):
         _ = td3.flatten_keys(separator)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
         _ = td1.unflatten_keys(separator)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
         _ = td2.unflatten_keys(separator)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
         _ = td3.unflatten_keys(separator)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
         _ = td4.unflatten_keys(separator)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
         _ = td5.unflatten_keys(separator)
 
     td4_flat = td4.flatten_keys(separator)

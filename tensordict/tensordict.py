@@ -1617,28 +1617,15 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
         to_flatten = []
-        already_flat = []
         for key, meta_value in self.items_meta():
             if meta_value.is_tensordict():
                 to_flatten.append(key)
-            else:
-                already_flat.append(key)
-
-        def exists(obj, chain):
-            _key = chain.pop(0)
-            if isinstance(obj, Tensor):
-                return None
-            if _key in obj:
-                return exists(obj[_key], chain) if chain else obj[_key]
-
-        for key in already_flat:
-            if separator in key:
-                _existing_val = exists(self.to_dict(), key.split(separator))
-
-                if isinstance(_existing_val, Tensor):
-                    raise KeyError(
-                        f"Flattening keys in tensordict collides with existing key '{key}'"
-                    )
+            elif separator in key and isinstance(
+                _exists(self, key.split(separator)), (MemmapTensor, Tensor)
+            ):
+                raise KeyError(
+                    f"Flattening keys in tensordict collides with existing key '{key}'"
+                )
 
         if inplace:
             for key in to_flatten:
@@ -1689,7 +1676,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         for key, list_of_keys in to_unflatten.items():
 
-            if key in out.to_dict():
+            if key in out.keys():
                 raise KeyError(
                     "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
@@ -5345,3 +5332,10 @@ def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
                 return batch_size
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def _exists(td, chain):
+    """Checks for existence of a chain of nested keys in a tensordict"""
+    _key = chain.pop(0)
+    if not isinstance(td, (MemmapTensor, Tensor)) and _key in td.keys():
+        return _exists(td[_key], chain) if chain else td[_key]
