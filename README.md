@@ -185,7 +185,7 @@ For instance, the following code will result in a single-level tensordict with k
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": TensorDict({"sub-key": torch.randn(3, 4, 5, 6)}, batch_size=[3, 4, 5])
 ... }, batch_size=[3, 4])
->>> tensordict_unflatten = tensordict.unflatten_keys(separator=".")
+>>> tensordict_flatten = tensordict.flatten_keys(separator=".")
 ```
 
 Accessing nested tensordicts can be achieved with a single index:
