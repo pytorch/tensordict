@@ -1735,7 +1735,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             )
 
         if isinstance(idx, Number):
-            return self._index_tensordict(idx)
+            return self._index_tensordict((idx,))
 
         if isinstance(idx, list):
             idx = torch.tensor(idx, device=self.device)
@@ -2200,7 +2200,7 @@ class TensorDict(TensorDictBase):
         self_copy = copy(self)
         self_copy._tensordict = {key: item[idx] for key, item in self.items()}
         self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
-        self_copy.batch_size = _getitem_batch_size(self.batch_size, idx)
+        self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
         self_copy._device = self.device
         return self_copy
 
