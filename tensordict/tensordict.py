@@ -2197,6 +2197,13 @@ class TensorDict(TensorDictBase):
                 "all elements must share that device."
             )
 
+    def _index_tensordict(self, idx: INDEX_TYPING):
+        self_copy = copy(self)
+        self_copy._tensordict = {key: item[idx] for key, item in self.items()}
+        self_copy.batch_size = _getitem_batch_size(self.batch_size, idx)
+        self_copy.device = self.device
+        return self_copy
+
     def pin_memory(self) -> TensorDictBase:
         if self.device == torch.device("cpu"):
             for key, value in self.items():
