@@ -1697,6 +1697,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             "`key in tensordict.keys()` instead."
         )
 
+    def _index_tensordict(self, idx: INDEX_TYPING):
+        return TensorDict(
+            source={key: item[idx] for key, item in self.items()},
+            _meta_source={
+                key: item[idx]
+                for key, item in self.items_meta(make_unset=False)
+                if not item.is_tensordict()
+            },
+            batch_size=_getitem_batch_size(self.batch_size, idx),
+            device=self.device,
+            _run_checks=False,
+        )
+
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Indexes all tensors according to the provided index.
 
@@ -1716,8 +1729,27 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             >>> print(td.get("a"))  # values have not changed
 
         """
+        if not self.batch_size:
+            raise RuntimeError(
+                "indexing a tensordict with td.batch_dims==0 is not permitted"
+            )
+
+        if isinstance(idx, Number):
+            return self._index_tensordict(idx)
+
         if isinstance(idx, list):
             idx = torch.tensor(idx, device=self.device)
+            return self._index_tensordict(idx)
+
+        if isinstance(idx, str) or (
+            isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
+        ):
+            return self.get(idx)
+
+        if isinstance(idx, np.ndarray):
+            idx = torch.tensor(idx, device=self.device)
+            return self._index_tensordict(idx)
+
         if isinstance(idx, tuple) and any(
             isinstance(sub_index, list) for sub_index in idx
         ):
@@ -1727,39 +1759,18 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 else sub_index
                 for sub_index in idx
             )
-        if isinstance(idx, str) or (
-            isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
-        ):
-            return self.get(idx)
+
         if isinstance(idx, tuple) and sum(
             isinstance(_idx, str) for _idx in idx
         ) not in [len(idx), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
-        elif isinstance(idx, Number):
-            idx = (idx,)
 
-        if not self.batch_size:
-            raise RuntimeError(
-                "indexing a tensordict with td.batch_dims==0 is not permitted"
-            )
 
-        if isinstance(idx, np.ndarray):
-            idx = torch.tensor(idx, device=self.device)
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
         # if return_simple_view and not self.is_memmap():
-        return TensorDict(
-            source={key: item[idx] for key, item in self.items()},
-            _meta_source={
-                key: item[idx]
-                for key, item in self.items_meta(make_unset=False)
-                if not item.is_tensordict()
-            },
-            batch_size=_getitem_batch_size(self.batch_size, idx),
-            device=self.device,
-            _run_checks=False,
-        )
+        return self._index_tensordict(idx)
 
     def __setitem__(
         self, index: INDEX_TYPING, value: Union[TensorDictBase, dict]
