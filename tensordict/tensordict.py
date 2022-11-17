@@ -1617,12 +1617,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
         to_flatten = []
+        existing_keys = self.keys(include_nested=True)
         for key, meta_value in self.items_meta():
+            key_split = tuple(key.split(separator))
             if meta_value.is_tensordict():
                 to_flatten.append(key)
-            elif separator in key and isinstance(
-                _exists(self, key.split(separator)), (MemmapTensor, Tensor)
-            ):
+            elif separator in key and key_split in existing_keys:
                 raise KeyError(
                     f"Flattening keys in tensordict collides with existing key '{key}'"
                 )
@@ -5332,10 +5332,3 @@ def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
                 return batch_size
         batch_size.append(curr_dim_size)
         curr_dim += 1
-
-
-def _exists(td, chain):
-    """Checks for existence of a chain of nested keys in a tensordict"""
-    _key = chain.pop(0)
-    if not isinstance(td, (MemmapTensor, Tensor)) and _key in td.keys():
-        return _exists(td[_key], chain) if chain else td[_key]
