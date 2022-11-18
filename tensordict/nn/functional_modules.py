@@ -183,6 +183,7 @@ def extract_weights_and_buffers(model: nn.Module):
         if module_tensordict is not None:
             tensordict[name] = module_tensordict
     model.forward = _forward_decorator(model)
+    model.__dict__["_is_stateless"] = True
 
     if len(tensordict.keys()):
         return tensordict
@@ -190,8 +191,10 @@ def extract_weights_and_buffers(model: nn.Module):
         return None
 
 
-def _swap_state(model, tensordict, return_old_tensordict=False, old_tensordict=None):
-
+def _swap_state(
+    model, tensordict, is_stateless, return_old_tensordict=False, old_tensordict=None
+):
+    model.__dict__["_is_stateless"] = is_stateless
     if return_old_tensordict and old_tensordict is None:
         old_tensordict = TensorDict(
             {}, torch.Size([]), device=tensordict.device, _run_checks=False
@@ -201,11 +204,14 @@ def _swap_state(model, tensordict, return_old_tensordict=False, old_tensordict=N
         if isinstance(value, TensorDictBase):
             if return_old_tensordict:
                 _old_value = old_tensordict.get(key, None)
+            else:
+                _old_value = None
             _old_value = _swap_state(
                 getattr(model, key),
                 value,
                 return_old_tensordict=return_old_tensordict,
                 old_tensordict=_old_value,
+                is_stateless=is_stateless,
             )
             old_tensordict._tensordict[key] = _old_value
         else:
@@ -221,7 +227,8 @@ def _swap_state(model, tensordict, return_old_tensordict=False, old_tensordict=N
 
 
 def make_functional(module):
-    return extract_weights_and_buffers(module)
+    params = extract_weights_and_buffers(module)
+    return params
 
 
 def _forward_decorator(module):
@@ -233,24 +240,31 @@ def _forward_decorator(module):
     # if yes insert step parameter before it, else insert it in last position
     params = list(oldsig.parameters.values())
     for i, param in enumerate(params):
+        print(param, param.kind)
+        if param.kind == inspect.Parameter.KEYWORD_ONLY:
+            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
+            break
         if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            out_type = inspect.Parameter.KEYWORD_ONLY
+            i = i + 1
             break
         if param.kind == inspect.Parameter.VAR_KEYWORD:
+            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
             break
         if (
             param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
             and param.default is not inspect._empty
         ):
+            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
             break
     else:
+        out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
         i = len(params)
     # new parameter name is params or params_[_...] if params if already present
     name = "params"
     while name in oldsig.parameters:
         name += "_"
-    newparam = inspect.Parameter(
-        name, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None
-    )
+    newparam = inspect.Parameter(name, out_type, default=None)
     params.insert(i, newparam)
     # we can now build the signature for the wrapper function
     sig = oldsig.replace(parameters=params)
@@ -258,20 +272,29 @@ def _forward_decorator(module):
     @wraps(forward)
     def new_forward(*args, **kwargs):
         # 3 use cases: (1) params is the last arg, (2) params is in kwargs, (3) no params
-        if len(args) == i + 1:
-            params = args[-1]
-            args = args[:-1]
-        else:
+        if module.__dict__["_is_stateless"]:
             params = kwargs.pop("params", None)
-        old_params = _assign_params(module, params)
-        out = forward(*args, **kwargs)
-        _assign_params(module, old_params)
-        return out
+            if params is None:
+                params = args[-1]
+                args = args[:-1]
+
+            # get the previous params, and tell the submodules not to look for params anymore
+            old_params = _assign_params(
+                module, params, make_stateless=False, return_old_tensordict=True
+            )
+            out = forward(*args, **kwargs)
+            # reset the previous params, and tell the submodules to look for params
+            _assign_params(
+                module, old_params, make_stateless=True, return_old_tensordict=True
+            )
+            return out
+        else:
+            return forward(*args, **kwargs)
 
     new_forward.__signature__ = sig
     return new_forward
 
 
-def _assign_params(module, params):
+def _assign_params(module, params, make_stateless, return_old_tensordict):
     if params is not None:
-        return _swap_state(module, params, True)
+        return _swap_state(module, params, make_stateless, return_old_tensordict)
