@@ -1619,9 +1619,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
         to_flatten = []
+        existing_keys = self.keys(include_nested=True)
         for key, meta_value in self.items_meta():
+            key_split = tuple(key.split(separator))
             if meta_value.is_tensordict():
                 to_flatten.append(key)
+            elif (
+                separator in key
+                and key_split in existing_keys
+                and not self._get_meta(key_split).is_tensordict()
+            ):
+                raise KeyError(
+                    f"Flattening keys in tensordict collides with existing key '{key}'"
+                )
 
         if inplace:
             for key in to_flatten:
@@ -1670,7 +1680,14 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         else:
             out = self
 
+        keys = set(out.keys())
         for key, list_of_keys in to_unflatten.items():
+
+            if key in keys:
+                raise KeyError(
+                    "Unflattening key(s) in tensordict will override existing unflattened key"
+                )
+
             tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
             if key in self.keys():
                 tensordict.update(self[key])
