@@ -2971,6 +2971,16 @@ def test_split():
     assert tds[2].shape == torch.Size([3, 6])
 
 
+def test_split_torch_overload():
+    td = TensorDict({"a": torch.zeros(10)}, [10])
+
+    tds = torch.split(td, [5, 2, 3], 0)
+    assert len(tds) == 3
+    assert tds[0].shape == torch.Size([5])
+    assert tds[1].shape == torch.Size([2])
+    assert tds[2].shape == torch.Size([3])
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
