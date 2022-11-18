@@ -542,9 +542,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         out = (
             self
             if inplace
-            else TensorDict({}, batch_size=batch_size, device=self.device)
+            else TensorDict(
+                {}, batch_size=batch_size, device=self.device, _run_checks=False
+            )
             if batch_size is not None
-            else copy(self)
+            else self.clone(recurse=False)
         )
         is_locked = out.is_locked
         if not inplace and is_locked:
@@ -1714,6 +1716,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             "`key in tensordict.keys()` instead."
         )
 
+    def _index_tensordict(self, idx: INDEX_TYPING):
+        return TensorDict(
+            source={key: item[idx] for key, item in self.items()},
+            _meta_source={
+                key: item[idx]
+                for key, item in self.items_meta(make_unset=False)
+                if not item.is_tensordict()
+            },
+            batch_size=_getitem_batch_size(self.batch_size, idx),
+            device=self.device,
+            _run_checks=False,
+        )
+
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Indexes all tensors according to the provided index.
 
@@ -1733,8 +1748,27 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             >>> print(td.get("a"))  # values have not changed
 
         """
+        if isinstance(idx, str) or (
+            isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
+        ):
+            return self.get(idx)
+
+        if not self.batch_size:
+            raise RuntimeError(
+                "indexing a tensordict with td.batch_dims==0 is not permitted"
+            )
+
+        if isinstance(idx, Number):
+            return self._index_tensordict((idx,))
+
         if isinstance(idx, list):
             idx = torch.tensor(idx, device=self.device)
+            return self._index_tensordict(idx)
+
+        if isinstance(idx, np.ndarray):
+            idx = torch.tensor(idx, device=self.device)
+            return self._index_tensordict(idx)
+
         if isinstance(idx, tuple) and any(
             isinstance(sub_index, list) for sub_index in idx
         ):
@@ -1744,38 +1778,17 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 else sub_index
                 for sub_index in idx
             )
-        if isinstance(idx, str) or (
-            isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
-        ):
-            return self.get(idx)
+
         if isinstance(idx, tuple) and sum(
             isinstance(_idx, str) for _idx in idx
         ) not in [len(idx), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
-        elif isinstance(idx, Number):
-            idx = (idx,)
 
-        if not self.batch_size:
-            raise RuntimeError(
-                "indexing a tensordict with td.batch_dims==0 is not permitted"
-            )
-
-        if isinstance(idx, np.ndarray):
-            idx = torch.tensor(idx, device=self.device)
         if idx is Ellipsis or (isinstance(idx, tuple) and Ellipsis in idx):
             idx = convert_ellipsis_to_idx(idx, self.batch_size)
 
         # if return_simple_view and not self.is_memmap():
-        return TensorDict(
-            source={key: item[idx] for key, item in self.items()},
-            _meta_source={
-                key: item[idx]
-                for key, item in self.items_meta(make_unset=False)
-                if not item.is_tensordict()
-            },
-            batch_size=_getitem_batch_size(self.batch_size, idx),
-            device=self.device,
-        )
+        return self._index_tensordict(idx)
 
     def __setitem__(
         self, index: INDEX_TYPING, value: Union[TensorDictBase, dict]
@@ -1819,7 +1832,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         else:
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = TensorDict(value, batch_size=indexed_bs, device=self.device)
+                value = TensorDict(
+                    value, batch_size=indexed_bs, device=self.device, _run_checks=False
+                )
             if value.batch_size != indexed_bs:
                 raise RuntimeError(
                     f"indexed destination TensorDict batch size is {indexed_bs} "
@@ -2200,6 +2215,14 @@ class TensorDict(TensorDictBase):
                 "all elements must share that device."
             )
 
+    def _index_tensordict(self, idx: INDEX_TYPING):
+        self_copy = copy(self)
+        self_copy._tensordict = {key: item[idx] for key, item in self.items()}
+        self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
+        self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
+        self_copy._device = self.device
+        return self_copy
+
     def pin_memory(self) -> TensorDictBase:
         if self.device == torch.device("cpu"):
             for key, value in self.items():
@@ -2251,6 +2274,7 @@ class TensorDict(TensorDictBase):
             source=d,
             batch_size=[*shape],
             device=self.device,
+            _run_checks=False,
         )
 
     def set(
@@ -3062,7 +3086,7 @@ def pad(tensordict: TensorDictBase, pad_size: Sequence[int], value: float = 0.0)
     for i in range(0, len(reverse_pad), 2):
         reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
 
-    out = TensorDict({}, new_batch_size, device=tensordict.device)
+    out = TensorDict({}, new_batch_size, device=tensordict.device, _run_checks=False)
     for key, tensor in tensordict.items():
         cur_pad = reverse_pad
         if len(pad_size) < len(tensor.shape) * 2:
@@ -3090,7 +3114,7 @@ def pad_sequence_td(
     # check that all tensordict match
     keys = _check_keys(list_of_tensordicts)
     if out is None:
-        out = TensorDict({}, [], device=device)
+        out = TensorDict({}, [], device=device, _run_checks=False)
         for key in keys:
             out.set(
                 key,
@@ -3515,6 +3539,7 @@ torch.Size([3, 2])
             batch_size=self.batch_size,
             source={key: value for key, value in self.items()},
             device=self.device,
+            _run_checks=False,
         )
 
     def select(
@@ -3630,9 +3655,12 @@ def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
             f"at least 2 tensordicts must be provided, got" f" {len(tensordicts)}"
         )
     d = tensordicts[0].to_dict()
+    batch_size = tensordicts[0].batch_size
     for td in tensordicts[1:]:
         d.update(td.to_dict())
-    return TensorDict({}, [], device=td.device).update(d)
+        if td.batch_dims < len(batch_size):
+            batch_size = td.batch_size
+    return TensorDict(d, batch_size, device=td.device, _run_checks=False)
 
 
 class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
@@ -3933,6 +3961,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # we could probably just infer the items_meta by extending them
             # _meta_source=meta_source,
             device=device,
+            _run_checks=False,
         )
         return out
 
@@ -4616,6 +4645,7 @@ class SavedTensorDict(TensorDictBase):
             },
             device=self.device,
             batch_size=self.batch_size,
+            _run_checks=False,
         )
 
     def _change_batch_size(self, new_size: torch.Size):
@@ -4935,6 +4965,7 @@ class _CustomOpTensorDict(TensorDictBase):
             source=self.to_dict(),
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
         )
 
     def is_contiguous(self) -> bool:
@@ -5318,7 +5349,7 @@ def make_tensordict(
     """
     if batch_size is None:
         batch_size = _find_max_batch_size(kwargs)
-    return TensorDict(kwargs, batch_size=batch_size, device=device)
+    return TensorDict(kwargs, batch_size=batch_size, device=device, _run_checks=False)
 
 
 def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
