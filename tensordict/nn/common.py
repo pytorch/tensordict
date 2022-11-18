@@ -175,9 +175,7 @@ class TensorDictModule(nn.Module):
         return tensordict_out
 
     def _call_module(
-        self,
-        tensors: Sequence[Tensor],
-        **kwargs,
+        self, tensors: Sequence[Tensor], **kwargs
     ) -> Union[Tensor, Sequence[Tensor]]:
         out = self.module(*tensors, **kwargs)
         return out
@@ -192,11 +190,7 @@ class TensorDictModule(nn.Module):
         tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
-        tensordict_out = self._write_to_tensordict(
-            tensordict,
-            tensors,
-            tensordict_out,
-        )
+        tensordict_out = self._write_to_tensordict(tensordict, tensors, tensordict_out)
         return tensordict_out
 
     @property

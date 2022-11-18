@@ -6,7 +6,7 @@
 import re
 from copy import deepcopy
 from textwrap import indent
-from typing import Any, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Optional, Sequence, Tuple, Type, Union
 
 from torch import Tensor
 from torch import distributions as d
@@ -207,14 +207,8 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
 
-    def _call_module(
-        self,
-        tensordict: TensorDictBase,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        **kwargs,
-    ) -> TensorDictBase:
-        return self.module(tensordict, params=params, buffers=buffers, **kwargs)
+    def _call_module(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
+        return self.module(tensordict, **kwargs)
 
     def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
         module_params = self.parameters(recurse=False)
@@ -238,8 +232,6 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> Tuple[d.Distribution, TensorDictBase]:
         mode = interaction_mode()
@@ -247,11 +239,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             mode = self.default_interaction_mode
         with set_interaction_mode(mode):
             tensordict_out = self._call_module(
-                tensordict,
-                tensordict_out=tensordict_out,
-                params=params,
-                buffers=buffers,
-                **kwargs,
+                tensordict, tensordict_out=tensordict_out, **kwargs
             )
         dist = self.build_dist_from_params(tensordict_out)
         return dist, tensordict_out
@@ -282,17 +270,11 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
 
         dist, tensordict_out = self.get_dist(
-            tensordict,
-            tensordict_out=tensordict_out,
-            params=params,
-            buffers=buffers,
-            **kwargs,
+            tensordict, tensordict_out=tensordict_out, **kwargs
         )
         if self._requires_sample:
             out_tensors = self._dist_sample(dist, interaction_mode=interaction_mode())
