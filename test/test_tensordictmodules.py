@@ -185,7 +185,6 @@ class TestTDModule:
 
         tdnet = TensorDictModule(module=net, in_keys=["in"], out_keys=["loc", "scale"])
 
-        params = make_functional(tdnet)
         kwargs = {"distribution_class": Normal}
 
         tdmodule = ProbabilisticTensorDictModule(
@@ -194,6 +193,7 @@ class TestTDModule:
             out_key_sample=["out"],
             **kwargs,
         )
+        params = make_functional(tdmodule)
 
         # vmap = True
         params = params.expand(10)
@@ -392,7 +392,7 @@ class TestTDSequence:
         )
         tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
-        params = make_functional(tdmodule)
+        params = make_functional(tdmodule, funs_to_decorate=["forward", "get_dist"])
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
@@ -484,7 +484,7 @@ class TestTDSequence:
         )
         tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
-        params = make_functional(tdmodule)
+        params = make_functional(tdmodule, ["forward", "get_dist"])
 
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3

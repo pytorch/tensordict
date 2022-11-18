@@ -167,7 +167,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
 # Tensordict-compatible Functional modules
 
 
-def extract_weights_and_buffers(model: nn.Module):
+def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None):
     """Extracts the weights and buffers of a model in a tensordict, and adapts the modules to read those inputs."""
     tensordict = TensorDict({}, [])
     for name, param in list(model.named_parameters(recurse=False)):
@@ -182,7 +182,10 @@ def extract_weights_and_buffers(model: nn.Module):
         module_tensordict = extract_weights_and_buffers(module)
         if module_tensordict is not None:
             tensordict[name] = module_tensordict
-    model.forward = _forward_decorator(model)
+    if funs_to_decorate is None:
+        funs_to_decorate = ["forward"]
+    for fun_to_decorate in funs_to_decorate:
+        setattr(model, fun_to_decorate, _make_decorator(model, fun_to_decorate))
     model.__dict__["_is_stateless"] = True
 
     if len(tensordict.keys()):
@@ -226,21 +229,20 @@ def _swap_state(
         return old_tensordict
 
 
-def make_functional(module):
-    params = extract_weights_and_buffers(module)
+def make_functional(module, funs_to_decorate=None):
+    params = extract_weights_and_buffers(module, funs_to_decorate=funs_to_decorate)
     return params
 
 
-def _forward_decorator(module):
-    forward = module.forward
+def _make_decorator(module, fun_name):
+    fun = getattr(module, fun_name)
 
     # we need to update the signature so that params can be the last positional arg
-    oldsig = inspect.signature(forward)
+    oldsig = inspect.signature(fun)
     # search if a VAR_POSITIONAL or VAR_KEYWORD is present
     # if yes insert step parameter before it, else insert it in last position
     params = list(oldsig.parameters.values())
     for i, param in enumerate(params):
-        print(param, param.kind)
         if param.kind == inspect.Parameter.KEYWORD_ONLY:
             out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
             break
@@ -269,8 +271,8 @@ def _forward_decorator(module):
     # we can now build the signature for the wrapper function
     sig = oldsig.replace(parameters=params)
 
-    @wraps(forward)
-    def new_forward(*args, **kwargs):
+    @wraps(fun)
+    def new_fun(*args, **kwargs):
         # 3 use cases: (1) params is the last arg, (2) params is in kwargs, (3) no params
         if module.__dict__["_is_stateless"]:
             params = kwargs.pop("params", None)
@@ -282,17 +284,17 @@ def _forward_decorator(module):
             old_params = _assign_params(
                 module, params, make_stateless=False, return_old_tensordict=True
             )
-            out = forward(*args, **kwargs)
+            out = fun(*args, **kwargs)
             # reset the previous params, and tell the submodules to look for params
             _assign_params(
                 module, old_params, make_stateless=True, return_old_tensordict=True
             )
             return out
         else:
-            return forward(*args, **kwargs)
+            return fun(*args, **kwargs)
 
-    new_forward.__signature__ = sig
-    return new_forward
+    new_fun.__signature__ = sig
+    return new_fun
 
 
 def _assign_params(module, params, make_stateless, return_old_tensordict):
