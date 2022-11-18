@@ -542,7 +542,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         out = (
             self
             if inplace
-            else TensorDict({}, batch_size=batch_size, device=self.device, _run_checks=False)
+            else TensorDict(
+                {}, batch_size=batch_size, device=self.device, _run_checks=False
+            )
             if batch_size is not None
             else self.clone(recurse=False)
         )
