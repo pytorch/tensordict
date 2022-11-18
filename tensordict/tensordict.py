@@ -1678,9 +1678,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         else:
             out = self
 
+        keys = set(out.keys())
         for key, list_of_keys in to_unflatten.items():
 
-            if key in out.keys():
+            if key in keys:
                 raise KeyError(
                     "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
