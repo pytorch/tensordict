@@ -1622,7 +1622,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             key_split = tuple(key.split(separator))
             if meta_value.is_tensordict():
                 to_flatten.append(key)
-            elif separator in key and key_split in existing_keys:
+            elif (
+                separator in key
+                and key_split in existing_keys
+                and not self._get_meta(key_split).is_tensordict()
+            ):
                 raise KeyError(
                     f"Flattening keys in tensordict collides with existing key '{key}'"
                 )
