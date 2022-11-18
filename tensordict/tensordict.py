@@ -1424,6 +1424,36 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             batch_size = shape
         return TensorDict(d, batch_size, device=self.device)
 
+    def split(
+        self, split_size: Union[int, List[int]], dim: int = 0
+    ) -> List[TensorDictBase]:
+        """Splits each tensor in the TensorDict with the specified size in the given dimension, like `torch.split`.
+        Returns a list of TensorDict with the view of split chunks of tensor.
+
+        The list of TensorDict maintains the original order of the tensor chunks.
+
+        Args:
+            split_size (int) or (list(int)): size of a single chunk or list of sizes for each chunk
+            dim (int): dimension along which to split the tensor
+
+        Returns:
+            A list of TensorDict with specified size in given dimension.
+
+        """
+        dictionaries = []
+        batch_size = []
+        for key, item in self.items():
+            split_tensors = torch.split(item, split_size, dim)
+            if not dictionaries:
+                dictionaries = [dict() for _ in range(len(split_tensors))]
+                batch_size = [split_tensor.shape[:-1] for split_tensor in split_tensors]
+            for idx, split_tensor in enumerate(split_tensors):
+                dictionaries[idx][key] = split_tensor
+        return [
+            TensorDict(dictionaries[i], batch_size[i], device=self.device)
+            for i in range(len(dictionaries))
+        ]
+
     def view(
         self,
         *shape: int,

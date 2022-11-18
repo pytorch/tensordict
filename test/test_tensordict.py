@@ -2935,6 +2935,42 @@ def test_unflatten_keys_collision(separator):
     assert assert_allclose_td(td.unflatten_keys(separator), ref)
 
 
+def test_split():
+    td = TensorDict({"a": torch.zeros(10)}, [10])
+
+    tds = td.split(5, 0)
+    assert len(tds) == 2
+    assert tds[0].shape == torch.Size([5])
+    assert tds[1].shape == torch.Size([5])
+
+    tds = td.split([5, 2, 3], 0)
+    assert len(tds) == 3
+    assert tds[0].shape == torch.Size([5])
+    assert tds[1].shape == torch.Size([2])
+    assert tds[2].shape == torch.Size([3])
+
+    td = TensorDict(
+        source={"a": torch.zeros(5, 6, 5), "b": torch.zeros(5, 6, 10, 1)},
+        batch_size=torch.Size([5, 6]),
+    )
+
+    tds = td.split(3, 0)
+    assert len(tds) == 2
+    assert tds[0].shape == torch.Size([3, 6])
+    assert tds[1].shape == torch.Size([2, 6])
+
+    tds = td.split(4, 1)
+    assert len(tds) == 2
+    assert tds[0].shape == torch.Size([5, 4])
+    assert tds[1].shape == torch.Size([5, 2])
+
+    tds = td.split([1, 1, 3], 0)
+    assert len(tds) == 3
+    assert tds[0].shape == torch.Size([1, 6])
+    assert tds[1].shape == torch.Size([1, 6])
+    assert tds[2].shape == torch.Size([3, 6])
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
