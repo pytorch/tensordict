@@ -760,6 +760,46 @@ class TestTensorDicts(TestTensorDictsBase):
         for item in td.values():
             assert (item[mask] == -10).all(), item[mask]
 
+    def test_lock(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_locked = td.is_locked
+        for key, item in td.items():
+            if isinstance(item, TensorDictBase):
+                assert item.is_locked == is_locked
+        td.is_locked = not is_locked
+        assert td.is_locked != is_locked
+        for key, item in td.items():
+            if isinstance(item, TensorDictBase):
+                assert item.is_locked != is_locked
+        td.lock()
+        assert td.is_locked
+        for key, item in td.items():
+            if isinstance(item, TensorDictBase):
+                assert item.is_locked
+        td.unlock()
+        assert not td.is_locked
+        for key, item in td.items():
+            if isinstance(item, TensorDictBase):
+                assert not item.is_locked
+
+    def test_lock_write(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td.lock()
+        td_clone = td.clone()
+        td = td.select(inplace=True)
+        for key, item in td_clone.items(True):
+            with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+                td.set(key, item)
+        td.unlock()
+        for key, item in td_clone.items(True):
+            td.set(key, item)
+        td.lock()
+        for key, item in td_clone.items(True):
+            with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+                td.set(key, item)
+            if td_name != "saved_td":
+                td.set_(key, item)
+
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)

@@ -148,7 +148,7 @@ class _TensorDictKeysView:
         if isinstance(tensordict, TensorDict):
             return tensordict._tensordict.items()
         elif isinstance(tensordict, LazyStackedTensorDict):
-            return ((key, tensordict.get(key)) for key in tensordict.valid_keys)
+            return _iter_items_lazystack(tensordict)
         elif isinstance(tensordict, _CustomOpTensorDict):
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to
@@ -1914,7 +1914,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     @is_locked.setter
     def is_locked(self, value: bool):
-        self._is_locked = value
+        if value:
+            self.lock()
+        else:
+            self.unlock()
 
     def set_default(
         self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
@@ -1938,10 +1941,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return self.get(key)
 
     def lock(self):
-        self.is_locked = True
+        self._is_locked = True
+        for key, item in self.items_meta():
+            if item.is_tensordict():
+                self.get(key).lock()
 
     def unlock(self):
-        self.is_locked = False
+        self._is_locked = False
+        for key, item in self.items_meta():
+            if item.is_tensordict():
+                self.get(key).unlock()
 
 
 class TensorDict(TensorDictBase):
@@ -2292,7 +2301,9 @@ class TensorDict(TensorDictBase):
         """
         if self.is_locked:
             if not inplace or key not in self.keys():
-                raise RuntimeError("Cannot modify locked TensorDict")
+                raise RuntimeError(
+                    "Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method."
+                )
 
         _nested_key_type_check(key)
         keys = set(self.keys(include_nested=True))
@@ -2622,7 +2633,9 @@ class TensorDict(TensorDictBase):
         }
         if strict:
             if len(keys.difference(existing_keys)):
-                raise KeyError(f"Keys {keys.difference(existing_keys)} were not found.")
+                raise KeyError(
+                    f"Keys {keys.difference(existing_keys)} were not found among keys {existing_keys}."
+                )
         else:
             keys = keys.intersection(existing_keys)
 
@@ -3265,7 +3278,9 @@ torch.Size([3, 2])
         keys = self.keys(is_nested)
         if self.is_locked:
             if not inplace or key not in keys:
-                raise RuntimeError("Cannot modify locked TensorDict")
+                raise RuntimeError(
+                    "Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method."
+                )
         if inplace and key in keys:
             return self.set_(key, tensor)
         elif key in keys:
@@ -3830,8 +3845,9 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
 
         if self.is_locked:
-            if key not in self.keys():
-                raise RuntimeError("Cannot modify locked TensorDict")
+            raise RuntimeError(
+                "Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method."
+            )
 
         tensor = self._process_input(
             tensor, check_device=False, check_tensor_shape=False
@@ -4414,8 +4430,9 @@ class SavedTensorDict(TensorDictBase):
         if self.is_locked:
             # TODO: self.keys doesn't return nested keys currently, so this might fail
             # if tensordict is locked.
-            if key not in self.keys():
-                raise RuntimeError("Cannot modify locked TensorDict")
+            raise RuntimeError(
+                "Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method."
+            )
         td = self._load()
         td.set(key, value, **kwargs)
         self._save(td)
@@ -4865,8 +4882,9 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"Consider calling .contiguous() before calling this method."
             )
         if self.is_locked:
-            if key not in self.keys():
-                raise RuntimeError("Cannot modify locked TensorDict")
+            raise RuntimeError(
+                "Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method."
+            )
         proc_value = self._process_input(
             value,
             check_device=False,
@@ -5371,3 +5389,12 @@ def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
                 return batch_size
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def _iter_items_lazystack(tensordict):
+    for key in tensordict.valid_keys:
+        try:
+            yield key, tensordict.get(key)
+        except KeyError:
+            tensordict._update_valid_keys()
+            continue
