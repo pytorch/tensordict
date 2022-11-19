@@ -148,12 +148,7 @@ class _TensorDictKeysView:
         if isinstance(tensordict, TensorDict):
             return tensordict._tensordict.items()
         elif isinstance(tensordict, LazyStackedTensorDict):
-            for key in tensordict.valid_keys:
-                try:
-                    yield key, tensordict.get(key)
-                except KeyError:
-                    tensordict._update_valid_keys()
-                    continue
+            return _iter_items_lazystack(tensordict)
         elif isinstance(tensordict, _CustomOpTensorDict):
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to
@@ -2638,7 +2633,9 @@ class TensorDict(TensorDictBase):
         }
         if strict:
             if len(keys.difference(existing_keys)):
-                raise KeyError(f"Keys {keys.difference(existing_keys)} were not found.")
+                raise KeyError(
+                    f"Keys {keys.difference(existing_keys)} were not found among keys {existing_keys}."
+                )
         else:
             keys = keys.intersection(existing_keys)
 
@@ -5392,3 +5389,12 @@ def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
                 return batch_size
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def _iter_items_lazystack(tensordict):
+    for key in tensordict.valid_keys:
+        try:
+            yield key, tensordict.get(key)
+        except KeyError:
+            tensordict._update_valid_keys()
+            continue
