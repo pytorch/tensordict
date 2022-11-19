@@ -787,6 +787,9 @@ class TestTensorDicts(TestTensorDictsBase):
         td.lock()
         td_clone = td.clone()
         assert not td_clone.is_locked
+        td_clone = td.to_tensordict()
+        assert not td_clone.is_locked
+        assert td.is_locked
         td = td.select(inplace=True)
         for key, item in td_clone.items(True):
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
