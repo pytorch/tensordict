@@ -1597,6 +1597,24 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         _ = str(td)
 
+    def test_memmap_(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            with pytest.raises(
+                RuntimeError,
+                match="Converting a sub-tensordict values to memmap cannot be done",
+            ):
+                td.memmap_()
+        elif td_name == "saved_td":
+            with pytest.raises(
+                RuntimeError,
+                match="SavedTensorDict and memmap are mutually exclusive features.",
+            ):
+                td.memmap_()
+        else:
+            td.memmap_()
+            assert td.is_memmap()
+
     def test_set_default_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         expected = torch.ones_like(td.get("a"))
