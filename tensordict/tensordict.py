@@ -1914,7 +1914,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     @is_locked.setter
     def is_locked(self, value: bool):
-        self._is_locked = value
+        if value:
+            self.lock()
+        else:
+            self.unlock()
 
     def set_default(
         self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
@@ -1938,10 +1941,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return self.get(key)
 
     def lock(self):
-        self.is_locked = True
+        self._is_locked = True
+        for key, item in self.items_meta():
+            if item.is_tensordict():
+                item.lock()
 
     def unlock(self):
-        self.is_locked = False
+        self._is_locked = False
+        for key, item in self.items_meta():
+            if item.is_tensordict():
+                item.unlock()
 
 
 class TensorDict(TensorDictBase):
