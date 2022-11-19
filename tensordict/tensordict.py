@@ -2548,6 +2548,9 @@ class TensorDict(TensorDictBase):
                 "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
             )
         for key, value in self.items():
+            if isinstance(value, TensorDictBase):
+                self._tensordict[key] = value.memmap_()
+                continue
             self._tensordict[key] = MemmapTensor(value, prefix=prefix)
         for value in self.values_meta():
             value.memmap_()
