@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from copy import copy, deepcopy
+from copy import deepcopy
 from typing import Iterable, List, Optional, Tuple, Union
 
 _has_functorch = False
@@ -28,11 +28,7 @@ from tensordict.nn.common import TensorDictModule
 from tensordict.nn.probabilistic import (
     ProbabilisticTensorDictModule,
 )
-from tensordict.tensordict import (
-    LazyStackedTensorDict,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import NESTED_KEY, _normalize_key
 
 __all__ = ["TensorDictSequential"]
@@ -358,68 +354,6 @@ class TensorDictSequential(TensorDictModule):
 
     def __delitem__(self, index: Union[int, slice]) -> None:
         self.module.__delitem__(idx=index)
-
-    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        """Transforms a stateful module in a functional module and returns its parameters and buffers.
-
-        Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
-
-        Args:
-            clone (bool, optional): if True, a clone of the module is created before it is returned.
-                This is useful as it prevents the original module to be scraped off of its
-                parameters and buffers.
-                Defaults to True
-            native (bool, optional): if True, TorchRL's functional modules will be used.
-                Defaults to True
-
-        Returns:
-            A tuple of parameter and buffer tuples
-
-        Examples:
-            >>> from tensordict import TensorDict
-            >>> lazy_module1 = nn.LazyLinear(4)
-            >>> lazy_module2 = nn.LazyLinear(3)
-            >>> td_module1 = TensorDictModule(module=lazy_module1, in_keys=["some_input"], out_keys=["hidden"])
-            >>> td_module2 = TensorDictModule(module=lazy_module2, in_keys=["hidden"], out_keys=["some_output"])
-            >>> td_module = TensorDictSequential(td_module1, td_module2)
-            >>> # initialize lazy layers
-            >>> td_module(TensorDict({"some_input": torch.randn(18)}, batch_size=[]))
-            >>> _, (params, buffers) = td_module.make_functional_with_buffers()
-            >>> print(params[0].shape)
-            torch.Size([4, 18])
-            >>> print(td_module(
-            ...    TensorDict({'some_input': torch.randn(18)}, batch_size=[]),
-            ...    params=params,
-            ...    buffers=buffers))
-            TensorDict(
-                fields={
-                    some_input: Tensor(torch.Size([18]), dtype=torch.float32),
-                    hidden: Tensor(torch.Size([4]), dtype=torch.float32),
-                    some_output: Tensor(torch.Size([3]), dtype=torch.float32)},
-                batch_size=torch.Size([]),
-                device=cpu,
-                is_shared=False)
-
-        """
-        if clone:
-            self_copy = deepcopy(self)
-            self_copy.module = copy(self_copy.module)
-        else:
-            self_copy = self
-        params = [] if not native else TensorDict({}, [])
-        buffers = [] if not native else TensorDict({}, [])
-        for i, module in enumerate(self.module):
-            self_copy.module[i], (
-                _params,
-                _buffers,
-            ) = module.make_functional_with_buffers(clone=True, native=native)
-            if native or not _has_functorch:
-                params[str(i)] = _params
-                buffers[str(i)] = _buffers
-            else:
-                params.extend(_params)
-                buffers.extend(_buffers)
-        return self_copy, (params, buffers)
 
     def get_dist(
         self,

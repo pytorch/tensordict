@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import re
-from copy import deepcopy
 from textwrap import indent
 from typing import Any, Optional, Sequence, Tuple, Type, Union
 
@@ -210,24 +209,6 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def _call_module(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         return self.module(tensordict, **kwargs)
-
-    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        module_params = self.parameters(recurse=False)
-        if len(list(module_params)):
-            raise RuntimeError(
-                "make_functional_with_buffers cannot be called on ProbabilisticTensorDictModule"
-                "that contain parameters on the outer level."
-            )
-        if clone:
-            self_copy = deepcopy(self)
-        else:
-            self_copy = self
-
-        self_copy.module, other = self_copy.module.make_functional_with_buffers(
-            clone=True,
-            native=native,
-        )
-        return self_copy, other
 
     def get_dist(
         self,
