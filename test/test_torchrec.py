@@ -8,9 +8,17 @@ import argparse
 import pytest
 import torch
 from tensordict.utils import index_keyedjaggedtensor
-from torchrec import KeyedJaggedTensor
+
+try:
+    from torchrec import KeyedJaggedTensor
+
+    _has_torchrec = True
+except ImportError as err:
+    _has_torchrec = False
+    # TORCHREC_ERR = str(err)
 
 
+@pytest.mark.skipif(not _has_torchrec, reason="torchrec not found.")
 @pytest.mark.parametrize("index", [[0, 2], 2, torch.tensor([0, 2]), range(0, 3, 2)])
 def test_kjt_indexing(index):
     values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])

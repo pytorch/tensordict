@@ -393,8 +393,8 @@ def _normalize_key(key: NESTED_KEY) -> NESTED_KEY:
 
 
 def index_keyedjaggedtensor(
-    kjt: "torchrec.KeyedJaggedTensor", index: torch.Tensor
-):  # noqa
+    kjt: "torchrec.KeyedJaggedTensor", index: torch.Tensor  # noqa
+):
     """Indexes a KeyedJaggedTensor along the batch dimension.
 
     Args:

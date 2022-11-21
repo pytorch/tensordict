@@ -30,7 +30,7 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+    pip3 install --pre pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia
 fi
 
 # smoke test
