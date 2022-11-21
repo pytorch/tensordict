@@ -24,6 +24,14 @@ try:
 except ImportError:
     pass
 
+try:
+    from torchrec import KeyedJaggedTensor
+
+    _has_torchrec = True
+except ImportError as err:
+    _has_torchrec = False
+    TORCHREC_ERR = str(err)
+
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DEVICE_TYPING = Union[torch.device, str, int]
 if hasattr(typing, "get_args"):
@@ -382,3 +390,55 @@ def _nested_key_type_check(key):
 def _normalize_key(key: NESTED_KEY) -> NESTED_KEY:
     # normalises tuples of length one to their string contents
     return key if not isinstance(key, tuple) or len(key) > 1 else key[0]
+
+
+def index_keyedjaggedtensor(
+    kjt: "torchrec.KeyedJaggedTensor", index: torch.Tensor
+):  # noqa
+    """Indexes a KeyedJaggedTensor along the batch dimension.
+
+    Args:
+        kjt (KeyedJaggedTensor): a KeyedJaggedTensor to index
+        index (int, torch.Tensor or other indexing type): batch index to use.
+
+    Examples:
+        >>> values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
+        >>> weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0])
+        >>> keys = ["index_0", "index_1", "index_2"]
+        >>> offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8, 9, 10, 11])
+        >>>
+        >>> jag_tensor = KeyedJaggedTensor(
+        ...     values=values,
+        ...     keys=keys,
+        ...     offsets=offsets,
+        ...     weights=weights,
+        ... )
+        >>> ikjt = index_keyedjaggedtensor(jag_tensor, [0, 2])
+        >>> print(ikjt["index_0"].to_padded_dense(), j0.to_padded_dense())
+
+    """
+    if not _has_torchrec:
+        raise ImportError(TORCHREC_ERR)
+    lengths = kjt.lengths()
+    keys = kjt.keys()
+    numel = len(lengths) // len(keys)
+    offsets = kjt.offsets()
+
+    _offsets1 = offsets[:-1].view(len(keys), numel)[:, index]
+    _offsets2 = offsets[1:].view(len(keys), numel)[:, index]
+    lengths = lengths.view(len(keys), numel)[:, index].view(-1)
+
+    full_index = torch.arange(offsets[-1]).view(1, 1, -1)
+    sel = (full_index >= _offsets1.unsqueeze(-1)) & (
+        full_index < _offsets2.unsqueeze(-1)
+    )
+    sel = sel.any(0).any(0)
+    full_index = full_index.squeeze()[sel]
+    values = kjt._values[full_index]
+    weights = kjt._weights[full_index]
+    return KeyedJaggedTensor(
+        values=values,
+        keys=kjt.keys(),
+        weights=weights,
+        lengths=lengths,
+    )

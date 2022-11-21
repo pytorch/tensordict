@@ -30,6 +30,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    get_args,
 )
 from warnings import warn
 
@@ -78,12 +79,23 @@ except ImportError:
         return False
 
 
+try:
+    from torchrec import KeyedJaggedTensor
+
+    _has_torchrec = True
+except ImportError as err:
+    _has_torchrec = False
+    TORCHREC_ERR = str(err)
+
+
 TD_HANDLED_FUNCTIONS: Dict = dict()
 COMPATIBLE_TYPES = Union[
     Tensor,
     MemmapTensor,
 ]  # None? # leaves space for TensorDictBase
 
+if _has_torchrec:
+    COMPATIBLE_TYPES = Union[get_args(COMPATIBLE_TYPES) + (KeyedJaggedTensor,)]
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
 
