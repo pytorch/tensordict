@@ -4,7 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import re
-from copy import deepcopy
 from textwrap import indent
 from typing import Any, Optional, Sequence, Tuple, Type, Union
 
@@ -108,15 +107,15 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             Default is 1000
 
     Examples:
-        >>> import functorch, torch
+        >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn import ProbabilisticTensorDictModule
+        >>> from tensordict.nn import ProbabilisticTensorDictModule, TensorDictModule
         >>> from tensordict.nn.distributions import NormalParamWrapper
+        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
-        >>> fnet, params, buffers = functorch.make_functional_with_buffers(net)
-        >>> module = TensorDictModule(fnet, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
+        >>> module = TensorDictModule(net, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
         >>> td_module = ProbabilisticTensorDictModule(
         ...     module=module,
         ...     dist_param_keys=["loc", "scale"],
@@ -124,35 +123,36 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         ...     distribution_class=Normal,
         ...     return_log_prob=True,
         ... )
-        >>> _ = td_module(td, params=params, buffers=buffers)
+        >>> params = make_functional(td_module)
+        >>> _ = td_module(td, params=params)
         >>> print(td)
         TensorDict(
             fields={
-                input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
-                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32)},
+                hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu,
+            device=None,
             is_shared=False)
 
-        >>> # In the vmap case, the tensordict is again expended to match the batch:
-        >>> params = tuple(p.expand(4, *p.shape).contiguous().normal_() for p in params)
-        >>> buffers = tuple(b.expand(4, *b.shape).contiguous().normal_() for p in buffers)
-        >>> td_vmap = td_module(td, params=params, buffers=buffers, vmap=True)
+        >>> # we can also apply the module to the TensorDict with vmap
+        >>> from functorch import vmap
+        >>> params = params.expand(4)
+        >>> td_vmap = vmap(td_module, (None, 0))(td, params)
         >>> print(td_vmap)
         TensorDict(
             fields={
-                input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
-                loc: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
-                scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 action: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([4, 3, 1]), dtype=torch.float32)},
+                hidden: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([4, 3]),
-            device=cpu,
+            device=None,
             is_shared=False)
 
     """
@@ -209,24 +209,6 @@ class ProbabilisticTensorDictModule(TensorDictModule):
 
     def _call_module(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         return self.module(tensordict, **kwargs)
-
-    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        module_params = self.parameters(recurse=False)
-        if len(list(module_params)):
-            raise RuntimeError(
-                "make_functional_with_buffers cannot be called on ProbabilisticTensorDictModule"
-                "that contain parameters on the outer level."
-            )
-        if clone:
-            self_copy = deepcopy(self)
-        else:
-            self_copy = self
-
-        self_copy.module, other = self_copy.module.make_functional_with_buffers(
-            clone=True,
-            native=native,
-        )
-        return self_copy, other
 
     def get_dist(
         self,
