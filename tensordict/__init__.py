@@ -12,7 +12,11 @@ from .tensordict import (
     LazyStackedTensorDict,
     SavedTensorDict,
 )
-from .version import __version__
+
+try:
+    from .version import __version__
+except ImportError:
+    __version__ = None
 
 __all__ = [
     "LazyStackedTensorDict",
