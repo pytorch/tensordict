@@ -1,4 +1,4 @@
-[![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat&logo=appveyor)](https://pytorch.org/rl/tensordict/)
+[![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat)](https://pytorch.org/rl/tensordict/)
 
 # TensorDict
 
