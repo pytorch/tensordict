@@ -8,7 +8,7 @@ import argparse
 import pytest
 import torch
 from tensordict import TensorDict
-from tensordict.utils import index_keyedjaggedtensor
+from tensordict.utils import index_keyedjaggedtensor, setitem_keyedjaggedtensor
 
 try:
     from torchrec import KeyedJaggedTensor
@@ -95,6 +95,26 @@ class TestKJT:
             match="the tensor b has shape torch.Size([3]) which is incompatible with the new shape torch.Size([4])",
         ):
             td.batch_size = [4]
+
+    def test_setindex(self):
+        jag_tensor = _get_kjt()
+        sub_jag_tensor = index_keyedjaggedtensor(jag_tensor, [0, 2])
+        out = setitem_keyedjaggedtensor(jag_tensor, [0, 2], sub_jag_tensor)
+        for f in ("_weights", "_values", ):
+            assert (getattr(jag_tensor, f) == getattr(out, f)).all()
+
+        keys = ["index_0", "index_1", "index_2"]
+        lengths2 = torch.IntTensor([2, 4, 6, 4, 2, 1])
+        values2 = torch.zeros(lengths2.sum(), )
+        weights2 = -torch.ones(lengths2.sum(), )
+        sub_jag_tensor = KeyedJaggedTensor(
+            values=values2,
+            keys=keys,
+            lengths=lengths2,
+            weights=weights2,
+        )
+        out = setitem_keyedjaggedtensor(jag_tensor, [0, 2], sub_jag_tensor)
+        print(out["index_0"].to_padded_dense())
 
 
 if __name__ == "__main__":
