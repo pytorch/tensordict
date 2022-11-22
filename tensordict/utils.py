@@ -30,6 +30,10 @@ try:
     _has_torchrec = True
 except ImportError as err:
     _has_torchrec = False
+
+    class KeyedJaggedTensor:
+        pass
+
     TORCHREC_ERR = str(err)
 
 INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
@@ -393,13 +397,15 @@ def _normalize_key(key: NESTED_KEY) -> NESTED_KEY:
 
 
 def index_keyedjaggedtensor(
-    kjt: "torchrec.KeyedJaggedTensor", index: torch.Tensor  # noqa
+    kjt: "torchrec.KeyedJaggedTensor",  # noqa
+    index: Union[slice, range, list, torch.Tensor],  # noqa
 ):
     """Indexes a KeyedJaggedTensor along the batch dimension.
 
     Args:
         kjt (KeyedJaggedTensor): a KeyedJaggedTensor to index
-        index (int, torch.Tensor or other indexing type): batch index to use.
+        index (torch.Tensor or other indexing type): batch index to use.
+            Indexing with an integer will result in an error.
 
     Examples:
         >>> values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
@@ -419,6 +425,13 @@ def index_keyedjaggedtensor(
     """
     if not _has_torchrec:
         raise ImportError(TORCHREC_ERR)
+    if isinstance(index, (int,)):
+        raise ValueError(
+            "Indexing KeyedJaggedTensor instances with an integer is prohibited, "
+            "as this would result in a KeyedJaggedTensor without batch size. "
+            "If you want to get a single element from a KeyedJaggedTensor, "
+            "call `index_keyedjaggedtensor(kjt, torch.tensor([index]))` instead."
+        )
     lengths = kjt.lengths()
     keys = kjt.keys()
     numel = len(lengths) // len(keys)
@@ -426,7 +439,7 @@ def index_keyedjaggedtensor(
 
     _offsets1 = offsets[:-1].view(len(keys), numel)[:, index]
     _offsets2 = offsets[1:].view(len(keys), numel)[:, index]
-    lengths = lengths.view(len(keys), numel)[:, index].view(-1)
+    lengths = lengths.view(len(keys), numel)[:, index].reshape(-1)
 
     full_index = torch.arange(offsets[-1]).view(1, 1, -1)
     sel = (full_index >= _offsets1.unsqueeze(-1)) & (
@@ -442,3 +455,67 @@ def index_keyedjaggedtensor(
         weights=weights,
         lengths=lengths,
     )
+
+
+def _ndimension(tensor: torch.Tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.ndimension()
+    elif isinstance(tensor, KeyedJaggedTensor):
+        return 1
+    else:
+        raise NotImplementedError(
+            f"_ndimension not implemented for inputs of type {type(tensor)}"
+        )
+
+
+def _shape(tensor: torch.Tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.shape
+    elif isinstance(tensor, KeyedJaggedTensor):
+        return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
+    else:
+        raise NotImplementedError(
+            f"_shape not implemented for inputs of type {type(tensor)}"
+        )
+
+
+def _is_shared(tensor: torch.Tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.is_shared()
+    elif isinstance(tensor, KeyedJaggedTensor):
+        return False
+    else:
+        raise NotImplementedError(
+            f"_is_shared not implemented for inputs of type {type(tensor)}"
+        )
+
+
+def _is_meta(tensor: torch.Tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.is_meta
+    elif isinstance(tensor, KeyedJaggedTensor):
+        return False
+    else:
+        raise NotImplementedError(
+            f"_is_meta not implemented for inputs of type {type(tensor)}"
+        )
+
+
+def _dtype(tensor: torch.Tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.dtype
+    elif isinstance(tensor, KeyedJaggedTensor):
+        return tensor._values.dtype
+    else:
+        raise NotImplementedError(
+            f"_dtype not implemented for inputs of type {type(tensor)}"
+        )
+
+
+def _get_item(tensor: torch.Tensor, index):
+    if isinstance(tensor, torch.Tensor):
+        return tensor[index]
+    elif isinstance(tensor, KeyedJaggedTensor):
+        return index_keyedjaggedtensor(tensor, index)
+    else:
+        return tensor[index]
