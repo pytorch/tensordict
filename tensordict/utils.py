@@ -550,9 +550,7 @@ def _ndimension(tensor: torch.Tensor):
     elif isinstance(tensor, KeyedJaggedTensor):
         return 1
     else:
-        raise NotImplementedError(
-            f"_ndimension not implemented for inputs of type {type(tensor)}"
-        )
+        return tensor.ndimension()
 
 
 def _shape(tensor: torch.Tensor):
@@ -561,9 +559,7 @@ def _shape(tensor: torch.Tensor):
     elif isinstance(tensor, KeyedJaggedTensor):
         return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
     else:
-        raise NotImplementedError(
-            f"_shape not implemented for inputs of type {type(tensor)}"
-        )
+        return tensor.shape
 
 
 def _is_shared(tensor: torch.Tensor):
@@ -572,9 +568,7 @@ def _is_shared(tensor: torch.Tensor):
     elif isinstance(tensor, KeyedJaggedTensor):
         return False
     else:
-        raise NotImplementedError(
-            f"_is_shared not implemented for inputs of type {type(tensor)}"
-        )
+        return tensor.is_shared()
 
 
 def _is_meta(tensor: torch.Tensor):
@@ -583,9 +577,7 @@ def _is_meta(tensor: torch.Tensor):
     elif isinstance(tensor, KeyedJaggedTensor):
         return False
     else:
-        raise NotImplementedError(
-            f"_is_meta not implemented for inputs of type {type(tensor)}"
-        )
+        return tensor.is_meta
 
 
 def _dtype(tensor: torch.Tensor):
@@ -594,9 +586,7 @@ def _dtype(tensor: torch.Tensor):
     elif isinstance(tensor, KeyedJaggedTensor):
         return tensor._values.dtype
     else:
-        raise NotImplementedError(
-            f"_dtype not implemented for inputs of type {type(tensor)}"
-        )
+        return tensor.dtype
 
 
 def _get_item(tensor: torch.Tensor, index):
