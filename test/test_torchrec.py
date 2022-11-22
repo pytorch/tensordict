@@ -37,16 +37,13 @@ def test_kjt_indexing(index):
     j2 = jag_tensor["index_2"]
     ikjt = index_keyedjaggedtensor(jag_tensor, index)
     assert (
-        ikjt["index_0"].to_padded_dense(),
-        j0.to_padded_dense() == j0.to_padded_dense()[:, index],
+        ikjt["index_0"].to_padded_dense() == j0.to_padded_dense()[:, index]
     ).all()
     assert (
-        ikjt["index_1"].to_padded_dense(),
-        j1.to_padded_dense() == j1.to_padded_dense()[:, index],
+        ikjt["index_1"].to_padded_dense() == j1.to_padded_dense()[:, index]
     ).all()
     assert (
-        ikjt["index_2"].to_padded_dense(),
-        j2.to_padded_dense() == j2.to_padded_dense()[:, index],
+        ikjt["index_2"].to_padded_dense() == j2.to_padded_dense()[:, index]
     ).all()
 
 
