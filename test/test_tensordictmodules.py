@@ -57,16 +57,16 @@ class TestTDModule:
 
         kwargs = {"distribution_class": Normal}
         if out_keys == ["loc", "scale"]:
-            dist_param_keys = ["loc", "scale"]
+            dist_in_keys = ["loc", "scale"]
         elif out_keys == ["loc_1", "scale_1"]:
-            dist_param_keys = {"loc": "loc_1", "scale": "scale_1"}
+            dist_in_keys = {"loc": "loc_1", "scale": "scale_1"}
         else:
             raise NotImplementedError
 
         tensordict_module = ProbabilisticTensorDictModule(
             module=net,
-            dist_param_keys=dist_param_keys,
-            out_key_sample=["out"],
+            dist_in_keys=dist_in_keys,
+            sample_out_key=["out"],
             **kwargs,
         )
 
@@ -108,8 +108,8 @@ class TestTDModule:
         kwargs = {"distribution_class": Normal}
         tensordict_module = ProbabilisticTensorDictModule(
             module=tdnet,
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=["out"],
+            dist_in_keys=["loc", "scale"],
+            sample_out_key=["out"],
             **kwargs,
         )
 
@@ -130,8 +130,8 @@ class TestTDModule:
         kwargs = {"distribution_class": Normal}
         tensordict_module = ProbabilisticTensorDictModule(
             module=tdnet,
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=["out"],
+            dist_in_keys=["loc", "scale"],
+            sample_out_key=["out"],
             **kwargs,
         )
         tensordict_module, (
@@ -175,8 +175,8 @@ class TestTDModule:
 
         tdmodule = ProbabilisticTensorDictModule(
             module=tdnet,
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=["out"],
+            dist_in_keys=["loc", "scale"],
+            sample_out_key=["out"],
             **kwargs,
         )
 
@@ -197,8 +197,8 @@ class TestTDModule:
         kwargs = {"distribution_class": Normal}
         tdmodule = ProbabilisticTensorDictModule(
             module=tdnet,
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=["out"],
+            dist_in_keys=["loc", "scale"],
+            sample_out_key=["out"],
             **kwargs,
         )
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
@@ -255,8 +255,8 @@ class TestTDModule:
 
         tdmodule = ProbabilisticTensorDictModule(
             module=tdnet,
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=["out"],
+            dist_in_keys=["loc", "scale"],
+            sample_out_key=["out"],
             **kwargs,
         )
 
@@ -293,8 +293,8 @@ class TestTDModule:
         kwargs = {"distribution_class": Normal}
         tdmodule = ProbabilisticTensorDictModule(
             module=tdnet,
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=["out"],
+            dist_in_keys=["loc", "scale"],
+            sample_out_key=["out"],
             **kwargs,
         )
         tdmodule, (params, buffers) = tdmodule.make_functional_with_buffers()
@@ -435,8 +435,8 @@ class TestTDSequence:
         )
         tdmodule2 = ProbabilisticTensorDictModule(
             module=net2,
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=["out"],
+            dist_in_keys=["loc", "scale"],
+            sample_out_key=["out"],
             **kwargs,
         )
         tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
@@ -529,7 +529,7 @@ class TestTDSequence:
             fdummy_net, in_keys=["hidden"], out_keys=["hidden"]
         )
         tdmodule2 = ProbabilisticTensorDictModule(
-            fnet2, dist_param_keys=["loc", "scale"], out_key_sample=["out"], **kwargs
+            fnet2, dist_in_keys=["loc", "scale"], sample_out_key=["out"], **kwargs
         )
         tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
@@ -629,7 +629,7 @@ class TestTDSequence:
             fdummy_net, in_keys=["hidden"], out_keys=["hidden"]
         )
         tdmodule2 = ProbabilisticTensorDictModule(
-            fnet2, dist_param_keys=["loc", "scale"], out_key_sample=["out"], **kwargs
+            fnet2, dist_in_keys=["loc", "scale"], sample_out_key=["out"], **kwargs
         )
         tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
 
@@ -672,8 +672,8 @@ class TestTDSequence:
         tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
         tdmodule2 = ProbabilisticTensorDictModule(
             net2,
-            dist_param_keys=["loc", "scale"],
-            out_key_sample=["out"],
+            dist_in_keys=["loc", "scale"],
+            sample_out_key=["out"],
             **kwargs,
         )
         tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
@@ -761,7 +761,7 @@ class TestTDSequence:
         kwargs = {"distribution_class": Normal}
         tdmodule1 = TensorDictModule(fnet1, in_keys=["in"], out_keys=["hidden"])
         tdmodule2 = ProbabilisticTensorDictModule(
-            fnet2, out_key_sample=["out"], dist_param_keys=["loc", "scale"], **kwargs
+            fnet2, sample_out_key=["out"], dist_in_keys=["loc", "scale"], **kwargs
         )
         tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
 
@@ -856,10 +856,10 @@ class TestTDSequence:
 
         tdmodule1 = TensorDictModule(fnet1, in_keys=["a"], out_keys=["hidden"])
         tdmodule2 = ProbabilisticTensorDictModule(
-            fnet2, out_key_sample=["out"], dist_param_keys=["loc", "scale"], **kwargs
+            fnet2, sample_out_key=["out"], dist_in_keys=["loc", "scale"], **kwargs
         )
         tdmodule3 = ProbabilisticTensorDictModule(
-            fnet3, out_key_sample=["out"], dist_param_keys=["loc", "scale"], **kwargs
+            fnet3, sample_out_key=["out"], dist_in_keys=["loc", "scale"], **kwargs
         )
         tdmodule = TensorDictSequential(
             tdmodule1, tdmodule2, tdmodule3, partial_tolerant=True
