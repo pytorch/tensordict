@@ -37,7 +37,7 @@ def _get_kjt():
 @pytest.mark.skipif(not _has_torchrec, reason="torchrec not found.")
 class TestKJT:
     @pytest.mark.parametrize("index", [[0, 2], torch.tensor([0, 2]), range(0, 3, 2)])
-    def test_kjt_indexing(index):
+    def test_kjt_indexing(self, index):
         jag_tensor = _get_kjt()
         j0 = jag_tensor["index_0"]
         j1 = jag_tensor["index_1"]

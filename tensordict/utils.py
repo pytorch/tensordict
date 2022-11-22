@@ -457,6 +457,93 @@ def index_keyedjaggedtensor(
     )
 
 
+def setitem_keyedjaggedtensor(
+    source: "torchrec.KeyedJaggedTensor",  # noqa
+    index,
+    dest: "torchrec.KeyedJaggedTensor",  # noqa
+):
+    #     if not _has_torchrec:
+    #         raise ImportError(TORCHREC_ERR)
+
+    source_lengths = source.lengths()
+    source_keys = source.keys()
+    source_numel = len(source_lengths) // len(source_keys)
+    source_offsets = source.offsets()
+
+    dest_lengths = dest.lengths()
+    dest_keys = dest.keys()
+    dest_numel = len(dest_lengths) // len(dest_keys)
+    # dest_offsets = dest.offsets()
+
+    if not dest_keys == source_keys:
+        raise KeyError("Mismatch in source and dest keys.")
+    #     if dest_numel - len(index) != source_numel:
+    #         raise RuntimeError("source and destination batch differ.")
+
+    _offsets1 = source_offsets[:-1]
+    _offsets2 = source_offsets[1:]
+    _source_shape = len(source_keys), source_numel
+
+    _lengths_out = source_lengths.view(_source_shape).clone()
+    _lengths_out[:, index] = dest_lengths.view(len(source_keys), dest_numel)
+    _lengths_out = _lengths_out.view(-1)
+
+    # get the values of source that we'll be keeping
+    full_index = torch.arange(source_offsets[-1]).view(1, 1, -1)
+    sel = (full_index >= _offsets1.view(_source_shape)[:, index].unsqueeze(-1)) & (
+        full_index < _offsets2.view(_source_shape)[:, index].unsqueeze(-1)
+    )
+    sel = (~sel).all(0).all(0)
+    index_to_keep = full_index.squeeze()[sel]
+    values_to_keep = source._values[index_to_keep]
+    new_values = dest._values
+    weights_to_keep = source._weights[index_to_keep]
+    new_weights = dest._weights
+
+    # compute new offsets
+    _offsets = torch.cat([_lengths_out[:1] * 0, _lengths_out], 0)
+    _offsets = _offsets.cumsum(0)
+
+    # get indices of offsets for new elts
+    _offsets1 = _offsets[:-1]
+    _offsets2 = _offsets[1:]
+    full_index = torch.arange(_offsets[-1]).view(1, 1, -1)
+    sel = (full_index >= _offsets1.view(_source_shape)[:, index].unsqueeze(-1)) & (
+        full_index < _offsets2.view(_source_shape)[:, index].unsqueeze(-1)
+    )
+    sel = sel.any(0).any(0)
+    new_index_new_elts = full_index.squeeze()[sel]
+    sel = (full_index >= _offsets1.view(_source_shape)[:, index].unsqueeze(-1)) & (
+        full_index < _offsets2.view(_source_shape)[:, index].unsqueeze(-1)
+    )
+    sel = (~sel).all(0).all(0)
+    new_index_to_keep = full_index.squeeze()[sel]
+
+    # create an empty values tensor
+    values_numel = values_to_keep.shape[0] + dest._values.shape[0]
+    tensor = torch.empty(
+        [values_numel, *values_to_keep.shape[1:]],
+        dtype=values_to_keep.dtype,
+        device=values_to_keep.device,
+    )
+    tensor_weights = torch.empty(
+        [values_numel, *values_to_keep.shape[1:]],
+        dtype=weights_to_keep.dtype,
+        device=weights_to_keep.device,
+    )
+    tensor[new_index_to_keep] = values_to_keep
+    tensor[new_index_new_elts] = new_values
+    tensor_weights[new_index_to_keep] = weights_to_keep
+    tensor_weights[new_index_new_elts] = new_weights
+
+    return KeyedJaggedTensor(
+        values=tensor,
+        keys=source_keys,
+        weights=tensor_weights,
+        lengths=_lengths_out,
+    )
+
+
 def _ndimension(tensor: torch.Tensor):
     if isinstance(tensor, torch.Tensor):
         return tensor.ndimension()
