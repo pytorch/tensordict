@@ -68,8 +68,8 @@ class TensorDictSequential(TensorDictModule):
         >>> fmodule1 = TensorDictModule(fnet1, in_keys=["input"], out_keys=["loc", "scale"])
         >>> td_module1 = ProbabilisticTensorDictModule(
         ...    module=fmodule1,
-        ...    dist_param_keys=["loc", "scale"],
-        ...    out_key_sample=["hidden"],
+        ...    dist_in_keys=["loc", "scale"],
+        ...    sample_out_key=["hidden"],
         ...    distribution_class=Normal,
         ...    return_log_prob=True,
         ...    )
