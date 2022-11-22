@@ -30,7 +30,6 @@ from typing import (
     Tuple,
     Type,
     Union,
-    get_args,
 )
 from warnings import warn
 
@@ -39,7 +38,14 @@ import torch
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
-from tensordict.utils import _ndimension, _shape, _is_shared, _get_item
+from tensordict.utils import (
+    _ndimension,
+    _shape,
+    _is_shared,
+    _get_item,
+    _set_item,
+    _requires_grad,
+)
 
 try:
     from torch.jit._shape_functions import infer_size_impl
@@ -101,7 +107,11 @@ COMPATIBLE_TYPES = Union[
 ]  # None? # leaves space for TensorDictBase
 
 if _has_torchrec:
-    COMPATIBLE_TYPES = Union[get_args(COMPATIBLE_TYPES) + (KeyedJaggedTensor,)]
+    COMPATIBLE_TYPES = Union[
+        Tensor,
+        MemmapTensor,
+        KeyedJaggedTensor,
+    ]
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
 
@@ -2527,11 +2537,11 @@ class TensorDict(TensorDictBase):
             tensor_in = _sub_index(tensor_in, idx)
             tensor_in.copy_(value)
         else:
-            tensor_in[idx] = value
+            _set_item(tensor_in, value, idx)
 
         # change Meta in case of require_grad coming in value
         if isinstance(key, str) and key in self._dict_meta:
-            self._dict_meta[key].requires_grad = tensor_in.requires_grad
+            self._dict_meta[key].requires_grad = _requires_grad(tensor_in)
         elif isinstance(key, tuple):
             # If we have a nested key, we must traverse the nested tensordicts until we
             # reach the parent of the leaf tensor, then check _dict_meta on that

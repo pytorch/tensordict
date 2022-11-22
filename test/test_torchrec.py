@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import re
 
 import pytest
 import torch
@@ -43,15 +44,9 @@ class TestKJT:
         j1 = jag_tensor["index_1"]
         j2 = jag_tensor["index_2"]
         ikjt = index_keyedjaggedtensor(jag_tensor, index)
-        assert (
-            ikjt["index_0"].to_padded_dense() == j0.to_padded_dense()[:, index]
-        ).all()
-        assert (
-            ikjt["index_1"].to_padded_dense() == j1.to_padded_dense()[:, index]
-        ).all()
-        assert (
-            ikjt["index_2"].to_padded_dense() == j2.to_padded_dense()[:, index]
-        ).all()
+        assert (ikjt["index_0"].to_padded_dense() == j0.to_padded_dense()[index]).all()
+        assert (ikjt["index_1"].to_padded_dense() == j1.to_padded_dense()[index]).all()
+        assert (ikjt["index_2"].to_padded_dense() == j2.to_padded_dense()[index]).all()
 
     def test_td_build(self):
         jag_tensor = _get_kjt()
@@ -77,14 +72,16 @@ class TestKJT:
         td = TensorDict({"b": jag_tensor}, [3])
         subtd = td[:2]
         assert subtd.shape == torch.Size([2])
-        assert subtd["b", "index_0"].to_padded_dense() == torch.tensor(
-            [[1.0, 2.0], [0.0, 0.0]]
-        )
+        assert (
+            subtd["b", "index_0"].to_padded_dense()
+            == torch.tensor([[1.0, 2.0], [0.0, 0.0]])
+        ).all()
         subtd = td[[0, 2]]
         assert subtd.shape == torch.Size([2])
-        assert subtd["b", "index_0"].to_padded_dense() == torch.tensor(
-            [[1.0, 2.0], [3.0, 0.0]]
-        )
+        assert (
+            subtd["b", "index_0"].to_padded_dense()
+            == torch.tensor([[1.0, 2.0], [3.0, 0.0]])
+        ).all()
 
     def test_td_change_batch_size(self):
         jag_tensor = _get_kjt()
@@ -92,7 +89,9 @@ class TestKJT:
         td.batch_size = [3]
         with pytest.raises(
             RuntimeError,
-            match="the tensor b has shape torch.Size([3]) which is incompatible with the new shape torch.Size([4])",
+            match=re.escape(
+                "the tensor b has shape torch.Size([3]) which is incompatible with the new shape torch.Size([4])"
+            ),
         ):
             td.batch_size = [4]
 
@@ -100,13 +99,20 @@ class TestKJT:
         jag_tensor = _get_kjt()
         sub_jag_tensor = index_keyedjaggedtensor(jag_tensor, [0, 2])
         out = setitem_keyedjaggedtensor(jag_tensor, [0, 2], sub_jag_tensor)
-        for f in ("_weights", "_values", ):
+        for f in (
+            "_weights",
+            "_values",
+        ):
             assert (getattr(jag_tensor, f) == getattr(out, f)).all()
 
         keys = ["index_0", "index_1", "index_2"]
         lengths2 = torch.IntTensor([2, 4, 6, 4, 2, 1])
-        values2 = torch.zeros(lengths2.sum(), )
-        weights2 = -torch.ones(lengths2.sum(), )
+        values2 = torch.zeros(
+            lengths2.sum(),
+        )
+        weights2 = -torch.ones(
+            lengths2.sum(),
+        )
         sub_jag_tensor = KeyedJaggedTensor(
             values=values2,
             keys=keys,
@@ -114,6 +120,43 @@ class TestKJT:
             weights=weights2,
         )
         out = setitem_keyedjaggedtensor(jag_tensor, [0, 2], sub_jag_tensor)
+        print(out["index_0"].to_padded_dense())
+
+    @pytest.mark.parametrize("index", [[0, 2], range(2)])
+    def test_setindex_td_same(self, index):
+        jag_tensor = _get_kjt()
+        td = TensorDict({"b": jag_tensor}, [3])
+        sub_jag_tensor = index_keyedjaggedtensor(jag_tensor, index)
+        td.set_at_("b", sub_jag_tensor, index)
+        out = td["b"]
+        for f in (
+            "_weights",
+            "_values",
+        ):
+            assert (getattr(jag_tensor, f) == getattr(out, f)).all()
+
+    def test_setindex_td(
+        self,
+    ):
+        jag_tensor = _get_kjt()
+        td = TensorDict({"b": jag_tensor}, [3])
+
+        keys = ["index_0", "index_1", "index_2"]
+        lengths2 = torch.IntTensor([2, 4, 6, 4, 2, 1])
+        values2 = torch.zeros(
+            lengths2.sum(),
+        )
+        weights2 = -torch.ones(
+            lengths2.sum(),
+        )
+        sub_jag_tensor = KeyedJaggedTensor(
+            values=values2,
+            keys=keys,
+            lengths=lengths2,
+            weights=weights2,
+        )
+        td.set_at_("b", sub_jag_tensor, range(2))
+        out = td["b"]
         print(out["index_0"].to_padded_dense())
 
 

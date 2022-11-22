@@ -536,12 +536,15 @@ def setitem_keyedjaggedtensor(
     tensor_weights[new_index_to_keep] = weights_to_keep
     tensor_weights[new_index_new_elts] = new_weights
 
-    return KeyedJaggedTensor(
+    kjt = KeyedJaggedTensor(
         values=tensor,
         keys=source_keys,
         weights=tensor_weights,
         lengths=_lengths_out,
     )
+    for k, item in kjt.__dict__.items():
+        source.__dict__[k] = item
+    return source
 
 
 def _ndimension(tensor: torch.Tensor):
@@ -596,3 +599,24 @@ def _get_item(tensor: torch.Tensor, index):
         return index_keyedjaggedtensor(tensor, index)
     else:
         return tensor[index]
+
+
+def _set_item(tensor: torch.Tensor, value, index):
+    if isinstance(tensor, torch.Tensor):
+        tensor[index] = value
+        return tensor
+    elif isinstance(tensor, KeyedJaggedTensor):
+        tensor = setitem_keyedjaggedtensor(tensor, index, value)
+        return tensor
+    else:
+        tensor[index] = value
+        return tensor
+
+
+def _requires_grad(tensor: torch.Tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.requires_grad
+    elif isinstance(tensor, KeyedJaggedTensor):
+        return tensor._values.requires_grad
+    else:
+        return tensor.requires_grad
