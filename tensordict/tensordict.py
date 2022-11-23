@@ -1440,7 +1440,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             A list of TensorDict with specified size in given dimension.
 
         """
-        original_batch_size = self.batch_size
         batch_sizes = []
         if self.batch_dims == 0:
             raise RuntimeError("TensorDict with empty batch size is not splittable")
@@ -1449,31 +1448,31 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 f"Dimension out of range (expected to be in range of [-{self.batch_dims}, {self.batch_dims - 1}], but got {dim})"
             )
         if isinstance(split_size, int):
-            rep, remainder = divmod(original_batch_size[dim], split_size)
+            rep, remainder = divmod(self.batch_size[dim], split_size)
             rep_shape = [
                 split_size if idx == dim else size
-                for (idx, size) in enumerate(original_batch_size)
+                for (idx, size) in enumerate(self.batch_size)
             ]
             batch_sizes = [rep_shape for _ in range(rep)]
             if remainder:
                 batch_sizes.append(
                     [
                         remainder if dim_idx == dim else dim_size
-                        for (dim_idx, dim_size) in enumerate(original_batch_size)
+                        for (dim_idx, dim_size) in enumerate(self.batch_size)
                     ]
                 )
         elif isinstance(split_size, list) and all(
             isinstance(element, int) for element in split_size
         ):
-            if sum(split_size) != original_batch_size[dim]:
+            if sum(split_size) != self.batch_size[dim]:
                 raise RuntimeError(
-                    f"Split method expects split_size to sum exactly to {original_batch_size[dim]} (tensor's size at dimension {dim}), but got split_size={split_size}"
+                    f"Split method expects split_size to sum exactly to {self.batch_size[dim]} (tensor's size at dimension {dim}), but got split_size={split_size}"
                 )
             for i in split_size:
                 batch_sizes.append(
                     [
                         i if dim_idx == dim else dim_size
-                        for (dim_idx, dim_size) in enumerate(original_batch_size)
+                        for (dim_idx, dim_size) in enumerate(self.batch_size)
                     ]
                 )
         else:
