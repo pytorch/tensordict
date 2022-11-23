@@ -1443,10 +1443,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         batch_sizes = []
         if self.batch_dims == 0:
             raise RuntimeError("TensorDict with empty batch size is not splittable")
-        if dim >= self.batch_dims:
+        if not (-self.batch_dims <= dim < self.batch_dims):
             raise IndexError(
                 f"Dimension out of range (expected to be in range of [-{self.batch_dims}, {self.batch_dims - 1}], but got {dim})"
             )
+        if dim < 0:
+            dim += self.batch_dims
         if isinstance(split_size, int):
             rep, remainder = divmod(self.batch_size[dim], split_size)
             rep_shape = [

@@ -3012,6 +3012,8 @@ def test_split_with_invalid_arguments():
     # Test invalid dimension input
     with pytest.raises(IndexError, match="Dimension out of range"):
         td.split(1, 2)
+    with pytest.raises(IndexError, match="Dimension out of range"):
+        td.split(1, -3)
 
 
 def test_split_with_empty_tensordict():
@@ -3041,6 +3043,19 @@ def test_split_with_empty_tensordict():
     assert len(tds) == 2
     assert tds[0].shape == torch.Size([10, 1, 3])
     assert tds[1].shape == torch.Size([10, 9, 3])
+
+
+def test_split_with_negative_dim():
+    td = TensorDict({"a": torch.zeros(5, 4, 2, 1), "b": torch.zeros(5, 4, 1)}, [5, 4])
+
+    tds = td.split([1, 3], -1)
+    assert len(tds) == 2
+    assert tds[0].shape == torch.Size([5, 1])
+    assert tds[0]["a"].shape == torch.Size([5, 1, 2, 1])
+    assert tds[0]["b"].shape == torch.Size([5, 1, 1])
+    assert tds[1].shape == torch.Size([5, 3])
+    assert tds[1]["a"].shape == torch.Size([5, 3, 2, 1])
+    assert tds[1]["b"].shape == torch.Size([5, 3, 1])
 
 
 if __name__ == "__main__":
