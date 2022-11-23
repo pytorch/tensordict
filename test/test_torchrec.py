@@ -15,7 +15,7 @@ try:
     from torchrec import KeyedJaggedTensor
 
     _has_torchrec = True
-except ImportError as err:
+except ImportError:
     _has_torchrec = False
     # TORCHREC_ERR = str(err)
 
