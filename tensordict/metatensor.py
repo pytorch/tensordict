@@ -14,16 +14,13 @@ import torch
 
 from tensordict.memmap import MemmapTensor
 from tensordict.utils import (
-    _get_shape,
-    _getitem_batch_size,
     DEVICE_TYPING,
     INDEX_TYPING,
+    _getitem_batch_size,
     _shape,
     _is_meta,
     _dtype,
-    _getitem_batch_size,
 )
-from tensordict.utils import _getitem_batch_size
 
 try:
     from torchrec import KeyedJaggedTensor

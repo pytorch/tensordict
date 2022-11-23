@@ -233,11 +233,6 @@ def infer_size_impl(shape: List[int], numel: int) -> List[int]:
     return out
 
 
-def _get_shape(value):
-    # we call it "legacy code"
-    return value.shape
-
-
 def _unwrap_value(value):
     # batch_dims = value.ndimension()
     if not isinstance(value, torch.Tensor):
