@@ -38,6 +38,15 @@ import torch
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
+from tensordict.utils import (
+    _ndimension,
+    _shape,
+    _is_shared,
+    _get_item,
+    _set_item,
+    _requires_grad,
+)
+
 try:
     from torch.jit._shape_functions import infer_size_impl
 except ImportError:
@@ -78,12 +87,31 @@ except ImportError:
         return False
 
 
+try:
+    from torchrec import KeyedJaggedTensor
+
+    _has_torchrec = True
+except ImportError as err:
+    _has_torchrec = False
+
+    class KeyedJaggedTensor:
+        pass
+
+    TORCHREC_ERR = str(err)
+
+
 TD_HANDLED_FUNCTIONS: Dict = dict()
 COMPATIBLE_TYPES = Union[
     Tensor,
     MemmapTensor,
 ]  # None? # leaves space for TensorDictBase
 
+if _has_torchrec:
+    COMPATIBLE_TYPES = Union[
+        Tensor,
+        MemmapTensor,
+        KeyedJaggedTensor,
+    ]
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
 
@@ -122,7 +150,16 @@ class _TensorDictKeysView:
 
         for key, value in items_iter:
             full_key = self._combine_keys(prefix, key)
-            if isinstance(value, TensorDictBase) and self.include_nested:
+            if (
+                isinstance(
+                    value,
+                    (
+                        TensorDictBase,
+                        KeyedJaggedTensor,
+                    ),
+                )
+                and self.include_nested
+            ):
                 subkeys = tuple(
                     self._iter_helper(
                         value,
@@ -149,6 +186,8 @@ class _TensorDictKeysView:
             return tensordict._tensordict.items()
         elif isinstance(tensordict, LazyStackedTensorDict):
             return _iter_items_lazystack(tensordict)
+        elif isinstance(tensordict, KeyedJaggedTensor):
+            return tuple((key, tensordict[key]) for key in tensordict.keys())
         elif isinstance(tensordict, _CustomOpTensorDict):
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to
@@ -168,14 +207,23 @@ class _TensorDictKeysView:
             elif len(key) > 1:
                 if self.include_nested:
                     if key[0] in self:
-                        val = self.tensordict.get(key[0])
+                        meta_val = self.tensordict._get_meta(key[0])
                         # TODO: SavedTensorDict currently doesn't support nested memebership checks
-                        include_nested = self.include_nested and not isinstance(
-                            val, SavedTensorDict
-                        )
-                        return isinstance(val, TensorDictBase) and key[1:] in val.keys(
+                        include_nested = self.include_nested  # and not isinstance(
+                        #     val, SavedTensorDict
+                        # )
+                        _tensordict_nested = meta_val.is_tensordict() and key[
+                            1:
+                        ] in self.tensordict.get(key[0]).keys(
                             include_nested=include_nested
                         )
+                        _kjt = (
+                            meta_val.is_kjt()
+                            and len(key) == 2
+                            and key[1] in self.tensordict.get(key[0]).keys()
+                        )
+                        return _kjt or _tensordict_nested
+
                     return False
             if all(isinstance(subkey, str) for subkey in key):
                 raise TypeError(
@@ -732,7 +780,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if check_shared:
             raise DeprecationWarning("check_shared is not authorized anymore")
 
-        if check_tensor_shape and tensor.shape[: self.batch_dims] != self.batch_size:
+        if check_tensor_shape and _shape(tensor)[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
             if (
                 isinstance(tensor, TensorDictBase)
@@ -744,12 +792,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 raise RuntimeError(
                     f"batch dimension mismatch, got self.batch_size"
                     f"={self.batch_size} and tensor.shape[:self.batch_dims]"
-                    f"={tensor.shape[: self.batch_dims]} with tensor {tensor}"
+                    f"={_shape(tensor)[: self.batch_dims]} with tensor {tensor}"
                 )
 
         # minimum ndimension is 1
-        if tensor.ndimension() == self.ndimension() and not isinstance(
-            tensor, TensorDictBase
+        if _ndimension(tensor) == self.ndimension() and not isinstance(
+            tensor, (TensorDictBase, KeyedJaggedTensor)
         ):
             tensor = tensor.unsqueeze(-1)
 
@@ -1207,7 +1255,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def _check_new_batch_size(self, new_size: torch.Size):
         n = len(new_size)
         for key, meta_tensor in self.items_meta():
-            if (meta_tensor.ndimension() <= n) or (meta_tensor.shape[:n] != new_size):
+            if not meta_tensor.is_kjt():
+                c1 = meta_tensor.ndimension() <= n
+            else:
+                c1 = meta_tensor.ndimension() < n
+            if c1 or (meta_tensor.shape[:n] != new_size):
                 if meta_tensor.ndimension() == n and meta_tensor.shape == new_size:
                     raise RuntimeError(
                         "TensorDict requires tensors that have at least one more "
@@ -1718,9 +1770,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def _index_tensordict(self, idx: INDEX_TYPING):
         return TensorDict(
-            source={key: item[idx] for key, item in self.items()},
+            source={key: _get_item(item, idx) for key, item in self.items()},
             _meta_source={
-                key: item[idx]
+                key: _get_item(item, idx)
                 for key, item in self.items_meta(make_unset=False)
                 if not item.is_tensordict()
             },
@@ -2130,8 +2182,8 @@ class TensorDict(TensorDictBase):
         is_shared = (
             self._is_shared
             if self._is_shared is not None
-            else proc_value.is_shared()
-            if isinstance(proc_value, (TensorDictBase, MemmapTensor))
+            else _is_shared(proc_value)
+            if isinstance(proc_value, (TensorDictBase, MemmapTensor, KeyedJaggedTensor))
             or not is_batchedtensor(proc_value)
             else False
         )
@@ -2190,10 +2242,10 @@ class TensorDict(TensorDictBase):
 
     # Checks
     def _check_is_shared(self) -> bool:
-        share_list = [value.is_shared() for key, value in self.items_meta()]
+        share_list = [_is_shared(value) for key, value in self.items_meta()]
         if any(share_list) and not all(share_list):
             shared_str = ", ".join(
-                [f"{key}: {value.is_shared()}" for key, value in self.items_meta()]
+                [f"{key}: {_is_shared(value)}" for key, value in self.items_meta()]
             )
             raise RuntimeError(
                 f"tensors must be either all shared or not, but mixed "
@@ -2226,7 +2278,9 @@ class TensorDict(TensorDictBase):
 
     def _index_tensordict(self, idx: INDEX_TYPING):
         self_copy = copy(self)
-        self_copy._tensordict = {key: item[idx] for key, item in self.items()}
+        self_copy._tensordict = {
+            key: _get_item(item, idx) for key, item in self.items()
+        }
         self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
         self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
         self_copy._device = self.device
@@ -2310,7 +2364,7 @@ class TensorDict(TensorDictBase):
 
         if self._is_shared is None:
             try:
-                self._is_shared = value.is_shared()
+                self._is_shared = _is_shared(value)
             except NotImplementedError:
                 # when running functorch, a NotImplementedError may be raised
                 pass
@@ -2483,11 +2537,11 @@ class TensorDict(TensorDictBase):
             tensor_in = _sub_index(tensor_in, idx)
             tensor_in.copy_(value)
         else:
-            tensor_in[idx] = value
+            _set_item(tensor_in, value, idx)
 
         # change Meta in case of require_grad coming in value
         if isinstance(key, str) and key in self._dict_meta:
-            self._dict_meta[key].requires_grad = tensor_in.requires_grad
+            self._dict_meta[key].requires_grad = _requires_grad(tensor_in)
         elif isinstance(key, tuple):
             # If we have a nested key, we must traverse the nested tensordicts until we
             # reach the parent of the leaf tensor, then check _dict_meta on that
@@ -2505,7 +2559,10 @@ class TensorDict(TensorDictBase):
         if key in self.keys(include_nested=True):
             if isinstance(key, tuple):
                 if len(key) > 1:
-                    return self.get(key[0]).get(key[1:])
+                    first_lev = self.get(key[0])
+                    if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
+                        return first_lev[key[1]]
+                    return first_lev.get(key[1:])
                 return self.get(key[0])
             return self._tensordict[key]
         else:
@@ -3105,8 +3162,8 @@ def pad(tensordict: TensorDictBase, pad_size: Sequence[int], value: float = 0.0)
     out = TensorDict({}, new_batch_size, device=tensordict.device, _run_checks=False)
     for key, tensor in tensordict.items():
         cur_pad = reverse_pad
-        if len(pad_size) < len(tensor.shape) * 2:
-            cur_pad = [0] * (len(tensor.shape) * 2 - len(pad_size)) + reverse_pad
+        if len(pad_size) < len(_shape(tensor)) * 2:
+            cur_pad = [0] * (len(_shape(tensor)) * 2 - len(pad_size)) + reverse_pad
 
         if isinstance(tensor, TensorDictBase):
             padded = pad(tensor, pad_size, value)
@@ -3310,7 +3367,7 @@ torch.Size([3, 2])
         else:
             tensor_expand = torch.zeros(
                 *parent.batch_size,
-                *tensor.shape[self.batch_dims :],
+                *_shape(tensor)[self.batch_dims :],
                 dtype=tensor.dtype,
                 device=self.device,
             )
@@ -3349,10 +3406,10 @@ torch.Size([3, 2])
                 raise KeyError(f"key {key} not found in {self.keys()}")
             if (
                 not isinstance(tensor, dict)
-                and tensor.shape[: self.batch_dims] != self.batch_size
+                and _shape(tensor)[: self.batch_dims] != self.batch_size
             ):
                 raise RuntimeError(
-                    f"tensor.shape={tensor.shape[:self.batch_dims]} and "
+                    f"tensor.shape={_shape(tensor)[:self.batch_dims]} and "
                     f"self.batch_size={self.batch_size} mismatch"
                 )
 
@@ -3855,10 +3912,10 @@ class LazyStackedTensorDict(TensorDictBase):
         if isinstance(tensor, TensorDictBase):
             if tensor.batch_size[: self.batch_dims] != self.batch_size:
                 tensor.batch_size = self.clone(recurse=False).batch_size
-        if self.batch_size != tensor.shape[: self.batch_dims]:
+        if self.batch_size != _shape(tensor)[: self.batch_dims]:
             raise RuntimeError(
                 "Setting tensor to tensordict failed because the shapes "
-                f"mismatch: got tensor.shape = {tensor.shape} and "
+                f"mismatch: got tensor.shape = {_shape(tensor)} and "
                 f"tensordict.batch_size={self.batch_size}"
             )
 
@@ -3885,10 +3942,10 @@ class LazyStackedTensorDict(TensorDictBase):
             if isinstance(tensor, TensorDictBase):
                 if tensor.batch_size[: self.batch_dims] != self.batch_size:
                     tensor.batch_size = self.clone(recurse=False).batch_size
-            if self.batch_size != tensor.shape[: self.batch_dims]:
+            if self.batch_size != _shape(tensor)[: self.batch_dims]:
                 raise RuntimeError(
                     "Setting tensor to tensordict failed because the shapes "
-                    f"mismatch: got tensor.shape = {tensor.shape} and "
+                    f"mismatch: got tensor.shape = {_shape(tensor)} and "
                     f"tensordict.batch_size={self.batch_size}"
                 )
             if key not in self.valid_keys:
@@ -3952,7 +4009,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key, default)
 
         tensors = [td.get(key, default=default) for td in self.tensordicts]
-        shapes = set(tensor.shape for tensor in tensors)
+        shapes = set(_shape(tensor) for tensor in tensors)
         if len(shapes) != 1:
             raise RuntimeError(
                 f"found more than one unique shape in the tensors to be "
@@ -5150,7 +5207,7 @@ class _ViewedTensorDict(_CustomOpTensorDict):
 
     def _update_inv_op_kwargs(self, tensor: Tensor) -> Dict:
         size = list(self.inv_op_kwargs.get("size"))
-        size += list(tensor.shape[self.batch_dims :])
+        size += list(_shape(tensor)[self.batch_dims :])
         new_dim = torch.Size(size)
         new_dict = deepcopy(self.inv_op_kwargs)
         new_dict.update({"size": new_dim})
@@ -5232,7 +5289,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     def _update_inv_op_kwargs(self, tensor: Tensor) -> Dict[str, Any]:
         new_dims = self.add_missing_dims(
-            self._source.batch_dims + len(tensor.shape[self.batch_dims :]),
+            self._source.batch_dims + len(_shape(tensor)[self.batch_dims :]),
             self.custom_op_kwargs["dims"],
         )
         kwargs = deepcopy(self.custom_op_kwargs)
@@ -5304,13 +5361,15 @@ _accepted_classes = (
     MemmapTensor,
     TensorDictBase,
 )
+if _has_torchrec:
+    _accepted_classes = _accepted_classes + (KeyedJaggedTensor,)
 
 
 def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_device):
     if hasattr(tensor, "dtype"):
         return torch.zeros(
             *parent_batch_size,
-            *tensor.shape[self_batch_dims:],
+            *_shape(tensor)[self_batch_dims:],
             dtype=tensor.dtype,
             device=self_device,
         )
@@ -5318,39 +5377,10 @@ def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_devi
         # tensordict
         out = TensorDict(
             {},
-            [*parent_batch_size, *tensor.shape[self_batch_dims:]],
+            [*parent_batch_size, *_shape(tensor)[self_batch_dims:]],
             device=self_device,
         )
         return out
-
-
-# seems like we can do without registering in pytree -- which requires us to create a new TensorDict,
-# an operation that does not come for free
-
-# def _flatten_tensordict(tensordict):
-#     return tensordict, tuple()
-#     # keys, values = list(zip(*tensordict.items()))
-#     # # represent values as batched tensors
-#     # vmap_level = 0
-#     # in_dim
-#     # values = [_add_batch_dim(value, in_dim, vmap_level)
-#     # return list(values), (list(keys), tensordict.device, tensordict.batch_size)
-#
-# def _unflatten_tensordict(values, context):
-#     return values
-#     # values = [_unwrap_value(value) for value in values]
-#     # keys, device, batch_size = context
-#     # print(values[0].shape)
-#     # return TensorDict(
-#     #     {key: value for key, value in zip(keys, values)},
-#     #     [],
-#     #     # [*new_batch_sizes[0], *batch_size],
-#     #     # new_batch_sizes[0],
-#     #     device=device
-#     # )
-#
-#
-# _register_pytree_node(TensorDict, _flatten_tensordict, _unflatten_tensordict)
 
 
 def make_tensordict(
