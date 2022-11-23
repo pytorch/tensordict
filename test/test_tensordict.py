@@ -10,16 +10,15 @@ import re
 import numpy as np
 import pytest
 import torch
-from _utils_internal import TestTensorDictsBase, get_available_devices, prod
-from tensordict import (
-    LazyStackedTensorDict,
-    MemmapTensor,
-    SavedTensorDict,
-    TensorDict,
+from _utils_internal import get_available_devices, prod, TestTensorDictsBase
+from tensordict import LazyStackedTensorDict, MemmapTensor, SavedTensorDict, TensorDict
+from tensordict.tensordict import (
+    _stack as stack_td,
+    assert_allclose_td,
+    make_tensordict,
+    pad,
+    TensorDictBase,
 )
-from tensordict.tensordict import TensorDictBase
-from tensordict.tensordict import _stack as stack_td
-from tensordict.tensordict import assert_allclose_td, make_tensordict, pad
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 from torch import multiprocessing as mp
 

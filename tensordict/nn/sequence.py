@@ -22,12 +22,12 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 import torch
-from torch import nn, Tensor
 
 from tensordict.nn.common import TensorDictModule
 from tensordict.nn.probabilistic import ProbabilisticTensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
 from tensordict.utils import _normalize_key, NESTED_KEY
+from torch import nn, Tensor
 
 __all__ = ["TensorDictSequential"]
 

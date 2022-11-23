@@ -11,7 +11,6 @@ from textwrap import indent
 from typing import Any, Iterable, List, Optional, Sequence, Union
 
 import torch
-from torch import nn, Tensor
 
 from tensordict.nn.functional_modules import (
     FunctionalModule as rlFunctionalModule,
@@ -19,6 +18,7 @@ from tensordict.nn.functional_modules import (
 )
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NESTED_KEY
+from torch import nn, Tensor
 
 try:
     import functorch

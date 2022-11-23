@@ -35,17 +35,17 @@ from warnings import warn
 
 import numpy as np
 import torch
-from torch import Tensor
-from torch.utils._pytree import tree_map
 
 from tensordict.utils import (
-    _ndimension,
-    _shape,
-    _is_shared,
     _get_item,
-    _set_item,
+    _is_shared,
+    _ndimension,
     _requires_grad,
+    _set_item,
+    _shape,
 )
+from torch import Tensor
+from torch.utils._pytree import tree_map
 
 try:
     from torch.jit._shape_functions import infer_size_impl
@@ -55,16 +55,16 @@ except ImportError:
 from tensordict.memmap import MemmapTensor
 from tensordict.metatensor import MetaTensor
 from tensordict.utils import (
-    DEVICE_TYPING,
-    INDEX_TYPING,
-    NESTED_KEY,
-    KeyDependentDefaultDict,
     _getitem_batch_size,
     _nested_key_type_check,
     _sub_index,
     convert_ellipsis_to_idx,
+    DEVICE_TYPING,
     expand_as_right,
     expand_right,
+    INDEX_TYPING,
+    KeyDependentDefaultDict,
+    NESTED_KEY,
     prod,
 )
 
