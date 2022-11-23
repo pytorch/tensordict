@@ -17,6 +17,7 @@ from tensordict.utils import (
     DEVICE_TYPING,
     INDEX_TYPING,
     _getitem_batch_size,
+    _requires_grad,
     _shape,
     _is_meta,
     _dtype,
@@ -110,7 +111,7 @@ class MetaTensor:
                 dtype = None
                 _repr_tensordict = str(tensor)
 
-            requires_grad = tensor.requires_grad
+            requires_grad = _requires_grad(tensor)
 
         if not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
