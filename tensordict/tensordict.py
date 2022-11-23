@@ -1476,6 +1476,75 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             batch_size = shape
         return TensorDict(d, batch_size, device=self.device)
 
+    def split(
+        self, split_size: Union[int, List[int]], dim: int = 0
+    ) -> List[TensorDictBase]:
+        """Splits each tensor in the TensorDict with the specified size in the given dimension, like `torch.split`.
+        Returns a list of TensorDict with the view of split chunks of items. Nested TensorDicts will remain nested.
+
+        The list of TensorDict maintains the original order of the tensor chunks.
+
+        Args:
+            split_size (int or List(int)): size of a single chunk or list of sizes for each chunk
+            dim (int): dimension along which to split the tensor
+
+        Returns:
+            A list of TensorDict with specified size in given dimension.
+
+        """
+        batch_sizes = []
+        if self.batch_dims == 0:
+            raise RuntimeError("TensorDict with empty batch size is not splittable")
+        if not (-self.batch_dims <= dim < self.batch_dims):
+            raise IndexError(
+                f"Dimension out of range (expected to be in range of [-{self.batch_dims}, {self.batch_dims - 1}], but got {dim})"
+            )
+        if dim < 0:
+            dim += self.batch_dims
+        if isinstance(split_size, int):
+            rep, remainder = divmod(self.batch_size[dim], split_size)
+            rep_shape = [
+                split_size if idx == dim else size
+                for (idx, size) in enumerate(self.batch_size)
+            ]
+            batch_sizes = [rep_shape for _ in range(rep)]
+            if remainder:
+                batch_sizes.append(
+                    [
+                        remainder if dim_idx == dim else dim_size
+                        for (dim_idx, dim_size) in enumerate(self.batch_size)
+                    ]
+                )
+        elif isinstance(split_size, list) and all(
+            isinstance(element, int) for element in split_size
+        ):
+            if sum(split_size) != self.batch_size[dim]:
+                raise RuntimeError(
+                    f"Split method expects split_size to sum exactly to {self.batch_size[dim]} (tensor's size at dimension {dim}), but got split_size={split_size}"
+                )
+            for i in split_size:
+                batch_sizes.append(
+                    [
+                        i if dim_idx == dim else dim_size
+                        for (dim_idx, dim_size) in enumerate(self.batch_size)
+                    ]
+                )
+        else:
+            raise TypeError(
+                "split(): argument 'split_size' must be int or list of ints"
+            )
+        dictionaries = [dict() for _ in range(len(batch_sizes))]
+        for key, item in self.items():
+            split_tensors = torch.split(item, split_size, dim)
+            for idx, split_tensor in enumerate(split_tensors):
+                dictionaries[idx][key] = split_tensor
+        return [
+            TensorDict(
+                dictionaries[i], batch_sizes[i], device=self.device, _run_checks=False
+            )
+            for i in range(len(dictionaries))
+        ]
+
     def view(
         self,
         *shape: int,
@@ -3209,6 +3278,11 @@ def pad_sequence_td(
                 ),
             )
         return out
+
+
+@implements_for_td(torch.split)
+def _split(td: TensorDict, split_size_or_sections: Union[int, List[int]], dim: int = 0):
+    return td.split(split_size_or_sections, dim)
 
 
 class SubTensorDict(TensorDictBase):
