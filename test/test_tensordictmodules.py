@@ -7,7 +7,6 @@ import argparse
 
 import pytest
 import torch
-from functorch import make_functional, make_functional_with_buffers
 from tensordict import TensorDict
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
@@ -18,6 +17,15 @@ from tensordict.nn.distributions import NormalParamWrapper
 from tensordict.nn.probabilistic import set_interaction_mode
 from torch import nn
 from torch.distributions import Normal
+
+try:
+    from functorch import make_functional, make_functional_with_buffers
+
+    _has_functorch = True
+    FUNCTORCH_ERR = ""
+except ImportError as FUNCTORCH_ERR:
+    _has_functorch = False
+    FUNCTORCH_ERR = str(FUNCTORCH_ERR)
 
 
 class TestTDModule:
@@ -76,6 +84,9 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -93,6 +104,9 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional_probabilistic(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -118,6 +132,9 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional_probabilistic_laterconstruct(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -144,6 +161,9 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional_with_buffer(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -159,6 +179,9 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional_with_buffer_probabilistic(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -185,6 +208,9 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional_with_buffer_probabilistic_laterconstruct(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -208,6 +234,9 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_vmap(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -239,6 +268,9 @@ class TestTDModule:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_vmap_probabilistic(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -281,6 +313,9 @@ class TestTDModule:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_vmap_probabilistic_laterconstruct(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -463,6 +498,9 @@ class TestTDSequence:
         dist, *_ = tdmodule.get_dist(td)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -505,6 +543,9 @@ class TestTDSequence:
         with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
             dist, *_ = tdmodule.get_dist(td, params=params)
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional_probabilistic(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -555,6 +596,9 @@ class TestTDSequence:
         dist, *_ = tdmodule.get_dist(td, params=params)
         assert dist.rsample().shape[: td.ndimension()] == td.shape
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional_with_buffer(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -602,6 +646,9 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional_with_buffer_probabilistic(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -656,6 +703,9 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional_with_buffer_probabilistic_laterconstruct(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -689,6 +739,9 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_vmap(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -744,6 +797,9 @@ class TestTDSequence:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_vmap_probabilistic(self):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -786,6 +842,9 @@ class TestTDSequence:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("functional", [True, False])
     def test_submodule_sequence(self, functional):
         td_module_1 = TensorDictModule(
@@ -821,6 +880,9 @@ class TestTDSequence:
             assert "out" in td_2.keys()
             assert td_2.get("out").shape == torch.Size([5, 4])
 
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     @pytest.mark.parametrize("stack", [True, False])
     @pytest.mark.parametrize("functional", [True, False])
     def test_sequential_partial(self, stack, functional):

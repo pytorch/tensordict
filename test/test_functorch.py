@@ -7,7 +7,6 @@ import argparse
 
 import pytest
 import torch
-from functorch import vmap
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.functional_modules import (
@@ -16,7 +15,19 @@ from tensordict.nn.functional_modules import (
 )
 from torch import nn
 
+try:
+    from functorch import vmap
 
+    _has_functorch = True
+    FUNCTORCH_ERR = ""
+except ImportError as FUNCTORCH_ERR:
+    _has_functorch = False
+    FUNCTORCH_ERR = str(FUNCTORCH_ERR)
+
+
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+)
 @pytest.mark.parametrize(
     "moduletype,batch_params",
     [
