@@ -45,7 +45,7 @@ class OneHotCategorical(D.Categorical):
         self,
         logits: Optional[torch.Tensor] = None,
         probs: Optional[torch.Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         logits = _treat_categorical_params(logits)
         probs = _treat_categorical_params(probs)

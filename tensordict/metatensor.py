@@ -13,8 +13,26 @@ import numpy as np
 import torch
 
 from tensordict.memmap import MemmapTensor
-from tensordict.utils import DEVICE_TYPING, INDEX_TYPING
-from tensordict.utils import _getitem_batch_size, _get_shape
+from tensordict.utils import (
+    DEVICE_TYPING,
+    INDEX_TYPING,
+    _getitem_batch_size,
+    _shape,
+    _is_meta,
+    _dtype,
+)
+
+try:
+    from torchrec import KeyedJaggedTensor
+
+    _has_torchrec = True
+except ImportError as err:
+    _has_torchrec = False
+
+    class KeyedJaggedTensor:
+        pass
+
+    TORCHREC_ERR = str(err)
 
 META_HANDLED_FUNCTIONS = dict()
 
@@ -69,22 +87,25 @@ class MetaTensor:
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
         _is_tensordict: Optional[bool] = None,
+        _is_kjt: Optional[bool] = None,
         _repr_tensordict: Optional[str] = None,
     ):
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
-            shape = _get_shape(tensor)
+            shape = _shape(tensor)
             if _is_shared is None:
                 _is_shared = tensor.is_shared()
             if _is_memmap is None:
                 _is_memmap = isinstance(tensor, MemmapTensor)
+            if _is_kjt is None:
+                _is_kjt = isinstance(tensor, KeyedJaggedTensor)
             # FIXME: using isinstance(tensor, TensorDictBase) would likely be
             # better here, but creates circular import without more refactoring
-            device = tensor.device if not tensor.is_meta else device
+            device = tensor.device if not _is_meta(tensor) else device
             if _is_tensordict is None:
                 _is_tensordict = not _is_memmap and not isinstance(tensor, torch.Tensor)
             if not _is_tensordict:
-                dtype = tensor.dtype
+                dtype = _dtype(tensor)
             else:
                 dtype = None
                 _repr_tensordict = str(tensor)
@@ -101,12 +122,15 @@ class MetaTensor:
         self._numel = None
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
+        self._is_kjt = bool(_is_kjt)
         self._is_tensordict = bool(_is_tensordict)
         self._repr_tensordict = _repr_tensordict
         if _is_tensordict:
             name = "TensorDict"
         elif _is_memmap:
             name = "MemmapTensor"
+        elif _is_kjt:
+            name = "KeyedJaggedTensor"
         elif _is_shared and device.type != "cuda":
             name = "SharedTensor"
         else:
@@ -149,6 +173,9 @@ class MetaTensor:
 
     def is_tensordict(self) -> bool:
         return self._is_tensordict
+
+    def is_kjt(self) -> bool:
+        return self._is_kjt
 
     def numel(self) -> int:
         if self._numel is None:

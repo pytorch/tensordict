@@ -8,10 +8,6 @@ import argparse
 import pytest
 import torch
 from _utils_internal import expand_list
-from functorch import (
-    vmap,
-    make_functional_with_buffers as functorch_make_functional_with_buffers,
-)
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.functional_modules import (
@@ -20,7 +16,22 @@ from tensordict.nn.functional_modules import (
 from torch import nn
 from torch.nn import Linear
 
+try:
+    from functorch import (
+        vmap,
+        make_functional_with_buffers as functorch_make_functional_with_buffers,
+    )
 
+    _has_functorch = True
+    FUNCTORCH_ERR = ""
+except ImportError as FUNCTORCH_ERR:
+    _has_functorch = False
+    FUNCTORCH_ERR = str(FUNCTORCH_ERR)
+
+
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+)
 @pytest.mark.parametrize(
     "moduletype,batch_params",
     [
@@ -59,6 +70,9 @@ def test_vmap_patch(moduletype, batch_params):
         assert y.shape == torch.Size([10, 2, 3])
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+)
 @pytest.mark.parametrize(
     "moduletype,batch_params",
     [
@@ -171,6 +185,9 @@ def test_swap():
         assert params.requires_grad
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+)
 @pytest.mark.parametrize(
     "moduletype,batch_params",
     [
