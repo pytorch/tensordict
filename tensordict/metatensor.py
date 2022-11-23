@@ -13,8 +13,12 @@ import numpy as np
 import torch
 
 from tensordict.memmap import MemmapTensor
-from tensordict.utils import DEVICE_TYPING, INDEX_TYPING
-from tensordict.utils import _getitem_batch_size, _get_shape
+from tensordict.utils import (
+    _get_shape,
+    _getitem_batch_size,
+    DEVICE_TYPING,
+    INDEX_TYPING,
+)
 
 META_HANDLED_FUNCTIONS = dict()
 

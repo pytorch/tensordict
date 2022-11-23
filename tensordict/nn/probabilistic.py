@@ -8,11 +8,10 @@ from copy import deepcopy
 from textwrap import indent
 from typing import Any, List, Optional, Sequence, Tuple, Type, Union
 
-from torch import Tensor
-from torch import distributions as d
+from torch import distributions as d, Tensor
 from torch.autograd.grad_mode import _DecoratorContextManager
 
-from tensordict.nn.common import TensorDictModule, _check_all_str
+from tensordict.nn.common import _check_all_str, TensorDictModule
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.tensordict import TensorDictBase
 

@@ -6,11 +6,11 @@
 from .memmap import MemmapTensor, set_transfer_ownership
 from .metatensor import MetaTensor
 from .tensordict import (
-    TensorDict,
-    SubTensorDict,
-    merge_tensordicts,
     LazyStackedTensorDict,
+    merge_tensordicts,
     SavedTensorDict,
+    SubTensorDict,
+    TensorDict,
 )
 
 try:
