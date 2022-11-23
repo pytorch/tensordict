@@ -1487,7 +1487,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             for idx, split_tensor in enumerate(split_tensors):
                 dictionaries[idx][key] = split_tensor
         return [
-            TensorDict(dictionaries[i], batch_sizes[i], device=self.device)
+            TensorDict(
+                dictionaries[i], batch_sizes[i], device=self.device, _run_checks=False
+            )
             for i in range(len(dictionaries))
         ]
 
