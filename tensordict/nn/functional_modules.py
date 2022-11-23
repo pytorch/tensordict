@@ -6,10 +6,10 @@
 from copy import deepcopy
 
 import torch
-from torch import nn
 
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
+from torch import nn
 
 _RESET_OLD_TENSORDICT = True
 try:
@@ -101,7 +101,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             arg
             if in_dim is None
             else arg.apply(
-                lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
+                lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),  # noqa: B023
                 batch_size=[b for i, b in enumerate(arg.batch_size) if i != in_dim],
             )
             if isinstance(arg, TensorDictBase)
@@ -156,7 +156,9 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 out = _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
             else:
                 out = batched_output.apply(
-                    lambda x: _remove_batch_dim(x, vmap_level, batch_size, out_dim),
+                    lambda x: _remove_batch_dim(
+                        x, vmap_level, batch_size, out_dim  # noqa: B023
+                    ),
                     batch_size=[batch_size, *batched_output.batch_size],
                 )
             flat_outputs.append(out)

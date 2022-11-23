@@ -10,16 +10,15 @@ import re
 import numpy as np
 import pytest
 import torch
-from _utils_internal import TestTensorDictsBase, get_available_devices, prod
-from tensordict import (
-    LazyStackedTensorDict,
-    MemmapTensor,
-    SavedTensorDict,
-    TensorDict,
+from _utils_internal import get_available_devices, prod, TestTensorDictsBase
+from tensordict import LazyStackedTensorDict, MemmapTensor, SavedTensorDict, TensorDict
+from tensordict.tensordict import (
+    _stack as stack_td,
+    assert_allclose_td,
+    make_tensordict,
+    pad,
+    TensorDictBase,
 )
-from tensordict.tensordict import TensorDictBase
-from tensordict.tensordict import _stack as stack_td
-from tensordict.tensordict import assert_allclose_td, make_tensordict, pad
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 from torch import multiprocessing as mp
 
@@ -763,22 +762,22 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)
         is_locked = td.is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked == is_locked
         td.is_locked = not is_locked
         assert td.is_locked != is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked != is_locked
         td.lock()
         assert td.is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked
         td.unlock()
         assert not td.is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert not item.is_locked
 
@@ -1374,7 +1373,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_to_dict_nested(self, td_name, device):
         def recursive_checker(cur_dict):
-            for key, value in cur_dict.items():
+            for _, value in cur_dict.items():
                 if isinstance(value, TensorDict):
                     return False
                 elif isinstance(value, dict) and not recursive_checker(value):
@@ -1704,6 +1703,59 @@ class TestTensorDicts(TestTensorDictsBase):
                 td.set_default(("a", "b", "d"), tensor2), tensor2
             )
             torch.testing.assert_close(td.get(("a", "b", "d")), tensor2)
+
+    @pytest.mark.parametrize("performer", ["torch", "tensordict"])
+    def test_split(self, td_name, device, performer):
+        td = getattr(self, td_name)(device)
+
+        for dim in range(td.batch_dims):
+            rep, remainder = divmod(td.shape[dim], 2)
+            length = rep + remainder
+
+            # split_sizes to be [2, 2, ..., 2, 1] or [2, 2, ..., 2]
+            split_sizes = [2] * rep + [1] * remainder
+            for test_split_size in (2, split_sizes):
+
+                if performer == "torch":
+                    tds = torch.split(td, test_split_size, dim)
+                elif performer == "tensordict":
+                    tds = td.split(test_split_size, dim)
+                assert len(tds) == length
+
+                for idx, split_td in enumerate(tds):
+                    expected_split_dim_size = 1 if idx == rep else 2
+                    expected_batch_size = [
+                        expected_split_dim_size if dim_idx == dim else dim_size
+                        for (dim_idx, dim_size) in enumerate(td.batch_size)
+                    ]
+
+                    # Test each split_td has the expected batch_size
+                    assert split_td.batch_size == torch.Size(expected_batch_size)
+
+                    if td_name == "nested_td":
+                        assert isinstance(split_td["my_nested_td"], TensorDict)
+                        assert isinstance(
+                            split_td["my_nested_td"]["inner"], torch.Tensor
+                        )
+
+                    # Test each tensor (or nested_td) in split_td has the expected shape
+                    for key, item in split_td.items():
+                        expected_shape = [
+                            expected_split_dim_size if dim_idx == dim else dim_size
+                            for (dim_idx, dim_size) in enumerate(td[key].shape)
+                        ]
+                        assert item.shape == torch.Size(expected_shape)
+
+                        if key == "my_nested_td":
+                            expected_inner_tensor_size = [
+                                expected_split_dim_size if dim_idx == dim else dim_size
+                                for (dim_idx, dim_size) in enumerate(
+                                    td[key]["inner"].shape
+                                )
+                            ]
+                            assert item["inner"].shape == torch.Size(
+                                expected_inner_tensor_size
+                            )
 
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
@@ -2835,13 +2887,13 @@ def test_keys_view():
     with pytest.raises(
         TypeError, match="checks with tuples of strings is only supported"
     ):
-        ("a", "b", "c") in tensordict.keys()
+        ("a", "b", "c") in tensordict.keys()  # noqa: B015
 
     with pytest.raises(TypeError, match="TensorDict keys are always strings."):
-        42 in tensordict.keys()
+        42 in tensordict.keys()  # noqa: B015
 
     with pytest.raises(TypeError, match="TensorDict keys are always strings."):
-        ("a", 42) in tensordict.keys()
+        ("a", 42) in tensordict.keys()  # noqa: B015
 
     keys = set(tensordict.keys())
     keys_nested = set(tensordict.keys(include_nested=True))
@@ -2861,7 +2913,7 @@ def test_error_on_contains():
         NotImplementedError,
         match="TensorDict does not support membership checks with the `in` keyword",
     ):
-        "random_string" in td
+        "random_string" in td  # noqa: B015
 
 
 def test_lazy_stacked_contains():
@@ -2877,7 +2929,7 @@ def test_lazy_stacked_contains():
         NotImplementedError,
         match="TensorDict does not support membership checks with the `in` keyword",
     ):
-        "random_string" in lstd
+        "random_string" in lstd  # noqa: B015
 
 
 @pytest.mark.parametrize("method", ["share_memory", "memmap"])
@@ -3088,6 +3140,76 @@ def test_flatten_unflatten_key_collision(inplace, separator):
     td5_flat = td5.flatten_keys(separator)
     assert (f"a{separator}b") in td5_flat.keys()
     assert (f"a{separator}b{separator}c") in td5_flat.keys()
+
+
+def test_split_with_invalid_arguments():
+    td = TensorDict({"a": torch.zeros(2, 1)}, [])
+    # Test empty batch size
+    with pytest.raises(RuntimeError, match="not splittable"):
+        td.split(1, 0)
+
+    td = TensorDict({}, [3, 2])
+
+    # Test invalid split_size input
+    with pytest.raises(TypeError, match="must be int or list of ints"):
+        td.split("1", 0)
+    with pytest.raises(TypeError, match="must be int or list of ints"):
+        td.split(["1", 2], 0)
+
+    # Test invalid split_size sum
+    with pytest.raises(RuntimeError, match="expects split_size to sum exactly"):
+        td.split([], 0)
+
+    with pytest.raises(RuntimeError, match="expects split_size to sum exactly"):
+        td.split([1, 1], 0)
+
+    # Test invalid dimension input
+    with pytest.raises(IndexError, match="Dimension out of range"):
+        td.split(1, 2)
+    with pytest.raises(IndexError, match="Dimension out of range"):
+        td.split(1, -3)
+
+
+def test_split_with_empty_tensordict():
+    td = TensorDict({}, [10])
+
+    tds = td.split(4, 0)
+    assert len(tds) == 3
+    assert tds[0].shape == torch.Size([4])
+    assert tds[1].shape == torch.Size([4])
+    assert tds[2].shape == torch.Size([2])
+
+    tds = td.split([1, 9], 0)
+
+    assert len(tds) == 2
+    assert tds[0].shape == torch.Size([1])
+    assert tds[1].shape == torch.Size([9])
+
+    td = TensorDict({}, [10, 10, 3])
+
+    tds = td.split(4, 1)
+    assert len(tds) == 3
+    assert tds[0].shape == torch.Size([10, 4, 3])
+    assert tds[1].shape == torch.Size([10, 4, 3])
+    assert tds[2].shape == torch.Size([10, 2, 3])
+
+    tds = td.split([1, 9], 1)
+    assert len(tds) == 2
+    assert tds[0].shape == torch.Size([10, 1, 3])
+    assert tds[1].shape == torch.Size([10, 9, 3])
+
+
+def test_split_with_negative_dim():
+    td = TensorDict({"a": torch.zeros(5, 4, 2, 1), "b": torch.zeros(5, 4, 1)}, [5, 4])
+
+    tds = td.split([1, 3], -1)
+    assert len(tds) == 2
+    assert tds[0].shape == torch.Size([5, 1])
+    assert tds[0]["a"].shape == torch.Size([5, 1, 2, 1])
+    assert tds[0]["b"].shape == torch.Size([5, 1, 1])
+    assert tds[1].shape == torch.Size([5, 3])
+    assert tds[1]["a"].shape == torch.Size([5, 3, 2, 1])
+    assert tds[1]["b"].shape == torch.Size([5, 3, 1])
 
 
 if __name__ == "__main__":
