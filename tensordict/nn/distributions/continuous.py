@@ -4,13 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 
 from numbers import Number
-from typing import Dict, Sequence, Union, Tuple
+from typing import Dict, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from torch import distributions as D, nn
 
 from tensordict.nn.utils import mappings
+from torch import distributions as D, nn
 
 __all__ = ["NormalParamWrapper", "Delta"]
 

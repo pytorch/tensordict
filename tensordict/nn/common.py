@@ -8,14 +8,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from textwrap import indent
-from typing import (
-    Any,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Union,
-)
+from typing import Any, Iterable, List, Optional, Sequence, Union
 
 try:
     import functorch
@@ -27,14 +20,14 @@ except ImportError:
 import torch
 from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
 from functorch._src.make_functional import _swap_state
-from torch import nn, Tensor
 
 from tensordict.nn.functional_modules import (
     FunctionalModule as rlFunctionalModule,
     FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,
 )
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import NESTED_KEY, _nested_key_type_check, _normalize_key
+from tensordict.utils import _nested_key_type_check, _normalize_key, NESTED_KEY
+from torch import nn, Tensor
 
 __all__ = [
     "TensorDictModule",

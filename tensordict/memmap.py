@@ -10,18 +10,18 @@ import os
 import tempfile
 from copy import copy, deepcopy
 from tempfile import _TemporaryFileWrapper
-from typing import Any, Callable, List, Optional, Tuple, Union, Dict
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 
 from tensordict.utils import (
+    _getitem_batch_size,
     DEVICE_TYPING,
     INDEX_TYPING,
+    prod,
     torch_to_numpy_dtype_dict,
 )
-from tensordict.utils import _getitem_batch_size
-from tensordict.utils import prod
 
 MEMMAP_HANDLED_FN = {}
 

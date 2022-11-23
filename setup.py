@@ -13,10 +13,8 @@ from datetime import date
 from pathlib import Path
 from typing import List
 
-from setuptools import setup, find_packages
-from torch.utils.cpp_extension import (
-    BuildExtension,
-)
+from setuptools import find_packages, setup
+from torch.utils.cpp_extension import BuildExtension
 
 ROOT_DIR = Path(__file__).parent.resolve()
 
