@@ -8,14 +8,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from textwrap import indent
-from typing import (
-    Any,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Union,
-)
+from typing import Any, Iterable, List, Optional, Sequence, Union
 
 try:
     import functorch
@@ -34,7 +27,7 @@ from tensordict.nn.functional_modules import (
     FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,
 )
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import NESTED_KEY, _nested_key_type_check, _normalize_key
+from tensordict.utils import _nested_key_type_check, _normalize_key, NESTED_KEY
 
 __all__ = [
     "TensorDictModule",

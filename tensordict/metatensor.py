@@ -13,7 +13,16 @@ import numpy as np
 import torch
 
 from tensordict.memmap import MemmapTensor
-from tensordict.utils import DEVICE_TYPING, INDEX_TYPING, _shape, _is_meta, _dtype
+from tensordict.utils import (
+    _get_shape,
+    _getitem_batch_size,
+    DEVICE_TYPING,
+    INDEX_TYPING,
+    _shape,
+    _is_meta,
+    _dtype,
+    _getitem_batch_size,
+)
 from tensordict.utils import _getitem_batch_size
 
 try:

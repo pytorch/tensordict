@@ -22,18 +22,12 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 import torch
-from torch import Tensor, nn
+from torch import nn, Tensor
 
 from tensordict.nn.common import TensorDictModule
-from tensordict.nn.probabilistic import (
-    ProbabilisticTensorDictModule,
-)
-from tensordict.tensordict import (
-    LazyStackedTensorDict,
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict.utils import NESTED_KEY, _normalize_key
+from tensordict.nn.probabilistic import ProbabilisticTensorDictModule
+from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict.utils import _normalize_key, NESTED_KEY
 
 __all__ = ["TensorDictSequential"]
 
@@ -68,8 +62,8 @@ class TensorDictSequential(TensorDictModule):
         >>> fmodule1 = TensorDictModule(fnet1, in_keys=["input"], out_keys=["loc", "scale"])
         >>> td_module1 = ProbabilisticTensorDictModule(
         ...    module=fmodule1,
-        ...    dist_param_keys=["loc", "scale"],
-        ...    out_key_sample=["hidden"],
+        ...    dist_in_keys=["loc", "scale"],
+        ...    sample_out_key=["hidden"],
         ...    distribution_class=Normal,
         ...    return_log_prob=True,
         ...    )

@@ -22,14 +22,14 @@ except ImportError:
 # Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
     from functorch._src.vmap import (
-        _get_name,
-        tree_flatten,
-        _broadcast_to_and_flatten,
-        Tensor,
-        _validate_and_get_batch_size,
         _add_batch_dim,
-        tree_unflatten,
+        _broadcast_to_and_flatten,
+        _get_name,
         _remove_batch_dim,
+        _validate_and_get_batch_size,
+        Tensor,
+        tree_flatten,
+        tree_unflatten,
     )
 
     # Monkey-patches

@@ -9,7 +9,7 @@ import collections
 import math
 import typing
 from numbers import Number
-from typing import Tuple, List, Union, Any, Optional
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -17,9 +17,9 @@ from torch import Tensor
 
 try:
     try:
-        from functorch._C import is_batchedtensor, get_unwrapped
+        from functorch._C import get_unwrapped, is_batchedtensor
     except ImportError:
-        from torch._C._functorch import is_batchedtensor, get_unwrapped
+        from torch._C._functorch import get_unwrapped, is_batchedtensor
 
 except ImportError:
     pass
