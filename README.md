@@ -1,4 +1,10 @@
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat)](https://pytorch.org/rl/tensordict/)
+[![Python 3.7, 3.8](https://img.shields.io/badge/python-3.7%20%7C%203.8%20%7C%203.9%20%7C%203.10-blue.svg)](https://www.python.org/downloads/)
+[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/pytorch-labs/tensordict/blob/main/LICENSE)
+<a href="https://pypi.org/project/tensordict"><img src="https://img.shields.io/pypi/v/tensordict" alt="pypi version"></a>
+<a href="https://pypi.org/project/tensordict-nightly"><img src="https://img.shields.io/pypi/v/tensordict-nightly?label=nightly" alt="pypi nightly version"></a>
+[![Downloads](https://static.pepy.tech/personalized-badge/tensordict?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/tensordict)
+[![Downloads](https://static.pepy.tech/personalized-badge/tensordict-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/tensordict-nightly)
 
 # TensorDict
 
