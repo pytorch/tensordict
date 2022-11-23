@@ -453,7 +453,9 @@ MemmapTensor of shape {self.shape}."""
         self.transfer_ownership = value
         return self
 
-    def __deepcopy__(self, memodict={}):
+    def __deepcopy__(self, memodict=None):
+        if memodict is None:
+            memodict = {}
         return MemmapTensor(self)
 
     def __del__(self) -> None:

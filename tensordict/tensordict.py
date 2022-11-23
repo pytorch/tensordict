@@ -250,7 +250,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         del state["_dict_meta"]
         return state
 
-    def __setstate__(self, state: dict) -> Dict[str, Any]:
+    def __setstate__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         state["_dict_meta"] = KeyDependentDefaultDict(self._make_meta)
         self.__dict__.update(state)
 
@@ -750,7 +750,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def _convert_to_tensor(self, array: np.ndarray) -> Union[Tensor, MemmapTensor]:
         return torch.as_tensor(array, device=self.device)
 
-    def _convert_to_tensordict(self, dict_value: dict) -> TensorDictBase:
+    def _convert_to_tensordict(self, dict_value: Dict[str, Any]) -> TensorDictBase:
         return TensorDict(dict_value, batch_size=self.batch_size, device=self.device)
 
     def _process_input(

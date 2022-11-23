@@ -763,22 +763,22 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)
         is_locked = td.is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked == is_locked
         td.is_locked = not is_locked
         assert td.is_locked != is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked != is_locked
         td.lock()
         assert td.is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked
         td.unlock()
         assert not td.is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert not item.is_locked
 
@@ -1374,7 +1374,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_to_dict_nested(self, td_name, device):
         def recursive_checker(cur_dict):
-            for key, value in cur_dict.items():
+            for _, value in cur_dict.items():
                 if isinstance(value, TensorDict):
                     return False
                 elif isinstance(value, dict) and not recursive_checker(value):
@@ -2888,13 +2888,13 @@ def test_keys_view():
     with pytest.raises(
         TypeError, match="checks with tuples of strings is only supported"
     ):
-        ("a", "b", "c") in tensordict.keys()
+        ("a", "b", "c") in tensordict.keys()  # noqa: B015
 
     with pytest.raises(TypeError, match="TensorDict keys are always strings."):
-        42 in tensordict.keys()
+        42 in tensordict.keys()  # noqa: B015
 
     with pytest.raises(TypeError, match="TensorDict keys are always strings."):
-        ("a", 42) in tensordict.keys()
+        ("a", 42) in tensordict.keys()  # noqa: B015
 
     keys = set(tensordict.keys())
     keys_nested = set(tensordict.keys(include_nested=True))
@@ -2914,7 +2914,7 @@ def test_error_on_contains():
         NotImplementedError,
         match="TensorDict does not support membership checks with the `in` keyword",
     ):
-        "random_string" in td
+        "random_string" in td  # noqa: B015
 
 
 def test_lazy_stacked_contains():
@@ -2930,7 +2930,7 @@ def test_lazy_stacked_contains():
         NotImplementedError,
         match="TensorDict does not support membership checks with the `in` keyword",
     ):
-        "random_string" in lstd
+        "random_string" in lstd  # noqa: B015
 
 
 @pytest.mark.parametrize("method", ["share_memory", "memmap"])
