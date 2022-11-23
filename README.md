@@ -1,3 +1,5 @@
+[![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat)](https://pytorch.org/rl/tensordict/)
+
 # TensorDict
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.

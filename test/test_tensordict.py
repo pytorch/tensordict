@@ -760,6 +760,50 @@ class TestTensorDicts(TestTensorDictsBase):
         for item in td.values():
             assert (item[mask] == -10).all(), item[mask]
 
+    def test_lock(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_locked = td.is_locked
+        for key, item in td.items():
+            if isinstance(item, TensorDictBase):
+                assert item.is_locked == is_locked
+        td.is_locked = not is_locked
+        assert td.is_locked != is_locked
+        for key, item in td.items():
+            if isinstance(item, TensorDictBase):
+                assert item.is_locked != is_locked
+        td.lock()
+        assert td.is_locked
+        for key, item in td.items():
+            if isinstance(item, TensorDictBase):
+                assert item.is_locked
+        td.unlock()
+        assert not td.is_locked
+        for key, item in td.items():
+            if isinstance(item, TensorDictBase):
+                assert not item.is_locked
+
+    def test_lock_write(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td.lock()
+        td_clone = td.clone()
+        assert not td_clone.is_locked
+        td_clone = td.to_tensordict()
+        assert not td_clone.is_locked
+        assert td.is_locked
+        td = td.select(inplace=True)
+        for key, item in td_clone.items(True):
+            with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+                td.set(key, item)
+        td.unlock()
+        for key, item in td_clone.items(True):
+            td.set(key, item)
+        td.lock()
+        for key, item in td_clone.items(True):
+            with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+                td.set(key, item)
+            if td_name != "saved_td":
+                td.set_(key, item)
+
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -1596,6 +1640,24 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_repr(self, td_name, device):
         td = getattr(self, td_name)(device)
         _ = str(td)
+
+    def test_memmap_(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            with pytest.raises(
+                RuntimeError,
+                match="Converting a sub-tensordict values to memmap cannot be done",
+            ):
+                td.memmap_()
+        elif td_name == "saved_td":
+            with pytest.raises(
+                RuntimeError,
+                match="SavedTensorDict and memmap are mutually exclusive features.",
+            ):
+                td.memmap_()
+        else:
+            td.memmap_()
+            assert td.is_memmap()
 
     def test_set_default_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -2926,13 +2988,106 @@ def test_update_nested_dict():
     t.update({"a": {"d": [[[1]] * 3] * 2}})
 
 
-@pytest.mark.parametrize("separator", [".", "-"])
-def test_unflatten_keys_collision(separator):
-    td = TensorDict(
-        {"a": [1, 2], f"c{separator}a": [1, 2], "c": TensorDict({"b": [1, 2]}, [])}, []
+@pytest.mark.parametrize("inplace", [True, False])
+@pytest.mark.parametrize("separator", [",", "-"])
+def test_flatten_unflatten_key_collision(inplace, separator):
+    td1 = TensorDict(
+        {
+            f"a{separator}b{separator}c": torch.zeros(3),
+            "a": {"b": {"c": torch.zeros(3)}},
+        },
+        [],
     )
-    ref = TensorDict({"a": [1, 2], "c": TensorDict({"a": [1, 2], "b": [1, 2]}, [])}, [])
-    assert assert_allclose_td(td.unflatten_keys(separator), ref)
+    td2 = TensorDict(
+        {
+            f"a{separator}b": torch.zeros(3),
+            "a": {"b": torch.zeros(3)},
+            "g": {"d": torch.zeros(3)},
+        },
+        [],
+    )
+    td3 = TensorDict(
+        {
+            f"a{separator}b{separator}c": torch.zeros(3),
+            "a": {"b": {"c": torch.zeros(3), "d": torch.zeros(3)}},
+        },
+        [],
+    )
+
+    td4 = TensorDict(
+        {
+            f"a{separator}b{separator}c{separator}d": torch.zeros(3),
+            "a": {"b": {"c": torch.zeros(3)}},
+        },
+        [],
+    )
+
+    td5 = TensorDict(
+        {f"a{separator}b": torch.zeros(3), "a": {"b": {"c": torch.zeros(3)}}}, []
+    )
+
+    with pytest.raises(
+        KeyError, match="Flattening keys in tensordict collides with existing key *"
+    ):
+        _ = td1.flatten_keys(separator)
+
+    with pytest.raises(
+        KeyError, match="Flattening keys in tensordict collides with existing key *"
+    ):
+        _ = td2.flatten_keys(separator)
+
+    with pytest.raises(
+        KeyError, match="Flattening keys in tensordict collides with existing key *"
+    ):
+        _ = td3.flatten_keys(separator)
+
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
+        _ = td1.unflatten_keys(separator)
+
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
+        _ = td2.unflatten_keys(separator)
+
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
+        _ = td3.unflatten_keys(separator)
+
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
+        _ = td4.unflatten_keys(separator)
+
+    with pytest.raises(
+        KeyError,
+        match=re.escape(
+            "Unflattening key(s) in tensordict will override existing unflattened key"
+        ),
+    ):
+        _ = td5.unflatten_keys(separator)
+
+    td4_flat = td4.flatten_keys(separator)
+    assert (f"a{separator}b{separator}c{separator}d") in td4_flat.keys()
+    assert (f"a{separator}b{separator}c") in td4_flat.keys()
+
+    td5_flat = td5.flatten_keys(separator)
+    assert (f"a{separator}b") in td5_flat.keys()
+    assert (f"a{separator}b{separator}c") in td5_flat.keys()
 
 
 if __name__ == "__main__":

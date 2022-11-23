@@ -7,28 +7,20 @@ from __future__ import annotations
 
 import warnings
 from textwrap import indent
-from typing import (
-    Any,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Union,
-)
+from typing import Any, Iterable, List, Optional, Sequence, Union
+
+import torch
+from torch import nn, Tensor
+
+from tensordict.tensordict import TensorDictBase
+from tensordict.utils import _nested_key_type_check, _normalize_key, NESTED_KEY
 
 try:
-    import functorch
+    from functorch import FunctionalModule, FunctionalModuleWithBuffers
 
     _has_functorch = True
 except ImportError:
     _has_functorch = False
-
-import torch
-from functorch import FunctionalModule, FunctionalModuleWithBuffers
-from torch import nn, Tensor
-
-from tensordict.tensordict import TensorDictBase
-from tensordict.utils import NESTED_KEY, _nested_key_type_check, _normalize_key
 
 __all__ = [
     "TensorDictModule",
@@ -128,7 +120,10 @@ class TensorDictModule(nn.Module):
     def __init__(
         self,
         module: Union[
-            FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
+            "FunctionalModule",
+            "FunctionalModuleWithBuffers",
+            TensorDictModule,
+            nn.Module,
         ],
         in_keys: Iterable[NESTED_KEY],
         out_keys: Iterable[NESTED_KEY],
@@ -154,9 +149,9 @@ class TensorDictModule(nn.Module):
 
     @property
     def is_functional(self):
-        return isinstance(
+        return _has_functorch and isinstance(
             self.module,
-            (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
+            (FunctionalModule, FunctionalModuleWithBuffers),
         )
 
     def _write_to_tensordict(
@@ -214,9 +209,9 @@ class TensorDictModule(nn.Module):
 
     @property
     def num_params(self):
-        if isinstance(
+        if _has_functorch and isinstance(
             self.module,
-            (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
+            (FunctionalModule, FunctionalModuleWithBuffers),
         ):
             return len(self.module.param_names)
         else:
@@ -224,7 +219,7 @@ class TensorDictModule(nn.Module):
 
     @property
     def num_buffers(self):
-        if isinstance(self.module, (functorch.FunctionalModuleWithBuffers,)):
+        if _has_functorch and isinstance(self.module, FunctionalModuleWithBuffers):
             return len(self.module.buffer_names)
         else:
             return 0
