@@ -177,7 +177,10 @@ class _TensorDictKeysView:
         return key
 
     def __len__(self):
-        return len(list(self))
+        i = 0
+        for _ in self:
+            i += 1
+        return i
 
     def _items(self, tensordict=None):
         if tensordict is None:
