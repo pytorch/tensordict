@@ -29,6 +29,13 @@ try:
 except ImportError:
     _has_functorch = False
 
+    class FunctionalModule:
+        pass
+
+    class FunctionalModuleWithBuffers:
+        pass
+
+
 __all__ = [
     "TensorDictModule",
     "TensorDictModuleWrapper",
@@ -153,7 +160,12 @@ class TensorDictModule(nn.Module):
     def is_functional(self):
         return isinstance(
             self.module,
-            (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
+            (
+                FunctionalModule,
+                FunctionalModuleWithBuffers,
+                rlFunctionalModule,
+                rlFunctionalModuleWithBuffers,
+            ),
         )
 
     def _write_to_tensordict(
@@ -408,7 +420,7 @@ class TensorDictModule(nn.Module):
     def num_params(self):
         if isinstance(
             self.module,
-            (functorch.FunctionalModule, functorch.FunctionalModuleWithBuffers),
+            (FunctionalModule, FunctionalModuleWithBuffers),
         ):
             return len(self.module.param_names)
         else:
@@ -416,7 +428,7 @@ class TensorDictModule(nn.Module):
 
     @property
     def num_buffers(self):
-        if isinstance(self.module, (functorch.FunctionalModuleWithBuffers,)):
+        if isinstance(self.module, FunctionalModuleWithBuffers):
             return len(self.module.buffer_names)
         else:
             return 0
