@@ -15,8 +15,6 @@ from tensordict.tensordict import TensorDictBase
 from torch import distributions as d, Tensor
 from torch.autograd.grad_mode import _DecoratorContextManager
 
-__all__ = ["ProbabilisticTensorDictModule"]
-
 
 _INTERACTION_MODE = None
 

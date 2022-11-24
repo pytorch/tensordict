@@ -36,12 +36,6 @@ except ImportError:
         pass
 
 
-__all__ = [
-    "TensorDictModule",
-    "TensorDictModuleWrapper",
-]
-
-
 def _check_all_str(list_of_str):
     if isinstance(list_of_str, str):
         raise RuntimeError(
