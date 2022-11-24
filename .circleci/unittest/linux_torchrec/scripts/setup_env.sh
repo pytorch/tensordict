@@ -13,7 +13,6 @@ git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
-lib_dir="${env_dir}/lib"
 
 cd "${root_dir}"
 

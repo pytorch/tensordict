@@ -35,7 +35,7 @@ except ImportError as err:
 
     TORCHREC_ERR = str(err)
 
-META_HANDLED_FUNCTIONS = dict()
+META_HANDLED_FUNCTIONS = {}
 
 
 def implements_for_meta(torch_function) -> Callable:
@@ -254,7 +254,7 @@ class MetaTensor:
         """Unsqueezes the meta-tensor along the desired dim."""
         clone = self.clone()
         new_shape = []
-        shape = [i for i in clone.shape]
+        shape = list(clone.shape)
         for i in range(len(shape) + 1):
             if i == dim:
                 new_shape.append(1)
@@ -345,7 +345,7 @@ def _stack_meta(
                     f"allowed, got shapes {dtype} and {tensor.dtype}"
                 )
 
-    shape = [s for s in shape]
+    shape = list(shape)
     shape.insert(dim, len(list_of_meta_tensors))
 
     return MetaTensor(

@@ -8,9 +8,9 @@ from typing import Dict, Sequence, Tuple, Union
 
 import numpy as np
 import torch
-from torch import distributions as D, nn
 
 from tensordict.nn.utils import mappings
+from torch import distributions as D, nn
 
 __all__ = ["NormalParamWrapper", "Delta"]
 
@@ -62,7 +62,7 @@ class NormalParamWrapper(nn.Module):
 
     def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
         net_output = self.operator(*tensors)
-        others = tuple()
+        others = ()
         if not isinstance(net_output, torch.Tensor):
             net_output, *others = net_output
         loc, scale = net_output.chunk(2, -1)

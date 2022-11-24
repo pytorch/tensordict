@@ -354,26 +354,26 @@ class TestIndexing:
             t_indexed1 = queue.get(timeout=10)
             assert (t_indexed1._index[0] == torch.tensor([1, 2])).all()
             # check that file is not opened if we did not access it
-            t_indexed1._memmap_array is None
+            assert t_indexed1._memmap_array is None
             _ = t_indexed1 + 1
             # check that file is now opened
-            t_indexed1._memmap_array is not None
+            assert t_indexed1._memmap_array is not None
 
             # receive 2nd copy
             t_indexed2 = queue.get(timeout=10)
             assert t_indexed2.filename == t_indexed1.filename
             assert (t_indexed2._index[0] == torch.tensor([3, 4])).all()
             # check that file is open only once
-            t_indexed1._memmap_array is not None
-            t_indexed2._memmap_array is None
+            assert t_indexed1._memmap_array is not None
+            assert t_indexed2._memmap_array is None
             t_indexed1.copy_(t_indexed2)
             # same assertion: after copying we should only have one file opened
-            t_indexed1._memmap_array is not None
-            t_indexed2._memmap_array is None
+            assert t_indexed1._memmap_array is not None
+            assert t_indexed2._memmap_array is None
             _ = t_indexed2 + 1
             # now we should find 2 opened files
-            t_indexed1._memmap_array is not None
-            t_indexed2._memmap_array is not None
+            assert t_indexed1._memmap_array is not None
+            assert t_indexed2._memmap_array is not None
             queue.put("done", block=True)
             queue.close()
             p.join()

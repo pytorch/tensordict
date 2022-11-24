@@ -222,7 +222,7 @@ class TensorDictSequential(TensorDictModule):
             out_keys = deepcopy(self.out_keys)
         else:
             out_keys = [_normalize_key(key) for key in out_keys]
-        id_to_keep = {i for i in range(len(self.module))}
+        id_to_keep = set(range(len(self.module)))
         for i, module in enumerate(self.module):
             if all(key in in_keys for key in module.in_keys):
                 in_keys.extend(module.out_keys)
@@ -234,7 +234,7 @@ class TensorDictSequential(TensorDictModule):
                     out_keys.extend(module.in_keys)
                 else:
                     id_to_keep.remove(i)
-        id_to_keep = sorted(list(id_to_keep))
+        id_to_keep = sorted(id_to_keep)
 
         modules = [self.module[i] for i in id_to_keep]
 
@@ -249,28 +249,18 @@ class TensorDictSequential(TensorDictModule):
         self,
         module,
         tensordict,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ):
         tensordict_keys = set(tensordict.keys(include_nested=True))
         if not self.partial_tolerant or all(
             key in tensordict_keys for key in module.in_keys
         ):
-            if params is not None or buffers is not None:
-                tensordict = module(
-                    tensordict, params=params, buffers=buffers, **kwargs
-                )
-            else:
-                tensordict = module(tensordict, **kwargs)
+            tensordict = module(tensordict, **kwargs)
         elif self.partial_tolerant and isinstance(tensordict, LazyStackedTensorDict):
             for sub_td in tensordict.tensordicts:
                 tensordict_keys = set(sub_td.keys(include_nested=True))
                 if all(key in tensordict_keys for key in module.in_keys):
-                    if params is not None or buffers is not None:
-                        module(sub_td, params=params, buffers=buffers, **kwargs)
-                    else:
-                        module(sub_td, **kwargs)
+                    module(sub_td, **kwargs)
             tensordict._update_valid_keys()
         return tensordict
 
@@ -278,55 +268,9 @@ class TensorDictSequential(TensorDictModule):
         self,
         tensordict: TensorDictBase,
         tensordict_out=None,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
-        if params is not None and buffers is not None:
-            if isinstance(params, TensorDictBase):
-                # TODO: implement sorted values and items
-                param_splits = list(zip(*sorted(list(params.items()))))[1]
-                buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
-            else:
-                param_splits = self._split_param(params, "params")
-                buffer_splits = self._split_param(buffers, "buffers")
-            for i, (module, param, buffer) in enumerate(
-                zip(self.module, param_splits, buffer_splits)
-            ):
-                if "vmap" in kwargs and i > 0:
-                    # the tensordict is already expended
-                    if not isinstance(kwargs["vmap"], tuple):
-                        kwargs["vmap"] = (0, 0, *(0,) * len(module.in_keys))
-                    else:
-                        kwargs["vmap"] = (
-                            *kwargs["vmap"][:2],
-                            *(0,) * len(module.in_keys),
-                        )
-                tensordict = self._run_module(
-                    module, tensordict, params=param, buffers=buffer, **kwargs
-                )
-
-        elif params is not None:
-            if isinstance(params, TensorDictBase):
-                # TODO: implement sorted values and items
-                param_splits = list(zip(*sorted(list(params.items()))))[1]
-            else:
-                param_splits = self._split_param(params, "params")
-            for i, (module, param) in enumerate(zip(self.module, param_splits)):
-                if "vmap" in kwargs and i > 0:
-                    # the tensordict is already expended
-                    if not isinstance(kwargs["vmap"], tuple):
-                        kwargs["vmap"] = (0, *(0,) * len(module.in_keys))
-                    else:
-                        kwargs["vmap"] = (
-                            *kwargs["vmap"][:1],
-                            *(0,) * len(module.in_keys),
-                        )
-                tensordict = self._run_module(
-                    module, tensordict, params=param, **kwargs
-                )
-
-        elif not len(kwargs):
+        if not len(kwargs):
             for module in self.module:
                 tensordict = self._run_module(module, tensordict, **kwargs)
         else:
@@ -365,8 +309,8 @@ class TensorDictSequential(TensorDictModule):
                 params = kwargs["params"]
                 buffers = kwargs["buffers"]
                 if isinstance(params, TensorDictBase):
-                    param_splits = list(zip(*sorted(list(params.items()))))[1]
-                    buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
+                    param_splits = list(zip(*sorted(params.items())))[1]
+                    buffer_splits = list(zip(*sorted(buffers.items())))[1]
                 else:
                     param_splits = self._split_param(kwargs["params"], "params")
                     buffer_splits = self._split_param(kwargs["buffers"], "buffers")
@@ -393,7 +337,7 @@ class TensorDictSequential(TensorDictModule):
             elif "params" in kwargs:
                 params = kwargs["params"]
                 if isinstance(params, TensorDictBase):
-                    param_splits = list(zip(*sorted(list(params.items()))))[1]
+                    param_splits = list(zip(*sorted(params.items())))[1]
                 else:
                     param_splits = self._split_param(kwargs["params"], "params")
                 kwargs_pruned = {

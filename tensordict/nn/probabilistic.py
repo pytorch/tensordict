@@ -4,15 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 
 import re
+from copy import deepcopy
 from textwrap import indent
-from typing import Any, Optional, Sequence, Tuple, Type, Union
-
-from torch import distributions as d, Tensor
-from torch.autograd.grad_mode import _DecoratorContextManager
+from typing import Any, List, Optional, Sequence, Tuple, Type, Union
 
 from tensordict.nn.common import _check_all_str, TensorDictModule
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.tensordict import TensorDictBase
+
+from torch import distributions as d, Tensor
+from torch.autograd.grad_mode import _DecoratorContextManager
 
 __all__ = ["ProbabilisticTensorDictModule"]
 
@@ -199,7 +200,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             distribution_class = distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
         self.distribution_kwargs = (
-            distribution_kwargs if distribution_kwargs is not None else dict()
+            distribution_kwargs if distribution_kwargs is not None else {}
         )
         self.n_empirical_estimate = n_empirical_estimate
         self._dist = None

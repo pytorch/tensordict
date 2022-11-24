@@ -177,7 +177,10 @@ class _TensorDictKeysView:
         return key
 
     def __len__(self):
-        return len([key for key in self])
+        i = 0
+        for _ in self:
+            i += 1
+        return i
 
     def _items(self, tensordict=None):
         if tensordict is None:
@@ -250,7 +253,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         del state["_dict_meta"]
         return state
 
-    def __setstate__(self, state: dict) -> Dict[str, Any]:
+    def __setstate__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         state["_dict_meta"] = KeyDependentDefaultDict(self._make_meta)
         self.__dict__.update(state)
 
@@ -516,7 +519,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if default == "_no_default_":
             raise KeyError(
                 f'key "{key}" not found in {self.__class__.__name__} with '
-                f"keys {sorted(list(self.keys()))}"
+                f"keys {sorted(self.keys())}"
             )
         else:
             raise ValueError(
@@ -750,7 +753,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def _convert_to_tensor(self, array: np.ndarray) -> Union[Tensor, MemmapTensor]:
         return torch.as_tensor(array, device=self.device)
 
-    def _convert_to_tensordict(self, dict_value: dict) -> TensorDictBase:
+    def _convert_to_tensordict(self, dict_value: Dict[str, Any]) -> TensorDictBase:
         return TensorDict(dict_value, batch_size=self.batch_size, device=self.device)
 
     def _process_input(
@@ -841,7 +844,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     else:
                         yield k, item
             else:
-                return self._dict_meta.items()
+                yield from self._dict_meta.items()
 
     def values_meta(
         self, make_unset: bool = True, include_nested: bool = False
@@ -855,8 +858,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             for k in self.keys(include_nested=include_nested):
                 yield self._get_meta(k)
         else:
-
-            return self._dict_meta.values()
+            yield from self._dict_meta.values()
 
     @abc.abstractmethod
     def keys(self, include_nested: bool = False) -> _TensorDictKeysView:
@@ -878,7 +880,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             >>> assert td_expand.get("a").shape == torch.Size([10, 3, 4, 5])
 
         """
-        d = dict()
+        d = {}
         tensordict_dims = self.batch_dims
 
         if len(shape) == 1 and isinstance(shape[0], Sequence):
@@ -947,7 +949,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             raise KeyError(
                 f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
             )
-        d = dict()
+        d = {}
         for (key, item1) in self.items():
             d[key] = item1 != other.get(key)
         return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
@@ -974,7 +976,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         keys2 = set(other.keys())
         if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
             raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
-        d = dict()
+        d = {}
         for (key, item1) in self.items():
             d[key] = item1 == other.get(key)
         return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
@@ -1347,7 +1349,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensor([[0., 0., 0., 0.]])
 
         """
-        d = dict()
+        d = {}
         for key, value in self.items():
             while mask.ndimension() > self.batch_dims:
                 mask_expand = mask.squeeze(-1)
@@ -1475,6 +1477,75 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 )
             batch_size = shape
         return TensorDict(d, batch_size, device=self.device)
+
+    def split(
+        self, split_size: Union[int, List[int]], dim: int = 0
+    ) -> List[TensorDictBase]:
+        """Splits each tensor in the TensorDict with the specified size in the given dimension, like `torch.split`.
+        Returns a list of TensorDict with the view of split chunks of items. Nested TensorDicts will remain nested.
+
+        The list of TensorDict maintains the original order of the tensor chunks.
+
+        Args:
+            split_size (int or List(int)): size of a single chunk or list of sizes for each chunk
+            dim (int): dimension along which to split the tensor
+
+        Returns:
+            A list of TensorDict with specified size in given dimension.
+
+        """
+        batch_sizes = []
+        if self.batch_dims == 0:
+            raise RuntimeError("TensorDict with empty batch size is not splittable")
+        if not (-self.batch_dims <= dim < self.batch_dims):
+            raise IndexError(
+                f"Dimension out of range (expected to be in range of [-{self.batch_dims}, {self.batch_dims - 1}], but got {dim})"
+            )
+        if dim < 0:
+            dim += self.batch_dims
+        if isinstance(split_size, int):
+            rep, remainder = divmod(self.batch_size[dim], split_size)
+            rep_shape = [
+                split_size if idx == dim else size
+                for (idx, size) in enumerate(self.batch_size)
+            ]
+            batch_sizes = [rep_shape for _ in range(rep)]
+            if remainder:
+                batch_sizes.append(
+                    [
+                        remainder if dim_idx == dim else dim_size
+                        for (dim_idx, dim_size) in enumerate(self.batch_size)
+                    ]
+                )
+        elif isinstance(split_size, list) and all(
+            isinstance(element, int) for element in split_size
+        ):
+            if sum(split_size) != self.batch_size[dim]:
+                raise RuntimeError(
+                    f"Split method expects split_size to sum exactly to {self.batch_size[dim]} (tensor's size at dimension {dim}), but got split_size={split_size}"
+                )
+            for i in split_size:
+                batch_sizes.append(
+                    [
+                        i if dim_idx == dim else dim_size
+                        for (dim_idx, dim_size) in enumerate(self.batch_size)
+                    ]
+                )
+        else:
+            raise TypeError(
+                "split(): argument 'split_size' must be int or list of ints"
+            )
+        dictionaries = [{} for _ in range(len(batch_sizes))]
+        for key, item in self.items():
+            split_tensors = torch.split(item, split_size, dim)
+            for idx, split_tensor in enumerate(split_tensors):
+                dictionaries[idx][key] = split_tensor
+        return [
+            TensorDict(
+                dictionaries[i], batch_sizes[i], device=self.device, _run_checks=False
+            )
+            for i in range(len(dictionaries))
+        ]
 
     def view(
         self,
@@ -2108,7 +2179,7 @@ class TensorDict(TensorDictBase):
     ) -> object:
         super().__init__()
 
-        self._tensordict: Dict = dict()
+        self._tensordict: Dict = {}
 
         self._is_shared = _is_shared
         self._is_memmap = _is_memmap
@@ -2301,7 +2372,7 @@ class TensorDict(TensorDictBase):
         Supports iterables to specify the shape.
 
         """
-        d = dict()
+        d = {}
         tensordict_dims = self.batch_dims
 
         if len(shape) == 1 and isinstance(shape[0], Sequence):
@@ -4009,7 +4080,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key, default)
 
         tensors = [td.get(key, default=default) for td in self.tensordicts]
-        shapes = set(_shape(tensor) for tensor in tensors)
+        shapes = {_shape(tensor) for tensor in tensors}
         if len(shapes) != 1:
             raise RuntimeError(
                 f"found more than one unique shape in the tensors to be "
@@ -4049,9 +4120,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 *[td.clone() for td in self.tensordicts],
                 stack_dim=self.stack_dim,
             )
-        return LazyStackedTensorDict(
-            *[td for td in self.tensordicts], stack_dim=self.stack_dim
-        )
+        return LazyStackedTensorDict(*self.tensordicts, stack_dim=self.stack_dim)
 
     def pin_memory(self) -> TensorDictBase:
         for td in self.tensordicts:
@@ -4328,7 +4397,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]
             else:
-                subkey = tuple()
+                subkey = ()
             # the key must be a string by now. Let's check if it is present
             if key in keys:
                 target = self._get_meta(key)
@@ -5272,7 +5341,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     def add_missing_dims(self, num_dims: int, batch_dims: Tuple[int]) -> Tuple[int]:
         dim_diff = num_dims - len(batch_dims)
-        all_dims = [i for i in range(num_dims)]
+        all_dims = list(range(num_dims))
         for i, x in enumerate(batch_dims):
             if x < 0:
                 x = x - dim_diff

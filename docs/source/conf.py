@@ -147,4 +147,4 @@ intersphinx_mapping = {
 }
 
 
-aafig_default_options = dict(scale=1.5, aspect=1.0, proportional=True)
+aafig_default_options = {"scale": 1.5, "aspect": 1.0, "proportional": True}
