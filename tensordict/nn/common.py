@@ -22,6 +22,13 @@ try:
 except ImportError:
     _has_functorch = False
 
+    class FunctionalModule:
+        pass
+
+    class FunctionalModuleWithBuffers:
+        pass
+
+
 __all__ = [
     "TensorDictModule",
     "TensorDictModuleWrapper",
@@ -208,23 +215,6 @@ class TensorDictModule(nn.Module):
         )
 
         return f"{self.__class__.__name__}(\n{fields})"
-
-    @property
-    def num_params(self):
-        if _has_functorch and isinstance(
-            self.module,
-            (FunctionalModule, FunctionalModuleWithBuffers),
-        ):
-            return len(self.module.param_names)
-        else:
-            return 0
-
-    @property
-    def num_buffers(self):
-        if _has_functorch and isinstance(self.module, FunctionalModuleWithBuffers):
-            return len(self.module.buffer_names)
-        else:
-            return 0
 
 
 class TensorDictModuleWrapper(nn.Module):
