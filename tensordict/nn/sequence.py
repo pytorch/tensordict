@@ -394,6 +394,7 @@ class TensorDictSequential(TensorDictModule):
                 is_shared=False)
 
         """
+        native = native or not _has_functorch
         if clone:
             self_copy = deepcopy(self)
             self_copy.module = copy(self_copy.module)
@@ -406,7 +407,7 @@ class TensorDictSequential(TensorDictModule):
                 _params,
                 _buffers,
             ) = module.make_functional_with_buffers(clone=True, native=native)
-            if native or not _has_functorch:
+            if native:
                 params[str(i)] = _params
                 buffers[str(i)] = _buffers
             else:
