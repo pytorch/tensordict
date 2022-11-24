@@ -101,7 +101,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             arg
             if in_dim is None
             else arg.apply(
-                lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),  # noqa: B023
+                lambda _arg, in_dim=in_dim: _add_batch_dim(_arg, in_dim, vmap_level),
                 batch_size=[b for i, b in enumerate(arg.batch_size) if i != in_dim],
             )
             if isinstance(arg, TensorDictBase)
@@ -156,8 +156,8 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
                 out = _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
             else:
                 out = batched_output.apply(
-                    lambda x: _remove_batch_dim(
-                        x, vmap_level, batch_size, out_dim  # noqa: B023
+                    lambda x, out_dim=out_dim: _remove_batch_dim(
+                        x, vmap_level, batch_size, out_dim
                     ),
                     batch_size=[batch_size, *batched_output.batch_size],
                 )
