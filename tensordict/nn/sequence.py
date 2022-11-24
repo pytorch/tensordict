@@ -221,7 +221,7 @@ class TensorDictSequential(TensorDictModule):
             out_keys = deepcopy(self.out_keys)
         else:
             out_keys = [_normalize_key(key) for key in out_keys]
-        id_to_keep = {i for i in range(len(self.module))}
+        id_to_keep = set(range(len(self.module)))
         for i, module in enumerate(self.module):
             if all(key in in_keys for key in module.in_keys):
                 in_keys.extend(module.out_keys)
@@ -233,7 +233,7 @@ class TensorDictSequential(TensorDictModule):
                     out_keys.extend(module.in_keys)
                 else:
                     id_to_keep.remove(i)
-        id_to_keep = sorted(list(id_to_keep))
+        id_to_keep = sorted(id_to_keep)
 
         modules = [self.module[i] for i in id_to_keep]
 
@@ -284,8 +284,8 @@ class TensorDictSequential(TensorDictModule):
         if params is not None and buffers is not None:
             if isinstance(params, TensorDictBase):
                 # TODO: implement sorted values and items
-                param_splits = list(zip(*sorted(list(params.items()))))[1]
-                buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
+                param_splits = list(zip(*sorted(params.items())))[1]
+                buffer_splits = list(zip(*sorted(buffers.items())))[1]
             else:
                 param_splits = self._split_param(params, "params")
                 buffer_splits = self._split_param(buffers, "buffers")
@@ -308,7 +308,7 @@ class TensorDictSequential(TensorDictModule):
         elif params is not None:
             if isinstance(params, TensorDictBase):
                 # TODO: implement sorted values and items
-                param_splits = list(zip(*sorted(list(params.items()))))[1]
+                param_splits = list(zip(*sorted(params.items())))[1]
             else:
                 param_splits = self._split_param(params, "params")
             for i, (module, param) in enumerate(zip(self.module, param_splits)):
@@ -426,8 +426,8 @@ class TensorDictSequential(TensorDictModule):
                 params = kwargs["params"]
                 buffers = kwargs["buffers"]
                 if isinstance(params, TensorDictBase):
-                    param_splits = list(zip(*sorted(list(params.items()))))[1]
-                    buffer_splits = list(zip(*sorted(list(buffers.items()))))[1]
+                    param_splits = list(zip(*sorted(params.items())))[1]
+                    buffer_splits = list(zip(*sorted(buffers.items())))[1]
                 else:
                     param_splits = self._split_param(kwargs["params"], "params")
                     buffer_splits = self._split_param(kwargs["buffers"], "buffers")
@@ -454,7 +454,7 @@ class TensorDictSequential(TensorDictModule):
             elif "params" in kwargs:
                 params = kwargs["params"]
                 if isinstance(params, TensorDictBase):
-                    param_splits = list(zip(*sorted(list(params.items()))))[1]
+                    param_splits = list(zip(*sorted(params.items())))[1]
                 else:
                     param_splits = self._split_param(kwargs["params"], "params")
                 kwargs_pruned = {

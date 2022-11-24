@@ -100,7 +100,7 @@ except ImportError as err:
     TORCHREC_ERR = str(err)
 
 
-TD_HANDLED_FUNCTIONS: Dict = dict()
+TD_HANDLED_FUNCTIONS: Dict = {}
 COMPATIBLE_TYPES = Union[
     Tensor,
     MemmapTensor,
@@ -177,7 +177,7 @@ class _TensorDictKeysView:
         return key
 
     def __len__(self):
-        return len([key for key in self])
+        return len(list(self))
 
     def _items(self, tensordict=None):
         if tensordict is None:
@@ -516,7 +516,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if default == "_no_default_":
             raise KeyError(
                 f'key "{key}" not found in {self.__class__.__name__} with '
-                f"keys {sorted(list(self.keys()))}"
+                f"keys {sorted(self.keys())}"
             )
         else:
             raise ValueError(
@@ -841,7 +841,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     else:
                         yield k, item
             else:
-                return self._dict_meta.items()
+                yield from self._dict_meta.items()
 
     def values_meta(
         self, make_unset: bool = True, include_nested: bool = False
@@ -855,8 +855,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             for k in self.keys(include_nested=include_nested):
                 yield self._get_meta(k)
         else:
-
-            return self._dict_meta.values()
+            yield from self._dict_meta.values()
 
     @abc.abstractmethod
     def keys(self, include_nested: bool = False) -> _TensorDictKeysView:
@@ -878,7 +877,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             >>> assert td_expand.get("a").shape == torch.Size([10, 3, 4, 5])
 
         """
-        d = dict()
+        d = {}
         tensordict_dims = self.batch_dims
 
         if len(shape) == 1 and isinstance(shape[0], Sequence):
@@ -947,7 +946,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             raise KeyError(
                 f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
             )
-        d = dict()
+        d = {}
         for (key, item1) in self.items():
             d[key] = item1 != other.get(key)
         return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
@@ -974,7 +973,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         keys2 = set(other.keys())
         if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
             raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
-        d = dict()
+        d = {}
         for (key, item1) in self.items():
             d[key] = item1 == other.get(key)
         return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
@@ -1347,7 +1346,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensor([[0., 0., 0., 0.]])
 
         """
-        d = dict()
+        d = {}
         for key, value in self.items():
             while mask.ndimension() > self.batch_dims:
                 mask_expand = mask.squeeze(-1)
@@ -1533,7 +1532,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             raise TypeError(
                 "split(): argument 'split_size' must be int or list of ints"
             )
-        dictionaries = [dict() for _ in range(len(batch_sizes))]
+        dictionaries = [{} for _ in range(len(batch_sizes))]
         for key, item in self.items():
             split_tensors = torch.split(item, split_size, dim)
             for idx, split_tensor in enumerate(split_tensors):
@@ -2177,7 +2176,7 @@ class TensorDict(TensorDictBase):
     ) -> object:
         super().__init__()
 
-        self._tensordict: Dict = dict()
+        self._tensordict: Dict = {}
 
         self._is_shared = _is_shared
         self._is_memmap = _is_memmap
@@ -2337,7 +2336,7 @@ class TensorDict(TensorDictBase):
         return all(memmap_list) and len(memmap_list) > 0
 
     def _check_device(self) -> None:
-        devices = set(value.device for value in self.values_meta())
+        devices = {value.device for value in self.values_meta()}
         if self.device is not None and len(devices) >= 1 and devices != {self.device}:
             raise RuntimeError(
                 f"TensorDict.device is {self._device}, but elements have "
@@ -2370,7 +2369,7 @@ class TensorDict(TensorDictBase):
         Supports iterables to specify the shape.
 
         """
-        d = dict()
+        d = {}
         tensordict_dims = self.batch_dims
 
         if len(shape) == 1 and isinstance(shape[0], Sequence):
@@ -4083,7 +4082,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key, default)
 
         tensors = [td.get(key, default=default) for td in self.tensordicts]
-        shapes = set(_shape(tensor) for tensor in tensors)
+        shapes = {_shape(tensor) for tensor in tensors}
         if len(shapes) != 1:
             raise RuntimeError(
                 f"found more than one unique shape in the tensors to be "
@@ -4123,9 +4122,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 *[td.clone() for td in self.tensordicts],
                 stack_dim=self.stack_dim,
             )
-        return LazyStackedTensorDict(
-            *[td for td in self.tensordicts], stack_dim=self.stack_dim
-        )
+        return LazyStackedTensorDict(*self.tensordicts, stack_dim=self.stack_dim)
 
     def pin_memory(self) -> TensorDictBase:
         for td in self.tensordicts:
@@ -4402,7 +4399,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]
             else:
-                subkey = tuple()
+                subkey = ()
             # the key must be a string by now. Let's check if it is present
             if key in keys:
                 target = self._get_meta(key)
@@ -5346,7 +5343,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     def add_missing_dims(self, num_dims: int, batch_dims: Tuple[int]) -> Tuple[int]:
         dim_diff = num_dims - len(batch_dims)
-        all_dims = [i for i in range(num_dims)]
+        all_dims = list(range(num_dims))
         for i, x in enumerate(batch_dims):
             if x < 0:
                 x = x - dim_diff

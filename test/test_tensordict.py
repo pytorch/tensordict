@@ -168,12 +168,12 @@ def test_tensordict_indexing(device):
     td_select = td[None, :2]
     td_select._check_batch_size()
 
-    td_reconstruct = stack_td([_td for _td in td], 0, contiguous=False)
+    td_reconstruct = stack_td(list(td), 0, contiguous=False)
     assert (
         td_reconstruct == td
     ).all(), f"td and td_reconstruct differ, got {td} and {td_reconstruct}"
 
-    superlist = [stack_td([__td for __td in _td], 0, contiguous=False) for _td in td]
+    superlist = [stack_td(list(_td), 0, contiguous=False) for _td in td]
     td_reconstruct = stack_td(superlist, 0, contiguous=False)
     assert (
         td_reconstruct == td
@@ -490,7 +490,7 @@ def test_stacked_td(stack_dim, device):
     std_bis = stack_td(tensordicts, dim=stack_dim, contiguous=False)
     assert (sub_td == std_bis).all()
 
-    item = tuple([*[slice(None) for _ in range(stack_dim)], 0])
+    item = tuple(*[slice(None) for _ in range(stack_dim)], 0)
     tensordicts0.zero_()
     assert (sub_td[item].get("key1") == sub_td.get("key1")[item]).all()
     assert (
@@ -498,7 +498,7 @@ def test_stacked_td(stack_dim, device):
     ).all()
     assert (sub_td.contiguous().get("key1")[item] == 0).all()
 
-    item = tuple([*[slice(None) for _ in range(stack_dim)], 1])
+    item = tuple(*[slice(None) for _ in range(stack_dim)], 1)
     std2 = sub_td[:5]
     tensordicts1.zero_()
     assert (std2[item].get("key1") == std2.get("key1")[item]).all()
@@ -509,7 +509,7 @@ def test_stacked_td(stack_dim, device):
 
     std3 = sub_td[:5, :, :5]
     tensordicts2.zero_()
-    item = tuple([*[slice(None) for _ in range(stack_dim)], 2])
+    item = tuple(*[slice(None) for _ in range(stack_dim)], 2)
     assert (std3[item].get("key1") == std3.get("key1")[item]).all()
     assert (
         std3.contiguous()[item].get("key1") == std3.contiguous().get("key1")[item]
@@ -518,7 +518,7 @@ def test_stacked_td(stack_dim, device):
 
     std4 = sub_td.select("key1")
     tensordicts3.zero_()
-    item = tuple([*[slice(None) for _ in range(stack_dim)], 3])
+    item = tuple(*[slice(None) for _ in range(stack_dim)], 3)
     assert (std4[item].get("key1") == std4.get("key1")[item]).all()
     assert (
         std4.contiguous()[item].get("key1") == std4.contiguous().get("key1")[item]
