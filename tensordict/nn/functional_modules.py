@@ -300,3 +300,7 @@ def _make_decorator(module, fun_name):
 def _assign_params(module, params, make_stateless, return_old_tensordict):
     if params is not None:
         return _swap_state(module, params, make_stateless, return_old_tensordict)
+
+def repopulate_module(model, tensordict):
+    _swap_state(model, tensordict, is_stateless=False)
+    return model
