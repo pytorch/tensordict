@@ -7,7 +7,7 @@ import argparse
 
 import pytest
 import torch
-from functorch import vmap
+from functorch import make_functional_with_buffers as make_functional_functorch, vmap
 from tensordict import TensorDict
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
@@ -89,7 +89,7 @@ class TestTDModule:
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )
-    def test_functional(self):
+    def test_functional_before(self):
         torch.manual_seed(0)
         param_multiplier = 1
 
@@ -103,6 +103,48 @@ class TestTDModule:
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tensordict_module(td, params=params)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 4])
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    def test_functional(self):
+        torch.manual_seed(0)
+        param_multiplier = 1
+
+        net = nn.Linear(3, 4 * param_multiplier)
+
+        tensordict_module = TensorDictModule(
+            module=net, in_keys=["in"], out_keys=["out"]
+        )
+
+        params = make_functional(tensordict_module)
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        tensordict_module(td, params=params)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 4])
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    def test_functional_functorch(self):
+        torch.manual_seed(0)
+        param_multiplier = 1
+
+        net = nn.Linear(3, 4 * param_multiplier)
+
+        tensordict_module = TensorDictModule(
+            module=net, in_keys=["in"], out_keys=["out"]
+        )
+
+        tensordict_module, params, buffers = make_functional_functorch(
+            tensordict_module
+        )
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        tensordict_module(params, buffers, td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -392,6 +434,34 @@ class TestTDSequence:
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td, params)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 4])
+
+        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
+            dist, *_ = tdmodule.get_dist(td, params=params)
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    def test_functional_functorch(self):
+        torch.manual_seed(0)
+        param_multiplier = 1
+
+        net1 = nn.Linear(3, 4)
+        dummy_net = nn.Linear(4, 4)
+        net2 = nn.Linear(4, 4 * param_multiplier)
+
+        tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
+        dummy_tdmodule = TensorDictModule(
+            dummy_net, in_keys=["hidden"], out_keys=["hidden"]
+        )
+        tdmodule2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["out"])
+        tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
+
+        ftdmodule, params, buffers = make_functional_functorch(tdmodule)
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        ftdmodule(params, buffers, td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
