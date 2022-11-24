@@ -160,7 +160,12 @@ class TensorDictModule(nn.Module):
     def is_functional(self):
         return isinstance(
             self.module,
-            (FunctionalModule, FunctionalModuleWithBuffers),
+            (
+                FunctionalModule,
+                FunctionalModuleWithBuffers,
+                rlFunctionalModule,
+                rlFunctionalModuleWithBuffers,
+            ),
         )
 
     def _write_to_tensordict(
