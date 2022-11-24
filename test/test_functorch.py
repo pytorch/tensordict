@@ -12,6 +12,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.functional_modules import (
     make_functional,
+    repopulate_module,
 )
 from torch import nn
 from torch.nn import Linear
@@ -284,6 +285,30 @@ def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
             raise NotImplementedError
         z = td["z"]
         assert z.shape == torch.Size([10, 2, 3])
+
+
+def test_repopulate():
+    module = nn.ModuleList(
+        [
+            nn.Linear(3, 4),
+            nn.BatchNorm1d(10),
+            nn.Sequential(nn.GELU(), nn.Conv2d(2, 3, 4)),
+        ]
+    )
+    params = set(module.named_parameters())
+    buffers = set(module.named_buffers())
+    assert len(params)
+    assert len(buffers)
+
+    params_td = make_functional(module)
+    assert len(list(module.parameters())) == 0
+    assert len(list(module.buffers())) == 0
+    new_module = repopulate_module(module, params_td)
+    assert new_module is module
+    new_params = set(new_module.named_parameters())
+    new_buffers = set(new_module.named_buffers())
+    assert len(new_params)
+    assert len(new_buffers)
 
 
 def test_nested_modules():

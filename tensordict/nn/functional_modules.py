@@ -216,14 +216,17 @@ def _swap_state(
                 old_tensordict=_old_value,
                 is_stateless=is_stateless,
             )
-            old_tensordict._tensordict[key] = _old_value
+            if old_tensordict is not None:
+                old_tensordict.set(key, _old_value)
         else:
+            is_param = key in model.__dict__.get("_parameters")
             if return_old_tensordict:
                 old_attr = getattr(model, key)
                 if old_attr is None:
                     old_attr = torch.zeros(*value.shape, 0)
-                old_tensordict._tensordict[key] = old_attr
-            delattr(model, key)
+                old_tensordict.set(key, old_attr)
+            if is_param:
+                delattr(model, key)
             setattr(model, key, value)
     if return_old_tensordict:
         return old_tensordict
@@ -300,6 +303,7 @@ def _make_decorator(module, fun_name):
 def _assign_params(module, params, make_stateless, return_old_tensordict):
     if params is not None:
         return _swap_state(module, params, make_stateless, return_old_tensordict)
+
 
 def repopulate_module(model, tensordict):
     _swap_state(model, tensordict, is_stateless=False)
