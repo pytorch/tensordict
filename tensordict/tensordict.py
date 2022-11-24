@@ -3282,6 +3282,11 @@ def pad_sequence_td(
         return out
 
 
+@implements_for_td(torch.split)
+def _split(td: TensorDict, split_size_or_sections: Union[int, List[int]], dim: int = 0):
+    return td.split(split_size_or_sections, dim)
+
+
 class SubTensorDict(TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors.
 

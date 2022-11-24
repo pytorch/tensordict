@@ -122,7 +122,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
         ...     distribution_class=Normal,
         ...     return_log_prob=True,
         ... )
-        >>> params = make_functional(td_module)
+        >>> params = make_functional(td_module, funs_to_decorate=["forward", "get_dist"])
         >>> _ = td_module(td, params=params)
         >>> print(td)
         TensorDict(
@@ -136,6 +136,9 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
+        >>> dist, *_ = td_module.get_dist(td, params=params)
+        >>> print(dist)
+        Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4]))
 
         >>> # we can also apply the module to the TensorDict with vmap
         >>> from functorch import vmap

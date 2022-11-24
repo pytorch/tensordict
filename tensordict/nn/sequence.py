@@ -27,7 +27,7 @@ from tensordict.nn.common import TensorDictModule
 from tensordict.nn.probabilistic import ProbabilisticTensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _normalize_key, NESTED_KEY
-from torch import nn, Tensor
+from torch import nn
 
 __all__ = ["TensorDictSequential"]
 
@@ -161,45 +161,6 @@ class TensorDictSequential(TensorDictModule):
                 )
         return fmodule
 
-    @property
-    def num_params(self):
-        return self.param_len[-1]
-
-    @property
-    def num_buffers(self):
-        return self.buffer_len[-1]
-
-    @property
-    def param_len(self) -> List[int]:
-        param_list = []
-        prev = 0
-        for module in self.module:
-            param_list.append(module.num_params + prev)
-            prev = param_list[-1]
-        return param_list
-
-    @property
-    def buffer_len(self) -> List[int]:
-        buffer_list = []
-        prev = 0
-        for module in self.module:
-            buffer_list.append(module.num_buffers + prev)
-            prev = buffer_list[-1]
-        return buffer_list
-
-    def _split_param(
-        self, param_list: Iterable[Tensor], params_or_buffers: str
-    ) -> Iterable[Iterable[Tensor]]:
-        if params_or_buffers == "params":
-            list_out = self.param_len
-        elif params_or_buffers == "buffers":
-            list_out = self.buffer_len
-        list_in = [0] + list_out[:-1]
-        out = []
-        for a, b in zip(list_in, list_out):
-            out.append(param_list[a:b])
-        return out
-
     def select_subsequence(
         self,
         in_keys: Iterable[NESTED_KEY] = None,
@@ -305,54 +266,7 @@ class TensorDictSequential(TensorDictModule):
         L = len(self.module)
 
         if isinstance(self.module[-1], ProbabilisticTensorDictModule):
-            if "params" in kwargs and "buffers" in kwargs:
-                params = kwargs["params"]
-                buffers = kwargs["buffers"]
-                if isinstance(params, TensorDictBase):
-                    param_splits = list(zip(*sorted(params.items())))[1]
-                    buffer_splits = list(zip(*sorted(buffers.items())))[1]
-                else:
-                    param_splits = self._split_param(kwargs["params"], "params")
-                    buffer_splits = self._split_param(kwargs["buffers"], "buffers")
-                kwargs_pruned = {
-                    key: item
-                    for key, item in kwargs.items()
-                    if key not in ("params", "buffers")
-                }
-                for i, (module, param, buffer) in enumerate(
-                    zip(self.module, param_splits, buffer_splits)
-                ):
-                    if "vmap" in kwargs_pruned and i > 0:
-                        # the tensordict is already expended
-                        kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
-                    if i < L - 1:
-                        tensordict = module(
-                            tensordict, params=param, buffers=buffer, **kwargs_pruned
-                        )
-                    else:
-                        out = module.get_dist(
-                            tensordict, params=param, buffers=buffer, **kwargs_pruned
-                        )
-
-            elif "params" in kwargs:
-                params = kwargs["params"]
-                if isinstance(params, TensorDictBase):
-                    param_splits = list(zip(*sorted(params.items())))[1]
-                else:
-                    param_splits = self._split_param(kwargs["params"], "params")
-                kwargs_pruned = {
-                    key: item for key, item in kwargs.items() if key not in ("params",)
-                }
-                for i, (module, param) in enumerate(zip(self.module, param_splits)):
-                    if "vmap" in kwargs_pruned and i > 0:
-                        # the tensordict is already expended
-                        kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
-                    if i < L - 1:
-                        tensordict = module(tensordict, params=param, **kwargs_pruned)
-                    else:
-                        out = module.get_dist(tensordict, params=param, **kwargs_pruned)
-
-            elif not len(kwargs):
+            if not len(kwargs):
                 for i, module in enumerate(self.module):
                     if i < L - 1:
                         tensordict = module(tensordict)
@@ -366,5 +280,6 @@ class TensorDictSequential(TensorDictModule):
             return out
         else:
             raise RuntimeError(
-                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict"
+                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict. "
+                f"The sequence items were of type: {[type(m) for m in self.module]}"
             )
