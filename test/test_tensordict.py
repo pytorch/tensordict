@@ -762,22 +762,22 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)
         is_locked = td.is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked == is_locked
         td.is_locked = not is_locked
         assert td.is_locked != is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked != is_locked
         td.lock()
         assert td.is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked
         td.unlock()
         assert not td.is_locked
-        for key, item in td.items():
+        for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert not item.is_locked
 

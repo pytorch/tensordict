@@ -14,13 +14,13 @@ import torch
 
 from tensordict.memmap import MemmapTensor
 from tensordict.utils import (
-    DEVICE_TYPING,
-    INDEX_TYPING,
+    _dtype,
     _getitem_batch_size,
+    _is_meta,
     _requires_grad,
     _shape,
-    _is_meta,
-    _dtype,
+    DEVICE_TYPING,
+    INDEX_TYPING,
 )
 
 try:

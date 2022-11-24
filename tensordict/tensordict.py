@@ -35,17 +35,17 @@ from warnings import warn
 
 import numpy as np
 import torch
-from torch import Tensor
-from torch.utils._pytree import tree_map
 
 from tensordict.utils import (
-    _ndimension,
-    _shape,
-    _is_shared,
     _get_item,
-    _set_item,
+    _is_shared,
+    _ndimension,
     _requires_grad,
+    _set_item,
+    _shape,
 )
+from torch import Tensor
+from torch.utils._pytree import tree_map
 
 try:
     from torch.jit._shape_functions import infer_size_impl
@@ -55,16 +55,16 @@ except ImportError:
 from tensordict.memmap import MemmapTensor
 from tensordict.metatensor import MetaTensor
 from tensordict.utils import (
-    DEVICE_TYPING,
-    INDEX_TYPING,
-    NESTED_KEY,
-    KeyDependentDefaultDict,
     _getitem_batch_size,
     _nested_key_type_check,
     _sub_index,
     convert_ellipsis_to_idx,
+    DEVICE_TYPING,
     expand_as_right,
     expand_right,
+    INDEX_TYPING,
+    KeyDependentDefaultDict,
+    NESTED_KEY,
     prod,
 )
 
@@ -100,7 +100,7 @@ except ImportError as err:
     TORCHREC_ERR = str(err)
 
 
-TD_HANDLED_FUNCTIONS: Dict = dict()
+TD_HANDLED_FUNCTIONS: Dict = {}
 COMPATIBLE_TYPES = Union[
     Tensor,
     MemmapTensor,
@@ -2339,7 +2339,7 @@ class TensorDict(TensorDictBase):
         return all(memmap_list) and len(memmap_list) > 0
 
     def _check_device(self) -> None:
-        devices = set(value.device for value in self.values_meta())
+        devices = {value.device for value in self.values_meta()}
         if self.device is not None and len(devices) >= 1 and devices != {self.device}:
             raise RuntimeError(
                 f"TensorDict.device is {self._device}, but elements have "

@@ -4,9 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import re
-from copy import deepcopy
 from textwrap import indent
-from typing import Any, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Optional, Sequence, Tuple, Type, Union
 
 from tensordict.nn.common import _check_all_str, TensorDictModule
 from tensordict.nn.distributions import Delta, distributions_maps
