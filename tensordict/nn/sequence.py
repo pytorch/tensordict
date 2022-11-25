@@ -344,7 +344,7 @@ class TensorDictSequential(TensorDictModule):
         if isinstance(index, int):
             return self.module.__getitem__(index)
         else:
-            return TensorDictSequential(*self.module.__getitem__(index))
+            return self.__class__(*self.module.__getitem__(index))
 
     def __setitem__(self, index: int, tensordict_module: TensorDictModule) -> None:
         return self.module.__setitem__(idx=index, module=tensordict_module)
