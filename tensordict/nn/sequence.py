@@ -242,7 +242,7 @@ class TensorDictSequential(TensorDictModule):
                 "No modules left after selection. Make sure that in_keys and out_keys are coherent."
             )
 
-        return TensorDictSequential(*modules)
+        return self.__class__(*modules)
 
     def _run_module(
         self,
