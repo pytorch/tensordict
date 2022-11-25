@@ -905,12 +905,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     )
                 )
         for key, value in self.items():
-            if isinstance(value, TensorDictBase):
-                d[key] = value.expand(*shape)
-            else:
-                tensor_dims = len(value.shape)
-                last_n_dims = tensor_dims - tensordict_dims
-                d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+            tensor_dims = len(value.shape)
+            last_n_dims = tensor_dims - tensordict_dims
+            d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
         return TensorDict(
             source=d,
             batch_size=[*shape],
