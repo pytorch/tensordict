@@ -204,7 +204,7 @@ class TensorDictSequential(TensorDictModule):
                 "No modules left after selection. Make sure that in_keys and out_keys are coherent."
             )
 
-        return TensorDictSequential(*modules)
+        return self.__class__(*modules)
 
     def _run_module(
         self,
@@ -250,7 +250,7 @@ class TensorDictSequential(TensorDictModule):
         if isinstance(index, int):
             return self.module.__getitem__(index)
         else:
-            return TensorDictSequential(*self.module.__getitem__(index))
+            return self.__class__(*self.module.__getitem__(index))
 
     def __setitem__(self, index: int, tensordict_module: TensorDictModule) -> None:
         return self.module.__setitem__(idx=index, module=tensordict_module)

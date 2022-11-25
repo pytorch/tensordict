@@ -905,16 +905,17 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     )
                 )
         for key, value in self.items():
-            if isinstance(value, TensorDictBase):
-                d[key] = value.expand(*shape)
-            else:
-                tensor_dims = len(value.shape)
-                last_n_dims = tensor_dims - tensordict_dims
+            tensor_dims = len(value.shape)
+            last_n_dims = tensor_dims - tensordict_dims
+            if last_n_dims > 0:
                 d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+            else:
+                d[key] = value.expand(*shape)
         return TensorDict(
             source=d,
             batch_size=[*shape],
             device=self.device,
+            _run_checks=False,
         )
 
     def __bool__(self) -> bool:
@@ -1257,7 +1258,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def _check_new_batch_size(self, new_size: torch.Size):
         n = len(new_size)
         for key, meta_tensor in self.items_meta():
-            if not meta_tensor.is_kjt():
+            if not meta_tensor.is_kjt() and not meta_tensor.is_tensordict():
                 c1 = meta_tensor.ndimension() <= n
             else:
                 c1 = meta_tensor.ndimension() < n
@@ -2398,12 +2399,12 @@ class TensorDict(TensorDictBase):
                 )
 
         for key, value in self.items():
-            if isinstance(value, TensorDictBase):
-                d[key] = value.expand(*shape)
-            else:
-                tensor_dims = len(value.shape)
-                last_n_dims = tensor_dims - tensordict_dims
+            tensor_dims = len(value.shape)
+            last_n_dims = tensor_dims - tensordict_dims
+            if last_n_dims > 0:
                 d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+            else:
+                d[key] = value.expand(*shape)
         return TensorDict(
             source=d,
             batch_size=[*shape],
