@@ -1258,7 +1258,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def _check_new_batch_size(self, new_size: torch.Size):
         n = len(new_size)
         for key, meta_tensor in self.items_meta():
-            if not meta_tensor.is_kjt():
+            if not meta_tensor.is_kjt() and not meta_tensor.is_tensordict():
                 c1 = meta_tensor.ndimension() <= n
             else:
                 c1 = meta_tensor.ndimension() < n
