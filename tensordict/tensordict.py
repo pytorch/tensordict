@@ -317,9 +317,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         for key, meta in self.items_meta():
             if meta.is_tensordict():
                 tensordict = self.get(key)
-                tensordict.batch_size = new_batch_size
-                self.set(key, tensordict)
-                meta.shape = new_batch_size
+                if len(tensordict.batch_size) < len(new_batch_size):
+                    # document as edge case
+                    tensordict.batch_size = new_batch_size
+                    self.set(key, tensordict)
+                    meta.shape = new_batch_size
         self._check_new_batch_size(new_batch_size)
         self._change_batch_size(new_batch_size)
 
