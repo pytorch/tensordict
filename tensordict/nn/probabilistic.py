@@ -212,7 +212,7 @@ class ProbabilisticTensorDictModule(TensorDictModule):
     def _call_module(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         return self.module(tensordict, **kwargs)
 
-    def get_dist(
+    def get_dist_params(
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
@@ -225,6 +225,15 @@ class ProbabilisticTensorDictModule(TensorDictModule):
             tensordict_out = self._call_module(
                 tensordict, tensordict_out=tensordict_out, **kwargs
             )
+        return tensordict_out
+
+    def get_dist(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out: Optional[TensorDictBase] = None,
+        **kwargs,
+    ) -> Tuple[d.Distribution, TensorDictBase]:
+        tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)
         dist = self.build_dist_from_params(tensordict_out)
         return dist, tensordict_out
 

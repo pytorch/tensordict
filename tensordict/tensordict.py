@@ -314,6 +314,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return
         if not isinstance(new_batch_size, torch.Size):
             new_batch_size = torch.Size(new_batch_size)
+        for key, meta in self.items_meta():
+            if meta.is_tensordict():
+                tensordict = self.get(key)
+                tensordict.batch_size = new_batch_size
+                self.set(key, tensordict)
+                meta.shape = new_batch_size
         self._check_new_batch_size(new_batch_size)
         self._change_batch_size(new_batch_size)
 
@@ -1124,6 +1130,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             {key: item.detach() for key, item in self.items()},
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
         )
 
     def to_tensordict(self):

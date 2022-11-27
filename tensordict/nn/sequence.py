@@ -236,7 +236,7 @@ class TensorDictSequential(TensorDictModule):
                 tensordict = self._run_module(module, tensordict, **kwargs)
         else:
             raise RuntimeError(
-                "TensorDictSequential does not support keyword arguments other than 'tensordict_out', 'in_keys', 'out_keys' 'params', 'buffers' and 'vmap'"
+                "TensorDictSequential does not support keyword arguments other than 'tensordict_out', 'in_keys' and 'out_keys'"
             )
         if tensordict_out is not None:
             tensordict_out.update(tensordict, inplace=True)
@@ -263,21 +263,32 @@ class TensorDictSequential(TensorDictModule):
         tensordict: TensorDictBase,
         **kwargs,
     ) -> Tuple[torch.distributions.Distribution, ...]:
-        L = len(self.module)
-
         if isinstance(self.module[-1], ProbabilisticTensorDictModule):
-            if not len(kwargs):
-                for i, module in enumerate(self.module):
-                    if i < L - 1:
-                        tensordict = module(tensordict)
-                    else:
-                        out = module.get_dist(tensordict)
-            else:
+            if kwargs:
                 raise RuntimeError(
                     "TensorDictSequential does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
                 )
-
+            tensordict = self[:-1](tensordict)
+            out = self[-1].get_dist(tensordict)
             return out
+        else:
+            raise RuntimeError(
+                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict. "
+                f"The sequence items were of type: {[type(m) for m in self.module]}"
+            )
+
+    def get_dist_params(
+        self,
+        tensordict: TensorDictBase,
+        **kwargs,
+    ) -> Tuple[torch.distributions.Distribution, ...]:
+        if isinstance(self.module[-1], ProbabilisticTensorDictModule):
+            if kwargs:
+                raise RuntimeError(
+                    "TensorDictSequential does not support keyword arguments."
+                )
+            tensordict = self[:-1](tensordict)
+            return self[-1].get_dist_params(tensordict)
         else:
             raise RuntimeError(
                 "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict. "

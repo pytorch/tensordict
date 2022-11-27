@@ -6,4 +6,4 @@
 from .common import *
 from .sequence import *
 from .probabilistic import *
-from .functional_modules import make_functional, repopulate_module
+from .functional_modules import get_functional, make_functional, repopulate_module

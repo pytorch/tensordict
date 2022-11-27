@@ -91,6 +91,7 @@ class MetaTensor:
         _is_kjt: Optional[bool] = None,
         _repr_tensordict: Optional[str] = None,
     ):
+        tensor = None
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             shape = _shape(tensor)
@@ -118,9 +119,11 @@ class MetaTensor:
         self.shape = shape
         self.device = device
         self.dtype = dtype if dtype is not None else torch.get_default_dtype()
+        # TODO: requires_grad is mutable, hence it should not be stored here
         self.requires_grad = requires_grad
         self._ndim = len(shape)
         self._numel = None
+        # TODO: is_shared is mutable, hence it should not be stored here
         self._is_shared = bool(_is_shared)
         self._is_memmap = bool(_is_memmap)
         self._is_kjt = bool(_is_kjt)
@@ -128,6 +131,8 @@ class MetaTensor:
         self._repr_tensordict = _repr_tensordict
         if _is_tensordict:
             name = "TensorDict"
+            # _origin will be None when a lazy stack is being created
+            self._origin = tensor
         elif _is_memmap:
             name = "MemmapTensor"
         elif _is_kjt:
@@ -137,6 +142,26 @@ class MetaTensor:
         else:
             name = "Tensor"
         self.class_name = name
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @shape.setter
+    def shape(self, value):
+        self._ndim = len(value)
+        self._shape = value
+
+    @property
+    def _ndim(self):
+        return self._ndimension
+
+    @_ndim.setter
+    def _ndim(self, value):
+        self._ndimension = value
+
+    def ndimension(self):
+        return self._ndim
 
     def get_repr(self):
         if self.is_tensordict():
@@ -182,9 +207,6 @@ class MetaTensor:
         if self._numel is None:
             self._numel = np.prod(self.shape)
         return self._numel
-
-    def ndimension(self) -> int:
-        return self._ndim
 
     def clone(self) -> MetaTensor:
         """Clones the meta-tensor.

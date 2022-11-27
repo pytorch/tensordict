@@ -3,10 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import inspect
+
+import types
+from copy import deepcopy
 from functools import wraps
 
 import torch
-
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 from torch import nn
@@ -18,6 +20,7 @@ try:
     _has_functorch = True
 except ImportError:
     _has_functorch = False
+
 
 # Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
@@ -169,7 +172,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
 # Tensordict-compatible Functional modules
 
 
-def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None):
+def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None, recurse=True):
     """Extracts the weights and buffers of a model in a tensordict, and adapts the modules to read those inputs."""
     tensordict = TensorDict({}, [])
     for name, param in list(model.named_parameters(recurse=False)):
@@ -184,16 +187,24 @@ def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None):
         module_tensordict = extract_weights_and_buffers(module)
         if module_tensordict is not None:
             tensordict[name] = module_tensordict
+
     if funs_to_decorate is None:
         funs_to_decorate = ["forward"]
-    for fun_to_decorate in funs_to_decorate:
-        setattr(model, fun_to_decorate, _make_decorator(model, fun_to_decorate))
-    model.__dict__["_is_stateless"] = True
 
+    if not model.__dict__.get("_functionalized", False):
+        for fun_to_decorate in funs_to_decorate:
+            if hasattr(model, fun_to_decorate):
+                setattr(
+                    model,
+                    fun_to_decorate,
+                    types.MethodType(_make_decorator(model, fun_to_decorate), model),
+                )
+    model.__dict__["_functionalized"] = True
+    model.__dict__["_is_stateless"] = True
     if len(tensordict.keys()):
         return tensordict
     else:
-        return None
+        return TensorDict({}, [], _run_checks=False)
 
 
 def _swap_state(
@@ -239,6 +250,13 @@ def make_functional(module, funs_to_decorate=None):
     return params
 
 
+def get_functional(module, funs_to_decorate=None):
+    params = make_functional(module, funs_to_decorate=funs_to_decorate)
+    out = deepcopy(module)
+    repopulate_module(module, params)
+    return out
+
+
 def _make_decorator(module, fun_name):
     fun = getattr(module, fun_name)
 
@@ -277,9 +295,9 @@ def _make_decorator(module, fun_name):
     sig = oldsig.replace(parameters=params)
 
     @wraps(fun)
-    def new_fun(*args, **kwargs):
+    def new_fun(self, *args, **kwargs):
         # 3 use cases: (1) params is the last arg, (2) params is in kwargs, (3) no params
-        if module.__dict__["_is_stateless"]:
+        if self.__dict__.get("_is_stateless", False):
             params = kwargs.pop("params", None)
             if params is None:
                 params = args[-1]
@@ -287,16 +305,16 @@ def _make_decorator(module, fun_name):
 
             # get the previous params, and tell the submodules not to look for params anymore
             old_params = _assign_params(
-                module, params, make_stateless=False, return_old_tensordict=True
+                self, params, make_stateless=False, return_old_tensordict=True
             )
-            out = fun(*args, **kwargs)
+            out = getattr(type(self), fun_name)(self, *args, **kwargs)
             # reset the previous params, and tell the submodules to look for params
             _assign_params(
-                module, old_params, make_stateless=True, return_old_tensordict=True
+                self, old_params, make_stateless=True, return_old_tensordict=True
             )
             return out
         else:
-            return fun(*args, **kwargs)
+            return getattr(type(self), fun_name)(self, *args, **kwargs)
 
     new_fun.__signature__ = sig
     return new_fun
