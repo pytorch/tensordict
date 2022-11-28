@@ -3897,8 +3897,8 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in tensordicts[1:]:
             if not isinstance(td, TensorDictBase):
                 raise TypeError(
-                    f"Expected input to be TensorDictBase instance"
-                    f" but got {type(tensordicts[0])} instead."
+                    "Expected all inputs to be TensorDictBase instances but got "
+                    f"{type(td)} instead."
                 )
             _bs = td.batch_size
             _device = td.device
@@ -4472,6 +4472,39 @@ class LazyStackedTensorDict(TensorDictBase):
     def masked_fill(self, mask: Tensor, value: Union[float, bool]) -> TensorDictBase:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
+
+    def insert(self, index: int, tensordict: TensorDictBase) -> None:
+        if not isinstance(tensordict, TensorDictBase):
+            raise TypeError(
+                "Expected new value to be TensorDictBase instance but got "
+                f"{type(tensordict)} instead."
+            )
+
+        batch_size = self.tensordicts[0].batch_size
+        device = self.tensordicts[0].device
+
+        _batch_size = tensordict.batch_size
+        _device = tensordict.device
+
+        if device != _device:
+            raise ValueError(
+                f"Devices differ: stack has device={device}, new value has "
+                f"device={_device}."
+            )
+        if _batch_size != batch_size:
+            raise ValueError(
+                f"Batch sizes in tensordicts differs: stack has "
+                f"batch_size={_batch_size}, new_value has batch_size={_batch_size}."
+            )
+
+        self.tensordicts.insert(index, tensordict)
+
+        N = len(self.tensordicts)
+        self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
+        self._update_valid_keys()
+
+    def append(self, tensordict: TensorDictBase) -> None:
+        self.insert(len(self.tensordicts), tensordict)
 
 
 class SavedTensorDict(TensorDictBase):
