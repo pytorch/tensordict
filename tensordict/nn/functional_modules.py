@@ -216,31 +216,41 @@ def _swap_state(
             {}, torch.Size([]), device=tensordict.device, _run_checks=False
         )
 
-    for key, value in list(tensordict.items()):
-        if isinstance(value, TensorDictBase):
-            if return_old_tensordict:
-                _old_value = old_tensordict.get(key, None)
-            else:
-                _old_value = None
-            _old_value = _swap_state(
-                getattr(model, key),
-                value,
-                return_old_tensordict=return_old_tensordict,
-                old_tensordict=_old_value,
-                is_stateless=is_stateless,
-            )
-            if old_tensordict is not None:
-                old_tensordict.set(key, _old_value)
+    keys = set(tensordict.keys())
+    children = list(zip(*model.named_children()))
+    if children:
+        children = children[0]
+        keys = keys.difference(children)
+    for key in children:
+        value = tensordict.get(key, None)
+        if value is None:
+            # faster than get(key, Tensordict(...))
+            value = TensorDict({}, [], _run_checks=False)
+
+        if return_old_tensordict:
+            _old_value = old_tensordict.get(key, None)
         else:
-            is_param = key in model.__dict__.get("_parameters")
-            if return_old_tensordict:
-                old_attr = getattr(model, key)
-                if old_attr is None:
-                    old_attr = torch.zeros(*value.shape, 0)
-                old_tensordict.set(key, old_attr)
-            if is_param:
-                delattr(model, key)
-            setattr(model, key, value)
+            _old_value = None
+        _old_value = _swap_state(
+            getattr(model, key),
+            value,
+            return_old_tensordict=return_old_tensordict,
+            old_tensordict=_old_value,
+            is_stateless=is_stateless,
+        )
+        if old_tensordict is not None:
+            old_tensordict.set(key, _old_value)
+    for key in keys:
+        value = tensordict.get(key)
+        is_param = key in model.__dict__.get("_parameters")
+        if return_old_tensordict:
+            old_attr = getattr(model, key)
+            if old_attr is None:
+                old_attr = torch.zeros(*value.shape, 0)
+            old_tensordict.set(key, old_attr)
+        if is_param:
+            delattr(model, key)
+        setattr(model, key, value)
     if return_old_tensordict:
         return old_tensordict
 
