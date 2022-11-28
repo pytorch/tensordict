@@ -138,9 +138,12 @@ class _TensorDictKeysView:
         >>> assert set(td.keys()) == {("a", "b"), "c"}
     """
 
-    def __init__(self, tensordict: "TensorDictBase", include_nested: bool):
+    def __init__(
+        self, tensordict: "TensorDictBase", include_nested: bool, leaves_only: bool
+    ):
         self.tensordict = tensordict
         self.include_nested = include_nested
+        self.leaves_only = leaves_only
 
     def __iter__(self):
         return self._iter_helper(self.tensordict)
@@ -151,13 +154,7 @@ class _TensorDictKeysView:
         for key, value in items_iter:
             full_key = self._combine_keys(prefix, key)
             if (
-                isinstance(
-                    value,
-                    (
-                        TensorDictBase,
-                        KeyedJaggedTensor,
-                    ),
-                )
+                isinstance(value, (TensorDictBase, KeyedJaggedTensor))
                 and self.include_nested
             ):
                 subkeys = tuple(
@@ -167,7 +164,8 @@ class _TensorDictKeysView:
                     )
                 )
                 yield from subkeys
-            yield full_key
+            if not (isinstance(value, TensorDictBase) and self.leaves_only):
+                yield full_key
 
     def _combine_keys(self, prefix, key):
         if prefix is not None:
@@ -202,7 +200,10 @@ class _TensorDictKeysView:
 
     def __contains__(self, key):
         if isinstance(key, str):
-            return key in self._keys()
+            if key in self._keys():
+                meta_val = self.tensordict._get_meta(key)
+                return not (self.leaves_only and meta_val.is_tensordict())
+            return False
 
         elif isinstance(key, tuple):
             if len(key) == 1:
@@ -211,7 +212,7 @@ class _TensorDictKeysView:
                 if self.include_nested:
                     if key[0] in self:
                         meta_val = self.tensordict._get_meta(key[0])
-                        # TODO: SavedTensorDict currently doesn't support nested memebership checks
+                        # TODO: SavedTensorDict currently doesn't support nested membership checks
                         include_nested = self.include_nested  # and not isinstance(
                         #     val, SavedTensorDict
                         # )
@@ -820,15 +821,17 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def items(
-        self, include_nested: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False
     ) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:
         """Returns a generator of key-value pairs for the tensordict."""
-        for k in self.keys(include_nested=include_nested):
+        for k in self.keys(include_nested=include_nested, leaves_only=leaves_only):
             yield k, self.get(k)
 
-    def values(self, include_nested: bool = False) -> Iterator[COMPATIBLE_TYPES]:
+    def values(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> Iterator[COMPATIBLE_TYPES]:
         """Returns a generator representing the values for the tensordict."""
-        for k in self.keys(include_nested=include_nested):
+        for k in self.keys(include_nested=include_nested, leaves_only=leaves_only):
             yield self.get(k)
 
     def items_meta(
@@ -869,7 +872,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             yield from self._dict_meta.values()
 
     @abc.abstractmethod
-    def keys(self, include_nested: bool = False) -> _TensorDictKeysView:
+    def keys(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> _TensorDictKeysView:
         """Returns a generator of tensordict keys."""
         raise NotImplementedError(f"{self.__class__.__name__}")
 
@@ -2820,8 +2825,12 @@ class TensorDict(TensorDictBase):
             _is_shared=self._is_shared,
         )
 
-    def keys(self, include_nested: bool = False) -> _TensorDictKeysView:
-        return _TensorDictKeysView(self, include_nested=include_nested)
+    def keys(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> _TensorDictKeysView:
+        return _TensorDictKeysView(
+            self, include_nested=include_nested, leaves_only=leaves_only
+        )
 
 
 class _ErrorInteceptor:
@@ -3471,11 +3480,13 @@ torch.Size([3, 2])
                 td._dict_meta[subkey].requires_grad = tensor.requires_grad
         return self
 
-    def keys(self, include_nested: bool = False) -> _TensorDictKeysView:
+    def keys(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> _TensorDictKeysView:
         # TODO: temporary hack while SavedTensorDict doesn't support nested iteration
         if isinstance(self._source, SavedTensorDict):
             include_nested = False
-        return self._source.keys(include_nested=include_nested)
+        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only)
 
     def set_(
         self,
@@ -4179,8 +4190,12 @@ class LazyStackedTensorDict(TensorDictBase):
             del self._orig_batch_size
         self._batch_size = new_size
 
-    def keys(self, include_nested: bool = False) -> _LazyStackedTensorDictKeysView:
-        keys = _LazyStackedTensorDictKeysView(self, include_nested=include_nested)
+    def keys(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> _LazyStackedTensorDictKeysView:
+        keys = _LazyStackedTensorDictKeysView(
+            self, include_nested=include_nested, leaves_only=leaves_only
+        )
         return keys
 
     def _update_valid_keys(self) -> None:
@@ -4550,13 +4565,19 @@ class SavedTensorDict(TensorDictBase):
             "on the new device."
         )
 
-    def keys(self, include_nested: bool = False) -> Sequence[str]:
+    def keys(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> Sequence[str]:
         # TODO: support iteration over nested keys
         if include_nested:
             raise ValueError(
                 "SavedTensorDict does not currently support iteration over nested keys."
             )
         for k in self._keys:
+            if leaves_only:
+                meta_val = self._get_meta(k)
+                if meta_val.is_tensordict():
+                    continue
             yield k
 
     def get(
@@ -4709,17 +4730,23 @@ class SavedTensorDict(TensorDictBase):
         raise RuntimeError("SavedTensorDict cannot be put detached.")
 
     def items(
-        self, include_nested: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False
     ) -> Iterator[Tuple[str, COMPATIBLE_TYPES]]:
         version = self._version
-        for v in self._load().items(include_nested=include_nested):
+        for v in self._load().items(
+            include_nested=include_nested, leaves_only=leaves_only
+        ):
             if version != self._version:
                 raise RuntimeError("The SavedTensorDict changed while querying items.")
             yield v
 
-    def values(self, include_nested: bool = False) -> Iterator[COMPATIBLE_TYPES]:
+    def values(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> Iterator[COMPATIBLE_TYPES]:
         version = self._version
-        for v in self._load().values(include_nested=include_nested):
+        for v in self._load().values(
+            include_nested=include_nested, leaves_only=leaves_only
+        ):
             if version != self._version:
                 raise RuntimeError("The SavedTensorDict changed while querying values.")
             yield v
@@ -5097,8 +5124,10 @@ class _CustomOpTensorDict(TensorDictBase):
             f"\n\top={self.custom_op}({custom_op_kwargs_str}))"
         )
 
-    def keys(self, include_nested: bool = False) -> _TensorDictKeysView:
-        return self._source.keys(include_nested=include_nested)
+    def keys(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> _TensorDictKeysView:
+        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only)
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = True
