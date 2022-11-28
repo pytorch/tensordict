@@ -2904,6 +2904,12 @@ def test_keys_view():
     assert keys == {key for key, _ in tensordict.items_meta()}
     assert keys_nested == {key for key, _ in tensordict.items_meta(include_nested=True)}
 
+    leaves = set(tensordict.keys(leaves_only=True))
+    leaves_nested = set(tensordict.keys(include_nested=True, leaves_only=True))
+
+    assert leaves == set()
+    assert leaves_nested == {("a", "b", "c")}
+
 
 def test_error_on_contains():
     td = TensorDict(
