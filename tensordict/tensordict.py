@@ -4494,7 +4494,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if _batch_size != batch_size:
             raise ValueError(
                 f"Batch sizes in tensordicts differs: stack has "
-                f"batch_size={_batch_size}, new_value has batch_size={_batch_size}."
+                f"batch_size={batch_size}, new_value has batch_size={_batch_size}."
             )
 
         self.tensordicts.insert(index, tensordict)
