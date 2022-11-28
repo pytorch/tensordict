@@ -192,6 +192,9 @@ class TensorDictModule(nn.Module):
         tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
     ) -> TensorDictBase:
+        """When the tensordict parameter is not set, kwargs are used to create
+        an instance of TensorDict.
+        """
         if tensordict is None:
             tensordict = make_tensordict(**kwargs)
             # do not pass used kwargs to _call_module
