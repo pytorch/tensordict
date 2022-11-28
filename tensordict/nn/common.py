@@ -11,7 +11,7 @@ from typing import Any, Iterable, List, Optional, Sequence, Union
 
 import torch
 
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NESTED_KEY
 from torch import nn, Tensor
 
@@ -188,10 +188,14 @@ class TensorDictModule(nn.Module):
 
     def forward(
         self,
-        tensordict: TensorDictBase,
+        tensordict: TensorDictBase = None,
         tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
     ) -> TensorDictBase:
+        if tensordict is None:
+            tensordict = make_tensordict(**kwargs)
+            # do not pass used kwargs to _call_module
+            kwargs = {}
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):

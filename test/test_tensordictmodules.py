@@ -280,6 +280,13 @@ class TestTDModule:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
+    def test_dispatch_kwargs(self):
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        td = TensorDict({"a": torch.zeros(1, 1)}, 1)
+        tdm(td)
+        td2 = tdm(a=torch.zeros(1, 1))
+        assert (td2 == td).all()
+
 
 class TestTDSequence:
     def test_key_exclusion(self):
