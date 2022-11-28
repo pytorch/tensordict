@@ -3219,10 +3219,16 @@ def test_lazy_stacked_insert(dim, index, device):
     td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
     lstd = torch.stack([td] * 2, dim=dim)
 
-    lstd.insert(index, TensorDict({"a": torch.ones(4)}, [4], device=device))
+    lstd.insert(
+        index,
+        TensorDict({"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device),
+    )
 
     bs = [4]
     bs.insert(dim, 3)
+
+    assert lstd.batch_size == torch.Size(bs)
+    assert set(lstd.keys()) == {"a"}
 
     t = torch.zeros(*bs, 1)
 
@@ -3252,10 +3258,15 @@ def test_lazy_stacked_append(dim, device):
     td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
     lstd = torch.stack([td] * 2, dim=dim)
 
-    lstd.append(TensorDict({"a": torch.ones(4)}, [4], device=device))
+    lstd.append(
+        TensorDict({"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device)
+    )
 
     bs = [4]
     bs.insert(dim, 3)
+
+    assert lstd.batch_size == torch.Size(bs)
+    assert set(lstd.keys()) == {"a"}
 
     t = torch.zeros(*bs, 1)
 
