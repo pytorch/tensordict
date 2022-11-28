@@ -302,16 +302,17 @@ def _make_decorator(module, fun_name):
             if params is None:
                 params = args[-1]
                 args = args[:-1]
-
-            # get the previous params, and tell the submodules not to look for params anymore
+                # get the previous params, and tell the submodules not to look for params anymore
             old_params = _assign_params(
                 self, params, make_stateless=False, return_old_tensordict=True
             )
-            out = getattr(type(self), fun_name)(self, *args, **kwargs)
-            # reset the previous params, and tell the submodules to look for params
-            _assign_params(
-                self, old_params, make_stateless=True, return_old_tensordict=True
-            )
+            try:
+                out = getattr(type(self), fun_name)(self, *args, **kwargs)
+            finally:
+                # reset the previous params, and tell the submodules to look for params
+                _assign_params(
+                    self, old_params, make_stateless=True, return_old_tensordict=True
+                )
             return out
         else:
             return getattr(type(self), fun_name)(self, *args, **kwargs)
