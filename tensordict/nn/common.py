@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import functools
+
 import warnings
 from textwrap import indent
 from typing import Any, Iterable, List, Optional, Sequence, Union
@@ -52,6 +54,17 @@ def _check_all_nested(list_of_keys):
         )
     for key in list_of_keys:
         _nested_key_type_check(key)
+
+
+def dispatch_kwargs(func):
+    @functools.wraps(func)
+    def wrapper(self, tensordict=None, *args, **kwargs):
+        if tensordict is None:
+            tensordict = make_tensordict(**kwargs)
+            kwargs = {}
+        return func(self, tensordict, *args, **kwargs)
+
+    return wrapper
 
 
 class TensorDictModule(nn.Module):
@@ -186,19 +199,16 @@ class TensorDictModule(nn.Module):
         out = self.module(*tensors, **kwargs)
         return out
 
+    @dispatch_kwargs
     def forward(
         self,
-        tensordict: TensorDictBase = None,
+        tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
     ) -> TensorDictBase:
         """When the tensordict parameter is not set, kwargs are used to create
         an instance of TensorDict.
         """
-        if tensordict is None:
-            tensordict = make_tensordict(**kwargs)
-            # do not pass used kwargs to _call_module
-            kwargs = {}
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):
