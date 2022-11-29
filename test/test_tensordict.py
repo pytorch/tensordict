@@ -3230,7 +3230,7 @@ def test_lazy_stacked_insert(dim, index, device):
     assert lstd.batch_size == torch.Size(bs)
     assert set(lstd.keys()) == {"a"}
 
-    t = torch.zeros(*bs, 1)
+    t = torch.zeros(*bs, 1, device=device)
 
     if dim == 0:
         t[index] = 1
@@ -3268,7 +3268,7 @@ def test_lazy_stacked_append(dim, device):
     assert lstd.batch_size == torch.Size(bs)
     assert set(lstd.keys()) == {"a"}
 
-    t = torch.zeros(*bs, 1)
+    t = torch.zeros(*bs, 1, device=device)
 
     if dim == 0:
         t[-1] = 1
@@ -3284,7 +3284,7 @@ def test_lazy_stacked_append(dim, device):
 
     if device != torch.device("cpu"):
         with pytest.raises(ValueError, match="Devices differ"):
-            lstd.append(TensorDict({"a": torch.ones(4)}, [4]), device="cpu")
+            lstd.append(TensorDict({"a": torch.ones(4)}, [4], device="cpu"))
 
     with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
         lstd.append(TensorDict({"a": torch.ones(17)}, [17], device=device))
