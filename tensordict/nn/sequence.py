@@ -21,10 +21,7 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-import torch
-
 from tensordict.nn.common import TensorDictModule
-from tensordict.nn.probabilistic import ProbabilisticTensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _normalize_key, NESTED_KEY
 from torch import nn
@@ -49,7 +46,7 @@ class TensorDictSequential(TensorDictModule):
             stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
 
-    TensorDictSequence supports functional, modular and vmap coding:
+    TensorDictSequential supports functional, modular and vmap coding:
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
@@ -173,7 +170,7 @@ class TensorDictSequential(TensorDictModule):
             out_keys: output keys of the subsequence we want to select
 
         Returns:
-            A new TensorDictSequential with only the modules that are necessary acording to the given input and output keys.
+            A new TensorDictSequential with only the modules that are necessary according to the given input and output keys.
         """
         if in_keys is None:
             in_keys = deepcopy(self.in_keys)
@@ -257,40 +254,3 @@ class TensorDictSequential(TensorDictModule):
 
     def __delitem__(self, index: Union[int, slice]) -> None:
         self.module.__delitem__(idx=index)
-
-    def get_dist(
-        self,
-        tensordict: TensorDictBase,
-        **kwargs,
-    ) -> Tuple[torch.distributions.Distribution, ...]:
-        if isinstance(self.module[-1], ProbabilisticTensorDictModule):
-            if kwargs:
-                raise RuntimeError(
-                    "TensorDictSequential does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
-                )
-            tensordict = self[:-1](tensordict)
-            out = self[-1].get_dist(tensordict)
-            return out
-        else:
-            raise RuntimeError(
-                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict. "
-                f"The sequence items were of type: {[type(m) for m in self.module]}"
-            )
-
-    def get_dist_params(
-        self,
-        tensordict: TensorDictBase,
-        **kwargs,
-    ) -> Tuple[torch.distributions.Distribution, ...]:
-        if isinstance(self.module[-1], ProbabilisticTensorDictModule):
-            if kwargs:
-                raise RuntimeError(
-                    "TensorDictSequential does not support keyword arguments."
-                )
-            tensordict = self[:-1](tensordict)
-            return self[-1].get_dist_params(tensordict)
-        else:
-            raise RuntimeError(
-                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict. "
-                f"The sequence items were of type: {[type(m) for m in self.module]}"
-            )
