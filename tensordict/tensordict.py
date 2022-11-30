@@ -1188,7 +1188,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             self.apply(lambda tensor, idx=_idx: tensor[idx], batch_size=batch_size)
             for _idx in idx
         )
-        # return tuple(self[_idx] for _idx in idx)
 
     def chunk(self, chunks: int, dim: int = 0) -> Tuple[TensorDictBase, ...]:
         """Splits a tendordict into the specified number of chunks, if possible.
