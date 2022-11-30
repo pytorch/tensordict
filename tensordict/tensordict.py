@@ -149,23 +149,26 @@ class _TensorDictKeysView:
         return self._iter_helper(self.tensordict)
 
     def _iter_helper(self, tensordict, prefix=None):
-        items_iter = self._items(tensordict)
+        if not self.include_nested and isinstance(self.tensordict, TensorDict):
+            yield from self.tensordict._tensordict.keys()
+        else:
+            items_iter = self._items(tensordict)
 
-        for key, value in items_iter:
-            full_key = self._combine_keys(prefix, key)
-            if (
-                isinstance(value, (TensorDictBase, KeyedJaggedTensor))
-                and self.include_nested
-            ):
-                subkeys = tuple(
-                    self._iter_helper(
-                        value,
-                        full_key if isinstance(full_key, tuple) else (full_key,),
+            for key, value in items_iter:
+                full_key = self._combine_keys(prefix, key)
+                if (
+                    isinstance(value, (TensorDictBase, KeyedJaggedTensor))
+                    and self.include_nested
+                ):
+                    subkeys = tuple(
+                        self._iter_helper(
+                            value,
+                            full_key if isinstance(full_key, tuple) else (full_key,),
+                        )
                     )
-                )
-                yield from subkeys
-            if not (isinstance(value, TensorDictBase) and self.leaves_only):
-                yield full_key
+                    yield from subkeys
+                if not (isinstance(value, TensorDictBase) and self.leaves_only):
+                    yield full_key
 
     def _combine_keys(self, prefix, key):
         if prefix is not None:
@@ -2484,16 +2487,13 @@ class TensorDict(TensorDictBase):
             self._is_memmap = isinstance(value, MemmapTensor)
 
         if not isinstance(key, tuple):
-            keys = self.keys()
-            present = key in keys
+            present = key in self.keys()
         elif len(key) == 1:
             key = key[0]
-            keys = self.keys()
-            present = key in keys
+            present = key in self.keys()
         else:
             # present will be assessed by the leaf tensordict
-            present = False
-            keys = None
+            present = None
 
         if present and value is self.get(key):
             return self
@@ -2501,21 +2501,21 @@ class TensorDict(TensorDictBase):
         if present and inplace:
             return self.set_(key, value)
 
-        if isinstance(key, str):
+        if present is not None:
             if _process:
                 proc_value = self._process_input(
                     value,
                     check_tensor_shape=_run_checks,
                     check_shared=False,
                     check_device=_run_checks,
-                )  # check_tensor_shape=_run_checks
+                )
             else:
                 proc_value = value
 
             self._tensordict[key] = proc_value
             if _meta_val:
                 self._dict_meta[key] = _meta_val
-            elif present and key in self._dict_meta:
+            elif present and key in self._dict_meta.keys():
                 del self._dict_meta[key]
         else:
             # since we call _nested_key_type_check above, we may assume that the key is
