@@ -28,6 +28,7 @@ For instance, the above example can be easily used across classification and seg
    :maxdepth: 3
    :caption: Contents:
 
+   overview
    reference/index
 
 Indices and tables
