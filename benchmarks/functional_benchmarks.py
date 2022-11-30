@@ -9,7 +9,7 @@ from tensordict.nn.functional_modules import make_functional
 from torch import nn
 
 if __name__ == "__main__":
-    ## Creation
+    # Creation
     net = nn.Sequential(
         nn.Linear(2, 2),
         nn.Linear(2, 2),
@@ -42,8 +42,7 @@ if __name__ == "__main__":
         ),
     )
 
-    ## Execution
-    # x = torch.randn(2, 2, 128)
+    # Execution
     x = torch.randn(2, 2)
     fmodule, params, buffers = functorch_make_functional(deepcopy(net))
     print(
