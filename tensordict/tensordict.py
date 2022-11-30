@@ -4512,6 +4512,8 @@ class LazyStackedTensorDict(TensorDictBase):
         N = len(self.tensordicts)
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
         self._update_valid_keys()
+        # recreate _dict_meta to ensure shapes of stacked tensors are correct
+        self._dict_meta = KeyDependentDefaultDict(self._make_meta)
 
     def append(self, tensordict: TensorDictBase) -> None:
         """Append a TensorDict onto the stack.
