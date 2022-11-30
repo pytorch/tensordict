@@ -5,15 +5,18 @@
 
 from __future__ import annotations
 
+import functools
+
 import warnings
 from textwrap import indent
 from typing import Any, Iterable, List, Optional, Sequence, Union
 
 import torch
 
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NESTED_KEY
 from torch import nn, Tensor
+
 
 try:
     from functorch import FunctionalModule, FunctionalModuleWithBuffers
@@ -52,6 +55,20 @@ def _check_all_nested(list_of_keys):
         )
     for key in list_of_keys:
         _nested_key_type_check(key)
+
+
+def dispatch_kwargs(func):
+    @functools.wraps(func)
+    def wrapper(self, tensordict=None, *args, **kwargs):
+        if tensordict is None:
+            tensordict_values = {}
+            for key in self.in_keys:
+                if key in kwargs:
+                    tensordict_values[key] = kwargs.pop(key)
+            tensordict = make_tensordict(**tensordict_values)
+        return func(self, tensordict, *args, **kwargs)
+
+    return wrapper
 
 
 class TensorDictModule(nn.Module):
@@ -186,12 +203,14 @@ class TensorDictModule(nn.Module):
         out = self.module(*tensors, **kwargs)
         return out
 
+    @dispatch_kwargs
     def forward(
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
     ) -> TensorDictBase:
+        """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):
