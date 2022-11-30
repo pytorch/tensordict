@@ -213,7 +213,12 @@ def _swap_state(
     keys = set(tensordict.keys())
     children = []
     for key, child in model.named_children():
-        keys.remove(key)
+        try:
+            keys.remove(key)
+        except KeyError:
+            # if params are built externally, this could lead to a KeyError as some
+            # modules do not have params
+            pass
         children.append(key)
         value = tensordict.get(key, None)
         if value is None:

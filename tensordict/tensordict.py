@@ -619,7 +619,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             else:
                 item_trsf = fn(item)
             if item_trsf is not None:
-                out.set(key, item_trsf, inplace=inplace)
+                out.set(
+                    key, item_trsf, inplace=inplace, _run_checks=False, _process=False
+                )
         if not inplace and is_locked:
             out.lock()
         return out
@@ -1176,7 +1178,13 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             (tuple(slice(None) for _ in range(dim)) + (i,))
             for i in range(self.shape[dim])
         ]
-        return tuple(self[_idx] for _idx in idx)
+        if dim < 0:
+            dim = self.batch_dims + dim
+        batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
+        return tuple(
+            self.apply(lambda tensor, idx=_idx: tensor[idx], batch_size=batch_size)
+            for _idx in idx
+        )
 
     def chunk(self, chunks: int, dim: int = 0) -> Tuple[TensorDictBase, ...]:
         """Splits a tendordict into the specified number of chunks, if possible.
@@ -1219,18 +1227,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
 
-        def _clone(value):
-            if recurse:
-                return value.clone()
-            elif isinstance(value, TensorDictBase):
-                return value.clone(recurse=recurse)
-            else:
-                return value
-
         return TensorDict(
-            source={key: _clone(value) for key, value in self.items()},
+            source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
         )
 
     @classmethod
@@ -1485,7 +1486,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         d = {}
         for key, item in self.items():
             d[key] = item.reshape(*shape, *item.shape[self.ndimension() :])
-        if len(d):
+        if d:
             batch_size = d[key].shape[: len(shape)]
         else:
             if any(not isinstance(i, int) or i < 0 for i in shape):
@@ -1493,7 +1494,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     "Implicit reshaping is not permitted with empty " "tensordicts"
                 )
             batch_size = shape
-        return TensorDict(d, batch_size, device=self.device)
+        return TensorDict(d, batch_size, device=self.device, _run_checks=False)
 
     def split(
         self, split_size: Union[int, List[int]], dim: int = 0
@@ -2220,7 +2221,8 @@ class TensorDict(TensorDictBase):
                         _is_memmap=_is_memmap,
                     )
                     upd_dict[key] = value
-            self._tensordict.update(upd_dict)
+            if upd_dict:
+                self._tensordict.update(upd_dict)
         else:
             self._tensordict = {}
             if not isinstance(source, (TensorDictBase, dict)):
@@ -2481,44 +2483,47 @@ class TensorDict(TensorDictBase):
             self._is_memmap = isinstance(value, MemmapTensor)
 
         if not isinstance(key, tuple):
-            keys = self.keys()
+            present = key in self.keys()
         elif len(key) == 1:
             key = key[0]
-            keys = self.keys()
+            present = key in self.keys()
         else:
-            keys = self.keys(include_nested=True)
+            # present will be assessed by the leaf tensordict
+            present = None
 
-        present = key in keys
         if present and value is self.get(key):
             return self
 
         if present and inplace:
             return self.set_(key, value)
 
-        if _process:
-            proc_value = self._process_input(
-                value,
-                check_tensor_shape=_run_checks,
-                check_shared=False,
-                check_device=_run_checks,
-            )  # check_tensor_shape=_run_checks
-        else:
-            proc_value = value
+        if present is not None:
+            if _process:
+                proc_value = self._process_input(
+                    value,
+                    check_tensor_shape=_run_checks,
+                    check_shared=False,
+                    check_device=_run_checks,
+                )
+            else:
+                proc_value = value
 
-        if isinstance(key, tuple) and len(key) == 1:
-            key = key[0]
-
-        if isinstance(key, str):
             self._tensordict[key] = proc_value
             if _meta_val:
                 self._dict_meta[key] = _meta_val
-            elif present and key in self._dict_meta:
+            elif present and key in self._dict_meta.keys():
                 del self._dict_meta[key]
         else:
             # since we call _nested_key_type_check above, we may assume that the key is
             # a tuple of strings
             td, subkey = _get_leaf_tensordict(self, key, _default_hook)
-            td.set(subkey, proc_value)
+            td.set(
+                subkey,
+                value,
+                inplace=inplace,
+                _process=_process,
+                _run_checks=_run_checks,
+            )
 
             if _meta_val:
                 td._dict_meta[subkey] = _meta_val
@@ -2672,7 +2677,7 @@ class TensorDict(TensorDictBase):
     ) -> COMPATIBLE_TYPES:
         _nested_key_type_check(key)
 
-        if key in self.keys(include_nested=True):
+        try:
             if isinstance(key, tuple):
                 if len(key) > 1:
                     first_lev = self.get(key[0])
@@ -2681,7 +2686,10 @@ class TensorDict(TensorDictBase):
                     return first_lev.get(key[1:])
                 return self.get(key[0])
             return self._tensordict[key]
-        else:
+        except KeyError:
+            # this is slower than a if / else but (1) it allows to avoid checking
+            # that the key is present and (2) it should be used less frequently than
+            # the regular get()
             return self._default_get(key, default)
 
     def share_memory_(self, lock=True) -> TensorDictBase:
@@ -5630,3 +5638,12 @@ def _iter_items_lazystack(tensordict):
         except KeyError:
             tensordict._update_valid_keys()
             continue
+
+
+def _clone_value(value, recurse):
+    if recurse:
+        return value.clone()
+    elif isinstance(value, TensorDictBase):
+        return value.clone(recurse=False)
+    else:
+        return value
