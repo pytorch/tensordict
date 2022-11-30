@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import collections
 import math
+
+import time
 import typing
+from functools import wraps
 from numbers import Number
 from typing import Any, List, Optional, Tuple, Union
 
@@ -649,3 +652,52 @@ def _requires_grad(tensor: torch.Tensor):
         return tensor._values.requires_grad
     else:
         return tensor.requires_grad
+
+
+class timeit:
+    """A dirty but easy to use decorator for profiling code."""
+
+    _REG = {}
+
+    def __init__(self, name):
+        self.name = name
+
+    def __call__(self, fn):
+        @wraps(fn)
+        def decorated_fn(*args, **kwargs):
+            with self:
+                out = fn(*args, **kwargs)
+                return out
+
+        return decorated_fn
+
+    def __enter__(self):
+        self.t0 = time.time()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        t = time.time() - self.t0
+        val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
+
+        count = val[2]
+        N = count + 1
+        val[0] = val[0] * (count / N) + t / N
+        val[1] += t
+        val[2] = N
+
+    @staticmethod
+    def print(prefix=None):
+        keys = list(timeit._REG)
+        keys.sort()
+        for name in keys:
+            strings = []
+            if prefix:
+                strings.append(prefix)
+            strings.append(
+                f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
+            )
+            print(" -- ".join(strings))
+
+    @staticmethod
+    def erase():
+        for k in timeit._REG:
+            timeit._REG[k] = [0.0, 0.0, 0]

@@ -174,7 +174,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
 
 def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None, recurse=True):
     """Extracts the weights and buffers of a model in a tensordict, and adapts the modules to read those inputs."""
-    tensordict = TensorDict({}, [])
+    tensordict = {}
     for name, param in list(model.named_parameters(recurse=False)):
         setattr(model, name, None)
         tensordict[name] = param
@@ -201,10 +201,7 @@ def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None, recurse
                 )
     model.__dict__["_functionalized"] = True
     model.__dict__["_is_stateless"] = True
-    if len(tensordict.keys()):
-        return tensordict
-    else:
-        return TensorDict({}, [], _run_checks=False)
+    return TensorDict(tensordict, [], _run_checks=False)
 
 
 def _swap_state(
@@ -212,34 +209,30 @@ def _swap_state(
 ):
     model.__dict__["_is_stateless"] = is_stateless
     if return_old_tensordict and old_tensordict is None:
-        old_tensordict = TensorDict(
-            {}, torch.Size([]), device=tensordict.device, _run_checks=False
-        )
-
+        old_tensordict = {}
     keys = set(tensordict.keys())
-    children = list(zip(*model.named_children()))
-    if children:
-        children = children[0]
-        keys = keys.difference(children)
-    for key in children:
+    children = []
+    for key, child in model.named_children():
+        keys.remove(key)
+        children.append(key)
         value = tensordict.get(key, None)
         if value is None:
             # faster than get(key, Tensordict(...))
-            value = TensorDict({}, [], _run_checks=False)
+            value = {}
 
         if return_old_tensordict:
             _old_value = old_tensordict.get(key, None)
         else:
             _old_value = None
         _old_value = _swap_state(
-            getattr(model, key),
+            child,
             value,
             return_old_tensordict=return_old_tensordict,
             old_tensordict=_old_value,
             is_stateless=is_stateless,
         )
         if old_tensordict is not None:
-            old_tensordict.set(key, _old_value)
+            old_tensordict[key] = _old_value
     for key in keys:
         value = tensordict.get(key)
         is_param = key in model.__dict__.get("_parameters")
@@ -247,7 +240,7 @@ def _swap_state(
             old_attr = getattr(model, key)
             if old_attr is None:
                 old_attr = torch.zeros(*value.shape, 0)
-            old_tensordict.set(key, old_attr)
+            old_tensordict[key] = old_attr
         if is_param:
             delattr(model, key)
         setattr(model, key, value)
@@ -333,7 +326,9 @@ def _make_decorator(module, fun_name):
 
 def _assign_params(module, params, make_stateless, return_old_tensordict):
     if params is not None:
-        return _swap_state(module, params, make_stateless, return_old_tensordict)
+        out = _swap_state(module, params, make_stateless, return_old_tensordict)
+        if out is not None:
+            return TensorDict(out, [], _run_checks=False)
 
 
 def repopulate_module(model, tensordict):
