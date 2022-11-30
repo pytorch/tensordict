@@ -17,6 +17,7 @@ from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NESTED_KEY
 from torch import nn, Tensor
 
+
 try:
     from functorch import FunctionalModule, FunctionalModuleWithBuffers
 
@@ -60,8 +61,11 @@ def dispatch_kwargs(func):
     @functools.wraps(func)
     def wrapper(self, tensordict=None, *args, **kwargs):
         if tensordict is None:
-            tensordict = make_tensordict(**kwargs)
-            kwargs = {}
+            tensordict_values = {}
+            for key in self.in_keys:
+                if key in kwargs:
+                    tensordict_values[key] = kwargs.pop(key)
+            tensordict = make_tensordict(**tensordict_values)
         return func(self, tensordict, *args, **kwargs)
 
     return wrapper
