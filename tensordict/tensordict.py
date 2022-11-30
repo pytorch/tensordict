@@ -2196,25 +2196,20 @@ class TensorDict(TensorDictBase):
     ) -> object:
         super().__init__()
 
-        self._tensordict: Dict = {}
-
         self._is_shared = _is_shared
         self._is_memmap = _is_memmap
-
-        if not isinstance(source, (TensorDictBase, dict)):
-            raise ValueError(
-                "A TensorDict source is expected to be a TensorDictBase "
-                f"sub-type or a dictionary, found type(source)={type(source)}."
-            )
-        self._batch_size = self._parse_batch_size(source, batch_size)
-
         if device is not None:
             device = torch.device(device)
-
         self._device = device
 
-        if source is not None:
-            for key, value in source.items():
+        if not _run_checks:
+            if isinstance(source, dict):
+                self._tensordict: Dict = copy(source)
+            else:
+                self._tensordict: Dict = {**source}
+            self._batch_size = torch.Size(batch_size)
+            upd_dict = {}
+            for key, value in self._tensordict.items():
                 if isinstance(value, dict):
                     value = TensorDict(
                         value,
@@ -2224,23 +2219,44 @@ class TensorDict(TensorDictBase):
                         _is_shared=_is_shared,
                         _is_memmap=_is_memmap,
                     )
-                elif (
-                    isinstance(value, TensorDictBase)
-                    and value.batch_size[: self.batch_dims] != self.batch_size
-                ):
-                    value = value.clone(False)
-                    value.batch_size = self.batch_size
-
-                if device is not None:
-                    value = value.to(device)
-                _meta_val = (
-                    None
-                    if _meta_source is None or key not in _meta_source
-                    else _meta_source[key]
+                    upd_dict[key] = value
+            self._tensordict.update(upd_dict)
+        else:
+            self._tensordict = {}
+            if not isinstance(source, (TensorDictBase, dict)):
+                raise ValueError(
+                    "A TensorDict source is expected to be a TensorDictBase "
+                    f"sub-type or a dictionary, found type(source)={type(source)}."
                 )
-                self.set(key, value, _meta_val=_meta_val, _run_checks=False)
+            self._batch_size = self._parse_batch_size(source, batch_size)
 
-        if _run_checks:
+            if source is not None:
+                for key, value in source.items():
+                    if isinstance(value, dict):
+                        value = TensorDict(
+                            value,
+                            batch_size=self._batch_size,
+                            device=self._device,
+                            _run_checks=_run_checks,
+                            _is_shared=_is_shared,
+                            _is_memmap=_is_memmap,
+                        )
+                    elif (
+                        isinstance(value, TensorDictBase)
+                        and value.batch_size[: self.batch_dims] != self.batch_size
+                    ):
+                        value = value.clone(False)
+                        value.batch_size = self.batch_size
+
+                    if device is not None:
+                        value = value.to(device)
+                    _meta_val = (
+                        None
+                        if _meta_source is None or key not in _meta_source
+                        else _meta_source[key]
+                    )
+                    self.set(key, value, _meta_val=_meta_val, _run_checks=False)
+
             self._check_batch_size()
             self._check_device()
 
@@ -5527,7 +5543,12 @@ def make_tensordict(
     """
     if batch_size is None:
         batch_size = _find_max_batch_size(kwargs)
-    return TensorDict(kwargs, batch_size=batch_size, device=device, _run_checks=False)
+    # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
+    return TensorDict(
+        kwargs,
+        batch_size=batch_size,
+        device=device,
+    )  # _run_checks=False)
 
 
 def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
