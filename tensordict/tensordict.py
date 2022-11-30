@@ -4474,6 +4474,16 @@ class LazyStackedTensorDict(TensorDictBase):
         return td_copy.masked_fill_(mask, value)
 
     def insert(self, index: int, tensordict: TensorDictBase) -> None:
+        """Insert a TensorDict into the stack at the specified index.
+
+        Analogous to list.insert. The inserted TensorDict must have compatible
+        batch_size and device. Insertion is in-place, nothing is returned.
+
+        Args:
+            index (int): The index at which the new TensorDict should be inserted.
+            tensordict (TensorDictBase): The TensorDict to be inserted into the stack.
+
+        """
         if not isinstance(tensordict, TensorDictBase):
             raise TypeError(
                 "Expected new value to be TensorDictBase instance but got "
@@ -4504,6 +4514,15 @@ class LazyStackedTensorDict(TensorDictBase):
         self._update_valid_keys()
 
     def append(self, tensordict: TensorDictBase) -> None:
+        """Append a TensorDict onto the stack.
+
+        Analogous to list.append. The appended TensorDict must have compatible
+        batch_size and device. The append operation is in-place, nothing is returned.
+
+        Args:
+            tensordict (TensorDictBase): The TensorDict to be appended onto the stack.
+
+        """
         self.insert(len(self.tensordicts), tensordict)
 
 
