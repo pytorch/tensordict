@@ -619,7 +619,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             else:
                 item_trsf = fn(item)
             if item_trsf is not None:
-                out.set(key, item_trsf, inplace=inplace, _run_checks=False)
+                out.set(
+                    key, item_trsf, inplace=inplace, _run_checks=False, _process=False
+                )
         if not inplace and is_locked:
             out.lock()
         return out
@@ -1226,18 +1228,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
 
-        def _clone(value):
-            if recurse:
-                return value.clone()
-            elif isinstance(value, TensorDictBase):
-                return value.clone(recurse=recurse)
-            else:
-                return value
-
         return TensorDict(
-            source={key: _clone(value) for key, value in self.items()},
+            source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
+            _run_checks=False,
         )
 
     @classmethod
@@ -5593,3 +5588,12 @@ def _iter_items_lazystack(tensordict):
         except KeyError:
             tensordict._update_valid_keys()
             continue
+
+
+def _clone_value(value, recurse):
+    if recurse:
+        return value.clone()
+    elif isinstance(value, TensorDictBase):
+        return value.clone(recurse=False)
+    else:
+        return value

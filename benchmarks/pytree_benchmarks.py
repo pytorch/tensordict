@@ -9,7 +9,7 @@ if __name__ == "__main__":
         "a": {"b": torch.randn(3, 4, 1), "c": {"d": torch.rand(3, 4, 5, 6)}},
         "c": torch.rand(3, 4, 1),
     }
-    nested_td = TensorDict(nested_dict, [3, 4])
+    nested_td = TensorDict(nested_dict, [3, 4], _run_checks=False)
 
     # reshape
     print(
@@ -72,5 +72,23 @@ if __name__ == "__main__":
         "split, td",
         timeit.timeit(
             "nested_td.split([1, 2], 0)", globals={"nested_td": nested_td}, number=10000
+        ),
+    )
+
+    # add
+    print(
+        "add, pytree",
+        timeit.timeit(
+            "tree_map(lambda x: x + 1, nested_dict)",
+            globals={"tree_map": tree_map, "nested_dict": nested_dict},
+            number=10000,
+        ),
+    )
+    print(
+        "add, td",
+        timeit.timeit(
+            "nested_td.apply(lambda x: x+1)",
+            globals={"nested_td": nested_td},
+            number=10000,
         ),
     )
