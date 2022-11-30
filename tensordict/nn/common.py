@@ -210,9 +210,7 @@ class TensorDictModule(nn.Module):
         tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
     ) -> TensorDictBase:
-        """When the tensordict parameter is not set, kwargs are used to create
-        an instance of TensorDict.
-        """
+        """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):
