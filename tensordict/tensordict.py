@@ -149,26 +149,23 @@ class _TensorDictKeysView:
         return self._iter_helper(self.tensordict)
 
     def _iter_helper(self, tensordict, prefix=None):
-        if not self.include_nested and isinstance(self.tensordict, TensorDict):
-            yield from self.tensordict._tensordict.keys()
-        else:
-            items_iter = self._items(tensordict)
+        items_iter = self._items(tensordict)
 
-            for key, value in items_iter:
-                full_key = self._combine_keys(prefix, key)
-                if (
-                    isinstance(value, (TensorDictBase, KeyedJaggedTensor))
-                    and self.include_nested
-                ):
-                    subkeys = tuple(
-                        self._iter_helper(
-                            value,
-                            full_key if isinstance(full_key, tuple) else (full_key,),
-                        )
+        for key, value in items_iter:
+            full_key = self._combine_keys(prefix, key)
+            if (
+                isinstance(value, (TensorDictBase, KeyedJaggedTensor))
+                and self.include_nested
+            ):
+                subkeys = tuple(
+                    self._iter_helper(
+                        value,
+                        full_key if isinstance(full_key, tuple) else (full_key,),
                     )
-                    yield from subkeys
-                if not (isinstance(value, TensorDictBase) and self.leaves_only):
-                    yield full_key
+                )
+                yield from subkeys
+            if not (isinstance(value, TensorDictBase) and self.leaves_only):
+                yield full_key
 
     def _combine_keys(self, prefix, key):
         if prefix is not None:
