@@ -242,7 +242,7 @@ We provide and API to use ``TensorDict`` in conjunction with ``functorch``. For 
 >>> # Let's use our functional module
 >>> x = torch.randn(10, 3)
 >>> out = model(x, params=params)  # params is the last arg (or kwarg)
->>> # an esemble of models: we stack params along the first dimension...
+>>> # an ensemble of models: we stack params along the first dimension...
 >>> params_stack = torch.stack([params, params], 0)
 >>> # ... and use it as an input we'd like to pass through the model
 >>> y = vmap(model, (None, 0))(x, params_stack)
