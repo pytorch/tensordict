@@ -29,6 +29,7 @@ For instance, the above example can be easily used across classification and seg
    :caption: Contents:
 
    overview
+   distributed
    reference/index
 
 Indices and tables
