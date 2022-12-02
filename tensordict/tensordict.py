@@ -151,12 +151,12 @@ class _TensorDictKeysView:
     def _iter_helper(self, tensordict, prefix=None):
         items_iter = self._items(tensordict)
 
-        for key, value in items_iter:
+        for key, meta_value in items_iter:
             full_key = self._combine_keys(prefix, key)
             if (
-                isinstance(value, (TensorDictBase, KeyedJaggedTensor))
-                and self.include_nested
-            ):
+                meta_value.is_tensordict() or meta_value.is_kjt()
+            ) and self.include_nested:
+                value = tensordict.get(key)
                 subkeys = tuple(
                     self._iter_helper(
                         value,
@@ -164,7 +164,7 @@ class _TensorDictKeysView:
                     )
                 )
                 yield from subkeys
-            if not (isinstance(value, TensorDictBase) and self.leaves_only):
+            if not (meta_value.is_tensordict() and self.leaves_only):
                 yield full_key
 
     def _combine_keys(self, prefix, key):
@@ -184,16 +184,21 @@ class _TensorDictKeysView:
         if tensordict is None:
             tensordict = self.tensordict
         if isinstance(tensordict, TensorDict):
-            return tensordict._tensordict.items()
+            return tuple(
+                (key, tensordict._get_meta(key))
+                for key in tensordict._tensordict.keys()
+            )
         elif isinstance(tensordict, LazyStackedTensorDict):
             return _iter_items_lazystack(tensordict)
         elif isinstance(tensordict, KeyedJaggedTensor):
-            return tuple((key, tensordict[key]) for key in tensordict.keys())
+            return tuple(
+                (key, MetaTensor(tensordict[key])) for key in tensordict.keys()
+            )
         elif isinstance(tensordict, _CustomOpTensorDict):
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to
             # be careful to not rely on tensordict._tensordict existing.
-            return ((key, tensordict.get(key)) for key in tensordict._source.keys())
+            return tensordict.items_meta()
 
     def _keys(self):
         return self.tensordict._tensordict.keys()
@@ -5634,7 +5639,7 @@ def _find_max_batch_size(source: Union[TensorDictBase, dict]) -> list[int]:
 def _iter_items_lazystack(tensordict):
     for key in tensordict.valid_keys:
         try:
-            yield key, tensordict.get(key)
+            yield key, tensordict._get_meta(key)
         except KeyError:
             tensordict._update_valid_keys()
             continue
