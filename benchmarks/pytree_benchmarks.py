@@ -6,7 +6,15 @@ from torch.utils._pytree import tree_map
 
 if __name__ == "__main__":
     nested_dict = {
-        "a": {"b": torch.randn(3, 4, 1), "c": {"d": torch.rand(3, 4, 5, 6)}},
+        "a": {
+            "b": torch.randn(3, 4, 1),
+            "c": {
+                "d": torch.rand(3, 4, 5, 6),
+                "e": torch.rand(3, 4, 5, 6),
+                "f": torch.rand(3, 4, 5, 6),
+                "g": torch.rand(3, 4, 5, 6),
+            },
+        },
         "c": torch.rand(3, 4, 1),
     }
     nested_td = TensorDict(nested_dict, [3, 4], _run_checks=False)
