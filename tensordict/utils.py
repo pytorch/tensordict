@@ -264,8 +264,7 @@ class KeyDependentDefaultDict(collections.defaultdict):
         super().__init__()
 
     def __missing__(self, key):
-        value = self.fun(key)
-        self[key] = value
+        self[key] = value = self.fun(key)
         return value
 
 
@@ -372,7 +371,7 @@ torch_to_numpy_dtype_dict = {
 
 
 def _nested_key_type_check(key):
-    is_tuple = isinstance(key, tuple)
+    is_tuple = type(key) is tuple
     if not (
         isinstance(key, str)
         or (
@@ -390,7 +389,7 @@ def _nested_key_type_check(key):
 
 def _normalize_key(key: NESTED_KEY) -> NESTED_KEY:
     # normalises tuples of length one to their string contents
-    return key if not isinstance(key, tuple) or len(key) > 1 else key[0]
+    return key if not (type(key) is tuple) or len(key) > 1 else key[0]
 
 
 def index_keyedjaggedtensor(

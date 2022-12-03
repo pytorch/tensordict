@@ -150,26 +150,25 @@ class _TensorDictKeysView:
 
     def _iter_helper(self, tensordict, prefix=None):
         items_iter = self._items(tensordict)
-
+        nested_keys = []
         for key, meta_value in items_iter:
             full_key = self._combine_keys(prefix, key)
             if (
                 meta_value.is_tensordict() or meta_value.is_kjt()
             ) and self.include_nested:
-                value = tensordict.get(key)
-                subkeys = tuple(
-                    self._iter_helper(
-                        value,
-                        full_key if isinstance(full_key, tuple) else (full_key,),
-                    )
-                )
-                yield from subkeys
+                nested_keys.append((key, full_key))
             if not (meta_value.is_tensordict() and self.leaves_only):
                 yield full_key
+        for (key, full_key) in nested_keys:
+            value = tensordict.get(key)
+            yield from self._iter_helper(
+                value,
+                full_key if isinstance(full_key, tuple) else (full_key,),
+            )
 
     def _combine_keys(self, prefix, key):
         if prefix is not None:
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 return prefix + key
             return prefix + (key,)
         return key
@@ -185,8 +184,7 @@ class _TensorDictKeysView:
             tensordict = self.tensordict
         if isinstance(tensordict, TensorDict):
             return tuple(
-                (key, tensordict._get_meta(key))
-                for key in tensordict._tensordict.keys()
+                (key, tensordict._get_meta(key)) for key in tensordict._tensordict
             )
         elif isinstance(tensordict, LazyStackedTensorDict):
             return _iter_items_lazystack(tensordict)
@@ -200,19 +198,19 @@ class _TensorDictKeysView:
             # be careful to not rely on tensordict._tensordict existing.
             return tensordict.items_meta()
 
-    def _keys(self):
-        return self.tensordict._tensordict.keys()
+    def _simple_check(self, key):
+        return key in self.tensordict._tensordict
 
     def __contains__(self, key):
-        if isinstance(key, str):
-            if key in self._keys():
+        if type(key) is str:
+            if self._simple_check(key):
                 if self.leaves_only:
                     meta_val = self.tensordict._get_meta(key)
                     return not meta_val.is_tensordict()
                 return True
             return False
 
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             if len(key) == 1:
                 return key[0] in self
             elif len(key) > 1:
@@ -246,6 +244,14 @@ class _TensorDictKeysView:
             "TensorDict keys are always strings. Membership checks are only supported "
             "for strings or non-empty tuples of strings (for nested TensorDicts)"
         )
+
+
+class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
+    def __len__(self):
+        return len(self.tensordict.valid_keys)
+
+    def _simple_check(self, key):
+        return key in self.tensordict.valid_keys
 
 
 class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
@@ -556,9 +562,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     def _get_meta(self, key: NESTED_KEY) -> MetaTensor:
-        _nested_key_type_check(key)
+        # _nested_key_type_check(key)
         try:
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 if len(key) > 1:
                     return self.get(key[0])._get_meta(key[1:])
                 key = key[0]
@@ -658,16 +664,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if input_dict_or_td is self:
             # no op
             return self
-        keys = set(self.keys(False))
+        # keys = set(self.keys(False))
         for key, value in input_dict_or_td.items():
             if clone and hasattr(value, "clone"):
                 value = value.clone()
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 key, subkey = key[0], key[1:]
             else:
                 subkey = []
             # the key must be a string by now. Let's check if it is present
-            if key in keys:
+            if key in self.keys():
                 target = self._get_meta(key)
                 if target.is_tensordict():
                     target = self.get(key)
@@ -772,7 +778,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return torch.as_tensor(array, device=self.device)
 
     def _convert_to_tensordict(self, dict_value: Dict[str, Any]) -> TensorDictBase:
-        return TensorDict(dict_value, batch_size=self.batch_size, device=self.device)
+        return TensorDict(
+            dict_value,
+            batch_size=self.batch_size,
+            device=self.device,
+            _run_checks=False,
+        )
 
     def _process_input(
         self,
@@ -1042,7 +1053,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
         target = self if inplace else self.clone(recurse=False)
-        is_nested = any(isinstance(key, tuple) for key in keys)
+        is_nested = any((type(key) is tuple) for key in keys)
         if len(keys) > 1:
             tdkeys = set(self.keys(is_nested))
         else:
@@ -2082,7 +2093,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             previously set.
 
         """
-        if key not in self.keys(include_nested=isinstance(key, tuple)):
+        if key not in self.keys(include_nested=(type(key) is tuple)):
             self.set(key, default, **kwargs)
         return self.get(key)
 
@@ -2202,6 +2213,7 @@ class TensorDict(TensorDictBase):
     ) -> object:
         super().__init__()
 
+        self._keys = {}
         self._is_shared = _is_shared
         self._is_memmap = _is_memmap
         if device is not None:
@@ -2287,26 +2299,13 @@ class TensorDict(TensorDictBase):
 
     def _make_meta(self, key: str) -> MetaTensor:
         proc_value = self._tensordict[key]
-        is_memmap = (
-            self._is_memmap
-            if self._is_memmap is not None
-            else isinstance(proc_value, MemmapTensor)
-        )
-        is_shared = (
-            self._is_shared
-            if self._is_shared is not None
-            else _is_shared(proc_value)
-            if isinstance(proc_value, (TensorDictBase, MemmapTensor, KeyedJaggedTensor))
-            or not is_batchedtensor(proc_value)
-            else False
-        )
+        is_memmap = self._is_memmap
+        is_shared = self._is_shared
 
         return MetaTensor(
             proc_value,
-            device=proc_value.device,
             _is_memmap=is_memmap,
             _is_shared=is_shared,
-            _is_tensordict=isinstance(proc_value, TensorDictBase),
         )
 
     @property
@@ -2388,16 +2387,6 @@ class TensorDict(TensorDictBase):
                 f"device values {devices}. If TensorDict.device is set then "
                 "all elements must share that device."
             )
-
-    def _index_tensordict(self, idx: INDEX_TYPING):
-        self_copy = copy(self)
-        self_copy._tensordict = {
-            key: _get_item(item, idx) for key, item in self.items()
-        }
-        self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
-        self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
-        self_copy._device = self.device
-        return self_copy
 
     def pin_memory(self) -> TensorDictBase:
         if self.device == torch.device("cpu"):
@@ -2487,7 +2476,7 @@ class TensorDict(TensorDictBase):
         if self._is_memmap is None:
             self._is_memmap = isinstance(value, MemmapTensor)
 
-        if not isinstance(key, tuple):
+        if not (type(key) is tuple):
             present = key in self.keys()
         elif len(key) == 1:
             key = key[0]
@@ -2538,7 +2527,7 @@ class TensorDict(TensorDictBase):
         return self
 
     def del_(self, key: str) -> TensorDictBase:
-        if isinstance(key, tuple):
+        if type(key) is tuple:
             td, subkey = _get_leaf_tensordict(self, key)
             del td[subkey]
             return self
@@ -2596,7 +2585,7 @@ class TensorDict(TensorDictBase):
                 self.get(key).copy_(proc_value)
                 if isinstance(key, str) and key in self._dict_meta:
                     self._dict_meta[key].requires_grad = proc_value.requires_grad
-                elif isinstance(key, tuple):
+                elif type(key) is tuple:
                     # If we have a nested key, we must traverse the nested tensordicts
                     # until we reach the parent of the leaf tensor, then check
                     # _dict_meta on that tensordict.
@@ -2644,7 +2633,7 @@ class TensorDict(TensorDictBase):
         self, key: NESTED_KEY, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
         _nested_key_type_check(key)
-        is_nested = isinstance(key, tuple)
+        is_nested = type(key) is tuple
         # do we need this?
         if not isinstance(value, _accepted_classes):
             value = self._process_input(
@@ -2668,7 +2657,7 @@ class TensorDict(TensorDictBase):
         # change Meta in case of require_grad coming in value
         if isinstance(key, str) and key in self._dict_meta:
             self._dict_meta[key].requires_grad = _requires_grad(tensor_in)
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             # If we have a nested key, we must traverse the nested tensordicts until we
             # reach the parent of the leaf tensor, then check _dict_meta on that
             td, subkey = _get_leaf_tensordict(self, key)
@@ -2683,7 +2672,7 @@ class TensorDict(TensorDictBase):
         _nested_key_type_check(key)
 
         try:
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 if len(key) > 1:
                     first_lev = self.get(key[0])
                     if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
@@ -2772,14 +2761,11 @@ class TensorDict(TensorDictBase):
             if self.device is not None and dest == self.device:
                 return self
 
-            self_copy = copy(self)
+            self_copy = self.clone(False)
             self_copy._device = dest
             self_copy._tensordict = {
                 key: value.to(dest, **kwargs) for key, value in self_copy.items()
             }
-            self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
-            self_copy._is_shared = None
-            self_copy._is_memmap = None
             return self_copy
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
@@ -2815,7 +2801,7 @@ class TensorDict(TensorDictBase):
     ) -> TensorDictBase:
         existing_keys = set(self.keys(include_nested=True))
         keys = {
-            key[0] if isinstance(key, tuple) and len(key) == 1 else key for key in keys
+            key[0] if (type(key) is tuple) and len(key) == 1 else key for key in keys
         }
         if strict:
             if len(keys.difference(existing_keys)):
@@ -2837,32 +2823,23 @@ class TensorDict(TensorDictBase):
                 nested_keys[key[0]].append(key[1:])
 
         d = {}
-        d_meta = {}
 
         for key, subkeys in nested_keys.items():
             value = self.get(key)
             if len(subkeys) > 0 and isinstance(value, TensorDictBase):
                 value = value.select(*subkeys, inplace=inplace)
-                d_meta[key] = MetaTensor(value)
-            elif key in self._dict_meta:
-                d_meta[key] = self._dict_meta[key]
-
             d[key] = value
 
         if inplace:
             self._tensordict = d
             for key in list(self._dict_meta.keys()):
-                if key not in nested_keys:
-                    del self._dict_meta[key]
-                elif len(nested_keys[key]) > 0:
-                    # meta value needs to be updated as not all keys present in children
-                    self._dict_meta[key] = d_meta[key]
+                # meta value needs to be updated as not all keys present in children
+                del self._dict_meta[key]
             return self
         return TensorDict(
-            device=self.device,
-            batch_size=self.batch_size,
             source=d,
-            _meta_source=d_meta,
+            batch_size=self.batch_size,
+            device=self.device,
             _run_checks=False,
             _is_memmap=self._is_memmap,
             _is_shared=self._is_shared,
@@ -2871,9 +2848,12 @@ class TensorDict(TensorDictBase):
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
-        return _TensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
-        )
+        if (include_nested, leaves_only) not in self._keys:
+            out = self._keys[(include_nested, leaves_only)] = _TensorDictKeysView(
+                self, include_nested=include_nested, leaves_only=leaves_only
+            )
+            return out
+        return self._keys[(include_nested, leaves_only)]
 
 
 class _ErrorInteceptor:
@@ -3469,7 +3449,7 @@ torch.Size([3, 2])
         inplace: bool = False,
         _run_checks: bool = True,
     ) -> TensorDictBase:
-        is_nested = isinstance(key, tuple)
+        is_nested = type(key) is tuple
         keys = self.keys(is_nested)
         if self.is_locked:
             if not inplace or key not in keys:
@@ -3517,7 +3497,7 @@ torch.Size([3, 2])
         self.set_(key, tensor)
         if isinstance(key, str) and key in self._dict_meta:
             self._dict_meta[key].requires_grad = tensor.requires_grad
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             td, subkey = _get_leaf_tensordict(self, key)
             if subkey in td._dict_meta:
                 td._dict_meta[subkey].requires_grad = tensor.requires_grad
@@ -3537,7 +3517,7 @@ torch.Size([3, 2])
         tensor: Union[dict, COMPATIBLE_TYPES],
         no_check: bool = False,
     ) -> SubTensorDict:
-        is_nested = isinstance(key, tuple)
+        is_nested = type(key) is tuple
         if not no_check:
             tensor = self._process_input(
                 tensor, check_device=False, check_tensor_shape=False
@@ -3556,7 +3536,7 @@ torch.Size([3, 2])
         self._source.set_at_(key, tensor, self.idx)
         if isinstance(key, str) and key in self._dict_meta:
             self._dict_meta[key].requires_grad = tensor.requires_grad
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             td, subkey = _get_leaf_tensordict(self, key)
             if subkey in td._dict_meta:
                 td._dict_meta[subkey].requires_grad = tensor.requires_grad
@@ -3631,7 +3611,7 @@ torch.Size([3, 2])
             self._source.set_at_(key, tensor, self.idx)
         if isinstance(key, str) and key in self._dict_meta:
             self._dict_meta[key].requires_grad = value.requires_grad
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             td, subkey = _get_leaf_tensordict(self, key)
             if subkey in td._dict_meta:
                 td._dict_meta[subkey].requires_grad = value.requires_grad
@@ -3670,7 +3650,7 @@ torch.Size([3, 2])
                 value = value.clone()
             else:
                 value = tree_map(torch.clone, value)
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 key, subkey = key[0], key[1:]
             else:
                 subkey = []
@@ -3740,6 +3720,7 @@ torch.Size([3, 2])
         return self
 
     def clone(self, recurse: bool = True) -> SubTensorDict:
+        # TODO: what to do with this? PyTorch users may expect a regular TensorDict.
         if not recurse:
             return copy(self)
         return SubTensorDict(source=self._source, idx=self.idx)
@@ -3876,14 +3857,6 @@ def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
         if td.batch_dims < len(batch_size):
             batch_size = td.batch_size
     return TensorDict(d, batch_size, device=td.device, _run_checks=False)
-
-
-class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
-    def __len__(self):
-        return len(self.tensordict.valid_keys)
-
-    def _keys(self):
-        return self.tensordict.valid_keys
 
 
 class LazyStackedTensorDict(TensorDictBase):
@@ -4133,9 +4106,9 @@ class LazyStackedTensorDict(TensorDictBase):
         # fairly easy to add support if we could add nested keys to valid_keys.
 
         # we can handle the case where the key is a tuple of length 1
-        if isinstance(key, tuple) and len(key) == 1:
+        if (type(key) is tuple) and len(key) == 1:
             key = key[0]
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             tensordict, key = _get_leaf_tensordict(self, key)
             return tensordict[key]
 
@@ -4467,7 +4440,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 value = value.clone()
             else:
                 value = tree_map(torch.clone, value)
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 key, subkey = key[0], key[1:]
             else:
                 subkey = ()
@@ -4714,7 +4687,7 @@ class SavedTensorDict(TensorDictBase):
             previously set.
 
         """
-        if isinstance(key, tuple):
+        if type(key) is tuple:
             raise TypeError("SavedTensorDict does not currently support nested keys.")
         return super().set_default(key=key, default=default, **kwargs)
 
@@ -4775,7 +4748,7 @@ class SavedTensorDict(TensorDictBase):
             #     )
             if clone and hasattr(value, clone):
                 value = value.clone()
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 key, subkey = key[0], key[1:]
             else:
                 subkey = []
@@ -4895,11 +4868,8 @@ class SavedTensorDict(TensorDictBase):
             dest = torch.device(dest)
             if self.device is not None and dest == self.device:
                 return self
-            self_copy = copy(self)
+            self_copy = self.clone(False)
             self_copy._device = dest
-            self_copy._dict_meta = deepcopy(self._dict_meta)
-            for k in self.keys():
-                self_copy._dict_meta[k].device = dest
             return self_copy
         if isinstance(dest, torch.Size):
             self.batch_size = dest
@@ -5232,7 +5202,7 @@ class _CustomOpTensorDict(TensorDictBase):
         if inplace:
             self._source.select(*keys, inplace=inplace, strict=strict)
             return self
-        self_copy = copy(self)
+        self_copy = self.clone(False)
         self_copy._source = self_copy._source.select(*keys, strict=strict)
         return self_copy
 

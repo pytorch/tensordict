@@ -212,9 +212,8 @@ class TensorDictSequential(TensorDictModule):
         tensordict,
         **kwargs,
     ):
-        tensordict_keys = set(tensordict.keys(include_nested=True))
         if not self.partial_tolerant or all(
-            key in tensordict_keys for key in module.in_keys
+            key in tensordict.keys(include_nested=True) for key in module.in_keys
         ):
             tensordict = module(tensordict, **kwargs)
         elif self.partial_tolerant and isinstance(tensordict, LazyStackedTensorDict):
