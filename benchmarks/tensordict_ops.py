@@ -28,6 +28,23 @@ if __name__ == "__main__":
     )
     print("basic", timeit.timeit("'b' in td.keys()", globals={"td": td}))
 
+    print("\n\n\nKey membership (missing)")
+    print("str in dict", timeit.timeit("'c' in dicto", globals={"dicto": dicto}))
+    print("str in nested", timeit.timeit("'c' in td.keys(True)", globals={"td": td}))
+    print(
+        "nested1 in nested",
+        timeit.timeit("('c', ) in td.keys(True)", globals={"td": td}),
+    )
+    print(
+        "nested2 in nested",
+        timeit.timeit("('a', 'c', ) in td.keys(True)", globals={"td": td}),
+    )
+    print(
+        "nested3 in nested",
+        timeit.timeit("('a', 'a', 'c') in td.keys(True)", globals={"td": td}),
+    )
+    print("basic", timeit.timeit("'c' in td.keys()", globals={"td": td}))
+
     print("\n\n\nGet")
     print("dict[key]", timeit.timeit("dicto['b']", globals={"dicto": dicto}))
     print("nested[nested1]", timeit.timeit("td.get(('a',))", globals={"td": td}))
