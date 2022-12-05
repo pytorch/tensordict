@@ -2654,6 +2654,23 @@ class TensorDict(TensorDictBase):
         else:
             return self._default_get(key, default)
 
+    def pop(
+        self, key: NESTED_KEY, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+    ) -> COMPATIBLE_TYPES:
+        _nested_key_type_check(key)
+
+        if key in self.keys(include_nested=True):
+            if isinstance(key, tuple):
+                td, subkey = _get_leaf_tensordict(self, key)
+                out = td[subkey]
+                td.del_(subkey)
+            else:
+                out = self._tensordict[key]
+                self.del_(key)
+            return out
+        else:
+            return self._default_get(key, default)
+
     def share_memory_(self, lock=True) -> TensorDictBase:
         if self.is_memmap():
             raise RuntimeError(
