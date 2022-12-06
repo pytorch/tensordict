@@ -3236,6 +3236,84 @@ def test_split_with_negative_dim():
     assert tds[1]["b"].shape == torch.Size([5, 3, 1])
 
 
+@pytest.mark.parametrize("dim", range(2))
+@pytest.mark.parametrize("index", range(2))
+@pytest.mark.parametrize("device", get_available_devices())
+def test_lazy_stacked_insert(dim, index, device):
+    td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
+    lstd = torch.stack([td] * 2, dim=dim)
+
+    lstd.insert(
+        index,
+        TensorDict({"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device),
+    )
+
+    bs = [4]
+    bs.insert(dim, 3)
+
+    assert lstd.batch_size == torch.Size(bs)
+    assert set(lstd.keys()) == {"a"}
+
+    t = torch.zeros(*bs, 1, device=device)
+
+    if dim == 0:
+        t[index] = 1
+    else:
+        t[:, index] = 1
+
+    torch.testing.assert_close(lstd["a"], t)
+
+    with pytest.raises(
+        TypeError, match="Expected new value to be TensorDictBase instance"
+    ):
+        lstd.insert(index, torch.rand(10))
+
+    if device != torch.device("cpu"):
+        with pytest.raises(ValueError, match="Devices differ"):
+            lstd.insert(index, TensorDict({"a": torch.ones(4)}, [4], device="cpu"))
+
+    with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+        lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
+
+
+@pytest.mark.parametrize("dim", range(2))
+@pytest.mark.parametrize("device", get_available_devices())
+def test_lazy_stacked_append(dim, device):
+    td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
+    lstd = torch.stack([td] * 2, dim=dim)
+
+    lstd.append(
+        TensorDict({"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device)
+    )
+
+    bs = [4]
+    bs.insert(dim, 3)
+
+    assert lstd.batch_size == torch.Size(bs)
+    assert set(lstd.keys()) == {"a"}
+
+    t = torch.zeros(*bs, 1, device=device)
+
+    if dim == 0:
+        t[-1] = 1
+    else:
+        t[:, -1] = 1
+
+    torch.testing.assert_close(lstd["a"], t)
+
+    with pytest.raises(
+        TypeError, match="Expected new value to be TensorDictBase instance"
+    ):
+        lstd.append(torch.rand(10))
+
+    if device != torch.device("cpu"):
+        with pytest.raises(ValueError, match="Devices differ"):
+            lstd.append(TensorDict({"a": torch.ones(4)}, [4], device="cpu"))
+
+    with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+        lstd.append(TensorDict({"a": torch.ones(17)}, [17], device=device))
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

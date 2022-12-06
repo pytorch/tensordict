@@ -20,6 +20,7 @@ from tensordict.nn.probabilistic import set_interaction_mode
 from torch import nn
 from torch.distributions import Normal
 
+
 try:
     import functorch  # noqa
 
@@ -279,6 +280,22 @@ class TestTDModule:
         assert td_out is not td_repeat
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
+
+    def test_dispatch_kwargs(self):
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        td = TensorDict({"a": torch.zeros(1, 1)}, 1)
+        tdm(td)
+        td2 = tdm(a=torch.zeros(1, 1))
+        assert (td2 == td).all()
+
+    def test_dispatch_kwargs_module_with_additional_parameters(self):
+        class MyModule(nn.Identity):
+            def forward(self, input, c):
+                return input
+
+        m = MyModule()
+        tdm = TensorDictModule(m, ["a"], ["b"])
+        tdm(a=torch.zeros(1, 1), c=1)
 
 
 class TestTDSequence:
