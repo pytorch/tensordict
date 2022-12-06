@@ -4,3 +4,4 @@ __pycache__
 tensordict/version.py
 .pytest_cache
 build/
+.idea/
