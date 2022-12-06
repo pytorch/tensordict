@@ -12,8 +12,27 @@ void TensorMap::set(std::string key, TensorMap value)
     this->map[key] = value;
 }
 
-// void TensorMap::set(pybind11::tuple, torch::Tensor);
-// void TensorMap::set(pybind11::tuple, TensorMap);
+void TensorMap::set(std::vector<std::string> indices, torch::Tensor value)
+{
+    if (indices.size() == 0)
+        throw std::invalid_argument("indices must have at least one element");
+
+    auto lastMap = GetRecursive(this->map, indices, 0);
+    auto key = indices[indices.size() - 1];
+
+    lastMap->at(key) = value;
+}
+
+void TensorMap::set(std::vector<std::string> indices, TensorMap value)
+{
+    if (indices.size() == 0)
+        throw std::invalid_argument("indices must have at least one element");
+
+    auto lastMap = GetRecursive(this->map, indices, 0);
+    auto key = indices[indices.size() - 1];
+
+    lastMap->at(key) = value;
+}
 
 std::variant<torch::Tensor, TensorMap> TensorMap::get(std::string key)
 {
@@ -23,12 +42,21 @@ std::variant<torch::Tensor, TensorMap> TensorMap::get(std::string key)
     return this->map[key];
 }
 
-// std::variant<torch::Tensor, TensorMap> TensorMap::get(pybind11::tuple key);
+std::variant<torch::Tensor, TensorMap> TensorMap::get(std::vector<std::string> indices)
+{
+    if (indices.size() == 0)
+        throw std::invalid_argument("indices must have at least one element");
+
+    auto lastMap = GetRecursive(this->map, indices, 0);
+    auto key = indices[indices.size() - 1];
+
+    return lastMap->at(key);
+}
 
 std::map<std::string, std::variant<torch::Tensor, TensorMap>>* TensorMap::GetRecursive(
     std::map<std::string, std::variant<torch::Tensor, TensorMap>> map,
     std::vector<std::string> indices,
-    int index = 0)
+    int index)
 {
     auto key = indices[index];
     if (!map.contains(key))
