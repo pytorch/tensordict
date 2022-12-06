@@ -2269,12 +2269,12 @@ class TensorDict(TensorDictBase):
 
                     if device is not None:
                         value = value.to(device)
-                    _meta_val = (
-                        None
-                        if _meta_source is None or key not in _meta_source
-                        else _meta_source[key]
-                    )
-                    self.set(key, value, _meta_val=_meta_val, _run_checks=False)
+                    # _meta_val = (
+                    #     None
+                    #     if _meta_source is None or key not in _meta_source
+                    #     else _meta_source[key]
+                    # )
+                    self.set(key, value, _run_checks=False)
 
             self._check_batch_size()
             self._check_device()

@@ -82,7 +82,7 @@ class MetaTensor:
     def __init__(
         self,
         *shape: Union[int, torch.Tensor, "MemmapTensor"],
-        device: Optional[DEVICE_TYPING] = "cpu",
+        device: Optional[DEVICE_TYPING] = None,
         dtype: torch.dtype = None,
         requires_grad: bool = None,
         _is_shared: Optional[bool] = None,
