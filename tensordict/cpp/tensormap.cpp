@@ -25,11 +25,9 @@ std::variant<torch::Tensor, TensorMap> TensorMap::get(std::string key)
 
 // std::variant<torch::Tensor, TensorMap> TensorMap::get(pybind11::tuple key);
 
-// TODO traversal can be outside in helper
-void TensorMap::SetRecursive(
+std::map<std::string, std::variant<torch::Tensor, TensorMap>>* TensorMap::GetRecursive(
     std::map<std::string, std::variant<torch::Tensor, TensorMap>> map,
     std::vector<std::string> indices,
-    std::variant<torch::Tensor, TensorMap> value,
     int index = 0)
 {
     auto key = indices[index];
@@ -38,14 +36,13 @@ void TensorMap::SetRecursive(
 
     if (index == indices.size() - 1)
     {
-        map[key] = value;
-        return;
+        return &map;
     }
 
     if (std::holds_alternative<TensorMap>(map[key]))
     {
         auto currentMap = std::get<TensorMap>(map[key]);
-        SetRecursive(currentMap.map, indices, value, index + 1);
+        return GetRecursive(currentMap.map, indices, index + 1);
     }
     else
         throw std::invalid_argument("Expected to have a Map at index " + std::to_string(index) + " but found tensor");
