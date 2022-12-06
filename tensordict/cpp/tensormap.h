@@ -3,6 +3,11 @@
 class TensorMap {
     private:
         std::map<std::string, std::variant<torch::Tensor, TensorMap>> map;
+        void SetRecursive(
+            std::map<std::string, std::variant<torch::Tensor, TensorMap>> map,
+            std::vector<std::string> indices,
+            std::variant<torch::Tensor, TensorMap> value,
+            int index);
         // TODO something about batch size
     public:
         TensorMap();

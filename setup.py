@@ -96,7 +96,7 @@ def get_extensions():
                 "-O0",
                 "-fno-inline",
                 "-g",
-                "-std=c++14",
+                "-std=c++20",
                 "-fdiagnostics-color=always",
             ]
         }
