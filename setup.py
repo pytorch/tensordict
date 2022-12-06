@@ -5,6 +5,7 @@
 
 import argparse
 import distutils.command.clean
+import glob
 import os
 import shutil
 import subprocess
@@ -14,7 +15,8 @@ from pathlib import Path
 from typing import List
 
 from setuptools import find_packages, setup
-from torch.utils.cpp_extension import BuildExtension
+from torch.utils.cpp_extension import BuildExtension, CppExtension
+
 
 ROOT_DIR = Path(__file__).parent.resolve()
 
@@ -82,7 +84,7 @@ def get_extensions():
     extra_compile_args = {
         "cxx": [
             "-O3",
-            "-std=c++14",
+            "-std=c++17",
             "-fdiagnostics-color=always",
         ]
     }
@@ -171,6 +173,7 @@ def _main(argv):
         license="BSD",
         # Package info
         packages=find_packages(exclude=("test", "tutorials", "packaging", "gallery")),
+        ext_modules=get_extensions(),
         cmdclass={
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
             "clean": clean,
