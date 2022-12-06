@@ -84,7 +84,7 @@ def get_extensions():
     extra_compile_args = {
         "cxx": [
             "-O3",
-            "-std=c++17",
+            "-std=c++20",
             "-fdiagnostics-color=always",
         ]
     }

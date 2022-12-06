@@ -2,16 +2,15 @@
 
 class TensorMap {
     private:
-        std::map<std::string, torch::Tensor> tensors;
-        std::map<std::string, TensorMap> maps;
+        std::map<std::string, std::variant<torch::Tensor, TensorMap>> map;
         // TODO something about batch size
     public:
         TensorMap();
         void set(std::string key, torch::Tensor value);
         void set(std::string key, TensorMap value);
-        void set(pybind11::tuple key, torch::Tensor value);
-        void set(pybind11::tuple key, TensorMap value);
+        void set(std::vector<std::string> key, torch::Tensor value);
+        void set(std::vector<std::string> key, TensorMap value);
         std::variant<torch::Tensor, TensorMap> get(std::string key);
-        std::variant<torch::Tensor, TensorMap> get(pybind11::tuple key);
+        std::variant<torch::Tensor, TensorMap> get(std::vector<std::string> key);
         // TODO add keys - check iterator
 };
