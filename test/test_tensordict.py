@@ -3048,10 +3048,9 @@ def test_update_nested_dict():
 
 def test_pop_nested_dict():
     td = TensorDict(
-        {
-            "a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]),
-            "b": torch.ones(4, 2)
-        }, batch_size=[4])
+        {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
+        batch_size=[4],
+    )
 
     getb = td.get("b")
     popb = td.pop("b")
