@@ -75,6 +75,52 @@ def _get_packages():
     ]
     return find_packages(exclude=exclude)
 
+def get_extensions():
+    extension = CppExtension
+
+    extra_link_args = []
+    extra_compile_args = {
+        "cxx": [
+            "-O3",
+            "-std=c++14",
+            "-fdiagnostics-color=always",
+        ]
+    }
+    debug_mode = os.getenv("DEBUG", "0") == "1"
+    if debug_mode:
+        print("Compiling in debug mode")
+        extra_compile_args = {
+            "cxx": [
+                "-O0",
+                "-fno-inline",
+                "-g",
+                "-std=c++14",
+                "-fdiagnostics-color=always",
+            ]
+        }
+        extra_link_args = ["-O0", "-g"]
+
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    extensions_dir = os.path.join(this_dir, "tensordict", "cpp")
+
+    extension_sources = {
+        os.path.join(extensions_dir, p)
+        for p in glob.glob(os.path.join(extensions_dir, "*.cpp"))
+    }
+    sources = list(extension_sources)
+
+    ext_modules = [
+        extension(
+            "tensordict._tensormap",
+            sources,
+            include_dirs=[this_dir],
+            extra_compile_args=extra_compile_args,
+            extra_link_args=extra_link_args,
+        )
+    ]
+
+    return ext_modules
+
 
 class clean(distutils.command.clean.clean):
     def run(self):
