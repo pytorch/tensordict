@@ -54,8 +54,8 @@ std::variant<torch::Tensor, TensorMap> TensorMap::get(std::vector<std::string> i
 }
 
 std::map<std::string, std::variant<torch::Tensor, TensorMap>>* TensorMap::GetRecursive(
-    std::map<std::string, std::variant<torch::Tensor, TensorMap>> map,
-    std::vector<std::string> indices,
+    std::map<std::string, std::variant<torch::Tensor, TensorMap>>& map,
+    std::vector<std::string>& indices,
     int index)
 {
     auto key = indices[index];
