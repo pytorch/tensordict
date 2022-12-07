@@ -282,6 +282,26 @@ class ProbabilisticTensorDictModule(nn.Module):
 
 
 class ProbabilisticTensorDictSequential(TensorDictSequential):
+    """A sequence of TensorDictModules ending in a ProbabilistictTensorDictModule.
+
+    Similarly to :obj:`TensorDictSequential`, but enforces that the final module in the
+    sequence is an :obj:`ProbabilisticTensorDictModule` and also exposes ``get_dist``
+    method to recover the distribution object from the ``ProbabilisticTensorDictModule``
+
+    Args:
+         modules (iterable of TensorDictModules): ordered sequence of TensorDictModule
+            instances, terminating in ProbabilisticTensorDictModule, to be run
+            sequentially.
+         partial_tolerant (bool, optional): if True, the input tensordict can miss some
+            of the input keys. If so, the only module that will be executed are those
+            who can be executed given the keys that are present. Also, if the input
+            tensordict is a lazy stack of tensordicts AND if partial_tolerant is
+            :obj:`True` AND if the stack does not have the required keys, then
+            TensorDictSequential will scan through the sub-tensordicts looking for those
+            that have the required keys, if any.
+
+    """
+
     def __init__(
         self,
         *modules: Union[TensorDictModule, ProbabilisticTensorDictModule],
