@@ -312,12 +312,27 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 "ProbabilisticTensorDictSequential must consist of zero or more "
                 "TensorDictModules followed by a ProbabilisticTensorDictModule"
             )
-        if not isinstance(modules[-1], ProbabilisticTensorDictModule):
+        if not isinstance(
+            modules[-1],
+            (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential),
+        ):
             raise TypeError(
                 "The final module passed to ProbabilisticTensorDictSequential must be "
-                "an instance of ProbabilisticTensorDictModule"
+                "an instance of ProbabilisticTensorDictModule or another "
+                "ProbabilisticTensorDictSequential"
             )
         super().__init__(*modules, partial_tolerant=partial_tolerant)
+
+    def get_dist_params(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out: Optional[TensorDictBase] = None,
+        **kwargs,
+    ) -> Tuple[d.Distribution, TensorDictBase]:
+        tds = TensorDictSequential(*self.module[:-1])
+        if self.__dict__.get("_is_stateless", False):
+            tds = repopulate_module(tds, kwargs.pop("params"))
+        return tds(tensordict, tensordict_out, **kwargs)
 
     def get_dist(
         self,
@@ -325,8 +340,14 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         tensordict_out: Optional[TensorDictBase] = None,
         **kwargs,
     ) -> d.Distribution:
-        tds = TensorDictSequential(*self.module[:-1])
-        if self.__dict__.get("_is_stateless", False):
-            tds = repopulate_module(tds, kwargs.pop("params"))
-        tensordict_out = tds(tensordict, tensordict_out, **kwargs)
-        return self.module[-1].get_dist(tensordict_out)
+        """Get the distribution that results from passing the input tensordict through
+        the sequence, and then using the resulting parameters.
+        """
+        tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)
+        return self.build_dist_from_params(tensordict_out)
+
+    def build_dist_from_params(self, tensordict: TensorDictBase) -> d.Distribution:
+        """Construct a distribution from the input parameters. Other modules in the
+        sequence are not evaluated.
+        """
+        return self.module[-1].get_dist(tensordict)
