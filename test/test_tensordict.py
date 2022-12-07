@@ -3047,24 +3047,6 @@ def test_update_nested_dict():
 
 
 def test_pop_nested_dict():
-    td = TensorDict(
-        {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
-        batch_size=[4],
-    )
-
-    getb = td.get("b")
-    popb = td.pop("b")
-    assert (popb == getb).all()
-    assert "b" not in td.keys(include_nested=True)
-    getc = td.get(("a", "c"))
-    popc = td.pop(("a", "c"))
-    assert (popc == getc).all()
-    assert "a" in td.keys(include_nested=True)
-    assert "c" not in td["a"].keys(include_nested=True)
-    assert ("a", "c") not in td.keys(include_nested=True)
-
-
-def test_pop_nested_dict():
     test_dicts = []
     # TensorDict
     td = TensorDict(
