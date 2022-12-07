@@ -3622,6 +3622,17 @@ torch.Size([3, 2])
     ) -> COMPATIBLE_TYPES:
         return self._source.get_at(key, self.idx, default=default)
 
+    def pop(
+        self,
+        key: NESTED_KEY,
+        default: Optional[Union[Tensor, str]] = "_no_default_",
+    ) -> COMPATIBLE_TYPES:
+        _nested_key_type_check(key)
+
+        out = self.get(key, default)
+        self.del_(key)
+        return out
+
     def set_at_(
         self,
         key: NESTED_KEY,
@@ -4171,6 +4182,23 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return torch.stack(tensors, self.stack_dim)
 
+    def pop(
+        self,
+        key: NESTED_KEY,
+        default: Optional[Union[Tensor, str]] = "_no_default_",
+    ) -> COMPATIBLE_TYPES:
+        # TODO: the codes below works for nested keys, but since nested keys
+        # aren't supported in get() and keys(), we'll simply return default instead.
+        _nested_key_type_check(key)
+
+        out = self.get(key, default)
+        if key in self._valid_keys:
+            for td in self.tensordicts:
+                td.del_(key)
+            self._valid_keys.remove(key)
+
+        return out
+
     def _make_meta(self, key: str) -> MetaTensor:
         return torch.stack(
             [td._get_meta(key) for td in self.tensordicts], self.stack_dim
@@ -4694,6 +4722,17 @@ class SavedTensorDict(TensorDictBase):
     ) -> COMPATIBLE_TYPES:
         td = self._load()
         return td.get(key, default=default)
+
+    def pop(
+        self,
+        key: NESTED_KEY,
+        default: Optional[Union[Tensor, str]] = "_no_default_",
+    ) -> COMPATIBLE_TYPES:
+        _nested_key_type_check(key)
+
+        out = self.get(key, default)
+        self.del_(key)
+        return out
 
     def set(
         self, key: NESTED_KEY, value: Union[dict, COMPATIBLE_TYPES], **kwargs

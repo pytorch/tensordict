@@ -3064,6 +3064,63 @@ def test_pop_nested_dict():
     assert ("a", "c") not in td.keys(include_nested=True)
 
 
+def test_pop_nested_dict():
+    test_dicts = []
+    # TensorDict
+    td = TensorDict(
+        {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
+        batch_size=[4],
+    )
+    test_dicts.append(td)
+
+    # SubTensorDict
+    td = TensorDict(
+        {"a": TensorDict({"c": torch.rand(4, 3, 2, 2)}, [4, 3, 2]), "b": torch.ones(4, 3, 2)},
+        batch_size=[4, 3],
+    )
+    subtd = td[:, 2]
+    test_dicts.append(subtd)
+
+    for td in test_dicts:
+        getb = td.get("b")
+        popb = td.pop("b")
+        assert (popb == getb).all()
+        assert "b" not in td.keys(include_nested=True)
+        getc = td.get(("a", "c"))
+        popc = td.pop(("a", "c"))
+        assert (popc == getc).all()
+        assert "a" in td.keys(include_nested=True)
+        assert "c" not in td["a"].keys(include_nested=True)
+        assert ("a", "c") not in td.keys(include_nested=True)
+
+
+def test_pop_simple_key():
+    # TODO: Currently SavedTensorDict/LazyStackedTensorDict.keys() doesn't support nested keys,
+    # so here we only test string key.
+    # LazyStackedTensorDict
+    tds = [TensorDict(
+        {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
+        batch_size=[4],
+    ) for _ in range(10)]
+    stacktd = torch.stack(tds, -1)
+
+    getb = stacktd.get("b")
+    popb = stacktd.pop("b")
+    assert (popb == getb).all()
+    assert "b" not in stacktd.keys(include_nested=True)
+
+    # SavedTensorDict
+    td = TensorDict(
+        {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
+        batch_size=[4],
+    )
+    td_saved = td.to(SavedTensorDict)
+
+    getb = td_saved.get("b")
+    popb = td_saved.pop("b")
+    assert (popb == getb).all()
+
+
 @pytest.mark.parametrize("inplace", [True, False])
 @pytest.mark.parametrize("separator", [",", "-"])
 def test_flatten_unflatten_key_collision(inplace, separator):
