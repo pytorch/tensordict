@@ -16,10 +16,10 @@ namespace py = pybind11;
 PYBIND11_MODULE(tensor_map_cpp, m) {
     py::class_<TensorMap>(m, "TensorMap")
         .def(py::init<>())
-        .def("get", py::overload_cast<std::string>(&TensorMap::get), "Get value at index")
-        .def("get", py::overload_cast<std::vector<std::string>>(&TensorMap::get), "Get value at path")
-        .def("set", py::overload_cast<std::string, torch::Tensor>(&TensorMap::set), "Set tensor as value at index")
-        .def("set", py::overload_cast<std::string, TensorMap>(&TensorMap::set), "Set map as value at index")
-        .def("set", py::overload_cast<std::vector<std::string>, torch::Tensor>(&TensorMap::set), "Set tensor as value at path")
-        .def("set", py::overload_cast<std::vector<std::string>, TensorMap>(&TensorMap::set), "Set map as value at path");
+        .def("get", &TensorMap::GetAt, "Get value at index")
+        .def("get", &TensorMap::GetAtPath, "Get value at path")
+        .def("set", &TensorMap::SetTensorAt, "Set tensor as value at index")
+        .def("set", &TensorMap::SetMapAt, "Set map as value at index")
+        .def("set", &TensorMap::SetTensorAtPath, "Set tensor as value at path")
+        .def("set", &TensorMap::SetMapAtPath, "Set map as value at path");
 }

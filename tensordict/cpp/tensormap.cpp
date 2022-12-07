@@ -2,17 +2,17 @@
 #include <exception>
 #include <string>
 
-void TensorMap::set(std::string key, torch::Tensor value)
+void TensorMap::SetTensorAt(std::string key, torch::Tensor value)
 {
     this->map[key] = value;
 }
 
-void TensorMap::set(std::string key, TensorMap value)
+void TensorMap::SetMapAt(std::string key, TensorMap value)
 {
     this->map[key] = value;
 }
 
-void TensorMap::set(std::vector<std::string> indices, torch::Tensor value)
+void TensorMap::SetTensorAtPath(std::vector<std::string> indices, torch::Tensor value)
 {
     if (indices.size() == 0)
         throw std::invalid_argument("indices must have at least one element");
@@ -23,7 +23,7 @@ void TensorMap::set(std::vector<std::string> indices, torch::Tensor value)
     lastMap->at(key) = value;
 }
 
-void TensorMap::set(std::vector<std::string> indices, TensorMap value)
+void TensorMap::SetMapAtPath(std::vector<std::string> indices, TensorMap value)
 {
     if (indices.size() == 0)
         throw std::invalid_argument("indices must have at least one element");
@@ -34,7 +34,7 @@ void TensorMap::set(std::vector<std::string> indices, TensorMap value)
     lastMap->at(key) = value;
 }
 
-std::variant<torch::Tensor, TensorMap> TensorMap::get(std::string key)
+std::variant<torch::Tensor, TensorMap> TensorMap::GetAt(std::string key)
 {
     if (this->map.count(key) == 0)
         throw std::invalid_argument("Invalid key: " + key);
@@ -42,7 +42,7 @@ std::variant<torch::Tensor, TensorMap> TensorMap::get(std::string key)
     return this->map[key];
 }
 
-std::variant<torch::Tensor, TensorMap> TensorMap::get(std::vector<std::string> indices)
+std::variant<torch::Tensor, TensorMap> TensorMap::GetAtPath(std::vector<std::string> indices)
 {
     if (indices.size() == 0)
         throw std::invalid_argument("indices must have at least one element");
