@@ -1,6 +1,13 @@
 #include "tensormap.h"
 #include <exception>
 #include <string>
+#include <torch/torch.h>
+#include <variant>
+#include <vector>
+#include <string>
+#include <map>
+
+namespace tensordict {
 
 void TensorMap::set(std::string key, torch::Tensor value)
 {
@@ -74,4 +81,5 @@ std::map<std::string, std::variant<torch::Tensor, TensorMap>>* TensorMap::GetRec
     }
     else
         throw std::invalid_argument("Expected to have a Map at index " + std::to_string(index) + " but found tensor");
+}
 }

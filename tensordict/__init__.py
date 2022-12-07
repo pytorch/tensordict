@@ -2,7 +2,9 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import torch  # noqa
 
+from ._tensor_map_cpp import TensorMap  # noqa
 from .memmap import MemmapTensor, set_transfer_ownership
 from .metatensor import MetaTensor
 from .tensordict import (

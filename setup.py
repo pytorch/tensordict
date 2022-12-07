@@ -77,6 +77,7 @@ def _get_packages():
     ]
     return find_packages(exclude=exclude)
 
+
 def get_extensions():
     extension = CppExtension
 
@@ -84,7 +85,7 @@ def get_extensions():
     extra_compile_args = {
         "cxx": [
             "-O3",
-            "-std=c++20",
+            "-std=c++19",
             "-fdiagnostics-color=always",
         ]
     }
@@ -96,7 +97,7 @@ def get_extensions():
                 "-O0",
                 "-fno-inline",
                 "-g",
-                "-std=c++20",
+                "-std=c++19",
                 "-fdiagnostics-color=always",
             ]
         }
@@ -113,7 +114,7 @@ def get_extensions():
 
     ext_modules = [
         extension(
-            "tensor_map_cpp",
+            "tensordict._tensor_map_cpp",
             sources,
             include_dirs=[this_dir],
             extra_compile_args=extra_compile_args,

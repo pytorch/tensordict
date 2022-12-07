@@ -1,4 +1,11 @@
 #include <torch/extension.h>
+#include <torch/torch.h>
+#include <variant>
+#include <vector>
+#include <string>
+#include <map>
+
+namespace tensordict {
 
 class TensorMap {
     private:
@@ -18,3 +25,5 @@ class TensorMap {
         std::variant<torch::Tensor, TensorMap> get(std::vector<std::string> key);
         // TODO add keys - check iterator
 };
+
+}
