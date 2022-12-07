@@ -3075,7 +3075,10 @@ def test_pop_nested_dict():
 
     # SubTensorDict
     td = TensorDict(
-        {"a": TensorDict({"c": torch.rand(4, 3, 2, 2)}, [4, 3, 2]), "b": torch.ones(4, 3, 2)},
+        {
+            "a": TensorDict({"c": torch.rand(4, 3, 2, 2)}, [4, 3, 2]),
+            "b": torch.ones(4, 3, 2),
+        },
         batch_size=[4, 3],
     )
     subtd = td[:, 2]
@@ -3098,10 +3101,13 @@ def test_pop_simple_key():
     # TODO: Currently SavedTensorDict/LazyStackedTensorDict.keys() doesn't support nested keys,
     # so here we only test string key.
     # LazyStackedTensorDict
-    tds = [TensorDict(
-        {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
-        batch_size=[4],
-    ) for _ in range(10)]
+    tds = [
+        TensorDict(
+            {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
+            batch_size=[4],
+        )
+        for _ in range(10)
+    ]
     stacktd = torch.stack(tds, -1)
 
     getb = stacktd.get("b")
