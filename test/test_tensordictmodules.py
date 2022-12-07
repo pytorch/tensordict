@@ -570,21 +570,21 @@ class TestTDSequence:
             tdmodule1, dummy_tdmodule, tdmodule2, prob_module
         )
 
-        assert hasattr(tdmodule.module, "__setitem__")
-        assert len(tdmodule.module) == 4
-        tdmodule.module[1] = tdmodule2
-        tdmodule.module[2] = prob_module
-        assert len(tdmodule.module) == 4
+        assert hasattr(tdmodule, "__setitem__")
+        assert len(tdmodule) == 4
+        tdmodule[1] = tdmodule2
+        tdmodule[2] = prob_module
+        assert len(tdmodule) == 4
 
-        assert hasattr(tdmodule.module, "__delitem__")
-        assert len(tdmodule.module) == 4
-        del tdmodule.module[3]
-        assert len(tdmodule.module) == 3
+        assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 4
+        del tdmodule[3]
+        assert len(tdmodule) == 3
 
-        assert hasattr(tdmodule.module, "__getitem__")
-        assert tdmodule.module[0] is tdmodule1
-        assert tdmodule.module[1] is tdmodule2
-        assert tdmodule.module[2] is prob_module
+        assert hasattr(tdmodule, "__getitem__")
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
+        assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td)
@@ -751,24 +751,24 @@ class TestTDSequence:
 
         params = make_functional(tdmodule, funs_to_decorate=["forward", "get_dist"])
 
-        assert hasattr(tdmodule.module, "__setitem__")
-        assert len(tdmodule.module) == 4
-        tdmodule.module[1] = tdmodule2
-        tdmodule.module[2] = prob_module
+        assert hasattr(tdmodule, "__setitem__")
+        assert len(tdmodule) == 4
+        tdmodule[1] = tdmodule2
+        tdmodule[2] = prob_module
         params["module", "1"] = params["module", "2"]
         params["module", "2"] = params["module", "3"]
-        assert len(tdmodule.module) == 4
+        assert len(tdmodule) == 4
 
-        assert hasattr(tdmodule.module, "__delitem__")
-        assert len(tdmodule.module) == 4
-        del tdmodule.module[3]
+        assert hasattr(tdmodule, "__delitem__")
+        assert len(tdmodule) == 4
+        del tdmodule[3]
         del params["module", "3"]
-        assert len(tdmodule.module) == 3
+        assert len(tdmodule) == 3
 
         assert hasattr(tdmodule.module, "__getitem__")
-        assert tdmodule.module[0] is tdmodule1
-        assert tdmodule.module[1] is tdmodule2
-        assert tdmodule.module[2] is prob_module
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
+        assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tdmodule(td, params=params)
@@ -914,11 +914,11 @@ class TestTDSequence:
 
         assert hasattr(tdmodule.module, "__setitem__")
         assert len(tdmodule.module) == 4
-        tdmodule.module[1] = tdmodule2
-        tdmodule.module[2] = prob_module
+        tdmodule[1] = tdmodule2
+        tdmodule[2] = prob_module
         params["module", "1"] = params["module", "2"]
         params["module", "2"] = params["module", "3"]
-        assert len(tdmodule.module) == 4
+        assert len(tdmodule) == 4
 
         assert hasattr(tdmodule.module, "__delitem__")
         assert len(tdmodule.module) == 4
@@ -927,9 +927,9 @@ class TestTDSequence:
         assert len(tdmodule.module) == 3
 
         assert hasattr(tdmodule.module, "__getitem__")
-        assert tdmodule.module[0] is tdmodule1
-        assert tdmodule.module[1] is tdmodule2
-        assert tdmodule.module[2] is prob_module
+        assert tdmodule[0] is tdmodule1
+        assert tdmodule[1] is tdmodule2
+        assert tdmodule[2] is prob_module
 
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params)
