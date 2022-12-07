@@ -85,7 +85,7 @@ def get_extensions():
     extra_compile_args = {
         "cxx": [
             "-O3",
-            "-std=c++19",
+            "-std=c++17",
             "-fdiagnostics-color=always",
         ]
     }
@@ -97,7 +97,7 @@ def get_extensions():
                 "-O0",
                 "-fno-inline",
                 "-g",
-                "-std=c++19",
+                "-std=c++17",
                 "-fdiagnostics-color=always",
             ]
         }

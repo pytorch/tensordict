@@ -9,17 +9,17 @@
 
 namespace tensordict {
 
-void TensorMap::set(std::string key, torch::Tensor value)
+void TensorMap::SetTensorAt(std::string key, torch::Tensor value)
 {
     this->map[key] = value;
 }
 
-void TensorMap::set(std::string key, TensorMap value)
+void TensorMap::SetMapAt(std::string key, TensorMap value)
 {
     this->map[key] = value;
 }
 
-void TensorMap::set(std::vector<std::string> indices, torch::Tensor value)
+void TensorMap::SetTensorAtPath(std::vector<std::string> indices, torch::Tensor value)
 {
     if (indices.size() == 0)
         throw std::invalid_argument("indices must have at least one element");
@@ -30,7 +30,7 @@ void TensorMap::set(std::vector<std::string> indices, torch::Tensor value)
     lastMap->at(key) = value;
 }
 
-void TensorMap::set(std::vector<std::string> indices, TensorMap value)
+void TensorMap::SetMapAtPath(std::vector<std::string> indices, TensorMap value)
 {
     if (indices.size() == 0)
         throw std::invalid_argument("indices must have at least one element");
@@ -41,15 +41,15 @@ void TensorMap::set(std::vector<std::string> indices, TensorMap value)
     lastMap->at(key) = value;
 }
 
-std::variant<torch::Tensor, TensorMap> TensorMap::get(std::string key)
+std::variant<torch::Tensor, TensorMap> TensorMap::GetAt(std::string key)
 {
-    if (!this->map.contains(key))
+    if (this->map.count(key) == 0)
         throw std::invalid_argument("Invalid key: " + key);
 
     return this->map[key];
 }
 
-std::variant<torch::Tensor, TensorMap> TensorMap::get(std::vector<std::string> indices)
+std::variant<torch::Tensor, TensorMap> TensorMap::GetAtPath(std::vector<std::string> indices)
 {
     if (indices.size() == 0)
         throw std::invalid_argument("indices must have at least one element");
@@ -66,7 +66,7 @@ std::map<std::string, std::variant<torch::Tensor, TensorMap>>* TensorMap::GetRec
     int index)
 {
     auto key = indices[index];
-    if (!map.contains(key))
+    if (map.count(key) == 0)
         throw std::invalid_argument("Invalid key " + key + " at index: " + std::to_string(index));
 
     if (index == indices.size() - 1)
