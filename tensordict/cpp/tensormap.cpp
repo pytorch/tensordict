@@ -1,5 +1,5 @@
 #include "tensormap.h"
-#include <stdexcept>
+#include <exception>
 #include <string>
 
 void TensorMap::set(std::string key, torch::Tensor value)
