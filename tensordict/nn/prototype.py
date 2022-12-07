@@ -72,33 +72,42 @@ class ProbabilisticTensorDictModule(nn.Module):
             be used for sampling. Default is Delta.
         distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
         return_log_prob (bool, optional): if True, the log-probability of the
-            distribution sample will be written in the
-            tensordict with the key `'sample_log_prob'`. Default is `False`.
-        cache_dist (bool, optional): EXPERIMENTAL: if True, the parameters of the distribution (i.e. the output of the module)
-            will be written to the tensordict along with the sample. Those parameters can be used to
-            re-compute the original distribution later on (e.g. to compute the divergence between the distribution
-            used to sample the action and the updated distribution in PPO).
-            Default is `False`.
-        n_empirical_estimate (int, optional): number of samples to compute the empirical mean when it is not available.
-            Default is 1000
+            distribution sample will be written in the tensordict with the key
+            `'sample_log_prob'`. Default is `False`.
+        cache_dist (bool, optional): EXPERIMENTAL: if True, the parameters of the
+            distribution (i.e. the output of the module) will be written to the
+            tensordict along with the sample. Those parameters can be used to re-compute
+            the original distribution later on (e.g. to compute the divergence between
+            the distribution used to sample the action and the updated distribution in
+            PPO). Default is `False`.
+        n_empirical_estimate (int, optional): number of samples to compute the empirical
+            mean when it is not available. Default is 1000
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn import ProbabilisticTensorDictModule, TensorDictModule
+        >>> from tensordict.nn import TensorDictModule
         >>> from tensordict.nn.distributions import NormalParamWrapper
         >>> from tensordict.nn.functional_modules import make_functional
+        >>> from tensordict.nn.prototype import (
+        ...     ProbabilisticTensorDictModule,
+        ...     ProbabilisticTensorDictSequential,
+        ... )
         >>> from torch.distributions import Normal
-        >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
+        >>> td = TensorDict(
+        ...     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3]
+        ... )
         >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
-        >>> module = TensorDictModule(net, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
-        >>> td_module = ProbabilisticTensorDictModule(
-        ...     module=module,
+        >>> module = TensorDictModule(
+        ...     net, in_keys=["input", "hidden"], out_keys=["loc", "scale"]
+        ... )
+        >>> prob_module = ProbabilisticTensorDictModule(
         ...     in_keys=["loc", "scale"],
         ...     out_keys=["action"],
         ...     distribution_class=Normal,
         ...     return_log_prob=True,
         ... )
+        >>> td_module = ProbabilisticTensorDictSequential(module, prob_module)
         >>> params = make_functional(td_module, funs_to_decorate=["forward", "get_dist"])
         >>> _ = td_module(td, params=params)
         >>> print(td)
@@ -113,10 +122,9 @@ class ProbabilisticTensorDictModule(nn.Module):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
-        >>> dist, *_ = td_module.get_dist(td, params=params)
+        >>> dist = td_module.get_dist(td, params=params)
         >>> print(dist)
         Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4]))
-
         >>> # we can also apply the module to the TensorDict with vmap
         >>> from functorch import vmap
         >>> params = params.expand(4)
