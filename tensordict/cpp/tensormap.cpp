@@ -36,7 +36,7 @@ void TensorMap::set(std::vector<std::string> indices, TensorMap value)
 
 std::variant<torch::Tensor, TensorMap> TensorMap::get(std::string key)
 {
-    if (!this->map.contains(key))
+    if (this->map.count(key) == 0)
         throw std::invalid_argument("Invalid key: " + key);
 
     return this->map[key];
@@ -59,7 +59,7 @@ std::map<std::string, std::variant<torch::Tensor, TensorMap>>* TensorMap::GetRec
     int index)
 {
     auto key = indices[index];
-    if (!map.contains(key))
+    if (map.count(key) == 0)
         throw std::invalid_argument("Invalid key " + key + " at index: " + std::to_string(index));
 
     if (index == indices.size() - 1)
