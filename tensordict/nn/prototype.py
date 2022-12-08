@@ -208,16 +208,13 @@ class ProbabilisticTensorDictModule(nn.Module):
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
+        _requires_sample: bool = True,
     ) -> TensorDictBase:
         if tensordict_out is None:
             tensordict_out = tensordict
 
         dist = self.get_dist(tensordict)
-        td_keys = set(tensordict.keys())
-        # if the tensordict contains the sampled keys we wont be sampling them again
-        # in that case ProbabilisticTensorDictModule is presumably used to return the
-        # distribution using `get_dist` or to sample log_probabilities
-        if not all(key in td_keys for key in self.out_keys):
+        if _requires_sample:
             out_tensors = self._dist_sample(dist, interaction_mode=interaction_mode())
             if isinstance(out_tensors, Tensor):
                 out_tensors = (out_tensors,)
@@ -321,6 +318,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 "an instance of ProbabilisticTensorDictModule or another "
                 "ProbabilisticTensorDictSequential"
             )
+        # if the modules not including the final probabilistic module return the sampled
+        # key we wont be sampling it again, in that case
+        # ProbabilisticTensorDictSequential is presumably used to return the
+        # distribution using `get_dist` or to sample log_probabilities
+        _, out_keys = self._compute_in_and_out_keys(modules[:-1])
+        self._requires_sample = modules[-1].out_keys[0] not in set(out_keys)
         super().__init__(*modules, partial_tolerant=partial_tolerant)
 
     def get_dist_params(
@@ -363,4 +366,4 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         **kwargs,
     ) -> TensorDictBase:
         tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)
-        return self.module[-1](tensordict_out)
+        return self.module[-1](tensordict_out, _requires_sample=self._requires_sample)
