@@ -21,10 +21,7 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-import torch
-
 from tensordict.nn.common import TensorDictModule
-from tensordict.nn.probabilistic import ProbabilisticTensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _normalize_key, NESTED_KEY
 from torch import nn
@@ -257,40 +254,3 @@ class TensorDictSequential(TensorDictModule):
 
     def __delitem__(self, index: Union[int, slice]) -> None:
         self.module.__delitem__(idx=index)
-
-    def get_dist(
-        self,
-        tensordict: TensorDictBase,
-        **kwargs,
-    ) -> Tuple[torch.distributions.Distribution, ...]:
-        if isinstance(self.module[-1], ProbabilisticTensorDictModule):
-            if kwargs:
-                raise RuntimeError(
-                    "TensorDictSequential does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
-                )
-            tensordict = self[:-1](tensordict)
-            out = self[-1].get_dist(tensordict)
-            return out
-        else:
-            raise RuntimeError(
-                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict. "
-                f"The sequence items were of type: {[type(m) for m in self.module]}"
-            )
-
-    def get_dist_params(
-        self,
-        tensordict: TensorDictBase,
-        **kwargs,
-    ) -> Tuple[torch.distributions.Distribution, ...]:
-        if isinstance(self.module[-1], ProbabilisticTensorDictModule):
-            if kwargs:
-                raise RuntimeError(
-                    "TensorDictSequential does not support keyword arguments."
-                )
-            tensordict = self[:-1](tensordict)
-            return self[-1].get_dist_params(tensordict)
-        else:
-            raise RuntimeError(
-                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict. "
-                f"The sequence items were of type: {[type(m) for m in self.module]}"
-            )

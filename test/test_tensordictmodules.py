@@ -11,16 +11,13 @@ from functorch import make_functional_with_buffers as make_functional_functorch,
 from tensordict import TensorDict
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
     TensorDictModule,
     TensorDictSequential,
 )
 from tensordict.nn.distributions import NormalParamWrapper
 from tensordict.nn.functional_modules import make_functional
 from tensordict.nn.probabilistic import set_interaction_mode
-from tensordict.nn.prototype import (
-    ProbabilisticTensorDictModule as ProbabilisticTensorDictModule_proto,
-    ProbabilisticTensorDictSequential,
-)
 from torch import nn
 from torch.distributions import Normal
 
@@ -78,44 +75,7 @@ class TestTDModule:
         else:
             raise NotImplementedError
 
-        tensordict_module = ProbabilisticTensorDictModule(
-            module=net,
-            dist_in_keys=dist_in_keys,
-            sample_out_key=["out"],
-            **kwargs,
-        )
-
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with set_interaction_mode(interaction_mode):
-            tensordict_module(td)
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 4])
-
-    @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
-    @pytest.mark.parametrize("lazy", [True, False])
-    @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
-    def test_stateful_probabilistic_proto(self, lazy, interaction_mode, out_keys):
-        torch.manual_seed(0)
-        param_multiplier = 2
-        if lazy:
-            net = nn.LazyLinear(4 * param_multiplier)
-        else:
-            net = nn.Linear(3, 4 * param_multiplier)
-
-        in_keys = ["in"]
-        net = TensorDictModule(
-            module=NormalParamWrapper(net), in_keys=in_keys, out_keys=out_keys
-        )
-
-        kwargs = {"distribution_class": Normal}
-        if out_keys == ["loc", "scale"]:
-            dist_in_keys = ["loc", "scale"]
-        elif out_keys == ["loc_1", "scale_1"]:
-            dist_in_keys = {"loc": "loc_1", "scale": "scale_1"}
-        else:
-            raise NotImplementedError
-
-        prob_module = ProbabilisticTensorDictModule_proto(
+        prob_module = ProbabilisticTensorDictModule(
             in_keys=dist_in_keys, out_keys=["out"], **kwargs
         )
 
@@ -196,31 +156,6 @@ class TestTDModule:
         torch.manual_seed(0)
         param_multiplier = 2
 
-        net = NormalParamWrapper(nn.Linear(3, 4 * param_multiplier))
-        params = make_functional(net)
-
-        tdnet = TensorDictModule(module=net, in_keys=["in"], out_keys=["loc", "scale"])
-
-        kwargs = {"distribution_class": Normal}
-        tensordict_module = ProbabilisticTensorDictModule(
-            module=tdnet,
-            dist_in_keys=["loc", "scale"],
-            sample_out_key=["out"],
-            **kwargs,
-        )
-
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tensordict_module(td, params=params)
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 4])
-
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
-    def test_functional_probabilistic_proto(self):
-        torch.manual_seed(0)
-        param_multiplier = 2
-
         tdnet = TensorDictModule(
             module=NormalParamWrapper(nn.Linear(3, 4 * param_multiplier)),
             in_keys=["in"],
@@ -228,7 +163,7 @@ class TestTDModule:
         )
 
         kwargs = {"distribution_class": Normal}
-        prob_module = ProbabilisticTensorDictModule_proto(
+        prob_module = ProbabilisticTensorDictModule(
             in_keys=["loc", "scale"], out_keys=["out"], **kwargs
         )
 
@@ -264,31 +199,6 @@ class TestTDModule:
         torch.manual_seed(0)
         param_multiplier = 2
 
-        net = NormalParamWrapper(nn.BatchNorm1d(32 * param_multiplier))
-        params = make_functional(net)
-
-        tdnet = TensorDictModule(module=net, in_keys=["in"], out_keys=["loc", "scale"])
-
-        kwargs = {"distribution_class": Normal}
-        tdmodule = ProbabilisticTensorDictModule(
-            module=tdnet,
-            dist_in_keys=["loc", "scale"],
-            sample_out_key=["out"],
-            **kwargs,
-        )
-
-        td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
-        tdmodule(td, params=params)
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 32])
-
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
-    def test_functional_with_buffer_probabilistic_proto(self):
-        torch.manual_seed(0)
-        param_multiplier = 2
-
         tdnet = TensorDictModule(
             module=NormalParamWrapper(nn.BatchNorm1d(32 * param_multiplier)),
             in_keys=["in"],
@@ -296,7 +206,7 @@ class TestTDModule:
         )
 
         kwargs = {"distribution_class": Normal}
-        prob_module = ProbabilisticTensorDictModule_proto(
+        prob_module = ProbabilisticTensorDictModule(
             in_keys=["loc", "scale"], out_keys=["out"], **kwargs
         )
 
@@ -348,44 +258,7 @@ class TestTDModule:
         tdnet = TensorDictModule(module=net, in_keys=["in"], out_keys=["loc", "scale"])
 
         kwargs = {"distribution_class": Normal}
-
-        tdmodule = ProbabilisticTensorDictModule(
-            module=tdnet,
-            dist_in_keys=["loc", "scale"],
-            sample_out_key=["out"],
-            **kwargs,
-        )
-        params = make_functional(tdmodule)
-
-        # vmap = True
-        params = params.expand(10)
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
-        assert td_out is not td
-        assert td_out.shape == torch.Size([10, 3])
-        assert td_out.get("out").shape == torch.Size([10, 3, 4])
-
-        # vmap = (0, 0)
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_repeat = td.expand(10, *td.batch_size)
-        td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
-        assert td_out is not td_repeat
-        assert td_out.shape == torch.Size([10, 3])
-        assert td_out.get("out").shape == torch.Size([10, 3, 4])
-
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
-    def test_vmap_probabilistic_proto(self):
-        torch.manual_seed(0)
-        param_multiplier = 2
-
-        net = NormalParamWrapper(nn.Linear(3, 4 * param_multiplier))
-
-        tdnet = TensorDictModule(module=net, in_keys=["in"], out_keys=["loc", "scale"])
-
-        kwargs = {"distribution_class": Normal}
-        prob_module = ProbabilisticTensorDictModule_proto(
+        prob_module = ProbabilisticTensorDictModule(
             in_keys=["loc", "scale"], out_keys=["out"], **kwargs
         )
 
@@ -485,63 +358,8 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td)
-
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful_probabilistic(self, lazy):
-        torch.manual_seed(0)
-        param_multiplier = 2
-        if lazy:
-            net1 = nn.LazyLinear(4)
-            dummy_net = nn.LazyLinear(4)
-            net2 = nn.LazyLinear(4 * param_multiplier)
-        else:
-            net1 = nn.Linear(3, 4)
-            dummy_net = nn.Linear(4, 4)
-            net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
-        net2 = TensorDictModule(
-            module=net2, in_keys=["hidden"], out_keys=["loc", "scale"]
-        )
-
-        kwargs = {"distribution_class": Normal}
-        tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
-        dummy_tdmodule = TensorDictModule(
-            dummy_net, in_keys=["hidden"], out_keys=["hidden"]
-        )
-        tdmodule2 = ProbabilisticTensorDictModule(
-            module=net2,
-            dist_in_keys=["loc", "scale"],
-            sample_out_key=["out"],
-            **kwargs,
-        )
-        tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
-
-        assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
-        tdmodule[1] = tdmodule2
-        assert len(tdmodule) == 3
-
-        assert hasattr(tdmodule, "__delitem__")
-        assert len(tdmodule) == 3
-        del tdmodule[2]
-        assert len(tdmodule) == 2
-
-        assert hasattr(tdmodule, "__getitem__")
-        assert tdmodule[0] is tdmodule1
-        assert tdmodule[1] is tdmodule2
-
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tdmodule(td)
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 4])
-
-        dist, *_ = tdmodule.get_dist(td)
-        assert dist.rsample().shape[: td.ndimension()] == td.shape
-
-    @pytest.mark.parametrize("lazy", [True, False])
-    def test_stateful_probabilistic_proto(self, lazy):
         torch.manual_seed(0)
         param_multiplier = 2
         if lazy:
@@ -563,7 +381,7 @@ class TestTDSequence:
             net2, in_keys=["hidden"], out_keys=["loc", "scale"]
         )
 
-        prob_module = ProbabilisticTensorDictModule_proto(
+        prob_module = ProbabilisticTensorDictModule(
             in_keys=["loc", "scale"], out_keys=["out"], **kwargs
         )
         tdmodule = ProbabilisticTensorDictSequential(
@@ -635,9 +453,6 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td, params=params)
-
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )
@@ -663,66 +478,10 @@ class TestTDSequence:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td, params=params)
-
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )
     def test_functional_probabilistic(self):
-        torch.manual_seed(0)
-        param_multiplier = 2
-
-        net1 = nn.Linear(3, 4)
-        dummy_net = nn.Linear(4, 4)
-        net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
-
-        net2 = TensorDictModule(
-            module=net2, in_keys=["hidden"], out_keys=["loc", "scale"]
-        )
-
-        kwargs = {"distribution_class": Normal}
-
-        tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
-        dummy_tdmodule = TensorDictModule(
-            dummy_net, in_keys=["hidden"], out_keys=["hidden"]
-        )
-        tdmodule2 = ProbabilisticTensorDictModule(
-            net2, dist_in_keys=["loc", "scale"], sample_out_key=["out"], **kwargs
-        )
-        tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
-
-        params = make_functional(tdmodule, funs_to_decorate=["forward", "get_dist"])
-
-        assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
-        tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
-        assert len(tdmodule) == 3
-
-        assert hasattr(tdmodule, "__delitem__")
-        assert len(tdmodule) == 3
-        del tdmodule[2]
-        del params["module", "2"]
-        assert len(tdmodule) == 2
-
-        assert hasattr(tdmodule, "__getitem__")
-        assert tdmodule[0] is tdmodule1
-        assert tdmodule[1] is tdmodule2
-
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tdmodule(td, params=params)
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 4])
-
-        dist, *_ = tdmodule.get_dist(td, params=params)
-        assert dist.rsample().shape[: td.ndimension()] == td.shape
-
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
-    def test_functional_probabilistic_proto(self):
         torch.manual_seed(0)
         param_multiplier = 2
 
@@ -740,7 +499,7 @@ class TestTDSequence:
         )
 
         kwargs = {"distribution_class": Normal}
-        prob_module = ProbabilisticTensorDictModule_proto(
+        prob_module = ProbabilisticTensorDictModule(
             out_keys=["out"],
             in_keys=["loc", "scale"],
             **kwargs,
@@ -819,9 +578,6 @@ class TestTDSequence:
         td = TensorDict({"in": torch.randn(3, 7)}, [3])
         tdmodule(td, params=params)
 
-        with pytest.raises(RuntimeError, match="Cannot call get_dist on a sequence"):
-            dist, *_ = tdmodule.get_dist(td, params=params)
-
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 7])
 
@@ -829,58 +585,6 @@ class TestTDSequence:
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )
     def test_functional_with_buffer_probabilistic(self):
-        torch.manual_seed(0)
-        param_multiplier = 2
-
-        net1 = nn.Sequential(nn.Linear(7, 7), nn.BatchNorm1d(7))
-        dummy_net = nn.Sequential(nn.Linear(7, 7), nn.BatchNorm1d(7))
-        net2 = nn.Sequential(
-            nn.Linear(7, 7 * param_multiplier), nn.BatchNorm1d(7 * param_multiplier)
-        )
-        net2 = NormalParamWrapper(net2)
-        net2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
-
-        kwargs = {"distribution_class": Normal}
-        tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
-        dummy_tdmodule = TensorDictModule(
-            dummy_net, in_keys=["hidden"], out_keys=["hidden"]
-        )
-        tdmodule2 = ProbabilisticTensorDictModule(
-            net2, dist_in_keys=["loc", "scale"], sample_out_key=["out"], **kwargs
-        )
-        tdmodule = TensorDictSequential(tdmodule1, dummy_tdmodule, tdmodule2)
-
-        params = make_functional(tdmodule, ["forward", "get_dist"])
-
-        assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
-        tdmodule[1] = tdmodule2
-        params["module", "1"] = params["module", "2"]
-        assert len(tdmodule) == 3
-
-        assert hasattr(tdmodule, "__delitem__")
-        assert len(tdmodule) == 3
-        del tdmodule[2]
-        del params["module", "2"]
-        assert len(tdmodule) == 2
-
-        assert hasattr(tdmodule, "__getitem__")
-        assert tdmodule[0] is tdmodule1
-        assert tdmodule[1] is tdmodule2
-
-        td = TensorDict({"in": torch.randn(3, 7)}, [3])
-        tdmodule(td, params=params)
-
-        dist, *_ = tdmodule.get_dist(td, params=params)
-        assert dist.rsample().shape[: td.ndimension()] == td.shape
-
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 7])
-
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
-    def test_functional_with_buffer_probabilistic_proto(self):
         torch.manual_seed(0)
         param_multiplier = 2
 
@@ -900,7 +604,7 @@ class TestTDSequence:
         )
 
         kwargs = {"distribution_class": Normal}
-        prob_module = ProbabilisticTensorDictModule_proto(
+        prob_module = ProbabilisticTensorDictModule(
             in_keys=["loc", "scale"],
             out_keys=["out"],
             **kwargs,
@@ -1003,44 +707,6 @@ class TestTDSequence:
 
         net2 = nn.Linear(4, 4 * param_multiplier)
         net2 = NormalParamWrapper(net2)
-        net2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["loc", "scale"])
-
-        kwargs = {"distribution_class": Normal}
-        tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
-        tdmodule2 = ProbabilisticTensorDictModule(
-            net2, sample_out_key=["out"], dist_in_keys=["loc", "scale"], **kwargs
-        )
-        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
-
-        params = make_functional(tdmodule)
-
-        # vmap = True
-        params = params.expand(10)
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_out = vmap(tdmodule, (None, 0))(td, params)
-        assert td_out is not td
-        assert td_out.shape == torch.Size([10, 3])
-        assert td_out.get("out").shape == torch.Size([10, 3, 4])
-
-        # vmap = (0, 0)
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        td_repeat = td.expand(10, *td.batch_size)
-        td_out = vmap(tdmodule, (0, 0))(td_repeat, params)
-        assert td_out is not td_repeat
-        assert td_out.shape == torch.Size([10, 3])
-        assert td_out.get("out").shape == torch.Size([10, 3, 4])
-
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
-    def test_vmap_probabilistic_proto(self):
-        torch.manual_seed(0)
-        param_multiplier = 2
-
-        net1 = nn.Linear(3, 4)
-
-        net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
 
         kwargs = {"distribution_class": Normal}
         tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
@@ -1050,7 +716,7 @@ class TestTDSequence:
         tdmodule = ProbabilisticTensorDictSequential(
             tdmodule1,
             tdmodule2,
-            ProbabilisticTensorDictModule_proto(
+            ProbabilisticTensorDictModule(
                 out_keys=["out"],
                 in_keys=["loc", "scale"],
                 **kwargs,
@@ -1135,83 +801,15 @@ class TestTDSequence:
         kwargs = {"distribution_class": Normal}
 
         tdmodule1 = TensorDictModule(net1, in_keys=["a"], out_keys=["hidden"])
-        tdmodule2 = ProbabilisticTensorDictModule(
-            net2, sample_out_key=["out"], dist_in_keys=["loc", "scale"], **kwargs
-        )
-        tdmodule3 = ProbabilisticTensorDictModule(
-            net3, sample_out_key=["out"], dist_in_keys=["loc", "scale"], **kwargs
-        )
-        tdmodule = TensorDictSequential(
-            tdmodule1, tdmodule2, tdmodule3, partial_tolerant=True
-        )
-
-        if functional:
-            params = make_functional(tdmodule)
-        else:
-            params = None
-
-        if stack:
-            td = torch.stack(
-                [
-                    TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, []),
-                    TensorDict({"a": torch.randn(3), "c": torch.randn(4)}, []),
-                ],
-                0,
-            )
-            if functional:
-                tdmodule(td, params=params)
-            else:
-                tdmodule(td)
-            assert "loc" in td.keys()
-            assert "scale" in td.keys()
-            assert "out" in td.keys()
-            assert td["out"].shape[0] == 2
-            assert td["loc"].shape[0] == 2
-            assert td["scale"].shape[0] == 2
-            assert "b" not in td.keys()
-            assert "b" in td[0].keys()
-        else:
-            td = TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, [])
-            if functional:
-                tdmodule(td, params=params)
-            else:
-                tdmodule(td)
-            assert "loc" in td.keys()
-            assert "scale" in td.keys()
-            assert "out" in td.keys()
-            assert "b" in td.keys()
-
-    @pytest.mark.skipif(
-        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-    )
-    @pytest.mark.parametrize("stack", [True, False])
-    @pytest.mark.parametrize("functional", [True, False])
-    def test_sequential_partial_proto(self, stack, functional):
-        torch.manual_seed(0)
-        param_multiplier = 2
-
-        net1 = nn.Linear(3, 4)
-
-        net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = NormalParamWrapper(net2)
-        net2 = TensorDictModule(net2, in_keys=["b"], out_keys=["loc", "scale"])
-
-        net3 = nn.Linear(4, 4 * param_multiplier)
-        net3 = NormalParamWrapper(net3)
-        net3 = TensorDictModule(net3, in_keys=["c"], out_keys=["loc", "scale"])
-
-        kwargs = {"distribution_class": Normal}
-
-        tdmodule1 = TensorDictModule(net1, in_keys=["a"], out_keys=["hidden"])
         tdmodule2 = ProbabilisticTensorDictSequential(
             net2,
-            ProbabilisticTensorDictModule_proto(
+            ProbabilisticTensorDictModule(
                 out_keys=["out"], in_keys=["loc", "scale"], **kwargs
             ),
         )
         tdmodule3 = ProbabilisticTensorDictSequential(
             net3,
-            ProbabilisticTensorDictModule_proto(
+            ProbabilisticTensorDictModule(
                 out_keys=["out"], in_keys=["loc", "scale"], **kwargs
             ),
         )
