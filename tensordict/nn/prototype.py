@@ -12,7 +12,7 @@ import torch.nn as nn
 from tensordict.nn.common import _check_all_str, TensorDictModule
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.nn.functional_modules import repopulate_module
-from tensordict.nn.probabilistic import interaction_mode
+from tensordict.nn.probabilistic import interaction_mode, set_interaction_mode
 from tensordict.nn.sequence import TensorDictSequential
 from tensordict.tensordict import TensorDictBase
 from torch import distributions as d, Tensor
@@ -332,7 +332,11 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         tds = TensorDictSequential(*self.module[:-1])
         if self.__dict__.get("_is_stateless", False):
             tds = repopulate_module(tds, kwargs.pop("params"))
-        return tds(tensordict, tensordict_out, **kwargs)
+        mode = interaction_mode()
+        if mode is None:
+            mode = self.module[-1].default_interaction_mode
+        with set_interaction_mode(mode):
+            return tds(tensordict, tensordict_out, **kwargs)
 
     def get_dist(
         self,
@@ -351,3 +355,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         sequence are not evaluated.
         """
         return self.module[-1].get_dist(tensordict)
+
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out: Optional[TensorDictBase] = None,
+        **kwargs,
+    ) -> TensorDictBase:
+        tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)
+        return self.module[-1](tensordict_out)
