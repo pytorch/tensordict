@@ -52,22 +52,29 @@ class TensorDictSequential(TensorDictModule):
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import (
         ...     ProbabilisticTensorDictModule,
+        ...     ProbabilisticTensorDictSequential,
         ...     TensorDictModule,
         ...     TensorDictSequential,
         ... )
-        >>> from tensordict.nn.distributions import NormalParamWrapper
+        >>> from tensordict.nn.distributions import NormalParamSplitter
         >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
-        >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> module1 = TensorDictModule(net1, in_keys=["input"], out_keys=["loc", "scale"])
-        >>> td_module1 = ProbabilisticTensorDictModule(
-        ...    module=module1,
-        ...    dist_in_keys=["loc", "scale"],
-        ...    sample_out_key=["hidden"],
-        ...    distribution_class=Normal,
-        ...    return_log_prob=True,
-        ...    )
+        >>> net1 = torch.nn.Linear(4, 8)
+        >>> module1 = TensorDictModule(net1, in_keys=["input"], out_keys=["params"])
+        >>> normal_params = TensorDictModule(
+                NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+            )
+        >>> td_module1 = ProbabilisticTensorDictSequential(
+        ...     module1,
+        ...     normal_params,
+        ...     ProbabilisticTensorDictModule(
+        ...         in_keys=["loc", "scale"],
+        ...         out_keys=["hidden"],
+        ...         distribution_class=Normal,
+        ...         return_log_prob=True,
+        ...     )
+        ... )
         >>> module2 = torch.nn.Linear(4, 8)
         >>> td_module2 = TensorDictModule(
         ...    module=module2, in_keys=["hidden"], out_keys=["output"]
@@ -82,6 +89,7 @@ class TensorDictSequential(TensorDictModule):
                 input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                params: Tensor(torch.Size([3, 8]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
@@ -99,6 +107,7 @@ class TensorDictSequential(TensorDictModule):
                 input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
+                params: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([4, 3]),
