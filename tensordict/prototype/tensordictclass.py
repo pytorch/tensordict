@@ -18,9 +18,7 @@ def tensordictclass(cls):
 
             # should we remove?
             if "batch_size" not in self.__dict__:
-                raise Exception(
-                    "Attribute batch_size is required for TensorDictClass."
-                )
+                raise Exception("Attribute batch_size is required for TensorDictClass.")
 
             attributes = [key for key in self.__dict__ if key != "batch_size"]
 
