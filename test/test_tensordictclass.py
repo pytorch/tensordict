@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import argparse
-from typing import Optional
+from dataclasses import field
+from typing import Any, Optional
 
 import pytest
 import torch
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.prototype import tensordictclass
-from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict
+from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
+from torch import Tensor
 
 
 @tensordictclass
@@ -115,14 +117,47 @@ def test_nested():
     @tensordictclass
     class MyDataNested:
         X: torch.tensor
-        batch_size: torch.Size
-        y: Optional[MyDataNested] = None
+        y: MyDataNested = None
 
     X = torch.ones(3, 4, 5)
     batch_size = [3, 4]
     data_nest = MyDataNested(X=X, batch_size=batch_size)
     data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
     assert isinstance(data.y, MyDataNested), type(data.y)
+
+
+@pytest.mark.parametrize("any_to_td", [True, False])
+def test_nested_heterogeneous(any_to_td):
+    @tensordictclass
+    class MyDataNest:
+        X: torch.Tensor
+
+    @tensordictclass
+    class MyDataParent:
+        W: Any
+        X: Tensor
+        z: TensorDictBase
+        y: MyDataNest
+
+    batch_size = [3, 4]
+    if any_to_td:
+        W = TensorDict({}, batch_size)
+    else:
+        W = torch.zeros(*batch_size, 1)
+    X = torch.ones(3, 4, 5)
+    data_nest = MyDataNest(X=X, batch_size=batch_size)
+    td = TensorDict({}, batch_size)
+    data = MyDataParent(X=X, y=data_nest, z=td, W=W, batch_size=batch_size)
+    assert isinstance(data.y, MyDataNest)
+    assert isinstance(data.y.X, Tensor)
+    assert isinstance(data.X, Tensor)
+    if not any_to_td:
+        assert isinstance(data.W, Tensor)
+    else:
+        assert isinstance(data.W, TensorDict)
+    assert isinstance(data, MyDataParent)
+    assert isinstance(data.z, TensorDict)
+    assert isinstance(data.tensordict["y"], TensorDict)
 
 
 if __name__ == "__main__":

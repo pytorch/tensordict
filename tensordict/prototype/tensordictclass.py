@@ -1,12 +1,21 @@
 import functools
-from dataclasses import dataclass, make_dataclass
+from dataclasses import dataclass, field, make_dataclass
+from platform import python_version
 from typing import Callable, Dict, Optional, Tuple
 
 import torch
 
+from etils.array_types import typing
+from packaging import version
+
 from tensordict.tensordict import _accepted_classes, TensorDict, TensorDictBase
 
 from torch import Tensor
+
+PY37 = version.parse(python_version()) < version.parse("3.8")
+
+# For __future__.annotations, we keep a dict of str -> class to call the class based on the string
+CLASSES_DICT = {}
 
 
 def tensordictclass(cls):
@@ -14,10 +23,14 @@ def tensordictclass(cls):
 
     name = cls.__name__
     datacls = make_dataclass(
-        name, bases=(dataclass(cls),), fields=[("batch_size", torch.Size)]
+        name,
+        bases=(dataclass(cls),),
+        fields=[("batch_size", torch.Size, field(default_factory=list))],
     )
 
-    class TensorDictClass(datacls):
+    class _TensorDictClass(datacls):
+        # TODO: (1) check type annotations and raise errors if Optional, Any or Union (?)
+        # TODO: (2) optionally check that the keys of the _tensordict match the fields of the datacls using dataclasses.fields
         def __init__(self, *args, _tensordict=None, **kwargs):
             if _tensordict is not None:
                 input_dict = {key: None for key in _tensordict.keys()}
@@ -59,7 +72,7 @@ def tensordictclass(cls):
 
         @staticmethod
         def _build_from_tensordict(tensordict):
-            return TensorDictClass(_tensordict=tensordict)
+            return _TensorDictClass(_tensordict=tensordict)
 
         @classmethod
         def __torch_function__(
@@ -83,7 +96,20 @@ def tensordictclass(cls):
                 and "tensordict" in self.__dict__
                 and item in self.__dict__["tensordict"].keys()
             ):
-                return self.__dict__["tensordict"][item]
+                out = self.__dict__["tensordict"][item]
+                # from __future__ import annotations turns types in stings. For those we use CLASSES_DICT.
+                # Otherwise, if the output is some TensorDictBase subclass, we check the type and if it
+                # does not match, we map it. In all other cases, just return what has been gathered.
+                field_def = datacls.__dataclass_fields__[item].type
+                if isinstance(field_def, str) and field_def in CLASSES_DICT:
+                    out = CLASSES_DICT[field_def](_tensordict=out)
+                elif (
+                    isinstance(field_def, type)
+                    and not isinstance(out, field_def)
+                    and isinstance(out, TensorDictBase)
+                ):
+                    out = field_def(_tensordict=out)
+                return out
             return super().__getattribute__(item)
 
         def __getattr__(self, attr):
@@ -96,7 +122,7 @@ def tensordictclass(cls):
                 def wrapped_func(*args, **kwargs):
                     res = func(*args, **kwargs)
                     if isinstance(res, TensorDictBase):
-                        new = TensorDictClass(_tensordict=res)
+                        new = _TensorDictClass(_tensordict=res)
                         return new
                     else:
                         return res
@@ -105,7 +131,7 @@ def tensordictclass(cls):
 
         def __getitem__(self, item):
             res = self.tensordict[item]
-            return TensorDictClass(
+            return _TensorDictClass(
                 **res,
                 batch_size=res.batch_size,
             )  # device=res.device)
@@ -123,13 +149,14 @@ def tensordictclass(cls):
     @implements_for_tdc(torch.stack)
     def _stack(list_of_tdc, dim):
         tensordict = torch.stack([tdc.tensordict for tdc in list_of_tdc], dim)
-        out = TensorDictClass(_tensordict=tensordict)
+        out = _TensorDictClass(_tensordict=tensordict)
         return out
 
     @implements_for_tdc(torch.cat)
     def _cat(list_of_tdc, dim):
         tensordict = torch.cat([tdc.tensordict for tdc in list_of_tdc], dim)
-        out = TensorDictClass(_tensordict=tensordict)
+        out = _TensorDictClass(_tensordict=tensordict)
         return out
 
-    return TensorDictClass
+    CLASSES_DICT[name] = _TensorDictClass
+    return _TensorDictClass
