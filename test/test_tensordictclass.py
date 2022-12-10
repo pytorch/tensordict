@@ -217,6 +217,44 @@ def test_setattr(any_to_td):
         data.newattr = TensorDict({"smth": torch.zeros(1)}, [])
 
 
+def test_default():
+    @tensordictclass
+    class MyData:
+        X: torch.Tensor = None  # TODO: do we want to allow any default, say an integer?
+        y: torch.Tensor = torch.ones(3, 4, 5)
+
+    data = MyData(batch_size=[3, 4])
+    assert data.__dict__["y"] is None
+    assert (data.y == 1).all()
+    assert data.X is None
+    data.X = torch.zeros(3, 4, 1)
+    assert (data.X == 0).all()
+
+    MyData(batch_size=[3])
+    MyData(batch_size=[])
+    with pytest.raises(RuntimeError, match="batch_size are incongruent"):
+        MyData(batch_size=[4])
+
+
+def test_defaultfactory():
+    @tensordictclass
+    class MyData:
+        X: torch.Tensor = None  # TODO: do we want to allow any default, say an integer?
+        y: torch.Tensor = dataclasses.field(default_factory=torch.ones(3, 4, 5))
+
+    data = MyData(batch_size=[3, 4])
+    assert data.__dict__["y"] is None
+    assert (data.y == 1).all()
+    assert data.X is None
+    data.X = torch.zeros(3, 4, 1)
+    assert (data.X == 0).all()
+
+    MyData(batch_size=[3])
+    MyData(batch_size=[])
+    with pytest.raises(RuntimeError, match="batch_size are incongruent"):
+        MyData(batch_size=[4])
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

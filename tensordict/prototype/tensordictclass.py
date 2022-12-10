@@ -1,3 +1,4 @@
+import dataclasses
 import functools
 from dataclasses import dataclass, field, make_dataclass
 from platform import python_version
@@ -46,6 +47,15 @@ def tensordictclass(cls):
                     raise Exception(
                         "Keyword argument 'batch_size' is required for TensorDictClass."
                     )
+                # get the default values
+                for key in datacls.__dataclass_fields__:
+                    default = datacls.__dataclass_fields__[key].default
+                    default_factory = datacls.__dataclass_fields__[key].default_factory
+                    if not isinstance(default_factory, dataclasses._MISSING_TYPE):
+                        default = default_factory
+                    if default is not None:
+                        kwargs.setdefault(key, default)
+
                 new_args = [None for _ in args]
                 new_kwargs = {
                     key: None if key != "batch_size" else value
@@ -61,11 +71,17 @@ def tensordictclass(cls):
                             f"Attribute name {attr} can't be used for TensorDictClass"
                         )
 
+                def _get_value(value):
+                    if isinstance(value, _accepted_classes):
+                        return value
+                    elif type(value) in CLASSES_DICT.values():
+                        return value.tensordict
+                    else:
+                        raise ValueError(f"{type(value)} is not an accepted class")
+
                 self.tensordict = TensorDict(
                     {
-                        key: value
-                        if isinstance(value, _accepted_classes)
-                        else value.tensordict
+                        key: _get_value(value)
                         for key, value in kwargs.items()
                         if key not in ("batch_size",)
                     },
