@@ -5,7 +5,6 @@ from typing import Callable, Dict, Optional, Tuple
 
 import torch
 
-from etils.array_types import typing
 from packaging import version
 
 from tensordict.tensordict import _accepted_classes, TensorDict, TensorDictBase
@@ -28,9 +27,12 @@ def tensordictclass(cls):
         fields=[("batch_size", torch.Size, field(default_factory=list))],
     )
 
+    EXPECTED_KEYS = set(datacls.__dataclass_fields__.keys())
+
     class _TensorDictClass(datacls):
-        # TODO: (1) check type annotations and raise errors if Optional, Any or Union (?)
+        # TODO: (1) check type annotations and raise errors if Optional, Any or Union (?) (line 105 would break)
         # TODO: (2) optionally check that the keys of the _tensordict match the fields of the datacls using dataclasses.fields
+        # TODO: (3) implement other @implements_for_td and port them to _TensorDictClass as stack and cat below
         def __init__(self, *args, _tensordict=None, **kwargs):
             if _tensordict is not None:
                 input_dict = {key: None for key in _tensordict.keys()}
@@ -112,6 +114,18 @@ def tensordictclass(cls):
                 return out
             return super().__getattribute__(item)
 
+        def __setattr__(self, key, value):
+            if "tensordict" not in self.__dict__:
+                return super().__setattr__(key, value)
+            if key not in EXPECTED_KEYS:
+                raise AttributeError(
+                    f"Cannot set the attribute '{key}', expected attributes are {EXPECTED_KEYS}."
+                )
+            if type(value) in CLASSES_DICT.values():
+                value = value.__dict__["tensordict"]
+            self.__dict__["tensordict"][key] = value
+            assert self.__dict__["tensordict"][key] is value
+
         def __getattr__(self, attr):
             res = getattr(self.tensordict, attr)
             if not callable(res):
@@ -135,6 +149,9 @@ def tensordictclass(cls):
                 **res,
                 batch_size=res.batch_size,
             )  # device=res.device)
+
+        def clone(self, recurse=True):
+            return _TensorDictClass(_tensordict=self.tensordict.clone(recurse=recurse))
 
     def implements_for_tdc(torch_function: Callable) -> Callable:
         """Register a torch function override for TensorDictClass."""

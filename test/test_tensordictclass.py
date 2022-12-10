@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import field
-from typing import Any, Optional
+import dataclasses
+import re
+from typing import Any
 
 import pytest
 import torch
@@ -20,6 +21,16 @@ class MyData:
 
     def stuff(self):
         return self.X + self.y
+
+
+def test_dataclass():
+
+    data = MyData(
+        X=torch.ones(3, 4, 5),
+        y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        batch_size=[3, 4],
+    )
+    assert dataclasses.is_dataclass(data)
 
 
 def test_type():
@@ -158,6 +169,52 @@ def test_nested_heterogeneous(any_to_td):
     assert isinstance(data, MyDataParent)
     assert isinstance(data.z, TensorDict)
     assert isinstance(data.tensordict["y"], TensorDict)
+
+
+@pytest.mark.parametrize("any_to_td", [True, False])
+def test_setattr(any_to_td):
+    @tensordictclass
+    class MyDataNest:
+        X: torch.Tensor
+
+    @tensordictclass
+    class MyDataParent:
+        W: Any
+        X: Tensor
+        z: TensorDictBase
+        y: MyDataNest
+
+    batch_size = [3, 4]
+    if any_to_td:
+        W = TensorDict({}, batch_size)
+    else:
+        W = torch.zeros(*batch_size, 1)
+    X = torch.ones(3, 4, 5)
+    X_clone = X.clone()
+    td = TensorDict({}, batch_size)
+    td_clone = td.clone()
+    data_nest = MyDataNest(X=X, batch_size=batch_size)
+    data = MyDataParent(X=X, y=data_nest, z=td, W=W, batch_size=batch_size)
+    data_nest_clone = data_nest.clone()
+    assert type(data_nest_clone) is type(data_nest)
+    data.y = data_nest_clone
+    assert data.tensordict["y"] is not data_nest.tensordict
+    assert data.tensordict["y"] is data_nest_clone.tensordict, (
+        type(data.tensordict["y"]),
+        type(data_nest.tensordict),
+    )
+    data.X = X_clone
+    assert data.tensordict["X"] is X_clone
+    data.z = td_clone
+    assert data.tensordict["z"] is td_clone
+    # check that you can't mess up the batch_size
+    with pytest.raises(
+        RuntimeError, match=re.escape("the tensor smth has shape torch.Size([1]) which")
+    ):
+        data.z = TensorDict({"smth": torch.zeros(1)}, [])
+    # check that you can't write any attribute
+    with pytest.raises(AttributeError, match=re.escape("Cannot set the attribute")):
+        data.newattr = TensorDict({"smth": torch.zeros(1)}, [])
 
 
 if __name__ == "__main__":
