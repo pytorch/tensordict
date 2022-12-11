@@ -72,7 +72,7 @@ def tensordictclass(cls):
                         )
 
                 def _get_value(value):
-                    if isinstance(value, _accepted_classes):
+                    if isinstance(value, _accepted_classes + (dataclasses._MISSING_TYPE,)):
                         return value
                     elif type(value) in CLASSES_DICT.values():
                         return value.tensordict
