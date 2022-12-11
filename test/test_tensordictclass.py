@@ -256,7 +256,11 @@ def test_defaultfactory():
 
 
 def test_kjt():
-    from torchrec.sparse import KeyedJaggedTensor
+    try:
+        from torchrec import KeyedJaggedTensor
+    except ImportError:
+        pytest.skip("TorchRec not installed.")
+
     def _get_kjt():
         values = torch.Tensor(
             [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
@@ -280,17 +284,10 @@ def test_kjt():
         X: torch.Tensor
         y: KeyedJaggedTensor
 
-    data = MyData(batch_size=[3])
-    assert data.__dict__["y"] is None
-    assert (data.y == 1).all()
-    assert data.X is None
-    data.X = torch.zeros(3, 4, 1)
-    assert (data.X == 0).all()
-
-    MyData(X=torch.zeros(3, 1), y=kjt, batch_size=[3])
-    MyData[:2].y
-    MyData[[0, 2]].y
-    MyData[0].y
+    data = MyData(X=torch.zeros(3, 1), y=kjt, batch_size=[3])
+    data[:2].y
+    data[[0, 2]].y
+    data[0].y
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
