@@ -255,6 +255,43 @@ def test_defaultfactory():
         MyData(batch_size=[4])
 
 
+def test_kjt():
+    from torchrec.sparse import KeyedJaggedTensor
+    def _get_kjt():
+        values = torch.Tensor(
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
+        weights = torch.Tensor(
+            [1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0])
+        keys = ["index_0", "index_1", "index_2"]
+        offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8, 9, 10, 11])
+
+        jag_tensor = KeyedJaggedTensor(
+            values=values,
+            keys=keys,
+            offsets=offsets,
+            weights=weights,
+        )
+        return jag_tensor
+
+    kjt = _get_kjt()
+
+    @tensordictclass
+    class MyData:
+        X: torch.Tensor
+        y: KeyedJaggedTensor
+
+    data = MyData(batch_size=[3])
+    assert data.__dict__["y"] is None
+    assert (data.y == 1).all()
+    assert data.X is None
+    data.X = torch.zeros(3, 4, 1)
+    assert (data.X == 0).all()
+
+    MyData(X=torch.zeros(3, 1), y=kjt, batch_size=[3])
+    MyData[:2].y
+    MyData[[0, 2]].y
+    MyData[0].y
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
