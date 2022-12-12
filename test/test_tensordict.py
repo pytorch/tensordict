@@ -1759,12 +1759,13 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_pop(self, td_name, device):
         td = getattr(self, td_name)(device)
-        assert 'a' in td
+        assert 'a' in td.keys()
         out = td.pop("a")
         assert out == getattr(self, td_name)(device)['a']
-        assert 'a' not in td
+        assert 'a' not in td.keys()
 
         default = 'some value'
+        assert 'b' in td.keys()
         out = td.pop("b", default)
         assert out != default
         out = td.pop("z", default)
@@ -1772,7 +1773,8 @@ class TestTensorDicts(TestTensorDictsBase):
 
         with pytest.raises(
             KeyError,
-            match = "You are trying to pop key z which is not in dict and not providing default value"
+            match=re.escape("You are trying to pop key `z` which is not in dict"
+            "without providing default value"),
         ):
             td.pop("z")
 

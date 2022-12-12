@@ -563,7 +563,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             # if default provided, 'out' value will return, else raise error
             if default == "_no_default_":
                 raise KeyError(
-                    f"You are trying to pop key `'{key}'` which is not in dict"
+                    f"You are trying to pop key `{key}` which is not in dict"
                     f"without providing default value."
                 )
         return out
