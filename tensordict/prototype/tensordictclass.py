@@ -203,6 +203,56 @@ def tensordictclass(cls):
 
         return decorator
 
+    @implements_for_tdc(torch.unbind)
+    def _unbind(tdc, dim):
+        tensordicts = torch.unbind(tdc.tensordict, dim)
+        out = [_TensorDictClass(_tensordict=td) for td in tensordicts]
+        return out
+
+    @implements_for_tdc(torch.full_like)
+    def _full_like(tdc, fill_value):
+        tensordict = torch.full_like(tdc.tensordict, fill_value)
+        out = _TensorDictClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.zeros_like)
+    def _zeros_like(tdc):
+        return _full_like(tdc, 0.0)
+
+    @implements_for_tdc(torch.zeros_like)
+    def _ones_like(tdc):
+        return _full_like(tdc, 1.0)
+
+    @implements_for_tdc(torch.clone)
+    def _clone(tdc):
+        tensordict = torch.clone(tdc.tensordict)
+        out = _TensorDictClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.squeeze)
+    def _squeeze(tdc):
+        tensordict = torch.squeeze(tdc.tensordict)
+        out = _TensorDictClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.unsqueeze)
+    def _unsqueeze(tdc, dim=0):
+        tensordict = torch.unsqueeze(tdc.tensordict, dim)
+        out = _TensorDictClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.permute)
+    def _permute(tdc, dims):
+        tensordict = torch.permute(tdc.tensordict, dims)
+        out = _TensorDictClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.split)
+    def _split(tdc, split_size_or_sections, dim=0):
+        tensordicts = torch.split(tdc.tensordict, split_size_or_sections, dim)
+        out = [_TensorDictClass(_tensordict=td) for td in tensordicts]
+        return out
+
     @implements_for_tdc(torch.stack)
     def _stack(list_of_tdc, dim):
         tensordict = torch.stack([tdc.tensordict for tdc in list_of_tdc], dim)
