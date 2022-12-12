@@ -1757,6 +1757,22 @@ class TestTensorDicts(TestTensorDictsBase):
                                 expected_inner_tensor_size
                             )
 
+    def test_pop(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert 'a' in td
+        out = td.pop(a)
+        assert out == getattr(self, td_name)(device)['a']
+        assert 'a' not in td
+
+        default = 'some value'
+        out = td.pop("b", default)
+        assert out != default
+        out = td.pop("z", defult)
+        assert out == defult
+
+        with pytest.raises(KeyError):
+            td.pop("z")
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
@@ -3044,69 +3060,6 @@ def test_update_nested_dict():
     assert ("a", "b") in t.keys(include_nested=True)
     assert t["a", "b"].shape == torch.Size([2, 3, 1])
     t.update({"a": {"d": [[[1]] * 3] * 2}})
-
-
-def test_pop_nested_dict():
-    test_dicts = []
-    # TensorDict
-    td = TensorDict(
-        {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
-        batch_size=[4],
-    )
-    test_dicts.append(td)
-
-    # SubTensorDict
-    td = TensorDict(
-        {
-            "a": TensorDict({"c": torch.rand(4, 3, 2, 2)}, [4, 3, 2]),
-            "b": torch.ones(4, 3, 2),
-        },
-        batch_size=[4, 3],
-    )
-    subtd = td[:, 2]
-    test_dicts.append(subtd)
-
-    for td in test_dicts:
-        getb = td.get("b")
-        popb = td.pop("b")
-        assert (popb == getb).all()
-        assert "b" not in td.keys(include_nested=True)
-        getc = td.get(("a", "c"))
-        popc = td.pop(("a", "c"))
-        assert (popc == getc).all()
-        assert "a" in td.keys(include_nested=True)
-        assert "c" not in td["a"].keys(include_nested=True)
-        assert ("a", "c") not in td.keys(include_nested=True)
-
-
-def test_pop_simple_key():
-    # TODO: Currently SavedTensorDict/LazyStackedTensorDict.keys() doesn't support nested keys,
-    # so here we only test string key.
-    # LazyStackedTensorDict
-    tds = [
-        TensorDict(
-            {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
-            batch_size=[4],
-        )
-        for _ in range(10)
-    ]
-    stacktd = torch.stack(tds, -1)
-
-    getb = stacktd.get("b")
-    popb = stacktd.pop("b")
-    assert (popb == getb).all()
-    assert "b" not in stacktd.keys(include_nested=True)
-
-    # SavedTensorDict
-    td = TensorDict(
-        {"a": TensorDict({"c": torch.rand(4, 3)}, [4, 3]), "b": torch.ones(4, 2)},
-        batch_size=[4],
-    )
-    td_saved = td.to(SavedTensorDict)
-
-    getb = td_saved.get("b")
-    popb = td_saved.pop("b")
-    assert (popb == getb).all()
 
 
 @pytest.mark.parametrize("inplace", [True, False])
