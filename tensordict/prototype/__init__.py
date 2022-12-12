@@ -1,1 +1,1 @@
-from .tensordictclass import tensordictclass
+from .tensorclass import tensorclass

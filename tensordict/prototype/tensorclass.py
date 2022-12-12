@@ -37,7 +37,7 @@ def _td_fields(td: TensorDictBase) -> str:
     )
 
 
-def tensordictclass(cls):
+def tensorclass(cls):
     TD_HANDLED_FUNCTIONS: Dict = {}
 
     name = cls.__name__
@@ -53,10 +53,6 @@ def tensordictclass(cls):
     EXPECTED_KEYS = set(datacls.__dataclass_fields__.keys())
 
     class _TensorDictClass(datacls):
-        # TODO: (1) check type annotations and raise errors if Optional, Any or Union (?) (line 105 would break)
-        # TODO: (2) optionally check that the keys of the _tensordict match the fields of the datacls using dataclasses.fields
-        # TODO: (3) implement other @implements_for_td and port them to _TensorDictClass as stack and cat below
-        # TODO: (4) raise an exception if indexing is done with a key or a tuple of keys
         def __init__(self, *args, _tensordict=None, **kwargs):
             if _tensordict is not None:
                 if args or kwargs:
@@ -253,10 +249,25 @@ def tensordictclass(cls):
             return wrapped_func
 
         def __getitem__(self, item):
-            if isinstance(item, str) or isinstance(item, tuple):
+            if isinstance(item, str) or (
+                isinstance(item, tuple)
+                and all(isinstance(_item, str) for _item in item)
+            ):
                 raise ValueError("Invalid indexing arguments.")
             res = self.tensordict[item]
             return _TensorDictClass(_tensordict=res)  # device=res.device)
+
+        def __setitem__(self, item, value):
+            if isinstance(item, str) or (
+                isinstance(item, tuple)
+                and all(isinstance(_item, str) for _item in item)
+            ):
+                raise ValueError("Invalid indexing arguments.")
+            if not isinstance(value, _TensorDictClass):
+                raise ValueError(
+                    "__setitem__ is only allowed for same-class assignement"
+                )
+            self.tensordict[item] = value.tensordict
 
         def __repr__(self) -> str:
             fields = _td_fields(self.tensordict)

@@ -7,12 +7,12 @@ import pytest
 import torch
 
 from tensordict import LazyStackedTensorDict, TensorDict
-from tensordict.prototype import tensordictclass
+from tensordict.prototype import tensorclass
 from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
 from torch import Tensor
 
 
-@tensordictclass
+@tensorclass
 class MyData:
     X: torch.Tensor
     y: torch.Tensor
@@ -42,35 +42,35 @@ def test_type():
 
 
 def test_banned_types():
-    @tensordictclass
+    @tensorclass
     class MyAnyClass:
         subclass: Any = None
 
     data = MyAnyClass(subclass=torch.ones(3, 4), batch_size=[3])
     assert data.subclass is not None
 
-    @tensordictclass
+    @tensorclass
     class MyOptAnyClass:
         subclass: Optional[Any] = None
 
     data = MyOptAnyClass(subclass=torch.ones(3, 4), batch_size=[3])
     assert data.subclass is not None
 
-    @tensordictclass
+    @tensorclass
     class MyUnionAnyClass:
         subclass: Union[Any] = None
 
     data = MyUnionAnyClass(subclass=torch.ones(3, 4), batch_size=[3])
     assert data.subclass is not None
 
-    @tensordictclass
+    @tensorclass
     class MyUnionAnyTDClass:
         subclass: Union[Any, TensorDict] = None
 
     data = MyUnionAnyTDClass(subclass=torch.ones(3, 4), batch_size=[3])
     assert data.subclass is not None
 
-    @tensordictclass
+    @tensorclass
     class MyOptionalClass:
         subclass: Optional[TensorDict] = None
 
@@ -80,7 +80,7 @@ def test_banned_types():
     data = MyOptionalClass(subclass=torch.ones(3), batch_size=[3])
     assert data.subclass is not None
 
-    @tensordictclass
+    @tensorclass
     class MyUnionClass:
         subclass: Union[MyOptionalClass, TensorDict] = None
 
@@ -265,11 +265,11 @@ def test_permute():
 
 @pytest.mark.parametrize("any_to_td", [True, False])
 def test_nested_heterogeneous(any_to_td):
-    @tensordictclass
+    @tensorclass
     class MyDataNest:
         X: torch.Tensor
 
-    @tensordictclass
+    @tensorclass
     class MyDataParent:
         W: Any
         X: Tensor
@@ -299,11 +299,11 @@ def test_nested_heterogeneous(any_to_td):
 
 @pytest.mark.parametrize("any_to_td", [True, False])
 def test_setattr(any_to_td):
-    @tensordictclass
+    @tensorclass
     class MyDataNest:
         X: torch.Tensor
 
-    @tensordictclass
+    @tensorclass
     class MyDataParent:
         W: Any
         X: Tensor
@@ -344,7 +344,7 @@ def test_setattr(any_to_td):
 
 
 def test_default():
-    @tensordictclass
+    @tensorclass
     class MyData:
         X: torch.Tensor = None  # TODO: do we want to allow any default, say an integer?
         y: torch.Tensor = torch.ones(3, 4, 5)
@@ -363,7 +363,7 @@ def test_default():
 
 
 def test_defaultfactory():
-    @tensordictclass
+    @tensorclass
     class MyData:
         X: torch.Tensor = None  # TODO: do we want to allow any default, say an integer?
         y: torch.Tensor = dataclasses.field(default_factory=torch.ones(3, 4, 5))
@@ -403,7 +403,7 @@ def test_kjt():
 
     kjt = _get_kjt()
 
-    @tensordictclass
+    @tensorclass
     class MyData:
         X: torch.Tensor
         y: KeyedJaggedTensor
