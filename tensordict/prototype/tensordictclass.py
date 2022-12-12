@@ -34,6 +34,8 @@ def tensordictclass(cls):
         # TODO: (1) check type annotations and raise errors if Optional, Any or Union (?) (line 105 would break)
         # TODO: (2) optionally check that the keys of the _tensordict match the fields of the datacls using dataclasses.fields
         # TODO: (3) implement other @implements_for_td and port them to _TensorDictClass as stack and cat below
+        # TODO: (4) raise an exception if indexing is done with a key or a tuple of keys
+        # TODO:
         def __init__(self, *args, _tensordict=None, **kwargs):
             if _tensordict is not None:
                 input_dict = {key: None for key in _tensordict.keys()}
@@ -72,7 +74,9 @@ def tensordictclass(cls):
                         )
 
                 def _get_value(value):
-                    if isinstance(value, _accepted_classes + (dataclasses._MISSING_TYPE,)):
+                    if isinstance(
+                        value, _accepted_classes + (dataclasses._MISSING_TYPE,)
+                    ):
                         return value
                     elif type(value) in CLASSES_DICT.values():
                         return value.tensordict

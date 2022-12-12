@@ -16,8 +16,8 @@ from torch import Tensor
 
 @tensordictclass
 class MyData:
-    X: torch.tensor
-    y: torch.tensor
+    X: torch.Tensor
+    y: torch.Tensor
 
     def stuff(self):
         return self.X + self.y
@@ -127,7 +127,7 @@ def test_permute():
 def test_nested():
     @tensordictclass
     class MyDataNested:
-        X: torch.tensor
+        X: torch.Tensor
         y: MyDataNested = None
 
     X = torch.ones(3, 4, 5)
@@ -262,10 +262,8 @@ def test_kjt():
         pytest.skip("TorchRec not installed.")
 
     def _get_kjt():
-        values = torch.Tensor(
-            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
-        weights = torch.Tensor(
-            [1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0])
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0])
+        weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5, 1.0, 1.0, 1.0])
         keys = ["index_0", "index_1", "index_2"]
         offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8, 9, 10, 11])
 
@@ -285,9 +283,16 @@ def test_kjt():
         y: KeyedJaggedTensor
 
     data = MyData(X=torch.zeros(3, 1), y=kjt, batch_size=[3])
-    data[:2].y
-    data[[0, 2]].y
-    data[0].y
+    subdata = data[:2]
+    assert (
+        subdata.y["index_0"].to_padded_dense() == torch.tensor([[1.0, 2.0], [0.0, 0.0]])
+    ).all()
+
+    subdata = data[[0, 2]].y
+    assert (
+        subdata.y["index_0"].to_padded_dense() == torch.tensor([[1.0, 2.0], [3.0, 0.0]])
+    ).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
