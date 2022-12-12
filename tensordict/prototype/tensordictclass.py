@@ -2,13 +2,19 @@ import dataclasses
 import functools
 from dataclasses import dataclass, field, make_dataclass
 from platform import python_version
+from textwrap import indent
 from typing import Callable, Dict, Optional, Tuple
 
 import torch
 
 from packaging import version
 
-from tensordict.tensordict import _accepted_classes, TensorDict, TensorDictBase
+from tensordict import MetaTensor
+from tensordict.tensordict import (
+    _accepted_classes,
+    TensorDict,
+    TensorDictBase,
+)
 
 from torch import Tensor
 
@@ -16,6 +22,21 @@ PY37 = version.parse(python_version()) < version.parse("3.8")
 
 # For __future__.annotations, we keep a dict of str -> class to call the class based on the string
 CLASSES_DICT = {}
+
+
+def _make_repr(key, item: MetaTensor, tensordict):
+    if item.is_tensordict():
+        return f"{key}={repr(tensordict[key])}"
+    return f"{key}={item.get_repr()}"
+
+
+def _td_fields(td: TensorDictBase) -> str:
+    return indent(
+        ",\n".join(
+            sorted([_make_repr(key, item, td) for key, item in td.items_meta()])
+        ),
+        4 * " ",
+    )
 
 
 def tensordictclass(cls):
@@ -35,7 +56,6 @@ def tensordictclass(cls):
         # TODO: (2) optionally check that the keys of the _tensordict match the fields of the datacls using dataclasses.fields
         # TODO: (3) implement other @implements_for_td and port them to _TensorDictClass as stack and cat below
         # TODO: (4) raise an exception if indexing is done with a key or a tuple of keys
-        # TODO:
         def __init__(self, *args, _tensordict=None, **kwargs):
             if _tensordict is not None:
                 input_dict = {key: None for key in _tensordict.keys()}
@@ -170,8 +190,14 @@ def tensordictclass(cls):
                 batch_size=res.batch_size,
             )  # device=res.device)
 
-        def clone(self, recurse=True):
-            return _TensorDictClass(_tensordict=self.tensordict.clone(recurse=recurse))
+        def __repr__(self) -> str:
+            fields = _td_fields(self.tensordict)
+            field_str = fields
+            batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
+            device_str = indent(f"device={self.device}", 4 * " ")
+            is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
+            string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+            return f"{name}(\n{string})"
 
     def implements_for_tdc(torch_function: Callable) -> Callable:
         """Register a torch function override for TensorDictClass."""
