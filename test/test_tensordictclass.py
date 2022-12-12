@@ -288,7 +288,7 @@ def test_kjt():
         subdata.y["index_0"].to_padded_dense() == torch.tensor([[1.0, 2.0], [0.0, 0.0]])
     ).all()
 
-    subdata = data[[0, 2]].y
+    subdata = data[[0, 2]]
     assert (
         subdata.y["index_0"].to_padded_dense() == torch.tensor([[1.0, 2.0], [3.0, 0.0]])
     ).all()
