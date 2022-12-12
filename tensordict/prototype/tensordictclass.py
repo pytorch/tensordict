@@ -54,10 +54,9 @@ def tensordictclass(cls):
         # TODO: (4) raise an exception if indexing is done with a key or a tuple of keys
         def __init__(self, *args, _tensordict=None, **kwargs):
             if _tensordict is not None:
-                assert isinstance(_tensordict, TensorDict)
                 if args or kwargs:
                     raise ValueError("Cannot pass both args/kwargs and _tensordict.")
-                if not (EXPECTED_KEYS - set(_tensordict.keys()) == {"batch_size"}):
+                if not all(key in EXPECTED_KEYS for key in _tensordict.keys()):
                     raise ValueError(
                         f"Keys from the tensordict ({set(_tensordict.keys())}) must correspond to the class attributes ({EXPECTED_KEYS-{'batch_size'}})."
                     )
@@ -180,10 +179,8 @@ def tensordictclass(cls):
                 return wrapped_func
 
         def __getitem__(self, item):
-            if isinstance(item, str) and item in self.tensordict.keys():
-                raise ValueError(
-                    "Indexing can't be used with an attribute from the class"
-                )
+            if isinstance(item, str) or isinstance(item, tuple):
+                raise ValueError("Invalid indexing arguments.")
             res = self.tensordict[item]
             return _TensorDictClass(_tensordict=res)  # device=res.device)
 

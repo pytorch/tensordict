@@ -78,11 +78,14 @@ def test_indexing():
     assert data[1].batch_size == torch.Size([4])
     assert data[1][1].batch_size == torch.Size([])
 
-    with pytest.raises(Exception):
+    with pytest.raises(
+        RuntimeError,
+        match="indexing a tensordict with td.batch_dims==0 is not permitted",
+    ):
         data[1][1][1]
 
-    with pytest.raises(Exception):
-        data[("X")]
+    with pytest.raises(ValueError, match="Invalid indexing arguments."):
+        data["X"]
 
 
 def test_stack():
@@ -114,9 +117,7 @@ def test_reshape():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    print("\na")
     stacked_tdc = data.reshape(-1)
-    print("b")
     assert stacked_tdc.X.shape == torch.Size([12, 5])
     assert (stacked_tdc.X == 1).all()
     assert isinstance(stacked_tdc.tensordict, TensorDict)
