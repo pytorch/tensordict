@@ -1,10 +1,11 @@
 import dataclasses
 import functools
 import re
+import typing
 from dataclasses import dataclass, field, make_dataclass
 from platform import python_version
 from textwrap import indent
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple, Union
 
 import torch
 
@@ -42,16 +43,6 @@ def tensordictclass(cls):
     name = cls.__name__
 
     _datacls = dataclass(cls)
-
-    for val in _datacls.__annotations__.values():
-        if (
-            re.search("Any", val)
-            or re.search(r"Optional\[.*\]", val)
-            or re.search(r"Union\[.*\]", val)
-        ):
-            raise TypeError(
-                "TensorDictClass can't have Any, Optional or Union parameters."
-            )
 
     datacls = make_dataclass(
         name,
@@ -142,6 +133,72 @@ def tensordictclass(cls):
             return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
         def __getattribute__(self, item):
+            def check_td_out_type(field_def):
+                if PY37:
+                    field_def = str(field_def)
+                if isinstance(field_def, str):
+                    if re.search(r"Optional\[.*\]", field_def):
+                        args = [re.search(r"Optional\[(.*?)\]", field_def).group(1)]
+                    elif re.search(r"Union\[.*\]", field_def):
+                        args = (
+                            re.search(r"Union\[(.*?)\]", field_def).group(1).split(", ")
+                        )
+                    else:
+                        args = None
+                    # skip all Any or TensorDict or Optional[TensorDict] or Union[TensorDict] or Optional[Any]
+                    if (
+                        args is None
+                        and (field_def == "Any" or re.search(r"TensorDict", field_def))
+                    ) or (args and len(args) == 1 and args[0] == "Any"):
+                        return None
+                    if args and len(args) == 1 and re.search(r"TensorDict", args[0]):
+                        return None
+                    elif args:
+                        # remove the NoneType from args
+                        args = [arg for arg in args if arg not in ("NoneType",)]
+                        if len(args) == 1 and args[0] in CLASSES_DICT:
+                            return CLASSES_DICT[args[0]]
+                        else:
+                            raise TypeError(
+                                f"{field_def} has args {args} which can't be deterministically cast."
+                            )
+                    else:
+                        raise TypeError(
+                            f"{field_def} has args {args} which can't be deterministically cast."
+                        )
+                else:
+                    if typing.get_origin(field_def) is Union:
+                        args = typing.get_args(field_def)
+                        # remove the NoneType from args
+                        args = [arg for arg in args if arg not in (type(None),)]
+                        # Any or any TensorDictBase subclass are alway ok if alone
+                        if len(args) == 1 and (
+                            typing.Any is not args[0]
+                            and args[0] is not TensorDictBase
+                            and TensorDictBase not in args[0].__bases__
+                        ):
+                            return args[0]
+                        elif len(args) == 1 and (
+                            typing.Any is args[0]
+                            or args[0] is TensorDictBase
+                            or TensorDictBase in args[0].__bases__
+                        ):
+                            return None
+                        else:
+                            raise TypeError(
+                                f"{field_def} has args {args} which can't be deterministically cast."
+                            )
+                    elif (
+                        field_def is typing.Any
+                        or field_def is TensorDictBase
+                        or TensorDictBase in field_def.__bases__
+                    ):
+                        return None
+                    else:
+                        raise TypeError(
+                            f"{field_def} has args {field_def} which can't be deterministically cast."
+                        )
+
             if (
                 not item.startswith("__")
                 and "tensordict" in self.__dict__
@@ -160,6 +217,12 @@ def tensordictclass(cls):
                     and isinstance(out, TensorDictBase)
                 ):
                     out = field_def(_tensordict=out)
+                elif isinstance(out, TensorDictBase):
+                    dest_dtype = check_td_out_type(field_def)
+                    if dest_dtype is not None:
+                        print(dest_dtype)
+                        out = dest_dtype(_tensordict=out)
+
                 return out
             return super().__getattribute__(item)
 
@@ -177,20 +240,17 @@ def tensordictclass(cls):
 
         def __getattr__(self, attr):
             res = getattr(self.tensordict, attr)
-            if not callable(res):
-                return res
-            else:
-                func = res
+            func = res
 
-                def wrapped_func(*args, **kwargs):
-                    res = func(*args, **kwargs)
-                    if isinstance(res, TensorDictBase):
-                        new = _TensorDictClass(_tensordict=res)
-                        return new
-                    else:
-                        return res
+            def wrapped_func(*args, **kwargs):
+                res = func(*args, **kwargs)
+                if isinstance(res, TensorDictBase):
+                    new = _TensorDictClass(_tensordict=res)
+                    return new
+                else:
+                    return res
 
-                return wrapped_func
+            return wrapped_func
 
         def __getitem__(self, item):
             if isinstance(item, str) or isinstance(item, tuple):

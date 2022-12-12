@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 import dataclasses
 import re
@@ -263,19 +261,6 @@ def test_permute():
     assert stacked_tdc.X.shape == torch.Size([4, 3, 5])
     assert (stacked_tdc.X == 1).all()
     assert isinstance(stacked_tdc.tensordict, _PermutedTensorDict)
-
-
-def test_nested():
-    @tensordictclass
-    class MyDataNested:
-        X: torch.Tensor
-        y: MyDataNested = None
-
-    X = torch.ones(3, 4, 5)
-    batch_size = [3, 4]
-    data_nest = MyDataNested(X=X, batch_size=batch_size)
-    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
-    assert isinstance(data.y, MyDataNested), type(data.y)
 
 
 @pytest.mark.parametrize("any_to_td", [True, False])
