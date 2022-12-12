@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field, make_dataclass
 from platform import python_version
 from textwrap import indent
-from typing import Callable, Dict, get_type_hints, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import torch
 
