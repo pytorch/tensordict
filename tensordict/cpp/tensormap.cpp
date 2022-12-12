@@ -8,17 +8,17 @@ void TensorMap::SetTensorAt(std::string key, torch::Tensor& value)
     this->map[key] = &value;
 }
 
-void TensorMap::SetMapAt(std::string key, TensorMap& value)
-{
-    this->map[key] = &value;
-}
+// void TensorMap::SetMapAt(std::string key, TensorMap& value)
+// {
+//     this->map[key] = &value;
+// }
 
-std::variant<torch::Tensor, TensorMap> TensorMap::GetAt(std::string key)
+torch::Tensor TensorMap::GetTensorAt(std::string key)
 {
     if (this->map.count(key) == 0)
         throw std::invalid_argument("Invalid key: " + key);
 
-    return UnboxVariant(this->map[key]);
+    return *(this->map[key]);
 }
 
 /*
@@ -78,7 +78,6 @@ std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& TensorMap::GetR
     else
         throw std::invalid_argument("Expected to have a Map at index " + std::to_string(index) + " but found tensor");
 }
-*/
 
 std::variant<torch::Tensor, TensorMap> TensorMap::UnboxVariant(std::variant<torch::Tensor*, TensorMap*> pointer)
 {
@@ -91,3 +90,5 @@ std::variant<torch::Tensor, TensorMap> TensorMap::UnboxVariant(std::variant<torc
     torch::Tensor* value = std::get<torch::Tensor*>(pointer);
     return std::variant<torch::Tensor, TensorMap>(*value);
 }
+
+    */
