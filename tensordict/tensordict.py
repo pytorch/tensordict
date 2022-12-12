@@ -556,10 +556,15 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         _nested_key_type_check(key)
         out = self.get(key, default)
         try:
-            self.del_(key)
-        except KeyError:
             # using try/except for deletion is suboptimal, but
             # this is faster that checkink if key in self keys
+            self.del_(key)
+        except KeyError:
+            if default == "_no_default_":
+                raise KeyError(
+                    f"You are trying to pop key `'{key}'` which is not in dict"
+                    f"and not providing default value."
+                )
         return out
 
     def _get_meta(self, key: NESTED_KEY) -> MetaTensor:

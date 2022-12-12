@@ -1770,7 +1770,10 @@ class TestTensorDicts(TestTensorDictsBase):
         out = td.pop("z", default)
         assert out == default
 
-        with pytest.raises(KeyError):
+        with pytest.raises(
+            KeyError,
+            match = "You are trying to pop key z which is not in dict and not providing default value"
+        ):
             td.pop("z")
 
 
