@@ -2698,7 +2698,7 @@ class TensorDict(TensorDictBase):
         _nested_key_type_check(key)
         out = self.get(key, default)
         try:
-            del self[key]
+            self.del_(key)
         except KeyError:
             # using try/except for deletion is suboptimal, but
             # this is faster that checkink if key in self keys
