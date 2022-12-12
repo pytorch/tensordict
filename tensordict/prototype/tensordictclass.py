@@ -57,6 +57,10 @@ def tensordictclass(cls):
                 assert isinstance(_tensordict, TensorDict)
                 if args or kwargs:
                     raise ValueError("Cannot pass both args/kwargs and _tensordict.")
+                if not (EXPECTED_KEYS - set(_tensordict.keys()) == {"batch_size"}):
+                    raise ValueError(
+                        f"Keys from the tensordict ({set(_tensordict.keys())}) must correspond to the class attributes ({EXPECTED_KEYS-{'batch_size'}})."
+                    )
                 input_dict = {key: None for key in _tensordict.keys()}
                 datacls.__init__(self, **input_dict, batch_size=_tensordict.batch_size)
                 self.tensordict = _tensordict
