@@ -67,6 +67,24 @@ def test_attributes():
     assert equality_tensordict.batch_size == torch.Size(batch_size)
 
 
+def test_indexing():
+    data = MyData(
+        X=torch.ones(3, 4, 5),
+        y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        batch_size=[3, 4],
+    )
+
+    assert data[:2].batch_size == torch.Size([2, 4])
+    assert data[1].batch_size == torch.Size([4])
+    assert data[1][1].batch_size == torch.Size([])
+
+    with pytest.raises(Exception):
+        data[1][1][1]
+
+    with pytest.raises(Exception):
+        data[("X")]
+
+
 def test_stack():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
@@ -96,7 +114,9 @@ def test_reshape():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
+    print("\na")
     stacked_tdc = data.reshape(-1)
+    print("b")
     assert stacked_tdc.X.shape == torch.Size([12, 5])
     assert (stacked_tdc.X == 1).all()
     assert isinstance(stacked_tdc.tensordict, TensorDict)

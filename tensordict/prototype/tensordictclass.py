@@ -54,17 +54,13 @@ def tensordictclass(cls):
         # TODO: (4) raise an exception if indexing is done with a key or a tuple of keys
         def __init__(self, *args, _tensordict=None, **kwargs):
             if _tensordict is not None:
-                input_dict = {key: None for key in _tensordict.keys()}
-                datacls.__init__(self, **input_dict, batch_size=_tensordict.batch_size)
+                assert isinstance(_tensordict, TensorDict)
                 if args or kwargs:
                     raise ValueError("Cannot pass both args/kwargs and _tensordict.")
+                input_dict = {key: None for key in _tensordict.keys()}
+                datacls.__init__(self, **input_dict, batch_size=_tensordict.batch_size)
                 self.tensordict = _tensordict
             else:
-                # should we remove?
-                if "batch_size" not in kwargs:
-                    raise Exception(
-                        "Keyword argument 'batch_size' is required for TensorDictClass."
-                    )
                 # get the default values
                 for key in datacls.__dataclass_fields__:
                     default = datacls.__dataclass_fields__[key].default
@@ -180,11 +176,12 @@ def tensordictclass(cls):
                 return wrapped_func
 
         def __getitem__(self, item):
+            if isinstance(item, str) and item in self.tensordict.keys():
+                raise ValueError(
+                    "Indexing can't be used with an attribute from the class"
+                )
             res = self.tensordict[item]
-            return _TensorDictClass(
-                **res,
-                batch_size=res.batch_size,
-            )  # device=res.device)
+            return _TensorDictClass(_tensordict=res)  # device=res.device)
 
         def __repr__(self) -> str:
             fields = _td_fields(self.tensordict)
