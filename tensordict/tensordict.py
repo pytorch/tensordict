@@ -550,6 +550,18 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
+    def pop(
+        self, key: NESTED_KEY, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+    ) -> COMPATIBLE_TYPES:
+        _nested_key_type_check(key)
+        out = self.get(key, default)
+        try:
+            self.del_(key)
+        except KeyError:
+            # using try/except for deletion is suboptimal, but
+            # this is faster that checkink if key in self keys
+        return out
+
     def _get_meta(self, key: NESTED_KEY) -> MetaTensor:
         _nested_key_type_check(key)
         try:
@@ -2691,18 +2703,6 @@ class TensorDict(TensorDictBase):
             # that the key is present and (2) it should be used less frequently than
             # the regular get()
             return self._default_get(key, default)
-
-    def pop(
-        self, key: NESTED_KEY, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
-    ) -> COMPATIBLE_TYPES:
-        _nested_key_type_check(key)
-        out = self.get(key, default)
-        try:
-            self.del_(key)
-        except KeyError:
-            # using try/except for deletion is suboptimal, but
-            # this is faster that checkink if key in self keys
-        return out
 
     def share_memory_(self, lock=True) -> TensorDictBase:
         if self.is_memmap():
