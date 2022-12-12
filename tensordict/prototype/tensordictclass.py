@@ -10,11 +10,7 @@ import torch
 from packaging import version
 
 from tensordict import MetaTensor
-from tensordict.tensordict import (
-    _accepted_classes,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict.tensordict import _accepted_classes, TensorDict, TensorDictBase
 
 from torch import Tensor
 
