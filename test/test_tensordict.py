@@ -1771,6 +1771,7 @@ class TestTensorDicts(TestTensorDictsBase):
         out = td.pop("z", default)
         assert out == default
 
+        assert "z" not in td.keys()
         with pytest.raises(
             KeyError,
             match=re.escape("You are trying to pop key `z` which is not in dict"
