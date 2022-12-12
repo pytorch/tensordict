@@ -1760,15 +1760,15 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_pop(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert 'a' in td
-        out = td.pop(a)
+        out = td.pop("a")
         assert out == getattr(self, td_name)(device)['a']
         assert 'a' not in td
 
         default = 'some value'
         out = td.pop("b", default)
         assert out != default
-        out = td.pop("z", defult)
-        assert out == defult
+        out = td.pop("z", default)
+        assert out == default
 
         with pytest.raises(KeyError):
             td.pop("z")
