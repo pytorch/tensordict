@@ -560,10 +560,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             # this is faster that checkink if key in self keys
             self.del_(key)
         except KeyError:
+            # if default provided, 'out' value will return, else raise error
             if default == "_no_default_":
                 raise KeyError(
                     f"You are trying to pop key `'{key}'` which is not in dict"
-                    f"and not providing default value."
+                    f"without providing default value."
                 )
         return out
 
