@@ -1,9 +1,10 @@
 import dataclasses
 import functools
+import re
 from dataclasses import dataclass, field, make_dataclass
 from platform import python_version
 from textwrap import indent
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, get_type_hints, Optional, Tuple
 
 import torch
 
@@ -39,9 +40,22 @@ def tensordictclass(cls):
     TD_HANDLED_FUNCTIONS: Dict = {}
 
     name = cls.__name__
+
+    _datacls = dataclass(cls)
+
+    for val in _datacls.__annotations__.values():
+        if (
+            re.search("Any", val)
+            or re.search(r"Optional\[.*\]", val)
+            or re.search(r"Union\[.*\]", val)
+        ):
+            raise TypeError(
+                "TensorDictClass can't have Any, Optional or Union parameters."
+            )
+
     datacls = make_dataclass(
         name,
-        bases=(dataclass(cls),),
+        bases=(_datacls,),
         fields=[("batch_size", torch.Size, field(default_factory=list))],
     )
 
@@ -58,7 +72,7 @@ def tensordictclass(cls):
                     raise ValueError("Cannot pass both args/kwargs and _tensordict.")
                 if not all(key in EXPECTED_KEYS for key in _tensordict.keys()):
                     raise ValueError(
-                        f"Keys from the tensordict ({set(_tensordict.keys())}) must correspond to the class attributes ({EXPECTED_KEYS-{'batch_size'}})."
+                        f"Keys from the tensordict ({set(_tensordict.keys())}) must correspond to the class attributes ({EXPECTED_KEYS - {'batch_size'} })."
                     )
                 input_dict = {key: None for key in _tensordict.keys()}
                 datacls.__init__(self, **input_dict, batch_size=_tensordict.batch_size)

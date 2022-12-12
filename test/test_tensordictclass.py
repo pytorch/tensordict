@@ -2,16 +2,14 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
-import re
-from typing import Any
+from typing import Any, Optional, Union
 
 import pytest
 import torch
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.prototype import tensordictclass
-from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
-from torch import Tensor
+from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict
 
 
 @tensordictclass
@@ -41,6 +39,33 @@ def test_type():
         batch_size=[3, 4],
     )
     assert isinstance(data, MyData)
+
+
+def test_banned_types():
+
+    with pytest.raises(
+        TypeError, match="TensorDictClass can't have Any, Optional or Union parameters."
+    ):
+
+        @tensordictclass
+        class MyAnyClass:
+            subclass: Any = None
+
+    with pytest.raises(
+        TypeError, match="TensorDictClass can't have Any, Optional or Union parameters."
+    ):
+
+        @tensordictclass
+        class MyOptionalClass:
+            subclass: Optional[TensorDict] = None
+
+    with pytest.raises(
+        TypeError, match="TensorDictClass can't have Any, Optional or Union parameters."
+    ):
+
+        @tensordictclass
+        class MyUnionClass:
+            subclass: Union[MyUnionClass, TensorDict] = None
 
 
 def test_attributes():
@@ -228,6 +253,7 @@ def test_nested():
     assert isinstance(data.y, MyDataNested), type(data.y)
 
 
+"""
 @pytest.mark.parametrize("any_to_td", [True, False])
 def test_nested_heterogeneous(any_to_td):
     @tensordictclass
@@ -260,7 +286,6 @@ def test_nested_heterogeneous(any_to_td):
     assert isinstance(data, MyDataParent)
     assert isinstance(data.z, TensorDict)
     assert isinstance(data.tensordict["y"], TensorDict)
-
 
 @pytest.mark.parametrize("any_to_td", [True, False])
 def test_setattr(any_to_td):
@@ -306,6 +331,7 @@ def test_setattr(any_to_td):
     # check that you can't write any attribute
     with pytest.raises(AttributeError, match=re.escape("Cannot set the attribute")):
         data.newattr = TensorDict({"smth": torch.zeros(1)}, [])
+"""
 
 
 def test_default():
