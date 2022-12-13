@@ -1759,13 +1759,13 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_pop(self, td_name, device):
         td = getattr(self, td_name)(device)
-        assert 'a' in td.keys()
+        assert "a" in td.keys()
         out = td.pop("a")
         assert torch.eq(out, getattr(self, td_name)(device)['a'])
         assert 'a' not in td.keys()
 
-        default = 'some value'
-        assert 'b' in td.keys()
+        default = "some value"
+        assert "b" in td.keys()
         out = td.pop("b", default)
         assert out != default
 
@@ -1774,8 +1774,10 @@ class TestTensorDicts(TestTensorDictsBase):
         assert out == default
         with pytest.raises(
             KeyError,
-            match=re.escape("You are trying to pop key `z` which is not in dict"
-            "without providing default value"),
+            match=re.escape(
+                "You are trying to pop key `z` which is not in dict"
+                "without providing default value"
+            ),
         ):
             td.pop("z")
 
