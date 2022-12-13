@@ -13,7 +13,7 @@ void TensorMap::SetTensorAt(std::string key, torch::Tensor& value)
 //     this->map[key] = &value;
 // }
 
-torch::Tensor TensorMap::GetTensorAt(std::string key)
+TensorMap::node TensorMap::GetTensorAt(std::string key)
 {
     if (this->internalMap.count(key) == 0)
         throw std::invalid_argument("Invalid key: " + key);
