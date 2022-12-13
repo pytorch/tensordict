@@ -1765,17 +1765,19 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (out == a).all()
         assert "a" not in td.keys()
 
-        default = torch.Tensor([0])
+        default = torch.Tensor(1).to(device)
         assert "b" in td.keys()
         b = td["b"].clone()
         assert (default != b).all()
         out = td.pop("b", default)
-        assert (out != default).all()
+
+        assert torch.ne(out, default).all()
         assert (out == b).all()
 
         assert "z" not in td.keys()
         out = td.pop("z", default)
-        assert out == default
+        assert (out == default).all()
+
         with pytest.raises(
             KeyError,
             match=re.escape(
