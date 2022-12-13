@@ -16,6 +16,7 @@ from tensordict.tensordict import _accepted_classes, TensorDict, TensorDictBase
 
 from torch import Tensor
 
+T = typing.TypeVar("T", bound=TensorDictBase)
 PY37 = version.parse(python_version()) < version.parse("3.8")
 
 # For __future__.annotations, we keep a dict of str -> class to call the class based on the string
@@ -41,7 +42,7 @@ def _td_fields(td: TensorDictBase) -> str:
     )
 
 
-def tensorclass(cls):
+def tensorclass(cls: T) -> T:
     TD_HANDLED_FUNCTIONS: Dict = {}
 
     name = cls.__name__
@@ -158,6 +159,10 @@ def tensorclass(cls):
                         args = [arg for arg in args if arg not in ("NoneType",)]
                         if len(args) == 1 and args[0] in CLASSES_DICT:
                             return CLASSES_DICT[args[0]]
+                        if len(args) == 1 and (
+                            "TensorDict" in args[0] or "Any" == args[0]
+                        ):
+                            return None
                         else:
                             raise TypeError(
                                 f"{field_def} has args {args} which can't be deterministically cast."
