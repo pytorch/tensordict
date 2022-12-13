@@ -146,6 +146,8 @@ def tensorclass(cls: T) -> T:
                         args = union_match.group(1).split(", ")
                     else:
                         args = None
+                    if args:
+                        args = [arg for arg in args if arg not in ("NoneType",)]
                     # skip all Any or TensorDict or Optional[TensorDict] or Union[TensorDict] or Optional[Any]
                     if (
                         args is None
@@ -156,7 +158,6 @@ def tensorclass(cls: T) -> T:
                         return None
                     elif args:
                         # remove the NoneType from args
-                        args = [arg for arg in args if arg not in ("NoneType",)]
                         if len(args) == 1 and args[0] in CLASSES_DICT:
                             return CLASSES_DICT[args[0]]
                         if len(args) == 1 and (
