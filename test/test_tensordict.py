@@ -1767,8 +1767,10 @@ class TestTensorDicts(TestTensorDictsBase):
 
         default = "some value"
         assert "b" in td.keys()
+        b = td["b"].clone()
         out = td.pop("b", default)
-        assert (out != default).all()
+        assert out != default
+        assert (out == b).all()
 
         assert "z" not in td.keys()
         out = td.pop("z", default)
