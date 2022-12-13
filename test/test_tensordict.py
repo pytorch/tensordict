@@ -1760,8 +1760,8 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_pop(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert "a" in td.keys()
-        out = td.pop("a")
         a = td["a"].clone()
+        out = td.pop("a")
         assert (out == a).all()
         assert "a" not in td.keys()
 
