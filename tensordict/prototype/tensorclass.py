@@ -21,6 +21,10 @@ PY37 = version.parse(python_version()) < version.parse("3.8")
 # For __future__.annotations, we keep a dict of str -> class to call the class based on the string
 CLASSES_DICT = {}
 
+# Regex precompiled patterns
+OPTIONAL_PATTERN = re.compile(r"Optional\[(.*?)\]")
+UNION_PATTERN = re.compile(r"Union\[(.*?)\]")
+
 
 def _make_repr(key, item: MetaTensor, tensordict):
     if item.is_tensordict():
@@ -133,12 +137,12 @@ def tensorclass(cls):
                 if PY37:
                     field_def = str(field_def)
                 if isinstance(field_def, str):
-                    if re.search(r"Optional\[.*\]", field_def):
-                        args = [re.search(r"Optional\[(.*?)\]", field_def).group(1)]
-                    elif re.search(r"Union\[.*\]", field_def):
-                        args = (
-                            re.search(r"Union\[(.*?)\]", field_def).group(1).split(", ")
-                        )
+                    optional_match = OPTIONAL_PATTERN.search(field_def)
+                    union_match = UNION_PATTERN.search(field_def)
+                    if optional_match is not None:
+                        args = [optional_match.group(1)]
+                    elif union_match is not None:
+                        args = union_match.group(1).split(", ")
                     else:
                         args = None
                     # skip all Any or TensorDict or Optional[TensorDict] or Union[TensorDict] or Optional[Any]
