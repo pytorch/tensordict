@@ -121,7 +121,7 @@ class ProbabilisticTensorDictModule(nn.Module):
         ...     ProbabilisticTensorDictSequential,
         ...     TensorDictModule,
         ... )
-        >>> from tensordict.nn.distributions import NormalParamSplitter
+        >>> from tensordict.nn.distributions import NormalParamExtractor
         >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict(
@@ -132,7 +132,7 @@ class ProbabilisticTensorDictModule(nn.Module):
         ...     net, in_keys=["input", "hidden"], out_keys=["params"]
         ... )
         >>> normal_params = TensorDictModule(
-        ...     NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+        ...     NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         ... )
         >>> prob_module = ProbabilisticTensorDictModule(
         ...     in_keys=["loc", "scale"],

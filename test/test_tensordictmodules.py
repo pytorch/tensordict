@@ -15,7 +15,7 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
-from tensordict.nn.distributions import NormalParamSplitter, NormalParamWrapper
+from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import make_functional
 from tensordict.nn.probabilistic import set_interaction_mode
 from torch import nn
@@ -101,7 +101,7 @@ class TestTDModule:
         in_keys = ["in"]
         net = TensorDictModule(module=net, in_keys=in_keys, out_keys=["params"])
         normal_params = TensorDictModule(
-            NormalParamSplitter(), in_keys=["params"], out_keys=out_keys
+            NormalParamExtractor(), in_keys=["params"], out_keys=out_keys
         )
 
         kwargs = {"distribution_class": Normal}
@@ -227,7 +227,7 @@ class TestTDModule:
             out_keys=["params"],
         )
         normal_params = TensorDictModule(
-            NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+            NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         )
 
         kwargs = {"distribution_class": Normal}
@@ -301,7 +301,7 @@ class TestTDModule:
             out_keys=["params"],
         )
         normal_params = TensorDictModule(
-            NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+            NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         )
 
         kwargs = {"distribution_class": Normal}
@@ -391,7 +391,7 @@ class TestTDModule:
 
         tdnet = TensorDictModule(module=net, in_keys=["in"], out_keys=["params"])
         normal_params = TensorDictModule(
-            NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+            NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         )
 
         kwargs = {"distribution_class": Normal}
@@ -570,7 +570,7 @@ class TestTDSequence:
         tdmodule2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["params"])
 
         normal_params = TensorDictModule(
-            NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+            NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         )
         prob_module = ProbabilisticTensorDictModule(
             in_keys=["loc", "scale"], out_keys=["out"], **kwargs
@@ -748,7 +748,7 @@ class TestTDSequence:
         tdmodule2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["params"])
 
         normal_params = TensorDictModule(
-            NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+            NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         )
         kwargs = {"distribution_class": Normal}
         prob_module = ProbabilisticTensorDictModule(
@@ -919,7 +919,7 @@ class TestTDSequence:
         tdmodule2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["params"])
 
         normal_params = TensorDictModule(
-            NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+            NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         )
         kwargs = {"distribution_class": Normal}
         prob_module = ProbabilisticTensorDictModule(
@@ -1076,7 +1076,7 @@ class TestTDSequence:
         tdmodule1 = TensorDictModule(net1, in_keys=["in"], out_keys=["hidden"])
         tdmodule2 = TensorDictModule(net2, in_keys=["hidden"], out_keys=["params"])
         normal_params = TensorDictModule(
-            NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+            NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         )
         tdmodule = ProbabilisticTensorDictSequential(
             tdmodule1,
@@ -1240,7 +1240,7 @@ class TestTDSequence:
         tdmodule2 = ProbabilisticTensorDictSequential(
             net2,
             TensorDictModule(
-                NormalParamSplitter(), in_keys=["params2"], out_keys=["loc", "scale"]
+                NormalParamExtractor(), in_keys=["params2"], out_keys=["loc", "scale"]
             ),
             ProbabilisticTensorDictModule(
                 out_keys=["out"], in_keys=["loc", "scale"], **kwargs
@@ -1249,7 +1249,7 @@ class TestTDSequence:
         tdmodule3 = ProbabilisticTensorDictSequential(
             net3,
             TensorDictModule(
-                NormalParamSplitter(), in_keys=["params3"], out_keys=["loc", "scale"]
+                NormalParamExtractor(), in_keys=["params3"], out_keys=["loc", "scale"]
             ),
             ProbabilisticTensorDictModule(
                 out_keys=["out"], in_keys=["loc", "scale"], **kwargs

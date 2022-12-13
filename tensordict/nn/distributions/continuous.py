@@ -12,7 +12,7 @@ import torch
 from tensordict.nn.utils import mappings
 from torch import distributions as D, nn
 
-__all__ = ["NormalParamWrapper", "NormalParamSplitter", "Delta"]
+__all__ = ["NormalParamExtractor", "NormalParamWrapper", "Delta"]
 
 # speeds up distribution construction
 D.Distribution.set_default_validate_args(False)
@@ -70,7 +70,7 @@ class NormalParamWrapper(nn.Module):
         return (loc, scale, *others)
 
 
-class NormalParamSplitter(nn.Module):
+class NormalParamExtractor(nn.Module):
     """A non-parametric nn.Module that splits its input into loc and scale parameters.
 
     The scale parameters are mapped onto positive values using the specified ``scale_mapping``.
@@ -83,10 +83,10 @@ class NormalParamSplitter(nn.Module):
 
     Examples:
         >>> import torch
-        >>> from tensordict.nn.distributions import NormalParamSplitter
+        >>> from tensordict.nn.distributions import NormalParamExtractor
         >>> from torch import nn
         >>> module = nn.Linear(3, 4)
-        >>> normal_params = NormalParamSplitter()
+        >>> normal_params = NormalParamExtractor()
         >>> tensor = torch.randn(3)
         >>> loc, scale = normal_params(module(tensor))
         >>> print(loc.shape, scale.shape)

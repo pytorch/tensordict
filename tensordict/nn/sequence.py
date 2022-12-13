@@ -56,14 +56,14 @@ class TensorDictSequential(TensorDictModule):
         ...     TensorDictModule,
         ...     TensorDictSequential,
         ... )
-        >>> from tensordict.nn.distributions import NormalParamSplitter
+        >>> from tensordict.nn.distributions import NormalParamExtractor
         >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
         >>> net1 = torch.nn.Linear(4, 8)
         >>> module1 = TensorDictModule(net1, in_keys=["input"], out_keys=["params"])
         >>> normal_params = TensorDictModule(
-                NormalParamSplitter(), in_keys=["params"], out_keys=["loc", "scale"]
+                NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
             )
         >>> td_module1 = ProbabilisticTensorDictSequential(
         ...     module1,
