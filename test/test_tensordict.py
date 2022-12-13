@@ -1761,13 +1761,14 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         assert "a" in td.keys()
         out = td.pop("a")
-        assert (out == getattr(self, td_name)(device).get("a")).all()
+        a = td["a"].clone()
+        assert (out == a).all()
         assert "a" not in td.keys()
 
         default = "some value"
         assert "b" in td.keys()
         out = td.pop("b", default)
-        assert out != default
+        assert (out != default).all()
 
         assert "z" not in td.keys()
         out = td.pop("z", default)
