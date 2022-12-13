@@ -94,7 +94,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             args_spec,
         )
 
-    functorch._src.vmap._process_batched_inputs = _process_batched_inputs
+    if hasattr(torch, "_functorch"):
+        torch._functorch.vmap._process_batched_inputs = _process_batched_inputs
+    else:
+        functorch._src.vmap._process_batched_inputs = _process_batched_inputs
 
     def _create_batched_inputs(flat_in_dims, flat_args, vmap_level: int, args_spec):
         # See NOTE [Ignored _remove_batch_dim, _add_batch_dim]
@@ -113,7 +116,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         ]
         return tree_unflatten(batched_inputs, args_spec)
 
-    functorch._src.vmap._create_batched_inputs = _create_batched_inputs
+    if hasattr(torch, "_functorch"):
+        torch._functorch.vmap._create_batched_inputs = _create_batched_inputs
+    else:
+        functorch._src.vmap._create_batched_inputs = _create_batched_inputs
 
     def _unwrap_batched(
         batched_outputs, out_dims, vmap_level: int, batch_size: int, func
@@ -167,7 +173,11 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             flat_outputs.append(out)
         return tree_unflatten(flat_outputs, output_spec)
 
-    functorch._src.vmap._unwrap_batched = _unwrap_batched
+    if hasattr(torch, "_functorch"):
+        torch._functorch.vmap._unwrap_batched = _unwrap_batched
+    else:
+        functorch._src.vmap._unwrap_batched = _unwrap_batched
+
 
 # Tensordict-compatible Functional modules
 
@@ -193,12 +203,14 @@ def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None, recurse
 
     if not model.__dict__.get("_functionalized", False):
         for fun_to_decorate in funs_to_decorate:
-            if hasattr(model, fun_to_decorate):
+            try:
                 setattr(
                     model,
                     fun_to_decorate,
                     types.MethodType(_make_decorator(model, fun_to_decorate), model),
                 )
+            except AttributeError:
+                continue
     model.__dict__["_functionalized"] = True
     model.__dict__["_is_stateless"] = True
     return TensorDict(tensordict, [], _run_checks=False)
@@ -267,9 +279,10 @@ def get_functional(module, funs_to_decorate=None):
 
 def _make_decorator(module, fun_name):
     fun = getattr(module, fun_name)
-
     # we need to update the signature so that params can be the last positional arg
     oldsig = inspect.signature(fun)
+    if "_forward_unimplemented" in fun.__name__:
+        raise AttributeError("_forward_unimplemented not supported")
     # search if a VAR_POSITIONAL or VAR_KEYWORD is present
     # if yes insert step parameter before it, else insert it in last position
     params = list(oldsig.parameters.values())
