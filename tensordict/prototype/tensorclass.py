@@ -235,7 +235,10 @@ def tensorclass(cls):
             assert self.__dict__["tensordict"][key] is value
 
         def __getattr__(self, attr):
+
             res = getattr(self.tensordict, attr)
+            if not callable(res):
+                return res
             func = res
 
             def wrapped_func(*args, **kwargs):
