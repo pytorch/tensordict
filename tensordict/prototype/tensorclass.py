@@ -144,7 +144,7 @@ def tensorclass(cls):
                     # skip all Any or TensorDict or Optional[TensorDict] or Union[TensorDict] or Optional[Any]
                     if (
                         args is None
-                        and (field_def == "Any" or re.search(r"TensorDict", field_def))
+                        and (field_def == "Any" or "TensorDict" in field_def)
                     ) or (args and len(args) == 1 and args[0] == "Any"):
                         return None
                     if args and len(args) == 1 and re.search(r"TensorDict", args[0]):
