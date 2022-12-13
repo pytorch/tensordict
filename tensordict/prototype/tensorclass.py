@@ -56,7 +56,7 @@ def tensorclass(cls):
 
     EXPECTED_KEYS = set(datacls.__dataclass_fields__.keys())
 
-    class _TensorDictClass(datacls):
+    class _TensorClass(datacls):
         def __init__(self, *args, _tensordict=None, **kwargs):
             if _tensordict is not None:
                 if args or kwargs:
@@ -90,7 +90,7 @@ def tensorclass(cls):
                 for attr in attributes:
                     if attr in dir(TensorDict):
                         raise Exception(
-                            f"Attribute name {attr} can't be used for TensorDictClass"
+                            f"Attribute name {attr} can't be used with @tensorclass"
                         )
 
                 def _get_value(value):
@@ -248,7 +248,7 @@ def tensorclass(cls):
             def wrapped_func(*args, **kwargs):
                 res = func(*args, **kwargs)
                 if isinstance(res, TensorDictBase):
-                    new = _TensorDictClass(_tensordict=res)
+                    new = _TensorClass(_tensordict=res)
                     return new
                 else:
                     return res
@@ -262,7 +262,7 @@ def tensorclass(cls):
             ):
                 raise ValueError("Invalid indexing arguments.")
             res = self.tensordict[item]
-            return _TensorDictClass(_tensordict=res)  # device=res.device)
+            return _TensorClass(_tensordict=res)  # device=res.device)
 
         def __setitem__(self, item, value):
             if isinstance(item, str) or (
@@ -270,7 +270,7 @@ def tensorclass(cls):
                 and all(isinstance(_item, str) for _item in item)
             ):
                 raise ValueError("Invalid indexing arguments.")
-            if not isinstance(value, _TensorDictClass):
+            if not isinstance(value, _TensorClass):
                 raise ValueError(
                     "__setitem__ is only allowed for same-class assignement"
                 )
@@ -286,7 +286,7 @@ def tensorclass(cls):
             return f"{name}(\n{string})"
 
     def implements_for_tdc(torch_function: Callable) -> Callable:
-        """Register a torch function override for TensorDictClass."""
+        """Register a torch function override for _TensorClass."""
 
         @functools.wraps(torch_function)
         def decorator(func):
@@ -298,13 +298,13 @@ def tensorclass(cls):
     @implements_for_tdc(torch.unbind)
     def _unbind(tdc, dim):
         tensordicts = torch.unbind(tdc.tensordict, dim)
-        out = [_TensorDictClass(_tensordict=td) for td in tensordicts]
+        out = [_TensorClass(_tensordict=td) for td in tensordicts]
         return out
 
     @implements_for_tdc(torch.full_like)
     def _full_like(tdc, fill_value):
         tensordict = torch.full_like(tdc.tensordict, fill_value)
-        out = _TensorDictClass(_tensordict=tensordict)
+        out = _TensorClass(_tensordict=tensordict)
         return out
 
     @implements_for_tdc(torch.zeros_like)
@@ -318,44 +318,44 @@ def tensorclass(cls):
     @implements_for_tdc(torch.clone)
     def _clone(tdc):
         tensordict = torch.clone(tdc.tensordict)
-        out = _TensorDictClass(_tensordict=tensordict)
+        out = _TensorClass(_tensordict=tensordict)
         return out
 
     @implements_for_tdc(torch.squeeze)
     def _squeeze(tdc):
         tensordict = torch.squeeze(tdc.tensordict)
-        out = _TensorDictClass(_tensordict=tensordict)
+        out = _TensorClass(_tensordict=tensordict)
         return out
 
     @implements_for_tdc(torch.unsqueeze)
     def _unsqueeze(tdc, dim=0):
         tensordict = torch.unsqueeze(tdc.tensordict, dim)
-        out = _TensorDictClass(_tensordict=tensordict)
+        out = _TensorClass(_tensordict=tensordict)
         return out
 
     @implements_for_tdc(torch.permute)
     def _permute(tdc, dims):
         tensordict = torch.permute(tdc.tensordict, dims)
-        out = _TensorDictClass(_tensordict=tensordict)
+        out = _TensorClass(_tensordict=tensordict)
         return out
 
     @implements_for_tdc(torch.split)
     def _split(tdc, split_size_or_sections, dim=0):
         tensordicts = torch.split(tdc.tensordict, split_size_or_sections, dim)
-        out = [_TensorDictClass(_tensordict=td) for td in tensordicts]
+        out = [_TensorClass(_tensordict=td) for td in tensordicts]
         return out
 
     @implements_for_tdc(torch.stack)
     def _stack(list_of_tdc, dim):
         tensordict = torch.stack([tdc.tensordict for tdc in list_of_tdc], dim)
-        out = _TensorDictClass(_tensordict=tensordict)
+        out = _TensorClass(_tensordict=tensordict)
         return out
 
     @implements_for_tdc(torch.cat)
     def _cat(list_of_tdc, dim):
         tensordict = torch.cat([tdc.tensordict for tdc in list_of_tdc], dim)
-        out = _TensorDictClass(_tensordict=tensordict)
+        out = _TensorClass(_tensordict=tensordict)
         return out
 
-    CLASSES_DICT[name] = _TensorDictClass
-    return _TensorDictClass
+    CLASSES_DICT[name] = _TensorClass
+    return _TensorClass
