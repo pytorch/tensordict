@@ -28,6 +28,58 @@ UNION_PATTERN = re.compile(r"Union\[(.*?)\]")
 
 
 def tensorclass(cls: T) -> T:
+    """A decorator to create :obj:`tensorclass` classes.
+
+    :obj:`tensorclass` classes are specialized :obj:`dataclass` instances that
+    can execute some pre-defined tensor operations out of the box, such as
+    indexing, item assignment, reshaping, casting to device or storage and many
+    others.
+
+    Examples:
+        >>> from tensordict.prototype import tensorclass
+        >>> import torch
+        >>> from typing import Optional
+        >>>
+        >>> @tensorclass
+        ... class MyData:
+        ...     X: torch.Tensor
+        ...     y: torch.Tensor
+        ...     def expand_and_mask(self):
+        ...         X = self.X.unsqueeze(-1).expand_as(self.y)
+        ...         X = X[self.y]
+        ...         return X
+        ...
+        >>> data = MyData(
+        ...     X=torch.ones(3, 4, 1),
+        ...     y=torch.zeros(3, 4, 2, 2, dtype=torch.bool),
+        ...     batch_size=[3, 4])
+        >>> print(data)
+        MyData(
+            X=Tensor(torch.Size([3, 4, 1]), dtype=torch.float32),
+            y=Tensor(torch.Size([3, 4, 2, 2]), dtype=torch.bool),
+            batch_size=[3, 4],
+            device=None,
+            is_shared=False)
+        >>> print(data.expand_and_mask())
+        tensor([])
+
+    It is also possible to nest tensorclasses instances within each other:
+        Examples:
+        >>> from tensordict.prototype import tensorclass
+        >>> import torch
+        >>> from typing import Optional
+        >>>
+        >>> @tensorclass
+        ... class NestingMyData:
+        ...     nested: MyData
+        ...
+        >>> nesting_data = NestingMyData(nested=data, batch_size=[3, 4])
+        >>> # although the data is stored as a TensorDict, the type hint helps us
+        >>> # to appropriately cast the data to the right type
+        >>> assert isinstance(nesting_data.nested, type(data))
+
+
+    """
     TD_HANDLED_FUNCTIONS: Dict = {}
 
     name = cls.__name__
@@ -54,6 +106,17 @@ def tensorclass(cls: T) -> T:
                 datacls.__init__(self, **input_dict, batch_size=_tensordict.batch_size)
                 self.tensordict = _tensordict
             else:
+                if len(args):
+                    raise ValueError(
+                        "passing unnamed args to the tensorclass constructor is currently "
+                        "not supported."
+                    )
+                if "device" in kwargs:
+                    raise ValueError(
+                        "passing 'device' to the tensorclass constructor is currently "
+                        "not supported."
+                    )
+
                 kwargs = _set_default_values(datacls, kwargs)
                 new_args = [None for _ in args]
                 new_kwargs = {
