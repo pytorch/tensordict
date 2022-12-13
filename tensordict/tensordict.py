@@ -554,10 +554,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self, key: NESTED_KEY, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
     ) -> COMPATIBLE_TYPES:
         _nested_key_type_check(key)
-        out = self.get(key, default)
         try:
-            # using try/except for deletion is suboptimal, but
+            # using try/except for get/del is suboptimal, but
             # this is faster that checkink if key in self keys
+            out = self.get(key, default)
             self.del_(key)
         except KeyError:
             # if default provided, 'out' value will return, else raise error
