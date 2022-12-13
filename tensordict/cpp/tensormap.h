@@ -1,8 +1,9 @@
 #include <torch/extension.h>
+#include <unordered_map>
 
 class TensorMap {
     private:
-        std::map<std::string, torch::Tensor*> map; // store references instead of copies
+        std::unordered_map<std::string, torch::Tensor> internalMap; // store references instead of copies
         // std::variant<torch::Tensor, TensorMap> UnboxVariant(std::variant<torch::Tensor*, TensorMap*> pointer);
         // std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& GetRecursive(std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& map, std::vector<std::string>& indices, int index);
         // TODO something about batch size

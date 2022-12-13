@@ -5,7 +5,7 @@
 void TensorMap::SetTensorAt(std::string key, torch::Tensor& value)
 {
     // we want to pass objects as arguments but store the reference
-    this->map[key] = &value;
+    this->internalMap[key] = value;
 }
 
 // void TensorMap::SetMapAt(std::string key, TensorMap& value)
@@ -15,10 +15,11 @@ void TensorMap::SetTensorAt(std::string key, torch::Tensor& value)
 
 torch::Tensor TensorMap::GetTensorAt(std::string key)
 {
-    if (this->map.count(key) == 0)
+    if (this->internalMap.count(key) == 0)
         throw std::invalid_argument("Invalid key: " + key);
 
-    return *(this->map[key]);
+    auto value = this->internalMap[key];
+    return value;
 }
 
 /*
