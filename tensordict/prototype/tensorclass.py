@@ -167,18 +167,19 @@ def tensorclass(cls):
                         args = typing.get_args(field_def)
                         # remove the NoneType from args
                         args = [arg for arg in args if arg not in (type(None),)]
-                        # Any or any TensorDictBase subclass are alway ok if alone
                         if len(args) == 1 and (
                             typing.Any is not args[0]
                             and args[0] is not TensorDictBase
                             and TensorDictBase not in args[0].__bases__
                         ):
+                            # If there is just one type in Union or Optional, we return that type
                             return args[0]
                         elif len(args) == 1 and (
                             typing.Any is args[0]
                             or args[0] is TensorDictBase
                             or TensorDictBase in args[0].__bases__
                         ):
+                            # Any or any TensorDictBase subclass are alway ok if alone
                             return None
                         else:
                             raise TypeError(
@@ -189,11 +190,10 @@ def tensorclass(cls):
                         or field_def is TensorDictBase
                         or TensorDictBase in field_def.__bases__
                     ):
+                        # Any or any TensorDictBase subclass are alway ok if alone
                         return None
                     else:
-                        raise TypeError(
-                            f"{field_def} has args {field_def} which can't be deterministically cast."
-                        )
+                        raise TypeError(f"{field_def} can't be deterministically cast.")
 
             if (
                 not item.startswith("__")

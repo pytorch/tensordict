@@ -89,7 +89,7 @@ def test_banned_types():
     data = MyUnionClass(
         subclass=MyUnionClass(_tensordict=TensorDict({}, [3])), batch_size=[3]
     )
-    with pytest.raises(TypeError, match="which can't be deterministically cast."):
+    with pytest.raises(TypeError, match="can't be deterministically cast."):
         assert data.subclass is not None
 
 
