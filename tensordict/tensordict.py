@@ -2941,7 +2941,7 @@ def _get_leaf_tensordict(tensordict: TensorDictBase, key: NESTED_KEY, hook=None)
 
 
 def implements_for_td(torch_function: Callable) -> Callable:
-    """Register a torch function override for ScalarTensor."""
+    """Register a torch function override for TensorDict."""
 
     @functools.wraps(torch_function)
     def decorator(func):
