@@ -42,6 +42,77 @@ def _td_fields(td: TensorDictBase) -> str:
     )
 
 
+def _check_td_out_type(field_def):
+    if PY37:
+        field_def = str(field_def)
+    if isinstance(field_def, str):
+        optional_match = OPTIONAL_PATTERN.search(field_def)
+        union_match = UNION_PATTERN.search(field_def)
+        if optional_match is not None:
+            args = [optional_match.group(1)]
+        elif union_match is not None:
+            args = union_match.group(1).split(", ")
+        else:
+            args = None
+        if args:
+            args = [arg for arg in args if arg not in ("NoneType",)]
+        # skip all Any or TensorDict or Optional[TensorDict] or Union[TensorDict] or Optional[Any]
+        if (args is None and (field_def == "Any" or "TensorDict" in field_def)) or (
+            args and len(args) == 1 and args[0] == "Any"
+        ):
+            return None
+        if args and len(args) == 1 and "TensorDict" in args[0]:
+            return None
+        elif args:
+            # remove the NoneType from args
+            if len(args) == 1 and args[0] in CLASSES_DICT:
+                return CLASSES_DICT[args[0]]
+            if len(args) == 1 and ("TensorDict" in args[0] or "Any" == args[0]):
+                return None
+            else:
+                raise TypeError(
+                    f"{field_def} has args {args} which can't be deterministically cast."
+                )
+        elif args is None:
+            return None
+        else:
+            raise TypeError(
+                f"{field_def} has args {args} which can't be deterministically cast."
+            )
+    else:
+        if typing.get_origin(field_def) is Union:
+            args = typing.get_args(field_def)
+            # remove the NoneType from args
+            args = [arg for arg in args if arg not in (type(None),)]
+            if len(args) == 1 and (
+                typing.Any is not args[0]
+                and args[0] is not TensorDictBase
+                and TensorDictBase not in args[0].__bases__
+            ):
+                # If there is just one type in Union or Optional, we return that type
+                return args[0]
+            elif len(args) == 1 and (
+                typing.Any is args[0]
+                or args[0] is TensorDictBase
+                or TensorDictBase in args[0].__bases__
+            ):
+                # Any or any TensorDictBase subclass are alway ok if alone
+                return None
+            else:
+                raise TypeError(
+                    f"{field_def} has args {args} which can't be deterministically cast."
+                )
+        elif (
+            field_def is typing.Any
+            or field_def is TensorDictBase
+            or TensorDictBase in field_def.__bases__
+        ):
+            # Any or any TensorDictBase subclass are alway ok if alone
+            return None
+        else:
+            raise TypeError(f"{field_def} can't be deterministically cast.")
+
+
 def tensorclass(cls: T) -> T:
     TD_HANDLED_FUNCTIONS: Dict = {}
 
@@ -134,77 +205,6 @@ def tensorclass(cls: T) -> T:
             return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
 
         def __getattribute__(self, item):
-            def check_td_out_type(field_def):
-                if PY37:
-                    field_def = str(field_def)
-                if isinstance(field_def, str):
-                    optional_match = OPTIONAL_PATTERN.search(field_def)
-                    union_match = UNION_PATTERN.search(field_def)
-                    if optional_match is not None:
-                        args = [optional_match.group(1)]
-                    elif union_match is not None:
-                        args = union_match.group(1).split(", ")
-                    else:
-                        args = None
-                    if args:
-                        args = [arg for arg in args if arg not in ("NoneType",)]
-                    # skip all Any or TensorDict or Optional[TensorDict] or Union[TensorDict] or Optional[Any]
-                    if (
-                        args is None
-                        and (field_def == "Any" or "TensorDict" in field_def)
-                    ) or (args and len(args) == 1 and args[0] == "Any"):
-                        return None
-                    if args and len(args) == 1 and "TensorDict" in args[0]:
-                        return None
-                    elif args:
-                        # remove the NoneType from args
-                        if len(args) == 1 and args[0] in CLASSES_DICT:
-                            return CLASSES_DICT[args[0]]
-                        if len(args) == 1 and (
-                            "TensorDict" in args[0] or "Any" == args[0]
-                        ):
-                            return None
-                        else:
-                            raise TypeError(
-                                f"{field_def} has args {args} which can't be deterministically cast."
-                            )
-                    else:
-                        raise TypeError(
-                            f"{field_def} has args {args} which can't be deterministically cast."
-                        )
-                else:
-                    if typing.get_origin(field_def) is Union:
-                        args = typing.get_args(field_def)
-                        # remove the NoneType from args
-                        args = [arg for arg in args if arg not in (type(None),)]
-                        if len(args) == 1 and (
-                            typing.Any is not args[0]
-                            and args[0] is not TensorDictBase
-                            and TensorDictBase not in args[0].__bases__
-                        ):
-                            # If there is just one type in Union or Optional, we return that type
-                            return args[0]
-                        elif len(args) == 1 and (
-                            typing.Any is args[0]
-                            or args[0] is TensorDictBase
-                            or TensorDictBase in args[0].__bases__
-                        ):
-                            # Any or any TensorDictBase subclass are alway ok if alone
-                            return None
-                        else:
-                            raise TypeError(
-                                f"{field_def} has args {args} which can't be deterministically cast."
-                            )
-                    elif (
-                        field_def is typing.Any
-                        or field_def is TensorDictBase
-                        or TensorDictBase in field_def.__bases__
-                    ):
-                        # Any or any TensorDictBase subclass are alway ok if alone
-                        return None
-                    else:
-                        raise TypeError(f"{field_def} can't be deterministically cast.")
-
             if (
                 not item.startswith("__")
                 and "tensordict" in self.__dict__
@@ -224,7 +224,7 @@ def tensorclass(cls: T) -> T:
                 ):
                     out = field_def(_tensordict=out)
                 elif isinstance(out, TensorDictBase):
-                    dest_dtype = check_td_out_type(field_def)
+                    dest_dtype = _check_td_out_type(field_def)
                     if dest_dtype is not None:
                         print(dest_dtype)
                         out = dest_dtype(_tensordict=out)
