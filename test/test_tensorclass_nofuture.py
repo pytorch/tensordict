@@ -159,11 +159,11 @@ def test_stack():
     batch_size = [3, 4]
     data1 = MyData(X=X, y=y, batch_size=batch_size)
     data2 = MyData(X=X, y=y, batch_size=batch_size)
-    stacked_tdc = torch.stack([data1, data2], 0)
-    assert type(stacked_tdc) is type(data1)
-    assert stacked_tdc.X.shape == torch.Size([2, 3, 4, 5])
-    assert (stacked_tdc.X == 1).all()
-    assert isinstance(stacked_tdc.tensordict, LazyStackedTensorDict)
+    stacked_tc = torch.stack([data1, data2], 0)
+    assert type(stacked_tc) is type(data1)
+    assert stacked_tc.X.shape == torch.Size([2, 3, 4, 5])
+    assert (stacked_tc.X == 1).all()
+    assert isinstance(stacked_tc.tensordict, LazyStackedTensorDict)
 
 
 def test_cat():
@@ -172,11 +172,11 @@ def test_cat():
     batch_size = [3, 4]
     data1 = MyData(X=X, y=y, batch_size=batch_size)
     data2 = MyData(X=X, y=y, batch_size=batch_size)
-    stacked_tdc = torch.cat([data1, data2], 0)
-    assert type(stacked_tdc) is type(data1)
-    assert stacked_tdc.X.shape == torch.Size([6, 4, 5])
-    assert (stacked_tdc.X == 1).all()
-    assert isinstance(stacked_tdc.tensordict, TensorDict)
+    stacked_tc = torch.cat([data1, data2], 0)
+    assert type(stacked_tc) is type(data1)
+    assert stacked_tc.X.shape == torch.Size([6, 4, 5])
+    assert (stacked_tc.X == 1).all()
+    assert isinstance(stacked_tc.tensordict, TensorDict)
 
 
 def test_unbind():
@@ -184,11 +184,11 @@ def test_unbind():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    unbind_tdcs = torch.unbind(data, 0)
-    assert type(unbind_tdcs[1]) is type(data)
-    assert len(unbind_tdcs) == 3
-    assert torch.all(torch.eq(unbind_tdcs[0].X, torch.ones(4, 5)))
-    assert unbind_tdcs[0].batch_size == torch.Size([4])
+    unbind_tcs = torch.unbind(data, 0)
+    assert type(unbind_tcs[1]) is type(data)
+    assert len(unbind_tcs) == 3
+    assert torch.all(torch.eq(unbind_tcs[0].X, torch.ones(4, 5)))
+    assert unbind_tcs[0].batch_size == torch.Size([4])
 
 
 def test_full_like():
@@ -196,13 +196,13 @@ def test_full_like():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    full_like_tdc = torch.full_like(data, 9.0)
-    assert type(full_like_tdc) is type(data)
-    assert full_like_tdc.batch_size == torch.Size(data.batch_size)
-    assert full_like_tdc.X.size() == data.X.size()
-    assert full_like_tdc.y.size() == data.y.size()
-    assert (full_like_tdc.X == 9).all()
-    assert full_like_tdc.y.all()
+    full_like_tc = torch.full_like(data, 9.0)
+    assert type(full_like_tc) is type(data)
+    assert full_like_tc.batch_size == torch.Size(data.batch_size)
+    assert full_like_tc.X.size() == data.X.size()
+    assert full_like_tc.y.size() == data.y.size()
+    assert (full_like_tc.X == 9).all()
+    assert full_like_tc.y.all()
 
 
 def test_clone():
@@ -210,10 +210,10 @@ def test_clone():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    clone_tdc = torch.clone(data)
-    assert clone_tdc.batch_size == torch.Size(data.batch_size)
-    assert torch.all(torch.eq(clone_tdc.X, data.X))
-    assert torch.all(torch.eq(clone_tdc.y, data.y))
+    clone_tc = torch.clone(data)
+    assert clone_tc.batch_size == torch.Size(data.batch_size)
+    assert torch.all(torch.eq(clone_tc.X, data.X))
+    assert torch.all(torch.eq(clone_tc.y, data.y))
 
 
 def test_squeeze():
@@ -221,10 +221,10 @@ def test_squeeze():
     y = torch.zeros(1, 4, 5, dtype=torch.bool)
     batch_size = [1, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    squeeze_tdc = torch.squeeze(data)
-    assert squeeze_tdc.batch_size == torch.Size([4])
-    assert squeeze_tdc.X.shape == torch.Size([4, 5])
-    assert squeeze_tdc.y.shape == torch.Size([4, 5])
+    squeeze_tc = torch.squeeze(data)
+    assert squeeze_tc.batch_size == torch.Size([4])
+    assert squeeze_tc.X.shape == torch.Size([4, 5])
+    assert squeeze_tc.y.shape == torch.Size([4, 5])
 
 
 def test_unsqueeze():
@@ -232,10 +232,10 @@ def test_unsqueeze():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    unsqueeze_tdc = torch.unsqueeze(data, dim=1)
-    assert unsqueeze_tdc.batch_size == torch.Size([3, 1, 4])
-    assert unsqueeze_tdc.X.shape == torch.Size([3, 1, 4, 5])
-    assert unsqueeze_tdc.y.shape == torch.Size([3, 1, 4, 5])
+    unsqueeze_tc = torch.unsqueeze(data, dim=1)
+    assert unsqueeze_tc.batch_size == torch.Size([3, 1, 4])
+    assert unsqueeze_tc.X.shape == torch.Size([3, 1, 4, 5])
+    assert unsqueeze_tc.y.shape == torch.Size([3, 1, 4, 5])
 
 
 def test_split():
@@ -243,13 +243,13 @@ def test_split():
     y = torch.zeros(3, 6, 5, dtype=torch.bool)
     batch_size = [3, 6]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    split_tdcs = torch.split(data, split_size_or_sections=[3, 2, 1], dim=1)
-    assert type(split_tdcs[1]) is type(data)
-    assert split_tdcs[0].batch_size == torch.Size([3, 3])
-    assert split_tdcs[1].batch_size == torch.Size([3, 2])
-    assert split_tdcs[2].batch_size == torch.Size([3, 1])
-    assert torch.all(torch.eq(split_tdcs[0].X, torch.ones(3, 3, 5)))
-    assert torch.all(torch.eq(split_tdcs[2].y, torch.zeros(3, 1, 5, dtype=torch.bool)))
+    split_tcs = torch.split(data, split_size_or_sections=[3, 2, 1], dim=1)
+    assert type(split_tcs[1]) is type(data)
+    assert split_tcs[0].batch_size == torch.Size([3, 3])
+    assert split_tcs[1].batch_size == torch.Size([3, 2])
+    assert split_tcs[2].batch_size == torch.Size([3, 1])
+    assert torch.all(torch.eq(split_tcs[0].X, torch.ones(3, 3, 5)))
+    assert torch.all(torch.eq(split_tcs[2].y, torch.zeros(3, 1, 5, dtype=torch.bool)))
 
 
 def test_reshape():
@@ -257,11 +257,11 @@ def test_reshape():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    stacked_tdc = data.reshape(-1)
-    assert stacked_tdc.X.shape == torch.Size([12, 5])
-    assert stacked_tdc.shape == torch.Size([12])
-    assert (stacked_tdc.X == 1).all()
-    assert isinstance(stacked_tdc.tensordict, TensorDict)
+    stacked_tc = data.reshape(-1)
+    assert stacked_tc.X.shape == torch.Size([12, 5])
+    assert stacked_tc.shape == torch.Size([12])
+    assert (stacked_tc.X == 1).all()
+    assert isinstance(stacked_tc.tensordict, TensorDict)
 
 
 def test_view():
@@ -269,11 +269,11 @@ def test_view():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    stacked_tdc = data.view(-1)
-    assert stacked_tdc.X.shape == torch.Size([12, 5])
-    assert stacked_tdc.shape == torch.Size([12])
-    assert (stacked_tdc.X == 1).all()
-    assert isinstance(stacked_tdc.tensordict, _ViewedTensorDict)
+    stacked_tc = data.view(-1)
+    assert stacked_tc.X.shape == torch.Size([12, 5])
+    assert stacked_tc.shape == torch.Size([12])
+    assert (stacked_tc.X == 1).all()
+    assert isinstance(stacked_tc.tensordict, _ViewedTensorDict)
 
 
 def test_permute():
@@ -281,11 +281,11 @@ def test_permute():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
-    stacked_tdc = data.permute(1, 0)
-    assert stacked_tdc.X.shape == torch.Size([4, 3, 5])
-    assert stacked_tdc.shape == torch.Size([4, 3])
-    assert (stacked_tdc.X == 1).all()
-    assert isinstance(stacked_tdc.tensordict, _PermutedTensorDict)
+    stacked_tc = data.permute(1, 0)
+    assert stacked_tc.X.shape == torch.Size([4, 3, 5])
+    assert stacked_tc.shape == torch.Size([4, 3])
+    assert (stacked_tc.X == 1).all()
+    assert isinstance(stacked_tc.tensordict, _PermutedTensorDict)
 
 
 @pytest.mark.parametrize("any_to_td", [True, False])
