@@ -1765,9 +1765,10 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (out == a).all()
         assert "a" not in td.keys()
 
-        default = "some value"
+        default = torch.Tensor([0])
         assert "b" in td.keys()
         b = td["b"].clone()
+        assert (default != b).all()
         out = td.pop("b", default)
         assert out != default
         assert (out == b).all()
