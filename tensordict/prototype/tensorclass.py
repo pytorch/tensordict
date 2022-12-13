@@ -147,7 +147,7 @@ def tensorclass(cls):
                         and (field_def == "Any" or "TensorDict" in field_def)
                     ) or (args and len(args) == 1 and args[0] == "Any"):
                         return None
-                    if args and len(args) == 1 and re.search(r"TensorDict", args[0]):
+                    if args and len(args) == 1 and "TensorDict" in args[0]:
                         return None
                     elif args:
                         # remove the NoneType from args
