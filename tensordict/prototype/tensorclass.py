@@ -108,9 +108,9 @@ def tensorclass(cls):
                     batch_size=kwargs["batch_size"],
                 )
 
-        @staticmethod
-        def _build_from_tensordict(tensordict):
-            return _TensorDictClass(_tensordict=tensordict)
+        @classmethod
+        def _build_from_tensordict(cls, tensordict):
+            return cls(_tensordict=tensordict)
 
         @classmethod
         def __torch_function__(
