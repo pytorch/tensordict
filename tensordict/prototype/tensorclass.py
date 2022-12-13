@@ -268,8 +268,8 @@ def _get_typed_value(value):
 
 def _get_typed_output(out, expected_type):
     # from __future__ import annotations turns types in stings. For those we use CLASSES_DICT.
-    # Otherwise, if the output is some TensorDictBase subclass, we check the type and if
-    # it does not match, we map it. In all other cases, just return what has been gathered.
+    # Otherwise, if the output is some TensorDictBase subclass, we check the type and if it
+    # does not match, we map it. In all other cases, just return what has been gathered.
     if isinstance(expected_type, str) and expected_type in CLASSES_DICT:
         out = CLASSES_DICT[expected_type](_tensordict=out)
     elif (
