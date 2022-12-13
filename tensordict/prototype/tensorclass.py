@@ -90,7 +90,7 @@ def tensorclass(cls):
                 for attr in attributes:
                     if attr in dir(TensorDict):
                         raise Exception(
-                            f"Attribute name {attr} can't be used for _TensorClass"
+                            f"Attribute name {attr} can't be used with @tensorclass"
                         )
 
                 def _get_value(value):
@@ -286,7 +286,7 @@ def tensorclass(cls):
             return f"{name}(\n{string})"
 
     def implements_for_tdc(torch_function: Callable) -> Callable:
-        """Register a torch function override for TensorClass."""
+        """Register a torch function override for _TensorClass."""
 
         @functools.wraps(torch_function)
         def decorator(func):
