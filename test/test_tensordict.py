@@ -1761,7 +1761,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         assert "a" in td.keys()
         out = td.pop("a")
-        assert torch.all(torch.eq(out, getattr(self, td_name)(device)["a"]))
+        assert (out == getattr(self, td_name)(device).get("a")).all()
         assert "a" not in td.keys()
 
         default = "some value"
