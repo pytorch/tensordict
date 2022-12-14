@@ -1,10 +1,12 @@
 import heapq
 
 import torch
-from tensordict.memmap import MemmapTensor
 from tensordict.metatensor import MetaTensor
 from tensordict.tensordict import (
-    _TensorDictKeysView, SubTensorDict, TensorDict, TensorDictBase
+    _TensorDictKeysView,
+    SubTensorDict,
+    TensorDict,
+    TensorDictBase,
 )
 from tensordict.utils import _is_shared
 
@@ -22,6 +24,7 @@ except ImportError:
     def is_batchedtensor(tensor):
         """Placeholder for the functorch function."""
         return False
+
 
 try:
     from torchrec import KeyedJaggedTensor
@@ -61,20 +64,25 @@ class _TensorDictNode(SubTensorDict):
     def keys(self, include_nested=False, leaves_only=False):
         return _TensorDictNodeKeysView(self, include_nested, leaves_only)
 
+    @property
+    def source(self):
+        return self._source
+
+    @source.setter
+    def _(self):
+        raise RuntimeError(
+            "Source should not be updated manually, it is managed by the nodes and "
+            "`make_tree`."
+        )
+
     def _make_meta(self, key):
         if key in self._children:
             # entries of self._children are always nodes, so we can simplify slightly
             # compared to the logic in other implementations of _make_meta
             out = self._children[key]
-            is_memmap = (
-                self._is_memmap
-                if self._is_memmap is not None
-                else False
-            )
+            is_memmap = self._is_memmap if self._is_memmap is not None else False
             is_shared = (
-                self._is_shared
-                if self._is_shared is not None
-                else _is_shared(out)
+                self._is_shared if self._is_shared is not None else _is_shared(out)
             )
             return MetaTensor(
                 out,
@@ -100,7 +108,10 @@ class _TensorDictNode(SubTensorDict):
             if subkey:
                 node[subkey] = item
             elif isinstance(item, TensorDictBase):
-                node.update(item)
+                node.update(item.select(*item.keys(leaves_only=True)))
+                for key, value in item.items():
+                    if isinstance(value, TensorDictBase):
+                        node[key] = value
         else:
             super().__setitem__(key, item)
 
@@ -147,7 +158,7 @@ class _TensorDictNode(SubTensorDict):
     def get_multiple_items(self, *keys):
         keys = [(key,) if isinstance(key, str) else key for key in keys]
         key = keys[0][-1]
-        assert set(k[-1] for k in keys) == {key}
+        assert {k[-1] for k in keys} == {key}
         indices = [self[k[:-1]].idx[0] if k[:-1] else self.idx[0] for k in keys]
         return self._source[key][indices]
 
@@ -198,6 +209,15 @@ class _TensorDictTreeSource(TensorDict):
         self._node_indices.remove(idx)
 
 
-def make_tree(batch_size, n_nodes=1_000):
-    source = _TensorDictTreeSource({}, torch.Size([n_nodes, *batch_size]))
-    return source.add_node()
+def make_tree(tensordict, n_nodes=1_000):
+    contents = {
+        key: torch.zeros(n_nodes, *value.shape)
+        for key, value in tensordict.items(leaves_only=True)
+    }
+    source = _TensorDictTreeSource(
+        contents, torch.Size([n_nodes, *tensordict.batch_size])
+    )
+    root = source.add_node()
+    for key, value in tensordict.items(include_nested=True, leaves_only=True):
+        root[key] = value
+    return root
