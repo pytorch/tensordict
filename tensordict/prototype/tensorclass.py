@@ -106,17 +106,18 @@ def tensorclass(cls: T) -> T:
                 datacls.__init__(self, **input_dict, batch_size=_tensordict.batch_size)
                 self.tensordict = _tensordict
             else:
-                if len(args):
-                    raise ValueError(
-                        "passing unnamed args to the tensorclass constructor is currently "
-                        "not supported."
-                    )
+
                 if "device" in kwargs:
                     raise ValueError(
                         "passing 'device' to the tensorclass constructor is currently "
                         "not supported."
                     )
 
+                for value, key in zip(args, datacls.__dataclass_fields__):
+                    if key in kwargs:
+                        raise ValueError(f"The key {key} is already set in kwargs")
+                    kwargs[key] = value
+                args = []
                 kwargs = _set_default_values(datacls, kwargs)
                 new_args = [None for _ in args]
                 new_kwargs = {

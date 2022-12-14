@@ -288,6 +288,29 @@ def test_permute():
     assert isinstance(stacked_tc.tensordict, _PermutedTensorDict)
 
 
+def test_args():
+    @tensorclass
+    class MyData:
+        D: torch.Tensor
+        B: torch.Tensor
+        A: torch.Tensor
+        C: torch.Tensor
+
+    D = torch.ones(3, 4, 5)
+    B = torch.ones(3, 4, 5)
+    A = torch.ones(3, 4, 5)
+    C = torch.ones(3, 4, 5)
+    data1 = MyData(D, B=B, A=A, C=C, batch_size=[3, 4])
+    data2 = MyData(D, B, A=A, C=C, batch_size=[3, 4])
+    data3 = MyData(D, B, A, C=C, batch_size=[3, 4])
+    data4 = MyData(D, B, A, C, batch_size=[3, 4])
+    data = torch.stack([data1, data2, data3, data4], 0)
+    assert (data.A == A).all()
+    assert (data.B == B).all()
+    assert (data.C == C).all()
+    assert (data.D == D).all()
+
+
 @pytest.mark.parametrize("any_to_td", [True, False])
 def test_nested_heterogeneous(any_to_td):
     @tensorclass
