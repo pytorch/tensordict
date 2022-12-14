@@ -38,6 +38,11 @@ except ImportError as err:
 
     TORCHREC_ERR = str(err)
 
+KEY_ERR = (
+    "All nodes must have the same leaf keys as the root node. The leaf keys on the "
+    "root node are {leaf_keys}, but you are trying to set the key(s) {key}."
+)
+
 
 class _TensorDictNodeKeysView(_TensorDictKeysView):
     # a custom keys view class for tensordict nodes which merges keys
@@ -108,22 +113,17 @@ class _TensorDictNode(SubTensorDict):
             if subkey:
                 node[subkey] = item
             elif isinstance(item, TensorDictBase):
+                item_keys = set(item.keys(leaves_only=True))
+                if item_keys != self.source._leaf_keys:
+                    raise KeyError(
+                        KEY_ERR.format(leaf_keys=self.source._leaf_keys, key=item_keys)
+                    )
                 for k, v in item.items():
-                    if isinstance(v, TensorDictBase) or k in self.source._leaf_keys:
-                        node[k] = v
-                    else:
-                        raise KeyError(
-                            "All nodes must have the same leaf keys as the root node. "
-                            "The leaf keys on the root node are "
-                            f"{self.source._leaf_keys}, but you are trying to set "
-                            f"the key {k}."
-                        )
+                    node[k] = v
         else:
             if key not in self.source._leaf_keys:
                 raise KeyError(
-                    "All nodes must have the same leaf keys as the root node. The leaf "
-                    f"keys on the root node are {self.source._leaf_keys}, but you are "
-                    f"trying to set the key {key}."
+                    KEY_ERR.format(leaf_keys=self.source._leaf_keys, key=key)
                 )
             super().__setitem__(key, item)
 
