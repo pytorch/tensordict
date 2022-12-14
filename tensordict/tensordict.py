@@ -550,6 +550,24 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
+    def pop(
+        self, key: NESTED_KEY, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+    ) -> COMPATIBLE_TYPES:
+        _nested_key_type_check(key)
+        try:
+            # using try/except for get/del is suboptimal, but
+            # this is faster that checkink if key in self keys
+            out = self.get(key, default)
+            self.del_(key)
+        except KeyError:
+            # if default provided, 'out' value will return, else raise error
+            if default == "_no_default_":
+                raise KeyError(
+                    f"You are trying to pop key `{key}` which is not in dict"
+                    f"without providing default value."
+                )
+        return out
+
     def _get_meta(self, key: NESTED_KEY) -> MetaTensor:
         _nested_key_type_check(key)
         try:

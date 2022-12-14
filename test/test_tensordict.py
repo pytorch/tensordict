@@ -1757,6 +1757,36 @@ class TestTensorDicts(TestTensorDictsBase):
                                 expected_inner_tensor_size
                             )
 
+    def test_pop(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert "a" in td.keys()
+        a = td["a"].clone()
+        out = td.pop("a")
+        assert (out == a).all()
+        assert "a" not in td.keys()
+
+        assert "b" in td.keys()
+        b = td["b"].clone()
+        default = torch.zeros_like(b).to(device)
+        assert (default != b).all()
+        out = td.pop("b", default)
+
+        assert torch.ne(out, default).all()
+        assert (out == b).all()
+
+        assert "z" not in td.keys()
+        out = td.pop("z", default)
+        assert (out == default).all()
+
+        with pytest.raises(
+            KeyError,
+            match=re.escape(
+                "You are trying to pop key `z` which is not in dict"
+                "without providing default value"
+            ),
+        ):
+            td.pop("z")
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
