@@ -121,15 +121,18 @@ class ProbabilisticTensorDictModule(nn.Module):
         ...     ProbabilisticTensorDictSequential,
         ...     TensorDictModule,
         ... )
-        >>> from tensordict.nn.distributions import NormalParamWrapper
+        >>> from tensordict.nn.distributions import NormalParamExtractor
         >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict(
         ...     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3]
         ... )
-        >>> net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
+        >>> net = torch.nn.GRUCell(4, 8)
         >>> module = TensorDictModule(
-        ...     net, in_keys=["input", "hidden"], out_keys=["loc", "scale"]
+        ...     net, in_keys=["input", "hidden"], out_keys=["params"]
+        ... )
+        >>> normal_params = TensorDictModule(
+        ...     NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         ... )
         >>> prob_module = ProbabilisticTensorDictModule(
         ...     in_keys=["loc", "scale"],
@@ -137,7 +140,9 @@ class ProbabilisticTensorDictModule(nn.Module):
         ...     distribution_class=Normal,
         ...     return_log_prob=True,
         ... )
-        >>> td_module = ProbabilisticTensorDictSequential(module, prob_module)
+        >>> td_module = ProbabilisticTensorDictSequential(
+        ...     module, normal_params, prob_module
+        ... )
         >>> params = make_functional(td_module, funs_to_decorate=["forward", "get_dist"])
         >>> _ = td_module(td, params=params)
         >>> print(td)
@@ -147,6 +152,7 @@ class ProbabilisticTensorDictModule(nn.Module):
                 hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
                 input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                params: Tensor(torch.Size([3, 8]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
@@ -166,6 +172,7 @@ class ProbabilisticTensorDictModule(nn.Module):
                 hidden: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
                 input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                params: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([4, 3]),
