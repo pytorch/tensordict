@@ -108,11 +108,23 @@ class _TensorDictNode(SubTensorDict):
             if subkey:
                 node[subkey] = item
             elif isinstance(item, TensorDictBase):
-                node.update(item.select(*item.keys(leaves_only=True)))
-                for key, value in item.items():
-                    if isinstance(value, TensorDictBase):
-                        node[key] = value
+                for k, v in item.items():
+                    if isinstance(v, TensorDictBase) or k in self.source._leaf_keys:
+                        node[k] = v
+                    else:
+                        raise KeyError(
+                            "All nodes must have the same leaf keys as the root node. "
+                            "The leaf keys on the root node are "
+                            f"{self.source._leaf_keys}, but you are trying to set "
+                            f"the key {k}."
+                        )
         else:
+            if key not in self.source._leaf_keys:
+                raise KeyError(
+                    "All nodes must have the same leaf keys as the root node. The leaf "
+                    f"keys on the root node are {self.source._leaf_keys}, but you are "
+                    f"trying to set the key {key}."
+                )
             super().__setitem__(key, item)
 
     def __getitem__(self, key):
@@ -187,6 +199,7 @@ class _TensorDictTreeSource(TensorDict):
             _is_shared=_is_shared,
             _is_memmap=_is_memmap,
         )
+        self._leaf_keys = set(source)
         self._n_nodes = _n_nodes
         self._available_indices = list(range(self._n_nodes))
         heapq.heapify(self._available_indices)

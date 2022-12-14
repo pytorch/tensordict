@@ -123,3 +123,25 @@ def test_apply():
     root.apply_(torch.abs)
 
     assert (root["a"] == 2).all()
+
+
+def test_key_checks():
+    td = TensorDict({"a": torch.ones(2, 3, 4)}, [2, 3])
+    root = make_tree(td, n_nodes=10)
+
+    with pytest.raises(
+        KeyError, match="All nodes must have the same leaf keys as the root node."
+    ):
+        root["left"] = TensorDict({"b": torch.rand(2, 3, 4)}, [2, 3])
+
+    with pytest.raises(
+        KeyError, match="All nodes must have the same leaf keys as the root node."
+    ):
+        root["left"] = torch.rand(2, 3, 4)
+
+    with pytest.raises(
+        KeyError, match="All nodes must have the same leaf keys as the root node."
+    ):
+        root["left"] = TensorDict(
+            {"a": torch.rand(2, 3, 4), "b": torch.rand(2, 3, 4)}, [2, 3]
+        )
