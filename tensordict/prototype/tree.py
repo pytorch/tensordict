@@ -10,34 +10,6 @@ from tensordict.tensordict import (
 )
 from tensordict.utils import _is_shared
 
-_has_functorch = False
-try:
-    try:
-        from functorch._C import is_batchedtensor
-    except ImportError:
-        from torch._C._functorch import is_batchedtensor
-
-    _has_functorch = True
-except ImportError:
-    _has_functorch = False
-
-    def is_batchedtensor(tensor):
-        """Placeholder for the functorch function."""
-        return False
-
-
-try:
-    from torchrec import KeyedJaggedTensor
-
-    _has_torchrec = True
-except ImportError as err:
-    _has_torchrec = False
-
-    class KeyedJaggedTensor:
-        pass
-
-    TORCHREC_ERR = str(err)
-
 KEY_ERR = (
     "All nodes must have the same leaf keys as the root node. The leaf keys on the "
     "root node are {leaf_keys}, but you are trying to set the key(s) {key}."
