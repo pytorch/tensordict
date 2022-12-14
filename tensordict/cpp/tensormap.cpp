@@ -1,25 +1,36 @@
 #include "tensormap.h"
 #include <exception>
 #include <string>
+#include <unordered_map>
+
+TensorMap::TensorMap()
+{
+    this->internalMap = new std::unordered_map<std::string, TensorMap::node>();
+}
+
+TensorMap::~TensorMap()
+{
+    // TODO handle delete
+    // Python deletes sub elements first, we try to delete the map twice and this result in seg fault
+    // delete this->internalMap;
+}
+
+TensorMap::node TensorMap::GetAt(std::string key)
+{
+    if (this->internalMap->count(key) == 0)
+        throw std::invalid_argument("Invalid key: " + key);
+
+    return this->internalMap->at(key);
+}
 
 void TensorMap::SetTensorAt(std::string key, torch::Tensor& value)
 {
-    // we want to pass objects as arguments but store the reference
-    this->internalMap[key] = value;
+    this->internalMap->insert_or_assign(key, value);
 }
 
-// void TensorMap::SetMapAt(std::string key, TensorMap& value)
-// {
-//     this->map[key] = &value;
-// }
-
-TensorMap::node TensorMap::GetTensorAt(std::string key)
+void TensorMap::SetMapAt(std::string key, TensorMap& value)
 {
-    if (this->internalMap.count(key) == 0)
-        throw std::invalid_argument("Invalid key: " + key);
-
-    auto value = this->internalMap[key];
-    return value;
+    this->internalMap->insert_or_assign(key, value);
 }
 
 /*
@@ -80,16 +91,4 @@ std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& TensorMap::GetR
         throw std::invalid_argument("Expected to have a Map at index " + std::to_string(index) + " but found tensor");
 }
 
-std::variant<torch::Tensor, TensorMap> TensorMap::UnboxVariant(std::variant<torch::Tensor*, TensorMap*> pointer)
-{
-    if (std::holds_alternative<TensorMap*>(pointer))
-    {
-        TensorMap* value = std::get<TensorMap*>(pointer);
-        return std::variant<torch::Tensor, TensorMap>(*value);
-    }
-
-    torch::Tensor* value = std::get<torch::Tensor*>(pointer);
-    return std::variant<torch::Tensor, TensorMap>(*value);
-}
-
-    */
+*/
