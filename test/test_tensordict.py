@@ -1765,9 +1765,9 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (out == a).all()
         assert "a" not in td.keys()
 
-        default = torch.zeros_like(a).to(device)
         assert "b" in td.keys()
         b = td["b"].clone()
+        default = torch.zeros_like(b).to(device)
         assert (default != b).all()
         out = td.pop("b", default)
 
