@@ -5607,6 +5607,7 @@ def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_devi
 
 
 def make_tensordict(
+    input_dict: Optional[dict] = None,
     batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
     device: Optional[DEVICE_TYPING] = None,
     **kwargs,  # source
@@ -5616,11 +5617,16 @@ def make_tensordict(
     If batch_size is not specified, returns the maximum batch size possible
 
     Args:
-        **kwargs (TensorDict or torch.Tensor): keyword arguments as data source.
+        input_dict (dictionary, optional): a dictionary to use as a data source
+            (nested keys compatible).
+        **kwargs (TensorDict or torch.Tensor): keyword arguments as data source
+            (incompatible with nested keys).
         batch_size (iterable of int, optional): a batch size for the tensordict.
         device (torch.device or compatible type, optional): a device for the TensorDict.
 
     """
+    if input_dict:
+        kwargs.update(input_dict)
     if batch_size is None:
         batch_size = _find_max_batch_size(kwargs)
     # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
