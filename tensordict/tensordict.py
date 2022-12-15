@@ -36,13 +36,7 @@ from warnings import warn
 import numpy as np
 import torch
 
-from tensordict.utils import (
-    _get_item,
-    _is_shared,
-    _requires_grad,
-    _set_item,
-    _shape,
-)
+from tensordict.utils import _get_item, _is_shared, _requires_grad, _set_item, _shape
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
