@@ -151,7 +151,7 @@ to build distributions from network outputs and get summary statistics or sample
   >>> import torch
   >>> from tensordict import TensorDict
   >>> from tensordict.nn import TensorDictModule
-  >>> from tensordict.nn.distributions import NormalParamExtractor
+  >>> from tensordict.nn.distributions import NormalParamWrapper
   >>> from tensordict.nn.functional_modules import make_functional
   >>> from tensordict.nn.prototype import (
   ...     ProbabilisticTensorDictModule,
@@ -163,10 +163,7 @@ to build distributions from network outputs and get summary statistics or sample
   ... )
   >>> net = torch.nn.GRUCell(4, 8)
   >>> module = TensorDictModule(
-  ...     net, in_keys=["input", "hidden"], out_keys=["embed"]
-  ... )
-  >>> extractor = TensorDictModule(
-  ...     NormalParamExtractor(), in_keys=["embed"], out_keys=["loc", "scale"]
+  ...     NormalParamWrapper(net), in_keys=["input", "hidden"], out_keys=["embed"]
   ... )
   >>> prob_module = ProbabilisticTensorDictModule(
   ...     in_keys=["loc", "scale"],
@@ -174,7 +171,7 @@ to build distributions from network outputs and get summary statistics or sample
   ...     distribution_class=Normal,
   ...     return_log_prob=True,
   ... )
-  >>> td_module = ProbabilisticTensorDictSequential(module, extractor, prob_module)
+  >>> td_module = ProbabilisticTensorDictSequential(module, prob_module)
   >>> td_module(td)
   >>> print(td)
   TensorDict(
@@ -201,6 +198,49 @@ to build distributions from network outputs and get summary statistics or sample
 
 Functional
 ----------
+
+The tensordict package is compatible with most functorch capabilities.
+We also provide a dedicated functional API that leverages the advantages of
+tensordict to handle parameters in functional programs.
+
+The :obj:`make_functional` method will turn a module in a functional module. The
+module will be modified in-place and a :obj:`TensorDict` containing the module
+parameters will be returned. This tensordict has a structure that reflects exactly
+the structure of the model. In the following example, we show that
+
+1. :obj:`make_functional` extracts the parameters of the module;
+
+2. These parameters have a structure that matches exactly the structure of the
+   model (though they can be flattened using :obj:`params.flatten_keys(".")`).
+
+3. It converts the module and all its sub-modules to be functional.
+
+.. code-block::
+
+  >>> from torch import nn
+  >>> from tensordict import TensorDict
+  >>> from tensordict.nn import make_functional
+  >>> import torch
+  >>> from functorch import vmap
+  >>> layer1 = nn.Linear(3, 4)
+  >>> layer2 = nn.Linear(4, 4)
+  >>> model = nn.Sequential(layer1, layer2)
+  >>> params = make_functional(model)
+  >>> x = torch.randn(10, 3)
+  >>> out = model(x, params=params)  # params is the last arg (or kwarg)
+  >>> intermediate = model[0](x, params["0"])
+  >>> out2 = model[1](intermediate, params["1"])
+  >>> assert torch.testing.assert_close(out, out2)
+
+Alternatively, parameters can also be constructed using the following methods:
+
+.. code-block::
+
+  >>> params = TensorDict({name: param for name, param in model.named_parameters()}, []).unflatten_keys(".")
+  >>> params = TensorDict(model.state_dict(), [])  # provided that the state_dict() just returns params and buffer tensors
+
+Unlike what is done with functorch, :obj:`tensordict.nn.make_functional` does not
+distinguish on a high level parameters and buffers (they are all packed together).
 
 .. autosummary::
     :toctree: generated/
