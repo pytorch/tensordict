@@ -27,6 +27,19 @@ OPTIONAL_PATTERN = re.compile(r"Optional\[(.*?)\]")
 UNION_PATTERN = re.compile(r"Union\[(.*?)\]")
 
 
+class _TensorClassMeta(type):
+    def __new__(cls, clsname, bases, attrs):
+        datacls = bases[0]
+        for attr in datacls.__dataclass_fields__:
+            if attr == "batch_size":
+                continue
+            if attr in dir(TensorDict):
+                raise AttributeError(
+                    f"Attribute name {attr} can't be used with @tensorclass"
+                )
+        return super().__new__(cls, clsname, bases, attrs)
+
+
 def tensorclass(cls: T) -> T:
     """A decorator to create :obj:`tensorclass` classes.
 
@@ -91,9 +104,8 @@ def tensorclass(cls: T) -> T:
 
     EXPECTED_KEYS = set(datacls.__dataclass_fields__.keys())
 
-    class _TensorClass(datacls):
+    class _TensorClass(datacls, metaclass=_TensorClassMeta):
         def __init__(self, *args, _tensordict=None, **kwargs):
-
             if (args or kwargs) and _tensordict is not None:
                 raise ValueError("Cannot pass both args/kwargs and _tensordict.")
 
@@ -103,7 +115,7 @@ def tensorclass(cls: T) -> T:
                         f"Keys from the tensordict ({set(_tensordict.keys())}) must correspond to the class attributes ({EXPECTED_KEYS - {'batch_size'} })."
                     )
                 input_dict = {key: None for key in _tensordict.keys()}
-                datacls.__init__(self, **input_dict, batch_size=_tensordict.batch_size)
+                super().__init__(**input_dict, batch_size=_tensordict.batch_size)
                 self.tensordict = _tensordict
             else:
 
@@ -125,14 +137,7 @@ def tensorclass(cls: T) -> T:
                     for key, value in kwargs.items()
                 }
 
-                datacls.__init__(self, *new_args, **new_kwargs)
-
-                attributes = [key for key in self.__dict__ if key != "batch_size"]
-                for attr in attributes:
-                    if attr in dir(TensorDict):
-                        raise Exception(
-                            f"Attribute name {attr} can't be used with @tensorclass"
-                        )
+                super().__init__(*new_args, **new_kwargs)
 
                 self.tensordict = TensorDict(
                     {

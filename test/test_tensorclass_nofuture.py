@@ -22,7 +22,6 @@ class MyData:
 
 
 def test_dataclass():
-
     data = MyData(
         X=torch.ones(3, 4, 5),
         y=torch.zeros(3, 4, 5, dtype=torch.bool),
@@ -32,7 +31,6 @@ def test_dataclass():
 
 
 def test_type():
-
     data = MyData(
         X=torch.ones(3, 4, 5),
         y=torch.zeros(3, 4, 5, dtype=torch.bool),
@@ -92,7 +90,6 @@ def test_banned_types():
 
 
 def test_attributes():
-
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
@@ -113,6 +110,19 @@ def test_attributes():
     assert data.batch_size == batch_size
     assert equality_tensordict.all()
     assert equality_tensordict.batch_size == torch.Size(batch_size)
+
+
+def test_disallowed_attributes():
+    with pytest.raises(
+        AttributeError,
+        match="Attribute name reshape can't be used with @tensorclass",
+    ):
+
+        @tensorclass
+        class MyInvalidClass:
+            x: torch.Tensor
+            y: torch.Tensor
+            reshape: torch.Tensor
 
 
 def test_indexing():
