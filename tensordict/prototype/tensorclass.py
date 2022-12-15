@@ -27,10 +27,6 @@ OPTIONAL_PATTERN = re.compile(r"Optional\[(.*?)\]")
 UNION_PATTERN = re.compile(r"Union\[(.*?)\]")
 
 
-class InvalidAttributeName(ValueError):
-    pass
-
-
 class _TensorClassMeta(type):
     def __new__(cls, clsname, bases, attrs):
         datacls = bases[0]
@@ -38,7 +34,7 @@ class _TensorClassMeta(type):
             if attr == "batch_size":
                 continue
             if attr in dir(TensorDict):
-                raise InvalidAttributeName(
+                raise AttributeError(
                     f"Attribute name {attr} can't be used with @tensorclass"
                 )
         return super().__new__(cls, clsname, bases, attrs)

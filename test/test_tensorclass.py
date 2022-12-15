@@ -10,7 +10,6 @@ import torch
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.prototype import tensorclass
-from tensordict.prototype.tensorclass import InvalidAttributeName
 from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
 from torch import Tensor
 
@@ -117,7 +116,7 @@ def test_attributes():
 
 def test_disallowed_attributes():
     with pytest.raises(
-        InvalidAttributeName,
+        AttributeError,
         match="Attribute name reshape can't be used with @tensorclass",
     ):
 
