@@ -23,7 +23,7 @@ except ImportError:
 
 import torch
 
-from tensordict.nn.common import TensorDictModule
+from tensordict.nn.common import dispatch_kwargs, TensorDictModule
 from tensordict.nn.probabilistic import ProbabilisticTensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _normalize_key, NESTED_KEY
@@ -225,6 +225,7 @@ class TensorDictSequential(TensorDictModule):
             tensordict._update_valid_keys()
         return tensordict
 
+    @dispatch_kwargs
     def forward(
         self,
         tensordict: TensorDictBase,
