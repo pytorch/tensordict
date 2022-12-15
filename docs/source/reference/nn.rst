@@ -47,6 +47,7 @@ additional input from the tensordict as necessary. Here's an example:
 
 .. code-block::
 
+  >>> from tensordict.nn import TensorDictSequential
   >>> class Net(nn.Module):
   ...     def __init__(self, input_size=100, hidden_size=50, output_size=10):
   ...         super().__init__()
@@ -163,7 +164,7 @@ to build distributions from network outputs and get summary statistics or sample
   ... )
   >>> net = torch.nn.GRUCell(4, 8)
   >>> module = TensorDictModule(
-  ...     NormalParamWrapper(net), in_keys=["input", "hidden"], out_keys=["embed"]
+  ...     NormalParamWrapper(net), in_keys=["input", "hidden"], out_keys=["loc", "scale"]
   ... )
   >>> prob_module = ProbabilisticTensorDictModule(
   ...     in_keys=["loc", "scale"],
@@ -230,7 +231,7 @@ the structure of the model. In the following example, we show that
   >>> out = model(x, params=params)  # params is the last arg (or kwarg)
   >>> intermediate = model[0](x, params["0"])
   >>> out2 = model[1](intermediate, params["1"])
-  >>> assert torch.testing.assert_close(out, out2)
+  >>> torch.testing.assert_close(out, out2)
 
 Alternatively, parameters can also be constructed using the following methods:
 

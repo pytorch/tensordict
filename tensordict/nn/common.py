@@ -126,7 +126,13 @@ def dispatch_kwargs(func):
                 else:
                     expected_key = key
                 if expected_key in kwargs:
-                    tensordict_values[key] = kwargs.pop(expected_key)
+                    try:
+                        tensordict_values[key] = kwargs.pop(expected_key)
+                    except KeyError:
+                        raise KeyError(
+                            f"The key {expected_key} wasn't found in the keyword arguments "
+                            f"but is expected to execute that function."
+                        )
             tensordict = make_tensordict(tensordict_values)
             out = func(self, tensordict, *args, **kwargs)
             out = tuple(out[key] for key in self.out_keys)
