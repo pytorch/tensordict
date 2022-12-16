@@ -47,10 +47,9 @@ class TensorMap {
             return this->internalMap != other.internalMap;
         }
 
-        // TODO Add const to all input args
-        node GetAt(std::string key);
-        void SetTensorAt(std::string key, torch::Tensor& value);
-        void SetMapAt(std::string key, TensorMap& value);
+        node GetAt(const std::string key) const;
+        void SetTensorAt(const std::string key, const torch::Tensor& value);
+        void SetMapAt(const std::string key, const TensorMap& value);
         // void SetTensorAtPath(std::vector<std::string>& key, torch::Tensor& value);
         // void SetMapAtPath(std::vector<std::string>& key, TensorMap& value);
         // std::variant<torch::Tensor, TensorMap> GetAtPath(std::vector<std::string>& key);

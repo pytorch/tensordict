@@ -9,7 +9,7 @@ TensorMap::TensorMap()
     this->internalMap = std::make_shared<std::unordered_map<std::string, node> >();
 }
 
-TensorMap::node TensorMap::GetAt(std::string key)
+TensorMap::node TensorMap::GetAt(const std::string key) const
 {
     auto map = unsafeGetInternalMap();
     if (map->count(key) == 0)
@@ -18,12 +18,12 @@ TensorMap::node TensorMap::GetAt(std::string key)
     return map->at(key);
 }
 
-void TensorMap::SetTensorAt(std::string key, torch::Tensor& value)
+void TensorMap::SetTensorAt(const std::string key, const torch::Tensor& value)
 {
     unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
-void TensorMap::SetMapAt(std::string key, TensorMap& value)
+void TensorMap::SetMapAt(const std::string key, const TensorMap& value)
 {
     unsafeGetInternalMap()->insert_or_assign(key, value);
 }
