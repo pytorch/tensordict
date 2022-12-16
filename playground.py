@@ -27,14 +27,14 @@ def main(argv):
     print('PathTensorRefCheck:', bc is c)
 
     y = torch.rand(3)
-    m.set(['x', 'y', 'z'], y)
+    m.set(('x', 'y', 'z'), y)
     xyz = m.get(('x', 'y', 'z'))
     print(xyz)
     print('SetGetPath RefCheck:', xyz is y)
 
     # Write over existing value test
     v2 = torch.rand(3)
-    m2.set(['c', 'd'], v2)
+    m2.set(('c', 'd'), v2)
     cd = m2.get(('c', 'd'))
     bcd = m.get(('b', 'c', 'd'))
     print('WriteOverTest RefCheck1:', cd is v2)
