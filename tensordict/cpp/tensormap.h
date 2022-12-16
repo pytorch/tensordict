@@ -17,7 +17,7 @@ class TensorMap {
             return internalMap.get();
         }
 
-        // std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& GetRecursive(std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& map, std::vector<std::string>& indices, int index);
+        map* GetRecursive(map* currentMap, const std::vector<std::string>& indices, const int index, const bool forcePath);
         // TODO something about batch size
 
     public:
@@ -53,7 +53,7 @@ class TensorMap {
         void SetTensorAt(const std::string key, const torch::Tensor& value);
         void SetMapAt(const std::string key, const TensorMap& value);
         // Index Path
-        node GetAtPath(const std::vector<std::string>& key) const;
+        node GetAtPath(const std::vector<std::string>& key);
         void SetTensorAtPath(const std::vector<std::string>& key, const torch::Tensor& value);
         // void SetMapAtPath(std::vector<std::string>& key, TensorMap& value);
         // TODO add keys - check iterator
