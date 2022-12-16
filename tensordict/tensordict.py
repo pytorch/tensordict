@@ -550,6 +550,24 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
+    def pop(
+        self, key: NESTED_KEY, default: Union[str, COMPATIBLE_TYPES] = "_no_default_"
+    ) -> COMPATIBLE_TYPES:
+        _nested_key_type_check(key)
+        try:
+            # using try/except for get/del is suboptimal, but
+            # this is faster that checkink if key in self keys
+            out = self.get(key, default)
+            self.del_(key)
+        except KeyError:
+            # if default provided, 'out' value will return, else raise error
+            if default == "_no_default_":
+                raise KeyError(
+                    f"You are trying to pop key `{key}` which is not in dict"
+                    f"without providing default value."
+                )
+        return out
+
     def _get_meta(self, key: NESTED_KEY) -> MetaTensor:
         _nested_key_type_check(key)
         try:
@@ -2941,7 +2959,7 @@ def _get_leaf_tensordict(tensordict: TensorDictBase, key: NESTED_KEY, hook=None)
 
 
 def implements_for_td(torch_function: Callable) -> Callable:
-    """Register a torch function override for ScalarTensor."""
+    """Register a torch function override for TensorDict."""
 
     @functools.wraps(torch_function)
     def decorator(func):
@@ -5589,6 +5607,7 @@ def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_devi
 
 
 def make_tensordict(
+    input_dict: Optional[dict] = None,
     batch_size: Optional[Union[Sequence[int], torch.Size, int]] = None,
     device: Optional[DEVICE_TYPING] = None,
     **kwargs,  # source
@@ -5598,11 +5617,16 @@ def make_tensordict(
     If batch_size is not specified, returns the maximum batch size possible
 
     Args:
-        **kwargs (TensorDict or torch.Tensor): keyword arguments as data source.
+        input_dict (dictionary, optional): a dictionary to use as a data source
+            (nested keys compatible).
+        **kwargs (TensorDict or torch.Tensor): keyword arguments as data source
+            (incompatible with nested keys).
         batch_size (iterable of int, optional): a batch size for the tensordict.
         device (torch.device or compatible type, optional): a device for the TensorDict.
 
     """
+    if input_dict:
+        kwargs.update(input_dict)
     if batch_size is None:
         batch_size = _find_max_batch_size(kwargs)
     # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict

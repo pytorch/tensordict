@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import functools
+import inspect
 
 import warnings
 from textwrap import indent
@@ -58,14 +59,84 @@ def _check_all_nested(list_of_keys):
 
 
 def dispatch_kwargs(func):
+    """Allows for a function expecting a TensorDict to be called using kwargs.
+
+    This method must be used within modules that have an :obj:`in_keys` and
+    :obj:`out_keys` attributes indicating what keys to be read and written
+    from the tensordict. The wrapped function should also have a :obj:`tensordict`
+    leading argument.
+
+    The resulting function will return a single tensor (if there is a single
+    element in out_keys), otherwise it will return a tuple sorted as the :obj:`out_keys`
+    of the module.
+
+    Examples:
+        >>> class MyModule(nn.Module):
+        ...     in_keys = ["a"]
+        ...     out_keys = ["b"]
+        ...
+        ...     @dispatch_kwargs
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModule()
+        >>> b = module(a=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+
+    For nested keys, it is assumed that an underscore (`_`) is used to join the
+    sub-keys.
+
+    Examples:
+        >>> class MyModuleNest(nn.Module):
+        ...     in_keys = [("a", "c")]
+        ...     out_keys = ["b"]
+        ...
+        ...     @dispatch_kwargs
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a', 'c'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModuleNest()
+        >>> b, = module(a_c=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+
+
+    """
+
+    # sanity check
+    for i, key in enumerate(inspect.signature(func).parameters):
+        if i == 0:
+            # skip self
+            continue
+        if key != "tensordict":
+            raise RuntimeError(
+                "the first argument of the wrapped function must be "
+                "named 'tensordict'."
+            )
+        break
+
     @functools.wraps(func)
     def wrapper(self, tensordict=None, *args, **kwargs):
         if tensordict is None:
             tensordict_values = {}
             for key in self.in_keys:
-                if key in kwargs:
-                    tensordict_values[key] = kwargs.pop(key)
-            tensordict = make_tensordict(**tensordict_values)
+                if isinstance(key, tuple):
+                    expected_key = "_".join(key)
+                else:
+                    expected_key = key
+                if expected_key in kwargs:
+                    try:
+                        tensordict_values[key] = kwargs.pop(expected_key)
+                    except KeyError:
+                        raise KeyError(
+                            f"The key {expected_key} wasn't found in the keyword arguments "
+                            f"but is expected to execute that function."
+                        )
+            tensordict = make_tensordict(tensordict_values)
+            out = func(self, tensordict, *args, **kwargs)
+            out = tuple(out[key] for key in self.out_keys)
+            return out[0] if len(out) == 1 else out
         return func(self, tensordict, *args, **kwargs)
 
     return wrapper

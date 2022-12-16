@@ -422,8 +422,26 @@ class TestTDModule:
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
         tdm(td)
-        td2 = tdm(a=torch.zeros(1, 1))
-        assert (td2 == td).all()
+        out = tdm(a=torch.zeros(1, 1))
+        assert (out == td["b"]).all()
+
+    def test_dispatch_kwargs_nested(self):
+        tdm = TensorDictModule(nn.Linear(1, 1), [("a", "c")], [("b", "d")])
+        td = TensorDict({("a", "c"): torch.zeros(1, 1)}, [1])
+        tdm(td)
+        out = tdm(a_c=torch.zeros(1, 1))
+        assert (out == td["b", "d"]).all()
+
+    def test_dispatch_kwargs_multi(self):
+        tdm = TensorDictSequential(
+            TensorDictModule(nn.Linear(1, 1), [("a", "c")], [("b", "d")]),
+            TensorDictModule(nn.Linear(1, 1), [("a", "c")], ["e"]),
+        )
+        td = TensorDict({("a", "c"): torch.zeros(1, 1)}, [1])
+        tdm(td)
+        out1, out2 = tdm(a_c=torch.zeros(1, 1))
+        assert (out1 == td["b", "d"]).all()
+        assert (out2 == td["e"]).all()
 
     def test_dispatch_kwargs_module_with_additional_parameters(self):
         class MyModule(nn.Identity):
