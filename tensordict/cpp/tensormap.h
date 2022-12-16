@@ -10,9 +10,10 @@
 
 class TensorMap {
     typedef std::variant<torch::Tensor, TensorMap> node;
+    typedef std::unordered_map<std::string, node> map;
     private:
-        std::shared_ptr<std::unordered_map<std::string, node> > internalMap;
-        std::unordered_map<std::string, node>* unsafeGetInternalMap() const {
+        std::shared_ptr<map> internalMap;
+        map* unsafeGetInternalMap() const {
             return internalMap.get();
         }
 
@@ -47,12 +48,14 @@ class TensorMap {
             return this->internalMap != other.internalMap;
         }
 
+        // Index Single Point
         node GetAt(const std::string key) const;
         void SetTensorAt(const std::string key, const torch::Tensor& value);
         void SetMapAt(const std::string key, const TensorMap& value);
-        // void SetTensorAtPath(std::vector<std::string>& key, torch::Tensor& value);
+        // Index Path
+        node GetAtPath(const std::vector<std::string>& key) const;
+        void SetTensorAtPath(const std::vector<std::string>& key, const torch::Tensor& value);
         // void SetMapAtPath(std::vector<std::string>& key, TensorMap& value);
-        // std::variant<torch::Tensor, TensorMap> GetAtPath(std::vector<std::string>& key);
         // TODO add keys - check iterator
 
 

@@ -6,16 +6,16 @@
 
 TensorMap::TensorMap()
 {
-    this->internalMap = std::make_shared<std::unordered_map<std::string, node> >();
+    this->internalMap = std::make_shared<map>();
 }
 
 TensorMap::node TensorMap::GetAt(const std::string key) const
 {
-    auto map = unsafeGetInternalMap();
-    if (map->count(key) == 0)
+    auto _map = unsafeGetInternalMap();
+    if (_map->count(key) == 0)
         throw std::invalid_argument("Invalid key: " + key);
 
-    return map->at(key);
+    return _map->at(key);
 }
 
 void TensorMap::SetTensorAt(const std::string key, const torch::Tensor& value)
