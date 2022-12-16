@@ -10,6 +10,8 @@
 #include <iostream>
 #include <vector>
 
+namespace py = pybind11;
+
 class TensorMap {
     typedef std::variant<torch::Tensor, TensorMap> node;
     typedef std::unordered_map<std::string, node> map;
@@ -19,7 +21,7 @@ class TensorMap {
             return internalMap.get();
         }
 
-        node GetRecursive(map* currentMap, const std::vector<std::string>& indices, const int index);
+        node GetRecursive(map* currentMap, const py::tuple indices, const int index);
         void SetRecursive(map* currentMap, const std::vector<std::string>& indices, const int index, node value);
         void GetKeysRecursive(std::set<std::vector<std::string> >& result, std::vector<std::string>& currentPath, const node& currentNode);
         // TODO something about batch size
@@ -57,7 +59,7 @@ class TensorMap {
         void SetTensorAt(const std::string key, const torch::Tensor& value);
         void SetMapAt(const std::string key, const TensorMap& value);
         // Index Path
-        node GetAtPath(const std::vector<std::string>& key);
+        node GetAtPath(const py::tuple key);
         void SetTensorAtPath(const std::vector<std::string>& key, const torch::Tensor& value);
         void SetMapAtPath(std::vector<std::string>& key, TensorMap& value);
         // TODO add keys - check iterator
