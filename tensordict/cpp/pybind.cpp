@@ -14,7 +14,7 @@
 namespace py = pybind11;
 
 PYBIND11_MODULE(tensor_map_cpp, m) {
-    py::class_<TensorMap>(m, "TensorMap")
+    py::class_<TensorMap, std::shared_ptr<TensorMap> >(m, "TensorMap")
         .def(py::init<>())
         .def("get", &TensorMap::GetAt, "Get value at index")
         .def("set", &TensorMap::SetTensorAt, "Set tensor as value at index")

@@ -18,7 +18,6 @@ class TensorMap {
 
         // std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& GetRecursive(std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& map, std::vector<std::string>& indices, int index);
         // TODO something about batch size
-        // helpers
 
     public:
         TensorMap();
