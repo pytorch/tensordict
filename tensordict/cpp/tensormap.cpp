@@ -34,7 +34,7 @@ void TensorMap::SetMapAt(const std::string key, const TensorMap& value)
 
 TensorMap::node TensorMap::GetAtPath(const py::tuple indices)
 {
-    if (indices.attr("__len__")().cast<int>() == 0)
+    if (py::len(indices) == 0)
         throw std::invalid_argument("indices must have at least one element");
 
     return GetRecursive(unsafeGetInternalMap(), indices, 0);
@@ -70,8 +70,8 @@ std::set<std::vector<std::string> > TensorMap::GetKeys() {
 
 TensorMap::node TensorMap::GetRecursive(TensorMap::map* currentMap, const py::tuple indices, const int index)
 {
-    auto key = indices.attr("__getitem__")(index).cast<std::string>();
-    if (index == indices.attr("__len__")().cast<int>() - 1) {
+    auto key = indices[index].cast<std::string>();
+    if (index == py::len(indices) - 1) {
         return currentMap->at(key);
     }
 
