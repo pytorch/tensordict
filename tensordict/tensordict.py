@@ -146,7 +146,17 @@ class _TensorDictKeysView:
         self.leaves_only = leaves_only
 
     def __iter__(self):
-        return self._iter_helper(self.tensordict)
+        if not self.include_nested:
+            if self.leaves_only:
+                for key in self._keys():
+                    meta_val = self.tensordict._get_meta(key)
+                    if meta_val.is_tensordict():
+                        continue
+                    yield key
+            else:
+                yield from self._keys()
+        else:
+            yield from self._iter_helper(self.tensordict)
 
     def _iter_helper(self, tensordict, prefix=None):
         items_iter = self._items(tensordict)
@@ -2826,17 +2836,10 @@ class TensorDict(TensorDictBase):
     def select(
         self, *keys: NESTED_KEY, inplace: bool = False, strict: bool = True
     ) -> TensorDictBase:
-        existing_keys = set(self.keys(include_nested=True))
+        # existing_keys = set(self.keys(include_nested=True))
         keys = {
             key[0] if isinstance(key, tuple) and len(key) == 1 else key for key in keys
         }
-        if strict:
-            if len(keys.difference(existing_keys)):
-                raise KeyError(
-                    f"Keys {keys.difference(existing_keys)} were not found among keys {existing_keys}."
-                )
-        else:
-            keys = keys.intersection(existing_keys)
 
         nested_keys = defaultdict(list)
         for key in keys:
@@ -2853,14 +2856,22 @@ class TensorDict(TensorDictBase):
         d_meta = {}
 
         for key, subkeys in nested_keys.items():
-            value = self.get(key)
-            if len(subkeys) > 0 and isinstance(value, TensorDictBase):
-                value = value.select(*subkeys, inplace=inplace)
-                d_meta[key] = MetaTensor(value)
-            elif key in self._dict_meta:
-                d_meta[key] = self._dict_meta[key]
+            try:
+                value = self.get(key)
+                if len(subkeys) > 0 and isinstance(value, TensorDictBase):
+                    value = value.select(*subkeys, inplace=inplace)
+                    d_meta[key] = MetaTensor(value)
+                elif key in self._dict_meta:
+                    d_meta[key] = self._dict_meta[key]
 
-            d[key] = value
+                d[key] = value
+            except KeyError:
+                if strict:
+                    raise KeyError(
+                        f"Key '{key}' was not found among keys {set(self.keys(True))}."
+                    )
+                else:
+                    continue
 
         if inplace:
             self._tensordict = d
