@@ -17,7 +17,8 @@ class TensorMap {
             return internalMap.get();
         }
 
-        map* GetRecursive(map* currentMap, const std::vector<std::string>& indices, const int index, const bool forcePath);
+        node GetRecursive(map* currentMap, const std::vector<std::string>& indices, const int index);
+        void SetRecursive(map* currentMap, const std::vector<std::string>& indices, const int index, node value);
         // TODO something about batch size
 
     public:
