@@ -1,18 +1,34 @@
 #include "tensormap.h"
 #include <exception>
+#include <memory>
 #include <string>
+#include <unordered_map>
 
-void TensorMap::SetTensorAt(std::string key, torch::Tensor& value)
+TensorMap::TensorMap()
 {
-    // we want to pass objects as arguments but store the reference
-    this->map[key] = &value;
+    this->internalMap = std::make_shared<std::unordered_map<std::string, node> >();
 }
 
-void TensorMap::SetMapAt(std::string key, TensorMap& value)
+TensorMap::node TensorMap::GetAt(const std::string key) const
 {
-    this->map[key] = &value;
+    auto map = unsafeGetInternalMap();
+    if (map->count(key) == 0)
+        throw std::invalid_argument("Invalid key: " + key);
+
+    return map->at(key);
 }
 
+void TensorMap::SetTensorAt(const std::string key, const torch::Tensor& value)
+{
+    unsafeGetInternalMap()->insert_or_assign(key, value);
+}
+
+void TensorMap::SetMapAt(const std::string key, const TensorMap& value)
+{
+    unsafeGetInternalMap()->insert_or_assign(key, value);
+}
+
+/*
 void TensorMap::SetTensorAtPath(std::vector<std::string>& indices, torch::Tensor& value)
 {
     if (indices.size() == 0)
@@ -34,15 +50,6 @@ void TensorMap::SetMapAtPath(std::vector<std::string>& indices, TensorMap& value
 
     lastMap[key] = &value;
 }
-
-std::variant<torch::Tensor, TensorMap> TensorMap::GetAt(std::string key)
-{
-    if (this->map.count(key) == 0)
-        throw std::invalid_argument("Invalid key: " + key);
-
-    return UnboxVariant(this->map[key]);
-}
-
 std::variant<torch::Tensor, TensorMap> TensorMap::GetAtPath(std::vector<std::string>& indices)
 {
     if (indices.size() == 0)
@@ -79,14 +86,4 @@ std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& TensorMap::GetR
         throw std::invalid_argument("Expected to have a Map at index " + std::to_string(index) + " but found tensor");
 }
 
-std::variant<torch::Tensor, TensorMap> TensorMap::UnboxVariant(std::variant<torch::Tensor*, TensorMap*> pointer)
-{
-    if (std::holds_alternative<TensorMap*>(pointer))
-    {
-        TensorMap* value = std::get<TensorMap*>(pointer);
-        return std::variant<torch::Tensor, TensorMap>(*value);
-    }
-
-    torch::Tensor* value = std::get<torch::Tensor*>(pointer);
-    return std::variant<torch::Tensor, TensorMap>(*value);
-}
+*/
