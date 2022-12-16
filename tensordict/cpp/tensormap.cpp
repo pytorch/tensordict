@@ -1,21 +1,23 @@
 #include "tensormap.h"
 #include <exception>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 TensorMap::TensorMap()
 {
-    this->internalMap = std::make_shared<std::unordered_map<std::string, node> >();
+    this->internalMap = std::make_shared<TensorMap::map>();
 }
 
 TensorMap::node TensorMap::GetAt(const std::string key) const
 {
-    auto map = unsafeGetInternalMap();
-    if (map->count(key) == 0)
+    auto _map = unsafeGetInternalMap();
+    if (_map->count(key) == 0)
         throw std::invalid_argument("Invalid key: " + key);
 
-    return map->at(key);
+    return _map->at(key);
 }
 
 void TensorMap::SetTensorAt(const std::string key, const torch::Tensor& value)
@@ -28,16 +30,22 @@ void TensorMap::SetMapAt(const std::string key, const TensorMap& value)
     unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
-/*
-void TensorMap::SetTensorAtPath(std::vector<std::string>& indices, torch::Tensor& value)
+// Path
+
+TensorMap::node TensorMap::GetAtPath(const py::tuple indices)
+{
+    if (indices.attr("__len__")().cast<int>() == 0)
+        throw std::invalid_argument("indices must have at least one element");
+
+    return GetRecursive(unsafeGetInternalMap(), indices, 0);
+}
+
+void TensorMap::SetTensorAtPath(const std::vector<std::string>& indices, const torch::Tensor& value)
 {
     if (indices.size() == 0)
         throw std::invalid_argument("indices must have at least one element");
 
-    auto lastMap = GetRecursive(this->map, indices, 0);
-    auto key = indices[indices.size() - 1];
-
-    lastMap[key] = &value;
+    SetRecursive(unsafeGetInternalMap(), indices, 0, value);
 }
 
 void TensorMap::SetMapAtPath(std::vector<std::string>& indices, TensorMap& value)
@@ -45,45 +53,72 @@ void TensorMap::SetMapAtPath(std::vector<std::string>& indices, TensorMap& value
     if (indices.size() == 0)
         throw std::invalid_argument("indices must have at least one element");
 
-    auto lastMap = GetRecursive(this->map, indices, 0);
-    auto key = indices[indices.size() - 1];
-
-    lastMap[key] = &value;
+    SetRecursive(unsafeGetInternalMap(), indices, 0, value);
 }
-std::variant<torch::Tensor, TensorMap> TensorMap::GetAtPath(std::vector<std::string>& indices)
-{
-    if (indices.size() == 0)
-        throw std::invalid_argument("indices must have at least one element");
 
-    auto lastMap = GetRecursive(this->map, indices, 0);
-    auto key = indices[indices.size() - 1];
+// TODO: Should I return by ref and have python handle the ref count?
+std::set<std::vector<std::string> > TensorMap::GetKeys() {
+    std::set<std::vector<std::string> > result;
+    std::vector<std::string> currentPath;
 
-    return UnboxVariant(lastMap[key]);
+    GetKeysRecursive(result, currentPath, *this);
+    return result;
 }
+
 
 // Helper methods
 
-std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& TensorMap::GetRecursive(
-    std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& map,
-    std::vector<std::string>& indices,
-    int index)
+TensorMap::node TensorMap::GetRecursive(TensorMap::map* currentMap, const py::tuple indices, const int index)
 {
-    auto key = indices[index];
-    if (map.count(key) == 0)
+    auto key = indices.attr("__getitem__")(index).cast<std::string>();
+    if (index == indices.attr("__len__")().cast<int>() - 1) {
+        return currentMap->at(key);
+    }
+
+    if (currentMap->count(key) == 0) {
         throw std::invalid_argument("Invalid key " + key + " at index: " + std::to_string(index));
-
-    if (index == indices.size() - 1)
-    {
-        return map;
     }
 
-    if (std::holds_alternative<TensorMap*>(map[key]))
-    {
-        auto currentMap = std::get<TensorMap*>(map[key]);
-        return GetRecursive(currentMap->map, indices, index + 1);
+    auto currentNode = currentMap->at(key);
+    if (std::holds_alternative<TensorMap>(currentNode)) {
+        auto nextMap = std::get<TensorMap>(currentNode);
+        return GetRecursive(nextMap.unsafeGetInternalMap(), indices, index + 1);
     }
-    else
+    else {
         throw std::invalid_argument("Expected to have a Map at index " + std::to_string(index) + " but found tensor");
+    }
 }
 
-*/
+void TensorMap::SetRecursive(TensorMap::map* currentMap, const std::vector<std::string>& indices, const int index, TensorMap::node value)
+{
+    auto key = indices[index];
+    if (index == indices.size() - 1) {
+        currentMap->insert_or_assign(key, value);
+        return;
+    }
+
+    if (currentMap->count(key) == 0 || !std::holds_alternative<TensorMap>(currentMap->at(key))) {
+        currentMap->insert_or_assign(key, TensorMap()); // For now we insert maps by value
+    }
+
+    auto nextMap = std::get<TensorMap>(currentMap->at(key));
+    SetRecursive(nextMap.unsafeGetInternalMap(), indices, index + 1, value);
+}
+
+void TensorMap::GetKeysRecursive(std::set<std::vector<std::string> >& result, std::vector<std::string>& currentPath, const node& currentNode) {
+    if (!std::holds_alternative<TensorMap>(currentNode))
+    {
+        std::vector<std::string> copy(currentPath);
+        result.insert(copy);
+        return;
+    }
+
+    auto currentTensorMap = std::get<TensorMap>(currentNode);
+    auto currentMap = currentTensorMap.unsafeGetInternalMap();
+    for (auto i : *currentMap)
+    {
+        currentPath.push_back(i.first);
+        TensorMap::GetKeysRecursive(result, currentPath, i.second);
+        currentPath.pop_back();
+    }
+}

@@ -4,19 +4,26 @@
 #include <memory>
 #include <torch/extension.h>
 #include <unordered_map>
+#include <set>
 #include <variant>
 #include <string>
 #include <iostream>
+#include <vector>
+
+namespace py = pybind11;
 
 class TensorMap {
     typedef std::variant<torch::Tensor, TensorMap> node;
+    typedef std::unordered_map<std::string, node> map;
     private:
-        std::shared_ptr<std::unordered_map<std::string, node> > internalMap;
-        std::unordered_map<std::string, node>* unsafeGetInternalMap() const {
+        std::shared_ptr<map> internalMap;
+        map* unsafeGetInternalMap() const {
             return internalMap.get();
         }
 
-        // std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& GetRecursive(std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& map, std::vector<std::string>& indices, int index);
+        node GetRecursive(map* currentMap, const py::tuple indices, const int index);
+        void SetRecursive(map* currentMap, const std::vector<std::string>& indices, const int index, node value);
+        void GetKeysRecursive(std::set<std::vector<std::string> >& result, std::vector<std::string>& currentPath, const node& currentNode);
         // TODO something about batch size
 
     public:
@@ -47,15 +54,16 @@ class TensorMap {
             return this->internalMap != other.internalMap;
         }
 
+        // Index Single Point
         node GetAt(const std::string key) const;
         void SetTensorAt(const std::string key, const torch::Tensor& value);
         void SetMapAt(const std::string key, const TensorMap& value);
-        // void SetTensorAtPath(std::vector<std::string>& key, torch::Tensor& value);
-        // void SetMapAtPath(std::vector<std::string>& key, TensorMap& value);
-        // std::variant<torch::Tensor, TensorMap> GetAtPath(std::vector<std::string>& key);
+        // Index Path
+        node GetAtPath(const py::tuple key);
+        void SetTensorAtPath(const std::vector<std::string>& key, const torch::Tensor& value);
+        void SetMapAtPath(std::vector<std::string>& key, TensorMap& value);
         // TODO add keys - check iterator
-
-
+        std::set<std::vector<std::string> > GetKeys();
 };
 
 #endif

@@ -18,9 +18,11 @@ PYBIND11_MODULE(tensor_map_cpp, m) {
         .def(py::init<>())
         .def("get", &TensorMap::GetAt, "Get value at index")
         .def("set", &TensorMap::SetTensorAt, "Set tensor as value at index")
-        .def("set", &TensorMap::SetMapAt, "Set map as value at index");
+        .def("set", &TensorMap::SetMapAt, "Set map as value at index")
         // path
-//        .def("set", &TensorMap::SetTensorAtPath, "Set tensor as value at path")
-//        .def("get", &TensorMap::GetAtPath, "Get value at path")
-//        .def("set", &TensorMap::SetMapAtPath, "Set map as value at path");
+        .def("get", &TensorMap::GetAtPath, "Get value at path")
+        .def("set", &TensorMap::SetTensorAtPath, "Set tensor as value at path")
+        .def("set", &TensorMap::SetMapAtPath, "Set map as value at path")
+        // keys
+        .def("keys", &TensorMap::GetKeys, "Get Keys");
 }
