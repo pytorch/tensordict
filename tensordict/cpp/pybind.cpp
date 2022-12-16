@@ -21,6 +21,6 @@ PYBIND11_MODULE(tensor_map_cpp, m) {
         .def("set", &TensorMap::SetMapAt, "Set map as value at index")
         // path
         .def("get", &TensorMap::GetAtPath, "Get value at path")
-        .def("set", &TensorMap::SetTensorAtPath, "Set tensor as value at path");
-//        .def("set", &TensorMap::SetMapAtPath, "Set map as value at path");
+        .def("set", &TensorMap::SetTensorAtPath, "Set tensor as value at path")
+        .def("set", &TensorMap::SetMapAtPath, "Set map as value at path");
 }

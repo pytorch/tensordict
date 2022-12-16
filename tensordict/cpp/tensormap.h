@@ -55,7 +55,7 @@ class TensorMap {
         // Index Path
         node GetAtPath(const std::vector<std::string>& key);
         void SetTensorAtPath(const std::vector<std::string>& key, const torch::Tensor& value);
-        // void SetMapAtPath(std::vector<std::string>& key, TensorMap& value);
+        void SetMapAtPath(std::vector<std::string>& key, TensorMap& value);
         // TODO add keys - check iterator
 
 

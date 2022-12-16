@@ -52,18 +52,16 @@ void TensorMap::SetTensorAtPath(const std::vector<std::string>& indices, const t
     lastMap->insert_or_assign(key, value);
 }
 
-/*
 void TensorMap::SetMapAtPath(std::vector<std::string>& indices, TensorMap& value)
 {
     if (indices.size() == 0)
         throw std::invalid_argument("indices must have at least one element");
 
-    auto lastMap = GetRecursive(this->map, indices, 0);
+    auto lastMap = GetRecursive(unsafeGetInternalMap(), indices, 0, true);
     auto key = indices[indices.size() - 1];
 
-    lastMap[key] = &value;
+    lastMap->insert_or_assign(key, value);
 }
-*/
 
 
 // Helper methods
