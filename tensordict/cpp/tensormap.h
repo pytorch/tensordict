@@ -4,9 +4,11 @@
 #include <memory>
 #include <torch/extension.h>
 #include <unordered_map>
+#include <set>
 #include <variant>
 #include <string>
 #include <iostream>
+#include <vector>
 
 class TensorMap {
     typedef std::variant<torch::Tensor, TensorMap> node;
@@ -19,6 +21,7 @@ class TensorMap {
 
         node GetRecursive(map* currentMap, const std::vector<std::string>& indices, const int index);
         void SetRecursive(map* currentMap, const std::vector<std::string>& indices, const int index, node value);
+        void GetKeysRecursive(std::set<std::vector<std::string> >& result, std::vector<std::string>& currentPath, const node& currentNode);
         // TODO something about batch size
 
     public:
@@ -58,8 +61,7 @@ class TensorMap {
         void SetTensorAtPath(const std::vector<std::string>& key, const torch::Tensor& value);
         void SetMapAtPath(std::vector<std::string>& key, TensorMap& value);
         // TODO add keys - check iterator
-
-
+        std::set<std::vector<std::string> > GetKeys();
 };
 
 #endif

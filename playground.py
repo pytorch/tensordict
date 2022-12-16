@@ -40,6 +40,9 @@ def main(argv):
     print('WriteOverTest RefCheck1:', cd is v2)
     print('WriteOverTest RefCheck2:', bcd is v2)
 
+    keys = m.keys()
+    print(keys)
+
 
 
 if __name__ == "__main__":

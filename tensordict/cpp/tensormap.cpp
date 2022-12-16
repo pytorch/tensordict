@@ -1,8 +1,10 @@
 #include "tensormap.h"
 #include <exception>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 TensorMap::TensorMap()
 {
@@ -54,6 +56,15 @@ void TensorMap::SetMapAtPath(std::vector<std::string>& indices, TensorMap& value
     SetRecursive(unsafeGetInternalMap(), indices, 0, value);
 }
 
+// TODO: Should I return by ref and have python handle the ref count?
+std::set<std::vector<std::string> > TensorMap::GetKeys() {
+    std::set<std::vector<std::string> > result;
+    std::vector<std::string> currentPath;
+
+    GetKeysRecursive(result, currentPath, *this);
+    return result;
+}
+
 
 // Helper methods
 
@@ -92,4 +103,22 @@ void TensorMap::SetRecursive(TensorMap::map* currentMap, const std::vector<std::
 
     auto nextMap = std::get<TensorMap>(currentMap->at(key));
     SetRecursive(nextMap.unsafeGetInternalMap(), indices, index + 1, value);
+}
+
+void TensorMap::GetKeysRecursive(std::set<std::vector<std::string> >& result, std::vector<std::string>& currentPath, const node& currentNode) {
+    if (!std::holds_alternative<TensorMap>(currentNode))
+    {
+        std::vector<std::string> copy(currentPath);
+        result.insert(copy);
+        return;
+    }
+
+    auto currentTensorMap = std::get<TensorMap>(currentNode);
+    auto currentMap = currentTensorMap.unsafeGetInternalMap();
+    for (auto i : *currentMap)
+    {
+        currentPath.push_back(i.first);
+        TensorMap::GetKeysRecursive(result, currentPath, i.second);
+        currentPath.pop_back();
+    }
 }
