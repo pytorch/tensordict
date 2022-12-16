@@ -262,6 +262,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def __init__(self):
         self._dict_meta = KeyDependentDefaultDict(self._make_meta)
+        self._being_called = False
 
     @abc.abstractmethod
     def _make_meta(self, key: str) -> MetaTensor:
@@ -301,7 +302,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     @property
     def requires_grad(self):
-        return any(v.requires_grad for v in self.values_meta())
+        return any(v.requires_grad for v in self.values_meta() if v is not None)
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
@@ -1703,8 +1704,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         )
 
     def __repr__(self) -> str:
-        fields = _td_fields(self)
-        field_str = indent(f"fields={{{fields}}}", 4 * " ")
+        field_str = indent("Auto-nested", 4 * " ")
+        if not self._being_called:
+            self._being_called = True
+            fields = _td_fields(self)
+            self._being_called = False
+            field_str = indent(f"fields={{{fields}}}", 4 * " ")
         batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
         device_str = indent(f"device={self.device}", 4 * " ")
         is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")

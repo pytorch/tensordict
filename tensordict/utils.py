@@ -264,6 +264,7 @@ class KeyDependentDefaultDict(collections.defaultdict):
         super().__init__()
 
     def __missing__(self, key):
+        self[key] = None
         value = self.fun(key)
         self[key] = value
         return value
