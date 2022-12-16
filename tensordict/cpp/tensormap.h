@@ -1,6 +1,7 @@
 #ifndef TensorMap_h
 #define TensorMap_h
 
+#include <memory>
 #include <torch/extension.h>
 #include <unordered_map>
 #include <variant>
@@ -8,12 +9,16 @@
 class TensorMap {
     typedef std::variant<torch::Tensor, TensorMap> node;
     private:
-        std::unordered_map<std::string, node>* internalMap;
+        std::shared_ptr<std::unordered_map<std::string, node> > internalMap;
+        std::unordered_map<std::string, node>* unsafeGetInternalMap() const {
+            return internalMap.get();
+        }
+
         // std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& GetRecursive(std::map<std::string, std::variant<torch::Tensor*, TensorMap*>>& map, std::vector<std::string>& indices, int index);
         // TODO something about batch size
     public:
         TensorMap();
-        ~TensorMap();
+        ~TensorMap() = default;
 
         // TODO Add const to all input args
         node GetAt(std::string key);

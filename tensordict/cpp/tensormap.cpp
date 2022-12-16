@@ -1,36 +1,31 @@
 #include "tensormap.h"
 #include <exception>
+#include <memory>
 #include <string>
 #include <unordered_map>
 
 TensorMap::TensorMap()
 {
-    this->internalMap = new std::unordered_map<std::string, TensorMap::node>();
-}
-
-TensorMap::~TensorMap()
-{
-    // TODO handle delete
-    // Python deletes sub elements first, we try to delete the map twice and this result in seg fault
-    // delete this->internalMap;
+    this->internalMap = std::make_shared<std::unordered_map<std::string, node> >();
 }
 
 TensorMap::node TensorMap::GetAt(std::string key)
 {
-    if (this->internalMap->count(key) == 0)
+    auto map = unsafeGetInternalMap();
+    if (map->count(key) == 0)
         throw std::invalid_argument("Invalid key: " + key);
 
-    return this->internalMap->at(key);
+    return map->at(key);
 }
 
 void TensorMap::SetTensorAt(std::string key, torch::Tensor& value)
 {
-    this->internalMap->insert_or_assign(key, value);
+    unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
 void TensorMap::SetMapAt(std::string key, TensorMap& value)
 {
-    this->internalMap->insert_or_assign(key, value);
+    unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
 /*
