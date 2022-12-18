@@ -1507,13 +1507,11 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_set_requires_grad(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert not td.get("a").requires_grad
-        assert not td._get_meta("a").requires_grad
         if td_name in ("sub_td", "sub_td2"):
             td.set_("a", torch.randn_like(td.get("a")).requires_grad_())
         else:
             td.set("a", torch.randn_like(td.get("a")).requires_grad_())
         assert td.get("a").requires_grad
-        assert td._get_meta("a").requires_grad
 
     def test_nested_td_emptyshape(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -2141,39 +2139,35 @@ class TestTensorDictsRequiresGrad:
         td.batch_size = torch.Size([3, 1])
         return td
 
-    def test_init_requires_grad(self, td_name, device):
-        td = getattr(self, td_name)(device)
-        assert td._get_meta("b").requires_grad
-
     def test_view(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         td_view = td.view(-1)
-        assert td_view._get_meta("b").requires_grad
+        assert td_view.get("b").requires_grad
 
     def test_expand(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         batch_size = td.batch_size
         new_td = td.expand(3, *batch_size)
-        assert new_td._get_meta("b").requires_grad
+        assert new_td.get("b").requires_grad
         assert new_td.batch_size == torch.Size([3, *batch_size])
 
     def test_cast(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         td_td = td.to(TensorDict)
-        assert td_td._get_meta("b").requires_grad
+        assert td_td.get("b").requires_grad
 
     def test_clone_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        assert torch.clone(td)._get_meta("b").requires_grad
+        assert torch.clone(td).get("b").requires_grad
 
     def test_squeeze(self, td_name, device, squeeze_dim=-1):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        assert torch.squeeze(td, dim=-1)._get_meta("b").requires_grad
+        assert torch.squeeze(td, dim=-1).get("b").requires_grad
 
 
 def test_batchsize_reset():
@@ -2659,7 +2653,7 @@ def test_requires_grad(device):
     ]
     stacked_td = LazyStackedTensorDict(*tensordicts, stack_dim=0)
     # First stacked tensor has requires_grad == True
-    assert list(stacked_td.values_meta())[0].requires_grad is True
+    assert list(stacked_td.values())[0].requires_grad is True
     SavedTensorDict(tensordicts[0])
     with pytest.raises(
         Exception,
