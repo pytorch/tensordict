@@ -1,6 +1,6 @@
 import os, sys
 import torch
-from tensor_map_cpp import TensorMap
+from tensordict._tensormap import TensorMap
 
 
 def main(argv):
