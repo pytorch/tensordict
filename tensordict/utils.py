@@ -585,12 +585,12 @@ def _ndimension(tensor: torch.Tensor):
 
 
 def _shape(tensor: torch.Tensor):
-    if isinstance(tensor, torch.Tensor):
+    try:
         return tensor.shape
-    elif isinstance(tensor, KeyedJaggedTensor):
-        return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
-    else:
-        return tensor.shape
+    except AttributeError as err:
+        if type(tensor) is KeyedJaggedTensor:
+            return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
+        raise err
 
 
 def _is_shared(tensor: torch.Tensor):

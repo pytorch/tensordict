@@ -393,8 +393,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         MemmapTensors.
 
         """
-        if self.device and self.device.type == "cuda" and not self._is_memmap:
-            return True
+        if self.device and not self._is_memmap:
+            return self.device.type == "cuda" or self._is_shared
         return self._is_shared
 
     def state_dict(self) -> OrderedDict:
