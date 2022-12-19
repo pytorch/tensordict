@@ -2247,7 +2247,7 @@ def test_batchsize_reset():
         RuntimeError,
         match=re.escape(
             "modifying the batch size of a lazy repesentation "
-            "of a tensordict is not permitted. Consider instantiating the tensordict fist by calling `td = td.to_tensordict()` before resetting the batch size."
+            "of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
         ),
     ):
         td_stack.batch_size = [2]
@@ -2258,7 +2258,7 @@ def test_batchsize_reset():
     with pytest.raises(
         RuntimeError,
         match=re.escape(
-            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict fist by calling `td = td.to_tensordict()` before resetting the batch size."
+            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
         ),
     ):
         subtd.batch_size = [3, 2]
@@ -2269,7 +2269,7 @@ def test_batchsize_reset():
     with pytest.raises(
         RuntimeError,
         match=re.escape(
-            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict fist by calling `td = td.to_tensordict()` before resetting the batch size."
+            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
         ),
     ):
         td_u.batch_size = [1]
