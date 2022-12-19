@@ -64,3 +64,26 @@ def test_tensormap_nested_overrite(device):
     m2 = TensorMap()
     m2['x'] = m1['a', 'b']
     assert m2['x', 'c'] is m1['a', 'b', 'c']
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_get_keys(device):
+    m = TensorMap()
+    m['a'] = torch.ones(3)
+    m['b'] = torch.zeros(3)
+
+    expected_keys = {('a',), ('b',)}
+    assert len(expected_keys.difference(m.keys())) == 0
+
+    m['c', 'd'] = torch.ones(3)
+    m['a', 'x', 'y'] = torch.zeros(3)
+    expected_keys = {('a', 'x', 'y'), ('b',), ('c', 'd')}
+    assert len(expected_keys.difference(m.keys())) == 0
+
+    m['a', 'z'] = torch.rand(3)
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), ('b',), ('c', 'd')}
+    assert len(expected_keys.difference(m.keys())) == 0
+
+    m['c', 'd'] = m['a']
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), ('b',), ('c', 'd', 'z')}
+    assert len(expected_keys.difference(m.keys())) == 0
