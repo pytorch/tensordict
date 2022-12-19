@@ -304,7 +304,6 @@ def _cat(list_of_tdc, dim):
     return out
 
 
-
 def tensorclass(cls: T) -> T:
     """A decorator to create :obj:`tensorclass` classes.
 
@@ -372,8 +371,6 @@ def tensorclass(cls: T) -> T:
 
     CLASSES_DICT[name] = TensorClass
     return TensorClass
-
-
 
 
 def _get_typed_value(value):
