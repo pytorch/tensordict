@@ -17,21 +17,24 @@ class TensorMap {
     typedef std::unordered_map<std::string, node> map;
     private:
         std::shared_ptr<map> internalMap;
-        map* unsafeGetInternalMap() const {
-            return internalMap.get();
-        }
-
-        node GetRecursive(map* currentMap, const py::tuple indices, const int index);
-        void SetRecursive(map* currentMap, const py::tuple  indices, const int index, node value);
-        void GetKeysRecursive(std::set<py::tuple>& result, py::tuple currentPath, const node& currentNode);
-        // TODO something about batch size
+       // TODO something about batch size
 
     public:
         TensorMap();
         ~TensorMap() = default;
-
         TensorMap(const TensorMap&) = default;
         TensorMap(TensorMap&&) = default;
+
+        // Index Single Point
+        node GetAt(const std::string key) const;
+        void SetTensorAt(const std::string key, const torch::Tensor& value);
+        void SetMapAt(const std::string key, const TensorMap& value);
+        // Index Path
+        node GetAtPath(const py::tuple key);
+        void SetTensorAtPath(const py::tuple key, const torch::Tensor& value);
+        void SetMapAtPath(const py::tuple key, const TensorMap& value);
+        // TODO add keys - check iterator
+        std::set<py::tuple> GetKeys();
 
         TensorMap& operator=(const TensorMap& other) & {
            internalMap = other.internalMap;
@@ -54,16 +57,13 @@ class TensorMap {
             return this->internalMap != other.internalMap;
         }
 
-        // Index Single Point
-        node GetAt(const std::string key) const;
-        void SetTensorAt(const std::string key, const torch::Tensor& value);
-        void SetMapAt(const std::string key, const TensorMap& value);
-        // Index Path
-        node GetAtPath(const py::tuple key);
-        void SetTensorAtPath(const py::tuple key, const torch::Tensor& value);
-        void SetMapAtPath(const py::tuple key, const TensorMap& value);
-        // TODO add keys - check iterator
-        std::set<py::tuple> GetKeys();
+        // Helpers
+        private:
+            map* unsafeGetInternalMap() const;
+            node GetRecursive(map* currentMap, const py::tuple indices, const int index);
+            void SetRecursive(map* currentMap, const py::tuple  indices, const int index, node value);
+            void GetKeysRecursive(std::set<py::tuple>& result, py::tuple currentPath, const node& currentNode);
+
 };
 
 #endif

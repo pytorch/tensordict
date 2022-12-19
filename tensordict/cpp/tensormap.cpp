@@ -11,6 +11,8 @@ TensorMap::TensorMap()
     this->internalMap = std::make_shared<TensorMap::map>();
 }
 
+// Index Get - Set
+
 TensorMap::node TensorMap::GetAt(const std::string key) const
 {
     auto _map = unsafeGetInternalMap();
@@ -30,7 +32,7 @@ void TensorMap::SetMapAt(const std::string key, const TensorMap& value)
     unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
-// Path
+// Path Get - Set
 
 TensorMap::node TensorMap::GetAtPath(const py::tuple indices)
 {
@@ -119,4 +121,8 @@ void TensorMap::GetKeysRecursive(std::set<py::tuple>& result, py::tuple currentP
         auto nextStep =  py::make_tuple(i.first);
         TensorMap::GetKeysRecursive(result, currentPath + nextStep, i.second);
     }
+}
+
+TensorMap::map* TensorMap::unsafeGetInternalMap() const {
+    return internalMap.get();
 }
