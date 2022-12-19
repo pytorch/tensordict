@@ -26,6 +26,12 @@ class MyData:
         return self.X + self.y
 
 
+@tensorclass
+class MyData2:
+    X: torch.Tensor
+    y: torch.Tensor
+
+
 def test_dataclass():
     data = MyData(
         X=torch.ones(3, 4, 5),
@@ -216,26 +222,52 @@ def test_stack():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
+
     data1 = MyData(X=X, y=y, batch_size=batch_size)
     data2 = MyData(X=X, y=y, batch_size=batch_size)
+    data3 = MyData2(X=X, y=y, batch_size=batch_size)
+
     stacked_tc = torch.stack([data1, data2], 0)
     assert type(stacked_tc) is type(data1)
     assert stacked_tc.X.shape == torch.Size([2, 3, 4, 5])
     assert (stacked_tc.X == 1).all()
     assert isinstance(stacked_tc.tensordict, LazyStackedTensorDict)
 
+    with pytest.raises(
+        TypeError,
+        match=re.escape(
+            "no implementation found for 'torch.stack' on types that implement "
+            "__torch_function__: [<class 'test_tensorclass.MyData'>, "
+            "<class 'test_tensorclass.MyData2'>]"
+        ),
+    ):
+        torch.stack([data1, data3], dim=0)
+
 
 def test_cat():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
+
     data1 = MyData(X=X, y=y, batch_size=batch_size)
     data2 = MyData(X=X, y=y, batch_size=batch_size)
-    stacked_tc = torch.cat([data1, data2], 0)
-    assert type(stacked_tc) is type(data1)
-    assert stacked_tc.X.shape == torch.Size([6, 4, 5])
-    assert (stacked_tc.X == 1).all()
-    assert isinstance(stacked_tc.tensordict, TensorDict)
+    data3 = MyData2(X=X, y=y, batch_size=batch_size)
+
+    catted_tc = torch.cat([data1, data2], 0)
+    assert type(catted_tc) is type(data1)
+    assert catted_tc.X.shape == torch.Size([6, 4, 5])
+    assert (catted_tc.X == 1).all()
+    assert isinstance(catted_tc.tensordict, TensorDict)
+
+    with pytest.raises(
+        TypeError,
+        match=re.escape(
+            "no implementation found for 'torch.cat' on types that implement "
+            "__torch_function__: [<class 'test_tensorclass.MyData'>, "
+            "<class 'test_tensorclass.MyData2'>]"
+        ),
+    ):
+        torch.cat([data1, data3], dim=0)
 
 
 def test_unbind():
