@@ -24,5 +24,5 @@ PYBIND11_MODULE(_tensormap, m) {
         .def("__setitem__", &TensorMap::SetTensorAtPath, "Set tensor as value at path")
         .def("__setitem__", &TensorMap::SetMapAtPath, "Set map as value at path")
         // keys
-        .def("keys", &TensorMap::GetKeys, "Get Keys");
+        .def("keys", &TensorMap::GetKeys, py::arg("includeNested") = false, py::arg("includeNested") = false, "Get Keys");
 }
