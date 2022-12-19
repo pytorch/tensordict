@@ -93,7 +93,7 @@ class ProbabilisticTensorDictModule(nn.Module):
             (in which case the value is sampled randomly from the distribution). Default
             is 'mode'.
             Note: When a sample is drawn, the :obj:`ProbabilisticTDModule` instance will
-            fist look for the interaction mode dictated by the `interaction_mode()`
+            first look for the interaction mode dictated by the `interaction_mode()`
             global function. If this returns `None` (its default value), then the
             `default_interaction_mode` of the `ProbabilisticTDModule` instance will be
             used. Note that DataCollector instances will use `set_interaction_mode` to
