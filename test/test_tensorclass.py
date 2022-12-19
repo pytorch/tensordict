@@ -55,6 +55,11 @@ def test_device(device):
     assert data.X.device == device
     assert data.y.device == device
 
+    with pytest.raises(
+        RuntimeError, match="device cannot be set using tensorclass.device = device"
+    ):
+        data.device = torch.device("cpu")
+
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_device(device):
@@ -153,6 +158,18 @@ def test_disallowed_attributes():
             x: torch.Tensor
             y: torch.Tensor
             reshape: torch.Tensor
+
+
+def test_batch_size():
+    myc = MyData(X=torch.rand(2, 3, 4), y=torch.rand(2, 3, 4, 5), batch_size=[2, 3])
+
+    assert myc.batch_size == torch.Size([2, 3])
+    assert myc.X.shape == torch.Size([2, 3, 4])
+
+    myc.batch_size = torch.Size([2])
+
+    assert myc.batch_size == torch.Size([2])
+    assert myc.X.shape == torch.Size([2, 3, 4])
 
 
 def test_indexing():
