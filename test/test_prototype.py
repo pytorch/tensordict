@@ -25,4 +25,25 @@ def test_tensormap_simple_set_map(device):
     m2 = TensorMap()
 
     m1['a'] = m2
-    assert m1['a'] is m2
+    assert m1['a'] is m2  # Failing - Need to fix!
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_nested_set(device):
+    m1 = TensorMap()
+    m2 = TensorMap()
+    x = torch.rand(3)
+    y = torch.rand(3)
+
+    m1['a'] = torch.ones(3)
+    m1['b'] = m2
+    m2['c'] = x
+
+    assert x is m1['b']['c']
+    assert m1['b']['c'] is m1['b', 'c']
+    assert m1['b', 'c'] is m2['c']
+
+    m1['b', 'c'] = y
+    assert m1['b']['c'] is y
+    assert m1['b', 'c'] is y
+    assert m2['c'] is y
