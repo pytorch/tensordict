@@ -2,9 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import torch  # noqa
 
-from ._tensor_map_cpp import TensorMap  # noqa
+from ._extension import _init_extension
 from .memmap import MemmapTensor, set_transfer_ownership
 from .metatensor import MetaTensor
 from .tensordict import (
@@ -14,11 +13,14 @@ from .tensordict import (
     SubTensorDict,
     TensorDict,
 )
+from tensordict._tensormap import TensorMap
 
 try:
     from .version import __version__
 except ImportError:
     __version__ = None
+
+_init_extension()
 
 __all__ = [
     "LazyStackedTensorDict",
@@ -29,4 +31,5 @@ __all__ = [
     "TensorDict",
     "merge_tensordicts",
     "set_transfer_ownership",
+    "TensorMap"
 ]

@@ -11,6 +11,8 @@ TensorMap::TensorMap()
     this->internalMap = std::make_shared<TensorMap::map>();
 }
 
+// Index Get - Set
+
 TensorMap::node TensorMap::GetAt(const std::string key) const
 {
     auto _map = unsafeGetInternalMap();
@@ -30,7 +32,7 @@ void TensorMap::SetMapAt(const std::string key, const TensorMap& value)
     unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
-// Path
+// Path Get - Set
 
 TensorMap::node TensorMap::GetAtPath(const py::tuple indices)
 {
@@ -57,9 +59,9 @@ void TensorMap::SetMapAtPath(const py::tuple indices, const TensorMap& value)
 }
 
 // TODO: Should I return by ref and have python handle the ref count?
-std::set<std::vector<std::string> > TensorMap::GetKeys() {
-    std::set<std::vector<std::string> > result;
-    std::vector<std::string> currentPath;
+std::set<py::tuple> TensorMap::GetKeys(const bool includeNested, const bool leavesOnly) {
+    std::set<py::tuple> result;
+    py::tuple currentPath;
 
     GetKeysRecursive(result, currentPath, *this);
     return result;
@@ -105,11 +107,10 @@ void TensorMap::SetRecursive(TensorMap::map* currentMap, const py::tuple indices
     SetRecursive(nextMap.unsafeGetInternalMap(), indices, index + 1, value);
 }
 
-void TensorMap::GetKeysRecursive(std::set<std::vector<std::string> >& result, std::vector<std::string>& currentPath, const node& currentNode) {
+void TensorMap::GetKeysRecursive(std::set<py::tuple>& result, py::tuple currentPath, const node& currentNode) {
     if (!std::holds_alternative<TensorMap>(currentNode))
     {
-        std::vector<std::string> copy(currentPath);
-        result.insert(copy);
+        result.insert(currentPath);
         return;
     }
 
@@ -117,8 +118,11 @@ void TensorMap::GetKeysRecursive(std::set<std::vector<std::string> >& result, st
     auto currentMap = currentTensorMap.unsafeGetInternalMap();
     for (auto i : *currentMap)
     {
-        currentPath.push_back(i.first);
-        TensorMap::GetKeysRecursive(result, currentPath, i.second);
-        currentPath.pop_back();
+        auto nextStep =  py::make_tuple(i.first);
+        TensorMap::GetKeysRecursive(result, currentPath + nextStep, i.second);
     }
+}
+
+TensorMap::map* TensorMap::unsafeGetInternalMap() const {
+    return internalMap.get();
 }

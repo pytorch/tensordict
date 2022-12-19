@@ -77,7 +77,6 @@ def _get_packages():
     ]
     return find_packages(exclude=exclude)
 
-
 def get_extensions():
     extension = CppExtension
 
@@ -114,7 +113,7 @@ def get_extensions():
 
     ext_modules = [
         extension(
-            "tensordict._tensor_map_cpp",
+            "tensordict._tensormap",
             sources,
             include_dirs=[this_dir],
             extra_compile_args=extra_compile_args,

@@ -1,30 +1,103 @@
 import torch
-from tensor_map_cpp import TensorMap
 import pytest
+
 from _utils_internal import get_available_devices
+from tensordict import TensorMap
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_tensordict_set(device):
-    torch.manual_seed(1)
-    td = TensorMap()
-    val = torch.randn(4, 5)
-    td.set("key1", val)
-    assert (td.get("key1") == val).all()
-
-    td.set(["key2", "key3"], torch.ones(4, 5))
-    assert (td.get("key2").get("key3") == 1).all()
-
-
-def test_tensordict_ref():
+def test_tensormap_simple_set_tensor(device):
     m = TensorMap()
-    x = torch.randn(3)
-    m.set('a', x)
-    assert m.get('a') is x
-    n = TensorMap()
-    m.set('b', n)
-    y = torch.randn(3)
-    n.set('c', y)
-    assert m.get('b') is n
-    assert m.get('b').get('c') is m.get(['b', 'c'])
-    assert m.get(['b', 'c']) is y
+    x = torch.ones(3)
+    m['a'] = x
+    assert m['a'] is x
+
+    m['a'] = torch.zeros(3)
+    assert (m['a'] == 0).all()
+
+    m['b'] = m['a']
+    assert m['b'] is m['a']
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_simple_set_map(device):
+    m1 = TensorMap()
+    m2 = TensorMap()
+
+    m1['a'] = m2
+    assert m1['a'] is m2  # Failing - Need to fix!
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_nested_set(device):
+    m1 = TensorMap()
+    m2 = TensorMap()
+    x = torch.rand(3)
+    y = torch.rand(3)
+
+    m1['a'] = torch.ones(3)
+    m1['b'] = m2
+    m2['c'] = x
+
+    assert x is m1['b']['c']
+    assert m1['b']['c'] is m1['b', 'c']
+    assert m1['b', 'c'] is m2['c']
+
+    m1['b', 'c'] = y
+    assert m1['b']['c'] is y
+    assert m1['b', 'c'] is y
+    assert m2['c'] is y
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_nested_overrite(device):
+    m1 = TensorMap()
+
+    m1['a'] = torch.ones(3)
+    assert (m1['a'] == 1).all()
+    m1['a', 'b', 'c'] = torch.ones(3)
+    assert type(m1['a']) is TensorMap
+    assert type(m1['a', 'b']) is TensorMap
+    assert m1['a', 'b', 'c'] is m1['a', 'b']['c']
+    assert (m1['a', 'b', 'c'] == 1).all()
+
+    m2 = TensorMap()
+    m2['x'] = m1['a', 'b']
+    assert m2['x', 'c'] is m1['a', 'b', 'c']
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_get_keys(device):
+    m = TensorMap()
+    m['a'] = torch.ones(3)
+    m['b'] = torch.zeros(3)
+
+    expected_keys = {('a',), ('b',)}
+    assert len(expected_keys.difference(m.keys())) == 0
+
+    m['c', 'd'] = torch.ones(3)
+    m['a', 'x', 'y'] = torch.zeros(3)
+    expected_keys = {('a', 'x', 'y'), ('b',), ('c', 'd')}
+    assert len(expected_keys.difference(m.keys())) == 0
+
+    m['a', 'z'] = torch.rand(3)
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), ('b',), ('c', 'd')}
+    assert len(expected_keys.difference(m.keys())) == 0
+
+    m['c', 'd'] = m['a']
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), ('b',), ('c', 'd', 'z')}
+    assert len(expected_keys.difference(m.keys())) == 0
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_in_keys(device):
+    m = TensorMap()
+    m['a', 'b', 'c'] = torch.zeros(3)
+    m['d'] = torch.zeros(3)
+
+    keys = m.keys()
+    assert ('d',) in keys
+    assert ('a', 'b', 'c') in keys
+
+    assert ('a', 'b') in keys  # This breaks too. Need to overwrite 'in' keyword ?
+    assert ('a', ) in keys
