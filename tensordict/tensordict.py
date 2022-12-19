@@ -378,26 +378,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def clear_device(self) -> None:
         self._device = None
 
-    def is_shared(self, no_check: bool = True) -> bool:
+    def is_shared(self) -> bool:
         """Checks if tensordict is in shared memory.
 
         This is always True for CUDA tensordicts, except when stored as
         MemmapTensors.
 
-        Args:
-            no_check (bool, optional): whether to use cached value or not
-                Default is True
-
         """
-        if no_check:
-            if self._is_shared is None:
-                if self.keys():
-                    _is_shared = all(value.is_shared() for value in self.values_meta())
-                else:
-                    _is_shared = None
-                self._is_shared = _is_shared
-            return self._is_shared
-        return all(item.is_shared() for item in self.values_meta())
+        if self.device and self.device.type == "cuda":
+            return True
+        return self._is_shared
 
     def state_dict(self) -> OrderedDict:
         out = collections.OrderedDict()
@@ -423,23 +413,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self.update(state_dict, inplace=True)
         return self
 
-    def is_memmap(self, no_check: bool = True) -> bool:
-        """Checks if tensordict is stored with MemmapTensors.
-
-        Args:
-            no_check (bool, optional): whether to use cached value or not
-                Default is True
-
-        """
-        if no_check:
-            if self._is_memmap is None:
-                if self.keys():
-                    _is_memmap = all(value.is_memmap() for value in self.values_meta())
-                else:
-                    _is_memmap = None
-                self._is_memmap = _is_memmap
-            return self._is_memmap
-        return all(item.is_memmap() for item in self.values_meta())
+    def is_memmap(self) -> bool:
+        """Checks if tensordict is stored with MemmapTensors."""
+        return self._is_memmap
 
     def numel(self) -> int:
         """Total number of elements in the batch."""
@@ -579,7 +555,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return out
 
     def _get_meta(self, key: NESTED_KEY) -> MetaTensor:
-        _nested_key_type_check(key)
+        # _nested_key_type_check(key)
         try:
             if type(key) is tuple:
                 if len(key) > 1:
@@ -811,18 +787,13 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensor = self._convert_to_tensor(input)
         else:
             tensor = input
-        # if (
-        #     _has_functorch and isinstance(tensor, Tensor) and is_batchedtensor(tensor)
-        # ):  # TODO: find a proper way of doing that
-        #     return tensor
-        #     tensor = _unwrap_value(tensor)[0]
 
         if check_device and self.device is not None:
             device = self.device
             tensor = tensor.to(device)
 
-        if check_shared:
-            raise DeprecationWarning("check_shared is not authorized anymore")
+        if self.is_shared() and not input.is_shared():
+            input = input.clone().share_memory_()
 
         if check_tensor_shape and _shape(tensor)[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
@@ -2224,7 +2195,7 @@ class TensorDict(TensorDictBase):
         _run_checks: bool = True,
         _is_shared: Optional[bool] = None,
         _is_memmap: Optional[bool] = None,
-    ) -> object:
+    ) -> None:
         super().__init__()
 
         self._is_shared = _is_shared
@@ -2237,7 +2208,7 @@ class TensorDict(TensorDictBase):
             if isinstance(source, dict):
                 self._tensordict: Dict = copy(source)
             else:
-                self._tensordict: Dict = {**source}
+                self._tensordict: Dict = dict(source)
             self._batch_size = torch.Size(batch_size)
             upd_dict = {}
             for key, value in self._tensordict.items():
@@ -2279,7 +2250,11 @@ class TensorDict(TensorDictBase):
                     ):
                         value = value.clone(False)
                         value.batch_size = self.batch_size
-
+                    elif isinstance(value, (Tensor, MemmapTensor)):
+                        if value.shape[: len(self._batch_size)] != self._batch_size:
+                            raise RuntimeError(
+                                f"batch_size are incongruent, got {value.shape}, -- expected leading dims to be {self._batch_size}"
+                            )
                     if device is not None:
                         value = value.to(device)
                     _meta_val = (
@@ -2289,8 +2264,8 @@ class TensorDict(TensorDictBase):
                     )
                     self.set(key, value, _meta_val=_meta_val, _run_checks=False)
 
-            self._check_batch_size()
-            self._check_device()
+            # self._check_batch_size()
+            # self._check_device()
 
     @staticmethod
     def _parse_batch_size(
@@ -2497,20 +2472,8 @@ class TensorDict(TensorDictBase):
                 raise RuntimeError(
                     "Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method."
                 )
-        if _run_checks:
-            _nested_key_type_check(key)
-
-        if self._is_shared is None:
-            try:
-                self._is_shared = _is_shared(value)
-            except NotImplementedError:
-                # when running functorch, a NotImplementedError may be raised
-                pass
-            except AttributeError:
-                # when setting a value of type dict
-                pass
-        if self._is_memmap is None:
-            self._is_memmap = isinstance(value, MemmapTensor)
+        # if _run_checks:
+        #     _nested_key_type_check(key)
 
         if type(key) is tuple and len(key) == 1:
             key = key[0]
@@ -2719,14 +2682,8 @@ class TensorDict(TensorDictBase):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        if not self._tensordict.keys():
-            raise Exception(
-                "share_memory_ must be called when the TensorDict is ("
-                "partially) populated. Set a tensor first."
-            )
         if self.device is not None and self.device.type == "cuda":
             # cuda tensors are shared by default
-            self._is_shared = True
             return self
         for value in self.values():
             # no need to consider MemmapTensors here as we have checked that this is not a memmap-tensordict
@@ -3842,11 +3799,11 @@ torch.Size([3, 2])
             self.batch_size = _getitem_batch_size(new_source_shape, new_idx)
         return new_source[new_idx]
 
-    def is_shared(self, no_check: bool = True) -> bool:
-        return self._source.is_shared(no_check=no_check)
+    def is_shared(self) -> bool:
+        return self._source.is_shared()
 
-    def is_memmap(self, no_check: bool = True) -> bool:
-        return self._source.is_memmap(no_check=no_check)
+    def is_memmap(self) -> bool:
+        return self._source.is_memmap()
 
     def rename_key(
         self, old_key: str, new_key: str, safe: bool = False
@@ -4013,8 +3970,11 @@ class LazyStackedTensorDict(TensorDictBase):
     def batch_size(self, new_size: torch.Size):
         return self._batch_size_setter(new_size)
 
-    def is_shared(self, no_check: bool = True) -> bool:
-        are_shared = [td.is_shared(no_check=no_check) for td in self.tensordicts]
+    def is_shared(self) -> bool:
+        are_shared = [td.is_shared() for td in self.tensordicts]
+        are_shared = [value for value in are_shared if value is not None]
+        if not len(are_shared):
+            return None
         if any(are_shared) and not all(are_shared):
             raise RuntimeError(
                 f"tensordicts shared status mismatch, got {sum(are_shared)} "
@@ -4023,7 +3983,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return all(are_shared)
 
-    def is_memmap(self, no_check: bool = True) -> bool:
+    def is_memmap(self) -> bool:
         are_memmap = [td.is_memmap() for td in self.tensordicts]
         if any(are_memmap) and not all(are_memmap):
             raise RuntimeError(
@@ -4827,10 +4787,10 @@ class SavedTensorDict(TensorDictBase):
         if hasattr(self, "file"):
             self.file.close()
 
-    def is_shared(self, no_check: bool = False) -> bool:
+    def is_shared(self) -> bool:
         return False
 
-    def is_memmap(self, no_check: bool = False) -> bool:
+    def is_memmap(self) -> bool:
         return False
 
     def share_memory_(self, lock=True) -> TensorDictBase:

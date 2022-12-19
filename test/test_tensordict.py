@@ -1860,7 +1860,7 @@ class TestTensorDictRepr:
         ):
             is_shared = True
         else:
-            is_shared = False
+            is_shared = None
         expected = f"""TensorDict(
     fields={{
         a: Tensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
@@ -1876,7 +1876,7 @@ class TestTensorDictRepr:
         ):
             is_shared = True
         else:
-            is_shared = False
+            is_shared = None
         expected = f"""TensorDict(
     fields={{
         a: MemmapTensor(torch.Size([4, 3, 2, 1, 5]), dtype={dtype})}},
@@ -1908,7 +1908,7 @@ class TestTensorDictRepr:
         ):
             is_shared = True
         else:
-            is_shared = False
+            is_shared = None
         tensor_class = "Tensor"
         expected = f"""TensorDict(
     fields={{
@@ -1932,7 +1932,7 @@ class TestTensorDictRepr:
         ):
             is_shared = True
         else:
-            is_shared = False
+            is_shared = None
         tensor_class = "Tensor"
         expected = f"""TensorDict(
     fields={{
@@ -1955,7 +1955,7 @@ class TestTensorDictRepr:
         ):
             is_shared = True
         else:
-            is_shared = False
+            is_shared = None
         tensor_class = "Tensor"
         expected = f"""LazyStackedTensorDict(
     fields={{
@@ -1973,7 +1973,7 @@ class TestTensorDictRepr:
         ):
             is_shared = True
         else:
-            is_shared = False
+            is_shared = None
         tensor_class = "Tensor"
         if index is None:
             expected = f"""TensorDict(
@@ -2000,7 +2000,7 @@ class TestTensorDictRepr:
         ):
             is_shared = True
         else:
-            is_shared = False
+            is_shared = None
         tensor_class = "Tensor"
         if index is None:
             expected = f"""TensorDict(
@@ -2038,7 +2038,7 @@ class TestTensorDictRepr:
         ):
             is_shared = True
         else:
-            is_shared = False
+            is_shared = None
         tensor_class = "Tensor"
         if index is None:
             expected = f"""LazyStackedTensorDict(
@@ -2065,7 +2065,7 @@ class TestTensorDictRepr:
         ):
             is_shared = True
         else:
-            is_shared = False
+            is_shared = None
         tensor_class = "Tensor"
         td2 = td.to(device_cast)
         expected = f"""TensorDict(
@@ -2080,7 +2080,7 @@ class TestTensorDictRepr:
     def test_repr_batch_size_update(self, device, dtype):
         td = self.td(device, dtype)
         td.batch_size = torch.Size([4, 3, 2])
-        is_shared = False
+        is_shared = None
         tensor_class = "Tensor"
         if (device is None and (torch.cuda.device_count() > 0)) or (
             device is not None and device.type == "cuda"
