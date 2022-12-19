@@ -12,6 +12,7 @@ from _utils_internal import get_available_devices
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.prototype import tensorclass
+from tensordict.prototype.tensorclass import _TensorClassBase
 from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
 from torch import Tensor
 
@@ -41,6 +42,7 @@ def test_type():
         batch_size=[3, 4],
     )
     assert isinstance(data, MyData)
+    assert isinstance(data, _TensorClassBase)
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -142,7 +144,7 @@ def test_attributes():
 
     assert torch.equal(data.X, X)
     assert torch.equal(data.y, y)
-    assert data.batch_size == batch_size
+    assert data.batch_size == torch.Size(batch_size)
     assert equality_tensordict.all()
     assert equality_tensordict.batch_size == torch.Size(batch_size)
 
