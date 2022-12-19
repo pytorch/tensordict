@@ -25,6 +25,19 @@ class MyData:
         return self.X + self.y
 
 
+@pytest.mark.parametrize("device", get_available_devices())
+def test_device(device):
+    data = MyData(
+        X=torch.ones(3, 4, 5),
+        y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        batch_size=[3, 4],
+        device=device,
+    )
+    assert data.device == device
+    assert data.X.device == device
+    assert data.y.device == device
+
+
 def test_dataclass():
     data = MyData(
         X=torch.ones(3, 4, 5),
