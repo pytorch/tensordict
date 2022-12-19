@@ -47,3 +47,20 @@ def test_tensormap_nested_set(device):
     assert m1['b']['c'] is y
     assert m1['b', 'c'] is y
     assert m2['c'] is y
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_nested_overrite(device):
+    m1 = TensorMap()
+
+    m1['a'] = torch.ones(3)
+    assert (m1['a'] == 1).all()
+    m1['a', 'b', 'c'] = torch.ones(3)
+    assert type(m1['a']) is TensorMap
+    assert type(m1['a', 'b']) is TensorMap
+    assert m1['a', 'b', 'c'] is m1['a', 'b']['c']
+    assert (m1['a', 'b', 'c'] == 1).all()
+
+    m2 = TensorMap()
+    m2['x'] = m1['a', 'b']
+    assert m2['x', 'c'] is m1['a', 'b', 'c']
