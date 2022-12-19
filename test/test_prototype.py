@@ -87,3 +87,17 @@ def test_tensormap_get_keys(device):
     m['c', 'd'] = m['a']
     expected_keys = {('a', 'z'), ('a', 'x', 'y'), ('b',), ('c', 'd', 'z')}
     assert len(expected_keys.difference(m.keys())) == 0
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_in_keys(device):
+    m = TensorMap()
+    m['a', 'b', 'c'] = torch.zeros(3)
+    m['d'] = torch.zeros(3)
+
+    keys = m.keys()
+    assert ('d',) in keys
+    assert ('a', 'b', 'c') in keys
+
+    assert ('a', 'b') in keys  # This breaks too. Need to overwrite 'in' keyword ?
+    assert ('a', ) in keys
