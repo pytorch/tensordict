@@ -62,7 +62,7 @@ class _TensorClassBase:
                     f"correspond to the class attributes ({self._expected_keys})."
                 )
             input_dict = {key: None for key in _tensordict.keys()}
-            super().__init__(**input_dict, batch_size=_tensordict.batch_size)
+            super().__init__(**input_dict)
             self.tensordict = _tensordict
         else:
             device = kwargs.pop("device", None)
@@ -134,7 +134,7 @@ class _TensorClassBase:
         return super().__getattribute__(item)
 
     def __setattr__(self, key, value):
-        if "tensordict" not in self.__dict__:
+        if "tensordict" not in self.__dict__ or key in ("batch_size", "device"):
             return super().__setattr__(key, value)
         if key not in self._expected_keys:
             raise AttributeError(
@@ -186,6 +186,38 @@ class _TensorClassBase:
         is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
         string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
         return f"{self.__class__.__name__}(\n{string})"
+
+    def to_tensordict(self) -> TensorDict:
+        """Convert the tensorclass into a regular TensorDict.
+
+        Makes a copy of all entries. Memmap and shared memory tensors are converted to
+        regular tensors.
+
+        Returns:
+            A new TensorDict object containing the same values as the tensorclass.
+        """
+        return self.tensordict.to_tensordict()
+
+    @property
+    def device(self):
+        return self.tensordict.device
+
+    @device.setter
+    def device(self, value: DEVICE_TYPING) -> None:
+        raise RuntimeError(
+            "device cannot be set using tensorclass.device = device, "
+            "because device cannot be updated in-place. To update device, use "
+            "tensorclass.to(new_device), which will return a new tensorclass "
+            "on the new device."
+        )
+
+    @property
+    def batch_size(self) -> torch.Size:
+        return self.tensordict.batch_size
+
+    @batch_size.setter
+    def batch_size(self, new_size: torch.Size) -> None:
+        self.tensordict._batch_size_setter(new_size)
 
 
 def implements_for_tdc(torch_function: Callable) -> Callable:
