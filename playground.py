@@ -40,8 +40,12 @@ def main(argv):
     print('WriteOverTest RefCheck1:', cd is v2)
     print('WriteOverTest RefCheck2:', bcd is v2)
 
-    # keys = m.keys()
-    # print(keys)
+    # Add more nesting
+    m.set(('b', 'c', 'e'), torch.ones(3))
+    m.set(('b', 'f'), torch.zeros(3))
+    m.set(('x', 'w'), torch.rand(3))
+    keys = m.keys()
+    print(keys)
 
 
 

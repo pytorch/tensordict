@@ -23,7 +23,7 @@ class TensorMap {
 
         node GetRecursive(map* currentMap, const py::tuple indices, const int index);
         void SetRecursive(map* currentMap, const py::tuple  indices, const int index, node value);
-        void GetKeysRecursive(std::set<std::vector<std::string> >& result, std::vector<std::string>& currentPath, const node& currentNode);
+        void GetKeysRecursive(std::set<py::tuple>& result, py::tuple currentPath, const node& currentNode);
         // TODO something about batch size
 
     public:
@@ -63,7 +63,7 @@ class TensorMap {
         void SetTensorAtPath(const py::tuple key, const torch::Tensor& value);
         void SetMapAtPath(const py::tuple key, const TensorMap& value);
         // TODO add keys - check iterator
-        std::set<std::vector<std::string> > GetKeys();
+        std::set<py::tuple> GetKeys();
 };
 
 #endif
