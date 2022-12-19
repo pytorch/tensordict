@@ -13,6 +13,7 @@ from .tensordict import (
     SubTensorDict,
     TensorDict,
 )
+from tensordict._tensormap import TensorMap
 
 try:
     from .version import __version__
@@ -30,4 +31,5 @@ __all__ = [
     "TensorDict",
     "merge_tensordicts",
     "set_transfer_ownership",
+    "TensorMap"
 ]
