@@ -10,6 +10,7 @@ from _utils_internal import get_available_devices
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.prototype import tensorclass
+from tensordict.prototype.tensorclass import _TensorClassBase
 from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
 from torch import Tensor
 
@@ -45,6 +46,7 @@ def test_type():
         batch_size=[3, 4],
     )
     assert isinstance(data, MyData)
+    assert isinstance(data, _TensorClassBase)
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -58,6 +60,11 @@ def test_device(device):
     assert data.device == device
     assert data.X.device == device
     assert data.y.device == device
+
+    with pytest.raises(
+        RuntimeError, match="device cannot be set using tensorclass.device = device"
+    ):
+        data.device = torch.device("cpu")
 
 
 def test_banned_types():
@@ -144,6 +151,18 @@ def test_disallowed_attributes():
             x: torch.Tensor
             y: torch.Tensor
             reshape: torch.Tensor
+
+
+def test_batch_size():
+    myc = MyData(X=torch.rand(2, 3, 4), y=torch.rand(2, 3, 4, 5), batch_size=[2, 3])
+
+    assert myc.batch_size == torch.Size([2, 3])
+    assert myc.X.shape == torch.Size([2, 3, 4])
+
+    myc.batch_size = torch.Size([2])
+
+    assert myc.batch_size == torch.Size([2])
+    assert myc.X.shape == torch.Size([2, 3, 4])
 
 
 def test_indexing():
@@ -343,6 +362,19 @@ def test_permute():
     assert stacked_tc.shape == torch.Size([4, 3])
     assert (stacked_tc.X == 1).all()
     assert isinstance(stacked_tc.tensordict, _PermutedTensorDict)
+
+
+def test_nested():
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        y: "MyDataNested" = None
+
+    X = torch.ones(3, 4, 5)
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
+    assert isinstance(data.y, MyDataNested), type(data.y)
 
 
 def test_args():
