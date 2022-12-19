@@ -381,11 +381,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def is_shared(self) -> bool:
         """Checks if tensordict is in shared memory.
 
+        If a TensorDict instance is in shared memory, any new tensor written
+        in it will be placed in shared memory. If a TensorDict is created with
+        tensors that are all in shared memory, this does not mean that it will be
+        in shared memory (as a new tensor may not be in shared memory).
+        Only if one calls `tensordict.share_memory_()` or places the tensordict
+        on a device where the content is shared will the tensordict be considered
+        in shared memory.
+
         This is always True for CUDA tensordicts, except when stored as
         MemmapTensors.
 
         """
-        if self.device and self.device.type == "cuda":
+        if self.device and self.device.type == "cuda" and not self._is_memmap:
             return True
         return self._is_shared
 
@@ -2182,8 +2190,8 @@ class TensorDict(TensorDictBase):
     def __new__(cls, *args, **kwargs):
         cls._safe = True
         cls._lazy = False
-        cls._is_shared = None
-        cls._is_memmap = None
+        cls._is_shared = False
+        cls._is_memmap = False
         return TensorDictBase.__new__(cls)
 
     def __init__(
@@ -2193,8 +2201,8 @@ class TensorDict(TensorDictBase):
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
         _run_checks: bool = True,
-        _is_shared: Optional[bool] = None,
-        _is_memmap: Optional[bool] = None,
+        _is_shared: Optional[bool] = False,
+        _is_memmap: Optional[bool] = False,
     ) -> None:
         super().__init__()
 
@@ -2752,8 +2760,8 @@ class TensorDict(TensorDictBase):
                 key: value.to(dest, **kwargs) for key, value in self_copy.items()
             }
             self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
-            self_copy._is_shared = None
-            self_copy._is_memmap = None
+            self_copy._is_shared = False
+            self_copy._is_memmap = False
             return self_copy
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
@@ -3374,8 +3382,8 @@ torch.Size([3, 2])
     def __new__(cls, *args, **kwargs):
         cls._safe = False
         cls._lazy = True
-        cls._is_shared = None
-        cls._is_memmap = None
+        cls._is_shared = False
+        cls._is_memmap = False
         cls._inplace_set = True
         return TensorDictBase.__new__(cls)
 
@@ -3386,8 +3394,6 @@ torch.Size([3, 2])
         batch_size: Optional[Sequence[int]] = None,
     ):
         super().__init__()
-        self._is_shared = None
-        self._is_memmap = None
 
         if not isinstance(source, TensorDictBase):
             raise TypeError(
@@ -3901,8 +3907,8 @@ class LazyStackedTensorDict(TensorDictBase):
     ):
         super().__init__()
 
-        self._is_shared = None
-        self._is_memmap = None
+        self._is_shared = False
+        self._is_memmap = False
 
         # sanity check
         N = len(tensordicts)
@@ -5003,8 +5009,8 @@ class _CustomOpTensorDict(TensorDictBase):
     ):
         super().__init__()
 
-        self._is_shared = None
-        self._is_memmap = None
+        self._is_shared = False
+        self._is_memmap = False
 
         if not isinstance(source, TensorDictBase):
             raise TypeError(
