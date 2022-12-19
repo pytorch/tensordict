@@ -8,6 +8,8 @@ from typing import Any, Optional, Union
 import pytest
 import torch
 
+from _utils_internal import get_available_devices
+
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.prototype import tensorclass
 from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
@@ -21,6 +23,19 @@ class MyData:
 
     def stuff(self):
         return self.X + self.y
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_device(device):
+    data = MyData(
+        X=torch.ones(3, 4, 5),
+        y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        batch_size=[3, 4],
+        device=device,
+    )
+    assert data.device == device
+    assert data.X.device == device
+    assert data.y.device == device
 
 
 def test_dataclass():
