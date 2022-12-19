@@ -18,7 +18,7 @@ def main(argv):
     m2 = TensorMap()
     m['b'] = m2
     b = m['b']
-    print('MapRefCheck:', b is m2) # Not working
+    print('MapRefCheck:', b is m2)  # Not working
 
     m2['c'] = x
     c = b['c']
@@ -46,6 +46,10 @@ def main(argv):
     m['x', 'w'] = torch.rand(3)
     keys = m.keys()
     print(keys)
+
+    print('(''a,'') in keys:', ('a',) in keys)
+    print('(''b'',) in keys:', ('b',) in keys)  # Need to fix this too
+    print('(''b'', ''f'') in keys:', ('b', 'f') in keys)
 
 
 if __name__ == "__main__":
