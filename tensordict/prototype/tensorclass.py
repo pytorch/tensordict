@@ -102,7 +102,9 @@ def tensorclass(cls: T) -> T:
         fields=[("batch_size", torch.Size, field(default_factory=list))],
     )
 
-    EXPECTED_KEYS = set(datacls.__dataclass_fields__.keys())
+    EXPECTED_KEYS = {
+        k for k in datacls.__dataclass_fields__.keys() if k != "batch_size"
+    }
 
     class _TensorClass(datacls, metaclass=_TensorClassMeta):
         def __init__(self, *args, _tensordict=None, **kwargs):
@@ -118,13 +120,7 @@ def tensorclass(cls: T) -> T:
                 super().__init__(**input_dict, batch_size=_tensordict.batch_size)
                 self.tensordict = _tensordict
             else:
-
-                if "device" in kwargs:
-                    raise ValueError(
-                        "passing 'device' to the tensorclass constructor is currently "
-                        "not supported."
-                    )
-
+                device = kwargs.pop("device", None)
                 for value, key in zip(args, datacls.__dataclass_fields__):
                     if key in kwargs:
                         raise ValueError(f"The key {key} is already set in kwargs")
@@ -146,6 +142,7 @@ def tensorclass(cls: T) -> T:
                         if key not in ("batch_size",)
                     },
                     batch_size=kwargs["batch_size"],
+                    device=device,
                 )
 
         @classmethod
@@ -193,7 +190,6 @@ def tensorclass(cls: T) -> T:
             assert self.__dict__["tensordict"][key] is value
 
         def __getattr__(self, attr):
-
             res = getattr(self.tensordict, attr)
             if not callable(res):
                 return res
