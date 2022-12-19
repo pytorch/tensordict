@@ -54,8 +54,6 @@ def test_device(device):
     assert data.y.device == device
 
 
-
-
 def test_banned_types():
     @tensorclass
     class MyAnyClass:
