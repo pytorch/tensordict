@@ -17,3 +17,12 @@ def test_tensormap_simple_set_tensor(device):
 
     m['b'] = m['a']
     assert m['b'] is m['a']
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_simple_set_map(device):
+    m1 = TensorMap()
+    m2 = TensorMap()
+
+    m1['a'] = m2
+    assert m1['a'] is m2
