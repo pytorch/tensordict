@@ -35,7 +35,7 @@ class TensorMap {
         void SetTensorAtPath(const py::tuple key, const torch::Tensor& value);
         void SetMapAtPath(const py::tuple key, const TensorMap& value);
         // TODO add keys - check iterator
-        std::set<key> GetKeys(const bool includeNested, const bool leavesOnly);
+        std::set<key> GetKeys(const bool includeNested = false, const bool leavesOnly = false);
 
         TensorMap& operator=(const TensorMap& other) & {
            internalMap = other.internalMap;

@@ -78,19 +78,27 @@ def test_tensormap_get_keys(device):
 
     m['c', 'd'] = torch.ones(3)
     m['a', 'x', 'y'] = torch.zeros(3)
-    expected_keys = {('a', 'x', 'y'), 'b', ('c', 'd')}
+    expected_nested_keys = {('a', 'x', 'y'), 'b', ('c', 'd')}
+    assert len(expected_nested_keys.difference(m.keys(True))) == 0
+    expected_keys = {'a', 'b', 'c'}
     assert len(expected_keys.difference(m.keys())) == 0
 
     m['a', 'z'] = torch.rand(3)
-    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd')}
+    expected_nested_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd')}
+    assert len(expected_nested_keys.difference(m.keys(True))) == 0
+    expected_keys = {'a', 'b', 'c'}
     assert len(expected_keys.difference(m.keys())) == 0
 
     m['c', 'd'] = m['a']
-    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd', 'z')}
+    expected_nested_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd', 'z')}
+    assert len(expected_nested_keys.difference(m.keys(True))) == 0
+    expected_keys = {'a', 'b', 'c'}
     assert len(expected_keys.difference(m.keys())) == 0
 
     m['c'] = torch.ones(3)
-    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', 'c'}
+    expected_nested_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', 'c'}
+    assert len(expected_nested_keys.difference(m.keys(True))) == 0
+    expected_keys = {'a', 'b', 'c'}
     assert len(expected_keys.difference(m.keys())) == 0
 
 
