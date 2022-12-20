@@ -9,7 +9,7 @@ import torch
 from _utils_internal import get_available_devices
 
 from tensordict import LazyStackedTensorDict, TensorDict
-from tensordict.prototype import tensorclass
+from tensordict.prototype import is_tensorclass, tensorclass
 from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
 from torch import Tensor
 
@@ -21,6 +21,12 @@ class MyData:
 
     def stuff(self):
         return self.X + self.y
+
+
+@tensorclass
+class MyData2:
+    X: torch.Tensor
+    y: torch.Tensor
 
 
 def test_dataclass():
@@ -39,6 +45,8 @@ def test_type():
         batch_size=[3, 4],
     )
     assert isinstance(data, MyData)
+    assert is_tensorclass(data)
+    assert is_tensorclass(MyData)
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -52,6 +60,11 @@ def test_device(device):
     assert data.device == device
     assert data.X.device == device
     assert data.y.device == device
+
+    with pytest.raises(
+        RuntimeError, match="device cannot be set using tensorclass.device = device"
+    ):
+        data.device = torch.device("cpu")
 
 
 def test_banned_types():
@@ -122,7 +135,7 @@ def test_attributes():
 
     assert torch.equal(data.X, X)
     assert torch.equal(data.y, y)
-    assert data.batch_size == batch_size
+    assert data.batch_size == torch.Size(batch_size)
     assert equality_tensordict.all()
     assert equality_tensordict.batch_size == torch.Size(batch_size)
 
@@ -138,6 +151,18 @@ def test_disallowed_attributes():
             x: torch.Tensor
             y: torch.Tensor
             reshape: torch.Tensor
+
+
+def test_batch_size():
+    myc = MyData(X=torch.rand(2, 3, 4), y=torch.rand(2, 3, 4, 5), batch_size=[2, 3])
+
+    assert myc.batch_size == torch.Size([2, 3])
+    assert myc.X.shape == torch.Size([2, 3, 4])
+
+    myc.batch_size = torch.Size([2])
+
+    assert myc.batch_size == torch.Size([2])
+    assert myc.X.shape == torch.Size([2, 3, 4])
 
 
 def test_indexing():
@@ -182,26 +207,52 @@ def test_stack():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
+
     data1 = MyData(X=X, y=y, batch_size=batch_size)
     data2 = MyData(X=X, y=y, batch_size=batch_size)
+    data3 = MyData2(X=X, y=y, batch_size=batch_size)
+
     stacked_tc = torch.stack([data1, data2], 0)
     assert type(stacked_tc) is type(data1)
     assert stacked_tc.X.shape == torch.Size([2, 3, 4, 5])
     assert (stacked_tc.X == 1).all()
     assert isinstance(stacked_tc.tensordict, LazyStackedTensorDict)
 
+    with pytest.raises(
+        TypeError,
+        match=re.escape(
+            "no implementation found for 'torch.stack' on types that implement "
+            "__torch_function__: [<class 'test_tensorclass_nofuture.MyData'>, "
+            "<class 'test_tensorclass_nofuture.MyData2'>]"
+        ),
+    ):
+        torch.stack([data1, data3], dim=0)
+
 
 def test_cat():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     batch_size = [3, 4]
+
     data1 = MyData(X=X, y=y, batch_size=batch_size)
     data2 = MyData(X=X, y=y, batch_size=batch_size)
-    stacked_tc = torch.cat([data1, data2], 0)
-    assert type(stacked_tc) is type(data1)
-    assert stacked_tc.X.shape == torch.Size([6, 4, 5])
-    assert (stacked_tc.X == 1).all()
-    assert isinstance(stacked_tc.tensordict, TensorDict)
+    data3 = MyData2(X=X, y=y, batch_size=batch_size)
+
+    catted_tc = torch.cat([data1, data2], 0)
+    assert type(catted_tc) is type(data1)
+    assert catted_tc.X.shape == torch.Size([6, 4, 5])
+    assert (catted_tc.X == 1).all()
+    assert isinstance(catted_tc.tensordict, TensorDict)
+
+    with pytest.raises(
+        TypeError,
+        match=re.escape(
+            "no implementation found for 'torch.cat' on types that implement "
+            "__torch_function__: [<class 'test_tensorclass_nofuture.MyData'>, "
+            "<class 'test_tensorclass_nofuture.MyData2'>]"
+        ),
+    ):
+        torch.cat([data1, data3], dim=0)
 
 
 def test_unbind():
@@ -311,6 +362,19 @@ def test_permute():
     assert stacked_tc.shape == torch.Size([4, 3])
     assert (stacked_tc.X == 1).all()
     assert isinstance(stacked_tc.tensordict, _PermutedTensorDict)
+
+
+def test_nested():
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        y: "MyDataNested" = None
+
+    X = torch.ones(3, 4, 5)
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
+    assert isinstance(data.y, MyDataNested), type(data.y)
 
 
 def test_args():

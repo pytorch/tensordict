@@ -2,7 +2,7 @@ import dataclasses
 import functools
 import re
 import typing
-from dataclasses import dataclass, field, make_dataclass
+from dataclasses import dataclass
 from platform import python_version
 from textwrap import indent
 from typing import Callable, Dict, Optional, Tuple, Union
@@ -13,6 +13,7 @@ from packaging import version
 
 from tensordict import MetaTensor
 from tensordict.tensordict import _accepted_classes, TensorDict, TensorDictBase
+from tensordict.utils import DEVICE_TYPING
 
 from torch import Tensor
 
@@ -28,8 +29,9 @@ UNION_PATTERN = re.compile(r"Union\[(.*?)\]")
 
 
 class _TensorClassMeta(type):
-    def __new__(cls, clsname, bases, attrs):
+    def __new__(cls, clsname, bases, attrs, cls_repr=None):
         datacls = bases[0]
+        attrs["_cls_repr"] = cls_repr
         for attr in datacls.__dataclass_fields__:
             if attr == "batch_size":
                 continue
@@ -37,7 +39,18 @@ class _TensorClassMeta(type):
                 raise AttributeError(
                     f"Attribute name {attr} can't be used with @tensorclass"
                 )
-        return super().__new__(cls, clsname, bases, attrs)
+        return super().__new__(cls, datacls.__name__, bases, attrs)
+
+    def __repr__(self):
+        if self._cls_repr is not None:
+            return self._cls_repr
+        return super().__repr__()
+
+
+def is_tensorclass(obj):
+    """Returns True if obj is either a tensorclass or an instance of a tensorclass"""
+    cls = obj if isinstance(obj, type) else type(obj)
+    return dataclasses.is_dataclass(cls) and isinstance(cls, _TensorClassMeta)
 
 
 def tensorclass(cls: T) -> T:
@@ -96,17 +109,15 @@ def tensorclass(cls: T) -> T:
     TD_HANDLED_FUNCTIONS: Dict = {}
 
     name = cls.__name__
-    datacls = make_dataclass(
-        name,
-        bases=(dataclass(cls),),
-        fields=[("batch_size", torch.Size, field(default_factory=list))],
-    )
+    # by capturing the representation of the original class, the representation of the
+    # generated class can be made the same, including preserving information about
+    # where the original class was defined
+    cls_repr = repr(cls)
+    datacls = dataclass(cls)
 
-    EXPECTED_KEYS = {
-        k for k in datacls.__dataclass_fields__.keys() if k != "batch_size"
-    }
+    EXPECTED_KEYS = set(datacls.__dataclass_fields__)
 
-    class _TensorClass(datacls, metaclass=_TensorClassMeta):
+    class _TensorClass(datacls, metaclass=_TensorClassMeta, cls_repr=cls_repr):
         def __init__(self, *args, _tensordict=None, **kwargs):
             if (args or kwargs) and _tensordict is not None:
                 raise ValueError("Cannot pass both args/kwargs and _tensordict.")
@@ -114,24 +125,25 @@ def tensorclass(cls: T) -> T:
             if _tensordict is not None:
                 if not all(key in EXPECTED_KEYS for key in _tensordict.keys()):
                     raise ValueError(
-                        f"Keys from the tensordict ({set(_tensordict.keys())}) must correspond to the class attributes ({EXPECTED_KEYS - {'batch_size'} })."
+                        f"Keys from the tensordict ({set(_tensordict.keys())}) must correspond to the class attributes ({EXPECTED_KEYS})."
                     )
                 input_dict = {key: None for key in _tensordict.keys()}
-                super().__init__(**input_dict, batch_size=_tensordict.batch_size)
+                super().__init__(**input_dict)
                 self.tensordict = _tensordict
             else:
                 device = kwargs.pop("device", None)
-                for value, key in zip(args, datacls.__dataclass_fields__):
+                if "batch_size" not in kwargs:
+                    raise TypeError("Missing keyword argument batch_size")
+                batch_size = kwargs.pop("batch_size")
+
+                for value, key in zip(args, self.__dataclass_fields__):
                     if key in kwargs:
                         raise ValueError(f"The key {key} is already set in kwargs")
                     kwargs[key] = value
                 args = []
-                kwargs = _set_default_values(datacls, kwargs)
+                kwargs = self._set_default_values(kwargs)
                 new_args = [None for _ in args]
-                new_kwargs = {
-                    key: None if key != "batch_size" else value
-                    for key, value in kwargs.items()
-                }
+                new_kwargs = {key: None for key in kwargs}
 
                 super().__init__(*new_args, **new_kwargs)
 
@@ -141,13 +153,23 @@ def tensorclass(cls: T) -> T:
                         for key, value in kwargs.items()
                         if key not in ("batch_size",)
                     },
-                    batch_size=kwargs["batch_size"],
+                    batch_size=batch_size,
                     device=device,
                 )
 
         @classmethod
         def _build_from_tensordict(cls, tensordict):
             return cls(_tensordict=tensordict)
+
+        def _set_default_values(self, kwargs):
+            for key in self.__dataclass_fields__:
+                default = self.__dataclass_fields__[key].default
+                default_factory = self.__dataclass_fields__[key].default_factory
+                if not isinstance(default_factory, dataclasses._MISSING_TYPE):
+                    default = default_factory
+                if default is not None:
+                    kwargs.setdefault(key, default)
+            return kwargs
 
         @classmethod
         def __torch_function__(
@@ -178,7 +200,7 @@ def tensorclass(cls: T) -> T:
             return super().__getattribute__(item)
 
         def __setattr__(self, key, value):
-            if "tensordict" not in self.__dict__:
+            if "tensordict" not in self.__dict__ or key in ("batch_size", "device"):
                 return super().__setattr__(key, value)
             if key not in EXPECTED_KEYS:
                 raise AttributeError(
@@ -234,6 +256,38 @@ def tensorclass(cls: T) -> T:
             is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
             string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
             return f"{name}(\n{string})"
+
+        def to_tensordict(self) -> TensorDict:
+            """Convert the tensorclass into a regular TensorDict.
+
+            Makes a copy of all entries. Memmap and shared memory tensors are converted to
+            regular tensors.
+
+            Returns:
+                A new TensorDict object containing the same values as the tensorclass.
+            """
+            return self.tensordict.to_tensordict()
+
+        @property
+        def device(self):
+            return self.tensordict.device
+
+        @device.setter
+        def device(self, value: DEVICE_TYPING) -> None:
+            raise RuntimeError(
+                "device cannot be set using tensorclass.device = device, "
+                "because device cannot be updated in-place. To update device, use "
+                "tensorclass.to(new_device), which will return a new tensorclass "
+                "on the new device."
+            )
+
+        @property
+        def batch_size(self) -> torch.Size:
+            return self.tensordict.batch_size
+
+        @batch_size.setter
+        def batch_size(self, new_size: torch.Size) -> None:
+            self.tensordict._batch_size_setter(new_size)
 
     def implements_for_tdc(torch_function: Callable) -> Callable:
         """Register a torch function override for _TensorClass."""
@@ -309,17 +363,6 @@ def tensorclass(cls: T) -> T:
 
     CLASSES_DICT[name] = _TensorClass
     return _TensorClass
-
-
-def _set_default_values(datacls, kwargs):
-    for key in datacls.__dataclass_fields__:
-        default = datacls.__dataclass_fields__[key].default
-        default_factory = datacls.__dataclass_fields__[key].default_factory
-        if not isinstance(default_factory, dataclasses._MISSING_TYPE):
-            default = default_factory
-        if default is not None:
-            kwargs.setdefault(key, default)
-    return kwargs
 
 
 def _get_typed_value(value):
