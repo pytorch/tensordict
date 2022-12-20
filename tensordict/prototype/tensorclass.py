@@ -2,6 +2,7 @@ import dataclasses
 import functools
 import re
 import typing
+from dataclasses import dataclass
 from platform import python_version
 from textwrap import indent
 from typing import Callable, Dict, Optional, Tuple, Union
@@ -22,18 +23,14 @@ PY37 = version.parse(python_version()) < version.parse("3.8")
 # For __future__.annotations, we keep a dict of str -> class to call the class based on the string
 CLASSES_DICT = {}
 
-TD_HANDLED_FUNCTIONS: Dict = {}
-
 # Regex precompiled patterns
 OPTIONAL_PATTERN = re.compile(r"Optional\[(.*?)\]")
 UNION_PATTERN = re.compile(r"Union\[(.*?)\]")
 
 
 class _TensorClassMeta(type):
-    def __new__(cls, clsname, bases, attrs, datacls=None, cls_repr=None):
-        if datacls is None:
-            raise ValueError("Must supply dataclass as kwarg")
-        attrs["_expected_keys"] = set(datacls.__dataclass_fields__)
+    def __new__(cls, clsname, bases, attrs, cls_repr=None):
+        datacls = bases[0]
         attrs["_cls_repr"] = cls_repr
         for attr in datacls.__dataclass_fields__:
             if attr == "batch_size":
@@ -42,266 +39,12 @@ class _TensorClassMeta(type):
                 raise AttributeError(
                     f"Attribute name {attr} can't be used with @tensorclass"
                 )
-        return super().__new__(cls, datacls.__name__, bases + (datacls,), attrs)
+        return super().__new__(cls, datacls.__name__, bases, attrs)
 
     def __repr__(self):
         if self._cls_repr is not None:
             return self._cls_repr
         return super().__repr__()
-
-
-class _TensorClassBase:
-    def __init__(self, *args, _tensordict=None, **kwargs):
-        if (args or kwargs) and _tensordict is not None:
-            raise ValueError("Cannot pass both args/kwargs and _tensordict.")
-
-        if _tensordict is not None:
-            if not all(key in self._expected_keys for key in _tensordict.keys()):
-                raise ValueError(
-                    f"Keys from the tensordict ({set(_tensordict.keys())}) must "
-                    f"correspond to the class attributes ({self._expected_keys})."
-                )
-            input_dict = {key: None for key in _tensordict.keys()}
-            super().__init__(**input_dict)
-            self.tensordict = _tensordict
-        else:
-            device = kwargs.pop("device", None)
-            if "batch_size" not in kwargs:
-                raise TypeError("Missing keyword argument batch_size")
-            batch_size = kwargs.pop("batch_size")
-
-            for value, key in zip(args, self.__dataclass_fields__):
-                if key in kwargs:
-                    raise ValueError(f"The key {key} is already set in kwargs")
-                kwargs[key] = value
-            args = []
-            kwargs = self._set_default_values(kwargs)
-            new_args = [None for _ in args]
-            new_kwargs = {key: None for key in kwargs}
-
-            super().__init__(*new_args, **new_kwargs)
-
-            self.tensordict = TensorDict(
-                {
-                    key: _get_typed_value(value)
-                    for key, value in kwargs.items()
-                    if key not in ("batch_size",)
-                },
-                batch_size=batch_size,
-                device=device,
-            )
-
-    @classmethod
-    def _build_from_tensordict(cls, tensordict):
-        return cls(_tensordict=tensordict)
-
-    def _set_default_values(self, kwargs):
-        for key in self.__dataclass_fields__:
-            default = self.__dataclass_fields__[key].default
-            default_factory = self.__dataclass_fields__[key].default_factory
-            if not isinstance(default_factory, dataclasses._MISSING_TYPE):
-                default = default_factory
-            if default is not None:
-                kwargs.setdefault(key, default)
-        return kwargs
-
-    @classmethod
-    def __torch_function__(
-        cls,
-        func: Callable,
-        types,
-        args: Tuple = (),
-        kwargs: Optional[dict] = None,
-    ) -> Callable:
-        if kwargs is None:
-            kwargs = {}
-        if func not in TD_HANDLED_FUNCTIONS or not all(
-            issubclass(t, (Tensor, cls)) for t in types
-        ):
-            return NotImplemented
-        return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
-
-    def __getattribute__(self, item):
-        if (
-            not item.startswith("__")
-            and "tensordict" in self.__dict__
-            and item in self.__dict__["tensordict"].keys()
-        ):
-            out = self.__dict__["tensordict"][item]
-            expected_type = self.__dataclass_fields__[item].type
-            out = _get_typed_output(out, expected_type)
-            return out
-        return super().__getattribute__(item)
-
-    def __setattr__(self, key, value):
-        if "tensordict" not in self.__dict__ or key in ("batch_size", "device"):
-            return super().__setattr__(key, value)
-        if key not in self._expected_keys:
-            raise AttributeError(
-                f"Cannot set the attribute '{key}', expected attributes are {self._expected_keys}."
-            )
-        if type(value) in CLASSES_DICT.values():
-            value = value.__dict__["tensordict"]
-        self.__dict__["tensordict"][key] = value
-        assert self.__dict__["tensordict"][key] is value
-
-    def __getattr__(self, attr):
-        res = getattr(self.tensordict, attr)
-        if not callable(res):
-            return res
-        func = res
-
-        def wrapped_func(*args, **kwargs):
-            res = func(*args, **kwargs)
-            if isinstance(res, TensorDictBase):
-                new = self.__class__(_tensordict=res)
-                return new
-            else:
-                return res
-
-        return wrapped_func
-
-    def __getitem__(self, item):
-        if isinstance(item, str) or (
-            isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
-        ):
-            raise ValueError("Invalid indexing arguments.")
-        res = self.tensordict[item]
-        return self.__class__(_tensordict=res)  # device=res.device)
-
-    def __setitem__(self, item, value):
-        if isinstance(item, str) or (
-            isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
-        ):
-            raise ValueError("Invalid indexing arguments.")
-        if not isinstance(value, self.__class__):
-            raise ValueError("__setitem__ is only allowed for same-class assignement")
-        self.tensordict[item] = value.tensordict
-
-    def __repr__(self) -> str:
-        fields = _all_td_fields_as_str(self.tensordict)
-        field_str = fields
-        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-        device_str = indent(f"device={self.device}", 4 * " ")
-        is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-        string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
-        return f"{self.__class__.__name__}(\n{string})"
-
-    def to_tensordict(self) -> TensorDict:
-        """Convert the tensorclass into a regular TensorDict.
-
-        Makes a copy of all entries. Memmap and shared memory tensors are converted to
-        regular tensors.
-
-        Returns:
-            A new TensorDict object containing the same values as the tensorclass.
-        """
-        return self.tensordict.to_tensordict()
-
-    @property
-    def device(self):
-        return self.tensordict.device
-
-    @device.setter
-    def device(self, value: DEVICE_TYPING) -> None:
-        raise RuntimeError(
-            "device cannot be set using tensorclass.device = device, "
-            "because device cannot be updated in-place. To update device, use "
-            "tensorclass.to(new_device), which will return a new tensorclass "
-            "on the new device."
-        )
-
-    @property
-    def batch_size(self) -> torch.Size:
-        return self.tensordict.batch_size
-
-    @batch_size.setter
-    def batch_size(self, new_size: torch.Size) -> None:
-        self.tensordict._batch_size_setter(new_size)
-
-
-def implements_for_tdc(torch_function: Callable) -> Callable:
-    """Register a torch function override for _TensorClass."""
-
-    @functools.wraps(torch_function)
-    def decorator(func):
-        TD_HANDLED_FUNCTIONS[torch_function] = func
-        return func
-
-    return decorator
-
-
-@implements_for_tdc(torch.unbind)
-def _unbind(tdc, dim):
-    tensordicts = torch.unbind(tdc.tensordict, dim)
-    out = [tdc.__class__(_tensordict=td) for td in tensordicts]
-    return out
-
-
-@implements_for_tdc(torch.full_like)
-def _full_like(tdc, fill_value):
-    tensordict = torch.full_like(tdc.tensordict, fill_value)
-    out = tdc.__class__(_tensordict=tensordict)
-    return out
-
-
-@implements_for_tdc(torch.zeros_like)
-def _zeros_like(tdc):
-    return _full_like(tdc, 0.0)
-
-
-@implements_for_tdc(torch.zeros_like)
-def _ones_like(tdc):
-    return _full_like(tdc, 1.0)
-
-
-@implements_for_tdc(torch.clone)
-def _clone(tdc):
-    tensordict = torch.clone(tdc.tensordict)
-    out = tdc.__class__(_tensordict=tensordict)
-    return out
-
-
-@implements_for_tdc(torch.squeeze)
-def _squeeze(tdc):
-    tensordict = torch.squeeze(tdc.tensordict)
-    out = tdc.__class__(_tensordict=tensordict)
-    return out
-
-
-@implements_for_tdc(torch.unsqueeze)
-def _unsqueeze(tdc, dim=0):
-    tensordict = torch.unsqueeze(tdc.tensordict, dim)
-    out = tdc.__class__(_tensordict=tensordict)
-    return out
-
-
-@implements_for_tdc(torch.permute)
-def _permute(tdc, dims):
-    tensordict = torch.permute(tdc.tensordict, dims)
-    out = tdc.__class__(_tensordict=tensordict)
-    return out
-
-
-@implements_for_tdc(torch.split)
-def _split(tdc, split_size_or_sections, dim=0):
-    tensordicts = torch.split(tdc.tensordict, split_size_or_sections, dim)
-    out = [tdc.__class__(_tensordict=td) for td in tensordicts]
-    return out
-
-
-@implements_for_tdc(torch.stack)
-def _stack(list_of_tdc, dim):
-    tensordict = torch.stack([tdc.tensordict for tdc in list_of_tdc], dim)
-    out = list_of_tdc[0].__class__(_tensordict=tensordict)
-    return out
-
-
-@implements_for_tdc(torch.cat)
-def _cat(list_of_tdc, dim):
-    tensordict = torch.cat([tdc.tensordict for tdc in list_of_tdc], dim)
-    out = list_of_tdc[0].__class__(_tensordict=tensordict)
-    return out
 
 
 def tensorclass(cls: T) -> T:
@@ -357,20 +100,263 @@ def tensorclass(cls: T) -> T:
 
 
     """
+    TD_HANDLED_FUNCTIONS: Dict = {}
+
     name = cls.__name__
     # by capturing the representation of the original class, the representation of the
     # generated class can be made the same, including preserving information about
     # where the original class was defined
     cls_repr = repr(cls)
-    datacls = dataclasses.dataclass(cls)
+    datacls = dataclass(cls)
 
-    class TensorClass(
-        _TensorClassBase, metaclass=_TensorClassMeta, datacls=datacls, cls_repr=cls_repr
-    ):
-        pass
+    EXPECTED_KEYS = set(datacls.__dataclass_fields__)
 
-    CLASSES_DICT[name] = TensorClass
-    return TensorClass
+    class _TensorClass(datacls, metaclass=_TensorClassMeta, cls_repr=cls_repr):
+        def __init__(self, *args, _tensordict=None, **kwargs):
+            if (args or kwargs) and _tensordict is not None:
+                raise ValueError("Cannot pass both args/kwargs and _tensordict.")
+
+            if _tensordict is not None:
+                if not all(key in EXPECTED_KEYS for key in _tensordict.keys()):
+                    raise ValueError(
+                        f"Keys from the tensordict ({set(_tensordict.keys())}) must correspond to the class attributes ({EXPECTED_KEYS})."
+                    )
+                input_dict = {key: None for key in _tensordict.keys()}
+                super().__init__(**input_dict)
+                self.tensordict = _tensordict
+            else:
+                device = kwargs.pop("device", None)
+                if "batch_size" not in kwargs:
+                    raise TypeError("Missing keyword argument batch_size")
+                batch_size = kwargs.pop("batch_size")
+
+                for value, key in zip(args, self.__dataclass_fields__):
+                    if key in kwargs:
+                        raise ValueError(f"The key {key} is already set in kwargs")
+                    kwargs[key] = value
+                args = []
+                kwargs = self._set_default_values(kwargs)
+                new_args = [None for _ in args]
+                new_kwargs = {key: None for key in kwargs}
+
+                super().__init__(*new_args, **new_kwargs)
+
+                self.tensordict = TensorDict(
+                    {
+                        key: _get_typed_value(value)
+                        for key, value in kwargs.items()
+                        if key not in ("batch_size",)
+                    },
+                    batch_size=batch_size,
+                    device=device,
+                )
+
+        @classmethod
+        def _build_from_tensordict(cls, tensordict):
+            return cls(_tensordict=tensordict)
+
+        def _set_default_values(self, kwargs):
+            for key in self.__dataclass_fields__:
+                default = self.__dataclass_fields__[key].default
+                default_factory = self.__dataclass_fields__[key].default_factory
+                if not isinstance(default_factory, dataclasses._MISSING_TYPE):
+                    default = default_factory
+                if default is not None:
+                    kwargs.setdefault(key, default)
+            return kwargs
+
+        @classmethod
+        def __torch_function__(
+            cls,
+            func: Callable,
+            types,
+            args: Tuple = (),
+            kwargs: Optional[dict] = None,
+        ) -> Callable:
+            if kwargs is None:
+                kwargs = {}
+            if func not in TD_HANDLED_FUNCTIONS or not all(
+                issubclass(t, (Tensor, cls)) for t in types
+            ):
+                return NotImplemented
+            return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
+
+        def __getattribute__(self, item):
+            if (
+                not item.startswith("__")
+                and "tensordict" in self.__dict__
+                and item in self.__dict__["tensordict"].keys()
+            ):
+                out = self.__dict__["tensordict"][item]
+                expected_type = datacls.__dataclass_fields__[item].type
+                out = _get_typed_output(out, expected_type)
+                return out
+            return super().__getattribute__(item)
+
+        def __setattr__(self, key, value):
+            if "tensordict" not in self.__dict__ or key in ("batch_size", "device"):
+                return super().__setattr__(key, value)
+            if key not in EXPECTED_KEYS:
+                raise AttributeError(
+                    f"Cannot set the attribute '{key}', expected attributes are {EXPECTED_KEYS}."
+                )
+            if type(value) in CLASSES_DICT.values():
+                value = value.__dict__["tensordict"]
+            self.__dict__["tensordict"][key] = value
+            assert self.__dict__["tensordict"][key] is value
+
+        def __getattr__(self, attr):
+            res = getattr(self.tensordict, attr)
+            if not callable(res):
+                return res
+            func = res
+
+            def wrapped_func(*args, **kwargs):
+                res = func(*args, **kwargs)
+                if isinstance(res, TensorDictBase):
+                    new = _TensorClass(_tensordict=res)
+                    return new
+                else:
+                    return res
+
+            return wrapped_func
+
+        def __getitem__(self, item):
+            if isinstance(item, str) or (
+                isinstance(item, tuple)
+                and all(isinstance(_item, str) for _item in item)
+            ):
+                raise ValueError("Invalid indexing arguments.")
+            res = self.tensordict[item]
+            return _TensorClass(_tensordict=res)  # device=res.device)
+
+        def __setitem__(self, item, value):
+            if isinstance(item, str) or (
+                isinstance(item, tuple)
+                and all(isinstance(_item, str) for _item in item)
+            ):
+                raise ValueError("Invalid indexing arguments.")
+            if not isinstance(value, _TensorClass):
+                raise ValueError(
+                    "__setitem__ is only allowed for same-class assignement"
+                )
+            self.tensordict[item] = value.tensordict
+
+        def __repr__(self) -> str:
+            fields = _all_td_fields_as_str(self.tensordict)
+            field_str = fields
+            batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
+            device_str = indent(f"device={self.device}", 4 * " ")
+            is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
+            string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+            return f"{name}(\n{string})"
+
+        def to_tensordict(self) -> TensorDict:
+            """Convert the tensorclass into a regular TensorDict.
+
+            Makes a copy of all entries. Memmap and shared memory tensors are converted to
+            regular tensors.
+
+            Returns:
+                A new TensorDict object containing the same values as the tensorclass.
+            """
+            return self.tensordict.to_tensordict()
+
+        @property
+        def device(self):
+            return self.tensordict.device
+
+        @device.setter
+        def device(self, value: DEVICE_TYPING) -> None:
+            raise RuntimeError(
+                "device cannot be set using tensorclass.device = device, "
+                "because device cannot be updated in-place. To update device, use "
+                "tensorclass.to(new_device), which will return a new tensorclass "
+                "on the new device."
+            )
+
+        @property
+        def batch_size(self) -> torch.Size:
+            return self.tensordict.batch_size
+
+        @batch_size.setter
+        def batch_size(self, new_size: torch.Size) -> None:
+            self.tensordict._batch_size_setter(new_size)
+
+    def implements_for_tdc(torch_function: Callable) -> Callable:
+        """Register a torch function override for _TensorClass."""
+
+        @functools.wraps(torch_function)
+        def decorator(func):
+            TD_HANDLED_FUNCTIONS[torch_function] = func
+            return func
+
+        return decorator
+
+    @implements_for_tdc(torch.unbind)
+    def _unbind(tdc, dim):
+        tensordicts = torch.unbind(tdc.tensordict, dim)
+        out = [_TensorClass(_tensordict=td) for td in tensordicts]
+        return out
+
+    @implements_for_tdc(torch.full_like)
+    def _full_like(tdc, fill_value):
+        tensordict = torch.full_like(tdc.tensordict, fill_value)
+        out = _TensorClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.zeros_like)
+    def _zeros_like(tdc):
+        return _full_like(tdc, 0.0)
+
+    @implements_for_tdc(torch.zeros_like)
+    def _ones_like(tdc):
+        return _full_like(tdc, 1.0)
+
+    @implements_for_tdc(torch.clone)
+    def _clone(tdc):
+        tensordict = torch.clone(tdc.tensordict)
+        out = _TensorClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.squeeze)
+    def _squeeze(tdc):
+        tensordict = torch.squeeze(tdc.tensordict)
+        out = _TensorClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.unsqueeze)
+    def _unsqueeze(tdc, dim=0):
+        tensordict = torch.unsqueeze(tdc.tensordict, dim)
+        out = _TensorClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.permute)
+    def _permute(tdc, dims):
+        tensordict = torch.permute(tdc.tensordict, dims)
+        out = _TensorClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.split)
+    def _split(tdc, split_size_or_sections, dim=0):
+        tensordicts = torch.split(tdc.tensordict, split_size_or_sections, dim)
+        out = [_TensorClass(_tensordict=td) for td in tensordicts]
+        return out
+
+    @implements_for_tdc(torch.stack)
+    def _stack(list_of_tdc, dim):
+        tensordict = torch.stack([tdc.tensordict for tdc in list_of_tdc], dim)
+        out = _TensorClass(_tensordict=tensordict)
+        return out
+
+    @implements_for_tdc(torch.cat)
+    def _cat(list_of_tdc, dim):
+        tensordict = torch.cat([tdc.tensordict for tdc in list_of_tdc], dim)
+        out = _TensorClass(_tensordict=tensordict)
+        return out
+
+    CLASSES_DICT[name] = _TensorClass
+    return _TensorClass
 
 
 def _get_typed_value(value):
