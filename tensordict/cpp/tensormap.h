@@ -15,6 +15,7 @@ namespace py = pybind11;
 class TensorMap {
     typedef std::variant<torch::Tensor, TensorMap> node;
     typedef std::unordered_map<std::string, node> map;
+    typedef std::variant<std::string, py::tuple> key;
     private:
         std::shared_ptr<map> internalMap;
        // TODO something about batch size
@@ -34,7 +35,7 @@ class TensorMap {
         void SetTensorAtPath(const py::tuple key, const torch::Tensor& value);
         void SetMapAtPath(const py::tuple key, const TensorMap& value);
         // TODO add keys - check iterator
-        std::set<py::tuple> GetKeys(const bool includeNested, const bool leavesOnly);
+        std::set<key> GetKeys(const bool includeNested, const bool leavesOnly);
 
         TensorMap& operator=(const TensorMap& other) & {
            internalMap = other.internalMap;
@@ -62,7 +63,7 @@ class TensorMap {
             map* unsafeGetInternalMap() const;
             node GetRecursive(map* currentMap, const py::tuple indices, const int index);
             void SetRecursive(map* currentMap, const py::tuple  indices, const int index, node value);
-            void GetKeysRecursive(std::set<py::tuple>& result, py::tuple currentPath, const node& currentNode);
+            void GetKeysRecursive(std::set<key>& result, py::tuple currentPath, const node& currentNode);
 
 };
 

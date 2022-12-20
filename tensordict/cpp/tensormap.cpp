@@ -59,8 +59,8 @@ void TensorMap::SetMapAtPath(const py::tuple indices, const TensorMap& value)
 }
 
 // TODO: Should I return by ref and have python handle the ref count?
-std::set<py::tuple> TensorMap::GetKeys(const bool includeNested, const bool leavesOnly) {
-    std::set<py::tuple> result;
+std::set<TensorMap::key> TensorMap::GetKeys(const bool includeNested, const bool leavesOnly) {
+    std::set<TensorMap::key> result;
     py::tuple currentPath;
 
     GetKeysRecursive(result, currentPath, *this);
@@ -107,7 +107,7 @@ void TensorMap::SetRecursive(TensorMap::map* currentMap, const py::tuple indices
     SetRecursive(nextMap.unsafeGetInternalMap(), indices, index + 1, value);
 }
 
-void TensorMap::GetKeysRecursive(std::set<py::tuple>& result, py::tuple currentPath, const node& currentNode) {
+void TensorMap::GetKeysRecursive(std::set<TensorMap::key>& result, py::tuple currentPath, const node& currentNode) {
     if (!std::holds_alternative<TensorMap>(currentNode))
     {
         result.insert(currentPath);
