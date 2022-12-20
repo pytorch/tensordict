@@ -63,7 +63,10 @@ std::set<TensorMap::key> TensorMap::GetKeys(const bool includeNested, const bool
     std::set<TensorMap::key> result;
     if (includeNested) {
         py::tuple currentPath;
-        GetKeysRecursive(result, currentPath, *this, leavesOnly);
+        if (leavesOnly)
+            GetKeysRecursiveLeavesOnly(result, currentPath, *this);
+        else
+            GetKeysRecursiveAll(result, currentPath, *this);
     }
     else {
         GetKeysFirstLevel(result, leavesOnly);
@@ -112,26 +115,6 @@ void TensorMap::SetRecursive(TensorMap::map* currentMap, const py::tuple indices
     SetRecursive(nextMap.unsafeGetInternalMap(), indices, index + 1, value);
 }
 
-void TensorMap::GetKeysRecursive(std::set<TensorMap::key>& result, py::tuple currentPath, const node& currentNode, bool leavesOnly) {
-    if (!std::holds_alternative<TensorMap>(currentNode))
-    {
-        TensorMap::key path = currentPath;
-        if (py::len(currentPath) == 1)
-            path = currentPath[0].cast<std::string>();
-
-        result.insert(path);
-        return;
-    }
-
-    auto currentTensorMap = std::get<TensorMap>(currentNode);
-    auto currentMap = currentTensorMap.unsafeGetInternalMap();
-    for (auto i : *currentMap)
-    {
-        auto nextStep =  py::make_tuple(i.first);
-        TensorMap::GetKeysRecursive(result, currentPath + nextStep, i.second, leavesOnly);
-    }
-}
-
 void TensorMap::GetKeysFirstLevel(std::set<TensorMap::key> &result, bool leavesOnly) {
     for (auto i : *unsafeGetInternalMap()) {
         if (!leavesOnly || !std::holds_alternative<TensorMap>(i.second)) {
@@ -140,6 +123,32 @@ void TensorMap::GetKeysFirstLevel(std::set<TensorMap::key> &result, bool leavesO
     }
 }
 
+void TensorMap::GetKeysRecursiveAll(std::set<TensorMap::key>& result, py::tuple currentPath, const node& currentNode) {
+    return;
+}
+
+void TensorMap::GetKeysRecursiveLeavesOnly(std::set<TensorMap::key>& result, py::tuple currentPath, const node& currentNode) {
+    if (!std::holds_alternative<TensorMap>(currentNode))
+    {
+        result.insert(GetCleanKey(currentPath));
+        return;
+    }
+
+    auto currentTensorMap = std::get<TensorMap>(currentNode);
+    auto currentMap = currentTensorMap.unsafeGetInternalMap();
+    for (auto i : *currentMap)
+    {
+        auto nextStep =  py::make_tuple(i.first);
+        TensorMap::GetKeysRecursiveLeavesOnly(result, currentPath + nextStep, i.second);
+    }
+}
+
+TensorMap::key TensorMap::GetCleanKey(py::tuple path) {
+    TensorMap::key cleanKey = path;
+    if (py::len(path) == 1)
+        cleanKey = path[0].cast<std::string>();
+    return cleanKey;
+}
 
 TensorMap::map* TensorMap::unsafeGetInternalMap() const {
     return internalMap.get();

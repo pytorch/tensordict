@@ -63,8 +63,10 @@ class TensorMap {
             map* unsafeGetInternalMap() const;
             node GetRecursive(map* currentMap, const py::tuple indices, const int index);
             void SetRecursive(map* currentMap, const py::tuple  indices, const int index, node value);
-            void GetKeysRecursive(std::set<key>& result, py::tuple currentPath, const node& currentNode, bool leavesOnly);
+            void GetKeysRecursiveAll(std::set<key>& result, py::tuple currentPath, const node& currentNode);
+            void GetKeysRecursiveLeavesOnly(std::set<key>& result, py::tuple currentPath, const node& currentNode);
             void GetKeysFirstLevel(std::set<key>& result, bool leavesOnly);
+            key GetCleanKey(py::tuple path);
 
 };
 
