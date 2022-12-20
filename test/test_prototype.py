@@ -138,18 +138,19 @@ def test_tensormap_get_keys_leaves_only(device):
 
 
 
-@pytest.mark.skip(reason="in keyword doesn't work with all cases") # .parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_in_keys(device):
     m = TensorMap()
     m['a', 'b', 'c'] = torch.zeros(3)
     m['d'] = torch.zeros(3)
+    m['a', 'x'] = torch.zeros(3)
 
-    keys = m.keys()
+    keys = m.keys(True, False)
     assert 'd' in keys
     assert ('a', 'b', 'c') in keys
-
-    assert ('a', 'b') in keys  # This breaks too. Need to overwrite 'in' keyword ?
-    assert ('a', ) in keys
+    assert ('a', 'b') in keys
+    assert 'a' in keys
+    assert ('a', 'x') in keys
 
 
 def assert_equal_sets(expected: set, actual: set):
