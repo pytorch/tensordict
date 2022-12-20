@@ -74,32 +74,33 @@ def test_tensormap_get_keys(device):
     m['b'] = torch.zeros(3)
 
     expected_keys = {'a', 'b'}
-    assert len(expected_keys.difference(m.keys())) == 0
+    assert_equal_sets(expected_keys, m.keys())
 
     m['c', 'd'] = torch.ones(3)
     m['a', 'x', 'y'] = torch.zeros(3)
-    expected_nested_keys = {('a', 'x', 'y'), 'b', ('c', 'd')}
-    assert len(expected_nested_keys.difference(m.keys(True))) == 0
+    expected_keys = {('a', 'x', 'y'), 'b', ('c', 'd')}
+    keys = m.keys(True, False)
+    assert_equal_sets(expected_keys, m.keys(True))
     expected_keys = {'a', 'b', 'c'}
-    assert len(expected_keys.difference(m.keys())) == 0
+    assert_equal_sets(expected_keys, m.keys())
 
     m['a', 'z'] = torch.rand(3)
-    expected_nested_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd')}
-    assert len(expected_nested_keys.difference(m.keys(True))) == 0
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd')}
+    assert_equal_sets(expected_keys, m.keys(True))
     expected_keys = {'a', 'b', 'c'}
-    assert len(expected_keys.difference(m.keys())) == 0
+    assert_equal_sets(expected_keys, m.keys())
 
     m['c', 'd'] = m['a']
-    expected_nested_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd', 'z')}
-    assert len(expected_nested_keys.difference(m.keys(True))) == 0
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd', 'z')}
+    assert_equal_sets(expected_keys, m.keys(True))
     expected_keys = {'a', 'b', 'c'}
-    assert len(expected_keys.difference(m.keys())) == 0
+    assert_equal_sets(expected_keys, m.keys())
 
     m['c'] = torch.ones(3)
-    expected_nested_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', 'c'}
-    assert len(expected_nested_keys.difference(m.keys(True))) == 0
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', 'c'}
+    assert_equal_sets(expected_keys, m.keys(True))
     expected_keys = {'a', 'b', 'c'}
-    assert len(expected_keys.difference(m.keys())) == 0
+    assert_equal_sets(expected_keys, m.keys())
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -109,32 +110,32 @@ def test_tensormap_get_keys_leaves_only(device):
     m['b'] = torch.zeros(3)
 
     expected_keys = {'a', 'b'}
-    assert len(expected_keys.difference(m.keys(False, True))) == 0
+    assert_equal_sets(expected_keys, m.keys(False, True))
 
     m['c', 'd'] = torch.ones(3)
     m['a', 'x', 'y'] = torch.zeros(3)
     expected_keys = {('a', 'x', 'y'), 'b', ('c', 'd')}
-    assert len(expected_keys.difference(m.keys(True, True))) == 0
+    assert_equal_sets(expected_keys, m.keys(True, True))
     expected_keys = {'b'}
-    assert len(expected_keys.difference(m.keys(False, True))) == 0
+    assert_equal_sets(expected_keys, m.keys(False, True))
 
     m['a', 'z'] = torch.rand(3)
     expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd')}
-    assert len(expected_keys.difference(m.keys(True, True))) == 0
+    assert_equal_sets(expected_keys, m.keys(True, True))
     expected_keys = {'b'}
-    assert len(expected_keys.difference(m.keys(False, True))) == 0
+    assert_equal_sets(expected_keys, m.keys(False, True))
 
     m['c', 'd'] = m['a']
-    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd', 'z')}
-    assert len(expected_keys.difference(m.keys(True, True))) == 0
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd', 'z'), ('c', 'd', 'x', 'y')}
+    assert_equal_sets(expected_keys, m.keys(True, True))
     expected_keys = {'b'}
-    assert len(expected_keys.difference(m.keys(False, True))) == 0
+    assert_equal_sets(expected_keys, m.keys(False, True))
 
     m['c'] = torch.ones(3)
     expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', 'c'}
-    assert len(expected_keys.difference(m.keys(True, True))) == 0
+    assert_equal_sets(expected_keys, m.keys(True, True))
     expected_keys = {'b', 'c'}
-    assert len(expected_keys.difference(m.keys(False, True))) == 0
+    assert_equal_sets(expected_keys, m.keys(False, True))
 
 
 
@@ -150,3 +151,9 @@ def test_tensormap_in_keys(device):
 
     assert ('a', 'b') in keys  # This breaks too. Need to overwrite 'in' keyword ?
     assert ('a', ) in keys
+
+
+def assert_equal_sets(expected: set, actual: set):
+    assert len(actual) == len(expected)
+    assert len(expected.difference(actual)) == 0
+    assert len(actual.difference(expected)) == 0
