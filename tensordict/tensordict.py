@@ -2754,14 +2754,11 @@ class TensorDict(TensorDictBase):
             if self.device is not None and dest == self.device:
                 return self
 
-            self_copy = copy(self)
-            self_copy._device = dest
-            self_copy._tensordict = {
-                key: value.to(dest, **kwargs) for key, value in self_copy.items()
-            }
-            self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
-            self_copy._is_shared = False
-            self_copy._is_memmap = False
+            self_copy = TensorDict(
+                {key: value.to(dest, **kwargs) for key, value in self.items()},
+                batch_size=self.batch_size,
+                device=dest,
+            )
             return self_copy
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
@@ -4881,7 +4878,9 @@ class SavedTensorDict(TensorDictBase):
                 return self
             self_copy = copy(self)
             self_copy._device = dest
-            self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
+            self_copy._dict_meta = {
+                key: value.to(dest) for key, value in self._dict_meta.items()
+            }
             return self_copy
         if isinstance(dest, torch.Size):
             self.batch_size = dest

@@ -376,6 +376,29 @@ class MetaTensor:
             _is_tensordict=self.is_tensordict(),
         )
 
+    def to(self, dest):
+        if isinstance(dest, torch.dtype):
+            self_copy = MetaTensor(
+                self.shape,
+                _is_memmap=self.is_memmap(),
+                _is_shared=self.is_shared(),
+                _is_tensordict=self.is_tensordict(),
+                _is_kjt=self.is_kjt(),
+                dtype=dest,
+                device=self.device,
+            )
+        else:
+            self_copy = MetaTensor(
+                self.shape,
+                _is_memmap=self.is_memmap(),
+                _is_shared=self.is_shared(),
+                _is_tensordict=self.is_tensordict(),
+                _is_kjt=self.is_kjt(),
+                dtype=self.dtype,
+                device=dest,
+            )
+        return self_copy
+
 
 def _stack_meta(
     list_of_meta_tensors: Sequence[MetaTensor],
