@@ -47,6 +47,12 @@ class _TensorClassMeta(type):
         return super().__repr__()
 
 
+def is_tensorclass(obj):
+    """Returns True if obj is either a tensorclass or an instance of a tensorclass"""
+    cls = obj if isinstance(obj, type) else type(obj)
+    return dataclasses.is_dataclass(cls) and isinstance(cls, _TensorClassMeta)
+
+
 def tensorclass(cls: T) -> T:
     """A decorator to create :obj:`tensorclass` classes.
 

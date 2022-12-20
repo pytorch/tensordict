@@ -1,1 +1,1 @@
-from .tensorclass import tensorclass
+from .tensorclass import is_tensorclass, tensorclass
