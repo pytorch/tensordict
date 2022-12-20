@@ -124,7 +124,18 @@ void TensorMap::GetKeysFirstLevel(std::set<TensorMap::key> &result, bool leavesO
 }
 
 void TensorMap::GetKeysRecursiveAll(std::set<TensorMap::key>& result, py::tuple currentPath, const node& currentNode) {
-    return;
+    if (!std::holds_alternative<TensorMap>(currentNode))
+        return;
+
+    auto currentTensorMap = std::get<TensorMap>(currentNode);
+    auto currentMap = currentTensorMap.unsafeGetInternalMap();
+    for (auto i : *currentMap)
+    {
+        auto nextPath = currentPath + py::make_tuple(i.first);
+        result.insert(GetCleanKey(nextPath));
+        TensorMap::GetKeysRecursiveAll(result, nextPath, i.second);
+    }
+
 }
 
 void TensorMap::GetKeysRecursiveLeavesOnly(std::set<TensorMap::key>& result, py::tuple currentPath, const node& currentNode) {

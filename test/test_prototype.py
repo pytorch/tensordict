@@ -78,26 +78,25 @@ def test_tensormap_get_keys(device):
 
     m['c', 'd'] = torch.ones(3)
     m['a', 'x', 'y'] = torch.zeros(3)
-    expected_keys = {('a', 'x', 'y'), 'b', ('c', 'd')}
-    keys = m.keys(True, False)
+    expected_keys = {'a', ('a', 'x'), ('a', 'x', 'y'), 'b', 'c', ('c', 'd')}
     assert_equal_sets(expected_keys, m.keys(True))
     expected_keys = {'a', 'b', 'c'}
     assert_equal_sets(expected_keys, m.keys())
 
     m['a', 'z'] = torch.rand(3)
-    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd')}
+    expected_keys = {'a', ('a', 'z'), ('a', 'x'), ('a', 'x', 'y'), 'b', 'c', ('c', 'd')}
     assert_equal_sets(expected_keys, m.keys(True))
     expected_keys = {'a', 'b', 'c'}
     assert_equal_sets(expected_keys, m.keys())
 
     m['c', 'd'] = m['a']
-    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd', 'z')}
+    expected_keys = {'a', ('a', 'z'), ('a', 'x'), ('a', 'x', 'y'), 'b', 'c', ('c', 'd'), ('c', 'd', 'z'), ('c', 'd', 'x'), ('c', 'd', 'x', 'y')}
     assert_equal_sets(expected_keys, m.keys(True))
     expected_keys = {'a', 'b', 'c'}
     assert_equal_sets(expected_keys, m.keys())
 
     m['c'] = torch.ones(3)
-    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', 'c'}
+    expected_keys = {'a', ('a', 'z'), ('a', 'x'), ('a', 'x', 'y'), 'b', 'c'}
     assert_equal_sets(expected_keys, m.keys(True))
     expected_keys = {'a', 'b', 'c'}
     assert_equal_sets(expected_keys, m.keys())
