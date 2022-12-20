@@ -867,7 +867,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             yield self.get(k)
 
     def items_meta(
-        self, make_unset: bool = True, include_nested: bool = False
+        self,
+        make_unset: bool = True,
+        include_nested: bool = False,
+        leaves_only: bool = False,
     ) -> Iterator[Tuple[str, MetaTensor]]:
         """Returns a generator of key-value pairs for the tensordict.
 
@@ -875,22 +878,27 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
         if make_unset:
-            for k in self.keys(include_nested=include_nested):
+            for k in self.keys(include_nested=include_nested, leaves_only=leaves_only):
                 yield k, self._get_meta(k)
         else:
-            if include_nested:
-                for k, item in self._dict_meta.items():
-                    if isinstance(item, TensorDictBase):
-                        yield from item.items_meta(
-                            make_unset=make_unset, include_nested=include_nested
-                        )
-                    else:
+            for k, item in self._dict_meta.items():
+                if item.is_tensordict():
+                    if not leaves_only:
                         yield k, item
-            else:
-                yield from self._dict_meta.items()
+                    if include_nested:
+                        yield from self.get(k).items_meta(
+                            make_unset=make_unset,
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                        )
+                else:
+                    yield k, item
 
     def values_meta(
-        self, make_unset: bool = True, include_nested: bool = False
+        self,
+        make_unset: bool = True,
+        include_nested: bool = False,
+        leaves_only: bool = False,
     ) -> Iterator[MetaTensor]:
         """Returns a generator representing the values for the tensordict.
 
@@ -898,10 +906,21 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
         if make_unset:
-            for k in self.keys(include_nested=include_nested):
+            for k in self.keys(include_nested=include_nested, leaves_only=leaves_only):
                 yield self._get_meta(k)
         else:
-            yield from self._dict_meta.values()
+            for k, item in self._dict_meta.items():
+                if item.is_tensordict():
+                    if not leaves_only:
+                        yield item
+                    if include_nested:
+                        yield from self.get(k).values_meta(
+                            make_unset=make_unset,
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                        )
+                else:
+                    yield item
 
     @abc.abstractmethod
     def keys(
