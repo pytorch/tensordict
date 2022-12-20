@@ -379,7 +379,7 @@ class MetaTensor:
     def to(self, dest):
         if isinstance(dest, torch.dtype):
             self_copy = MetaTensor(
-                self.shape,
+                *self.shape,
                 _is_memmap=self.is_memmap(),
                 _is_shared=self.is_shared(),
                 _is_tensordict=self.is_tensordict(),
@@ -389,7 +389,7 @@ class MetaTensor:
             )
         else:
             self_copy = MetaTensor(
-                self.shape,
+                *self.shape,
                 _is_memmap=self.is_memmap(),
                 _is_shared=self.is_shared(),
                 _is_tensordict=self.is_tensordict(),
