@@ -596,6 +596,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         fn: Callable,
         batch_size: Optional[Sequence[int]] = None,
         inplace: bool = False,
+        **constructor_kwargs,
     ) -> TensorDictBase:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
 
@@ -608,6 +609,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 the transformation.
             inplace (bool, optional): if True, changes are made in-place.
                 Default is False.
+            **constructor_kwargs: additional keyword arguments to be passed to the
+                TensorDict constructor.
 
         Returns:
             a new tensordict with transformed_in tensors.
@@ -617,7 +620,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             self
             if inplace
             else TensorDict(
-                {}, batch_size=batch_size, device=self.device, _run_checks=False
+                {},
+                batch_size=batch_size,
+                device=self.device,
+                _run_checks=False,
+                **constructor_kwargs,
             )
             if batch_size is not None
             else self.clone(recurse=False)
@@ -627,7 +634,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             out.unlock()
         for key, item in self.items():
             if isinstance(item, TensorDictBase):
-                item_trsf = item.apply(fn, inplace=inplace, batch_size=batch_size)
+                item_trsf = item.apply(
+                    fn, inplace=inplace, batch_size=batch_size, **constructor_kwargs
+                )
             else:
                 item_trsf = fn(item)
             if item_trsf is not None:
@@ -1191,7 +1200,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             dim = self.batch_dims + dim
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
         return tuple(
-            self.apply(lambda tensor, idx=_idx: tensor[idx], batch_size=batch_size)
+            self.apply(
+                lambda tensor, idx=_idx: tensor[idx],
+                batch_size=batch_size,
+                _is_shared=self.is_shared(),
+                _is_memmap=self.is_memmap(),
+            )
             for _idx in idx
         )
 
@@ -1241,6 +1255,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             batch_size=self.batch_size,
             device=self.device,
             _run_checks=False,
+            _is_shared=self.is_shared() if not recurse else False,
+            _is_memmap=self.is_memmap() if not recurse else False,
         )
 
     @classmethod
@@ -1569,7 +1585,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 dictionaries[idx][key] = split_tensor
         return [
             TensorDict(
-                dictionaries[i], batch_sizes[i], device=self.device, _run_checks=False
+                dictionaries[i],
+                batch_sizes[i],
+                device=self.device,
+                _run_checks=False,
+                _is_shared=self.is_shared(),
+                _is_memmap=self.is_memmap(),
             )
             for i in range(len(dictionaries))
         ]
@@ -1795,7 +1816,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return self
         else:
             tensordict_out = TensorDict(
-                {}, batch_size=self.batch_size, device=self.device
+                {},
+                batch_size=self.batch_size,
+                device=self.device,
+                _run_checks=False,
+                _is_shared=self.is_shared(),
+                _is_memmap=self.is_memmap(),
             )
             for key, value in self.items():
                 if key in to_flatten:
@@ -1826,6 +1852,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 },
                 batch_size=self.batch_size,
                 device=self.device,
+                _run_checks=False,
+                _is_shared=self.is_shared(),
+                _is_memmap=self.is_memmap(),
             )
         else:
             out = self
@@ -1877,6 +1906,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             batch_size=_getitem_batch_size(self.batch_size, idx),
             device=self.device,
             _run_checks=False,
+            _is_shared=self.is_shared(),
+            _is_memmap=self.is_memmap(),
         )
 
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
@@ -3419,6 +3450,8 @@ torch.Size([3, 2])
             batch_size=self.batch_size,
             device=self.device,
             _run_checks=False,
+            _is_memmap=self.is_memmap(),
+            _is_shared=self.is_shared(),
         ).exclude(*keys, inplace=True)
 
     @property
@@ -5006,8 +5039,8 @@ class _CustomOpTensorDict(TensorDictBase):
     ):
         super().__init__()
 
-        self._is_shared = False
-        self._is_memmap = False
+        self._is_shared = source.is_shared()
+        self._is_memmap = source.is_memmap()
 
         if not isinstance(source, TensorDictBase):
             raise TypeError(
@@ -5225,6 +5258,8 @@ class _CustomOpTensorDict(TensorDictBase):
             batch_size=self.batch_size,
             device=self.device,
             _run_checks=False,
+            _is_memmap=self.is_memmap(),
+            _is_shared=self.is_shared(),
         ).exclude(*keys, inplace=True)
 
     def clone(self, recurse: bool = True) -> TensorDictBase:

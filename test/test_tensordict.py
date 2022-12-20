@@ -3299,6 +3299,45 @@ def test_lazy_stacked_append(dim, device):
         lstd.append(TensorDict({"a": torch.ones(17)}, [17], device=device))
 
 
+def test_shared_inheritance():
+    td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
+    td.share_memory_()
+
+    td0, *_ = td.unbind(1)
+    assert td0.is_shared()
+
+    td0, *_ = td.split(1, 0)
+    assert td0.is_shared()
+
+    td0 = td.exclude("a")
+    assert td0.is_shared()
+
+    td0 = td.select("a")
+    assert td0.is_shared()
+
+    td.unlock()
+    td0 = td.rename_key("a", "a.a")
+    assert td0.is_shared()
+
+    td0 = td.unflatten_keys(".")
+    assert td0.is_shared()
+
+    td0 = td.flatten_keys(".")
+    assert td0.is_shared()
+
+    td0 = td.view(-1)
+    assert td0.is_shared()
+
+    td0 = td.permute(1, 0)
+    assert td0.is_shared()
+
+    td0 = td.unsqueeze(0)
+    assert td0.is_shared()
+
+    td0 = td0.squeeze(0)
+    assert td0.is_shared()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
