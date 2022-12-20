@@ -110,7 +110,11 @@ void TensorMap::SetRecursive(TensorMap::map* currentMap, const py::tuple indices
 void TensorMap::GetKeysRecursive(std::set<TensorMap::key>& result, py::tuple currentPath, const node& currentNode) {
     if (!std::holds_alternative<TensorMap>(currentNode))
     {
-        result.insert(currentPath);
+        TensorMap::key path = currentPath;
+        if (py::len(currentPath) == 1)
+            path = currentPath[0].cast<std::string>();
+
+        result.insert(path);
         return;
     }
 

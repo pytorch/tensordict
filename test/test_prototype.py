@@ -1,3 +1,4 @@
+import os
 import torch
 import pytest
 
@@ -72,20 +73,24 @@ def test_tensormap_get_keys(device):
     m['a'] = torch.ones(3)
     m['b'] = torch.zeros(3)
 
-    expected_keys = {('a',), ('b',)}
+    expected_keys = {'a', 'b'}
     assert len(expected_keys.difference(m.keys())) == 0
 
     m['c', 'd'] = torch.ones(3)
     m['a', 'x', 'y'] = torch.zeros(3)
-    expected_keys = {('a', 'x', 'y'), ('b',), ('c', 'd')}
+    expected_keys = {('a', 'x', 'y'), 'b', ('c', 'd')}
     assert len(expected_keys.difference(m.keys())) == 0
 
     m['a', 'z'] = torch.rand(3)
-    expected_keys = {('a', 'z'), ('a', 'x', 'y'), ('b',), ('c', 'd')}
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd')}
     assert len(expected_keys.difference(m.keys())) == 0
 
     m['c', 'd'] = m['a']
-    expected_keys = {('a', 'z'), ('a', 'x', 'y'), ('b',), ('c', 'd', 'z')}
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd', 'z')}
+    assert len(expected_keys.difference(m.keys())) == 0
+
+    m['c'] = torch.ones(3)
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', 'c'}
     assert len(expected_keys.difference(m.keys())) == 0
 
 
@@ -96,7 +101,7 @@ def test_tensormap_in_keys(device):
     m['d'] = torch.zeros(3)
 
     keys = m.keys()
-    assert ('d',) in keys
+    assert 'd' in keys
     assert ('a', 'b', 'c') in keys
 
     assert ('a', 'b') in keys  # This breaks too. Need to overwrite 'in' keyword ?
