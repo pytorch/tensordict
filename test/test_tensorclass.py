@@ -11,7 +11,7 @@ import torch
 from _utils_internal import get_available_devices
 
 from tensordict import LazyStackedTensorDict, TensorDict
-from tensordict.prototype import tensorclass
+from tensordict.prototype import is_tensorclass, tensorclass
 from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
 from torch import Tensor
 
@@ -47,7 +47,8 @@ def test_type():
         batch_size=[3, 4],
     )
     assert isinstance(data, MyData)
-    # assert is_tensorclass(data)
+    assert is_tensorclass(data)
+    assert is_tensorclass(MyData)
 
 
 @pytest.mark.parametrize("device", get_available_devices())
