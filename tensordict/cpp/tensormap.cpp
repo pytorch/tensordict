@@ -6,9 +6,10 @@
 #include <unordered_map>
 #include <vector>
 
-TensorMap::TensorMap()
+TensorMap::TensorMap(std::vector<int> batchSize)
 {
     this->internalMap = std::make_shared<TensorMap::map>();
+    this->batchSize = batchSize;
 }
 
 // Index Get - Set
@@ -108,7 +109,7 @@ void TensorMap::SetRecursive(TensorMap::map* currentMap, const py::tuple indices
     }
 
     if (currentMap->count(key) == 0 || !std::holds_alternative<TensorMap>(currentMap->at(key))) {
-        currentMap->insert_or_assign(key, TensorMap()); // For now we insert maps by value
+        currentMap->insert_or_assign(key, TensorMap(std::vector<int>())); // For now we insert maps by value
     }
 
     auto nextMap = std::get<TensorMap>(currentMap->at(key));

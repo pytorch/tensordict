@@ -18,10 +18,11 @@ class TensorMap {
     typedef std::variant<std::string, py::tuple> key;
     private:
         std::shared_ptr<map> internalMap;
+        std::vector<int> batchSize;
        // TODO something about batch size
 
     public:
-        TensorMap();
+        TensorMap(std::vector<int> batchSize);
         ~TensorMap() = default;
         TensorMap(const TensorMap&) = default;
         TensorMap(TensorMap&&) = default;
@@ -39,10 +40,12 @@ class TensorMap {
 
         TensorMap& operator=(const TensorMap& other) & {
            internalMap = other.internalMap;
+           batchSize = other.batchSize;
            return *this;
         }
         TensorMap& operator=(TensorMap& other) & {
             internalMap = std::move(other.internalMap);
+            batchSize = other.batchSize;
             return *this;
         }
 

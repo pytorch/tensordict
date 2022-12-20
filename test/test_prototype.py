@@ -8,7 +8,7 @@ from tensordict import TensorMap
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_simple_set_tensor(device):
-    m = TensorMap()
+    m = TensorMap([])
     x = torch.ones(3)
     m['a'] = x
     assert m['a'] is x
@@ -22,8 +22,8 @@ def test_tensormap_simple_set_tensor(device):
 
 @pytest.mark.skip(reason="TensorMap ref not working for now") # parametrize("device", get_available_devices())
 def test_tensormap_simple_set_map(device):
-    m1 = TensorMap()
-    m2 = TensorMap()
+    m1 = TensorMap([])
+    m2 = TensorMap([])
 
     m1['a'] = m2
     assert m1['a'] is m2  # Failing - Need to fix!
@@ -31,8 +31,8 @@ def test_tensormap_simple_set_map(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_nested_set(device):
-    m1 = TensorMap()
-    m2 = TensorMap()
+    m1 = TensorMap([])
+    m2 = TensorMap([])
     x = torch.rand(3)
     y = torch.rand(3)
 
@@ -52,7 +52,7 @@ def test_tensormap_nested_set(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_nested_overrite(device):
-    m1 = TensorMap()
+    m1 = TensorMap([])
 
     m1['a'] = torch.ones(3)
     assert (m1['a'] == 1).all()
@@ -62,14 +62,14 @@ def test_tensormap_nested_overrite(device):
     assert m1['a', 'b', 'c'] is m1['a', 'b']['c']
     assert (m1['a', 'b', 'c'] == 1).all()
 
-    m2 = TensorMap()
+    m2 = TensorMap([])
     m2['x'] = m1['a', 'b']
     assert m2['x', 'c'] is m1['a', 'b', 'c']
 
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_get_keys(device):
-    m = TensorMap()
+    m = TensorMap([])
     m['a'] = torch.ones(3)
     m['b'] = torch.zeros(3)
 
@@ -104,7 +104,7 @@ def test_tensormap_get_keys(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_get_keys_leaves_only(device):
-    m = TensorMap()
+    m = TensorMap([])
     m['a'] = torch.ones(3)
     m['b'] = torch.zeros(3)
 
@@ -140,7 +140,7 @@ def test_tensormap_get_keys_leaves_only(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_in_keys(device):
-    m = TensorMap()
+    m = TensorMap([])
     m['a', 'b', 'c'] = torch.zeros(3)
     m['d'] = torch.zeros(3)
     m['a', 'x'] = torch.zeros(3)
