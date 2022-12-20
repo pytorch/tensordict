@@ -102,6 +102,42 @@ def test_tensormap_get_keys(device):
     assert len(expected_keys.difference(m.keys())) == 0
 
 
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_get_keys_leaves_only(device):
+    m = TensorMap()
+    m['a'] = torch.ones(3)
+    m['b'] = torch.zeros(3)
+
+    expected_keys = {'a', 'b'}
+    assert len(expected_keys.difference(m.keys(False, True))) == 0
+
+    m['c', 'd'] = torch.ones(3)
+    m['a', 'x', 'y'] = torch.zeros(3)
+    expected_keys = {('a', 'x', 'y'), 'b', ('c', 'd')}
+    assert len(expected_keys.difference(m.keys(True, True))) == 0
+    expected_keys = {'b'}
+    assert len(expected_keys.difference(m.keys(False, True))) == 0
+
+    m['a', 'z'] = torch.rand(3)
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd')}
+    assert len(expected_keys.difference(m.keys(True, True))) == 0
+    expected_keys = {'b'}
+    assert len(expected_keys.difference(m.keys(False, True))) == 0
+
+    m['c', 'd'] = m['a']
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', ('c', 'd', 'z')}
+    assert len(expected_keys.difference(m.keys(True, True))) == 0
+    expected_keys = {'b'}
+    assert len(expected_keys.difference(m.keys(False, True))) == 0
+
+    m['c'] = torch.ones(3)
+    expected_keys = {('a', 'z'), ('a', 'x', 'y'), 'b', 'c'}
+    assert len(expected_keys.difference(m.keys(True, True))) == 0
+    expected_keys = {'b', 'c'}
+    assert len(expected_keys.difference(m.keys(False, True))) == 0
+
+
+
 @pytest.mark.skip(reason="in keyword doesn't work with all cases") # .parametrize("device", get_available_devices())
 def test_tensormap_in_keys(device):
     m = TensorMap()
