@@ -1855,9 +1855,7 @@ class TestTensorDictRepr:
 
     def test_repr_plain(self, device, dtype):
         tensordict = self.td(device, dtype)
-        if (
-            device is not None and device.type == "cuda"
-        ):
+        if device is not None and device.type == "cuda":
             is_shared = True
         else:
             is_shared = False
@@ -1898,9 +1896,7 @@ class TestTensorDictRepr:
 
     def test_repr_nested(self, device, dtype):
         nested_td = self.nested_td(device, dtype)
-        if (
-            device is not None and device.type == "cuda"
-        ):
+        if device is not None and device.type == "cuda":
             is_shared = True
         else:
             is_shared = False
@@ -1922,9 +1918,7 @@ class TestTensorDictRepr:
     def test_repr_nested_update(self, device, dtype):
         nested_td = self.nested_td(device, dtype)
         nested_td["my_nested_td"].rename_key("a", "z")
-        if (
-            device is not None and device.type == "cuda"
-        ):
+        if device is not None and device.type == "cuda":
             is_shared = True
         else:
             is_shared = False
@@ -1945,9 +1939,7 @@ class TestTensorDictRepr:
 
     def test_repr_stacked(self, device, dtype):
         stacked_td = self.stacked_td(device, dtype)
-        if (
-            device is not None and device.type == "cuda"
-        ):
+        if device is not None and device.type == "cuda":
             is_shared = True
         else:
             is_shared = False
@@ -1963,9 +1955,7 @@ class TestTensorDictRepr:
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
     def test_repr_indexed_tensordict(self, device, dtype, index):
         tensordict = self.td(device, dtype)[index]
-        if (
-            device is not None and device.type == "cuda"
-        ):
+        if device is not None and device.type == "cuda":
             is_shared = True
         else:
             is_shared = False
@@ -1990,9 +1980,7 @@ class TestTensorDictRepr:
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
     def test_repr_indexed_nested_tensordict(self, device, dtype, index):
         nested_tensordict = self.nested_td(device, dtype)[index]
-        if (
-            device is not None and device.type == "cuda"
-        ):
+        if device is not None and device.type == "cuda":
             is_shared = True
         else:
             is_shared = False
@@ -2028,9 +2016,7 @@ class TestTensorDictRepr:
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
     def test_repr_indexed_stacked_tensordict(self, device, dtype, index):
         stacked_tensordict = self.stacked_td(device, dtype)
-        if (
-            device is not None and device.type == "cuda"
-        ):
+        if device is not None and device.type == "cuda":
             is_shared = True
         else:
             is_shared = False
@@ -2077,9 +2063,7 @@ class TestTensorDictRepr:
         td.batch_size = torch.Size([4, 3, 2])
         is_shared = False
         tensor_class = "Tensor"
-        if (
-            device is not None and device.type == "cuda"
-        ):
+        if device is not None and device.type == "cuda":
             is_shared = True
         expected = f"""TensorDict(
     fields={{

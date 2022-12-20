@@ -800,8 +800,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             device = self.device
             tensor = tensor.to(device)
 
-        if self.is_shared() and not input.is_shared():
-            input = input.clone().share_memory_()
+        if self.is_shared() and not tensor.is_shared():
+            tensor = tensor.clone().share_memory_()
 
         if check_tensor_shape and _shape(tensor)[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape

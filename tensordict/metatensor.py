@@ -228,7 +228,17 @@ class MetaTensor:
 
         """
         self._is_shared = True
-        self._class_name = "SharedTensor" if self.device.type != "cuda" else "Tensor"
+        if (
+            self._class_name
+            and not self.is_tensordict()
+            and not self.is_kjt()
+            and not self.is_memmap()
+        ):
+            self._class_name = (
+                "SharedTensor"
+                if (self.device is not None and self.device.type != "cuda")
+                else "Tensor"
+            )
         return self
 
     def is_shared(self) -> bool:
