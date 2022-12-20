@@ -800,7 +800,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             device = self.device
             tensor = tensor.to(device)
 
-        if self.is_shared() and not tensor.is_shared():
+        if self._is_shared and not tensor.is_shared():
             tensor = tensor.clone().share_memory_()
 
         if check_tensor_shape and _shape(tensor)[: self.batch_dims] != self.batch_size:
@@ -2408,7 +2408,7 @@ class TensorDict(TensorDictBase):
         return self_copy
 
     def pin_memory(self) -> TensorDictBase:
-        if self.device == torch.device("cpu"):
+        if self.device.type == "cpu":
             for key, value in self.items():
                 if isinstance(value, TensorDictBase) or (
                     value.dtype in (torch.half, torch.float, torch.double)
@@ -2713,7 +2713,7 @@ class TensorDict(TensorDictBase):
         return self
 
     def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
-        if self.is_shared() and self.device == torch.device("cpu"):
+        if self.is_shared() and self.device.type == "cpu":
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
@@ -3490,7 +3490,7 @@ torch.Size([3, 2])
                 dtype=tensor.dtype,
                 device=self.device,
             )
-            if self.is_shared() and self.device == torch.device("cpu"):
+            if self.is_shared() and self.device.type == "cpu":
                 tensor_expand.share_memory_()
             elif self.is_memmap():
                 tensor_expand = MemmapTensor(tensor_expand)
@@ -4881,9 +4881,7 @@ class SavedTensorDict(TensorDictBase):
                 return self
             self_copy = copy(self)
             self_copy._device = dest
-            self_copy._dict_meta = deepcopy(self._dict_meta)
-            for k in self.keys():
-                self_copy._dict_meta[k].device = dest
+            self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
             return self_copy
         if isinstance(dest, torch.Size):
             self.batch_size = dest
