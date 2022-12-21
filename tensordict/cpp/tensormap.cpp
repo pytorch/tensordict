@@ -28,11 +28,13 @@ TensorMap::node TensorMap::GetAt(const std::string key) const
 void TensorMap::SetTensorAt(const std::string key, const torch::Tensor& value)
 {
     ValidateBatchSize(value.sizes());
+    // TODO: handle case when dim == size; change tensor dim after valid size check
     unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
 void TensorMap::SetMapAt(const std::string key, const TensorMap& value)
 {
+    ValidateBatchSize(c10::IntArrayRef(value.batchSize));
     unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
@@ -184,6 +186,4 @@ void TensorMap::ValidateBatchSize(const c10::IntArrayRef shape) {
         }
         message += std::to_string(validShape.at(i)) + ", ";
     }
-
-    // TODO: handle case when dim == size; change tensor dim
 }

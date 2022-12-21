@@ -77,7 +77,7 @@ def test_tensormap_nested_overrite(device):
 # In this part we test the constraint first on tensors then on nested dicts
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_tensormap_batch_constraint(device):
+def test_tensormap_batch_constraint_tensor(device):
     m = TensorMap([3])
     m['a'] = torch.ones(3, 4)
     with pytest.raises(Exception):
@@ -91,6 +91,22 @@ def test_tensormap_batch_constraint(device):
         m['b'] = torch.ones(2, 5, 6, 3)
         m['b'] = torch.ones(4)
         m['b'] = torch.ones(4, 5)
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_batch_constraint_map(device):
+    m = TensorMap([3])
+    m['a'] = TensorMap([3, 4])
+    with pytest.raises(Exception):
+        m['b'] = TensorMap([4, 4])
+
+    m = TensorMap([4, 5, 6])
+    m['a'] = TensorMap([4, 5, 6])
+    m['a'] = TensorMap([4, 5, 6, 3])
+    with pytest.raises(Exception):
+        m['b'] = TensorMap([2, 5, 6, 3])
+        m['b'] = TensorMap([4])
+        m['b'] = TensorMap([4, 5])
 
 
 # Region: Testing keys() feature of TensorMap
