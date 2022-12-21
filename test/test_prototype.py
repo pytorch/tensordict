@@ -89,7 +89,9 @@ def test_tensormap_batch_constraint_tensor(device):
     m['a'] = torch.ones(4, 5, 6, 3)
     with pytest.raises(Exception):
         m['b'] = torch.ones(2, 5, 6, 3)
+    with pytest.raises(Exception):
         m['b'] = torch.ones(4)
+    with pytest.raises(Exception):
         m['b'] = torch.ones(4, 5)
 
 
@@ -105,8 +107,40 @@ def test_tensormap_batch_constraint_map(device):
     m['a'] = TensorMap([4, 5, 6, 3])
     with pytest.raises(Exception):
         m['b'] = TensorMap([2, 5, 6, 3])
+    with pytest.raises(Exception):
         m['b'] = TensorMap([4])
+    with pytest.raises(Exception):
         m['b'] = TensorMap([4, 5])
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_batch_constraint_nestedmap(device):
+    m = TensorMap([3, 4])
+    m['a'] = torch.ones(3, 4, 2)
+    m['n1'] = TensorMap([3, 4, 5])
+
+    # Set tensor in nested map
+    m['n1', 'a'] = torch.ones(3, 4, 5)
+    m['n1', 'b'] = torch.ones(3, 4, 5, 9)
+    m['n1', 'c'] = torch.ones(3, 4, 5, 7)
+    with pytest.raises(Exception):
+        m['n1', 'x'] = torch.ones(3, 4)
+    with pytest.raises(Exception):
+        m['n1', 'x'] = torch.ones(3, 4, 8)
+    with pytest.raises(Exception):
+        m['n1', 'x'] = torch.ones(3, 4, 8, 9)
+
+    # nested level 2
+    with pytest.raises(Exception):
+        m['n1', 'n2'] = TensorMap([3, 5, 5, 7])
+
+    m['n1', 'n2'] = TensorMap([3, 4, 5, 7])
+    m['n1', 'n2', 'a'] = torch.ones(3, 4, 5, 7)
+    m['n1', 'n2', 'b'] = torch.ones(3, 4, 5, 7, 12)
+    with pytest.raises(Exception):
+        m['n1', 'n2', 'x'] = torch.ones(3, 4, 5)
+    with pytest.raises(Exception):
+        m['n1', 'n2', 'x'] = torch.ones(3, 4, 5, 8, 12)
 
 
 # Region: Testing keys() feature of TensorMap
