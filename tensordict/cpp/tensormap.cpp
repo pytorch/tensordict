@@ -2,11 +2,12 @@
 #include <exception>
 #include <memory>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-TensorMap::TensorMap(std::vector<int> batchSize)
+TensorMap::TensorMap(std::vector<int64_t> batchSize)
 {
     this->internalMap = std::make_shared<TensorMap::map>();
     this->batchSize = batchSize;
@@ -25,6 +26,7 @@ TensorMap::node TensorMap::GetAt(const std::string key) const
 
 void TensorMap::SetTensorAt(const std::string key, const torch::Tensor& value)
 {
+    ValidateBatchSize(value);
     unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
@@ -109,7 +111,7 @@ void TensorMap::SetRecursive(TensorMap::map* currentMap, const py::tuple indices
     }
 
     if (currentMap->count(key) == 0 || !std::holds_alternative<TensorMap>(currentMap->at(key))) {
-        currentMap->insert_or_assign(key, TensorMap(std::vector<int>())); // For now we insert maps by value
+        currentMap->insert_or_assign(key, TensorMap(batchSize)); // For now we insert maps by value
     }
 
     auto nextMap = std::get<TensorMap>(currentMap->at(key));
@@ -164,4 +166,22 @@ TensorMap::key TensorMap::GetCleanKey(py::tuple path) {
 
 TensorMap::map* TensorMap::unsafeGetInternalMap() const {
     return internalMap.get();
+}
+
+void TensorMap::ValidateBatchSize(const torch::Tensor& tensor) {
+    if (tensor.dim() < batchSize.size())
+        throw std::invalid_argument("Tensor has less dimensions than batch size");
+
+    std::string message = "(";
+    for (auto i = 0; i < batchSize.size(); i++)
+    {
+        if (batchSize[i] != tensor.size(i)) {
+            auto expected = message + std::to_string(batchSize[i]) + ")";
+            auto actual = message + std::to_string(tensor.size(i)) + ")";
+            throw std::invalid_argument("Tensor size is not conform to batch size. Expected: " + expected + ", but got: " + actual);
+        }
+        message += std::to_string(batchSize[i]) + ", ";
+    }
+
+    // TODO: handle case when dim == size; change tensor dim
 }

@@ -18,11 +18,11 @@ class TensorMap {
     typedef std::variant<std::string, py::tuple> key;
     private:
         std::shared_ptr<map> internalMap;
-        std::vector<int> batchSize;
+        std::vector<int64_t> batchSize;
        // TODO something about batch size
 
     public:
-        TensorMap(std::vector<int> batchSize);
+        TensorMap(std::vector<int64_t> batchSize);
         ~TensorMap() = default;
         TensorMap(const TensorMap&) = default;
         TensorMap(TensorMap&&) = default;
@@ -70,6 +70,7 @@ class TensorMap {
             void GetKeysRecursiveLeavesOnly(std::set<key>& result, py::tuple currentPath, const node& currentNode);
             void GetKeysFirstLevel(std::set<key>& result, bool leavesOnly);
             key GetCleanKey(py::tuple path);
+            void ValidateBatchSize(const torch::Tensor& tensor);
 
 };
 
