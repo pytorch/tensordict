@@ -142,6 +142,11 @@ def test_tensormap_batch_constraint_nestedmap(device):
     with pytest.raises(Exception):
         m['n1', 'n2', 'x'] = torch.ones(3, 4, 5, 8, 12)
 
+    # test case when no map is created before set - should have same batchsize as n2
+    m['n1', 'n2', 'n3', 'a'] = torch.ones(3, 4, 5, 7, 8)
+    with pytest.raises(Exception):
+        m['n1', 'n2', 'n3', 'x'] = torch.ones(3, 4, 5, 8, 8)
+
 
 # Region: Testing keys() feature of TensorMap
 # In this part we test the keys method with the all cominations of include_nested and leaves_only

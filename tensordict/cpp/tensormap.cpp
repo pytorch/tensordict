@@ -107,7 +107,7 @@ void TensorMap::SetRecursive(TensorMap* currentMap, const py::tuple indices, con
     }
 
     if (!currentMap->Contains(key) || ! currentMap->HoldsMap(key)) { // We overwrite tensors in case we encounter it in the path
-        currentMap->SetAt(key, TensorMap(batchSize)); // For now we insert maps by value
+        currentMap->SetAt(key, TensorMap(currentMap->batchSize)); // We insert new map with same batchsize as parent map
     }
 
     auto nextMap = std::get<TensorMap>(currentMap->GetAt(key));
