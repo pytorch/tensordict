@@ -6,6 +6,8 @@ from _utils_internal import get_available_devices
 from tensordict import TensorMap
 
 
+# Region: Testing simple get, set feature of TensorMap
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_simple_set_tensor(device):
     m = TensorMap([])
@@ -28,6 +30,10 @@ def test_tensormap_simple_set_map(device):
     m1['a'] = m2
     assert m1['a'] is m2  # Failing - Need to fix!
 
+
+# Region: Testing Nested{Set,Get} feature of TensorMap
+# In this part we test multiple combinations of set and get for tensors with on nested maps
+# TODO: add test for nested maps ref check when issue is fixed.
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_nested_set(device):
@@ -66,6 +72,29 @@ def test_tensormap_nested_overrite(device):
     m2['x'] = m1['a', 'b']
     assert m2['x', 'c'] is m1['a', 'b', 'c']
 
+
+# Region: Testing batchsize constraint of TensorMap
+# In this part we test the constraint first on tensors then on nested dicts
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_tensormap_batch_constraint(device):
+    m = TensorMap([3])
+    m['a'] = torch.ones(3, 4)
+    with pytest.raises(Exception):
+        m['b'] = torch.ones(4, 4)
+
+    m = TensorMap([4, 5, 6])
+    m['a'] = torch.ones(4, 5, 6)
+    assert m['a'].size() == torch.Size([4, 5, 6, 1])
+    m['a'] = torch.ones(4, 5, 6, 3)
+    with pytest.raises(Exception):
+        m['b'] = torch.ones(2, 5, 6, 3)
+        m['b'] = torch.ones(4)
+        m['b'] = torch.ones(4, 5)
+
+
+# Region: Testing keys() feature of TensorMap
+# In this part we test the keys method with the all cominations of include_nested and leaves_only
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensormap_get_keys(device):
@@ -135,7 +164,6 @@ def test_tensormap_get_keys_leaves_only(device):
     assert_equal_sets(expected_keys, m.keys(True, True))
     expected_keys = {'b', 'c'}
     assert_equal_sets(expected_keys, m.keys(False, True))
-
 
 
 @pytest.mark.parametrize("device", get_available_devices())
