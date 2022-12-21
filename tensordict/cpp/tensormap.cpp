@@ -8,24 +8,21 @@
 #include <unordered_map>
 #include <vector>
 
-TensorMap::TensorMap(std::vector<int64_t> batchSize)
-{
+TensorMap::TensorMap(std::vector<int64_t> batchSize) {
     this->internalMap = std::make_shared<TensorMap::map>();
     this->batchSize = batchSize;
 }
 
 // Index Get - Set
 
-TensorMap::node TensorMap::GetAt(const std::string key) const
-{
+TensorMap::node TensorMap::GetAt(const std::string key) const {
     if (!Contains(key))
         throw std::invalid_argument("Invalid key: " + key);
 
     return unsafeGetInternalMap()->at(key);
 }
 
-void TensorMap::SetAt(const std::string key, const TensorMap::node& value)
-{
+void TensorMap::SetAt(const std::string key, const TensorMap::node& value) {
     if (std::holds_alternative<TensorMap>(value)) {
         auto tmap = std::get<TensorMap>(value);
         ValidateBatchSize(c10::IntArrayRef(tmap.batchSize));
@@ -41,16 +38,14 @@ void TensorMap::SetAt(const std::string key, const TensorMap::node& value)
 
 // Path Get - Set
 
-TensorMap::node TensorMap::GetAtPath(const py::tuple indices)
-{
+TensorMap::node TensorMap::GetAtPath(const py::tuple indices) {
     if (py::len(indices) == 0)
         throw std::invalid_argument("indices must have at least one element");
 
     return GetRecursive(this, indices, 0);
 }
 
-void TensorMap::SetAtPath(const py::tuple indices, const TensorMap::node& value)
-{
+void TensorMap::SetAtPath(const py::tuple indices, const TensorMap::node& value) {
     if (py::len(indices) == 0)
         throw std::invalid_argument("indices must have at least one element");
 
@@ -74,11 +69,9 @@ std::set<TensorMap::key> TensorMap::GetKeys(const bool includeNested, const bool
     return result;
 }
 
-
 // Helper methods
 
-TensorMap::node TensorMap::GetRecursive(TensorMap* currentMap, const py::tuple indices, const int index)
-{
+TensorMap::node TensorMap::GetRecursive(TensorMap* currentMap, const py::tuple indices, const int index) {
     auto key = indices[index].cast<std::string>();
     if (index == py::len(indices) - 1) {
         return currentMap->GetAt(key);
@@ -98,8 +91,7 @@ TensorMap::node TensorMap::GetRecursive(TensorMap* currentMap, const py::tuple i
     }
 }
 
-void TensorMap::SetRecursive(TensorMap* currentMap, const py::tuple indices, const int index, TensorMap::node value)
-{
+void TensorMap::SetRecursive(TensorMap* currentMap, const py::tuple indices, const int index, TensorMap::node value) {
     auto key = indices[index].cast<std::string>();
     if (index == py::len(indices) - 1) {
         currentMap->SetAt(key, value);
@@ -128,36 +120,25 @@ void TensorMap::GetKeysRecursiveAll(std::set<TensorMap::key>& result, py::tuple 
 
     auto currentTensorMap = std::get<TensorMap>(currentNode);
     auto currentMap = currentTensorMap.unsafeGetInternalMap();
-    for (auto i : *currentMap)
-    {
+    for (auto i : *currentMap) {
         auto nextPath = currentPath + py::make_tuple(i.first);
         result.insert(GetCleanKey(nextPath));
         TensorMap::GetKeysRecursiveAll(result, nextPath, i.second);
     }
-
 }
 
 void TensorMap::GetKeysRecursiveLeavesOnly(std::set<TensorMap::key>& result, py::tuple currentPath, const node& currentNode) {
-    if (!std::holds_alternative<TensorMap>(currentNode))
-    {
+    if (!std::holds_alternative<TensorMap>(currentNode)) {
         result.insert(GetCleanKey(currentPath));
         return;
     }
 
     auto currentTensorMap = std::get<TensorMap>(currentNode);
     auto currentMap = currentTensorMap.unsafeGetInternalMap();
-    for (auto i : *currentMap)
-    {
+    for (auto i : *currentMap) {
         auto nextStep =  py::make_tuple(i.first);
         TensorMap::GetKeysRecursiveLeavesOnly(result, currentPath + nextStep, i.second);
     }
-}
-
-TensorMap::key TensorMap::GetCleanKey(py::tuple path) {
-    TensorMap::key cleanKey = path;
-    if (py::len(path) == 1)
-        cleanKey = path[0].cast<std::string>();
-    return cleanKey;
 }
 
 void TensorMap::ValidateBatchSize(const c10::IntArrayRef shape) {
@@ -177,8 +158,11 @@ void TensorMap::ValidateBatchSize(const c10::IntArrayRef shape) {
     }
 }
 
-TensorMap::map* TensorMap::unsafeGetInternalMap() const {
-    return internalMap.get();
+TensorMap::key TensorMap::GetCleanKey(py::tuple path) {
+    TensorMap::key cleanKey = path;
+    if (py::len(path) == 1)
+        cleanKey = path[0].cast<std::string>();
+    return cleanKey;
 }
 
 bool TensorMap::Contains(std::string key) const {
@@ -188,4 +172,8 @@ bool TensorMap::Contains(std::string key) const {
 bool TensorMap::HoldsMap(std::string key) const {
     auto node = GetAt(key);
     return std::holds_alternative<TensorMap>(node);
+}
+
+TensorMap::map* TensorMap::unsafeGetInternalMap() const {
+    return internalMap.get();
 }
