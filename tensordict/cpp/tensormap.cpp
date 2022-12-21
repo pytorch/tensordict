@@ -102,11 +102,11 @@ void TensorMap::SetRecursive(TensorMap* currentMap, const py::tuple indices, con
 {
     auto key = indices[index].cast<std::string>();
     if (index == py::len(indices) - 1) {
-        currentMap->unsafeGetInternalMap()->insert_or_assign(key, value);
+        currentMap->SetAt(key, value);
         return;
     }
 
-    if (!currentMap->Contains(key) || !HoldsMap(key)) { // We overwrite tensors in case we encounter it in the path
+    if (!currentMap->Contains(key) || ! currentMap->HoldsMap(key)) { // We overwrite tensors in case we encounter it in the path
         currentMap->SetAt(key, TensorMap(batchSize)); // For now we insert maps by value
     }
 
