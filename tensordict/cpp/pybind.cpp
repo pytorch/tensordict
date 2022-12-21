@@ -18,12 +18,10 @@ PYBIND11_MODULE(_tensormap, m) {
     py::class_<TensorMap, std::shared_ptr<TensorMap> >(m, "TensorMap")
         .def(py::init<std::vector<int64_t>>())
         .def("__getitem__", &TensorMap::GetAt, "Get value at index")
-        .def("__setitem__", &TensorMap::SetTensorAt, "Set tensor as value at index")
-        .def("__setitem__", &TensorMap::SetMapAt, "Set map as value at index")
+        .def("__setitem__", &TensorMap::SetAt, "Set value at index")
         // path
         .def("__getitem__", &TensorMap::GetAtPath, "Get value at path")
-        .def("__setitem__", &TensorMap::SetTensorAtPath, "Set tensor as value at path")
-        .def("__setitem__", &TensorMap::SetMapAtPath, "Set map as value at path")
+        .def("__setitem__", &TensorMap::SetAtPath, "Set value at path")
         // keys
         .def("keys", &TensorMap::GetKeys, py::arg("includeNested") = false, py::arg("includeNested") = false, "Get Keys");
 }

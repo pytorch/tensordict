@@ -28,12 +28,10 @@ class TensorMap {
 
         // Index Single Point
         node GetAt(const std::string key) const;
-        void SetTensorAt(const std::string key, const torch::Tensor& value);
-        void SetMapAt(const std::string key, const TensorMap& value);
+        void SetAt(const std::string key, const node& value);
         // Index Path
         node GetAtPath(const py::tuple key);
-        void SetTensorAtPath(const py::tuple key, const torch::Tensor& value);
-        void SetMapAtPath(const py::tuple key, const TensorMap& value);
+        void SetAtPath(const py::tuple key, const node& value);
         // TODO add keys - check iterator
         std::set<key> GetKeys(const bool includeNested = false, const bool leavesOnly = false);
 

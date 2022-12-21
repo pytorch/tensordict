@@ -24,16 +24,18 @@ TensorMap::node TensorMap::GetAt(const std::string key) const
     return unsafeGetInternalMap()->at(key);
 }
 
-void TensorMap::SetTensorAt(const std::string key, const torch::Tensor& value)
+void TensorMap::SetAt(const std::string key, const TensorMap::node& value)
 {
-    ValidateBatchSize(value.sizes());
-    // TODO: handle case when dim == size; change tensor dim after valid size check
-    unsafeGetInternalMap()->insert_or_assign(key, value);
-}
+    if (std::holds_alternative<TensorMap>(value)) {
+        auto tmap = std::get<TensorMap>(value);
+        ValidateBatchSize(c10::IntArrayRef(tmap.batchSize));
+    }
+    else {
+        auto tensor = std::get<torch::Tensor>(value); // can be adapted to use TensorBase and support multiple tensor types
+        ValidateBatchSize(tensor.sizes());
+        // TODO: handle case when dim == size; change tensor dim after valid size check
+    }
 
-void TensorMap::SetMapAt(const std::string key, const TensorMap& value)
-{
-    ValidateBatchSize(c10::IntArrayRef(value.batchSize));
     unsafeGetInternalMap()->insert_or_assign(key, value);
 }
 
@@ -47,15 +49,7 @@ TensorMap::node TensorMap::GetAtPath(const py::tuple indices)
     return GetRecursive(this, indices, 0);
 }
 
-void TensorMap::SetTensorAtPath(const py::tuple indices, const torch::Tensor& value)
-{
-    if (py::len(indices) == 0)
-        throw std::invalid_argument("indices must have at least one element");
-
-    SetRecursive(this, indices, 0, value);
-}
-
-void TensorMap::SetMapAtPath(const py::tuple indices, const TensorMap& value)
+void TensorMap::SetAtPath(const py::tuple indices, const TensorMap::node& value)
 {
     if (py::len(indices) == 0)
         throw std::invalid_argument("indices must have at least one element");
@@ -113,7 +107,7 @@ void TensorMap::SetRecursive(TensorMap* currentMap, const py::tuple indices, con
     }
 
     if (!currentMap->Contains(key) || !HoldsMap(key)) { // We overwrite tensors in case we encounter it in the path
-        currentMap->SetMapAt(key, TensorMap(batchSize)); // For now we insert maps by value
+        currentMap->SetAt(key, TensorMap(batchSize)); // For now we insert maps by value
     }
 
     auto nextMap = std::get<TensorMap>(currentMap->GetAt(key));
