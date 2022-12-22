@@ -47,7 +47,7 @@ except ImportError:
     except ImportError:
         _has_functorch = False
 
-# Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
+# Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
 
     # Monkey-patches
