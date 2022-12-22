@@ -113,7 +113,7 @@ class TestTensorDictsBase:
         return SavedTensorDict(source=self.td(device))
 
     def memmap_td(self, device):
-        return self.td(device).memmap_(lock=False)
+        return self.td(device).memmap_()
 
     def permute_td(self, device):
         return TensorDict(
