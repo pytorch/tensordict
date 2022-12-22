@@ -28,14 +28,14 @@ printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu117
+    conda install pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia -y
 fi
 
 # smoke test
 python -c "import functorch"
 
 # install torchsnapshot nightly
-pip3 install torchsnapshot-nightly torchrec-nightly
+pip3 install torchsnapshot-nightly torchrec_nightly
 
 python -c "from torchrec import KeyedJaggedTensor"
 python -c "import torchsnapshot"

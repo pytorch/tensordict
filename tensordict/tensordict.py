@@ -172,7 +172,7 @@ class _TensorDictKeysView:
 
     def _combine_keys(self, prefix, key):
         if prefix is not None:
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 return prefix + key
             return prefix + (key,)
         return key
@@ -202,7 +202,7 @@ class _TensorDictKeysView:
         return self.tensordict._tensordict.keys()
 
     def __contains__(self, key):
-        if isinstance(key, str):
+        if type(key) is str:
             if key in self._keys():
                 if self.leaves_only:
                     meta_val = self.tensordict._get_meta(key)
@@ -210,7 +210,7 @@ class _TensorDictKeysView:
                 return True
             return False
 
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             if len(key) == 1:
                 return key[0] in self
             elif len(key) > 1:
@@ -304,7 +304,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     @property
     def requires_grad(self):
-        return any(v.requires_grad for v in self.values_meta())
+        return any(v.requires_grad for v in self.values())
 
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
@@ -371,26 +371,24 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def clear_device(self) -> None:
         self._device = None
 
-    def is_shared(self, no_check: bool = True) -> bool:
+    def is_shared(self) -> bool:
         """Checks if tensordict is in shared memory.
+
+        If a TensorDict instance is in shared memory, any new tensor written
+        in it will be placed in shared memory. If a TensorDict is created with
+        tensors that are all in shared memory, this does not mean that it will be
+        in shared memory (as a new tensor may not be in shared memory).
+        Only if one calls `tensordict.share_memory_()` or places the tensordict
+        on a device where the content is shared will the tensordict be considered
+        in shared memory.
 
         This is always True for CUDA tensordicts, except when stored as
         MemmapTensors.
 
-        Args:
-            no_check (bool, optional): whether to use cached value or not
-                Default is True
-
         """
-        if no_check:
-            if self._is_shared is None:
-                if self.keys():
-                    _is_shared = all(value.is_shared() for value in self.values_meta())
-                else:
-                    _is_shared = None
-                self._is_shared = _is_shared
-            return self._is_shared
-        return all(item.is_shared() for item in self.values_meta())
+        if self.device and not self._is_memmap:
+            return self.device.type == "cuda" or self._is_shared
+        return self._is_shared
 
     def state_dict(self) -> OrderedDict:
         out = collections.OrderedDict()
@@ -416,23 +414,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self.update(state_dict, inplace=True)
         return self
 
-    def is_memmap(self, no_check: bool = True) -> bool:
-        """Checks if tensordict is stored with MemmapTensors.
-
-        Args:
-            no_check (bool, optional): whether to use cached value or not
-                Default is True
-
-        """
-        if no_check:
-            if self._is_memmap is None:
-                if self.keys():
-                    _is_memmap = all(value.is_memmap() for value in self.values_meta())
-                else:
-                    _is_memmap = None
-                self._is_memmap = _is_memmap
-            return self._is_memmap
-        return all(item.is_memmap() for item in self.values_meta())
+    def is_memmap(self) -> bool:
+        """Checks if tensordict is stored with MemmapTensors."""
+        return self._is_memmap
 
     def numel(self) -> int:
         """Total number of elements in the batch."""
@@ -572,9 +556,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return out
 
     def _get_meta(self, key: NESTED_KEY) -> MetaTensor:
-        _nested_key_type_check(key)
+        # _nested_key_type_check(key)
         try:
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 if len(key) > 1:
                     return self.get(key[0])._get_meta(key[1:])
                 key = key[0]
@@ -605,6 +589,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         fn: Callable,
         batch_size: Optional[Sequence[int]] = None,
         inplace: bool = False,
+        **constructor_kwargs,
     ) -> TensorDictBase:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
 
@@ -617,6 +602,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 the transformation.
             inplace (bool, optional): if True, changes are made in-place.
                 Default is False.
+            **constructor_kwargs: additional keyword arguments to be passed to the
+                TensorDict constructor.
 
         Returns:
             a new tensordict with transformed_in tensors.
@@ -626,7 +613,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             self
             if inplace
             else TensorDict(
-                {}, batch_size=batch_size, device=self.device, _run_checks=False
+                {},
+                batch_size=batch_size,
+                device=self.device,
+                _run_checks=False,
+                **constructor_kwargs,
             )
             if batch_size is not None
             else self.clone(recurse=False)
@@ -636,7 +627,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             out.unlock()
         for key, item in self.items():
             if isinstance(item, TensorDictBase):
-                item_trsf = item.apply(fn, inplace=inplace, batch_size=batch_size)
+                item_trsf = item.apply(
+                    fn, inplace=inplace, batch_size=batch_size, **constructor_kwargs
+                )
             else:
                 item_trsf = fn(item)
             if item_trsf is not None:
@@ -678,7 +671,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         for key, value in input_dict_or_td.items():
             if clone and hasattr(value, "clone"):
                 value = value.clone()
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 key, subkey = key[0], key[1:]
             else:
                 subkey = []
@@ -804,18 +797,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensor = self._convert_to_tensor(input)
         else:
             tensor = input
-        # if (
-        #     _has_functorch and isinstance(tensor, Tensor) and is_batchedtensor(tensor)
-        # ):  # TODO: find a proper way of doing that
-        #     return tensor
-        #     tensor = _unwrap_value(tensor)[0]
 
         if check_device and self.device is not None:
             device = self.device
             tensor = tensor.to(device)
-
-        if check_shared:
-            raise DeprecationWarning("check_shared is not authorized anymore")
 
         if check_tensor_shape and _shape(tensor)[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
@@ -1071,14 +1056,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
         target = self if inplace else self.clone(recurse=False)
-        is_nested = any(isinstance(key, tuple) for key in keys)
-        if len(keys) > 1:
-            tdkeys = set(self.keys(is_nested))
-        else:
-            tdkeys = self.keys(is_nested)
+        # is_nested = any((type(key) is tuple) for key in keys)
+        # if len(keys) > 1:
+        #     tdkeys = set(self.keys(is_nested))
+        # else:
+        #     tdkeys = self.keys(is_nested)
         for key in keys:
-            if key in tdkeys:
+            try:
                 del target[key]
+            except KeyError:
+                continue
         return target
 
     @abc.abstractmethod
@@ -1127,11 +1114,13 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return value
 
     @abc.abstractmethod
-    def share_memory_(self, lock=True) -> TensorDictBase:
+    def share_memory_(self) -> TensorDictBase:
         """Places all the tensors in shared memory.
 
-        Args:
-            lock (bool): prevents changes to the dictionary except for inplace overwrites to existing keys
+        The TensorDict is then locked, meaning that the only writing operations that
+        can be executed must be done in-place.
+        Once the tensordict is unlocked, the share_memory attribute is turned to False,
+        because cross-process identity is not guaranteed anymore.
 
         Returns:
             self.
@@ -1140,13 +1129,20 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
+    def memmap_(
+        self,
+        prefix=None,
+    ) -> TensorDictBase:
         """Writes all tensors onto a MemmapTensor.
 
         Args:
             prefix (str): directory prefix where the memmap tensors will have to
                 be stored.
-            lock (bool): prevents changes to the dictionary except for inplace overwrites to existing keys
+
+        The TensorDict is then locked, meaning that the only writing operations that
+        can be executed must be done in-place.
+        Once the tensordict is unlocked, the memmap attribute is turned to False,
+        because cross-process identity is not guaranteed anymore.
 
         Returns:
             self.
@@ -1216,7 +1212,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             dim = self.batch_dims + dim
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
         return tuple(
-            self.apply(lambda tensor, idx=_idx: tensor[idx], batch_size=batch_size)
+            self.apply(
+                lambda tensor, idx=_idx: tensor[idx],
+                batch_size=batch_size,
+                _is_shared=self.is_shared(),
+                _is_memmap=self.is_memmap(),
+            )
             for _idx in idx
         )
 
@@ -1266,6 +1267,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             batch_size=self.batch_size,
             device=self.device,
             _run_checks=False,
+            _is_shared=self.is_shared() if not recurse else False,
+            _is_memmap=self.is_memmap() if not recurse else False,
         )
 
     @classmethod
@@ -1584,7 +1587,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 dictionaries[idx][key] = split_tensor
         return [
             TensorDict(
-                dictionaries[i], batch_sizes[i], device=self.device, _run_checks=False
+                dictionaries[i],
+                batch_sizes[i],
+                device=self.device,
+                _run_checks=False,
+                _is_shared=self.is_shared(),
+                _is_memmap=self.is_memmap(),
             )
             for i in range(len(dictionaries))
         ]
@@ -1810,7 +1818,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return self
         else:
             tensordict_out = TensorDict(
-                {}, batch_size=self.batch_size, device=self.device
+                {},
+                batch_size=self.batch_size,
+                device=self.device,
+                _run_checks=False,
+                _is_shared=self.is_shared(),
+                _is_memmap=self.is_memmap(),
             )
             for key, value in self.items():
                 if key in to_flatten:
@@ -1841,6 +1854,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 },
                 batch_size=self.batch_size,
                 device=self.device,
+                _run_checks=False,
+                _is_shared=self.is_shared(),
+                _is_memmap=self.is_memmap(),
             )
         else:
             out = self
@@ -1892,6 +1908,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             batch_size=_getitem_batch_size(self.batch_size, idx),
             device=self.device,
             _run_checks=False,
+            _is_shared=self.is_shared(),
+            _is_memmap=self.is_memmap(),
         )
 
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
@@ -2101,7 +2119,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             previously set.
 
         """
-        if key not in self.keys(include_nested=isinstance(key, tuple)):
+        if key not in self.keys(include_nested=(type(key) is tuple)):
             self.set(key, default, **kwargs)
         return self.get(key)
 
@@ -2113,6 +2131,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def unlock(self):
         self._is_locked = False
+        self._is_shared = False
+        self._is_memmap = False
         for key, item in self.items_meta():
             if item.is_tensordict():
                 self.get(key).unlock()
@@ -2205,8 +2225,8 @@ class TensorDict(TensorDictBase):
     def __new__(cls, *args, **kwargs):
         cls._safe = True
         cls._lazy = False
-        cls._is_shared = None
-        cls._is_memmap = None
+        cls._is_shared = False
+        cls._is_memmap = False
         return TensorDictBase.__new__(cls)
 
     def __init__(
@@ -2216,9 +2236,9 @@ class TensorDict(TensorDictBase):
         device: Optional[DEVICE_TYPING] = None,
         _meta_source: Optional[dict] = None,
         _run_checks: bool = True,
-        _is_shared: Optional[bool] = None,
-        _is_memmap: Optional[bool] = None,
-    ) -> object:
+        _is_shared: Optional[bool] = False,
+        _is_memmap: Optional[bool] = False,
+    ) -> None:
         super().__init__()
 
         self._is_shared = _is_shared
@@ -2231,7 +2251,7 @@ class TensorDict(TensorDictBase):
             if isinstance(source, dict):
                 self._tensordict: Dict = copy(source)
             else:
-                self._tensordict: Dict = {**source}
+                self._tensordict: Dict = dict(source)
             self._batch_size = torch.Size(batch_size)
             upd_dict = {}
             for key, value in self._tensordict.items():
@@ -2273,7 +2293,11 @@ class TensorDict(TensorDictBase):
                     ):
                         value = value.clone(False)
                         value.batch_size = self.batch_size
-
+                    elif isinstance(value, (Tensor, MemmapTensor)):
+                        if value.shape[: len(self._batch_size)] != self._batch_size:
+                            raise RuntimeError(
+                                f"batch_size are incongruent, got {value.shape}, -- expected leading dims to be {self._batch_size}"
+                            )
                     if device is not None:
                         value = value.to(device)
                     _meta_val = (
@@ -2283,8 +2307,8 @@ class TensorDict(TensorDictBase):
                     )
                     self.set(key, value, _meta_val=_meta_val, _run_checks=False)
 
-            self._check_batch_size()
-            self._check_device()
+            # self._check_batch_size()
+            # self._check_device()
 
     @staticmethod
     def _parse_batch_size(
@@ -2419,7 +2443,7 @@ class TensorDict(TensorDictBase):
         return self_copy
 
     def pin_memory(self) -> TensorDictBase:
-        if self.device == torch.device("cpu"):
+        if self.device and self.device.type == "cpu":
             for key, value in self.items():
                 if isinstance(value, TensorDictBase) or (
                     value.dtype in (torch.half, torch.float, torch.double)
@@ -2491,37 +2515,19 @@ class TensorDict(TensorDictBase):
                 raise RuntimeError(
                     "Cannot modify locked TensorDict. For in-place modification, consider using the `set_()` method."
                 )
-        if _run_checks:
-            _nested_key_type_check(key)
+        # if _run_checks:
+        #     _nested_key_type_check(key)
 
-        if self._is_shared is None:
-            try:
-                self._is_shared = _is_shared(value)
-            except NotImplementedError:
-                # when running functorch, a NotImplementedError may be raised
-                pass
-            except AttributeError:
-                # when setting a value of type dict
-                pass
-        if self._is_memmap is None:
-            self._is_memmap = isinstance(value, MemmapTensor)
-
-        if not isinstance(key, tuple):
-            present = key in self.keys()
-        elif len(key) == 1:
+        if type(key) is tuple and len(key) == 1:
             key = key[0]
-            present = key in self.keys()
-        else:
-            # present will be assessed by the leaf tensordict
-            present = None
 
-        if present and value is self.get(key):
+        if value is self._tensordict.get(key, None):
             return self
 
-        if present and inplace:
+        if inplace and key in self.keys(True):
             return self.set_(key, value)
 
-        if present is not None:
+        if type(key) is str:
             if _process:
                 proc_value = self._process_input(
                     value,
@@ -2535,8 +2541,8 @@ class TensorDict(TensorDictBase):
             self._tensordict[key] = proc_value
             if _meta_val:
                 self._dict_meta[key] = _meta_val
-            elif present and key in self._dict_meta.keys():
-                del self._dict_meta[key]
+            else:
+                self._dict_meta.pop(key, None)
         else:
             # since we call _nested_key_type_check above, we may assume that the key is
             # a tuple of strings
@@ -2551,13 +2557,13 @@ class TensorDict(TensorDictBase):
 
             if _meta_val:
                 td._dict_meta[subkey] = _meta_val
-            elif present and subkey in td._dict_meta:
+            elif subkey in td._dict_meta:
                 del td._dict_meta[subkey]
 
         return self
 
     def del_(self, key: str) -> TensorDictBase:
-        if isinstance(key, tuple):
+        if type(key) is tuple:
             td, subkey = _get_leaf_tensordict(self, key)
             del td[subkey]
             return self
@@ -2613,9 +2619,7 @@ class TensorDict(TensorDictBase):
                 proc_value = value
             if proc_value is not self.get(key):
                 self.get(key).copy_(proc_value)
-                if isinstance(key, str) and key in self._dict_meta:
-                    self._dict_meta[key].requires_grad = proc_value.requires_grad
-                elif isinstance(key, tuple):
+                if type(key) is tuple:
                     # If we have a nested key, we must traverse the nested tensordicts
                     # until we reach the parent of the leaf tensor, then check
                     # _dict_meta on that tensordict.
@@ -2663,7 +2667,7 @@ class TensorDict(TensorDictBase):
         self, key: NESTED_KEY, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
         _nested_key_type_check(key)
-        is_nested = isinstance(key, tuple)
+        is_nested = type(key) is tuple
         # do we need this?
         if not isinstance(value, _accepted_classes):
             value = self._process_input(
@@ -2685,9 +2689,9 @@ class TensorDict(TensorDictBase):
             _set_item(tensor_in, value, idx)
 
         # change Meta in case of require_grad coming in value
-        if isinstance(key, str) and key in self._dict_meta:
+        if (type(key) is str) and key in self._dict_meta:
             self._dict_meta[key].requires_grad = _requires_grad(tensor_in)
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             # If we have a nested key, we must traverse the nested tensordicts until we
             # reach the parent of the leaf tensor, then check _dict_meta on that
             td, subkey = _get_leaf_tensordict(self, key)
@@ -2702,7 +2706,7 @@ class TensorDict(TensorDictBase):
         _nested_key_type_check(key)
 
         try:
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 if len(key) > 1:
                     first_lev = self.get(key[0])
                     if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
@@ -2716,19 +2720,13 @@ class TensorDict(TensorDictBase):
             # the regular get()
             return self._default_get(key, default)
 
-    def share_memory_(self, lock=True) -> TensorDictBase:
+    def share_memory_(self) -> TensorDictBase:
         if self.is_memmap():
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        if not self._tensordict.keys():
-            raise Exception(
-                "share_memory_ must be called when the TensorDict is ("
-                "partially) populated. Set a tensor first."
-            )
         if self.device is not None and self.device.type == "cuda":
             # cuda tensors are shared by default
-            self._is_shared = True
             return self
         for value in self.values():
             # no need to consider MemmapTensors here as we have checked that this is not a memmap-tensordict
@@ -2741,7 +2739,7 @@ class TensorDict(TensorDictBase):
         for value in self.values_meta():
             value.share_memory_()
         self._is_shared = True
-        self.is_locked = lock
+        self.lock()
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -2749,8 +2747,8 @@ class TensorDict(TensorDictBase):
             value.detach_()
         return self
 
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
-        if self.is_shared() and self.device == torch.device("cpu"):
+    def memmap_(self, prefix=None) -> TensorDictBase:
+        if self.is_shared() and self.device.type == "cpu":
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
@@ -2759,11 +2757,11 @@ class TensorDict(TensorDictBase):
                 "memmap_() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
-        if any(val.requires_grad for val in self._dict_meta.values()):
-            raise Exception(
-                "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
-            )
         for key, value in self.items():
+            if value.requires_grad:
+                raise Exception(
+                    "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
+                )
             if isinstance(value, TensorDictBase):
                 self._tensordict[key] = value.memmap_()
                 continue
@@ -2771,7 +2769,7 @@ class TensorDict(TensorDictBase):
         for value in self.values_meta():
             value.memmap_()
         self._is_memmap = True
-        self.is_locked = lock
+        self.lock()
         return self
 
     def to(
@@ -2791,14 +2789,11 @@ class TensorDict(TensorDictBase):
             if self.device is not None and dest == self.device:
                 return self
 
-            self_copy = copy(self)
-            self_copy._device = dest
-            self_copy._tensordict = {
-                key: value.to(dest, **kwargs) for key, value in self_copy.items()
-            }
-            self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
-            self_copy._is_shared = None
-            self_copy._is_memmap = None
+            self_copy = TensorDict(
+                {key: value.to(dest, **kwargs) for key, value in self.items()},
+                batch_size=self.batch_size,
+                device=dest,
+            )
             return self_copy
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
@@ -2834,13 +2829,13 @@ class TensorDict(TensorDictBase):
     ) -> TensorDictBase:
         # existing_keys = set(self.keys(include_nested=True))
         keys = {
-            key[0] if isinstance(key, tuple) and len(key) == 1 else key for key in keys
+            key[0] if (type(key) is tuple) and len(key) == 1 else key for key in keys
         }
 
         nested_keys = defaultdict(list)
         for key in keys:
             _nested_key_type_check(key)
-            if isinstance(key, str):
+            if type(key) is str:
                 # ensure key is in the top level of the dict
                 nested_keys[key]
             elif len(key) == 1:
@@ -2931,7 +2926,7 @@ class _ErrorInteceptor:
 def _nested_keys_to_dict(keys: Iterator[NESTED_KEY]) -> Dict[str, Any]:
     nested_keys = {}
     for key in keys:
-        if isinstance(key, str):
+        if type(key) is str:
             nested_keys.setdefault(key, {})
         else:
             d = nested_keys
@@ -3419,8 +3414,8 @@ torch.Size([3, 2])
     def __new__(cls, *args, **kwargs):
         cls._safe = False
         cls._lazy = True
-        cls._is_shared = None
-        cls._is_memmap = None
+        cls._is_shared = False
+        cls._is_memmap = False
         cls._inplace_set = True
         return TensorDictBase.__new__(cls)
 
@@ -3431,8 +3426,6 @@ torch.Size([3, 2])
         batch_size: Optional[Sequence[int]] = None,
     ):
         super().__init__()
-        self._is_shared = None
-        self._is_memmap = None
 
         if not isinstance(source, TensorDictBase):
             raise TypeError(
@@ -3461,6 +3454,8 @@ torch.Size([3, 2])
             batch_size=self.batch_size,
             device=self.device,
             _run_checks=False,
+            _is_memmap=self.is_memmap(),
+            _is_shared=self.is_shared(),
         ).exclude(*keys, inplace=True)
 
     @property
@@ -3489,7 +3484,7 @@ torch.Size([3, 2])
         inplace: bool = False,
         _run_checks: bool = True,
     ) -> TensorDictBase:
-        is_nested = isinstance(key, tuple)
+        is_nested = type(key) is tuple
         keys = self.keys(is_nested)
         if self.is_locked:
             if not inplace or key not in keys:
@@ -3529,15 +3524,15 @@ torch.Size([3, 2])
                 dtype=tensor.dtype,
                 device=self.device,
             )
-            if self.is_shared() and self.device == torch.device("cpu"):
+            if self.is_shared() and self.device.type == "cpu":
                 tensor_expand.share_memory_()
             elif self.is_memmap():
                 tensor_expand = MemmapTensor(tensor_expand)
         parent.set(key, tensor_expand, _run_checks=_run_checks)
         self.set_(key, tensor)
-        if isinstance(key, str) and key in self._dict_meta:
+        if (type(key) is str) and key in self._dict_meta:
             self._dict_meta[key].requires_grad = tensor.requires_grad
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             td, subkey = _get_leaf_tensordict(self, key)
             if subkey in td._dict_meta:
                 td._dict_meta[subkey].requires_grad = tensor.requires_grad
@@ -3557,7 +3552,7 @@ torch.Size([3, 2])
         tensor: Union[dict, COMPATIBLE_TYPES],
         no_check: bool = False,
     ) -> SubTensorDict:
-        is_nested = isinstance(key, tuple)
+        is_nested = type(key) is tuple
         if not no_check:
             tensor = self._process_input(
                 tensor, check_device=False, check_tensor_shape=False
@@ -3574,9 +3569,9 @@ torch.Size([3, 2])
                 )
 
         self._source.set_at_(key, tensor, self.idx)
-        if isinstance(key, str) and key in self._dict_meta:
+        if (type(key) is str) and key in self._dict_meta:
             self._dict_meta[key].requires_grad = tensor.requires_grad
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             td, subkey = _get_leaf_tensordict(self, key)
             if subkey in td._dict_meta:
                 td._dict_meta[subkey].requires_grad = tensor.requires_grad
@@ -3649,9 +3644,9 @@ torch.Size([3, 2])
             tensor = self._source.get_at(key, self.idx)
             tensor[idx] = value
             self._source.set_at_(key, tensor, self.idx)
-        if isinstance(key, str) and key in self._dict_meta:
+        if (type(key) is str) and key in self._dict_meta:
             self._dict_meta[key].requires_grad = value.requires_grad
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             td, subkey = _get_leaf_tensordict(self, key)
             if subkey in td._dict_meta:
                 td._dict_meta[subkey].requires_grad = value.requires_grad
@@ -3690,7 +3685,7 @@ torch.Size([3, 2])
                 value = value.clone()
             else:
                 value = tree_map(torch.clone, value)
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 key, subkey = key[0], key[1:]
             else:
                 subkey = []
@@ -3844,11 +3839,11 @@ torch.Size([3, 2])
             self.batch_size = _getitem_batch_size(new_source_shape, new_idx)
         return new_source[new_idx]
 
-    def is_shared(self, no_check: bool = True) -> bool:
-        return self._source.is_shared(no_check=no_check)
+    def is_shared(self) -> bool:
+        return self._source.is_shared()
 
-    def is_memmap(self, no_check: bool = True) -> bool:
-        return self._source.is_memmap(no_check=no_check)
+    def is_memmap(self) -> bool:
+        return self._source.is_memmap()
 
     def rename_key(
         self, old_key: str, new_key: str, safe: bool = False
@@ -3872,12 +3867,12 @@ torch.Size([3, 2])
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
+    def memmap_(self, prefix=None) -> TensorDictBase:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
         )
 
-    def share_memory_(self, lock=True) -> TensorDictBase:
+    def share_memory_(self) -> TensorDictBase:
         raise RuntimeError(
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
@@ -3946,8 +3941,8 @@ class LazyStackedTensorDict(TensorDictBase):
     ):
         super().__init__()
 
-        self._is_shared = None
-        self._is_memmap = None
+        self._is_shared = False
+        self._is_memmap = False
 
         # sanity check
         N = len(tensordicts)
@@ -4015,8 +4010,11 @@ class LazyStackedTensorDict(TensorDictBase):
     def batch_size(self, new_size: torch.Size):
         return self._batch_size_setter(new_size)
 
-    def is_shared(self, no_check: bool = True) -> bool:
-        are_shared = [td.is_shared(no_check=no_check) for td in self.tensordicts]
+    def is_shared(self) -> bool:
+        are_shared = [td.is_shared() for td in self.tensordicts]
+        are_shared = [value for value in are_shared if value is not None]
+        if not len(are_shared):
+            return None
         if any(are_shared) and not all(are_shared):
             raise RuntimeError(
                 f"tensordicts shared status mismatch, got {sum(are_shared)} "
@@ -4025,7 +4023,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return all(are_shared)
 
-    def is_memmap(self, no_check: bool = True) -> bool:
+    def is_memmap(self) -> bool:
         are_memmap = [td.is_memmap() for td in self.tensordicts]
         if any(are_memmap) and not all(are_memmap):
             raise RuntimeError(
@@ -4082,7 +4080,7 @@ class LazyStackedTensorDict(TensorDictBase):
         proc_tensor = tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensordicts, proc_tensor):
             td.set(key, _item, **kwargs)
-        first_key = key if isinstance(key, str) else key[0]
+        first_key = key if (type(key) is str) else key[0]
         if key not in self._valid_keys:
             self._valid_keys = sorted([*self._valid_keys, first_key], key=str)
         if first_key in self._dict_meta:
@@ -4153,9 +4151,9 @@ class LazyStackedTensorDict(TensorDictBase):
         # fairly easy to add support if we could add nested keys to valid_keys.
 
         # we can handle the case where the key is a tuple of length 1
-        if isinstance(key, tuple) and len(key) == 1:
+        if (type(key) is tuple) and len(key) == 1:
             key = key[0]
-        elif isinstance(key, tuple):
+        elif type(key) is tuple:
             tensordict, key = _get_leaf_tensordict(self, key)
             return tensordict[key]
 
@@ -4272,7 +4270,7 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> LazyStackedTensorDict:
         # TODO: Add support for nested keys.
         for key in keys:
-            if not isinstance(key, str):
+            if not (type(key) is str):
                 raise TypeError(
                     "All keys passed to LazyStackedTensorDict.select must be strings. "
                     f"Found {key} of type {type(key)}. Note that LazyStackedTensorDict "
@@ -4444,11 +4442,11 @@ class LazyStackedTensorDict(TensorDictBase):
         self._valid_keys.remove(key)
         return self
 
-    def share_memory_(self, lock=True) -> TensorDictBase:
+    def share_memory_(self) -> TensorDictBase:
         for td in self.tensordicts:
             td.share_memory_()
         self._is_shared = True
-        self.is_locked = lock
+        self.lock()
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -4456,11 +4454,11 @@ class LazyStackedTensorDict(TensorDictBase):
             td.detach_()
         return self
 
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
+    def memmap_(self, prefix=None) -> TensorDictBase:
         for td in self.tensordicts:
             td.memmap_(prefix=prefix)
         self._is_memmap = True
-        self.is_locked = lock
+        self.lock()
         return self
 
     def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
@@ -4487,7 +4485,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 value = value.clone()
             else:
                 value = tree_map(torch.clone, value)
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 key, subkey = key[0], key[1:]
             else:
                 subkey = ()
@@ -4624,7 +4622,7 @@ class SavedTensorDict(TensorDictBase):
             )
         elif isinstance(source, SavedTensorDict):
             source = source._load()
-        if any(val.requires_grad for val in source.values_meta()):
+        if any(val.requires_grad for val in source.values()):
             raise Exception(
                 "SavedTensorDicts is not compatible with gradients, one of Tensors has requires_grad equals True"
             )
@@ -4734,7 +4732,7 @@ class SavedTensorDict(TensorDictBase):
             previously set.
 
         """
-        if isinstance(key, tuple):
+        if type(key) is tuple:
             raise TypeError("SavedTensorDict does not currently support nested keys.")
         return super().set_default(key=key, default=default, **kwargs)
 
@@ -4795,7 +4793,7 @@ class SavedTensorDict(TensorDictBase):
             #     )
             if clone and hasattr(value, clone):
                 value = value.clone()
-            if isinstance(key, tuple):
+            if type(key) is tuple:
                 key, subkey = key[0], key[1:]
             else:
                 subkey = []
@@ -4829,16 +4827,16 @@ class SavedTensorDict(TensorDictBase):
         if hasattr(self, "file"):
             self.file.close()
 
-    def is_shared(self, no_check: bool = False) -> bool:
+    def is_shared(self) -> bool:
         return False
 
-    def is_memmap(self, no_check: bool = False) -> bool:
+    def is_memmap(self) -> bool:
         return False
 
     def share_memory_(self, lock=True) -> TensorDictBase:
         raise RuntimeError("SavedTensorDict cannot be put in shared memory.")
 
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
+    def memmap_(self, prefix=None) -> TensorDictBase:
         raise RuntimeError(
             "SavedTensorDict and memmap are mutually exclusive features."
         )
@@ -4917,9 +4915,9 @@ class SavedTensorDict(TensorDictBase):
                 return self
             self_copy = copy(self)
             self_copy._device = dest
-            self_copy._dict_meta = deepcopy(self._dict_meta)
-            for k in self.keys():
-                self_copy._dict_meta[k].device = dest
+            self_copy._dict_meta = {
+                key: value.to(dest) for key, value in self._dict_meta.items()
+            }
             return self_copy
         if isinstance(dest, torch.Size):
             self.batch_size = dest
@@ -5045,8 +5043,8 @@ class _CustomOpTensorDict(TensorDictBase):
     ):
         super().__init__()
 
-        self._is_shared = None
-        self._is_memmap = None
+        self._is_shared = source.is_shared()
+        self._is_memmap = source.is_memmap()
 
         if not isinstance(source, TensorDictBase):
             raise TypeError(
@@ -5264,6 +5262,8 @@ class _CustomOpTensorDict(TensorDictBase):
             batch_size=self.batch_size,
             device=self.device,
             _run_checks=False,
+            _is_memmap=self.is_memmap(),
+            _is_shared=self.is_shared(),
         ).exclude(*keys, inplace=True)
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
@@ -5337,16 +5337,16 @@ class _CustomOpTensorDict(TensorDictBase):
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None, lock=True):
+    def memmap_(self, prefix=None):
         self._source.memmap_(prefix=prefix)
         self._is_memmap = True
-        self.is_locked = lock
+        self.lock()
         return self
 
-    def share_memory_(self, lock=True):
+    def share_memory_(self):
         self._source.share_memory_()
         self._is_shared = True
-        self.is_locked = lock
+        self.lock()
 
 
 class _UnsqueezedTensorDict(_CustomOpTensorDict):
