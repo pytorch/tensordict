@@ -922,6 +922,7 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         if td_name != "saved_td":
+            td.unlock()
             td.pin_memory()
             td_device = td.to(device_cast)
             _device_cast = torch.device(device_cast)
@@ -941,6 +942,13 @@ class TestTensorDicts(TestTensorDictsBase):
                 match="pin_memory requires tensordicts that live in memory",
             ):
                 td.pin_memory()
+
+    def test_indexed_properties(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_index = td[0]
+        assert td_index.is_memmap() is td.is_memmap()
+        assert td_index.is_shared() is td.is_shared()
+        assert td_index.device == td.device
 
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
