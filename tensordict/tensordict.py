@@ -2520,7 +2520,7 @@ class TensorDict(TensorDictBase):
         if value is self._tensordict.get(key, None):
             return self
 
-        if inplace:
+        if inplace and key in self.keys(True):
             return self.set_(key, value)
 
         if type(key) is str:
