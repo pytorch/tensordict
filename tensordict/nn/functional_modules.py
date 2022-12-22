@@ -15,16 +15,8 @@ from torch import nn
 
 _RESET_OLD_TENSORDICT = True
 try:
-    import functorch._src.vmap
-
-    _has_functorch = True
-except ImportError:
-    _has_functorch = False
-
-
-# Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
-if _has_functorch:
-    from functorch._src.vmap import (
+    import torch._functorch.vmap
+    from torch._functorch.vmap import (
         _add_batch_dim,
         _broadcast_to_and_flatten,
         _get_name,
@@ -34,6 +26,29 @@ if _has_functorch:
         tree_flatten,
         tree_unflatten,
     )
+
+    _has_functorch = True
+except ImportError:
+    try:
+        import functorch._src.vmap
+        from functorch._src.vmap import (
+            _add_batch_dim,
+            _broadcast_to_and_flatten,
+            _get_name,
+            _remove_batch_dim,
+            _validate_and_get_batch_size,
+            Tensor,
+            tree_flatten,
+            tree_unflatten,
+        )
+
+        _has_functorch = True
+
+    except ImportError:
+        _has_functorch = False
+
+# Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
+if _has_functorch:
 
     # Monkey-patches
 
