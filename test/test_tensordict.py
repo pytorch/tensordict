@@ -13,6 +13,7 @@ import torch
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
 from tensordict import LazyStackedTensorDict, MemmapTensor, SavedTensorDict, TensorDict
 from tensordict.tensordict import (
+    _CustomOpTensorDict,
     _stack as stack_td,
     assert_allclose_td,
     make_tensordict,
@@ -1503,6 +1504,46 @@ class TestTensorDicts(TestTensorDictsBase):
         values_meta = list(td.values_meta())
         items_meta = list(td.items_meta())
         assert len(values_meta) == len(items_meta)
+
+    @pytest.mark.parametrize("make_unset", [True, False])
+    @pytest.mark.parametrize("include_nested", [True, False])
+    @pytest.mark.parametrize("leaves_only", [True, False])
+    def test_items_values_meta(
+        self, td_name, device, make_unset, include_nested, leaves_only
+    ):
+        if td_name == "saved_td" and include_nested:
+            pytest.skip("SavedTensorDict does not support nested keys")
+
+        td = getattr(self, td_name)(device)
+
+        values_meta = list(
+            td.values_meta(
+                make_unset=make_unset,
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+            )
+        )
+        items_meta = list(
+            td.items_meta(
+                make_unset=make_unset,
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+            )
+        )
+
+        if not (make_unset and isinstance(td, _CustomOpTensorDict)):
+            # instances of _CustomOpTensorDict make a new metatensor each time we call
+            # _get_meta, and equality of meta tensors is currently equivalent to
+            # `mt1 is mt2`. if MetaTensor were to define `__eq__` method we could apply
+            # this check in all cases.
+            assert all(v == i for v, (_, i) in zip(values_meta, items_meta))
+
+        if not include_nested:
+            assert all(isinstance(key, str) for key, _ in items_meta)
+
+        if leaves_only:
+            assert all(not value.is_tensordict() for value in values_meta)
+            assert all(not item.is_tensordict() for _, item in items_meta)
 
     def test_set_requires_grad(self, td_name, device):
         td = getattr(self, td_name)(device)
