@@ -15,21 +15,8 @@ from torch import nn
 
 _RESET_OLD_TENSORDICT = True
 try:
-    import torch._functorch.vmap as vmap_src
-
-    _has_functorch = True
-except ImportError:
-    try:
-        import functorch._src.vmap as vmap_src
-
-        _has_functorch = True
-
-    except ImportError:
-        _has_functorch = False
-
-# Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
-if _has_functorch:
-    from vmap_src import (
+    import torch._functorch.vmap
+    from torch._functorch.vmap import (
         _add_batch_dim,
         _broadcast_to_and_flatten,
         _get_name,
@@ -39,6 +26,29 @@ if _has_functorch:
         tree_flatten,
         tree_unflatten,
     )
+
+    _has_functorch = True
+except ImportError:
+    try:
+        import functorch._src.vmap
+        from functorch._src.vmap import (
+            _add_batch_dim,
+            _broadcast_to_and_flatten,
+            _get_name,
+            _remove_batch_dim,
+            _validate_and_get_batch_size,
+            Tensor,
+            tree_flatten,
+            tree_unflatten,
+        )
+
+        _has_functorch = True
+
+    except ImportError:
+        _has_functorch = False
+
+# Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
+if _has_functorch:
 
     # Monkey-patches
 
@@ -99,7 +109,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             args_spec,
         )
 
-    vmap_src._process_batched_inputs = _process_batched_inputs
+    if hasattr(torch, "_functorch"):
+        torch._functorch.vmap._process_batched_inputs = _process_batched_inputs
+    else:
+        functorch._src.vmap._process_batched_inputs = _process_batched_inputs
 
     def _create_batched_inputs(flat_in_dims, flat_args, vmap_level: int, args_spec):
         # See NOTE [Ignored _remove_batch_dim, _add_batch_dim]
@@ -118,7 +131,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         ]
         return tree_unflatten(batched_inputs, args_spec)
 
-    vmap_src._create_batched_inputs = _create_batched_inputs
+    if hasattr(torch, "_functorch"):
+        torch._functorch.vmap._create_batched_inputs = _create_batched_inputs
+    else:
+        functorch._src.vmap._create_batched_inputs = _create_batched_inputs
 
     def _unwrap_batched(
         batched_outputs, out_dims, vmap_level: int, batch_size: int, func
@@ -172,7 +188,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             flat_outputs.append(out)
         return tree_unflatten(flat_outputs, output_spec)
 
-    vmap_src._unwrap_batched = _unwrap_batched
+    if hasattr(torch, "_functorch"):
+        torch._functorch.vmap._unwrap_batched = _unwrap_batched
+    else:
+        functorch._src.vmap._unwrap_batched = _unwrap_batched
 
 
 # Tensordict-compatible Functional modules
