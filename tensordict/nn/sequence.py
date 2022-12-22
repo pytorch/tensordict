@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from copy import copy, deepcopy
-from typing import Iterable, List, Optional, Tuple, Union
+from copy import deepcopy
+from typing import Iterable, List, Tuple, Union
 
 _has_functorch = False
 try:
@@ -21,13 +21,11 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-import torch
 
-from tensordict.nn.common import TensorDictModule
-from tensordict.nn.probabilistic import ProbabilisticTensorDictModule
-from tensordict.tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict.nn.common import dispatch_kwargs, TensorDictModule
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _normalize_key, NESTED_KEY
-from torch import nn, Tensor
+from torch import nn
 
 
 class TensorDictSequential(TensorDictModule):
@@ -49,61 +47,71 @@ class TensorDictSequential(TensorDictModule):
 
     TensorDictSequence supports functional, modular and vmap coding:
     Examples:
-        >>> import torch, functorch
+        >>> import torch
         >>> from tensordict import TensorDict
-        >>> from tensordict.nn import ProbabilisticTensorDictModule, TensorDictSequential
-        >>> from tensordict.nn.distributions import NormalParamWrapper
+        >>> from tensordict.nn import (
+        ...     ProbabilisticTensorDictModule,
+        ...     ProbabilisticTensorDictSequential,
+        ...     TensorDictModule,
+        ...     TensorDictSequential,
+        ... )
+        >>> from tensordict.nn.distributions import NormalParamExtractor
+        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
-        >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> fnet1, params1, buffers1 = functorch.make_functional_with_buffers(net1)
-        >>> fmodule1 = TensorDictModule(fnet1, in_keys=["input"], out_keys=["loc", "scale"])
-        >>> td_module1 = ProbabilisticTensorDictModule(
-        ...    module=fmodule1,
-        ...    dist_in_keys=["loc", "scale"],
-        ...    sample_out_key=["hidden"],
-        ...    distribution_class=Normal,
-        ...    return_log_prob=True,
-        ...    )
+        >>> net1 = torch.nn.Linear(4, 8)
+        >>> module1 = TensorDictModule(net1, in_keys=["input"], out_keys=["params"])
+        >>> normal_params = TensorDictModule(
+                NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
+            )
+        >>> td_module1 = ProbabilisticTensorDictSequential(
+        ...     module1,
+        ...     normal_params,
+        ...     ProbabilisticTensorDictModule(
+        ...         in_keys=["loc", "scale"],
+        ...         out_keys=["hidden"],
+        ...         distribution_class=Normal,
+        ...         return_log_prob=True,
+        ...     )
+        ... )
         >>> module2 = torch.nn.Linear(4, 8)
-        >>> fmodule2, params2, buffers2 = functorch.make_functional_with_buffers(module2)
         >>> td_module2 = TensorDictModule(
-        ...    module=fmodule2, in_keys=["hidden"], out_keys=["output"]
+        ...    module=module2, in_keys=["hidden"], out_keys=["output"]
         ... )
         >>> td_module = TensorDictSequential(td_module1, td_module2)
-        >>> params = params1 + params2
-        >>> buffers = buffers1 + buffers2
-        >>> _ = td_module(td, params=params, buffers=buffers)
+        >>> params = make_functional(td_module)
+        >>> _ = td_module(td, params=params)
         >>> print(td)
         TensorDict(
             fields={
+                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([3, 1]), dtype=torch.float32),
-                output: Tensor(torch.Size([3, 8]), dtype=torch.float32)},
+                output: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                params: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
-            device=cpu,
+            device=None,
             is_shared=False)
 
     In the vmap case:
-        >>> params = tuple(p.expand(4, *p.shape).contiguous().normal_() for p in params)
-        >>> buffers = tuple(b.expand(4, *b.shape).contiguous().normal_() for p in buffers)
-        >>> td_vmap = td_module(td, params=params, buffers=buffers, vmap=True)
+        >>> from functorch import vmap
+        >>> params = params.expand(4)
+        >>> td_vmap = vmap(td_module, (None, 0))(td, params)
         >>> print(td_vmap)
         TensorDict(
             fields={
+                hidden: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
-                scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
-                hidden: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
-                sample_log_prob: Tensor(torch.Size([4, 3, 1]), dtype=torch.float32),
-                output: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32)},
+                output: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
+                params: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([4, 3]),
-            device=cpu,
+            device=None,
             is_shared=False)
-
 
     """
 
@@ -158,45 +166,6 @@ class TensorDictSequential(TensorDictModule):
                 )
         return fmodule
 
-    @property
-    def num_params(self):
-        return self.param_len[-1]
-
-    @property
-    def num_buffers(self):
-        return self.buffer_len[-1]
-
-    @property
-    def param_len(self) -> List[int]:
-        param_list = []
-        prev = 0
-        for module in self.module:
-            param_list.append(module.num_params + prev)
-            prev = param_list[-1]
-        return param_list
-
-    @property
-    def buffer_len(self) -> List[int]:
-        buffer_list = []
-        prev = 0
-        for module in self.module:
-            buffer_list.append(module.num_buffers + prev)
-            prev = buffer_list[-1]
-        return buffer_list
-
-    def _split_param(
-        self, param_list: Iterable[Tensor], params_or_buffers: str
-    ) -> Iterable[Iterable[Tensor]]:
-        if params_or_buffers == "params":
-            list_out = self.param_len
-        elif params_or_buffers == "buffers":
-            list_out = self.buffer_len
-        list_in = [0] + list_out[:-1]
-        out = []
-        for a, b in zip(list_in, list_out):
-            out.append(param_list[a:b])
-        return out
-
     def select_subsequence(
         self,
         in_keys: Iterable[NESTED_KEY] = None,
@@ -240,95 +209,40 @@ class TensorDictSequential(TensorDictModule):
                 "No modules left after selection. Make sure that in_keys and out_keys are coherent."
             )
 
-        return TensorDictSequential(*modules)
+        return self.__class__(*modules)
 
     def _run_module(
         self,
         module,
         tensordict,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ):
         tensordict_keys = set(tensordict.keys(include_nested=True))
         if not self.partial_tolerant or all(
             key in tensordict_keys for key in module.in_keys
         ):
-            if params is not None or buffers is not None:
-                tensordict = module(
-                    tensordict, params=params, buffers=buffers, **kwargs
-                )
-            else:
-                tensordict = module(tensordict, **kwargs)
+            tensordict = module(tensordict, **kwargs)
         elif self.partial_tolerant and isinstance(tensordict, LazyStackedTensorDict):
             for sub_td in tensordict.tensordicts:
                 tensordict_keys = set(sub_td.keys(include_nested=True))
                 if all(key in tensordict_keys for key in module.in_keys):
-                    if params is not None or buffers is not None:
-                        module(sub_td, params=params, buffers=buffers, **kwargs)
-                    else:
-                        module(sub_td, **kwargs)
+                    module(sub_td, **kwargs)
             tensordict._update_valid_keys()
         return tensordict
 
+    @dispatch_kwargs
     def forward(
         self,
         tensordict: TensorDictBase,
         tensordict_out=None,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
-        if params is not None and buffers is not None:
-            if isinstance(params, TensorDictBase):
-                # TODO: implement sorted values and items
-                param_splits = list(zip(*sorted(params.items())))[1]
-                buffer_splits = list(zip(*sorted(buffers.items())))[1]
-            else:
-                param_splits = self._split_param(params, "params")
-                buffer_splits = self._split_param(buffers, "buffers")
-            for i, (module, param, buffer) in enumerate(
-                zip(self.module, param_splits, buffer_splits)
-            ):
-                if "vmap" in kwargs and i > 0:
-                    # the tensordict is already expended
-                    if not isinstance(kwargs["vmap"], tuple):
-                        kwargs["vmap"] = (0, 0, *(0,) * len(module.in_keys))
-                    else:
-                        kwargs["vmap"] = (
-                            *kwargs["vmap"][:2],
-                            *(0,) * len(module.in_keys),
-                        )
-                tensordict = self._run_module(
-                    module, tensordict, params=param, buffers=buffer, **kwargs
-                )
-
-        elif params is not None:
-            if isinstance(params, TensorDictBase):
-                # TODO: implement sorted values and items
-                param_splits = list(zip(*sorted(params.items())))[1]
-            else:
-                param_splits = self._split_param(params, "params")
-            for i, (module, param) in enumerate(zip(self.module, param_splits)):
-                if "vmap" in kwargs and i > 0:
-                    # the tensordict is already expended
-                    if not isinstance(kwargs["vmap"], tuple):
-                        kwargs["vmap"] = (0, *(0,) * len(module.in_keys))
-                    else:
-                        kwargs["vmap"] = (
-                            *kwargs["vmap"][:1],
-                            *(0,) * len(module.in_keys),
-                        )
-                tensordict = self._run_module(
-                    module, tensordict, params=param, **kwargs
-                )
-
-        elif not len(kwargs):
+        if not len(kwargs):
             for module in self.module:
                 tensordict = self._run_module(module, tensordict, **kwargs)
         else:
             raise RuntimeError(
-                "TensorDictSequential does not support keyword arguments other than 'tensordict_out', 'in_keys', 'out_keys' 'params', 'buffers' and 'vmap'"
+                "TensorDictSequential does not support keyword arguments other than 'tensordict_out', 'in_keys' and 'out_keys'"
             )
         if tensordict_out is not None:
             tensordict_out.update(tensordict, inplace=True)
@@ -342,145 +256,10 @@ class TensorDictSequential(TensorDictModule):
         if isinstance(index, int):
             return self.module.__getitem__(index)
         else:
-            return TensorDictSequential(*self.module.__getitem__(index))
+            return self.__class__(*self.module.__getitem__(index))
 
     def __setitem__(self, index: int, tensordict_module: TensorDictModule) -> None:
         return self.module.__setitem__(idx=index, module=tensordict_module)
 
     def __delitem__(self, index: Union[int, slice]) -> None:
         self.module.__delitem__(idx=index)
-
-    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        """Transforms a stateful module in a functional module and returns its parameters and buffers.
-
-        Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
-
-        Args:
-            clone (bool, optional): if True, a clone of the module is created before it is returned.
-                This is useful as it prevents the original module to be scraped off of its
-                parameters and buffers.
-                Defaults to True
-            native (bool, optional): if True, TorchRL's functional modules will be used.
-                Defaults to True
-
-        Returns:
-            A tuple of parameter and buffer tuples
-
-        Examples:
-            >>> from tensordict import TensorDict
-            >>> lazy_module1 = nn.LazyLinear(4)
-            >>> lazy_module2 = nn.LazyLinear(3)
-            >>> td_module1 = TensorDictModule(module=lazy_module1, in_keys=["some_input"], out_keys=["hidden"])
-            >>> td_module2 = TensorDictModule(module=lazy_module2, in_keys=["hidden"], out_keys=["some_output"])
-            >>> td_module = TensorDictSequential(td_module1, td_module2)
-            >>> # initialize lazy layers
-            >>> td_module(TensorDict({"some_input": torch.randn(18)}, batch_size=[]))
-            >>> _, (params, buffers) = td_module.make_functional_with_buffers()
-            >>> print(params[0].shape)
-            torch.Size([4, 18])
-            >>> print(td_module(
-            ...    TensorDict({'some_input': torch.randn(18)}, batch_size=[]),
-            ...    params=params,
-            ...    buffers=buffers))
-            TensorDict(
-                fields={
-                    some_input: Tensor(torch.Size([18]), dtype=torch.float32),
-                    hidden: Tensor(torch.Size([4]), dtype=torch.float32),
-                    some_output: Tensor(torch.Size([3]), dtype=torch.float32)},
-                batch_size=torch.Size([]),
-                device=cpu,
-                is_shared=False)
-
-        """
-        native = native or not _has_functorch
-        if clone:
-            self_copy = deepcopy(self)
-            self_copy.module = copy(self_copy.module)
-        else:
-            self_copy = self
-        params = [] if not native else TensorDict({}, [])
-        buffers = [] if not native else TensorDict({}, [])
-        for i, module in enumerate(self.module):
-            self_copy.module[i], (
-                _params,
-                _buffers,
-            ) = module.make_functional_with_buffers(clone=True, native=native)
-            if native:
-                params[str(i)] = _params
-                buffers[str(i)] = _buffers
-            else:
-                params.extend(_params)
-                buffers.extend(_buffers)
-        return self_copy, (params, buffers)
-
-    def get_dist(
-        self,
-        tensordict: TensorDictBase,
-        **kwargs,
-    ) -> Tuple[torch.distributions.Distribution, ...]:
-        L = len(self.module)
-
-        if isinstance(self.module[-1], ProbabilisticTensorDictModule):
-            if "params" in kwargs and "buffers" in kwargs:
-                params = kwargs["params"]
-                buffers = kwargs["buffers"]
-                if isinstance(params, TensorDictBase):
-                    param_splits = list(zip(*sorted(params.items())))[1]
-                    buffer_splits = list(zip(*sorted(buffers.items())))[1]
-                else:
-                    param_splits = self._split_param(kwargs["params"], "params")
-                    buffer_splits = self._split_param(kwargs["buffers"], "buffers")
-                kwargs_pruned = {
-                    key: item
-                    for key, item in kwargs.items()
-                    if key not in ("params", "buffers")
-                }
-                for i, (module, param, buffer) in enumerate(
-                    zip(self.module, param_splits, buffer_splits)
-                ):
-                    if "vmap" in kwargs_pruned and i > 0:
-                        # the tensordict is already expended
-                        kwargs_pruned["vmap"] = (0, 0, *(0,) * len(module.in_keys))
-                    if i < L - 1:
-                        tensordict = module(
-                            tensordict, params=param, buffers=buffer, **kwargs_pruned
-                        )
-                    else:
-                        out = module.get_dist(
-                            tensordict, params=param, buffers=buffer, **kwargs_pruned
-                        )
-
-            elif "params" in kwargs:
-                params = kwargs["params"]
-                if isinstance(params, TensorDictBase):
-                    param_splits = list(zip(*sorted(params.items())))[1]
-                else:
-                    param_splits = self._split_param(kwargs["params"], "params")
-                kwargs_pruned = {
-                    key: item for key, item in kwargs.items() if key not in ("params",)
-                }
-                for i, (module, param) in enumerate(zip(self.module, param_splits)):
-                    if "vmap" in kwargs_pruned and i > 0:
-                        # the tensordict is already expended
-                        kwargs_pruned["vmap"] = (0, *(0,) * len(module.in_keys))
-                    if i < L - 1:
-                        tensordict = module(tensordict, params=param, **kwargs_pruned)
-                    else:
-                        out = module.get_dist(tensordict, params=param, **kwargs_pruned)
-
-            elif not len(kwargs):
-                for i, module in enumerate(self.module):
-                    if i < L - 1:
-                        tensordict = module(tensordict)
-                    else:
-                        out = module.get_dist(tensordict)
-            else:
-                raise RuntimeError(
-                    "TensorDictSequential does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
-                )
-
-            return out
-        else:
-            raise RuntimeError(
-                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict"
-            )

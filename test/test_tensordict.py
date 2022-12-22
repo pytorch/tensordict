@@ -13,6 +13,7 @@ import torch
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
 from tensordict import LazyStackedTensorDict, MemmapTensor, SavedTensorDict, TensorDict
 from tensordict.tensordict import (
+    _CustomOpTensorDict,
     _stack as stack_td,
     assert_allclose_td,
     make_tensordict,
@@ -1504,6 +1505,46 @@ class TestTensorDicts(TestTensorDictsBase):
         items_meta = list(td.items_meta())
         assert len(values_meta) == len(items_meta)
 
+    @pytest.mark.parametrize("make_unset", [True, False])
+    @pytest.mark.parametrize("include_nested", [True, False])
+    @pytest.mark.parametrize("leaves_only", [True, False])
+    def test_items_values_meta(
+        self, td_name, device, make_unset, include_nested, leaves_only
+    ):
+        if td_name == "saved_td" and include_nested:
+            pytest.skip("SavedTensorDict does not support nested keys")
+
+        td = getattr(self, td_name)(device)
+
+        values_meta = list(
+            td.values_meta(
+                make_unset=make_unset,
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+            )
+        )
+        items_meta = list(
+            td.items_meta(
+                make_unset=make_unset,
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+            )
+        )
+
+        if not (make_unset and isinstance(td, _CustomOpTensorDict)):
+            # instances of _CustomOpTensorDict make a new metatensor each time we call
+            # _get_meta, and equality of meta tensors is currently equivalent to
+            # `mt1 is mt2`. if MetaTensor were to define `__eq__` method we could apply
+            # this check in all cases.
+            assert all(v == i for v, (_, i) in zip(values_meta, items_meta))
+
+        if not include_nested:
+            assert all(isinstance(key, str) for key, _ in items_meta)
+
+        if leaves_only:
+            assert all(not value.is_tensordict() for value in values_meta)
+            assert all(not item.is_tensordict() for _, item in items_meta)
+
     def test_set_requires_grad(self, td_name, device):
         td = getattr(self, td_name)(device)
         assert not td.get("a").requires_grad
@@ -1756,6 +1797,36 @@ class TestTensorDicts(TestTensorDictsBase):
                             assert item["inner"].shape == torch.Size(
                                 expected_inner_tensor_size
                             )
+
+    def test_pop(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert "a" in td.keys()
+        a = td["a"].clone()
+        out = td.pop("a")
+        assert (out == a).all()
+        assert "a" not in td.keys()
+
+        assert "b" in td.keys()
+        b = td["b"].clone()
+        default = torch.zeros_like(b).to(device)
+        assert (default != b).all()
+        out = td.pop("b", default)
+
+        assert torch.ne(out, default).all()
+        assert (out == b).all()
+
+        assert "z" not in td.keys()
+        out = td.pop("z", default)
+        assert (out == default).all()
+
+        with pytest.raises(
+            KeyError,
+            match=re.escape(
+                "You are trying to pop key `z` which is not in dict"
+                "without providing default value"
+            ),
+        ):
+            td.pop("z")
 
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
@@ -2217,7 +2288,7 @@ def test_batchsize_reset():
         RuntimeError,
         match=re.escape(
             "modifying the batch size of a lazy repesentation "
-            "of a tensordict is not permitted. Consider instantiating the tensordict fist by calling `td = td.to_tensordict()` before resetting the batch size."
+            "of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
         ),
     ):
         td_stack.batch_size = [2]
@@ -2228,7 +2299,7 @@ def test_batchsize_reset():
     with pytest.raises(
         RuntimeError,
         match=re.escape(
-            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict fist by calling `td = td.to_tensordict()` before resetting the batch size."
+            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
         ),
     ):
         subtd.batch_size = [3, 2]
@@ -2239,7 +2310,7 @@ def test_batchsize_reset():
     with pytest.raises(
         RuntimeError,
         match=re.escape(
-            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict fist by calling `td = td.to_tensordict()` before resetting the batch size."
+            "modifying the batch size of a lazy repesentation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
         ),
     ):
         td_u.batch_size = [1]
@@ -2904,6 +2975,12 @@ def test_keys_view():
     assert keys == {key for key, _ in tensordict.items_meta()}
     assert keys_nested == {key for key, _ in tensordict.items_meta(include_nested=True)}
 
+    leaves = set(tensordict.keys(leaves_only=True))
+    leaves_nested = set(tensordict.keys(include_nested=True, leaves_only=True))
+
+    assert leaves == set()
+    assert leaves_nested == {("a", "b", "c")}
+
 
 def test_error_on_contains():
     td = TensorDict(
@@ -3210,6 +3287,84 @@ def test_split_with_negative_dim():
     assert tds[1].shape == torch.Size([5, 3])
     assert tds[1]["a"].shape == torch.Size([5, 3, 2, 1])
     assert tds[1]["b"].shape == torch.Size([5, 3, 1])
+
+
+@pytest.mark.parametrize("dim", range(2))
+@pytest.mark.parametrize("index", range(2))
+@pytest.mark.parametrize("device", get_available_devices())
+def test_lazy_stacked_insert(dim, index, device):
+    td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
+    lstd = torch.stack([td] * 2, dim=dim)
+
+    lstd.insert(
+        index,
+        TensorDict({"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device),
+    )
+
+    bs = [4]
+    bs.insert(dim, 3)
+
+    assert lstd.batch_size == torch.Size(bs)
+    assert set(lstd.keys()) == {"a"}
+
+    t = torch.zeros(*bs, 1, device=device)
+
+    if dim == 0:
+        t[index] = 1
+    else:
+        t[:, index] = 1
+
+    torch.testing.assert_close(lstd["a"], t)
+
+    with pytest.raises(
+        TypeError, match="Expected new value to be TensorDictBase instance"
+    ):
+        lstd.insert(index, torch.rand(10))
+
+    if device != torch.device("cpu"):
+        with pytest.raises(ValueError, match="Devices differ"):
+            lstd.insert(index, TensorDict({"a": torch.ones(4)}, [4], device="cpu"))
+
+    with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+        lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
+
+
+@pytest.mark.parametrize("dim", range(2))
+@pytest.mark.parametrize("device", get_available_devices())
+def test_lazy_stacked_append(dim, device):
+    td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
+    lstd = torch.stack([td] * 2, dim=dim)
+
+    lstd.append(
+        TensorDict({"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device)
+    )
+
+    bs = [4]
+    bs.insert(dim, 3)
+
+    assert lstd.batch_size == torch.Size(bs)
+    assert set(lstd.keys()) == {"a"}
+
+    t = torch.zeros(*bs, 1, device=device)
+
+    if dim == 0:
+        t[-1] = 1
+    else:
+        t[:, -1] = 1
+
+    torch.testing.assert_close(lstd["a"], t)
+
+    with pytest.raises(
+        TypeError, match="Expected new value to be TensorDictBase instance"
+    ):
+        lstd.append(torch.rand(10))
+
+    if device != torch.device("cpu"):
+        with pytest.raises(ValueError, match="Devices differ"):
+            lstd.append(TensorDict({"a": torch.ones(4)}, [4], device="cpu"))
+
+    with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+        lstd.append(TensorDict({"a": torch.ones(17)}, [17], device=device))
 
 
 if __name__ == "__main__":

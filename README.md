@@ -44,23 +44,23 @@ pip install tensordict-nightly
 
 A tensordict is primarily defined by its `batch_size` (or `shape`) and its key-value pairs:
 ```python
-from tensordict import TensorDict
-import torch
-tensordict = TensorDict({
-    "key 1": torch.ones(3, 4, 5),
-    "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
-}, batch_size=[3, 4])
+>>> from tensordict import TensorDict
+>>> import torch
+>>> tensordict = TensorDict({
+...     "key 1": torch.ones(3, 4, 5),
+...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
+... }, batch_size=[3, 4])
 ```
 The `batch_size` and the first dimensions of each of the tensors must be compliant.
 The tensors can be of any dtype and device. Optionally, one can restrict a tensordict to
 live on a dedicated device, which will send each tensor that is written there:
 ```python
-tensordict = TensorDict({
-    "key 1": torch.ones(3, 4, 5),
-    "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
-}, batch_size=[3, 4], device="cuda:0")
-tensordict["key 3"] = torch.randn(3, 4, device="cpu")
-assert tensordict["key 3"].device is torch.device("cuda:0")
+>>> tensordict = TensorDict({
+...     "key 1": torch.ones(3, 4, 5),
+...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
+... }, batch_size=[3, 4], device="cuda:0")
+>>> tensordict["key 3"] = torch.randn(3, 4, device="cpu")
+>>> assert tensordict["key 3"].device is torch.device("cuda:0")
 ```
 
 ### Tensor-like features
@@ -68,38 +68,41 @@ assert tensordict["key 3"].device is torch.device("cuda:0")
 TensorDict objects can be indexed exactly like tensors. The resulting of indexing
 a TensorDict is another TensorDict containing tensors indexed along the required dimension:
 ```python
-tensordict = TensorDict({
-    "key 1": torch.ones(3, 4, 5),
-    "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
-}, batch_size=[3, 4])
-sub_tensordict = tensordict[..., :2]
-assert sub_tensordict.shape == torch.Size([3, 2])
-assert sub_tensordict["key 1"].shape == torch.Size([3, 2, 5])
+>>> tensordict = TensorDict({
+...     "key 1": torch.ones(3, 4, 5),
+...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
+... }, batch_size=[3, 4])
+>>> sub_tensordict = tensordict[..., :2]
+>>> assert sub_tensordict.shape == torch.Size([3, 2])
+>>> assert sub_tensordict["key 1"].shape == torch.Size([3, 2, 5])
 ```
 
 Similarly, one can build tensordicts by stacking or concatenating single tensordicts:
 ```python
-tensordicts = [TensorDict({
-    "key 1": torch.ones(3, 4, 5),
-    "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
-}, batch_size=[3, 4]) for _ in range(2)]
-stack_tensordict = torch.stack(tensordicts, 1)
-assert stack_tensordict.shape == torch.Size([3, 2, 4])
-assert stack_tensordict["key 1"].shape == torch.Size([3, 2, 4, 5])
-cat_tensordict = torch.cat(tensordicts, 0)
-assert cat_tensordict.shape == torch.Size([6, 4])
-assert cat_tensordict["key 1"].shape == torch.Size([6, 4, 5])
+>>> tensordicts = [TensorDict({
+...     "key 1": torch.ones(3, 4, 5),
+...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
+... }, batch_size=[3, 4]) for _ in range(2)]
+>>> stack_tensordict = torch.stack(tensordicts, 1)
+>>> assert stack_tensordict.shape == torch.Size([3, 2, 4])
+>>> assert stack_tensordict["key 1"].shape == torch.Size([3, 2, 4, 5])
+>>> cat_tensordict = torch.cat(tensordicts, 0)
+>>> assert cat_tensordict.shape == torch.Size([6, 4])
+>>> assert cat_tensordict["key 1"].shape == torch.Size([6, 4, 5])
 ```
 
 TensorDict instances can also be reshaped, viewed, squeezed and unsqueezed:
 ```python
-tensordict = TensorDict({
-    "key 1": torch.ones(3, 4, 5),
-    "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
-}, batch_size=[3, 4])
-print(tensordict.view(-1))  # prints torch.Size([12])
-print(tensordict.reshape(-1))  # prints torch.Size([12])
-print(tensordict.unsqueeze(-1))  # prints torch.Size([3, 4, 1])
+>>> tensordict = TensorDict({
+...     "key 1": torch.ones(3, 4, 5),
+...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
+... }, batch_size=[3, 4])
+>>> print(tensordict.view(-1))
+torch.Size([12])
+>>> print(tensordict.reshape(-1))
+torch.Size([12])
+>>> print(tensordict.unsqueeze(-1))
+torch.Size([3, 4, 1])
 ```
 
 One can also send tensordict from device to device, place them in shared memory,
@@ -115,25 +118,28 @@ tensordict_uniform = tensordict.apply(lambda tensor: tensor.uniform_())
 We also provide an API to use TensorDict in conjunction with [FuncTorch](https://pytorch.org/functorch).
 For instance, TensorDict makes it easy to concatenate model weights to do model ensembling:
 ```python
-from torch import nn
-from tensordict import TensorDict
-from copy import deepcopy
-from tensordict.nn.functional_modules import FunctionalModule
-import torch
-from functorch import vmap
-layer1 = nn.Linear(3, 4)
-layer2 = nn.Linear(4, 4)
-model1 = nn.Sequential(layer1, layer2)
-model2 = deepcopy(model1)
-# we represent the weights hierarchically
-weights1 = TensorDict(model1.state_dict(), []).unflatten_keys(".")
-weights2 = TensorDict(model2.state_dict(), []).unflatten_keys(".")
-weights = torch.stack([weights1, weights2], 0)
-fmodule, _ = FunctionalModule._create_from(model1)
-# an input we'd like to pass through the model
-x = torch.randn(10, 3)
-y = vmap(fmodule, (0, None))(weights, x)
-y.shape  # torch.Size([2, 10, 4])
+>>> from torch import nn
+>>> from tensordict import TensorDict
+>>> from tensordict.nn import make_functional
+>>> import torch
+>>> from functorch import vmap
+>>> layer1 = nn.Linear(3, 4)
+>>> layer2 = nn.Linear(4, 4)
+>>> model = nn.Sequential(layer1, layer2)
+>>> # we represent the weights hierarchically
+>>> weights1 = TensorDict(layer1.state_dict(), []).unflatten_keys(".")
+>>> weights2 = TensorDict(layer2.state_dict(), []).unflatten_keys(".")
+>>> params = make_functional(model)
+>>> assert (params == TensorDict({"0": weights1, "1": weights2}, [])).all()
+>>> # Let's use our functional module
+>>> x = torch.randn(10, 3)
+>>> out = model(x, params=params)  # params is the last arg (or kwarg)
+>>> # an ensemble of models: we stack params along the first dimension...
+>>> params_stack = torch.stack([params, params], 0)
+>>> # ... and use it as an input we'd like to pass through the model
+>>> y = vmap(model, (None, 0))(x, params_stack)
+>>> print(y.shape)
+torch.Size([2, 10, 4])
 ```
 
 ### Lazy preallocation

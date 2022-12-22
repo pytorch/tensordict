@@ -2,11 +2,13 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import inspect
 
+import types
 from copy import deepcopy
+from functools import wraps
 
 import torch
-
 from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 from torch import nn
@@ -18,6 +20,7 @@ try:
     _has_functorch = True
 except ImportError:
     _has_functorch = False
+
 
 # Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
@@ -91,7 +94,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             args_spec,
         )
 
-    functorch._src.vmap._process_batched_inputs = _process_batched_inputs
+    if hasattr(torch, "_functorch"):
+        torch._functorch.vmap._process_batched_inputs = _process_batched_inputs
+    else:
+        functorch._src.vmap._process_batched_inputs = _process_batched_inputs
 
     def _create_batched_inputs(flat_in_dims, flat_args, vmap_level: int, args_spec):
         # See NOTE [Ignored _remove_batch_dim, _add_batch_dim]
@@ -110,7 +116,10 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         ]
         return tree_unflatten(batched_inputs, args_spec)
 
-    functorch._src.vmap._create_batched_inputs = _create_batched_inputs
+    if hasattr(torch, "_functorch"):
+        torch._functorch.vmap._create_batched_inputs = _create_batched_inputs
+    else:
+        functorch._src.vmap._create_batched_inputs = _create_batched_inputs
 
     def _unwrap_batched(
         batched_outputs, out_dims, vmap_level: int, batch_size: int, func
@@ -164,133 +173,182 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             flat_outputs.append(out)
         return tree_unflatten(flat_outputs, output_spec)
 
-    functorch._src.vmap._unwrap_batched = _unwrap_batched
+    if hasattr(torch, "_functorch"):
+        torch._functorch.vmap._unwrap_batched = _unwrap_batched
+    else:
+        functorch._src.vmap._unwrap_batched = _unwrap_batched
+
 
 # Tensordict-compatible Functional modules
 
 
-class FunctionalModule(nn.Module):
-    """This is the callable object returned by :func:`make_functional`."""
-
-    def __init__(self, stateless_model):
-        super(FunctionalModule, self).__init__()
-        self.stateless_model = stateless_model
-
-    @staticmethod
-    def _create_from(model, disable_autograd_tracking=False):
-        # TODO: We don't need to copy the model to create a stateless copy
-        model_copy = deepcopy(model)
-        param_tensordict = extract_weights(model_copy)
-        if disable_autograd_tracking:
-            param_tensordict.apply(lambda x: x.requires_grad_(False), inplace=True)
-        return FunctionalModule(model_copy), param_tensordict
-
-    def forward(self, params, *args, **kwargs):
-        # Temporarily load the state back onto self.stateless_model
-        old_state = _swap_state(
-            self.stateless_model, params, return_old_tensordict=_RESET_OLD_TENSORDICT
-        )
-        try:
-            return self.stateless_model(*args, **kwargs)
-        finally:
-            # Remove the loaded state on self.stateless_model
-            if _RESET_OLD_TENSORDICT:
-                _swap_state(self.stateless_model, old_state)
-
-
-class FunctionalModuleWithBuffers(nn.Module):
-    """This is the callable object returned by :func:`make_functional`."""
-
-    def __init__(self, stateless_model):
-        super(FunctionalModuleWithBuffers, self).__init__()
-        self.stateless_model = stateless_model
-
-    @staticmethod
-    def _create_from(model, disable_autograd_tracking=False):
-        # TODO: We don't need to copy the model to create a stateless copy
-        model_copy = deepcopy(model)
-        param_tensordict = extract_weights(model_copy)
-        buffers = extract_buffers(model_copy)
-        if buffers is None:
-            buffers = TensorDict(
-                {}, param_tensordict.batch_size, device=param_tensordict.device
-            )
-        if disable_autograd_tracking:
-            param_tensordict.apply(lambda x: x.requires_grad_(False), inplace=True)
-        return FunctionalModuleWithBuffers(model_copy), param_tensordict, buffers
-
-    def forward(self, params, buffers, *args, **kwargs):
-        # Temporarily load the state back onto self.stateless_model
-        old_state = _swap_state(
-            self.stateless_model, params, return_old_tensordict=_RESET_OLD_TENSORDICT
-        )
-        old_state_buffers = _swap_state(
-            self.stateless_model, buffers, return_old_tensordict=_RESET_OLD_TENSORDICT
-        )
-
-        try:
-            return self.stateless_model(*args, **kwargs)
-        finally:
-            # Remove the loaded state on self.stateless_model
-            if _RESET_OLD_TENSORDICT:
-                _swap_state(self.stateless_model, old_state)
-                _swap_state(self.stateless_model, old_state_buffers)
-
-
-# Some utils for these
-
-
-def extract_weights(model: nn.Module):
-    """Extracts the weights of a model in a tensordict."""
-    tensordict = TensorDict({}, [])
+def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None, recurse=True):
+    """Extracts the weights and buffers of a model in a tensordict, and adapts the modules to read those inputs."""
+    tensordict = {}
     for name, param in list(model.named_parameters(recurse=False)):
         setattr(model, name, None)
         tensordict[name] = param
-    for name, module in model.named_children():
-        module_tensordict = extract_weights(module)
-        if module_tensordict is not None:
-            tensordict[name] = module_tensordict
-    if len(tensordict.keys()):
-        return tensordict
-    else:
-        return None
 
-
-def extract_buffers(model: nn.Module):
-    """Extracts the buffers of a model in a tensordict."""
-    tensordict = TensorDict({}, [])
     for name, param in list(model.named_buffers(recurse=False)):
         setattr(model, name, None)
         tensordict[name] = param
+
     for name, module in model.named_children():
-        module_tensordict = extract_buffers(module)
+        module_tensordict = extract_weights_and_buffers(module)
         if module_tensordict is not None:
             tensordict[name] = module_tensordict
-    if len(tensordict.keys()):
-        return tensordict
-    else:
-        return None
+
+    if funs_to_decorate is None:
+        funs_to_decorate = ["forward"]
+
+    if not model.__dict__.get("_functionalized", False):
+        for fun_to_decorate in funs_to_decorate:
+            try:
+                setattr(
+                    model,
+                    fun_to_decorate,
+                    types.MethodType(_make_decorator(model, fun_to_decorate), model),
+                )
+            except AttributeError:
+                continue
+    model.__dict__["_functionalized"] = True
+    model.__dict__["_is_stateless"] = True
+    return TensorDict(tensordict, [], _run_checks=False)
 
 
-def _swap_state(model, tensordict, return_old_tensordict=False):
-    #     if return_old_tensordict:
-    #         old_tensordict = tensordict.clone(recurse=False)
-    #         old_tensordict.batch_size = []
+def _swap_state(
+    model, tensordict, is_stateless, return_old_tensordict=False, old_tensordict=None
+):
+    model.__dict__["_is_stateless"] = is_stateless
+    if return_old_tensordict and old_tensordict is None:
+        old_tensordict = {}
+    keys = set(tensordict.keys())
+    children = []
+    for key, child in model.named_children():
+        try:
+            keys.remove(key)
+        except KeyError:
+            # if params are built externally, this could lead to a KeyError as some
+            # modules do not have params
+            pass
+        children.append(key)
+        value = tensordict.get(key, None)
+        if value is None:
+            # faster than get(key, Tensordict(...))
+            value = {}
 
-    if return_old_tensordict:
-        old_tensordict = TensorDict({}, [], device=tensordict.device)
-
-    for key, value in list(tensordict.items()):
-        if isinstance(value, TensorDictBase):
-            _swap_state(getattr(model, key), value)
+        if return_old_tensordict:
+            _old_value = old_tensordict.get(key, None)
         else:
-            if return_old_tensordict:
-                old_attr = getattr(model, key)
-                if old_attr is None:
-                    old_attr = torch.tensor([]).view(*value.shape, 0)
+            _old_value = None
+        _old_value = _swap_state(
+            child,
+            value,
+            return_old_tensordict=return_old_tensordict,
+            old_tensordict=_old_value,
+            is_stateless=is_stateless,
+        )
+        if old_tensordict is not None:
+            old_tensordict[key] = _old_value
+    for key in keys:
+        value = tensordict.get(key)
+        is_param = key in model.__dict__.get("_parameters")
+        if return_old_tensordict:
+            old_attr = getattr(model, key)
+            if old_attr is None:
+                old_attr = torch.zeros(*value.shape, 0)
+            old_tensordict[key] = old_attr
+        if is_param:
             delattr(model, key)
-            setattr(model, key, value)
-            if return_old_tensordict:
-                old_tensordict.set(key, old_attr)
+        setattr(model, key, value)
     if return_old_tensordict:
         return old_tensordict
+
+
+def make_functional(module, funs_to_decorate=None):
+    params = extract_weights_and_buffers(module, funs_to_decorate=funs_to_decorate)
+    return params
+
+
+def get_functional(module, funs_to_decorate=None):
+    params = make_functional(module, funs_to_decorate=funs_to_decorate)
+    out = deepcopy(module)
+    repopulate_module(module, params)
+    return out
+
+
+def _make_decorator(module, fun_name):
+    fun = getattr(module, fun_name)
+    # we need to update the signature so that params can be the last positional arg
+    oldsig = inspect.signature(fun)
+    if "_forward_unimplemented" in fun.__name__:
+        raise AttributeError("_forward_unimplemented not supported")
+    # search if a VAR_POSITIONAL or VAR_KEYWORD is present
+    # if yes insert step parameter before it, else insert it in last position
+    params = list(oldsig.parameters.values())
+    for i, param in enumerate(params):
+        if param.kind == inspect.Parameter.KEYWORD_ONLY:
+            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
+            break
+        if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            out_type = inspect.Parameter.KEYWORD_ONLY
+            i = i + 1
+            break
+        if param.kind == inspect.Parameter.VAR_KEYWORD:
+            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
+            break
+        if (
+            param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
+            and param.default is not inspect._empty
+        ):
+            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
+            break
+    else:
+        out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
+        i = len(params)
+    # new parameter name is params or params_[_...] if params if already present
+    name = "params"
+    while name in oldsig.parameters:
+        name += "_"
+    newparam = inspect.Parameter(name, out_type, default=None)
+    params.insert(i, newparam)
+    # we can now build the signature for the wrapper function
+    sig = oldsig.replace(parameters=params)
+
+    @wraps(fun)
+    def new_fun(self, *args, **kwargs):
+        # 3 use cases: (1) params is the last arg, (2) params is in kwargs, (3) no params
+        if self.__dict__.get("_is_stateless", False):
+            params = kwargs.pop("params", None)
+            if params is None:
+                params = args[-1]
+                args = args[:-1]
+                # get the previous params, and tell the submodules not to look for params anymore
+            old_params = _assign_params(
+                self, params, make_stateless=False, return_old_tensordict=True
+            )
+            try:
+                out = getattr(type(self), fun_name)(self, *args, **kwargs)
+            finally:
+                # reset the previous params, and tell the submodules to look for params
+                _assign_params(
+                    self, old_params, make_stateless=True, return_old_tensordict=True
+                )
+            return out
+        else:
+            return getattr(type(self), fun_name)(self, *args, **kwargs)
+
+    new_fun.__signature__ = sig
+    return new_fun
+
+
+def _assign_params(module, params, make_stateless, return_old_tensordict):
+    if params is not None:
+        out = _swap_state(module, params, make_stateless, return_old_tensordict)
+        if out is not None:
+            return TensorDict(out, [], _run_checks=False)
+
+
+def repopulate_module(model, tensordict):
+    _swap_state(model, tensordict, is_stateless=False)
+    return model

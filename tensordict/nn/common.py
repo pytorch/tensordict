@@ -5,25 +5,22 @@
 
 from __future__ import annotations
 
+import functools
+import inspect
+
 import warnings
-from copy import deepcopy
 from textwrap import indent
 from typing import Any, Iterable, List, Optional, Sequence, Union
 
 import torch
 
-from tensordict.nn.functional_modules import (
-    FunctionalModule as rlFunctionalModule,
-    FunctionalModuleWithBuffers as rlFunctionalModuleWithBuffers,
-)
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NESTED_KEY
 from torch import nn, Tensor
 
+
 try:
-    import functorch
-    from functorch import FunctionalModule, FunctionalModuleWithBuffers, vmap
-    from functorch._src.make_functional import _swap_state
+    from functorch import FunctionalModule, FunctionalModuleWithBuffers
 
     _has_functorch = True
 except ImportError:
@@ -55,6 +52,90 @@ def _check_all_nested(list_of_keys):
         _nested_key_type_check(key)
 
 
+def dispatch_kwargs(func):
+    """Allows for a function expecting a TensorDict to be called using kwargs.
+
+    This method must be used within modules that have an :obj:`in_keys` and
+    :obj:`out_keys` attributes indicating what keys to be read and written
+    from the tensordict. The wrapped function should also have a :obj:`tensordict`
+    leading argument.
+
+    The resulting function will return a single tensor (if there is a single
+    element in out_keys), otherwise it will return a tuple sorted as the :obj:`out_keys`
+    of the module.
+
+    Examples:
+        >>> class MyModule(nn.Module):
+        ...     in_keys = ["a"]
+        ...     out_keys = ["b"]
+        ...
+        ...     @dispatch_kwargs
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModule()
+        >>> b = module(a=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+
+    For nested keys, it is assumed that an underscore (`_`) is used to join the
+    sub-keys.
+
+    Examples:
+        >>> class MyModuleNest(nn.Module):
+        ...     in_keys = [("a", "c")]
+        ...     out_keys = ["b"]
+        ...
+        ...     @dispatch_kwargs
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a', 'c'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModuleNest()
+        >>> b, = module(a_c=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+
+
+    """
+
+    # sanity check
+    for i, key in enumerate(inspect.signature(func).parameters):
+        if i == 0:
+            # skip self
+            continue
+        if key != "tensordict":
+            raise RuntimeError(
+                "the first argument of the wrapped function must be "
+                "named 'tensordict'."
+            )
+        break
+
+    @functools.wraps(func)
+    def wrapper(self, tensordict=None, *args, **kwargs):
+        if tensordict is None:
+            tensordict_values = {}
+            for key in self.in_keys:
+                if isinstance(key, tuple):
+                    expected_key = "_".join(key)
+                else:
+                    expected_key = key
+                if expected_key in kwargs:
+                    try:
+                        tensordict_values[key] = kwargs.pop(expected_key)
+                    except KeyError:
+                        raise KeyError(
+                            f"The key {expected_key} wasn't found in the keyword arguments "
+                            f"but is expected to execute that function."
+                        )
+            tensordict = make_tensordict(tensordict_values)
+            out = func(self, tensordict, *args, **kwargs)
+            out = tuple(out[key] for key in self.out_keys)
+            return out[0] if len(out) == 1 else out
+        return func(self, tensordict, *args, **kwargs)
+
+    return wrapper
+
+
 class TensorDictModule(nn.Module):
     """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
 
@@ -73,60 +154,67 @@ class TensorDictModule(nn.Module):
     be specified:
 
     Examples:
-        >>> import torch, functorch
+        >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
+        >>> from tensordict.nn.functional_modules import make_functional
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> module = torch.nn.GRUCell(4, 8)
         >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
         >>> td_fmodule = TensorDictModule(
-        ...    module=fmodule, in_keys=["input", "hidden"], out_keys=["output"]
+        ...    module=torch.nn.GRUCell(4, 8), in_keys=["input", "hidden"], out_keys=["output"]
         ... )
-        >>> td_functional = td_fmodule(td.clone(), params=params, buffers=buffers)
+        >>> params = make_functional(td_fmodule)
+        >>> td_functional = td_fmodule(td.clone(), params=params)
         >>> print(td_functional)
         TensorDict(
-            fields={input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([3, 8]), dtype=torch.float32)},
             shared=False,
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
     In the stateful case:
         >>> td_module = TensorDictModule(
-        ...    module=module, in_keys=["input", "hidden"], out_keys=["output"]
+        ...    module=torch.nn.GRUCell(4, 8), in_keys=["input", "hidden"], out_keys=["output"]
         ... )
         >>> td_stateful = td_module(td.clone())
         >>> print(td_stateful)
         TensorDict(
-            fields={input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+            fields={
                 hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([3, 8]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
-    One can use a vmap operator to call the functional module. In this case the tensordict is expanded to match the
-    batch size (i.e. the tensordict isn't modified in-place anymore):
-        >>> # Model ensemble using vmap
-        >>> params_repeat = tuple(param.expand(4, *param.shape).contiguous().normal_() for param in params)
-        >>> buffers_repeat = tuple(param.expand(4, *param.shape).contiguous().normal_() for param in buffers)
-        >>> td_vmap = td_fmodule(td.clone(), params=params_repeat, buffers=buffers_repeat, vmap=True)
+    One can use a vmap operator to call the functional module.
+        >>> from functorch import vmap
+        >>> params_repeat = params.expand(4)
+        >>> td_vmap = vmap(td_fmodule, (None, 0))(td.clone(), params_repeat)
         >>> print(td_vmap)
         TensorDict(
-            fields={input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+            fields={
                 hidden: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32)},
-            shared=False,
             batch_size=torch.Size([4, 3]),
-            device=cpu)
+            device=None,
+            is_shared=False)
 
     """
 
     def __init__(
         self,
         module: Union[
-            FunctionalModule, FunctionalModuleWithBuffers, TensorDictModule, nn.Module
+            "FunctionalModule",
+            "FunctionalModuleWithBuffers",
+            TensorDictModule,
+            nn.Module,
         ],
         in_keys: Iterable[NESTED_KEY],
         out_keys: Iterable[NESTED_KEY],
@@ -152,14 +240,9 @@ class TensorDictModule(nn.Module):
 
     @property
     def is_functional(self):
-        return isinstance(
+        return _has_functorch and isinstance(
             self.module,
-            (
-                FunctionalModule,
-                FunctionalModuleWithBuffers,
-                rlFunctionalModule,
-                rlFunctionalModuleWithBuffers,
-            ),
+            (FunctionalModule, FunctionalModuleWithBuffers),
         )
 
     def _write_to_tensordict(
@@ -168,136 +251,36 @@ class TensorDictModule(nn.Module):
         tensors: List,
         tensordict_out: Optional[TensorDictBase] = None,
         out_keys: Optional[Iterable[NESTED_KEY]] = None,
-        vmap: Optional[int] = None,
     ) -> TensorDictBase:
 
         if out_keys is None:
             out_keys = self.out_keys
-        if (
-            (tensordict_out is None)
-            and vmap
-            and (isinstance(vmap, bool) or vmap[-1] is None)
-        ):
-            dim = tensors[0].shape[0]
-            tensordict_out = tensordict.expand(dim, *tensordict.batch_size).contiguous()
-        elif tensordict_out is None:
+        if tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
             if _out_key != "_":
                 tensordict_out.set(_out_key, _tensor)
         return tensordict_out
 
-    def _make_vmap(self, buffers, kwargs, n_input):
-        if "vmap" in kwargs and kwargs["vmap"]:
-            if not isinstance(kwargs["vmap"], (tuple, bool)):
-                raise RuntimeError(
-                    "vmap argument must be a boolean or a tuple of dim expensions."
-                )
-            # if vmap is a tuple, we make sure the number of inputs after params and buffers match
-            if isinstance(kwargs["vmap"], (tuple, list)):
-                err_msg = f"the vmap argument had {len(kwargs['vmap'])} elements, but the module has {len(self.in_keys)} inputs"
-                if isinstance(
-                    self.module,
-                    (FunctionalModuleWithBuffers, rlFunctionalModuleWithBuffers),
-                ):
-                    if len(kwargs["vmap"]) == 3:
-                        _vmap = (
-                            *kwargs["vmap"][:2],
-                            *[kwargs["vmap"][2]] * len(self.in_keys),
-                        )
-                    elif len(kwargs["vmap"]) == 2 + len(self.in_keys):
-                        _vmap = kwargs["vmap"]
-                    else:
-                        raise RuntimeError(err_msg)
-                elif isinstance(self.module, (FunctionalModule, rlFunctionalModule)):
-                    if len(kwargs["vmap"]) == 2:
-                        _vmap = (
-                            *kwargs["vmap"][:1],
-                            *[kwargs["vmap"][1]] * len(self.in_keys),
-                        )
-                    elif len(kwargs["vmap"]) == 1 + len(self.in_keys):
-                        _vmap = kwargs["vmap"]
-                    else:
-                        raise RuntimeError(err_msg)
-                else:
-                    raise TypeError(
-                        f"vmap not compatible with modules of type {type(self.module)}"
-                    )
-            else:
-                _vmap = (
-                    (0, 0, *(None,) * n_input)
-                    if buffers is not None
-                    else (0, *(None,) * n_input)
-                )
-            return _vmap
-
     def _call_module(
-        self,
-        tensors: Sequence[Tensor],
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        **kwargs,
+        self, tensors: Sequence[Tensor], **kwargs
     ) -> Union[Tensor, Sequence[Tensor]]:
-        err_msg = "Did not find the {0} keyword argument to be used with the functional module. Check it was passed to the TensorDictModule method."
-        if isinstance(
-            self.module,
-            (
-                FunctionalModule,
-                FunctionalModuleWithBuffers,
-                rlFunctionalModule,
-                rlFunctionalModuleWithBuffers,
-            ),
-        ):
-            _vmap = self._make_vmap(buffers, kwargs, len(tensors))
-            if _vmap:
-                module = vmap(self.module, _vmap)
-            else:
-                module = self.module
-
-        if isinstance(self.module, (FunctionalModule, rlFunctionalModule)):
-            if params is None:
-                raise KeyError(err_msg.format("params"))
-            kwargs_pruned = {
-                key: item for key, item in kwargs.items() if key not in ("vmap")
-            }
-            out = module(params, *tensors, **kwargs_pruned)
-            return out
-
-        elif isinstance(
-            self.module, (FunctionalModuleWithBuffers, rlFunctionalModuleWithBuffers)
-        ):
-            if params is None:
-                raise KeyError(err_msg.format("params"))
-            if buffers is None:
-                raise KeyError(err_msg.format("buffers"))
-
-            kwargs_pruned = {
-                key: item for key, item in kwargs.items() if key not in ("vmap")
-            }
-            out = module(params, buffers, *tensors, **kwargs_pruned)
-            return out
-        else:
-            out = self.module(*tensors, **kwargs)
+        out = self.module(*tensors, **kwargs)
         return out
 
+    @dispatch_kwargs
     def forward(
         self,
         tensordict: TensorDictBase,
         tensordict_out: Optional[TensorDictBase] = None,
-        params: Optional[Union[TensorDictBase, List[Tensor]]] = None,
-        buffers: Optional[Union[TensorDictBase, List[Tensor]]] = None,
         **kwargs,
     ) -> TensorDictBase:
+        """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
-        tensors = self._call_module(tensors, params=params, buffers=buffers, **kwargs)
+        tensors = self._call_module(tensors, **kwargs)
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
-        tensordict_out = self._write_to_tensordict(
-            tensordict,
-            tensors,
-            tensordict_out,
-            vmap=kwargs.get("vmap", False),
-        )
+        tensordict_out = self._write_to_tensordict(tensordict, tensors, tensordict_out)
         return tensordict_out
 
     @property
@@ -316,116 +299,6 @@ class TensorDictModule(nn.Module):
         )
 
         return f"{self.__class__.__name__}(\n{fields})"
-
-    def make_functional_with_buffers(self, clone: bool = True, native: bool = False):
-        """Transforms a stateful module in a functional module and returns its parameters and buffers.
-
-        Unlike functorch.make_functional_with_buffers, this method supports lazy modules.
-
-        Args:
-            clone (bool, optional): if True, a clone of the module is created before it is returned.
-                This is useful as it prevents the original module to be scraped off of its
-                parameters and buffers.
-                Defaults to True
-            native (bool, optional): if True, TorchRL's functional modules will be used.
-                Defaults to True
-
-        Returns:
-            A tuple of parameter and buffer tuples
-
-        Examples:
-            >>> import torch.nn as nn
-            >>> from tensordict import TensorDict
-            >>> from tensordict.nn import TensorDictModule
-            >>> module = nn.Linear(18, 4)
-            >>> td_module = TensorDictModule(
-            ...     lazy_module, ["some_input"], ["some_output"]
-            ... )
-            >>> _, (params, buffers) = td_module.make_functional_with_buffers()
-            >>> print(params[0].shape)
-            torch.Size([4, 18])
-            >>> print(td_module(
-            ...    TensorDict({'some_input': torch.randn(18)}, batch_size=[]),
-            ...    params=params,
-            ...    buffers=buffers))
-            TensorDict(
-                fields={
-                    some_input: Tensor(torch.Size([18]), dtype=torch.float32),
-                    some_output: Tensor(torch.Size([4]), dtype=torch.float32)},
-                batch_size=torch.Size([]),
-                device=cpu,
-                is_shared=False)
-
-        """
-        native = native or not _has_functorch
-        if clone:
-            self_copy = deepcopy(self)
-        else:
-            self_copy = self
-
-        if isinstance(
-            self_copy.module,
-            (
-                TensorDictModule,
-                FunctionalModule,
-                FunctionalModuleWithBuffers,
-                rlFunctionalModule,
-                rlFunctionalModuleWithBuffers,
-            ),
-        ):
-            raise RuntimeError(
-                "TensorDictModule.make_functional_with_buffers requires the "
-                "module to be a regular nn.Module. "
-                f"Found type {type(self_copy.module)}"
-            )
-
-        # check if there is a non-initialized lazy module
-        for m in self_copy.module.modules():
-            if hasattr(m, "has_uninitialized_params") and m.has_uninitialized_params():
-                raise ValueError(
-                    "Modules with uninitialized lazy components cannot be converted to "
-                    "functional modules."
-                )
-
-        module = self_copy.module
-        if native:
-            fmodule, params, buffers = rlFunctionalModuleWithBuffers._create_from(
-                module
-            )
-        else:
-            fmodule, params, buffers = functorch.make_functional_with_buffers(module)
-        self_copy.module = fmodule
-
-        # Erase meta params
-        for _ in fmodule.parameters():
-            none_state = [None for _ in params + buffers]
-            if hasattr(fmodule, "all_names_map"):
-                # functorch >= 0.2.0
-                _swap_state(fmodule.stateless_model, fmodule.all_names_map, none_state)
-            else:
-                # functorch < 0.2.0
-                _swap_state(fmodule.stateless_model, fmodule.split_names, none_state)
-
-            break
-
-        return self_copy, (params, buffers)
-
-    @property
-    def num_params(self):
-        if isinstance(
-            self.module,
-            (FunctionalModule, FunctionalModuleWithBuffers),
-        ):
-            return len(self.module.param_names)
-        else:
-            return 0
-
-    @property
-    def num_buffers(self):
-        if isinstance(self.module, FunctionalModuleWithBuffers):
-            return len(self.module.buffer_names)
-        else:
-            return 0
 
 
 class TensorDictModuleWrapper(nn.Module):
