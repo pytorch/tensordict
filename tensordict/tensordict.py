@@ -809,9 +809,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             device = self.device
             tensor = tensor.to(device)
 
-        if self._is_shared and not tensor.is_shared():
-            tensor = tensor.clone().share_memory_()
-
         if check_tensor_shape and _shape(tensor)[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
             if (
@@ -1111,11 +1108,13 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return value
 
     @abc.abstractmethod
-    def share_memory_(self, lock=True) -> TensorDictBase:
+    def share_memory_(self) -> TensorDictBase:
         """Places all the tensors in shared memory.
 
-        Args:
-            lock (bool): prevents changes to the dictionary except for inplace overwrites to existing keys
+        The TensorDict is then locked, meaning that the only writing operations that
+        can be executed must be done in-place.
+        Once the tensordict is unlocked, the share_memory attribute is turned to False,
+        because cross-process identity is not guaranteed anymore.
 
         Returns:
             self.
@@ -1124,13 +1123,20 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
+    def memmap_(
+        self,
+        prefix=None,
+    ) -> TensorDictBase:
         """Writes all tensors onto a MemmapTensor.
 
         Args:
             prefix (str): directory prefix where the memmap tensors will have to
                 be stored.
-            lock (bool): prevents changes to the dictionary except for inplace overwrites to existing keys
+
+        The TensorDict is then locked, meaning that the only writing operations that
+        can be executed must be done in-place.
+        Once the tensordict is unlocked, the memmap attribute is turned to False,
+        because cross-process identity is not guaranteed anymore.
 
         Returns:
             self.
@@ -2129,6 +2135,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def unlock(self):
         self._is_locked = False
+        self._is_shared = False
+        self._is_memmap = False
         for key, item in self.items_meta():
             if item.is_tensordict():
                 self.get(key).unlock()
@@ -2716,7 +2724,7 @@ class TensorDict(TensorDictBase):
             # the regular get()
             return self._default_get(key, default)
 
-    def share_memory_(self, lock=True) -> TensorDictBase:
+    def share_memory_(self) -> TensorDictBase:
         if self.is_memmap():
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2735,7 +2743,7 @@ class TensorDict(TensorDictBase):
         for value in self.values_meta():
             value.share_memory_()
         self._is_shared = True
-        self.is_locked = lock
+        self.lock()
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -2743,7 +2751,7 @@ class TensorDict(TensorDictBase):
             value.detach_()
         return self
 
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
+    def memmap_(self, prefix=None) -> TensorDictBase:
         if self.is_shared() and self.device.type == "cpu":
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2765,7 +2773,7 @@ class TensorDict(TensorDictBase):
         for value in self.values_meta():
             value.memmap_()
         self._is_memmap = True
-        self.is_locked = lock
+        self.lock()
         return self
 
     def to(
@@ -3863,12 +3871,12 @@ torch.Size([3, 2])
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
+    def memmap_(self, prefix=None) -> TensorDictBase:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
         )
 
-    def share_memory_(self, lock=True) -> TensorDictBase:
+    def share_memory_(self) -> TensorDictBase:
         raise RuntimeError(
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
@@ -4438,11 +4446,11 @@ class LazyStackedTensorDict(TensorDictBase):
         self._valid_keys.remove(key)
         return self
 
-    def share_memory_(self, lock=True) -> TensorDictBase:
+    def share_memory_(self) -> TensorDictBase:
         for td in self.tensordicts:
             td.share_memory_()
         self._is_shared = True
-        self.is_locked = lock
+        self.lock()
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -4450,11 +4458,11 @@ class LazyStackedTensorDict(TensorDictBase):
             td.detach_()
         return self
 
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
+    def memmap_(self, prefix=None) -> TensorDictBase:
         for td in self.tensordicts:
             td.memmap_(prefix=prefix)
         self._is_memmap = True
-        self.is_locked = lock
+        self.lock()
         return self
 
     def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
@@ -4832,7 +4840,7 @@ class SavedTensorDict(TensorDictBase):
     def share_memory_(self, lock=True) -> TensorDictBase:
         raise RuntimeError("SavedTensorDict cannot be put in shared memory.")
 
-    def memmap_(self, prefix=None, lock=True) -> TensorDictBase:
+    def memmap_(self, prefix=None) -> TensorDictBase:
         raise RuntimeError(
             "SavedTensorDict and memmap are mutually exclusive features."
         )
@@ -5333,16 +5341,16 @@ class _CustomOpTensorDict(TensorDictBase):
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None, lock=True):
+    def memmap_(self, prefix=None):
         self._source.memmap_(prefix=prefix)
         self._is_memmap = True
-        self.is_locked = lock
+        self.lock()
         return self
 
-    def share_memory_(self, lock=True):
+    def share_memory_(self):
         self._source.share_memory_()
         self._is_shared = True
-        self.is_locked = lock
+        self.lock()
 
 
 class _UnsqueezedTensorDict(_CustomOpTensorDict):
