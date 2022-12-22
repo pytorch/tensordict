@@ -139,7 +139,17 @@ class _TensorDictKeysView:
         self.leaves_only = leaves_only
 
     def __iter__(self):
-        return self._iter_helper(self.tensordict)
+        if not self.include_nested:
+            if self.leaves_only:
+                for key in self._keys():
+                    meta_val = self.tensordict._get_meta(key)
+                    if meta_val.is_tensordict():
+                        continue
+                    yield key
+            else:
+                yield from self._keys()
+        else:
+            yield from self._iter_helper(self.tensordict)
 
     def _iter_helper(self, tensordict, prefix=None):
         items_iter = self._items(tensordict)
@@ -303,7 +313,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             raise RuntimeError(
                 "modifying the batch size of a lazy repesentation of a "
                 "tensordict is not permitted. Consider instantiating the "
-                "tensordict fist by calling `td = td.to_tensordict()` before "
+                "tensordict first by calling `td = td.to_tensordict()` before "
                 "resetting the batch size."
             )
         if self.batch_size == new_batch_size:
@@ -844,7 +854,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             yield self.get(k)
 
     def items_meta(
-        self, make_unset: bool = True, include_nested: bool = False
+        self,
+        make_unset: bool = True,
+        include_nested: bool = False,
+        leaves_only: bool = False,
     ) -> Iterator[Tuple[str, MetaTensor]]:
         """Returns a generator of key-value pairs for the tensordict.
 
@@ -852,22 +865,27 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
         if make_unset:
-            for k in self.keys(include_nested=include_nested):
+            for k in self.keys(include_nested=include_nested, leaves_only=leaves_only):
                 yield k, self._get_meta(k)
         else:
-            if include_nested:
-                for k, item in self._dict_meta.items():
-                    if isinstance(item, TensorDictBase):
-                        yield from item.items_meta(
-                            make_unset=make_unset, include_nested=include_nested
-                        )
-                    else:
+            for k, item in self._dict_meta.items():
+                if item.is_tensordict():
+                    if not leaves_only:
                         yield k, item
-            else:
-                yield from self._dict_meta.items()
+                    if include_nested:
+                        yield from self.get(k).items_meta(
+                            make_unset=make_unset,
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                        )
+                else:
+                    yield k, item
 
     def values_meta(
-        self, make_unset: bool = True, include_nested: bool = False
+        self,
+        make_unset: bool = True,
+        include_nested: bool = False,
+        leaves_only: bool = False,
     ) -> Iterator[MetaTensor]:
         """Returns a generator representing the values for the tensordict.
 
@@ -875,10 +893,21 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
         if make_unset:
-            for k in self.keys(include_nested=include_nested):
+            for k in self.keys(include_nested=include_nested, leaves_only=leaves_only):
                 yield self._get_meta(k)
         else:
-            yield from self._dict_meta.values()
+            for k, item in self._dict_meta.items():
+                if item.is_tensordict():
+                    if not leaves_only:
+                        yield item
+                    if include_nested:
+                        yield from self.get(k).values_meta(
+                            make_unset=make_unset,
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                        )
+                else:
+                    yield item
 
     @abc.abstractmethod
     def keys(
@@ -2803,17 +2832,10 @@ class TensorDict(TensorDictBase):
     def select(
         self, *keys: NESTED_KEY, inplace: bool = False, strict: bool = True
     ) -> TensorDictBase:
-        existing_keys = set(self.keys(include_nested=True))
+        # existing_keys = set(self.keys(include_nested=True))
         keys = {
             key[0] if isinstance(key, tuple) and len(key) == 1 else key for key in keys
         }
-        if strict:
-            if len(keys.difference(existing_keys)):
-                raise KeyError(
-                    f"Keys {keys.difference(existing_keys)} were not found among keys {existing_keys}."
-                )
-        else:
-            keys = keys.intersection(existing_keys)
 
         nested_keys = defaultdict(list)
         for key in keys:
@@ -2830,14 +2852,22 @@ class TensorDict(TensorDictBase):
         d_meta = {}
 
         for key, subkeys in nested_keys.items():
-            value = self.get(key)
-            if len(subkeys) > 0 and isinstance(value, TensorDictBase):
-                value = value.select(*subkeys, inplace=inplace)
-                d_meta[key] = MetaTensor(value)
-            elif key in self._dict_meta:
-                d_meta[key] = self._dict_meta[key]
+            try:
+                value = self.get(key)
+                if len(subkeys) > 0 and isinstance(value, TensorDictBase):
+                    value = value.select(*subkeys, inplace=inplace)
+                    d_meta[key] = MetaTensor(value)
+                elif key in self._dict_meta:
+                    d_meta[key] = self._dict_meta[key]
 
-            d[key] = value
+                d[key] = value
+            except KeyError:
+                if strict:
+                    raise KeyError(
+                        f"Key '{key}' was not found among keys {set(self.keys(True))}."
+                    )
+                else:
+                    continue
 
         if inplace:
             self._tensordict = d
