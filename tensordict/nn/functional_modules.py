@@ -15,16 +15,8 @@ from torch import nn
 
 _RESET_OLD_TENSORDICT = True
 try:
-    import functorch._src.vmap
-
-    _has_functorch = True
-except ImportError:
-    _has_functorch = False
-
-
-# Monky-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
-if _has_functorch:
-    from functorch._src.vmap import (
+    import torch._functorch.vmap
+    from torch._functorch.vmap import (
         _add_batch_dim,
         _broadcast_to_and_flatten,
         _get_name,
@@ -34,6 +26,29 @@ if _has_functorch:
         tree_flatten,
         tree_unflatten,
     )
+
+    _has_functorch = True
+except ImportError:
+    try:
+        import functorch._src.vmap
+        from functorch._src.vmap import (
+            _add_batch_dim,
+            _broadcast_to_and_flatten,
+            _get_name,
+            _remove_batch_dim,
+            _validate_and_get_batch_size,
+            Tensor,
+            tree_flatten,
+            tree_unflatten,
+        )
+
+        _has_functorch = True
+
+    except ImportError:
+        _has_functorch = False
+
+# Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
+if _has_functorch:
 
     # Monkey-patches
 
@@ -203,12 +218,14 @@ def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None, recurse
 
     if not model.__dict__.get("_functionalized", False):
         for fun_to_decorate in funs_to_decorate:
-            if hasattr(model, fun_to_decorate):
+            try:
                 setattr(
                     model,
                     fun_to_decorate,
                     types.MethodType(_make_decorator(model, fun_to_decorate), model),
                 )
+            except AttributeError:
+                continue
     model.__dict__["_functionalized"] = True
     model.__dict__["_is_stateless"] = True
     return TensorDict(tensordict, [], _run_checks=False)
@@ -277,9 +294,10 @@ def get_functional(module, funs_to_decorate=None):
 
 def _make_decorator(module, fun_name):
     fun = getattr(module, fun_name)
-
     # we need to update the signature so that params can be the last positional arg
     oldsig = inspect.signature(fun)
+    if "_forward_unimplemented" in fun.__name__:
+        raise AttributeError("_forward_unimplemented not supported")
     # search if a VAR_POSITIONAL or VAR_KEYWORD is present
     # if yes insert step parameter before it, else insert it in last position
     params = list(oldsig.parameters.values())

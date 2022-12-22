@@ -16,8 +16,6 @@ from tensordict.memmap import MemmapTensor
 from tensordict.utils import (
     _dtype as _dtype_fn,
     _getitem_batch_size,
-    _is_meta as _is_meta_fn,
-    _requires_grad as _requires_grad_fn,
     _shape as _shape_fn,
     DEVICE_TYPING,
     INDEX_TYPING,
@@ -79,119 +77,68 @@ class MetaTensor:
         ...    1).shape == torch.Size([3, 10, 4])
     """
 
-    def __init__(
-        self,
-        *shape: Union[int, torch.Tensor, "MemmapTensor"],
-        device: Optional[DEVICE_TYPING] = None,
-        dtype: torch.dtype = None,
-        requires_grad: bool = None,
-        _is_shared: Optional[bool] = None,
-        _is_memmap: Optional[bool] = None,
-        _is_tensordict: Optional[bool] = None,
-        _is_kjt: Optional[bool] = None,
-        _repr_tensordict: Optional[str] = None,
-    ):
-        if len(shape) == 1 and not isinstance(shape[0], (Number,)):
-            tensor = shape[0]
-            self._tensor = tensor
-            shape = None
-            # FIXME: using isinstance(tensor, TensorDictBase) would likely be
-            # better here, but creates circular import without more refactoring
-        else:
-            self._tensor = None
-            _is_shared = bool(_is_shared)
-            _is_memmap = bool(_is_memmap)
-            _is_kjt = bool(_is_kjt)
-            _is_tensordict = bool(_is_tensordict)
-            if not isinstance(shape, torch.Size):
-                shape = torch.Size(shape)
-        self._shape = shape
-
-        self._dtype = dtype
-        # TODO: requires_grad is mutable, hence it should not be stored here
-        self.requires_grad = requires_grad
-        self.device = device
-        self._ndim = None
-        self._numel = None
-        # TODO: is_shared is mutable, hence it should not be stored here
-        self._is_shared = _is_shared
-        self._is_memmap = _is_memmap
-        self._is_kjt = _is_kjt
-        self._is_tensordict = _is_tensordict
-        self._class_name = None
-        self._repr_tensordict = _repr_tensordict
-
-    @property
-    def class_name(self):
-        _class_name = self._class_name
-        if _class_name is None:
-            if self.is_tensordict():
-                name = "TensorDict"
-            elif self.is_memmap():
-                name = "MemmapTensor"
-            elif self.is_kjt():
-                name = "KeyedJaggedTensor"
-            elif self.is_shared() and self.device.type != "cuda":
-                name = "SharedTensor"
-            else:
-                name = "Tensor"
-            self._class_name = _class_name = name
-        return _class_name
-
-    @class_name.setter
-    def class_name(self, value):
-        self._class_name = value
-
-    @property
-    def device(self):
-        _device = self._device
-        if _device is None and self._tensor is not None:
-            _device = self._tensor.device if not _is_meta_fn(self._tensor) else _device
-        return _device
-
-    @device.setter
-    def device(self, value):
-        if value is not None and type(value) is not torch.device:
-            value = torch.device(value)
-        self._device = value
-
-    @property
-    def dtype(self):
-        _dtype = self._dtype
-        if _dtype is None and self._tensor is not None and not self.is_tensordict():
-            _dtype = _dtype_fn(self._tensor)
-        return _dtype
-
-    @dtype.setter
-    def dtype(self, value):
-        self._dtype = value
-
-    @property
-    def requires_grad(self):
-        _requires_grad = self._requires_grad
-        if _requires_grad is None and self._tensor is not None:
-            _requires_grad = (
-                _requires_grad_fn(self._tensor)
-                if not _is_meta_fn(self._tensor)
-                else _requires_grad
-            )
-        return _requires_grad
-
-    @requires_grad.setter
-    def requires_grad(self, value):
-        self._requires_grad = value
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls._shape = None
+        cls._requires_grad = None
+        cls._ndimension = None
+        cls._device = None
+        cls._dtype = None
+        cls._numel = None
+        cls._is_shared = None
+        cls._is_memmap = None
+        cls._is_kjt = None
+        cls._is_tensordict = None
+        cls._tensor = None
+        cls._class_name = None
+        return super().__new__(cls)
 
     @property
     def shape(self):
         _shape = self._shape
         if _shape is None:
-            self._shape = _shape = _shape_fn(self._tensor)
-        return self._shape
+            _shape = self._shape = _shape_fn(self._tensor)
+        return _shape
 
     @shape.setter
     def shape(self, value):
-        self._ndim = len(value)
         self._shape = value
+
+    @property
+    def device(self):
+        _device = self._device
+        if _device is None:
+            _device = self._device = self._tensor.device
+        return _device
+
+    @property
+    def dtype(self):
+        _dtype = self._dtype
+        if _dtype is None and not self.is_tensordict():
+            _dtype = self._dtype = _dtype_fn(self._tensor)
+        return _dtype
+
+    def is_tensordict(self):
+        _is_tensordict = self._is_tensordict
+        if _is_tensordict is None:
+            _is_tensordict = self._is_tensordict = (
+                not isinstance(self._tensor, torch.Tensor)
+                and not self.is_memmap()
+                and not self.is_kjt()
+            )
+        return _is_tensordict
+
+    def is_memmap(self):
+        _is_memmap = self._is_memmap
+        if _is_memmap is None:
+            _is_memmap = self._is_memmap = isinstance(self._tensor, MemmapTensor)
+        return _is_memmap
+
+    def is_kjt(self):
+        _is_kjt = self._is_kjt
+        if _is_kjt is None:
+            _is_kjt = self._is_kjt = isinstance(self._tensor, KeyedJaggedTensor)
+        return _is_kjt
 
     @property
     def _ndim(self):
@@ -207,12 +154,58 @@ class MetaTensor:
     def ndimension(self):
         return self._ndim
 
+    def __init__(
+        self,
+        *shape: Union[int, torch.Tensor, "MemmapTensor"],
+        device: Optional[DEVICE_TYPING] = "cpu",
+        dtype: torch.dtype = None,
+        _is_shared: Optional[bool] = None,
+        _is_memmap: Optional[bool] = None,
+        _is_tensordict: Optional[bool] = None,
+        _is_kjt: Optional[bool] = None,
+        _repr_tensordict: Optional[str] = None,
+    ):
+        tensor = None
+        if len(shape) == 1 and not isinstance(shape[0], (Number,)):
+            tensor = shape[0]
+            self._tensor = tensor
+            return
+
+        if type(shape) is not torch.Size:
+            shape = torch.Size(shape)
+        self.shape = shape
+        self._device = device
+        self._dtype = dtype if dtype is not None else torch.get_default_dtype()
+        self._ndim = len(shape)
+        self._numel = None
+        # TODO: is_shared is mutable, hence it should not be stored here
+        self._is_shared = bool(_is_shared)
+        self._is_memmap = bool(_is_memmap)
+        self._is_kjt = bool(_is_kjt)
+        self._is_tensordict = bool(_is_tensordict)
+        self._repr_tensordict = _repr_tensordict
+
+    @property
+    def class_name(self):
+        name = self._class_name
+        if name:
+            return name
+        if self._is_tensordict:
+            name = "TensorDict"
+        elif self._is_memmap:
+            name = "MemmapTensor"
+        elif self._is_kjt:
+            name = "KeyedJaggedTensor"
+        elif self.is_shared() and self.device.type != "cuda":
+            name = "SharedTensor"
+        else:
+            name = "Tensor"
+        self.name = name
+        return name
+
     def get_repr(self):
         if self.is_tensordict():
-            _repr_tensordict = self._repr_tensordict
-            if _repr_tensordict is None:
-                self._repr_tensordict = _repr_tensordict = str(self._tensor)
-            return _repr_tensordict
+            return repr(self._tensor)
         else:
             return f"{self.class_name}({self.shape}, dtype={self.dtype})"
 
@@ -224,7 +217,7 @@ class MetaTensor:
 
         """
         self._is_memmap = True
-        self.class_name = "MemmapTensor"
+        self._class_name = "MemmapTensor"
         return self
 
     def share_memory_(self) -> MetaTensor:
@@ -235,45 +228,28 @@ class MetaTensor:
 
         """
         self._is_shared = True
-        self.class_name = "SharedTensor" if self.device.type != "cuda" else "Tensor"
+        if (
+            self._class_name
+            and not self.is_tensordict()
+            and not self.is_kjt()
+            and not self.is_memmap()
+        ):
+            self._class_name = (
+                "SharedTensor"
+                if (self.device is not None and self.device.type != "cuda")
+                else "Tensor"
+            )
         return self
 
     def is_shared(self) -> bool:
-        _is_shared = self._is_shared
-        if _is_shared is None:
-            self._is_shared = _is_shared = self._tensor.is_shared()
-        return _is_shared
-
-    def is_memmap(self) -> bool:
-        _is_memmap = self._is_memmap
-        if _is_memmap is None:
-            self._is_memmap = _is_memmap = isinstance(self._tensor, MemmapTensor)
-        return _is_memmap
-
-    def is_kjt(self) -> bool:
-        _is_kjt = self._is_kjt
-        if _is_kjt is None:
-            _is_kjt = isinstance(self._tensor, KeyedJaggedTensor)
-        return _is_kjt
-
-    def is_tensordict(self) -> bool:
-        _is_tensordict = self._is_tensordict
-        if _is_tensordict is None:
-            _is_tensordict = not isinstance(
-                self._tensor, (torch.Tensor, KeyedJaggedTensor)
-            )
-            self._is_tensordict = _is_tensordict
-        return self._is_tensordict
+        if self._is_shared is None:
+            self._is_shared = self._tensor.is_shared()
+        return self._is_shared
 
     def numel(self) -> int:
         if self._numel is None:
             self._numel = np.prod(self.shape)
         return self._numel
-
-    def __deepcopy__(self, memodict=None):
-        if memodict is None:
-            memodict = {}
-        raise RuntimeError("deepcopy is not allowed for MetaTensors. Use clone indead.")
 
     def clone(self) -> MetaTensor:
         """Clones the meta-tensor.
@@ -285,11 +261,10 @@ class MetaTensor:
             *self.shape,
             device=self.device,
             dtype=self.dtype,
-            requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
             _is_tensordict=self.is_tensordict(),
-            _repr_tensordict=self._repr_tensordict,
+            _repr_tensordict=repr(self),
         )
 
     def _to_meta(self) -> torch.Tensor:
@@ -301,11 +276,10 @@ class MetaTensor:
             *shape,
             dtype=self.dtype,
             device=self.device,
-            requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
             _is_tensordict=self.is_tensordict(),
-            _repr_tensordict=self._repr_tensordict,
+            _repr_tensordict=repr(self),
         )
 
     @classmethod
@@ -330,7 +304,6 @@ class MetaTensor:
             *shape,
             device=self.device,
             dtype=self.dtype,
-            requires_grad=self.requires_grad,
         )
 
     def __repr__(self) -> str:
@@ -391,17 +364,40 @@ class MetaTensor:
         elif not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
         new_shape = torch.zeros(
-            self.shape, device="meta", requires_grad=self.requires_grad
+            self.shape,
+            device="meta",
         ).view(*shape)
         return MetaTensor(
             new_shape,
             device=self.device,
             dtype=self.dtype,
-            requires_grad=self.requires_grad,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
             _is_tensordict=self.is_tensordict(),
         )
+
+    def to(self, dest):
+        if isinstance(dest, torch.dtype):
+            self_copy = MetaTensor(
+                *self.shape,
+                _is_memmap=self.is_memmap(),
+                _is_shared=self.is_shared(),
+                _is_tensordict=self.is_tensordict(),
+                _is_kjt=self.is_kjt(),
+                dtype=dest,
+                device=self.device,
+            )
+        else:
+            self_copy = MetaTensor(
+                *self.shape,
+                _is_memmap=self.is_memmap(),
+                _is_shared=self.is_shared(),
+                _is_tensordict=self.is_tensordict(),
+                _is_kjt=self.is_kjt(),
+                dtype=self.dtype,
+                device=dest,
+            )
+        return self_copy
 
 
 def _stack_meta(
@@ -409,7 +405,6 @@ def _stack_meta(
     dim: int = 0,
     dtype: torch.dtype = torch.float,
     device: DEVICE_TYPING = "cpu",
-    requires_grad: bool = False,
     safe: bool = False,
 ) -> MetaTensor:
     if not len(list_of_meta_tensors):
@@ -442,7 +437,6 @@ def _stack_meta(
         dtype=dtype,
         device=device,
         _is_tensordict=is_tensordict,
-        requires_grad=requires_grad,
     )
 
 
@@ -463,12 +457,10 @@ def stack_meta(
         if len(list_of_meta_tensors)
         else torch.device("cpu")
     )
-    requires_grad = any(tensor.requires_grad for tensor in list_of_meta_tensors)
     return _stack_meta(
         list_of_meta_tensors,
         dim=dim,
         dtype=dtype,
         device=device,
-        requires_grad=requires_grad,
         safe=safe,
     )
