@@ -3145,9 +3145,16 @@ def _cat(
             with _ErrorInteceptor(
                 key, "Attempted to concatenate tensors on different devices at key"
             ):
-                out.set_(
-                    key, torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-                )
+                if isinstance(out, TensorDict):
+                    torch.cat(
+                        [td.get(key) for td in list_of_tensordicts],
+                        dim,
+                        out=out.get(key),
+                    )
+                else:
+                    out.set_(
+                        key, torch.cat([td.get(key) for td in list_of_tensordicts], dim)
+                    )
         return out
 
 
