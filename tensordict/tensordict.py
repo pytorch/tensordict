@@ -36,14 +36,7 @@ from warnings import warn
 import numpy as np
 import torch
 
-from tensordict.utils import (
-    _get_item,
-    _is_shared,
-    _ndimension,
-    _requires_grad,
-    _set_item,
-    _shape,
-)
+from tensordict.utils import _get_item, _is_shared, _requires_grad, _set_item, _shape
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
@@ -824,12 +817,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     f"={_shape(tensor)[: self.batch_dims]} with tensor {tensor}"
                 )
 
-        # minimum ndimension is 1
-        if _ndimension(tensor) == self.ndimension() and not isinstance(
-            tensor, (TensorDictBase, KeyedJaggedTensor)
-        ):
-            tensor = tensor.unsqueeze(-1)
-
         return tensor
 
     @abc.abstractmethod
@@ -1325,17 +1312,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def _check_new_batch_size(self, new_size: torch.Size):
         n = len(new_size)
         for key, meta_tensor in self.items_meta():
-            if not meta_tensor.is_kjt() and not meta_tensor.is_tensordict():
-                c1 = meta_tensor.ndimension() <= n
-            else:
-                c1 = meta_tensor.ndimension() < n
-            if c1 or (meta_tensor.shape[:n] != new_size):
-                if meta_tensor.ndimension() == n and meta_tensor.shape == new_size:
-                    raise RuntimeError(
-                        "TensorDict requires tensors that have at least one more "
-                        f'dimension than the batch_size. The tensor "{key}" has shape '
-                        f"{meta_tensor.shape} which is the same as the new size."
-                    )
+            if meta_tensor.shape[:n] != new_size:
                 raise RuntimeError(
                     f"the tensor {key} has shape {meta_tensor.shape} which "
                     f"is incompatible with the new shape {new_size}."
