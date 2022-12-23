@@ -7,7 +7,6 @@ import argparse
 
 import pytest
 import torch
-from functorch import make_functional_with_buffers as make_functional_functorch, vmap
 from tensordict import TensorDict
 from tensordict.nn import (
     ProbabilisticTensorDictModule,
@@ -24,12 +23,16 @@ from torch.distributions import Normal
 
 try:
     import functorch  # noqa
+    from functorch import (
+        make_functional_with_buffers as make_functional_functorch,
+        vmap,
+    )
 
     _has_functorch = True
     FUNCTORCH_ERR = ""
-except ImportError as FUNCTORCH_ERR:
+except ImportError as err:
     _has_functorch = False
-    FUNCTORCH_ERR = str(FUNCTORCH_ERR)
+    FUNCTORCH_ERR = str(err)
 
 
 class TestTDModule:
