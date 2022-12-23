@@ -338,6 +338,9 @@ def test_nested_modules():
     assert y.shape == torch.Size([10, 4])
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+)
 class TestNativeFunctorch:
     def test_vamp_basic(self):
         class MyModule(torch.nn.Module):
