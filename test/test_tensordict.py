@@ -283,20 +283,29 @@ def test_cat_td(device):
     d = {
         "key1": torch.randn(4, 5, 6, device=device),
         "key2": torch.randn(4, 5, 10, device=device),
+        "key3": {"key4": torch.randn(4, 5, 10, device=device)},
     }
     td1 = TensorDict(batch_size=(4, 5), source=d)
     d = {
         "key1": torch.randn(4, 10, 6, device=device),
         "key2": torch.randn(4, 10, 10, device=device),
+        "key3": {"key4": torch.randn(4, 10, 10, device=device)},
     }
     td2 = TensorDict(batch_size=(4, 10), source=d)
 
     td_cat = torch.cat([td1, td2], 1)
     assert td_cat.batch_size == torch.Size([4, 15])
-    d = {"key1": torch.randn(4, 15, 6), "key2": torch.randn(4, 15, 10)}
+    d = {
+        "key1": torch.zeros(4, 15, 6, device=device),
+        "key2": torch.zeros(4, 15, 10, device=device),
+        "key3": {"key4": torch.zeros(4, 15, 10, device=device)},
+    }
     td_out = TensorDict(batch_size=(4, 15), source=d)
     torch.cat([td1, td2], 1, out=td_out)
     assert td_out.batch_size == torch.Size([4, 15])
+    assert (td_out["key1"] != 0).all()
+    assert (td_out["key2"] != 0).all()
+    assert (td_out["key3", "key4"] != 0).all()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
