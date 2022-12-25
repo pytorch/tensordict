@@ -253,6 +253,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     _lazy = False
     _inplace_set = False
     is_meta = False
+    _sources: Tuple[TensorDictBase, List[INDEX_TYPING]] = None
 
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
@@ -1976,6 +1977,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def __setitem__(
         self, index: INDEX_TYPING, value: Union[TensorDictBase, dict]
     ) -> None:
+        if self._sources:
+            source, idxx = self._sources
+            for idx in idxx:
+                source = source.get_sub_tensordict(idx)
+            source.__setitem__(index, value)
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if isinstance(index, list):
@@ -2440,6 +2446,10 @@ class TensorDict(TensorDictBase):
         self_copy._dict_meta = KeyDependentDefaultDict(self_copy._make_meta)
         self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
         self_copy._device = self.device
+        if not self_copy._sources:
+            self_copy._sources = (self, [idx])
+        else:
+            self_copy._sources = self_copy._sources[0], self_copy._sources[1] + [idx]
         return self_copy
 
     def pin_memory(self) -> TensorDictBase:

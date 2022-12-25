@@ -3436,6 +3436,16 @@ def test_shared_inheritance():
     assert td0.is_shared()
 
 
+def test_in_place_set_to_masked_tensordict():
+    # Related to https://github.com/pytorch/rl/issues/298
+    td = TensorDict({"a": torch.randn(3, 4, 2), "b": torch.randn(3, 4)}, [3, 4])
+
+    mask = torch.tensor([True, False, True])
+    x = torch.randn(2, 4, 2)
+    td[mask]["a"] = x
+    torch.testing.assert_allclose(td[mask]["a"], x)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
