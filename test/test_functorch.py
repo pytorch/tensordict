@@ -114,6 +114,9 @@ def test_vmap_tdmodule_functorch(moduletype, batch_params):
         assert y.shape == torch.Size([10, 2, 3])
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+)
 @pytest.mark.parametrize(
     "moduletype,batch_params",
     [
@@ -235,6 +238,9 @@ def test_vmap_tdsequence_functorch(moduletype, batch_params):
         assert z.shape == torch.Size([10, 2, 3])
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+)
 @pytest.mark.parametrize(
     "moduletype,batch_params",
     [
@@ -308,6 +314,9 @@ def test_repopulate():
     assert len(new_buffers)
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+)
 def test_nested_modules():
     class LinearWithKwargs(Linear):
         """Checks that modules with kwargs work equally well."""
