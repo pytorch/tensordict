@@ -11,3 +11,16 @@ from .probabilistic import (
     set_interaction_mode,
 )
 from .sequence import TensorDictSequential
+
+__all__ = [
+    "dispatch_kwargs",
+    "TensorDictModule",
+    "TensorDictModuleWrapper",
+    "get_functional",
+    "make_functional",
+    "repopulate_module",
+    "ProbabilisticTensorDictModule",
+    "ProbabilisticTensorDictSequential",
+    "set_interaction_mode",
+    "TensorDictSequential",
+]
