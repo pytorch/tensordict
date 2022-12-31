@@ -285,13 +285,13 @@ def test_cat_td(device):
         "key2": torch.randn(4, 5, 10, device=device),
         "key3": {"key4": torch.randn(4, 5, 10, device=device)},
     }
-    td1 = TensorDict(batch_size=(4, 5), source=d)
+    td1 = TensorDict(batch_size=(4, 5), source=d, device=device)
     d = {
         "key1": torch.randn(4, 10, 6, device=device),
         "key2": torch.randn(4, 10, 10, device=device),
         "key3": {"key4": torch.randn(4, 10, 10, device=device)},
     }
-    td2 = TensorDict(batch_size=(4, 10), source=d)
+    td2 = TensorDict(batch_size=(4, 10), source=d, device=device)
 
     td_cat = torch.cat([td1, td2], 1)
     assert td_cat.batch_size == torch.Size([4, 15])
@@ -300,7 +300,7 @@ def test_cat_td(device):
         "key2": torch.zeros(4, 15, 10, device=device),
         "key3": {"key4": torch.zeros(4, 15, 10, device=device)},
     }
-    td_out = TensorDict(batch_size=(4, 15), source=d)
+    td_out = TensorDict(batch_size=(4, 15), source=d, device=device)
     torch.cat([td1, td2], 1, out=td_out)
     assert td_out.batch_size == torch.Size([4, 15])
     assert (td_out["key1"] != 0).all()
@@ -1223,6 +1223,39 @@ class TestTensorDicts(TestTensorDictsBase):
             ]
             assert td.view(-1).view(*new_shape) is td
             assert td.view(*new_shape) is td
+
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    @pytest.mark.parametrize(
+        "key", ["heterogeneous-entry", ("sub", "heterogeneous-entry")]
+    )
+    def test_nestedtensor_stack(self, td_name, device, dim, key):
+        torch.manual_seed(1)
+        td1 = getattr(self, td_name)(device).unlock()
+        td2 = getattr(self, td_name)(device).unlock()
+        td1[key] = torch.randn(*td1.shape, 2)
+        td2[key] = torch.randn(*td1.shape, 3)
+        td_stack = torch.stack([td1, td2], dim)
+        # get will fail
+        with pytest.raises(
+            RuntimeError, match="Found more than one unique shape in the tensors"
+        ):
+            td_stack.get(key)
+        with pytest.raises(
+            RuntimeError, match="Found more than one unique shape in the tensors"
+        ):
+            td_stack[key]
+        # this will work: it is the proper way to get that entry
+        td_stack.get_nestedtensor(key)
+        with pytest.raises(
+            RuntimeError, match="Found more than one unique shape in the tensors"
+        ):
+            td_stack.contiguous()
+        with pytest.raises(
+            RuntimeError, match="Found more than one unique shape in the tensors"
+        ):
+            td_stack.to_tensordict()
+        # cloning is type-preserving: we can do that operation
+        td_stack.clone()
 
     def test_clone_td(self, td_name, device):
         torch.manual_seed(1)
