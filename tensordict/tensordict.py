@@ -36,14 +36,7 @@ from warnings import warn
 import numpy as np
 import torch
 
-from tensordict.utils import (
-    _get_item,
-    _is_shared,
-    _ndimension,
-    _requires_grad,
-    _set_item,
-    _shape,
-)
+from tensordict.utils import _get_item, _is_shared, _requires_grad, _set_item, _shape
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
@@ -829,12 +822,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     f"={_shape(tensor)[: self.batch_dims]} with tensor {tensor}"
                 )
 
-        # minimum ndimension is 1
-        if _ndimension(tensor) == self.ndimension() and not isinstance(
-            tensor, (TensorDictBase, KeyedJaggedTensor)
-        ):
-            tensor = tensor.unsqueeze(-1)
-
         return tensor
 
     @abc.abstractmethod
@@ -1330,17 +1317,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def _check_new_batch_size(self, new_size: torch.Size):
         n = len(new_size)
         for key, meta_tensor in self.items_meta():
-            if not meta_tensor.is_kjt() and not meta_tensor.is_tensordict():
-                c1 = meta_tensor.ndimension() <= n
-            else:
-                c1 = meta_tensor.ndimension() < n
-            if c1 or (meta_tensor.shape[:n] != new_size):
-                if meta_tensor.ndimension() == n and meta_tensor.shape == new_size:
-                    raise RuntimeError(
-                        "TensorDict requires tensors that have at least one more "
-                        f'dimension than the batch_size. The tensor "{key}" has shape '
-                        f"{meta_tensor.shape} which is the same as the new size."
-                    )
+            if meta_tensor.shape[:n] != new_size:
                 raise RuntimeError(
                     f"the tensor {key} has shape {meta_tensor.shape} which "
                     f"is incompatible with the new shape {new_size}."
@@ -2156,6 +2133,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         for key, item in self.items_meta():
             if item.is_tensordict():
                 self.get(key).lock()
+        return self
 
     def unlock(self):
         self._is_locked = False
@@ -2164,6 +2142,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         for key, item in self.items_meta():
             if item.is_tensordict():
                 self.get(key).unlock()
+        return self
 
 
 class TensorDict(TensorDictBase):
@@ -3159,7 +3138,14 @@ def _cat(
                 key, "Attempted to concatenate tensors on different devices at key"
             ):
                 out[key] = torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-
+        if device is None:
+            device = list_of_tensordicts[0].device
+            for td in list_of_tensordicts[1:]:
+                if device == td.device:
+                    continue
+                else:
+                    device = None
+                    break
         return TensorDict(out, device=device, batch_size=batch_size, _run_checks=False)
     else:
         if out.batch_size != batch_size:
@@ -3173,9 +3159,16 @@ def _cat(
             with _ErrorInteceptor(
                 key, "Attempted to concatenate tensors on different devices at key"
             ):
-                out.set_(
-                    key, torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-                )
+                if isinstance(out, TensorDict):
+                    torch.cat(
+                        [td.get(key) for td in list_of_tensordicts],
+                        dim,
+                        out=out.get(key),
+                    )
+                else:
+                    out.set_(
+                        key, torch.cat([td.get(key) for td in list_of_tensordicts], dim)
+                    )
         return out
 
 
@@ -4195,15 +4188,50 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key, default)
 
         tensors = [td.get(key, default=default) for td in self.tensordicts]
-        shapes = {_shape(tensor) for tensor in tensors}
-        if len(shapes) != 1:
-            raise RuntimeError(
-                f"found more than one unique shape in the tensors to be "
-                f"stacked ({shapes}). This is likely due to a modification "
-                f"of one of the stacked TensorDicts, where a key has been "
-                f"updated/created with an uncompatible shape."
-            )
-        return torch.stack(tensors, self.stack_dim)
+        try:
+            return torch.stack(tensors, self.stack_dim)
+        except RuntimeError as err:
+            if "stack expects each tensor to be equal size" in str(err):
+                shapes = {_shape(tensor) for tensor in tensors}
+                raise RuntimeError(
+                    f"Found more than one unique shape in the tensors to be "
+                    f"stacked ({shapes}). This is likely due to a modification "
+                    f"of one of the stacked TensorDicts, where a key has been "
+                    f"updated/created with an uncompatible shape. If the entries "
+                    f"are intended to have a different shape, use the get_nestedtensor "
+                    f"method instead."
+                )
+            else:
+                raise err
+
+    def get_nestedtensor(
+        self,
+        key: NESTED_KEY,
+        default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
+    ) -> COMPATIBLE_TYPES:
+        # TODO: the stacking logic below works for nested keys, but the key in
+        # self.valid_keys check will fail and we'll return the default instead.
+        # For now we'll advise user that nested keys aren't supported, but it should be
+        # fairly easy to add support if we could add nested keys to valid_keys.
+
+        # we can handle the case where the key is a tuple of length 1
+        if (type(key) is tuple) and len(key) == 1:
+            key = key[0]
+        elif type(key) is tuple:
+            tensordict, key = _get_leaf_tensordict(self, key)
+            return tensordict.get_nestedtensor(key)
+
+        keys = self.valid_keys
+        if not (key in keys):
+            # first, let's try to update the valid keys
+            self._update_valid_keys()
+            keys = self.valid_keys
+
+        if not (key in keys):
+            return self._default_get(key, default)
+
+        tensors = [td.get(key, default=default) for td in self.tensordicts]
+        return torch.nested.nested_tensor(tensors)
 
     def _make_meta(self, key: str) -> MetaTensor:
         return torch.stack(
@@ -4214,7 +4242,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return False
 
     def contiguous(self) -> TensorDictBase:
-        source = {key: value for key, value in self.items()}
+        source = {key: value.contiguous() for key, value in self.items()}
         batch_size = self.batch_size
         device = self.device
         out = TensorDict(
@@ -5579,7 +5607,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
 def _make_repr(key, item: MetaTensor, tensordict):
     if item.is_tensordict():
-        return f"{key}: {repr(tensordict[key])}"
+        return f"{key}: {repr(tensordict.get(key))}"
     return f"{key}: {item.get_repr()}"
 
 

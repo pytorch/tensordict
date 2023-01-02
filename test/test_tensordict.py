@@ -283,20 +283,29 @@ def test_cat_td(device):
     d = {
         "key1": torch.randn(4, 5, 6, device=device),
         "key2": torch.randn(4, 5, 10, device=device),
+        "key3": {"key4": torch.randn(4, 5, 10, device=device)},
     }
-    td1 = TensorDict(batch_size=(4, 5), source=d)
+    td1 = TensorDict(batch_size=(4, 5), source=d, device=device)
     d = {
         "key1": torch.randn(4, 10, 6, device=device),
         "key2": torch.randn(4, 10, 10, device=device),
+        "key3": {"key4": torch.randn(4, 10, 10, device=device)},
     }
-    td2 = TensorDict(batch_size=(4, 10), source=d)
+    td2 = TensorDict(batch_size=(4, 10), source=d, device=device)
 
     td_cat = torch.cat([td1, td2], 1)
     assert td_cat.batch_size == torch.Size([4, 15])
-    d = {"key1": torch.randn(4, 15, 6), "key2": torch.randn(4, 15, 10)}
-    td_out = TensorDict(batch_size=(4, 15), source=d)
+    d = {
+        "key1": torch.zeros(4, 15, 6, device=device),
+        "key2": torch.zeros(4, 15, 10, device=device),
+        "key3": {"key4": torch.zeros(4, 15, 10, device=device)},
+    }
+    td_out = TensorDict(batch_size=(4, 15), source=d, device=device)
     torch.cat([td1, td2], 1, out=td_out)
     assert td_out.batch_size == torch.Size([4, 15])
+    assert (td_out["key1"] != 0).all()
+    assert (td_out["key2"] != 0).all()
+    assert (td_out["key3", "key4"] != 0).all()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -357,14 +366,14 @@ def test_permute(device):
 
     td2 = torch.permute(td1, dims=(-1, -3, -2))
     assert td2.shape == torch.Size((6, 4, 5))
-    assert td2["c"].shape == torch.Size((6, 4, 5, 1))
+    assert td2["c"].shape == torch.Size((6, 4, 5))
 
     td2 = torch.permute(td1, dims=(0, 1, 2))
     assert td2["a"].shape == torch.Size((4, 5, 6, 9))
 
     t = TensorDict({"a": torch.randn(3, 4, 1)}, [3, 4])
     torch.permute(t, dims=(1, 0)).set("b", torch.randn(4, 3))
-    assert t["b"].shape == torch.Size((3, 4, 1))
+    assert t["b"].shape == torch.Size((3, 4))
 
     torch.permute(t, dims=(1, 0)).fill_("a", 0.0)
     assert torch.sum(t["a"]) == torch.Tensor([0])
@@ -1216,6 +1225,39 @@ class TestTensorDicts(TestTensorDictsBase):
             ]
             assert td.view(-1).view(*new_shape) is td
             assert td.view(*new_shape) is td
+
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    @pytest.mark.parametrize(
+        "key", ["heterogeneous-entry", ("sub", "heterogeneous-entry")]
+    )
+    def test_nestedtensor_stack(self, td_name, device, dim, key):
+        torch.manual_seed(1)
+        td1 = getattr(self, td_name)(device).unlock()
+        td2 = getattr(self, td_name)(device).unlock()
+        td1[key] = torch.randn(*td1.shape, 2)
+        td2[key] = torch.randn(*td1.shape, 3)
+        td_stack = torch.stack([td1, td2], dim)
+        # get will fail
+        with pytest.raises(
+            RuntimeError, match="Found more than one unique shape in the tensors"
+        ):
+            td_stack.get(key)
+        with pytest.raises(
+            RuntimeError, match="Found more than one unique shape in the tensors"
+        ):
+            td_stack[key]
+        # this will work: it is the proper way to get that entry
+        td_stack.get_nestedtensor(key)
+        with pytest.raises(
+            RuntimeError, match="Found more than one unique shape in the tensors"
+        ):
+            td_stack.contiguous()
+        with pytest.raises(
+            RuntimeError, match="Found more than one unique shape in the tensors"
+        ):
+            td_stack.to_tensordict()
+        # cloning is type-preserving: we can do that operation
+        td_stack.clone()
 
     def test_clone_td(self, td_name, device):
         torch.manual_seed(1)
@@ -2292,10 +2334,8 @@ def test_batchsize_reset():
     # test index
     td[torch.tensor([1, 2])]
     with pytest.raises(
-        RuntimeError,
-        match=re.escape(
-            "The shape torch.Size([3]) is incompatible with the index (slice(None, None, None), 0)."
-        ),
+        IndexError,
+        match=re.escape("too many indices for tensor of dimension 1"),
     ):
         td[:, 0]
 
@@ -2303,14 +2343,6 @@ def test_batchsize_reset():
     td = TensorDict(
         {"a": torch.randn(3, 4, 5, 6), "b": torch.randn(3, 4, 5)}, batch_size=[3, 4]
     )
-    with pytest.raises(
-        RuntimeError,
-        match=re.escape(
-            "TensorDict requires tensors that have at least one more dimension than the batch_size"
-        ),
-    ):
-        td.batch_size = torch.Size([3, 4, 5])
-    del td["b"]
     td.batch_size = torch.Size([3, 4, 5])
 
     td.set("c", torch.randn(3, 4, 5, 6))
@@ -2469,7 +2501,7 @@ def test_create_on_device():
     a = torch.randn(2, 3)
     viewedtd.set("a", a)
     assert viewedtd.get("a").device == device
-    assert (a.unsqueeze(-1).to(device) == viewedtd.get("a")).all()
+    assert (a.to(device) == viewedtd.get("a")).all()
 
 
 def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordict):
@@ -3084,7 +3116,7 @@ def test_memory_lock(method):
 class TestMakeTensorDict:
     def test_create_tensordict(self):
         tensordict = make_tensordict(a=torch.zeros(3, 4))
-        assert (tensordict["a"] == torch.zeros(3, 4, 1)).all()
+        assert (tensordict["a"] == torch.zeros(3, 4)).all()
 
     def test_tensordict_batch_size(self):
         tensordict = make_tensordict()
@@ -3339,7 +3371,7 @@ def test_lazy_stacked_insert(dim, index, device):
     assert lstd.batch_size == torch.Size(bs)
     assert set(lstd.keys()) == {"a"}
 
-    t = torch.zeros(*bs, 1, device=device)
+    t = torch.zeros(*bs, device=device)
 
     if dim == 0:
         t[index] = 1
@@ -3377,7 +3409,7 @@ def test_lazy_stacked_append(dim, device):
     assert lstd.batch_size == torch.Size(bs)
     assert set(lstd.keys()) == {"a"}
 
-    t = torch.zeros(*bs, 1, device=device)
+    t = torch.zeros(*bs, device=device)
 
     if dim == 0:
         t[-1] = 1
