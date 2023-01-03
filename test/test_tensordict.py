@@ -1391,6 +1391,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert_allclose_td(td[range(2)], td[[0, 1]])
         assert_allclose_td(td[range(1), range(1)], td[[0], [0]])
         assert_allclose_td(td[:, range(2)], td[:, [0, 1]])
+        assert_allclose_td(td[..., range(1)], td[..., [0]])
 
     def test_setitem_nested_dict_value(self, td_name, device):
         torch.manual_seed(1)
