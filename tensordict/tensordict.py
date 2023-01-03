@@ -4462,19 +4462,20 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack_dim=new_stack_dim,
             )
         elif isinstance(item, tuple):
-            _sub_item = tuple(
-                _item for i, _item in enumerate(item) if i == self.stack_dim
-            )
-            if len(_sub_item):
-                tensordicts = self.tensordicts[_sub_item[0]]
-                if isinstance(tensordicts, TensorDictBase):
-                    return tensordicts
-            else:
-                tensordicts = self.tensordicts
             # select sub tensordicts
             _sub_item = tuple(
                 _item for i, _item in enumerate(item) if i != self.stack_dim
             )
+
+            if self.stack_dim < len(item):
+                tensordicts = self.tensordicts[item[self.stack_dim]]
+                if isinstance(tensordicts, TensorDictBase):
+                    if _sub_item:
+                        return tensordicts[_sub_item]
+                    return tensordicts
+            else:
+                tensordicts = self.tensordicts
+
             if len(_sub_item):
                 tensordicts = [td[_sub_item] for td in tensordicts]
             new_stack_dim = self.stack_dim - sum(
