@@ -540,6 +540,29 @@ def test_stacked_td(stack_dim, device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("stack_dim", [0, 1])
+def test_stacked_indexing(device, stack_dim):
+    tensordicts = [
+        TensorDict(
+            {"a": torch.randn(4, 5), "b": torch.randn(4, 5)},
+            batch_size=[4, 5],
+            device=device,
+        )
+        for _ in range(3)
+    ]
+    tds = torch.stack(tensordicts, stack_dim)
+
+    item = (2, 2)
+    assert tds[item].batch_size == torch.Size([5])
+    assert (tds[item].get("a") == tds.get("a")[item]).all()
+    assert (tds[item].get("a") == tensordicts[2].get("a")[2]).all()
+
+    item = (slice(1, 2), 2)
+    assert tds[item].batch_size == torch.Size([1, 5])
+    assert (tds[item].get("a") == tds.get("a")[item]).all()
+
+
+@pytest.mark.parametrize("device", get_available_devices())
 def test_savedtensordict(device):
     vals = [torch.randn(3, 1, device=device) for _ in range(4)]
     ss_list = [
