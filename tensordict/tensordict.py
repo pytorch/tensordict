@@ -4669,6 +4669,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self._is_locked = True
         for td in self.tensordicts:
             td.lock()
+        return self
 
     def unlock(self):
         self._is_locked = False
@@ -4676,6 +4677,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self._is_memmap = False
         for td in self.tensordicts:
             td.unlock()
+        return self
 
 
 class SavedTensorDict(TensorDictBase):
