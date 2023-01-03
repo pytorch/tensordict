@@ -1982,14 +1982,14 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     ) -> None:
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
-        if isinstance(index, list):
+        if isinstance(index, (list, range)):
             index = torch.tensor(index, device=self.device)
         if isinstance(index, tuple) and any(
-            isinstance(sub_index, list) for sub_index in index
+            isinstance(sub_index, (list, range)) for sub_index in index
         ):
             index = tuple(
                 torch.tensor(sub_index, device=self.device)
-                if isinstance(sub_index, list)
+                if isinstance(sub_index, (list, range))
                 else sub_index
                 for sub_index in index
             )
@@ -4360,14 +4360,14 @@ class LazyStackedTensorDict(TensorDictBase):
         return torch.stack(tensordicts, dim=self.stack_dim)
 
     def __setitem__(self, item: INDEX_TYPING, value: TensorDictBase) -> TensorDictBase:
-        if isinstance(item, list):
+        if isinstance(item, (list, range)):
             item = torch.tensor(item, device=self.device)
         if isinstance(item, tuple) and any(
-            isinstance(sub_index, list) for sub_index in item
+            isinstance(sub_index, (list, range)) for sub_index in item
         ):
             item = tuple(
                 torch.tensor(sub_index, device=self.device)
-                if isinstance(sub_index, list)
+                if isinstance(sub_index, (list, range))
                 else sub_index
                 for sub_index in item
             )
