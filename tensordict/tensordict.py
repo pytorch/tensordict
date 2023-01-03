@@ -4538,7 +4538,23 @@ class LazyStackedTensorDict(TensorDictBase):
         if input_dict_or_td is self:
             # no op
             return self
-        keys = set(self.keys(False))
+
+        if (
+            isinstance(input_dict_or_td, LazyStackedTensorDict)
+            and input_dict_or_td.stack_dim == self.stack_dim
+        ):
+            if not input_dict_or_td.shape[self.stack_dim] == len(self.tensordicts):
+                raise ValueError(
+                    "cannot update stacked tensordicts with different shapes."
+                )
+            for td_dest, td_source in zip(
+                self.tensordicts, input_dict_or_td.tensordicts
+            ):
+                td_dest.update(td_source)
+            self._update_valid_keys()
+            return self
+
+        keys = self.keys(False)
         for key, value in input_dict_or_td.items():
             if clone and hasattr(value, "clone"):
                 value = value.clone()
@@ -4576,6 +4592,19 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
         if input_dict_or_td is self:
             # no op
+            return self
+        if (
+            isinstance(input_dict_or_td, LazyStackedTensorDict)
+            and input_dict_or_td.stack_dim == self.stack_dim
+        ):
+            if not input_dict_or_td.shape[self.stack_dim] == len(self.tensordicts):
+                raise ValueError(
+                    "cannot update stacked tensordicts with different shapes."
+                )
+            for td_dest, td_source in zip(
+                self.tensordicts, input_dict_or_td.tensordicts
+            ):
+                td_dest.update_(td_source)
             return self
         for key, value in input_dict_or_td.items():
             if not isinstance(value, _accepted_classes):

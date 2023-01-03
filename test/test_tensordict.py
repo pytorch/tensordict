@@ -3524,6 +3524,25 @@ def test_unbind_lazystack():
     assert all(_td is td0 for _td in td.unbind(1))
 
 
+def test_stack_update_heter_stacked_td():
+    td1 = TensorDict({"a": torch.randn(3, 4)}, [3])
+    td2 = TensorDict({"a": torch.randn(3, 5)}, [3])
+    td_a = torch.stack([td1, td2], 0)
+    td_b = td_a.clone()
+    td_a.update(td_b)
+    with pytest.raises(
+        RuntimeError,
+        match="Found more than one unique shape in the tensors to be stacked",
+    ):
+        td_a.update(td_b.to_tensordict())
+    td_a.update_(td_b)
+    with pytest.raises(
+        RuntimeError,
+        match="Found more than one unique shape in the tensors to be stacked",
+    ):
+        td_a.update_(td_b.to_tensordict())
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
