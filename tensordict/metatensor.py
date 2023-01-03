@@ -165,7 +165,6 @@ class MetaTensor:
         _is_kjt: Optional[bool] = None,
         _repr_tensordict: Optional[str] = None,
     ):
-        tensor = None
         if len(shape) == 1 and not isinstance(shape[0], (Number,)):
             tensor = shape[0]
             self._tensor = tensor
@@ -184,6 +183,25 @@ class MetaTensor:
         self._is_kjt = bool(_is_kjt)
         self._is_tensordict = bool(_is_tensordict)
         self._repr_tensordict = _repr_tensordict
+
+    def __eq__(self, other):
+        if not type(other) is MetaTensor:
+            return False
+        if self.is_tensordict() is not other.is_tensordict():
+            return False
+        if self.is_kjt() is not other.is_kjt():
+            return False
+        if self.is_memmap() is not other.is_memmap():
+            return False
+        if self.is_shared() is not other.is_shared():
+            return False
+        if self.shape != other.shape:
+            return False
+        if self.device != other.device:
+            return False
+        if self.dtype != other.dtype:
+            return False
+        return True
 
     @property
     def class_name(self):

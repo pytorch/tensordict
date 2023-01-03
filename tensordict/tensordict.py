@@ -249,10 +249,15 @@ class _TensorDictKeysView:
 class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
-    _safe = False
-    _lazy = False
-    _inplace_set = False
-    is_meta = False
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        cls = kwargs.get("subcls", cls)
+        cls._safe = kwargs.get("_safe", False)
+        cls._lazy = kwargs.get("_lazy", False)
+        cls._inplace_set = kwargs.get("_inplace_set", False)
+        cls.is_meta = kwargs.get("is_meta", False)
+        cls._is_locked = kwargs.get("_is_locked", False)
+        return super().__new__(cls)
 
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
@@ -2089,19 +2094,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return False
         return True
 
-    @property
-    def is_locked(self):
-        if not hasattr(self, "_is_locked"):
-            self._is_locked = False
-        return self._is_locked
-
-    @is_locked.setter
-    def is_locked(self, value: bool):
-        if value:
-            self.lock()
-        else:
-            self.unlock()
-
     def set_default(
         self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
     ) -> COMPATIBLE_TYPES:
@@ -2122,6 +2114,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if key not in self.keys(include_nested=(type(key) is tuple)):
             self.set(key, default, **kwargs)
         return self.get(key)
+
+    @property
+    def is_locked(self):
+        if "_is_locked" not in self.__dict__:
+            self._is_locked = False
+        return self._is_locked
+
+    @is_locked.setter
+    def is_locked(self, value: bool):
+        if value:
+            self.lock()
+        else:
+            self.unlock()
 
     def lock(self):
         self._is_locked = True
@@ -2223,11 +2228,15 @@ class TensorDict(TensorDictBase):
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._safe = True
-        cls._lazy = False
         cls._is_shared = False
         cls._is_memmap = False
-        return TensorDictBase.__new__(cls)
+        return TensorDictBase.__new__(
+            subcls=cls,
+            *args,
+            _safe=True,
+            _lazy=False,
+            **kwargs,
+        )
 
     def __init__(
         self,
@@ -3419,12 +3428,11 @@ torch.Size([3, 2])
 
     @classmethod
     def __new__(cls, *args, **kwargs):
-        cls._safe = False
-        cls._lazy = True
         cls._is_shared = False
         cls._is_memmap = False
-        cls._inplace_set = True
-        return TensorDictBase.__new__(cls)
+        return TensorDictBase.__new__(
+            subcls=cls, _safe=False, _lazy=True, _inplace_set=True
+        )
 
     def __init__(
         self,
@@ -3937,8 +3945,9 @@ class LazyStackedTensorDict(TensorDictBase):
 
     """
 
-    _safe = False
-    _lazy = True
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(*args, subcls=cls, _safe=False, _lazy=True, **kwargs)
 
     def __init__(
         self,
@@ -4113,7 +4122,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     f"mismatch: got tensor.shape = {_shape(tensor)} and "
                     f"tensordict.batch_size={self.batch_size}"
                 )
-            if key not in self.valid_keys:
+            if isinstance(key, str) and key not in self.valid_keys:
                 raise KeyError(
                     "setting a value in-place on a stack of TensorDict is only "
                     "permitted if all members of the stack have this key in "
@@ -4275,23 +4284,9 @@ class LazyStackedTensorDict(TensorDictBase):
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = None
     ) -> LazyStackedTensorDict:
-        # TODO: Add support for nested keys.
-        for key in keys:
-            if not (type(key) is str):
-                raise TypeError(
-                    "All keys passed to LazyStackedTensorDict.select must be strings. "
-                    f"Found {key} of type {type(key)}. Note that LazyStackedTensorDict "
-                    "does not yet support nested keys."
-                )
-        # TODO: implement strict=True
-        if strict:
-            raise NotImplementedError(
-                "strict=True is not yet implemented for LazyStackedTensorDict.select()"
-            )
         # the following implementation keeps the hidden keys in the tensordicts
-        excluded_keys = set(self.valid_keys) - set(keys)
         tensordicts = [
-            td.exclude(*excluded_keys, inplace=inplace) for td in self.tensordicts
+            td.select(*keys, inplace=inplace, strict=strict) for td in self.tensordicts
         ]
         if inplace:
             return self
@@ -4331,7 +4326,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         ):
             raise RuntimeError(
-                "setting values to a LazyStackTensorDict using boolean values is not supported yet."
+                "setting values to a LazyStackTensorDict using boolean values is not supported yet. "
                 "If this feature is needed, feel free to raise an issue on github."
             )
         if isinstance(item, Tensor):
@@ -4610,12 +4605,40 @@ class LazyStackedTensorDict(TensorDictBase):
         """
         self.insert(len(self.tensordicts), tensordict)
 
+    @property
+    def is_locked(self):
+        is_locked = self._is_locked
+        for td in self.tensordicts:
+            is_locked = is_locked or td.is_locked
+        self._is_locked = is_locked
+        return is_locked
+
+    @is_locked.setter
+    def is_locked(self, value: bool):
+        if value:
+            self.lock()
+        else:
+            self.unlock()
+
+    def lock(self):
+        self._is_locked = True
+        for td in self.tensordicts:
+            td.lock()
+
+    def unlock(self):
+        self._is_locked = False
+        self._is_shared = False
+        self._is_memmap = False
+        for td in self.tensordicts:
+            td.unlock()
+
 
 class SavedTensorDict(TensorDictBase):
     """A saved tensordict class."""
 
-    _safe = False
-    _lazy = False
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(*args, subcls=cls, _safe=False, _lazy=False, **kwargs)
 
     def __init__(
         self,
@@ -5037,7 +5060,9 @@ class SavedTensorDict(TensorDictBase):
 class _CustomOpTensorDict(TensorDictBase):
     """Encodes lazy operations on tensors contained in a TensorDict."""
 
-    _lazy = True
+    @classmethod
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(*args, subcls=cls, _safe=False, _lazy=True, **kwargs)
 
     def __init__(
         self,
