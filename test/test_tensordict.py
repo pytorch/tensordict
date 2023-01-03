@@ -540,26 +540,24 @@ def test_stacked_td(stack_dim, device):
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("stack_dim", [0, 1])
+@pytest.mark.parametrize("stack_dim", [0, 1, 2])
 def test_stacked_indexing(device, stack_dim):
-    tensordicts = [
-        TensorDict(
-            {"a": torch.randn(4, 5), "b": torch.randn(4, 5)},
-            batch_size=[4, 5],
-            device=device,
-        )
-        for _ in range(3)
-    ]
-    tds = torch.stack(tensordicts, stack_dim)
+    tensordict = TensorDict(
+        {"a": torch.randn(3, 4, 5), "b": torch.randn(3, 4, 5)},
+        batch_size=[3, 4, 5],
+        device=device,
+    )
 
-    item = (2, 2)
-    assert tds[item].batch_size == torch.Size([5])
-    assert (tds[item].get("a") == tds.get("a")[item]).all()
-    assert (tds[item].get("a") == tensordicts[2].get("a")[2]).all()
+    tds = torch.stack(list(tensordict.unbind(stack_dim)), stack_dim)
 
-    item = (slice(1, 2), 2)
-    assert tds[item].batch_size == torch.Size([1, 5])
-    assert (tds[item].get("a") == tds.get("a")[item]).all()
+    for item, expected_shape in (
+        ((2, 2), torch.Size([5])),
+        ((slice(1, 2), 2), torch.Size([1, 5])),
+        ((..., 2), torch.Size([3, 4])),
+    ):
+        assert tds[item].batch_size == expected_shape
+        assert (tds[item].get("a") == tds.get("a")[item]).all()
+        assert (tds[item].get("a") == tensordict[item].get("a")).all()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
