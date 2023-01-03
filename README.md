@@ -245,6 +245,14 @@ MyData(
     is_shared=False)
 >>> print(data.mask_image().shape)
 torch.Size([100, 6117])
+>>> print(data.reshape(10, 10))
+MyData(
+    image=Tensor(torch.Size([10, 10, 3, 64, 64]), dtype=torch.float32),
+    label=Tensor(torch.Size([10, 10]), dtype=torch.int64),
+    mask=Tensor(torch.Size([10, 10, 1, 64, 64]), dtype=torch.bool),
+    batch_size=torch.Size([10, 10]),
+    device=None,
+    is_shared=False)
 ```
 As this example shows, one can write a specific data structures with dedicated methods while still enjoying the TensorDict
 artifacts such as shape operations (e.g. reshape or permutations), data manipulation (indexing, `cat` and `stack`) or calling
