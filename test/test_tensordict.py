@@ -3514,6 +3514,16 @@ def test_shared_inheritance():
     assert td0.is_shared()
 
 
+def test_unbind_lazystack():
+    td0 = TensorDict(
+        {"a": {"b": torch.randn(3, 4), "d": torch.randn(3, 4)}, "c": torch.randn(3, 4)},
+        [3, 4],
+    )
+    td = torch.stack([td0, td0, td0], 1)
+
+    assert all(_td is td0 for _td in td.unbind(1))
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
