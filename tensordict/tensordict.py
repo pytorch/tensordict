@@ -1952,12 +1952,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             idx = torch.tensor(idx, device=self.device)
             return self._index_tensordict(idx)
 
+        if isinstance(idx, range):
+            idx = torch.tensor(idx, device=self.device)
+            return self._index_tensordict(idx)
+
         if isinstance(idx, tuple) and any(
-            isinstance(sub_index, list) for sub_index in idx
+            isinstance(sub_index, (list, range)) for sub_index in idx
         ):
             idx = tuple(
                 torch.tensor(sub_index, device=self.device)
-                if isinstance(sub_index, list)
+                if isinstance(sub_index, (list, range))
                 else sub_index
                 for sub_index in idx
             )
@@ -3449,7 +3453,7 @@ torch.Size([3, 2])
                 f"got {type(source)}"
             )
         self._source = source
-        if not isinstance(idx, (tuple, list)):
+        if not isinstance(idx, (tuple, list, range)):
             idx = (idx,)
         else:
             idx = tuple(idx)
@@ -4404,14 +4408,14 @@ class LazyStackedTensorDict(TensorDictBase):
             isinstance(_item, str) for _item in item
         ) not in [len(item), 0]:
             raise IndexError(_STR_MIXED_INDEX_ERROR)
-        if isinstance(item, list):
+        if isinstance(item, (list, range)):
             item = torch.tensor(item, device=self.device)
         if isinstance(item, tuple) and any(
-            isinstance(sub_index, list) for sub_index in item
+            isinstance(sub_index, (list, range)) for sub_index in item
         ):
             item = tuple(
                 torch.tensor(sub_index, device=self.device)
-                if isinstance(sub_index, list)
+                if isinstance(sub_index, (list, range))
                 else sub_index
                 for sub_index in item
             )
@@ -5028,14 +5032,14 @@ class SavedTensorDict(TensorDictBase):
         return super().__reduce__(*args, **kwargs)
 
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
-        if isinstance(idx, list):
+        if isinstance(idx, (list, range)):
             idx = torch.tensor(idx, device=self.device)
         if isinstance(idx, tuple) and any(
-            isinstance(sub_index, list) for sub_index in idx
+            isinstance(sub_index, (list, range)) for sub_index in idx
         ):
             idx = tuple(
                 torch.tensor(sub_index, device=self.device)
-                if isinstance(sub_index, list)
+                if isinstance(sub_index, (list, range))
                 else sub_index
                 for sub_index in idx
             )
