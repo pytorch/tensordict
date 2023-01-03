@@ -4475,7 +4475,16 @@ class LazyStackedTensorDict(TensorDictBase):
             )
 
             if self.stack_dim < len(item):
-                tensordicts = self.tensordicts[item[self.stack_dim]]
+                idx = item[self.stack_dim]
+                if isinstance(idx, (Number, slice)):
+                    tensordicts = self.tensordicts[idx]
+                elif isinstance(idx, torch.Tensor):
+                    tensordicts = [self.tensordicts[i] for i in idx]
+                else:
+                    raise TypeError(
+                        "Invalid index used for stack dimension. Expected number, "
+                        f"slice, or tensor-like. Got {type(idx)}"
+                    )
                 if isinstance(tensordicts, TensorDictBase):
                     if _sub_item:
                         return tensordicts[_sub_item]

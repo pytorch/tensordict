@@ -1326,6 +1326,15 @@ class TestTensorDicts(TestTensorDictsBase):
         assert_allclose_td(td[:, range(2)], td[:, [0, 1]])
         assert_allclose_td(td[..., range(1)], td[..., [0]])
 
+        if td_name in ("stacked_td", "nested_stacked_td"):
+            # this is a bit contrived, but want to check that if we pass something
+            # weird as the index to the stacking dimension we'll get the error
+            idx = (slice(None),) * td.stack_dim + ({1, 2, 3},)
+            with pytest.raises(
+                TypeError, match="Invalid index used for stack dimension."
+            ):
+                td[idx]
+
     def test_setitem_nested_dict_value(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
