@@ -52,6 +52,21 @@ class TestTensorDictsBase:
             device=device,
         )
 
+    def nested_stacked_td(self, device):
+        td = TensorDict(
+            source={
+                "a": torch.randn(4, 3, 2, 1, 5),
+                "b": torch.randn(4, 3, 2, 1, 10),
+                "c": torch.randint(10, (4, 3, 2, 1, 3)),
+                "my_nested_td": TensorDict(
+                    {"inner": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
+                ),
+            },
+            batch_size=[4, 3, 2, 1],
+            device=device,
+        )
+        return torch.stack(list(td.unbind(1)), 1)
+
     def stacked_td(self, device):
         td1 = TensorDict(
             source={

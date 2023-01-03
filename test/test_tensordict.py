@@ -645,6 +645,7 @@ TD_BATCH_SIZE = 4
         "td_reset_bs",
         "nested_td",
         "permute_td",
+        "nested_stacked_td",
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
@@ -667,33 +668,44 @@ class TestTensorDicts(TestTensorDictsBase):
         td2 = td.to_tensordict()
         assert (td2 == td).all()
 
-    def test_select(self, td_name, device):
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_select(self, td_name, device, strict, inplace):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td2 = td.select("a")
-        assert td2 is not td
-        assert len(list(td2.keys())) == 1 and "a" in td2.keys()
-        assert len(list(td2.clone().keys())) == 1 and "a" in td2.clone().keys()
+        keys = ["a"]
+        if td_name in ("nested_stacked_td", "nested_td"):
+            keys += [("my_nested_td", "inner")]
 
-        td2 = td.select("a", inplace=True)
-        assert td2 is td
+        td2 = td.select(*keys, strict=strict, inplace=inplace)
+        if inplace:
+            assert td2 is td
+        else:
+            assert td2 is not td
+        if td_name == "saved_td":
+            assert (len(list(td2.keys())) == len(keys)) and ("a" in td2.keys())
+            assert (len(list(td2.clone().keys())) == len(keys)) and (
+                "a" in td2.clone().keys()
+            )
+        else:
+            assert (len(list(td2.keys(True, True))) == len(keys)) and (
+                "a" in td2.keys()
+            )
+            assert (len(list(td2.clone().keys(True, True))) == len(keys)) and (
+                "a" in td2.clone().keys()
+            )
 
     @pytest.mark.parametrize("strict", [True, False])
     def test_select_exception(self, td_name, device, strict):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         if strict:
-            if td_name == "stacked_td":
-                with pytest.raises(NotImplementedError):
-                    _ = td.select("tada", strict=strict)
-            else:
-                with pytest.raises(KeyError):
-                    _ = td.select("tada", strict=strict)
-            return
+            with pytest.raises(KeyError):
+                _ = td.select("tada", strict=strict)
         else:
             td2 = td.select("tada", strict=strict)
-        assert td2 is not td
-        assert len(list(td2.keys())) == 0
+            assert td2 is not td
+            assert len(list(td2.keys())) == 0
 
     def test_exclude(self, td_name, device):
         torch.manual_seed(1)
@@ -937,7 +949,7 @@ class TestTensorDicts(TestTensorDictsBase):
             td_mask = mask.cpu().numpy().tolist()
         else:
             td_mask = mask
-        if td_name == "stacked_td":
+        if td_name in ("nested_stacked_td", "stacked_td"):
             with pytest.raises(RuntimeError, match="is not supported"):
                 td[td_mask] = pseudo_td
         else:
@@ -1285,6 +1297,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td.batch_size == torch.clone(td).batch_size
         if td_name in (
             "stacked_td",
+            "nested_stacked_td",
             "saved_td",
             "squeezed_td",
             "unsqueezed_td",
@@ -1648,7 +1661,8 @@ class TestTensorDicts(TestTensorDictsBase):
             # _get_meta, and equality of meta tensors is currently equivalent to
             # `mt1 is mt2`. if MetaTensor were to define `__eq__` method we could apply
             # this check in all cases.
-            assert all(v == i for v, (_, i) in zip(values_meta, items_meta))
+            for v, (_, i) in zip(values_meta, items_meta):
+                assert v == i
 
         if not include_nested:
             assert all(isinstance(key, str) for key, _ in items_meta)
