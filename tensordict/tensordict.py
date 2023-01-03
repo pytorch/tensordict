@@ -4144,6 +4144,14 @@ class LazyStackedTensorDict(TensorDictBase):
             td.set_(key, _item)
         return self
 
+    def unbind(self, dim: int) -> Tuple[TensorDictBase, ...]:
+        if dim < 0:
+            dim = self.batch_dims + dim
+        if dim == self.stack_dim:
+            return tuple(self.tensordicts)
+        else:
+            return super().unbind(dim)
+
     def set_at_(
         self, key: str, value: Union[dict, COMPATIBLE_TYPES], idx: INDEX_TYPING
     ) -> TensorDictBase:
