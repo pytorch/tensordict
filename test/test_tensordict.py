@@ -1156,7 +1156,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td.view(-1).view(*new_shape) is td
             assert td.view(*new_shape) is td
 
-    @pytest.mark.parametrize("dim", [0, 1, -1])
+    @pytest.mark.parametrize("dim", [0, 1, -1, -5])
     @pytest.mark.parametrize(
         "key", ["heterogeneous-entry", ("sub", "heterogeneous-entry")]
     )
@@ -1176,8 +1176,18 @@ class TestTensorDicts(TestTensorDictsBase):
             RuntimeError, match="Found more than one unique shape in the tensors"
         ):
             td_stack[key]
-        # this will work: it is the proper way to get that entry
-        td_stack.get_nestedtensor(key)
+        if dim in (0, -5):
+            # this will work if stack_dim is 0 (or equivalently -self.batch_dims)
+            # it is the proper way to get that entry
+            td_stack.get_nestedtensor(key)
+        else:
+            # if the stack_dim is not zero, then calling get_nestedtensor is disallowed
+            with pytest.raises(
+                RuntimeError,
+                match="LazyStackedTensorDict.get_nestedtensor can only be called "
+                "when the stack_dim is 0.",
+            ):
+                td_stack.get_nestedtensor(key)
         with pytest.raises(
             RuntimeError, match="Found more than one unique shape in the tensors"
         ):

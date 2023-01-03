@@ -526,7 +526,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             )
         else:
             raise ValueError(
-                f"default should be None or a Tensor instance, " f"got {default}"
+                f"default should be None or a Tensor instance, got {default}"
             )
 
     @abc.abstractmethod
@@ -4225,6 +4225,14 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NESTED_KEY,
         default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
     ) -> COMPATIBLE_TYPES:
+        # disallow getting nested tensor if the stacking dimension is not 0
+        if self.stack_dim != 0:
+            raise RuntimeError(
+                "Because nested tensors can only be stacked along their first "
+                "dimension, LazyStackedTensorDict.get_nestedtensor can only be called "
+                "when the stack_dim is 0."
+            )
+
         # TODO: the stacking logic below works for nested keys, but the key in
         # self.valid_keys check will fail and we'll return the default instead.
         # For now we'll advise user that nested keys aren't supported, but it should be
