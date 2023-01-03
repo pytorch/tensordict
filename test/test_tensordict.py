@@ -1376,7 +1376,9 @@ class TestTensorDicts(TestTensorDictsBase):
         for key in td_clone.keys():
             assert (td_clone[idx].get(key) == 0).all()
 
-    @pytest.mark.parametrize("idx", [slice(1), torch.tensor([0]), torch.tensor([0, 1])])
+    @pytest.mark.parametrize(
+        "idx", [slice(1), torch.tensor([0]), torch.tensor([0, 1]), range(1), range(2)]
+    )
     def test_setitem(self, td_name, device, idx):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -1403,6 +1405,14 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         assert isinstance(td["a"], (MemmapTensor, torch.Tensor))
+
+    def test_getitem_range(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        assert_allclose_td(td[range(2)], td[[0, 1]])
+        assert_allclose_td(td[range(1), range(1)], td[[0], [0]])
+        assert_allclose_td(td[:, range(2)], td[:, [0, 1]])
+        assert_allclose_td(td[..., range(1)], td[..., [0]])
 
     def test_setitem_nested_dict_value(self, td_name, device):
         torch.manual_seed(1)
