@@ -138,22 +138,6 @@ def test_pad():
 
 
 @pytest.mark.parametrize("device", get_available_devices())
-def test_stack(device):
-    torch.manual_seed(1)
-    tds_list = [TensorDict(source={}, batch_size=(4, 5)) for _ in range(3)]
-    tds = stack_td(tds_list, 0, contiguous=False)
-    assert tds[0] is tds_list[0]
-
-    td = TensorDict(
-        source={"a": torch.randn(4, 5, 3, device=device)}, batch_size=(4, 5)
-    )
-    td_list = list(td)
-    td_reconstruct = stack_td(td_list, 0)
-    assert td_reconstruct.batch_size == td.batch_size
-    assert (td_reconstruct == td).all()
-
-
-@pytest.mark.parametrize("device", get_available_devices())
 def test_tensordict_indexing(device):
     torch.manual_seed(1)
     td = TensorDict({}, batch_size=(4, 5))
@@ -473,91 +457,6 @@ def test_permute_with_tensordict_operations(device):
         contiguous=False,
     ).permute(2, 1, 0)
     assert td1.shape == torch.Size((6, 5, 4))
-
-
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("stack_dim", [0, 1])
-def test_stacked_td(stack_dim, device):
-    tensordicts = [
-        TensorDict(
-            batch_size=[11, 12],
-            source={
-                "key1": torch.randn(11, 12, 5, device=device),
-                "key2": torch.zeros(
-                    11, 12, 50, device=device, dtype=torch.bool
-                ).bernoulli_(),
-            },
-        )
-        for _ in range(10)
-    ]
-
-    tensordicts0 = tensordicts[0]
-    tensordicts1 = tensordicts[1]
-    tensordicts2 = tensordicts[2]
-    tensordicts3 = tensordicts[3]
-    sub_td = LazyStackedTensorDict(*tensordicts, stack_dim=stack_dim)
-
-    std_bis = stack_td(tensordicts, dim=stack_dim, contiguous=False)
-    assert (sub_td == std_bis).all()
-
-    item = (*[slice(None) for _ in range(stack_dim)], 0)
-    tensordicts0.zero_()
-    assert (sub_td[item].get("key1") == sub_td.get("key1")[item]).all()
-    assert (
-        sub_td.contiguous()[item].get("key1") == sub_td.contiguous().get("key1")[item]
-    ).all()
-    assert (sub_td.contiguous().get("key1")[item] == 0).all()
-
-    item = (*[slice(None) for _ in range(stack_dim)], 1)
-    std2 = sub_td[:5]
-    tensordicts1.zero_()
-    assert (std2[item].get("key1") == std2.get("key1")[item]).all()
-    assert (
-        std2.contiguous()[item].get("key1") == std2.contiguous().get("key1")[item]
-    ).all()
-    assert (std2.contiguous().get("key1")[item] == 0).all()
-
-    std3 = sub_td[:5, :, :5]
-    tensordicts2.zero_()
-    item = (*[slice(None) for _ in range(stack_dim)], 2)
-    assert (std3[item].get("key1") == std3.get("key1")[item]).all()
-    assert (
-        std3.contiguous()[item].get("key1") == std3.contiguous().get("key1")[item]
-    ).all()
-    assert (std3.contiguous().get("key1")[item] == 0).all()
-
-    std4 = sub_td.select("key1")
-    tensordicts3.zero_()
-    item = (*[slice(None) for _ in range(stack_dim)], 3)
-    assert (std4[item].get("key1") == std4.get("key1")[item]).all()
-    assert (
-        std4.contiguous()[item].get("key1") == std4.contiguous().get("key1")[item]
-    ).all()
-    assert (std4.contiguous().get("key1")[item] == 0).all()
-
-    std5 = sub_td.unbind(1)[0]
-    assert (std5.contiguous() == sub_td.contiguous().unbind(1)[0]).all()
-
-
-@pytest.mark.parametrize("device", get_available_devices())
-@pytest.mark.parametrize("stack_dim", [0, 1, 2])
-def test_stacked_indexing(device, stack_dim):
-    tensordict = TensorDict(
-        {"a": torch.randn(3, 4, 5), "b": torch.randn(3, 4, 5)},
-        batch_size=[3, 4, 5],
-        device=device,
-    )
-
-    tds = torch.stack(list(tensordict.unbind(stack_dim)), stack_dim)
-
-    for item, expected_shape in (
-        ((2, 2), torch.Size([5])),
-        ((slice(1, 2), 2), torch.Size([1, 5])),
-        ((..., 2), torch.Size([3, 4])),
-    ):
-        assert tds[item].batch_size == expected_shape
-        assert (tds[item].get("a") == tds.get("a")[item]).all()
-        assert (tds[item].get("a") == tensordict[item].get("a")).all()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -2709,65 +2608,6 @@ def test_saved_delete():
     assert not os.path.isfile(file)
 
 
-def test_stack_keys():
-    td1 = TensorDict(source={"a": torch.randn(3)}, batch_size=[])
-    td2 = TensorDict(
-        source={
-            "a": torch.randn(3),
-            "b": torch.randn(3),
-            "c": torch.randn(4),
-            "d": torch.randn(5),
-        },
-        batch_size=[],
-    )
-    td = stack_td([td1, td2], 0)
-    assert "a" in td.keys()
-    assert "b" not in td.keys()
-    assert "b" in td[1].keys()
-    td.set("b", torch.randn(2, 10), inplace=False)  # overwrites
-    with pytest.raises(KeyError):
-        td.set_("c", torch.randn(2, 10))  # overwrites
-    td.set_("b", torch.randn(2, 10))  # b has been set before
-
-    td1.set("c", torch.randn(4))
-    td[
-        "c"
-    ]  # we must first query that key for the stacked tensordict to update the list
-    assert "c" in td.keys(), list(td.keys())  # now all tds have the key c
-    td.get("c")
-
-    td1.set("d", torch.randn(6))
-    with pytest.raises(RuntimeError):
-        td.get("d")
-
-    td["e"] = torch.randn(2, 4)
-    assert "e" in td.keys()  # now all tds have the key c
-    td.get("e")
-
-
-def test_stacked_td_nested_keys():
-    td = torch.stack(
-        [
-            TensorDict({"a": {"b": {"d": [1]}, "c": [2]}}, []),
-            TensorDict({"a": {"b": {"d": [1]}, "d": [2]}}, []),
-        ],
-        0,
-    )
-    assert ("a", "b") in td.keys(True)
-    assert ("a", "c") not in td.keys(True)
-    assert ("a", "b", "d") in td.keys(True)
-    td["a", "c"] = [[2], [3]]
-    assert ("a", "c") in td.keys(True)
-
-    keys, items = zip(*td.items(True))
-    assert ("a", "b") in keys
-    assert ("a", "c") in keys
-    assert ("a", "d") not in keys
-
-    td["a", "c"] = td["a", "c"] + 1
-    assert (td["a", "c"] == torch.tensor([[3], [4]], device=td.device)).all()
-
-
 @pytest.mark.parametrize(
     "idx",
     [
@@ -3114,22 +2954,6 @@ def test_error_on_contains():
         "random_string" in td  # noqa: B015
 
 
-def test_lazy_stacked_contains():
-    td = TensorDict(
-        {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
-    )
-    lstd = torch.stack([td, td, td])
-
-    assert td in lstd
-    assert td.clone() not in lstd
-
-    with pytest.raises(
-        NotImplementedError,
-        match="TensorDict does not support membership checks with the `in` keyword",
-    ):
-        "random_string" in lstd  # noqa: B015
-
-
 @pytest.mark.parametrize("method", ["share_memory", "memmap"])
 def test_memory_lock(method):
     torch.manual_seed(1)
@@ -3396,84 +3220,6 @@ def test_split_with_negative_dim():
     assert tds[1]["b"].shape == torch.Size([5, 3, 1])
 
 
-@pytest.mark.parametrize("dim", range(2))
-@pytest.mark.parametrize("index", range(2))
-@pytest.mark.parametrize("device", get_available_devices())
-def test_lazy_stacked_insert(dim, index, device):
-    td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
-    lstd = torch.stack([td] * 2, dim=dim)
-
-    lstd.insert(
-        index,
-        TensorDict({"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device),
-    )
-
-    bs = [4]
-    bs.insert(dim, 3)
-
-    assert lstd.batch_size == torch.Size(bs)
-    assert set(lstd.keys()) == {"a"}
-
-    t = torch.zeros(*bs, device=device)
-
-    if dim == 0:
-        t[index] = 1
-    else:
-        t[:, index] = 1
-
-    torch.testing.assert_close(lstd["a"], t)
-
-    with pytest.raises(
-        TypeError, match="Expected new value to be TensorDictBase instance"
-    ):
-        lstd.insert(index, torch.rand(10))
-
-    if device != torch.device("cpu"):
-        with pytest.raises(ValueError, match="Devices differ"):
-            lstd.insert(index, TensorDict({"a": torch.ones(4)}, [4], device="cpu"))
-
-    with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
-        lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
-
-
-@pytest.mark.parametrize("dim", range(2))
-@pytest.mark.parametrize("device", get_available_devices())
-def test_lazy_stacked_append(dim, device):
-    td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
-    lstd = torch.stack([td] * 2, dim=dim)
-
-    lstd.append(
-        TensorDict({"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device)
-    )
-
-    bs = [4]
-    bs.insert(dim, 3)
-
-    assert lstd.batch_size == torch.Size(bs)
-    assert set(lstd.keys()) == {"a"}
-
-    t = torch.zeros(*bs, device=device)
-
-    if dim == 0:
-        t[-1] = 1
-    else:
-        t[:, -1] = 1
-
-    torch.testing.assert_close(lstd["a"], t)
-
-    with pytest.raises(
-        TypeError, match="Expected new value to be TensorDictBase instance"
-    ):
-        lstd.append(torch.rand(10))
-
-    if device != torch.device("cpu"):
-        with pytest.raises(ValueError, match="Devices differ"):
-            lstd.append(TensorDict({"a": torch.ones(4)}, [4], device="cpu"))
-
-    with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
-        lstd.append(TensorDict({"a": torch.ones(17)}, [17], device=device))
-
-
 def test_shared_inheritance():
     td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
     td.share_memory_()
@@ -3514,33 +3260,288 @@ def test_shared_inheritance():
     assert td0.is_shared()
 
 
-def test_unbind_lazystack():
-    td0 = TensorDict(
-        {"a": {"b": torch.randn(3, 4), "d": torch.randn(3, 4)}, "c": torch.randn(3, 4)},
-        [3, 4],
-    )
-    td = torch.stack([td0, td0, td0], 1)
+class TestLazyStackedTensorDict:
+    def test_stack_keys(self):
+        td1 = TensorDict(source={"a": torch.randn(3)}, batch_size=[])
+        td2 = TensorDict(
+            source={
+                "a": torch.randn(3),
+                "b": torch.randn(3),
+                "c": torch.randn(4),
+                "d": torch.randn(5),
+            },
+            batch_size=[],
+        )
+        td = stack_td([td1, td2], 0)
+        assert "a" in td.keys()
+        assert "b" not in td.keys()
+        assert "b" in td[1].keys()
+        td.set("b", torch.randn(2, 10), inplace=False)  # overwrites
+        with pytest.raises(KeyError):
+            td.set_("c", torch.randn(2, 10))  # overwrites
+        td.set_("b", torch.randn(2, 10))  # b has been set before
 
-    assert all(_td is td0 for _td in td.unbind(1))
+        td1.set("c", torch.randn(4))
+        td[
+            "c"
+        ]  # we must first query that key for the stacked tensordict to update the list
+        assert "c" in td.keys(), list(td.keys())  # now all tds have the key c
+        td.get("c")
 
+        td1.set("d", torch.randn(6))
+        with pytest.raises(RuntimeError):
+            td.get("d")
 
-def test_stack_update_heter_stacked_td():
-    td1 = TensorDict({"a": torch.randn(3, 4)}, [3])
-    td2 = TensorDict({"a": torch.randn(3, 5)}, [3])
-    td_a = torch.stack([td1, td2], 0)
-    td_b = td_a.clone()
-    td_a.update(td_b)
-    with pytest.raises(
-        RuntimeError,
-        match="Found more than one unique shape in the tensors to be stacked",
-    ):
-        td_a.update(td_b.to_tensordict())
-    td_a.update_(td_b)
-    with pytest.raises(
-        RuntimeError,
-        match="Found more than one unique shape in the tensors to be stacked",
-    ):
-        td_a.update_(td_b.to_tensordict())
+        td["e"] = torch.randn(2, 4)
+        assert "e" in td.keys()  # now all tds have the key c
+        td.get("e")
+
+    def test_stacked_td_nested_keys(self):
+        td = torch.stack(
+            [
+                TensorDict({"a": {"b": {"d": [1]}, "c": [2]}}, []),
+                TensorDict({"a": {"b": {"d": [1]}, "d": [2]}}, []),
+            ],
+            0,
+        )
+        assert ("a", "b") in td.keys(True)
+        assert ("a", "c") not in td.keys(True)
+        assert ("a", "b", "d") in td.keys(True)
+        td["a", "c"] = [[2], [3]]
+        assert ("a", "c") in td.keys(True)
+
+        keys, items = zip(*td.items(True))
+        assert ("a", "b") in keys
+        assert ("a", "c") in keys
+        assert ("a", "d") not in keys
+
+        td["a", "c"] = td["a", "c"] + 1
+        assert (td["a", "c"] == torch.tensor([[3], [4]], device=td.device)).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_stacked_td(self, stack_dim, device):
+        tensordicts = [
+            TensorDict(
+                batch_size=[11, 12],
+                source={
+                    "key1": torch.randn(11, 12, 5, device=device),
+                    "key2": torch.zeros(
+                        11, 12, 50, device=device, dtype=torch.bool
+                    ).bernoulli_(),
+                },
+            )
+            for _ in range(10)
+        ]
+
+        tensordicts0 = tensordicts[0]
+        tensordicts1 = tensordicts[1]
+        tensordicts2 = tensordicts[2]
+        tensordicts3 = tensordicts[3]
+        sub_td = LazyStackedTensorDict(*tensordicts, stack_dim=stack_dim)
+
+        std_bis = stack_td(tensordicts, dim=stack_dim, contiguous=False)
+        assert (sub_td == std_bis).all()
+
+        item = (*[slice(None) for _ in range(stack_dim)], 0)
+        tensordicts0.zero_()
+        assert (sub_td[item].get("key1") == sub_td.get("key1")[item]).all()
+        assert (
+            sub_td.contiguous()[item].get("key1")
+            == sub_td.contiguous().get("key1")[item]
+        ).all()
+        assert (sub_td.contiguous().get("key1")[item] == 0).all()
+
+        item = (*[slice(None) for _ in range(stack_dim)], 1)
+        std2 = sub_td[:5]
+        tensordicts1.zero_()
+        assert (std2[item].get("key1") == std2.get("key1")[item]).all()
+        assert (
+            std2.contiguous()[item].get("key1") == std2.contiguous().get("key1")[item]
+        ).all()
+        assert (std2.contiguous().get("key1")[item] == 0).all()
+
+        std3 = sub_td[:5, :, :5]
+        tensordicts2.zero_()
+        item = (*[slice(None) for _ in range(stack_dim)], 2)
+        assert (std3[item].get("key1") == std3.get("key1")[item]).all()
+        assert (
+            std3.contiguous()[item].get("key1") == std3.contiguous().get("key1")[item]
+        ).all()
+        assert (std3.contiguous().get("key1")[item] == 0).all()
+
+        std4 = sub_td.select("key1")
+        tensordicts3.zero_()
+        item = (*[slice(None) for _ in range(stack_dim)], 3)
+        assert (std4[item].get("key1") == std4.get("key1")[item]).all()
+        assert (
+            std4.contiguous()[item].get("key1") == std4.contiguous().get("key1")[item]
+        ).all()
+        assert (std4.contiguous().get("key1")[item] == 0).all()
+
+        std5 = sub_td.unbind(1)[0]
+        assert (std5.contiguous() == sub_td.contiguous().unbind(1)[0]).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
+    def test_stacked_indexing(self, device, stack_dim):
+        tensordict = TensorDict(
+            {"a": torch.randn(3, 4, 5), "b": torch.randn(3, 4, 5)},
+            batch_size=[3, 4, 5],
+            device=device,
+        )
+
+        tds = torch.stack(list(tensordict.unbind(stack_dim)), stack_dim)
+
+        for item, expected_shape in (
+            ((2, 2), torch.Size([5])),
+            ((slice(1, 2), 2), torch.Size([1, 5])),
+            ((..., 2), torch.Size([3, 4])),
+        ):
+            assert tds[item].batch_size == expected_shape
+            assert (tds[item].get("a") == tds.get("a")[item]).all()
+            assert (tds[item].get("a") == tensordict[item].get("a")).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_stack(self, device):
+        torch.manual_seed(1)
+        tds_list = [TensorDict(source={}, batch_size=(4, 5)) for _ in range(3)]
+        tds = stack_td(tds_list, 0, contiguous=False)
+        assert tds[0] is tds_list[0]
+
+        td = TensorDict(
+            source={"a": torch.randn(4, 5, 3, device=device)}, batch_size=(4, 5)
+        )
+        td_list = list(td)
+        td_reconstruct = stack_td(td_list, 0)
+        assert td_reconstruct.batch_size == td.batch_size
+        assert (td_reconstruct == td).all()
+
+    @pytest.mark.parametrize("dim", range(2))
+    @pytest.mark.parametrize("index", range(2))
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_lazy_stacked_insert(self, dim, index, device):
+        td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
+        lstd = torch.stack([td] * 2, dim=dim)
+
+        lstd.insert(
+            index,
+            TensorDict(
+                {"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device
+            ),
+        )
+
+        bs = [4]
+        bs.insert(dim, 3)
+
+        assert lstd.batch_size == torch.Size(bs)
+        assert set(lstd.keys()) == {"a"}
+
+        t = torch.zeros(*bs, device=device)
+
+        if dim == 0:
+            t[index] = 1
+        else:
+            t[:, index] = 1
+
+        torch.testing.assert_close(lstd["a"], t)
+
+        with pytest.raises(
+            TypeError, match="Expected new value to be TensorDictBase instance"
+        ):
+            lstd.insert(index, torch.rand(10))
+
+        if device != torch.device("cpu"):
+            with pytest.raises(ValueError, match="Devices differ"):
+                lstd.insert(index, TensorDict({"a": torch.ones(4)}, [4], device="cpu"))
+
+        with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+            lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
+
+    def test_lazy_stacked_contains(self):
+        td = TensorDict(
+            {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
+        )
+        lstd = torch.stack([td, td, td])
+
+        assert td in lstd
+        assert td.clone() not in lstd
+
+        with pytest.raises(
+            NotImplementedError,
+            match="TensorDict does not support membership checks with the `in` keyword",
+        ):
+            "random_string" in lstd  # noqa: B015
+
+    @pytest.mark.parametrize("dim", range(2))
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_lazy_stacked_append(self, dim, device):
+        td = TensorDict({"a": torch.zeros(4)}, [4], device=device)
+        lstd = torch.stack([td] * 2, dim=dim)
+
+        lstd.append(
+            TensorDict(
+                {"a": torch.ones(4), "invalid": torch.rand(4)}, [4], device=device
+            )
+        )
+
+        bs = [4]
+        bs.insert(dim, 3)
+
+        assert lstd.batch_size == torch.Size(bs)
+        assert set(lstd.keys()) == {"a"}
+
+        t = torch.zeros(*bs, device=device)
+
+        if dim == 0:
+            t[-1] = 1
+        else:
+            t[:, -1] = 1
+
+        torch.testing.assert_close(lstd["a"], t)
+
+        with pytest.raises(
+            TypeError, match="Expected new value to be TensorDictBase instance"
+        ):
+            lstd.append(torch.rand(10))
+
+        if device != torch.device("cpu"):
+            with pytest.raises(ValueError, match="Devices differ"):
+                lstd.append(TensorDict({"a": torch.ones(4)}, [4], device="cpu"))
+
+        with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
+            lstd.append(TensorDict({"a": torch.ones(17)}, [17], device=device))
+
+    def test_unbind_lazystack(self):
+        td0 = TensorDict(
+            {
+                "a": {"b": torch.randn(3, 4), "d": torch.randn(3, 4)},
+                "c": torch.randn(3, 4),
+            },
+            [3, 4],
+        )
+        td = torch.stack([td0, td0, td0], 1)
+
+        assert all(_td is td0 for _td in td.unbind(1))
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, -1])
+    def test_stack_update_heter_stacked_td(self, stack_dim):
+        td1 = TensorDict({"a": torch.randn(3, 4)}, [3])
+        td2 = TensorDict({"a": torch.randn(3, 5)}, [3])
+        td_a = torch.stack([td1, td2], stack_dim)
+        td_b = td_a.clone()
+        td_a.update(td_b)
+        with pytest.raises(
+            RuntimeError,
+            match="Found more than one unique shape in the tensors to be stacked",
+        ):
+            td_a.update(td_b.to_tensordict())
+        td_a.update_(td_b)
+        with pytest.raises(
+            RuntimeError,
+            match="Found more than one unique shape in the tensors to be stacked",
+        ):
+            td_a.update_(td_b.to_tensordict())
 
 
 if __name__ == "__main__":
