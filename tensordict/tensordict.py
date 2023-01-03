@@ -2133,6 +2133,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         for key, item in self.items_meta():
             if item.is_tensordict():
                 self.get(key).lock()
+        return self
 
     def unlock(self):
         self._is_locked = False
@@ -2141,6 +2142,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         for key, item in self.items_meta():
             if item.is_tensordict():
                 self.get(key).unlock()
+        return self
 
 
 class TensorDict(TensorDictBase):
@@ -3140,7 +3142,14 @@ def _cat(
                 key, "Attempted to concatenate tensors on different devices at key"
             ):
                 out[key] = torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-
+        if device is None:
+            device = list_of_tensordicts[0].device
+            for td in list_of_tensordicts[1:]:
+                if device == td.device:
+                    continue
+                else:
+                    device = None
+                    break
         return TensorDict(out, device=device, batch_size=batch_size, _run_checks=False)
     else:
         if out.batch_size != batch_size:
@@ -4183,15 +4192,50 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key, default)
 
         tensors = [td.get(key, default=default) for td in self.tensordicts]
-        shapes = {_shape(tensor) for tensor in tensors}
-        if len(shapes) != 1:
-            raise RuntimeError(
-                f"found more than one unique shape in the tensors to be "
-                f"stacked ({shapes}). This is likely due to a modification "
-                f"of one of the stacked TensorDicts, where a key has been "
-                f"updated/created with an uncompatible shape."
-            )
-        return torch.stack(tensors, self.stack_dim)
+        try:
+            return torch.stack(tensors, self.stack_dim)
+        except RuntimeError as err:
+            if "stack expects each tensor to be equal size" in str(err):
+                shapes = {_shape(tensor) for tensor in tensors}
+                raise RuntimeError(
+                    f"Found more than one unique shape in the tensors to be "
+                    f"stacked ({shapes}). This is likely due to a modification "
+                    f"of one of the stacked TensorDicts, where a key has been "
+                    f"updated/created with an uncompatible shape. If the entries "
+                    f"are intended to have a different shape, use the get_nestedtensor "
+                    f"method instead."
+                )
+            else:
+                raise err
+
+    def get_nestedtensor(
+        self,
+        key: NESTED_KEY,
+        default: Union[str, COMPATIBLE_TYPES] = "_no_default_",
+    ) -> COMPATIBLE_TYPES:
+        # TODO: the stacking logic below works for nested keys, but the key in
+        # self.valid_keys check will fail and we'll return the default instead.
+        # For now we'll advise user that nested keys aren't supported, but it should be
+        # fairly easy to add support if we could add nested keys to valid_keys.
+
+        # we can handle the case where the key is a tuple of length 1
+        if (type(key) is tuple) and len(key) == 1:
+            key = key[0]
+        elif type(key) is tuple:
+            tensordict, key = _get_leaf_tensordict(self, key)
+            return tensordict.get_nestedtensor(key)
+
+        keys = self.valid_keys
+        if not (key in keys):
+            # first, let's try to update the valid keys
+            self._update_valid_keys()
+            keys = self.valid_keys
+
+        if not (key in keys):
+            return self._default_get(key, default)
+
+        tensors = [td.get(key, default=default) for td in self.tensordicts]
+        return torch.nested.nested_tensor(tensors)
 
     def _make_meta(self, key: str) -> MetaTensor:
         return torch.stack(
@@ -4202,7 +4246,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return False
 
     def contiguous(self) -> TensorDictBase:
-        source = {key: value for key, value in self.items()}
+        source = {key: value.contiguous() for key, value in self.items()}
         batch_size = self.batch_size
         device = self.device
         out = TensorDict(
@@ -4413,19 +4457,20 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack_dim=new_stack_dim,
             )
         elif isinstance(item, tuple):
-            _sub_item = tuple(
-                _item for i, _item in enumerate(item) if i == self.stack_dim
-            )
-            if len(_sub_item):
-                tensordicts = self.tensordicts[_sub_item[0]]
-                if isinstance(tensordicts, TensorDictBase):
-                    return tensordicts
-            else:
-                tensordicts = self.tensordicts
             # select sub tensordicts
             _sub_item = tuple(
                 _item for i, _item in enumerate(item) if i != self.stack_dim
             )
+
+            if self.stack_dim < len(item):
+                tensordicts = self.tensordicts[item[self.stack_dim]]
+                if isinstance(tensordicts, TensorDictBase):
+                    if _sub_item:
+                        return tensordicts[_sub_item]
+                    return tensordicts
+            else:
+                tensordicts = self.tensordicts
+
             if len(_sub_item):
                 tensordicts = [td[_sub_item] for td in tensordicts]
             new_stack_dim = self.stack_dim - sum(
@@ -5583,7 +5628,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
 def _make_repr(key, item: MetaTensor, tensordict):
     if item.is_tensordict():
-        return f"{key}: {repr(tensordict[key])}"
+        return f"{key}: {repr(tensordict.get(key))}"
     return f"{key}: {item.get_repr()}"
 
 

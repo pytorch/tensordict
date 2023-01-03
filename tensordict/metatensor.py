@@ -96,7 +96,7 @@ class MetaTensor:
     @property
     def shape(self):
         _shape = self._shape
-        if _shape is None:
+        if _shape is None and self._tensor is not None:
             _shape = self._shape = _shape_fn(self._tensor)
         return _shape
 
@@ -114,7 +114,7 @@ class MetaTensor:
     @property
     def dtype(self):
         _dtype = self._dtype
-        if _dtype is None and not self.is_tensordict():
+        if _dtype is None and not self.is_tensordict() and self._tensor is not None:
             _dtype = self._dtype = _dtype_fn(self._tensor)
         return _dtype
 
@@ -122,7 +122,8 @@ class MetaTensor:
         _is_tensordict = self._is_tensordict
         if _is_tensordict is None:
             _is_tensordict = self._is_tensordict = (
-                not isinstance(self._tensor, torch.Tensor)
+                self._tensor is not None
+                and not isinstance(self._tensor, torch.Tensor)
                 and not self.is_memmap()
                 and not self.is_kjt()
             )
@@ -165,14 +166,20 @@ class MetaTensor:
         _is_kjt: Optional[bool] = None,
         _repr_tensordict: Optional[str] = None,
     ):
-        if len(shape) == 1 and not isinstance(shape[0], (Number,)):
+        if (
+            len(shape) == 1
+            and not isinstance(shape[0], (Number,))
+            and shape[0] is not None
+        ):
             tensor = shape[0]
             self._tensor = tensor
             return
-
-        if type(shape) is not torch.Size:
-            shape = torch.Size(shape)
-        self.shape = shape
+        elif len(shape) == 1 and shape[0] is None:
+            self.shape = None
+        else:
+            if type(shape) is not torch.Size:
+                shape = torch.Size(shape)
+            self.shape = shape
         self._device = device
         self._dtype = dtype if dtype is not None else torch.get_default_dtype()
         self._ndim = len(shape)
@@ -214,7 +221,7 @@ class MetaTensor:
             name = "MemmapTensor"
         elif self._is_kjt:
             name = "KeyedJaggedTensor"
-        elif self.is_shared() and self.device.type != "cuda":
+        elif self.is_shared() and self.device and self.device.type != "cuda":
             name = "SharedTensor"
         else:
             name = "Tensor"
@@ -225,7 +232,10 @@ class MetaTensor:
         if self.is_tensordict():
             return repr(self._tensor)
         else:
-            return f"{self.class_name}({self.shape}, dtype={self.dtype})"
+            shape = self.shape
+            if shape is None:
+                shape = "*"
+            return f"{self.class_name}({shape}, dtype={self.dtype})"
 
     def memmap_(self) -> MetaTensor:
         """Changes the storage of the MetaTensor to memmap.
@@ -260,9 +270,9 @@ class MetaTensor:
         return self
 
     def is_shared(self) -> bool:
-        if self._is_shared is None:
+        if self._is_shared is None and self._tensor is not None:
             self._is_shared = self._tensor.is_shared()
-        return self._is_shared
+        return bool(self._is_shared)
 
     def numel(self) -> int:
         if self._numel is None:
@@ -446,9 +456,17 @@ def _stack_meta(
                     f"Stacking meta tensors of different dtype is not "
                     f"allowed, got shapes {dtype} and {tensor.dtype}"
                 )
-
-    shape = list(shape)
-    shape.insert(dim, len(list_of_meta_tensors))
+    for tensor in list_of_meta_tensors:
+        if tensor.shape != shape:
+            shape = (None,)
+            break
+    else:
+        shape = list(shape)
+        shape.insert(dim, len(list_of_meta_tensors))
+    if dtype is None:
+        dtype = list_of_meta_tensors[0].dtype
+    if device is None:
+        device = list_of_meta_tensors[0].device
 
     return MetaTensor(
         *shape,
