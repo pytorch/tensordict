@@ -1804,7 +1804,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     ) -> TensorDictBase:
         if self._being_flattened:
             return self
-        try: 
+        try:
             self._being_flattened = True
             to_flatten = []
             existing_keys = self.keys(include_nested=True)
