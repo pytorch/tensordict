@@ -207,7 +207,60 @@ Accessing nested tensordicts can be achieved with a single index:
 >>> sub_value = tensordict["key 2", "sub-key"]
 ```
 
-# Disclaimer
+## TensorClass
+
+Content flexibility comes at the cost of predictability.
+In some cases, developers may be looking for data structure with a more explicit behavior.
+`tensordict` provides a `dataclass`-like decorator that allows for the creation of custom dataclasses that support
+the tensordict operations:
+```python
+>>> from tensordict.prototype import tensorclass
+>>> import torch
+>>> 
+>>> @tensorclass
+... class MyData:
+...    image: torch.Tensor
+...    mask: torch.Tensor
+...    label: torch.Tensor
+...
+...    def mask_image(self):
+...        return self.image[self.mask.expand_as(self.image)].view(*self.batch_size, -1)
+...
+...    def select_label(self, label):
+...        return self[self.label == label]
+...
+>>> images = torch.randn(100, 3, 64, 64)
+>>> label = torch.randint(10, (100,))
+>>> mask = torch.zeros(1, 64, 64, dtype=torch.bool).bernoulli_().expand(100, 1, 64, 64)
+>>> 
+>>> data = MyData(images, mask, label=label, batch_size=[100])
+>>>
+>>> print(data.select_label(1))
+MyData(
+    image=Tensor(torch.Size([11, 3, 64, 64]), dtype=torch.float32),
+    label=Tensor(torch.Size([11]), dtype=torch.int64),
+    mask=Tensor(torch.Size([11, 1, 64, 64]), dtype=torch.bool),
+    batch_size=torch.Size([11]),
+    device=None,
+    is_shared=False)
+>>> print(data.mask_image().shape)
+torch.Size([100, 6117])
+>>> print(data.reshape(10, 10))
+MyData(
+    image=Tensor(torch.Size([10, 10, 3, 64, 64]), dtype=torch.float32),
+    label=Tensor(torch.Size([10, 10]), dtype=torch.int64),
+    mask=Tensor(torch.Size([10, 10, 1, 64, 64]), dtype=torch.bool),
+    batch_size=torch.Size([10, 10]),
+    device=None,
+    is_shared=False)
+```
+As this example shows, one can write a specific data structures with dedicated methods while still enjoying the TensorDict
+artifacts such as shape operations (e.g. reshape or permutations), data manipulation (indexing, `cat` and `stack`) or calling
+arbitrary functions through the `apply` method (and many more).
+
+Tensorclasses support nesting and many more features.
+
+## Disclaimer
 
 TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
 Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility
