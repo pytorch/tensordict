@@ -99,19 +99,6 @@ class _TensorDictNode(SubTensorDict):
                 )
             super().__setitem__(key, item)
 
-    def __getitem__(self, key):
-        if isinstance(key, tuple):
-            key, subkey = key[0], key[1:]
-        else:
-            subkey = ()
-        if key in self._children:
-            if subkey:
-                return self._children[key][subkey]
-            return self._children[key]
-        if subkey:
-            raise KeyError("key not valid")
-        return super().__getitem__(key)
-
     def get(self, key):
         if isinstance(key, tuple):
             key, subkey = key[0], key[1:]
