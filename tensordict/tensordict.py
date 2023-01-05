@@ -672,7 +672,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if input_dict_or_td is self:
             # no op
             return self
-        # keys = set(self.keys(False))
         for key, value in input_dict_or_td.items():
             if clone and hasattr(value, "clone"):
                 value = value.clone()
