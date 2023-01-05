@@ -30,6 +30,7 @@ Tutorials
    :maxdepth: 2
 
    tutorials/dummy
+   tutorials/tensordict_dataset_fashionmnist
 
 Contents
 ========
