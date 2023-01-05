@@ -29,8 +29,7 @@ Tutorials
 .. toctree::
    :maxdepth: 2
 
-   tutorials/dummy
-   tutorials/tensordict_dataset_fashionmnist
+   tutorials/data_fashion
 
 Contents
 ========

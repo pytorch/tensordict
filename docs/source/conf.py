@@ -166,6 +166,6 @@ current_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(current_path)
 from content_generation import generate_tutorial_references
 
-generate_tutorial_references("../../tutorials/", "tutorials")
+generate_tutorial_references("../../tutorials/sphinx_tuto", "tutorial")
 generate_tutorial_references("../../tutorials/src/", "src")
 generate_tutorial_references("../../tutorials/media/", "media")
