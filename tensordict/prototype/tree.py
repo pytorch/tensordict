@@ -112,6 +112,19 @@ class _TensorDictNode(SubTensorDict):
             raise KeyError("key not valid")
         return super().__getitem__(key)
 
+    def get(self, key):
+        if isinstance(key, tuple):
+            key, subkey = key[0], key[1:]
+        else:
+            subkey = ()
+        if key in self._children:
+            if subkey:
+                return self._children[key].get(subkey)
+            return self._children[key]
+        if subkey:
+            raise KeyError("key not valid")
+        return super().get(key)
+
     def __delitem__(self, key):
         if isinstance(key, tuple):
             prekey, key = key[:-1], key[-1]
