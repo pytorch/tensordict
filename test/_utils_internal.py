@@ -52,6 +52,11 @@ class TestTensorDictsBase:
             device=device,
         )
 
+    def auto_nested_td(self, device):
+        td = self.td(device)
+        td["self"] = td
+        return td
+
     def stacked_td(self, device):
         td1 = TensorDict(
             source={

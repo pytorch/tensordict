@@ -1968,6 +1968,11 @@ class TestTensorDictRepr:
 
         return stack_td([td1, td2], 2)
 
+    def auto_nested_td(self, device, dtype):
+        td = self.td(device, dtype)
+        td["self"] = td
+        return td
+
     def memmap_td(self, device, dtype):
         return self.td(device, dtype).memmap_()
 
@@ -2072,6 +2077,22 @@ class TestTensorDictRepr:
     device={str(device)},
     is_shared={is_shared})"""
         assert repr(stacked_td) == expected
+
+    def test_repr_auto_nested(self, device, dtype):
+        auto_nested_td = self.auto_nested_td(device, dtype)
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
+        tensor_class = "Tensor"
+        expected = f"""TensorDict(
+    fields={{
+        a: {tensor_class}(torch.Size([4, 3, 2, 1, 5]), dtype={dtype}),
+        self: Auto-nested}},
+    batch_size=torch.Size([4, 3, 2, 1]),
+    device={str(device)},
+    is_shared={is_shared})"""
+        assert repr(auto_nested_td) == expected
 
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
     def test_repr_indexed_tensordict(self, device, dtype, index):
@@ -3434,6 +3455,39 @@ def test_shared_inheritance():
 
     td0 = td0.squeeze(0)
     assert td0.is_shared()
+
+
+@pytest.mark.parametrize("include_nested", [True, False])
+def test_keys_auto_nested(include_nested):
+    td1 = TensorDict(
+        {
+            "a": torch.ones(3, 4, 5),
+            "b": torch.zeros(3, 4, 5, dtype=torch.bool),
+        },
+        batch_size=[3, 4],
+    )
+    td2 = TensorDict(
+        {
+            "a": torch.ones(3, 4, 5),
+            "b": torch.zeros(3, 4, 5, dtype=torch.bool),
+        },
+        batch_size=[3, 4],
+    )
+    td1["nested"] = td2
+    td1["self"] = td1
+
+    keys_set = set(td1.keys(include_nested=include_nested))  # Ok
+    if include_nested is True:
+        assert keys_set == {
+            "a",
+            "b",
+            "self",
+            "nested",
+            ("nested", "a"),
+            ("nested", "b"),
+        }
+    else:
+        assert keys_set == {"a", "b", "self", "nested"}
 
 
 if __name__ == "__main__":
