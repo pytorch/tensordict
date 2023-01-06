@@ -624,6 +624,7 @@ TD_BATCH_SIZE = 4
         "td_reset_bs",
         "nested_td",
         "permute_td",
+        "auto_nested_td",
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
