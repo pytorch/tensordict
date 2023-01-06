@@ -7,6 +7,9 @@ SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = source
 BUILDDIR      = build
+DATADIR       = _data
+
+ZIPOPTS       ?= -qo
 
 # Put it first so that "make" without argument is like "make help".
 help:
@@ -18,3 +21,8 @@ help:
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
 %: Makefile
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+download:
+	# imagenet tutorial data
+	wget -nv -N https://download.pytorch.org/tutorial/hymenoptera_data.zip -P $(DATADIR)
+	unzip $(ZIPOPTS) $(DATADIR)/hymenoptera_data.zip -d $(SOURCEDIR)/reference/generated/tutorials/data
