@@ -945,10 +945,10 @@ if (downloadNote.length >= 1) {
     var tutorialUrlArray = $("#tutorial-type").text().split('/');
         tutorialUrlArray[0] = tutorialUrlArray[0] + "/sphinx-tutorials"
 
-    var githubLink = "https://github.com/pytorch/rl/blob/main/" + tutorialUrlArray.join("/") + ".py",
+    var githubLink = "https://github.com/pytorch-labs/tensordict/blob/main/" + tutorialUrlArray.join("/") + ".py",
         notebookLink = $(".reference.download")[1].href,
         notebookDownloadPath = notebookLink.split('_downloads')[1],
-        colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/_downloads" + notebookDownloadPath;
+        colabLink = "https://colab.research.google.com/github/pytorch-labs/tensordict/blob/gh-pages/_downloads" + notebookDownloadPath;
 
     $("#google-colab-link").wrap("<a href=" + colabLink + " data-behavior='call-to-action-event' data-response='Run in Google Colab' target='_blank'/>");
     $("#download-notebook-link").wrap("<a href=" + notebookLink + " data-behavior='call-to-action-event' data-response='Download Notebook'/>");
@@ -2073,10 +2073,10 @@ if (downloadNote.length >= 1) {
     var tutorialUrlArray = $("#tutorial-type").text().split('/');
         tutorialUrlArray[0] = tutorialUrlArray[0] + "/sphinx-tutorials"
 
-    var githubLink = "https://github.com/pytorch/rl/blob/main/" + tutorialUrlArray.join("/") + ".py",
+    var githubLink = "https://github.com/pytorch-labs/tensordict/blob/main/" + tutorialUrlArray.join("/") + ".py",
         notebookLink = $(".reference.download")[1].href,
         notebookDownloadPath = notebookLink.split('_downloads')[1],
-        colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/_downloads" + notebookDownloadPath;
+        colabLink = "https://colab.research.google.com/github/pytorch-labs/tensordict/blob/gh-pages/_downloads" + notebookDownloadPath;
 
     $("#google-colab-link").wrap("<a href=" + colabLink + " data-behavior='call-to-action-event' data-response='Run in Google Colab' target='_blank'/>");
     $("#download-notebook-link").wrap("<a href=" + notebookLink + " data-behavior='call-to-action-event' data-response='Download Notebook'/>");
@@ -3201,10 +3201,10 @@ if (downloadNote.length >= 1) {
     var tutorialUrlArray = $("#tutorial-type").text().split('/');
         tutorialUrlArray[0] = tutorialUrlArray[0] + "/sphinx-tutorials"
 
-    var githubLink = "https://github.com/pytorch/rl/blob/main/" + tutorialUrlArray.join("/") + ".py",
+    var githubLink = "https://github.com/pytorch-labs/tensordict/blob/main/" + tutorialUrlArray.join("/") + ".py",
         notebookLink = $(".reference.download")[1].href,
         notebookDownloadPath = notebookLink.split('_downloads')[1],
-        colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/_downloads" + notebookDownloadPath;
+        colabLink = "https://colab.research.google.com/github/pytorch-labs/tensordict/blob/gh-pages/_downloads" + notebookDownloadPath;
 
     $("#google-colab-link").wrap("<a href=" + colabLink + " data-behavior='call-to-action-event' data-response='Run in Google Colab' target='_blank'/>");
     $("#download-notebook-link").wrap("<a href=" + notebookLink + " data-behavior='call-to-action-event' data-response='Download Notebook'/>");
@@ -4328,10 +4328,10 @@ require=(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c=
   if (downloadNote.length >= 1) {
       var tutorialUrlArray = $("#tutorial-type").text().split('/');
 
-      var githubLink = "https://github.com/pytorch/rl/tree/tutorial_py_dup/sphinx-tutorials/" + tutorialUrlArray[tutorialUrlArray.length - 1] + ".py",
+      var githubLink = "https://github.com/pytorch-labs/tensordict/tree/main/tutorials/sphinx_tuto/" + tutorialUrlArray[tutorialUrlArray.length - 1] + ".py",
           notebookLink = $(".reference.download")[1].href,
           notebookDownloadPath = notebookLink.split('_downloads')[1],
-          colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/_downloads" + notebookDownloadPath;
+          colabLink = "https://colab.research.google.com/github/pytorch-labs/tensordict/blob/gh-pages/_downloads" + notebookDownloadPath;
 
       $("#google-colab-link").wrap("<a href=" + colabLink + " data-behavior='call-to-action-event' data-response='Run in Google Colab' target='_blank'/>");
       $("#download-notebook-link").wrap("<a href=" + notebookLink + " data-behavior='call-to-action-event' data-response='Download Notebook'/>");
@@ -4760,10 +4760,10 @@ require=(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c=
   if (downloadNote.length >= 1) {
       var tutorialUrlArray = $("#tutorial-type").text().split('/');
 
-      var githubLink = "https://github.com/pytorch/rl/tree/tutorial_py_dup/tutorials/" + tutorialUrlArray.join("/") + ".py",
+      var githubLink = "https://github.com/pytorch-labs/tensordict/tree/main/tutorials/sphinx_tuto/" + tutorialUrlArray.join("/") + ".py",
           notebookLink = $(".reference.download")[1].href,
           notebookDownloadPath = notebookLink.split('_downloads')[1],
-          colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/_downloads" + notebookDownloadPath;
+          colabLink = "https://colab.research.google.com/github/pytorch-labs/tensordict/blob/gh-pages/_downloads" + notebookDownloadPath;
 
       $("#google-colab-link").wrap("<a href=" + colabLink + " data-behavior='call-to-action-event' data-response='Run in Google Colab' target='_blank'/>");
       $("#download-notebook-link").wrap("<a href=" + notebookLink + " data-behavior='call-to-action-event' data-response='Download Notebook'/>");
