@@ -21,6 +21,9 @@
 
 
 # -- Project information -----------------------------------------------------
+import os
+import sys
+
 import pytorch_sphinx_theme
 import tensordict
 
@@ -63,11 +66,21 @@ extensions = [
 ]
 
 sphinx_gallery_conf = {
-    "examples_dirs": "../../gallery/",  # path to your example scripts
-    "gallery_dirs": "auto_examples",  # path to where to save gallery generated output
+    "examples_dirs": "reference/generated/tutorials/",  # path to your example scripts
+    "gallery_dirs": "tutorials",  # path to where to save gallery generated output
     "backreferences_dir": "gen_modules/backreferences",
     "doc_module": ("tensordict",),
+    "filename_pattern": "reference/generated/tutorials/",  # files to parse
+    "notebook_images": "reference/generated/tutorials/media/",  # images to parse
+    "download_all_examples": True,
 }
+
+# sphinx_gallery_conf = {
+#     "examples_dirs": "../../gallery/",  # path to your example scripts
+#     "gallery_dirs": "auto_examples",  # path to where to save gallery generated output
+#     "backreferences_dir": "gen_modules/backreferences",
+#     "doc_module": ("tensordict",),
+# }
 
 napoleon_use_ivar = True
 napoleon_numpy_docstring = False
@@ -148,3 +161,11 @@ intersphinx_mapping = {
 
 
 aafig_default_options = {"scale": 1.5, "aspect": 1.0, "proportional": True}
+
+current_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(current_path)
+from content_generation import generate_tutorial_references
+
+generate_tutorial_references("../../tutorials/sphinx_tuto", "tutorial")
+generate_tutorial_references("../../tutorials/src/", "src")
+generate_tutorial_references("../../tutorials/media/", "media")

@@ -23,10 +23,20 @@ Each individual step of the training loop (data collection and transform, model 
 can be tailored to the use case at hand without impacting the others.
 For instance, the above example can be easily used across classification and segmentation tasks, among many others.
 
+Tutorials
+=========
+
+.. toctree::
+   :maxdepth: 2
+
+   tutorials/data_fashion
+   tutorials/tensorclass_fashion
+
+Contents
+========
 
 .. toctree::
    :maxdepth: 3
-   :caption: Contents:
 
    overview
    distributed

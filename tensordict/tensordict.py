@@ -1982,6 +1982,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         # if return_simple_view and not self.is_memmap():
         return self._index_tensordict(idx)
 
+    __getitems__ = __getitem__
+
     def __setitem__(
         self, index: INDEX_TYPING, value: Union[TensorDictBase, dict]
     ) -> None:
