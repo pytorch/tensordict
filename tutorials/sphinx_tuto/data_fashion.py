@@ -6,8 +6,11 @@ Using TensorDict for datasets
 
 
 ##############################################################################
-# In this tutorial we demonstrate how `TensorDict` can be used to efficiently
-# and transparently load and manage data inside a training pipeline. The tutorial is based heavily on the [PyTorch Quickstart Tutorial](https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html), but modified to demonstrate use of `TensorDict`.
+# In this tutorial we demonstrate how ``TensorDict`` can be used to
+# efficiently and transparently load and manage data inside a training
+# pipeline. The tutorial is based heavily on the `PyTorch Quickstart
+# Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__,
+# but modified to demonstrate use of ``TensorDict``.
 
 
 import torch
@@ -22,7 +25,10 @@ print(f"Using device: {device}")
 
 
 ###############################################################################
-# The `torchvision.datasets` module contains a number of convenient pre-prepared datasets. In this tutorial we'll use the relatively simple FashionMNIST dataset. Each image is an item of clothing, the objective is to classify the type of clothing in the image (e.g. "Bag", "Sneaker" etc.)."""
+# The ``torchvision.datasets`` module contains a number of convenient pre-prepared
+# datasets. In this tutorial we'll use the relatively simple FashionMNIST dataset. Each
+# image is an item of clothing, the objective is to classify the type of clothing in
+# the image (e.g. "Bag", "Sneaker" etc.).
 
 training_data = datasets.FashionMNIST(
     root="data",
@@ -38,10 +44,13 @@ test_data = datasets.FashionMNIST(
 )
 
 ###############################################################################
-# We will create two tensordicts, one each for the training and test data. We create memory-mapped tensors to hold the data. This will allow us to efficiently load batches of transformed data from disk rather than repeatedly load and transform individual images.
+# We will create two tensordicts, one each for the training and test data. We create
+# memory-mapped tensors to hold the data. This will allow us to efficiently load
+# batches of transformed data from disk rather than repeatedly load and transform
+# individual images.
 #
-# First we create the `MemmapTensor` containers.
-#
+# First we create the ``MemmapTensor`` containers.
+
 
 training_data_td = TensorDict(
     {
@@ -67,9 +76,9 @@ test_data_td = TensorDict(
 )
 
 ###############################################################################
-# Then we can iterate over the data to populate the memory-mapped tensors.
-# This takes a bit of time, but performing the transforms up-front will save repeated effort during training later.
-#
+# Then we can iterate over the data to populate the memory-mapped tensors. This takes a
+# bit of time, but performing the transforms up-front will save repeated effort during
+# training later.
 
 for i, (img, label) in enumerate(training_data):
     training_data_td[i] = TensorDict({"images": img, "targets": label}, [])
@@ -81,10 +90,13 @@ for i, (img, label) in enumerate(test_data):
 # DataLoaders
 # ----------------
 #
-# We'll create DataLoaders from the `torchvision`-provided Datasets, as well as from our memory-mapped TensorDicts.
+# We'll create DataLoaders from the ``torchvision``-provided Datasets, as well as from
+# our memory-mapped TensorDicts.
 #
-# Since `TensorDict` implements `__len__` and `__getitem__` (and also `__getitems__`) we can use it like a map-style Dataset and create a `DataLoader` directly from it. Note that because `TensorDict` can already handle batched indices, there is no need for collation, so we pass the identity function as `collate_fn`.
-#
+# Since ``TensorDict`` implements ``__len__`` and ``__getitem__`` (and also
+# ``__getitems__``) we can use it like a map-style Dataset and create a ``DataLoader``
+# directly from it. Note that because ``TensorDict`` can already handle batched indices,
+# there is no need for collation, so we pass the identity function as ``collate_fn``.
 
 batch_size = 64
 
@@ -102,7 +114,8 @@ test_dataloader_td = DataLoader(
 # Model
 # -------
 #
-# We use the same model from the [Quickstart Tutorial](https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html).
+# We use the same model from the
+# `Quickstart Tutorial <https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html>`__.
 #
 
 
@@ -132,7 +145,8 @@ model, model_td
 # Optimizing the parameters
 # ---------------------------------
 #
-# We'll optimise the parameters of the model using stochastic gradient descent and cross-entropy loss.
+# We'll optimise the parameters of the model using stochastic gradient descent and
+# cross-entropy loss.
 #
 
 loss_fn = nn.CrossEntropyLoss()
@@ -160,17 +174,9 @@ def train(dataloader, model, loss_fn, optimizer):
 
 
 ###############################################################################
-# The training loop for our `TensorDict`-based DataLoader is very similar, we just adjust how we unpack the data to the more explicit key-based retrieval offered by `TensorDict`.
-#
-# ```diff
-# - for batch, (X, y) in enumerate(dataloader):
-# -     X, y = X.to(device), y.to(device)
-# + for batch, data in enumerate(dataloader):
-# +     X, y = data["images"].contiguous(), data["targets"].contiguous()
-# ```
-#
-# The `.contiguous()` method loads the data stored in the memmap tensor.
-#
+# The training loop for our ``TensorDict``-based DataLoader is very similar, we just
+# adjust how we unpack the data to the more explicit key-based retrieval offered by
+# ``TensorDict``. The ``.contiguous()`` method loads the data stored in the memmap tensor.
 
 
 def train_td(dataloader, model, loss_fn, optimizer):
