@@ -26,3 +26,7 @@ download:
 	# imagenet tutorial data
 	wget -nv -N https://download.pytorch.org/tutorial/hymenoptera_data.zip -P $(DATADIR)
 	unzip $(ZIPOPTS) $(DATADIR)/hymenoptera_data.zip -d $(SOURCEDIR)/reference/generated/tutorials/data
+
+docs:
+	make download
+	make html
