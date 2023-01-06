@@ -31,6 +31,7 @@ Tutorials
 
    tutorials/data_fashion
    tutorials/tensorclass_fashion
+   tutorials/tensorclass_imagenet
 
 Contents
 ========
