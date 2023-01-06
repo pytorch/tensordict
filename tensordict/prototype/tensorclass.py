@@ -257,6 +257,10 @@ def tensorclass(cls: T) -> T:
             string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
             return f"{name}(\n{string})"
 
+        def __len__(self) -> int:
+            """Returns the length of first dimension, if there is, otherwise 0."""
+            return len(self.tensordict)
+
         def to_tensordict(self) -> TensorDict:
             """Convert the tensorclass into a regular TensorDict.
 

@@ -167,6 +167,14 @@ def test_batch_size():
     assert myc.X.shape == torch.Size([2, 3, 4])
 
 
+def test_len():
+    myc = MyData(X=torch.rand(2, 3, 4), y=torch.rand(2, 3, 4, 5), batch_size=[2, 3])
+    assert len(myc) == 2
+
+    myc2 = MyData(X=torch.rand(2, 3, 4), y=torch.rand(2, 3, 4, 5), batch_size=[])
+    assert len(myc2) == 0
+
+
 def test_indexing():
     data = MyData(
         X=torch.ones(3, 4, 5),
