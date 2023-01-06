@@ -30,6 +30,7 @@ Tutorials
    :maxdepth: 2
 
    tutorials/data_fashion
+   tutorials/tensorclass_fashion
 
 Contents
 ========
