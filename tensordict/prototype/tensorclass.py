@@ -118,7 +118,7 @@ def tensorclass(cls: T) -> T:
     EXPECTED_KEYS = set(datacls.__dataclass_fields__)
 
     class _TensorClass(datacls, metaclass=_TensorClassMeta, cls_repr=cls_repr):
-        def __init__(self, *args, _tensordict=None, **kwargs):
+        def __init__(self, *args, _tensordict=None, _non_tensordict=None, **kwargs):
             if (args or kwargs) and _tensordict is not None:
                 raise ValueError("Cannot pass both args/kwargs and _tensordict.")
 
@@ -127,7 +127,11 @@ def tensorclass(cls: T) -> T:
                     raise ValueError(
                         f"Keys from the tensordict ({set(_tensordict.keys())}) must correspond to the class attributes ({EXPECTED_KEYS})."
                     )
-                input_dict = {key: None for key in _tensordict.keys()}
+                # Handling Non-Tensor data
+                if _non_tensordict:
+                    input_dict = _non_tensordict
+                else:
+                    input_dict = {key: None for key in _tensordict.keys()}
                 super().__init__(**input_dict)
                 self.tensordict = _tensordict
             else:
@@ -144,6 +148,7 @@ def tensorclass(cls: T) -> T:
                 kwargs = self._set_default_values(kwargs)
                 new_args = [None for _ in args]
                 new_kwargs = {}
+                # Handling non-tensor data
                 for key, val in kwargs.items():
                     if isinstance(val, _accepted_classes):
                         new_kwargs[key] = None
@@ -239,8 +244,13 @@ def tensorclass(cls: T) -> T:
                 and all(isinstance(_item, str) for _item in item)
             ):
                 raise ValueError("Invalid indexing arguments.")
-            res = self.tensordict[item]
-            return _TensorClass(_tensordict=res)  # device=res.device)
+            tensor_res = self.tensordict[item]
+            non_tensor_res = {}
+            for key,val in self.__dict__.items():
+                if key != 'tensordict':
+                    non_tensor_res[key] = val
+
+            return _TensorClass(_tensordict=tensor_res, _non_tensordict=non_tensor_res)  # device=res.device)
 
         def __setitem__(self, item, value):
             if isinstance(item, str) or (
@@ -432,7 +442,7 @@ def _all_td_fields_as_str(td: TensorDictBase) -> str:
     )
 
 
-def _all_non_td_fields_as_str(dict) -> str:
+def _all_non_td_fields_as_str(dict) -> list:
     result = []
     for key, val in dict.items():
         if key not in 'tensordict' and val:
