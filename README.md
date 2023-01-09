@@ -5,8 +5,14 @@
 <a href="https://pypi.org/project/tensordict-nightly"><img src="https://img.shields.io/pypi/v/tensordict-nightly?label=nightly" alt="pypi nightly version"></a>
 [![Downloads](https://static.pepy.tech/personalized-badge/tensordict?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/tensordict)
 [![Downloads](https://static.pepy.tech/personalized-badge/tensordict-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/tensordict-nightly)
+[![codecov](https://codecov.io/gh/pytorch-labs/tensordict/branch/main/graph/badge.svg?token=9QTUG6NAGQ)](https://codecov.io/gh/pytorch-labs/tensordict)
+[![pytorch](https://circleci.com/gh/pytorch-labs/tensordict.svg?style=shield)](https://circleci.com/gh/pytorch-labs/tensordict)
 
 # TensorDict
+
+[**Installation**](#installation) | [**General features**](#general) |
+[**Tensor-like features**](#tensor-like-features) | [**TensorDict for functional programming using FuncTorch**](#tensordict-for-functional-programming-using-functorch) |
+[**Lazy preallocation**](#lazy-preallocation) | [**Nesting TensorDicts**](#nesting-tensordicts) | [**TensorClass**](#tensorclass)
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.
 
@@ -267,4 +273,5 @@ Hopefully that should not happen too often, as the current roadmap mostly involv
 with the broader pytorch ecosystem.
 
 ## License
+
 TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.
