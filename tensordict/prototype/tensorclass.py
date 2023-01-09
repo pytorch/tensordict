@@ -143,7 +143,12 @@ def tensorclass(cls: T) -> T:
                 args = []
                 kwargs = self._set_default_values(kwargs)
                 new_args = [None for _ in args]
-                new_kwargs = {key: None for key in kwargs}
+                new_kwargs = {}
+                for key, val in kwargs.items():
+                    if isinstance(val, _accepted_classes):
+                        new_kwargs[key] = None
+                    else:
+                        new_kwargs[key] = val
 
                 super().__init__(*new_args, **new_kwargs)
 
@@ -151,7 +156,7 @@ def tensorclass(cls: T) -> T:
                     {
                         key: _get_typed_value(value)
                         for key, value in kwargs.items()
-                        if key not in ("batch_size",)
+                        if key not in ("batch_size",) and isinstance(value, _accepted_classes)
                     },
                     batch_size=batch_size,
                     device=device,
@@ -200,7 +205,8 @@ def tensorclass(cls: T) -> T:
             return super().__getattribute__(item)
 
         def __setattr__(self, key, value):
-            if "tensordict" not in self.__dict__ or key in ("batch_size", "device"):
+            if "tensordict" not in self.__dict__ or key in ("batch_size", "device") or \
+                    not isinstance(value, _accepted_classes):
                 return super().__setattr__(key, value)
             if key not in EXPECTED_KEYS:
                 raise AttributeError(
@@ -246,15 +252,26 @@ def tensorclass(cls: T) -> T:
                 raise ValueError(
                     "__setitem__ is only allowed for same-class assignement"
                 )
+            for key, val in self.__dict__.items():
+                if not isinstance(val, _accepted_classes):
+                    if val and val != value.__dict__[key]:
+                        raise ValueError(
+                            f"Expecting {repr(val)} for {key} instead got {repr(value.__dict__[key])}"
+                        )
             self.tensordict[item] = value.tensordict
 
         def __repr__(self) -> str:
             fields = _all_td_fields_as_str(self.tensordict)
             field_str = fields
+            non_tensor_fields = _all_non_td_fields_as_str(self.__dict__)
             batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
             device_str = indent(f"device={self.device}", 4 * " ")
             is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-            string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+            if len(non_tensor_fields):
+                non_tensor_field_str = indent(",\n".join(non_tensor_fields), 4 * " ",)
+                string = ",\n".join([field_str, non_tensor_field_str, batch_size_str, device_str, is_shared_str])
+            else:
+                string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
             return f"{name}(\n{string})"
 
         def to_tensordict(self) -> TensorDict:
@@ -413,6 +430,15 @@ def _all_td_fields_as_str(td: TensorDictBase) -> str:
         ),
         4 * " ",
     )
+
+
+def _all_non_td_fields_as_str(dict) -> str:
+    result = []
+    for key, val in dict.items():
+        if key not in 'tensordict' and val:
+            result.append(f"{key}={repr(val)}")
+
+    return result
 
 
 def _check_td_out_type(field_def):
