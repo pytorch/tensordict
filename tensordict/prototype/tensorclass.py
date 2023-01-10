@@ -1,5 +1,6 @@
 import dataclasses
 import functools
+import pdb
 import re
 import typing
 from dataclasses import dataclass
@@ -150,7 +151,7 @@ def tensorclass(cls: T) -> T:
                 new_kwargs = {}
                 # Handling non-tensor data
                 for key, val in kwargs.items():
-                    if isinstance(val, _accepted_classes):
+                    if isinstance(val, _accepted_classes) or is_tensorclass(val):
                         new_kwargs[key] = None
                     else:
                         new_kwargs[key] = val
@@ -161,7 +162,7 @@ def tensorclass(cls: T) -> T:
                     {
                         key: _get_typed_value(value)
                         for key, value in kwargs.items()
-                        if key not in ("batch_size",) and isinstance(value, _accepted_classes)
+                        if key not in ("batch_size",) and (isinstance(value, _accepted_classes) or is_tensorclass(value))
                     },
                     batch_size=batch_size,
                     device=device,
@@ -211,7 +212,7 @@ def tensorclass(cls: T) -> T:
 
         def __setattr__(self, key, value):
             if "tensordict" not in self.__dict__ or key in ("batch_size", "device") or \
-                    not isinstance(value, _accepted_classes):
+                    (not isinstance(value, _accepted_classes) and not is_tensorclass(value)):
                 return super().__setattr__(key, value)
             if key not in EXPECTED_KEYS:
                 raise AttributeError(
