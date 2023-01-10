@@ -226,7 +226,7 @@ class ProbabilisticTensorDictModule(nn.Module):
                 dist_key: tensordict[td_key]
                 for dist_key, td_key in self.in_keys.items()
             }
-            dist = self.distribution_class(**dist_kwargs)
+            dist = self.distribution_class(**dist_kwargs, **self.distribution_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
                 raise TypeError(
