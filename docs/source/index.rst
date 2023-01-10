@@ -41,6 +41,7 @@ Contents
 
    overview
    distributed
+   fx
    reference/index
 
 Indices and tables
