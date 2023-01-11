@@ -231,14 +231,14 @@ def test_setitem():
     z = "test_tensorclass"
     batch_size = [4]
     data[1] = MyData(X=x, y=y, z=z, batch_size=batch_size)
-    assert data[1].X == x
-    assert data[1].y == y
+    assert (data[1].X == x).all()
+    assert (data[1].y == y).all()
     assert data[1].z == z
 
     # Negative testcase for non-tensor data
     z = "test_bluff"
     with pytest.raises(
-            ValueError, match=f"Expecting {data.z} for 'z' instead got {z}"
+            ValueError, match=f"Expecting {repr(data.z)} for z instead got {repr(z)}"
     ):
         data[1] = MyData(X=x, y=y, z=z, batch_size=batch_size)
 
@@ -403,7 +403,7 @@ def test_reshape():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     z = 'test_tensorclass'
     batch_size = [3, 4]
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData(X=X, y=y, z=z, batch_size=batch_size)
     stacked_tc = data.reshape(-1)
     assert stacked_tc.X.shape == torch.Size([12, 5])
     assert stacked_tc.shape == torch.Size([12])
@@ -417,7 +417,7 @@ def test_view():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     z = 'test_tensorclass'
     batch_size = [3, 4]
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData(X=X, y=y, z=z, batch_size=batch_size)
     stacked_tc = data.view(-1)
     assert stacked_tc.X.shape == torch.Size([12, 5])
     assert stacked_tc.shape == torch.Size([12])
@@ -431,7 +431,7 @@ def test_permute():
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     z = 'test_tensorclass'
     batch_size = [3, 4]
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData(X=X, y=y, z=z, batch_size=batch_size)
     stacked_tc = data.permute(1, 0)
     assert stacked_tc.X.shape == torch.Size([4, 3, 5])
     assert stacked_tc.shape == torch.Size([4, 3])
