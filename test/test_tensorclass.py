@@ -20,6 +20,7 @@ from torch import Tensor
 class MyData:
     X: torch.Tensor
     y: torch.Tensor
+    z: str
 
     def stuff(self):
         return self.X + self.y
@@ -29,12 +30,21 @@ class MyData:
 class MyData2:
     X: torch.Tensor
     y: torch.Tensor
+    z: list
+
+
+@tensorclass
+class MyData3:
+    X: torch.Tensor
+    y: torch.Tensor
+    z: str
 
 
 def test_dataclass():
     data = MyData(
         X=torch.ones(3, 4, 5),
         y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        z="test_tensorclass",
         batch_size=[3, 4],
     )
     assert dataclasses.is_dataclass(data)
@@ -44,6 +54,7 @@ def test_type():
     data = MyData(
         X=torch.ones(3, 4, 5),
         y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        z="test_tensorclass",
         batch_size=[3, 4],
     )
     assert isinstance(data, MyData)
@@ -56,6 +67,7 @@ def test_device(device):
     data = MyData(
         X=torch.ones(3, 4, 5),
         y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        z="test_tensorclass",
         batch_size=[3, 4],
         device=device,
     )
@@ -122,6 +134,7 @@ def test_banned_types():
 def test_attributes():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = "test_tensorclass"
     batch_size = [3, 4]
     tensordict = TensorDict(
         {
@@ -131,7 +144,7 @@ def test_attributes():
         batch_size=[3, 4],
     )
 
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData(X=X, y=y, z=z, batch_size=batch_size)
 
     equality_tensordict = data.tensordict == tensordict
 
@@ -140,6 +153,7 @@ def test_attributes():
     assert data.batch_size == torch.Size(batch_size)
     assert equality_tensordict.all()
     assert equality_tensordict.batch_size == torch.Size(batch_size)
+    assert data.z == z
 
 
 def test_disallowed_attributes():
@@ -156,7 +170,11 @@ def test_disallowed_attributes():
 
 
 def test_batch_size():
-    myc = MyData(X=torch.rand(2, 3, 4), y=torch.rand(2, 3, 4, 5), batch_size=[2, 3])
+    myc = MyData(
+        X=torch.rand(2, 3, 4),
+        y=torch.rand(2, 3, 4, 5),
+        z="test_tensorclass",
+        batch_size=[2, 3])
 
     assert myc.batch_size == torch.Size([2, 3])
     assert myc.X.shape == torch.Size([2, 3, 4])
@@ -168,15 +186,17 @@ def test_batch_size():
 
 
 def test_indexing():
-    data = MyData(
-        X=torch.ones(3, 4, 5),
-        y=torch.zeros(3, 4, 5, dtype=torch.bool),
-        batch_size=[3, 4],
-    )
+    X = torch.ones(3, 4, 5)
+    y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = ["a", "b", "c"]
+    data = MyData2(X=X, y=y, z=z,
+                   batch_size=[3, 4])
 
     assert data[:2].batch_size == torch.Size([2, 4])
     assert data[1].batch_size == torch.Size([4])
     assert data[1][1].batch_size == torch.Size([])
+    assert data[1].z == data[2].z == data[:2].z == z
+    assert data[:2].X.shape == torch.Size([2, 4, 5])
 
     with pytest.raises(
         RuntimeError,
@@ -192,6 +212,7 @@ def test_setitem():
     data = MyData(
         X=torch.ones(3, 4, 5),
         y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        z="test_tensorclass",
         batch_size=[3, 4],
     )
     data[:2] = data[:2].clone()
@@ -204,76 +225,114 @@ def test_setitem():
     ):
         data[:, [1, 2]] = data.clone()
 
+    # Test cases for non-tensor data
+    x = torch.randn(4,5)
+    y = torch.zeros(4,5, dtype=torch.bool)
+    z = "test_tensorclass"
+    batch_size = [4]
+    data[1] = MyData(X=x, y=y, z=z, batch_size=batch_size)
+    assert data[1].X == x
+    assert data[1].y == y
+    assert data[1].z == z
+
+    # Negative testcase for non-tensor data
+    z = "test_bluff"
+    with pytest.raises(
+            ValueError, match=f"Expecting {data.z} for 'z' instead got {z}"
+    ):
+        data[1] = MyData(X=x, y=y, z=z, batch_size=batch_size)
+
 
 def test_stack():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = "test_tensorclass"
     batch_size = [3, 4]
 
-    data1 = MyData(X=X, y=y, batch_size=batch_size)
-    data2 = MyData(X=X, y=y, batch_size=batch_size)
-    data3 = MyData2(X=X, y=y, batch_size=batch_size)
+    data1 = MyData(X=X, y=y, z=z, batch_size=batch_size)
+    data2 = MyData(X=X, y=y, z=z, batch_size=batch_size)
+    data3 = MyData3(X=X, y=y, z=z, batch_size=batch_size)
+    data4 = MyData(X=X, y=y, z="test_bluff", batch_size=batch_size)
 
     stacked_tc = torch.stack([data1, data2], 0)
     assert type(stacked_tc) is type(data1)
     assert stacked_tc.X.shape == torch.Size([2, 3, 4, 5])
     assert (stacked_tc.X == 1).all()
     assert isinstance(stacked_tc.tensordict, LazyStackedTensorDict)
+    assert stacked_tc.z == data1.z == z
 
     with pytest.raises(
         TypeError,
         match=re.escape(
             "no implementation found for 'torch.stack' on types that implement "
             "__torch_function__: [<class 'test_tensorclass.MyData'>, "
-            "<class 'test_tensorclass.MyData2'>]"
-        ),
+            "<class 'test_tensorclass.MyData3'>]"
+            ),
     ):
         torch.stack([data1, data3], dim=0)
+
+    with pytest.raises(
+            ValueError,
+        match=f"{repr(data4.z)} and {repr(data1.z)} for the attribute 'z' are not matching"
+    ):
+        assert torch.stack([data1, data4], dim=0)
 
 
 def test_cat():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = 'test_tensorclass'
     batch_size = [3, 4]
 
-    data1 = MyData(X=X, y=y, batch_size=batch_size)
-    data2 = MyData(X=X, y=y, batch_size=batch_size)
-    data3 = MyData2(X=X, y=y, batch_size=batch_size)
+    data1 = MyData(X=X, y=y, z=z, batch_size=batch_size)
+    data2 = MyData(X=X, y=y, z=z, batch_size=batch_size)
+    data3 = MyData3(X=X, y=y, z=z, batch_size=batch_size)
+    data4 = MyData(X=X, y=y, z="test_bluff", batch_size=batch_size)
 
     catted_tc = torch.cat([data1, data2], 0)
     assert type(catted_tc) is type(data1)
     assert catted_tc.X.shape == torch.Size([6, 4, 5])
     assert (catted_tc.X == 1).all()
     assert isinstance(catted_tc.tensordict, TensorDict)
+    assert catted_tc.z == data1.z == z
 
     with pytest.raises(
         TypeError,
         match=re.escape(
             "no implementation found for 'torch.cat' on types that implement "
             "__torch_function__: [<class 'test_tensorclass.MyData'>, "
-            "<class 'test_tensorclass.MyData2'>]"
+            "<class 'test_tensorclass.MyData3'>]"
         ),
     ):
         torch.cat([data1, data3], dim=0)
+
+    with pytest.raises(
+            ValueError,
+        match=f"{repr(data4.z)} and {repr(data1.z)} for the attribute 'z' are not matching"
+    ):
+        assert torch.cat([data1, data4], dim=0)
 
 
 def test_unbind():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = ['a', 'b', 'c']
     batch_size = [3, 4]
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData2(X=X, y=y, z=z, batch_size=batch_size)
     unbind_tcs = torch.unbind(data, 0)
     assert type(unbind_tcs[0]) is type(data)
     assert len(unbind_tcs) == 3
     assert torch.all(torch.eq(unbind_tcs[0].X, torch.ones(4, 5)))
     assert unbind_tcs[0].batch_size == torch.Size([4])
+    assert unbind_tcs[0].z == unbind_tcs[1].z == unbind_tcs[2].z == z
 
 
 def test_full_like():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = 'test_tensorclass'
     batch_size = [3, 4]
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData(X=X, y=y, z=z, batch_size=batch_size)
     full_like_tc = torch.full_like(data, 9.0)
     assert type(full_like_tc) is type(data)
     assert full_like_tc.batch_size == torch.Size(data.batch_size)
@@ -281,46 +340,54 @@ def test_full_like():
     assert full_like_tc.y.size() == data.y.size()
     assert (full_like_tc.X == 9).all()
     assert full_like_tc.y.all()
+    assert full_like_tc.z == data.z == z
 
 
 def test_clone():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = 'test_tensorclass'
     batch_size = [3, 4]
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData(X=X, y=y, z=z, batch_size=batch_size)
     clone_tc = torch.clone(data)
     assert clone_tc.batch_size == torch.Size(data.batch_size)
     assert torch.all(torch.eq(clone_tc.X, data.X))
     assert torch.all(torch.eq(clone_tc.y, data.y))
+    assert clone_tc.z == data.z == z
 
 
 def test_squeeze():
     X = torch.ones(1, 4, 5)
     y = torch.zeros(1, 4, 5, dtype=torch.bool)
+    z = 'test_tensorclass'
     batch_size = [1, 4]
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData(X=X, y=y, z=z, batch_size=batch_size)
     squeeze_tc = torch.squeeze(data)
     assert squeeze_tc.batch_size == torch.Size([4])
     assert squeeze_tc.X.shape == torch.Size([4, 5])
     assert squeeze_tc.y.shape == torch.Size([4, 5])
+    assert squeeze_tc.z == data.z == z
 
 
 def test_unsqueeze():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = ['a', 'b', 'c']
     batch_size = [3, 4]
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData2(X=X, y=y, z=z, batch_size=batch_size)
     unsqueeze_tc = torch.unsqueeze(data, dim=1)
     assert unsqueeze_tc.batch_size == torch.Size([3, 1, 4])
     assert unsqueeze_tc.X.shape == torch.Size([3, 1, 4, 5])
     assert unsqueeze_tc.y.shape == torch.Size([3, 1, 4, 5])
+    assert unsqueeze_tc.z == data.z == z
 
 
 def test_split():
     X = torch.ones(3, 6, 5)
     y = torch.zeros(3, 6, 5, dtype=torch.bool)
+    z = 'test_tensorclass'
     batch_size = [3, 6]
-    data = MyData(X=X, y=y, batch_size=batch_size)
+    data = MyData(X=X, y=y, z=z, batch_size=batch_size)
     split_tcs = torch.split(data, split_size_or_sections=[3, 2, 1], dim=1)
     assert type(split_tcs[1]) is type(data)
     assert split_tcs[0].batch_size == torch.Size([3, 3])
@@ -328,11 +395,13 @@ def test_split():
     assert split_tcs[2].batch_size == torch.Size([3, 1])
     assert torch.all(torch.eq(split_tcs[0].X, torch.ones(3, 3, 5)))
     assert torch.all(torch.eq(split_tcs[2].y, torch.zeros(3, 1, 5, dtype=torch.bool)))
+    assert split_tcs[0].z == split_tcs[1].z == split_tcs[2].z == z
 
 
 def test_reshape():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = 'test_tensorclass'
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
     stacked_tc = data.reshape(-1)
@@ -340,11 +409,13 @@ def test_reshape():
     assert stacked_tc.shape == torch.Size([12])
     assert (stacked_tc.X == 1).all()
     assert isinstance(stacked_tc.tensordict, TensorDict)
+    assert stacked_tc.z == data.z == z
 
 
 def test_view():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = 'test_tensorclass'
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
     stacked_tc = data.view(-1)
@@ -352,11 +423,13 @@ def test_view():
     assert stacked_tc.shape == torch.Size([12])
     assert (stacked_tc.X == 1).all()
     assert isinstance(stacked_tc.tensordict, _ViewedTensorDict)
+    assert stacked_tc.z == data.z == z
 
 
 def test_permute():
     X = torch.ones(3, 4, 5)
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    z = 'test_tensorclass'
     batch_size = [3, 4]
     data = MyData(X=X, y=y, batch_size=batch_size)
     stacked_tc = data.permute(1, 0)
@@ -364,19 +437,23 @@ def test_permute():
     assert stacked_tc.shape == torch.Size([4, 3])
     assert (stacked_tc.X == 1).all()
     assert isinstance(stacked_tc.tensordict, _PermutedTensorDict)
+    assert stacked_tc.z == data.z == z
 
 
 def test_nested():
     @tensorclass
     class MyDataNested:
         X: torch.Tensor
+        z: str
         y: MyDataNested = None
 
     X = torch.ones(3, 4, 5)
+    z = 'test_tensorclass'
     batch_size = [3, 4]
-    data_nest = MyDataNested(X=X, batch_size=batch_size)
-    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
+    data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
     assert isinstance(data.y, MyDataNested), type(data.y)
+    assert data.z == data_nest.z == z
 
 
 def test_args():
@@ -386,20 +463,24 @@ def test_args():
         B: torch.Tensor
         A: torch.Tensor
         C: torch.Tensor
+        E: str
 
     D = torch.ones(3, 4, 5)
     B = torch.ones(3, 4, 5)
     A = torch.ones(3, 4, 5)
     C = torch.ones(3, 4, 5)
-    data1 = MyData(D, B=B, A=A, C=C, batch_size=[3, 4])
-    data2 = MyData(D, B, A=A, C=C, batch_size=[3, 4])
-    data3 = MyData(D, B, A, C=C, batch_size=[3, 4])
-    data4 = MyData(D, B, A, C, batch_size=[3, 4])
-    data = torch.stack([data1, data2, data3, data4], 0)
+    E = 'test_tensorclass'
+    data1 = MyData(D, B=B, A=A, C=C, E=E, batch_size=[3, 4])
+    data2 = MyData(D, B, A=A, C=C, E=E, batch_size=[3, 4])
+    data3 = MyData(D, B, A, C=C, E=E, batch_size=[3, 4])
+    data4 = MyData(D, B, A, C, E=E, batch_size=[3, 4])
+    data5 = MyData(D, B, A, C, E, batch_size=[3, 4])
+    data = torch.stack([data1, data2, data3, data4, data5], 0)
     assert (data.A == A).all()
     assert (data.B == B).all()
     assert (data.C == C).all()
     assert (data.D == D).all()
+    assert data.E == E
 
 
 @pytest.mark.parametrize("any_to_td", [True, False])
@@ -414,6 +495,7 @@ def test_nested_heterogeneous(any_to_td):
         X: Tensor
         z: TensorDictBase
         y: MyDataNest
+        v: str
 
     batch_size = [3, 4]
     if any_to_td:
@@ -423,7 +505,8 @@ def test_nested_heterogeneous(any_to_td):
     X = torch.ones(3, 4, 5)
     data_nest = MyDataNest(X=X, batch_size=batch_size)
     td = TensorDict({}, batch_size)
-    data = MyDataParent(X=X, y=data_nest, z=td, W=W, batch_size=batch_size)
+    v = 'test_tensorclass'
+    data = MyDataParent(X=X, y=data_nest, z=td, W=W, v=v, batch_size=batch_size)
     assert isinstance(data.y, MyDataNest)
     assert isinstance(data.y.X, Tensor)
     assert isinstance(data.X, Tensor)
@@ -434,6 +517,7 @@ def test_nested_heterogeneous(any_to_td):
     assert isinstance(data, MyDataParent)
     assert isinstance(data.z, TensorDict)
     assert isinstance(data.tensordict["y"], TensorDict)
+    assert data.v == v
 
 
 @pytest.mark.parametrize("any_to_td", [True, False])
@@ -448,6 +532,7 @@ def test_setattr(any_to_td):
         X: Tensor
         z: TensorDictBase
         y: MyDataNest
+        v: str
 
     batch_size = [3, 4]
     if any_to_td:
@@ -459,7 +544,8 @@ def test_setattr(any_to_td):
     td = TensorDict({}, batch_size)
     td_clone = td.clone()
     data_nest = MyDataNest(X=X, batch_size=batch_size)
-    data = MyDataParent(X=X, y=data_nest, z=td, W=W, batch_size=batch_size)
+    v = 'test_tensorclass'
+    data = MyDataParent(X=X, y=data_nest, z=td, W=W, v=v, batch_size=batch_size)
     data_nest_clone = data_nest.clone()
     assert type(data_nest_clone) is type(data_nest)
     data.y = data_nest_clone
@@ -472,6 +558,9 @@ def test_setattr(any_to_td):
     assert data.tensordict["X"] is X_clone
     data.z = td_clone
     assert data.tensordict["z"] is td_clone
+    v_new = 'test_bluff'
+    data.v = v_new
+    assert data.v == v_new
     # check that you can't mess up the batch_size
     with pytest.raises(
         RuntimeError, match=re.escape("the tensor smth has shape torch.Size([1]) which")
@@ -546,8 +635,10 @@ def test_kjt():
     class MyData:
         X: torch.Tensor
         y: KeyedJaggedTensor
+        z: str
 
-    data = MyData(X=torch.zeros(3, 1), y=kjt, batch_size=[3])
+    z = 'test_tensorclass'
+    data = MyData(X=torch.zeros(3, 1), y=kjt, z=z, batch_size=[3])
     subdata = data[:2]
     assert (
         subdata.y["index_0"].to_padded_dense() == torch.tensor([[1.0, 2.0], [0.0, 0.0]])
@@ -557,6 +648,7 @@ def test_kjt():
     assert (
         subdata.y["index_0"].to_padded_dense() == torch.tensor([[1.0, 2.0], [3.0, 0.0]])
     ).all()
+    assert subdata.z == data.z == z
 
 
 if __name__ == "__main__":

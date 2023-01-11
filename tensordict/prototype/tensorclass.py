@@ -485,7 +485,9 @@ def _validate_non_tensor_data(list_tds) -> bool:
         if key != 'tensordict' and val:
             for tds in list_tds_copy:
                 if val != tds.__dict__[key]:
-                    return False
+                    raise ValueError(
+                        f"{repr(val)} and {repr(tds.__dict__[key])} for the attribute {repr(key)} are not matching"
+                    )
 
     return True
 
