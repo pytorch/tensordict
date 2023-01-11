@@ -80,9 +80,13 @@ def _trace_tensordictsequential(td_sequential):
 
     for i, td_module in enumerate(td_sequential.module):
         # trace the submodule
-        graph = fx.Tracer().trace(td_module.module)
-
-        node_iter = iter(graph.nodes)
+        if isinstance(td_module, TensorDictSequential):
+            graph = _trace_tensordictsequential(td_module).graph
+            node_iter = iter(graph.nodes)
+            next(node_iter)  # discard the tensordict placeholder from submodule graph
+        else:
+            graph = fx.Tracer().trace(td_module.module)
+            node_iter = iter(graph.nodes)
 
         for in_key, node in zip(td_module.in_keys, node_iter):
             # the first nodes, in order, are placeholders for the in_keys. We instead
@@ -101,7 +105,14 @@ def _trace_tensordictsequential(td_sequential):
             if node.op == "output":
                 # capture the outputs but don't clone the output node (this would
                 # result in prematurely returning intermediate values)
-                for out_key, arg in zip(td_module.out_keys, node.args):
+                # need to unpack the args in the case that the submodule is itself a
+                # TensorDictSequential that returns a tuple of arguments
+                for out_key, arg in zip(
+                    td_module.out_keys,
+                    node.args[0]
+                    if isinstance(td_module, TensorDictSequential)
+                    else node.args,
+                ):
                     # any outputs of submodules will need to be returned at the end
                     outputs[out_key] = env[arg.name]
                     # we also need to make outputs of submodules available as inputs
