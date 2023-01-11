@@ -7,6 +7,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.prototype.fx import symbolic_trace
 
 
+# modules for sequential benchmark
 class Net(nn.Module):
     def __init__(self, input_size=100, hidden_size=50, output_size=10):
         super().__init__()
@@ -21,6 +22,25 @@ class Net(nn.Module):
 class Masker(nn.Module):
     def forward(self, x, mask):
         return torch.softmax(x * mask, dim=1)
+
+
+# modules for nested sequential benchmark
+class FCLayer(nn.Module):
+    def __init__(self, input_size, output_size):
+        super().__init__()
+        self.fc = nn.Linear(input_size, output_size)
+
+    def forward(self, x):
+        return torch.relu(self.fc(x))
+
+
+class Output(nn.Module):
+    def __init__(self, input_size, output_size=10):
+        super().__init__()
+        self.fc = nn.Linear(input_size, output_size)
+
+    def forward(self, x):
+        return torch.softmax(self.fc(x), dim=1)
 
 
 if __name__ == "__main__":
@@ -59,6 +79,34 @@ if __name__ == "__main__":
         timeit.timeit(
             "module(tensordict)",
             globals={"tensordict": tensordict, "module": graph_module},
+            number=10_000,
+        ),
+    )
+
+    tdmodule1 = TensorDictModule(FCLayer(100, 50), ["input"], ["x"])
+    tdmodule2 = TensorDictModule(FCLayer(50, 40), ["x"], ["x"])
+    tdmodule3 = TensorDictModule(Output(40, 10), ["x"], ["probabilities"])
+    nested_tdmodule = TensorDictSequential(
+        TensorDictSequential(tdmodule1, tdmodule2), tdmodule3
+    )
+
+    nested_graph_module = symbolic_trace(nested_tdmodule)
+    tensordict = TensorDict({"input": torch.rand(32, 100)}, [32])
+
+    print(
+        "nested_forward, TensorDictSequential",
+        timeit.timeit(
+            "module(tensordict)",
+            globals={"tensordict": tensordict, "module": nested_tdmodule},
+            number=10_000,
+        ),
+    )
+
+    print(
+        "nested_forward, GraphModule",
+        timeit.timeit(
+            "module(tensordict)",
+            globals={"tensordict": tensordict, "module": nested_graph_module},
             number=10_000,
         ),
     )
