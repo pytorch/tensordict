@@ -71,3 +71,41 @@ def test_tensordictsequential_trace_consistency():
 
     assert (logits == tensordict["intermediate", "x"]).all()
     assert (probabilities == tensordict["output", "probabilities"]).all()
+
+
+def test_nested_tensordictsequential_trace_consistency():
+    class Net(nn.Module):
+        def __init__(self, input_size, output_size):
+            super().__init__()
+            self.fc = nn.Linear(input_size, output_size)
+
+        def forward(self, x):
+            return torch.relu(self.fc(x))
+
+    class Output(nn.Module):
+        def __init__(self, input_size, output_size=10):
+            super().__init__()
+            self.fc = nn.Linear(input_size, output_size)
+
+        def forward(self, x):
+            return torch.softmax(self.fc(x), dim=1)
+
+    module1 = Net(100, 50)
+    module2 = Net(50, 40)
+    module3 = Output(40, 10)
+
+    tdmodule1 = TensorDictModule(module1, ["input"], ["x"])
+    tdmodule2 = TensorDictModule(module2, ["x"], ["x"])
+    tdmodule3 = TensorDictModule(module3, ["x"], ["probabilities"])
+
+    tdmodule = TensorDictSequential(
+        TensorDictSequential(tdmodule1, tdmodule2), tdmodule3
+    )
+    graph_module = symbolic_trace(tdmodule)
+
+    tensordict = TensorDict({"input": torch.rand(32, 100)}, [32])
+    tdmodule = tdmodule(tensordict)
+    logits, probabilities = graph_module(tensordict)
+
+    assert (logits == tensordict["x"]).all()
+    assert (probabilities == tensordict["probabilities"]).all()
