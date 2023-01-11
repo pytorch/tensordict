@@ -228,11 +228,12 @@ def tensorclass(cls: T) -> T:
             if not callable(res):
                 return res
             func = res
+            non_tensor_dict = _get_non_tensor_dict(self.__dict__)
 
             def wrapped_func(*args, **kwargs):
                 res = func(*args, **kwargs)
                 if isinstance(res, TensorDictBase):
-                    new = _TensorClass(_tensordict=res)
+                    new = _TensorClass(_tensordict=res, _non_tensordict=non_tensor_dict)
                     return new
                 else:
                     return res
