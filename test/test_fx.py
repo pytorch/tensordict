@@ -23,11 +23,20 @@ def test_tensordictmodule_trace_consistency():
     graph_module = symbolic_trace(module)
 
     tensordict = TensorDict({"input": torch.randn(32, 100)}, [32])
-    tensordict = module(tensordict)
-    logits, probabilities = graph_module(tensordict)
 
-    assert (logits == tensordict["outputs", "logits"]).all()
-    assert (probabilities == tensordict["outputs", "probabilities"]).all()
+    module_out = TensorDict({}, [])
+    graph_module_out = TensorDict({}, [])
+
+    module(tensordict, tensordict_out=module_out)
+    graph_module(tensordict, tensordict_out=graph_module_out)
+
+    assert (
+        module_out["outputs", "logits"] == graph_module_out["outputs", "logits"]
+    ).all()
+    assert (
+        module_out["outputs", "probabilities"]
+        == graph_module_out["outputs", "probabilities"]
+    ).all()
 
 
 def test_tensordictsequential_trace_consistency():
@@ -66,11 +75,19 @@ def test_tensordictsequential_trace_consistency():
         batch_size=[32],
     )
 
-    tensordict = module(tensordict)
-    logits, probabilities = graph_module(tensordict)
+    module_out = TensorDict({}, [])
+    graph_module_out = TensorDict({}, [])
 
-    assert (logits == tensordict["intermediate", "x"]).all()
-    assert (probabilities == tensordict["output", "probabilities"]).all()
+    module(tensordict, tensordict_out=module_out)
+    graph_module(tensordict, tensordict_out=graph_module_out)
+
+    assert (
+        graph_module_out["intermediate", "x"] == module_out["intermediate", "x"]
+    ).all()
+    assert (
+        graph_module_out["output", "probabilities"]
+        == module_out["output", "probabilities"]
+    ).all()
 
 
 def test_nested_tensordictsequential_trace_consistency():
@@ -104,8 +121,12 @@ def test_nested_tensordictsequential_trace_consistency():
     graph_module = symbolic_trace(tdmodule)
 
     tensordict = TensorDict({"input": torch.rand(32, 100)}, [32])
-    tdmodule = tdmodule(tensordict)
-    logits, probabilities = graph_module(tensordict)
 
-    assert (logits == tensordict["x"]).all()
-    assert (probabilities == tensordict["probabilities"]).all()
+    module_out = TensorDict({}, [])
+    graph_module_out = TensorDict({}, [])
+
+    tdmodule(tensordict, tensordict_out=module_out)
+    graph_module(tensordict, tensordict_out=graph_module_out)
+
+    assert (module_out["x"] == graph_module_out["x"]).all()
+    assert (module_out["probabilities"] == graph_module_out["probabilities"]).all()

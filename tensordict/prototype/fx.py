@@ -1,12 +1,38 @@
 import operator
 
 import torch.fx as fx
+import torch.nn as nn
 
 # from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 
 
 __all__ = ["symbolic_trace"]
+
+
+class TDGraphModule(nn.Module):
+    def __init__(self, graph_module, out_keys):
+        super().__init__()
+        self.out_keys = out_keys
+        self._gm = graph_module
+
+    def forward(self, tensordict, tensordict_out=None, **kwargs):
+        outputs = self._gm(tensordict, **kwargs)
+
+        if tensordict_out is None:
+            tensordict_out = tensordict
+
+        for out_key, output in zip(self.out_keys, outputs):
+            if out_key != "_":
+                tensordict_out.set(out_key, output, _run_checks=False)
+
+        return tensordict_out
+
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self._gm, name)
 
 
 def symbolic_trace(td_module):
@@ -64,7 +90,9 @@ def _trace_tensordictmodule(td_module):
         new_node = new_graph.node_copy(node, lambda x: env[x.name])
         env[node.name] = new_node
 
-    return fx.GraphModule(td_module.module, new_graph)
+    return TDGraphModule(
+        fx.GraphModule(td_module.module, new_graph), td_module.out_keys
+    )
 
 
 def _trace_tensordictsequential(td_sequential):
@@ -131,4 +159,6 @@ def _trace_tensordictsequential(td_sequential):
     # submodules in the graph and returns them together
     new_graph.output(tuple(outputs.values()))
 
-    return fx.GraphModule(td_sequential.module, new_graph)
+    return TDGraphModule(
+        fx.GraphModule(td_sequential.module, new_graph), tuple(outputs.keys())
+    )
