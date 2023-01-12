@@ -14,13 +14,17 @@ from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, Tensor
 from torch import Tensor
 
 
-@tensorclass
 class MyData:
     X: torch.Tensor
     y: torch.Tensor
 
     def stuff(self):
         return self.X + self.y
+
+
+# this slightly convoluted construction of MyData allows us to check that instances of
+# the tensorclass are instances of the original class.
+MyDataUndecorated, MyData = MyData, tensorclass(MyData)
 
 
 @tensorclass
@@ -44,6 +48,7 @@ def test_type():
         y=torch.zeros(3, 4, 5, dtype=torch.bool),
         batch_size=[3, 4],
     )
+    assert isinstance(data, MyDataUndecorated)
     assert isinstance(data, MyData)
     assert is_tensorclass(data)
     assert is_tensorclass(MyData)
@@ -511,7 +516,7 @@ def test_defaultfactory():
     @tensorclass
     class MyData:
         X: torch.Tensor = None  # TODO: do we want to allow any default, say an integer?
-        y: torch.Tensor = dataclasses.field(default_factory=torch.ones(3, 4, 5))
+        y: torch.Tensor = dataclasses.field(default_factory=lambda: torch.ones(3, 4, 5))
 
     data = MyData(batch_size=[3, 4])
     assert data.__dict__["y"] is None
