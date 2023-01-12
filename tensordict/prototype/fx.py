@@ -111,36 +111,75 @@ def _trace_tensordictsequential(td_sequential):
         if isinstance(td_module, TensorDictSequential):
             graph = _trace_tensordictsequential(td_module).graph
             node_iter = iter(graph.nodes)
-            next(node_iter)  # discard the tensordict placeholder from submodule graph
+            _td = next(node_iter)  # tensordict placeholder from submodule graph
+
+            # in the graph of TensorDictSequential, the getitem calls to the tensordict
+            # need not come first, so we iterate over all nodes and detect when we've
+            # read a key on the tensordict placeholder
+            for node in node_iter:
+                if (
+                    node.op == "call_function"
+                    and node.target == operator.getitem
+                    and node.args[0] == _td
+                ):
+                    in_key = node.args[1]
+                    if in_key in inputs:
+                        new_node = inputs[in_key]
+                    else:
+                        # key has not yet been accessed, get it from the tensordict
+                        output_proxy = operator.getitem(td, in_key)
+                        new_node = output_proxy.node
+                        inputs[in_key] = new_node
+                    env[node.name] = new_node
+
+            # create a new iterator over nodes that filters out the getitem nodes we
+            # just accessed
+            node_iter = filter(
+                lambda node: not (
+                    node.op == "call_function"
+                    and node.target == operator.getitem
+                    and node.args[0] == _td
+                ),
+                graph.nodes,
+            )
+            next(node_iter)  # discard tensordict placeholder
+
         else:
             graph = fx.Tracer().trace(td_module.module)
             node_iter = iter(graph.nodes)
 
-        for in_key, node in zip(td_module.in_keys, node_iter):
-            # the first nodes, in order, are placeholders for the in_keys. We instead
-            # check if they have been read before, if so we load from inputs, otherwise
-            # we read from the tensordict proxy using operator.getitem
-            if in_key in inputs:
-                new_node = inputs[in_key]
-            else:
-                output_proxy = operator.getitem(td, in_key)
-                new_node = output_proxy.node
-                inputs[in_key] = new_node
-            env[node.name] = new_node
+            for in_key, node in zip(td_module.in_keys, node_iter):
+                # the first nodes, in order, are placeholders for the in_keys. We
+                # instead check if they have been read before, if so we load from
+                # inputs, otherwise we read from the tensordict proxy using
+                # operator.getitem
+                if in_key in inputs:
+                    new_node = inputs[in_key]
+                else:
+                    output_proxy = operator.getitem(td, in_key)
+                    new_node = output_proxy.node
+                    inputs[in_key] = new_node
+                env[node.name] = new_node
 
         # clone the remaining nodes
         for node in node_iter:
             if node.op == "output":
                 # capture the outputs but don't clone the output node (this would
                 # result in prematurely returning intermediate values)
+
                 # need to unpack the args in the case that the submodule is itself a
                 # TensorDictSequential that returns a tuple of arguments
-                for out_key, arg in zip(
-                    td_module.out_keys,
+                args = (
                     node.args[0]
                     if isinstance(td_module, TensorDictSequential)
-                    else node.args,
-                ):
+                    else node.args
+                )
+
+                # if the submodule has multiple outputs, args has structure
+                # ((out1, out2,),), so we need to do some extra unpacking
+                args = args[0] if isinstance(args[0], tuple) else args
+
+                for out_key, arg in zip(td_module.out_keys, args):
                     # any outputs of submodules will need to be returned at the end
                     outputs[out_key] = env[arg.name]
                     # we also need to make outputs of submodules available as inputs
