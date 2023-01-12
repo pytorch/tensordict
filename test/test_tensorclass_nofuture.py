@@ -1,6 +1,9 @@
 import argparse
 import dataclasses
+import pickle
 import re
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Optional, Union
 
 import pytest
@@ -10,7 +13,12 @@ from _utils_internal import get_available_devices
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.prototype import is_tensorclass, tensorclass
-from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
+from tensordict.tensordict import (
+    _PermutedTensorDict,
+    _ViewedTensorDict,
+    assert_allclose_td,
+    TensorDictBase,
+)
 from torch import Tensor
 
 
@@ -568,6 +576,26 @@ def test_kjt():
     assert (
         subdata.y["index_0"].to_padded_dense() == torch.tensor([[1.0, 2.0], [3.0, 0.0]])
     ).all()
+
+
+def test_pickle():
+    data = MyData(
+        X=torch.ones(3, 4, 5),
+        y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        batch_size=[3, 4],
+    )
+
+    with TemporaryDirectory() as tempdir:
+        tempdir = Path(tempdir)
+
+        with open(tempdir / "test.pkl", "wb") as f:
+            pickle.dump(data, f)
+
+        with open(tempdir / "test.pkl", "rb") as f:
+            data2 = pickle.load(f)
+
+    assert_allclose_td(data.to_tensordict(), data2.to_tensordict())
+    assert isinstance(data2, MyData)
 
 
 if __name__ == "__main__":
