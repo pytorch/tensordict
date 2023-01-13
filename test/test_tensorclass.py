@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import os
+import pickle
 import re
+from multiprocessing import Pool
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Optional, Union
 
 import pytest
@@ -12,11 +17,15 @@ from _utils_internal import get_available_devices
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.prototype import is_tensorclass, tensorclass
-from tensordict.tensordict import _PermutedTensorDict, _ViewedTensorDict, TensorDictBase
+from tensordict.tensordict import (
+    _PermutedTensorDict,
+    _ViewedTensorDict,
+    assert_allclose_td,
+    TensorDictBase,
+)
 from torch import Tensor
 
 
-@tensorclass
 class MyData:
     X: torch.Tensor
     y: torch.Tensor
@@ -24,6 +33,11 @@ class MyData:
 
     def stuff(self):
         return self.X + self.y
+
+
+# this slightly convoluted construction of MyData allows us to check that instances of
+# the tensorclass are instances of the original class.
+MyDataUndecorated, MyData = MyData, tensorclass(MyData)
 
 
 @tensorclass
@@ -60,6 +74,8 @@ def test_type():
     assert isinstance(data, MyData)
     assert is_tensorclass(data)
     assert is_tensorclass(MyData)
+    # we get an instance of the user defined class, not a dynamically defined subclass
+    assert type(data) is MyDataUndecorated
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -183,6 +199,14 @@ def test_batch_size():
 
     assert myc.batch_size == torch.Size([2])
     assert myc.X.shape == torch.Size([2, 3, 4])
+
+
+def test_len():
+    myc = MyData(X=torch.rand(2, 3, 4), y=torch.rand(2, 3, 4, 5), batch_size=[2, 3])
+    assert len(myc) == 2
+
+    myc2 = MyData(X=torch.rand(2, 3, 4), y=torch.rand(2, 3, 4, 5), batch_size=[])
+    assert len(myc2) == 0
 
 
 def test_indexing():
@@ -594,7 +618,7 @@ def test_defaultfactory():
     @tensorclass
     class MyData:
         X: torch.Tensor = None  # TODO: do we want to allow any default, say an integer?
-        y: torch.Tensor = dataclasses.field(default_factory=torch.ones(3, 4, 5))
+        y: torch.Tensor = dataclasses.field(default_factory=lambda: torch.ones(3, 4, 5))
 
     data = MyData(batch_size=[3, 4])
     assert data.__dict__["y"] is None
@@ -649,6 +673,37 @@ def test_kjt():
         subdata.y["index_0"].to_padded_dense() == torch.tensor([[1.0, 2.0], [3.0, 0.0]])
     ).all()
     assert subdata.z == data.z == z
+
+
+def test_pickle():
+    data = MyData(
+        X=torch.ones(3, 4, 5),
+        y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        batch_size=[3, 4],
+    )
+
+    with TemporaryDirectory() as tempdir:
+        tempdir = Path(tempdir)
+
+        with open(tempdir / "test.pkl", "wb") as f:
+            pickle.dump(data, f)
+
+        with open(tempdir / "test.pkl", "rb") as f:
+            data2 = pickle.load(f)
+
+    assert_allclose_td(data.to_tensordict(), data2.to_tensordict())
+    assert isinstance(data2, MyData)
+
+
+def _make_data(shape):
+    return MyData(X=torch.rand(*shape), y=torch.rand(*shape), batch_size=shape[:1])
+
+
+def test_multiprocessing():
+    with Pool(os.cpu_count()) as p:
+        catted = torch.cat(p.map(_make_data, [(i, 2) for i in range(1, 9)]), dim=0)
+
+    assert catted.batch_size == torch.Size([36])
 
 
 if __name__ == "__main__":

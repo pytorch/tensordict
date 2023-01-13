@@ -13,3 +13,4 @@ dependencies:
     - pytest-mock
     - pytest-instafail
     - expecttest
+    - coverage

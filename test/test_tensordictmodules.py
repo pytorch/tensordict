@@ -90,6 +90,45 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
+    @pytest.mark.parametrize("out_keys", [["low"], ["low1"]])
+    @pytest.mark.parametrize("lazy", [True, False])
+    @pytest.mark.parametrize("max_dist", [1.0, 2.0])
+    @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
+    def test_stateful_probabilistic_kwargs(
+        self, lazy, interaction_mode, out_keys, max_dist
+    ):
+        torch.manual_seed(0)
+        if lazy:
+            net = nn.LazyLinear(4)
+        else:
+            net = nn.Linear(3, 4)
+
+        in_keys = ["in"]
+        net = TensorDictModule(module=net, in_keys=in_keys, out_keys=out_keys)
+
+        kwargs = {
+            "distribution_class": torch.distributions.Uniform,
+            "distribution_kwargs": {"high": max_dist},
+        }
+        if out_keys == ["low"]:
+            dist_in_keys = ["low"]
+        elif out_keys == ["low1"]:
+            dist_in_keys = {"low": "low1"}
+        else:
+            raise NotImplementedError
+
+        prob_module = ProbabilisticTensorDictModule(
+            in_keys=dist_in_keys, out_keys=["out"], **kwargs
+        )
+
+        tensordict_module = ProbabilisticTensorDictSequential(net, prob_module)
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+        with set_interaction_mode(interaction_mode):
+            tensordict_module(td)
+        assert td.shape == torch.Size([3])
+        assert td.get("out").shape == torch.Size([3, 4])
+
     @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
