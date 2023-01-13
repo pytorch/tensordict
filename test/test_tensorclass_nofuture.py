@@ -1,7 +1,9 @@
 import argparse
 import dataclasses
+import os
 import pickle
 import re
+from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Optional, Union
@@ -596,6 +598,17 @@ def test_pickle():
 
     assert_allclose_td(data.to_tensordict(), data2.to_tensordict())
     assert isinstance(data2, MyData)
+
+
+def _make_data(shape):
+    return MyData(X=torch.rand(*shape), y=torch.rand(*shape), batch_size=shape[:1])
+
+
+def test_multiprocessing():
+    with Pool(os.cpu_count()) as p:
+        catted = torch.cat(p.map(_make_data, [(i, 2) for i in range(1, 9)]), dim=0)
+
+    assert catted.batch_size == torch.Size([36])
 
 
 if __name__ == "__main__":
