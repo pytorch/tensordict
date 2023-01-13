@@ -1,4 +1,5 @@
 import operator
+from itertools import filterfalse, tee
 
 import torch.fx as fx
 import torch.nn as nn
@@ -43,6 +44,25 @@ def symbolic_trace(td_module):
     raise TypeError(f"Unsupported type {type(td_module)}")
 
 
+# cf. https://docs.python.org/3/library/itertools.html#itertools-recipes
+def _partition(pred, iterable):
+    "Use a predicate to partition entries into false entries and true entries"
+    # partition(is_odd, range(10)) --> 0 2 4 6 8   and  1 3 5 7 9
+    t1, t2 = tee(iterable)
+    return filterfalse(pred, t1), filter(pred, t2)
+
+
+def _parse_input_nodes(in_keys, nodes, td, inputs, env):
+    for in_key, node in zip(in_keys, nodes):
+        if in_key in inputs:
+            new_node = inputs[in_key]
+        else:
+            output_proxy = operator.getitem(td, in_key)
+            new_node = output_proxy.node
+            inputs[in_key] = new_node
+        env[node.name] = new_node
+
+
 def _trace_tensordictmodule(td_module):
     # this graph manipulation is based heavily on example in the PyTorch docs
     # https://pytorch.org/docs/stable/fx.html#proxy-retracing
@@ -62,31 +82,10 @@ def _trace_tensordictmodule(td_module):
 
     # the first nodes, in order, are placeholders for the in_keys. We consume them and
     # convert them to "call_function" nodes with target=operator.getitem.
-    for in_key, node in zip(td_module.in_keys, node_iter):
-        output_proxy = operator.getitem(td, in_key)
-        new_node = output_proxy.node
-        env[node.name] = new_node
+    _parse_input_nodes(td_module.in_keys, node_iter, td, {}, env)
 
     # the remaining nodes we simply clone, pulling any arguments from the env
     for node in node_iter:
-        # TODO: we would like to intercept the output node, populate the tensordict
-        # with the outputs, and then return the tensordict as the output, however the
-        # numerous runtime checks that are performed when setting a key are not easily
-        # traceable...
-        # if node.op == "output":
-        #     # output node, intercept args and repopulate tensordict
-        #     for out_key, arg in zip(td_module.out_keys, node.args):
-        #         TensorDict.set(
-        #             td,
-        #             out_key,
-        #             fx.Proxy(env[arg.name], tracer)
-        #             if isinstance(arg, fx.Node)
-        #             else arg,
-        #         )
-        #     new_graph.output(td, TensorDict)
-        # else:
-        #     new_node = new_graph.node_copy(node, lambda x: env[x.name])
-        #     env[node.name] = new_node
         new_node = new_graph.node_copy(node, lambda x: env[x.name])
         env[node.name] = new_node
 
@@ -114,52 +113,24 @@ def _trace_tensordictsequential(td_sequential):
             _td = next(node_iter)  # tensordict placeholder from submodule graph
 
             # in the graph of TensorDictSequential, the getitem calls to the tensordict
-            # need not come first, so we iterate over all nodes and detect when we've
-            # read a key on the tensordict placeholder
-            for node in node_iter:
-                if (
-                    node.op == "call_function"
-                    and node.target == operator.getitem
-                    and node.args[0] == _td
-                ):
-                    in_key = node.args[1]
-                    if in_key in inputs:
-                        new_node = inputs[in_key]
-                    else:
-                        # key has not yet been accessed, get it from the tensordict
-                        output_proxy = operator.getitem(td, in_key)
-                        new_node = output_proxy.node
-                        inputs[in_key] = new_node
-                    env[node.name] = new_node
-
-            # create a new iterator over nodes that filters out the getitem nodes we
-            # just accessed
-            node_iter = filter(
-                lambda node: not (
+            # need not come first, so we partition nodes into getitem calls on the
+            # placeholder tensordict (input_nodes) and the remaining nodes
+            node_iter, input_nodes = _partition(
+                lambda node, _td=_td: (
                     node.op == "call_function"
                     and node.target == operator.getitem
                     and node.args[0] == _td
                 ),
-                graph.nodes,
+                node_iter,
             )
-            next(node_iter)  # discard tensordict placeholder
+            _parse_input_nodes(td_module.in_keys, input_nodes, td, inputs, env)
 
         else:
             graph = fx.Tracer().trace(td_module.module)
+            # in the trace of a regular nn.Module the placeholder nodes all come first,
+            # so we just consume them in order
             node_iter = iter(graph.nodes)
-
-            for in_key, node in zip(td_module.in_keys, node_iter):
-                # the first nodes, in order, are placeholders for the in_keys. We
-                # instead check if they have been read before, if so we load from
-                # inputs, otherwise we read from the tensordict proxy using
-                # operator.getitem
-                if in_key in inputs:
-                    new_node = inputs[in_key]
-                else:
-                    output_proxy = operator.getitem(td, in_key)
-                    new_node = output_proxy.node
-                    inputs[in_key] = new_node
-                env[node.name] = new_node
+            _parse_input_nodes(td_module.in_keys, node_iter, td, inputs, env)
 
         # clone the remaining nodes
         for node in node_iter:
