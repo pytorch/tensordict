@@ -58,10 +58,11 @@ def test_type():
         y=torch.zeros(3, 4, 5, dtype=torch.bool),
         batch_size=[3, 4],
     )
-    assert isinstance(data, MyDataUndecorated)
     assert isinstance(data, MyData)
     assert is_tensorclass(data)
     assert is_tensorclass(MyData)
+    # we get an instance of the user defined class, not a dynamically defined subclass
+    assert type(data) is MyDataUndecorated
 
 
 @pytest.mark.parametrize("device", get_available_devices())
