@@ -3,7 +3,7 @@ on:
   push:
     branches: 
     - issue164-trigger
-
+  workflow_dispatch:
 jobs:
   benchmark:
     name: Run pytest-benchmark benchmark
@@ -18,7 +18,7 @@ jobs:
           pip install tensordict-nightly
           python setup.py develop
           cd benchmarks/
-          pytest pytree_benchmarks.py --benchmark-json output_.json
+          pytest pytree_benchmarks.py --benchmark-json output.json
       - name: Download previous benchmark data
         uses: actions/cache@v1
         with:
@@ -31,4 +31,3 @@ jobs:
           output-file-path: benchmarks/output.json
           external-data-json-path: ./cache/benchmark-data.json
           fail-on-alert: true
-
