@@ -3,6 +3,7 @@ import functools
 import pdb
 import re
 import typing
+import collections
 from dataclasses import dataclass
 from platform import python_version
 from textwrap import indent
@@ -23,6 +24,7 @@ PY37 = version.parse(python_version()) < version.parse("3.8")
 
 # For __future__.annotations, we keep a dict of str -> class to call the class based on the string
 CLASSES_DICT = {}
+TENSOR_CLASS_NON_TENSOR_DATA = collections.defaultdict(dict)
 
 # Regex precompiled patterns
 OPTIONAL_PATTERN = re.compile(r"Optional\[(.*?)\]")
@@ -151,7 +153,15 @@ def tensorclass(cls: T) -> T:
                 new_kwargs = {}
                 # Handling non-tensor data
                 for key, val in kwargs.items():
-                    if isinstance(val, _accepted_classes) or is_tensorclass(val):
+                    if isinstance(val, _accepted_classes):
+                        new_kwargs[key] = None
+                    elif is_tensorclass(val):
+                        expected_type = datacls.__dataclass_fields__[key].type
+                        TENSOR_CLASS_NON_TENSOR_DATA[expected_type] = {
+                            k: v
+                            for k, v in val.__dict__.items()
+                            if not isinstance(v, _accepted_classes) and not is_tensorclass(v)
+                        }
                         new_kwargs[key] = None
                     else:
                         new_kwargs[key] = val
@@ -425,8 +435,12 @@ def _get_typed_output(out, expected_type):
     # from __future__ import annotations turns types in stings. For those we use CLASSES_DICT.
     # Otherwise, if the output is some TensorDictBase subclass, we check the type and if it
     # does not match, we map it. In all other cases, just return what has been gathered.
+    non_tensor_dict = None
+
+    if expected_type in TENSOR_CLASS_NON_TENSOR_DATA:
+        non_tensor_dict = TENSOR_CLASS_NON_TENSOR_DATA[expected_type]
     if isinstance(expected_type, str) and expected_type in CLASSES_DICT:
-        out = CLASSES_DICT[expected_type](_tensordict=out)
+        out = CLASSES_DICT[expected_type](_tensordict=out, _non_tensordict=non_tensor_dict)
     elif (
         isinstance(expected_type, type)
         and not isinstance(out, expected_type)
