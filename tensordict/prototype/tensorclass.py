@@ -1,5 +1,6 @@
 import dataclasses
 import functools
+import pdb
 import re
 import typing
 import collections
@@ -33,7 +34,7 @@ UNION_PATTERN = re.compile(r"Union\[(.*?)\]")
 def is_tensorclass(obj):
     """Returns True if obj is either a tensorclass or an instance of a tensorclass"""
     cls = obj if isinstance(obj, type) else type(obj)
-    return dataclasses.is_dataclass(cls) and isinstance(cls, _TensorClassMeta)
+    return dataclasses.is_dataclass(cls) and cls.__name__ in CLASSES_DICT
 
 
 def tensorclass(cls: T) -> T:
@@ -219,8 +220,8 @@ def _init_wrapper(init, expected_keys):
     return wrapper
 
 
-def _build_from_tensordict(cls, tensordict):
-    return cls(_tensordict=tensordict)
+def _build_from_tensordict(cls, tensordict, non_tensordict):
+    return cls(_tensordict=tensordict, _non_tensordict=non_tensordict)
 
 
 def _getstate(self):
@@ -468,12 +469,12 @@ def _get_typed_output(out, expected_type):
         and not isinstance(out, expected_type)
         and isinstance(out, TensorDictBase)
     ):
-        out = expected_type(_tensordict=out)
+        out = expected_type(_tensordict=out, _non_tensordict=non_tensor_dict)
     elif isinstance(out, TensorDictBase):
         dest_dtype = _check_td_out_type(expected_type)
         if dest_dtype is not None:
             print(dest_dtype)
-            out = dest_dtype(_tensordict=out)
+            out = dest_dtype(_tensordict=out, _non_tensordict=non_tensor_dict)
 
     return out
 

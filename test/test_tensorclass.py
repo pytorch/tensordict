@@ -53,6 +53,11 @@ class MyData3:
     y: torch.Tensor
     z: str
 
+@tensorclass
+class MyData4:
+    X: torch.Tensor
+    y: torch.Tensor
+
 
 def test_dataclass():
     data = MyData(
@@ -679,6 +684,7 @@ def test_pickle():
     data = MyData(
         X=torch.ones(3, 4, 5),
         y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        z='test_tensorclass',
         batch_size=[3, 4],
     )
 
@@ -696,7 +702,7 @@ def test_pickle():
 
 
 def _make_data(shape):
-    return MyData(X=torch.rand(*shape), y=torch.rand(*shape), batch_size=shape[:1])
+    return MyData4(X=torch.rand(*shape),y=torch.rand(*shape),batch_size=shape[:1])
 
 
 def test_multiprocessing():
