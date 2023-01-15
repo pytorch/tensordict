@@ -11,8 +11,8 @@ from tensordict import TensorDict
 # use this to checkout a branch
 def checkout(branch):
 
-    repo = git.Repo("..")
-    current = git.Repo(".").git.branch("--show-current")
+    repo = git.Repo("../..")
+    current = git.Repo("..").git.branch("--show-current")
     repo.git.checkout("speed")
     return current
 

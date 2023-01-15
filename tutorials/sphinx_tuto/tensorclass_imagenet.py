@@ -16,6 +16,10 @@ Batched data loading with tensorclasses
 # efficiently load data from the memory-mapped tensor in batches, rather
 # than sequentially from the raw image files.
 #
+# Using the combination of pre-processing, loading on a contiguous physical-memory
+# storage and on-device batched transformation, we obtain a 10x speedup in data-loading
+# over regular torch + torchvision pipelines.
+#
 # We’ll use the same subset of imagenet used in `this transfer learning
 # tutorial <https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html>`__,
 # though we also give results of our experiments running the same code on ImageNet.
@@ -34,6 +38,7 @@ import torch.nn as nn
 import tqdm
 from tensordict import MemmapTensor
 from tensordict.prototype import tensorclass
+from torch import multiprocessing as mp
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
@@ -46,9 +51,22 @@ NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "4"))
 # subset of imagenet. the fraction of images can be set with the FRACTION environment
 # variable, we use the first `len(dataset) // FRACTION` images. Default is 10.
 RUN_ON_CLUSTER = os.environ.get("RUN_ON_CLUSTER", False)
+if RUN_ON_CLUSTER in ("0", "False", False):
+    RUN_ON_CLUSTER = False
+elif RUN_ON_CLUSTER in ("1", "True", True):
+    RUN_ON_CLUSTER = True
+else:
+    raise NotImplementedError(RUN_ON_CLUSTER)
 FRACTION = int(os.environ.get("FRACTION", 10))
 # sphinx_gallery_end_ignore
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
+if torch.cuda.is_available():
+    # If the data is collected on cuda, we must use the "spawn" multiprocessing
+    # mode, as it is the only one compatible with cuda-shared tensors.
+    mp.set_start_method("spawn")
+    device = "cuda:0"
+else:
+    device = "cpu"
+
 print(f"Using device: {device}")
 
 
@@ -216,7 +234,7 @@ class ImageNetData:
         )
         data = data.memmap_()
 
-        batch = 32
+        batch = 64
         dl = DataLoader(dataset, batch_size=batch, num_workers=NUM_WORKERS)
         i = 0
         pbar = tqdm.tqdm(total=len(dataset))
@@ -296,17 +314,21 @@ train_dataloader_tc = DataLoader(
     train_data_tc,
     batch_size=batch_size,
     collate_fn=Collate(collate_transform, device),
+    num_workers=4,
 )
 val_dataloader_tc = DataLoader(
     val_data_tc,
     batch_size=batch_size,
     collate_fn=Collate(device=device),
+    num_workers=4,
 )
 
 ##############################################################################
 # We can now compare how long it takes to iterate once over the data in
 # each case. The regular dataloader loads images one by one from disk,
-# applies the transform sequentially and then stacks the results.
+# applies the transform sequentially and then stacks the results
+# (note: we start measuring time a little after the first iteration, as
+# starting the dataloader can take some time).
 
 total = 0
 for i, (image, target) in enumerate(train_dataloader):
