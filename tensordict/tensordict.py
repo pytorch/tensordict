@@ -36,7 +36,14 @@ from warnings import warn
 import numpy as np
 import torch
 
-from tensordict.utils import _get_item, _is_shared, _requires_grad, _set_item, _shape
+from tensordict.utils import (
+    _get_item,
+    _is_shared,
+    _requires_grad,
+    _set_item,
+    _shape,
+    mem_map_tensor_as_tensor,
+)
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
@@ -397,8 +404,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def state_dict(self) -> OrderedDict:
         out = collections.OrderedDict()
-        for key, item in self.flatten_keys().items():
+        for key, item in self.flatten_keys().apply(mem_map_tensor_as_tensor).items():
             out[key] = item
+        # out.update(self.to_dict())
         if "__batch_size" in out:
             raise KeyError(
                 "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
@@ -2783,8 +2791,10 @@ class TensorDict(TensorDictBase):
                 self._tensordict[key] = value.memmap_()
                 continue
             self._tensordict[key] = MemmapTensor(value, prefix=prefix)
-        for value in self.values_meta():
+        for value in self.values_meta(make_unset=False):
+            # print("before", value)
             value.memmap_()
+            # print("after", value)
         self._is_memmap = True
         self.lock()
         return self

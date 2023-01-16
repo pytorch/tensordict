@@ -245,7 +245,13 @@ class MetaTensor:
 
         """
         self._is_memmap = True
-        self._class_name = "MemmapTensor"
+        if (
+            self._class_name
+            and not self.is_tensordict()
+            and not self.is_kjt()
+            and not self.is_shared()
+        ):
+            self._class_name = "MemmapTensor"
         return self
 
     def share_memory_(self) -> MetaTensor:

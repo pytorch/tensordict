@@ -17,6 +17,7 @@ from typing import Any, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from torch import Tensor
+from torchsnapshot.serialization import tensor_from_memoryview
 
 try:
     try:
@@ -697,3 +698,19 @@ class timeit:
     def erase():
         for k in timeit._REG:
             timeit._REG[k] = [0.0, 0.0, 0]
+
+
+def mem_map_tensor_as_tensor(
+    mem_map_tensor: Union[torch.Tensor, "MemmapTensor"]  # noqa: F821
+) -> torch.Tensor:
+    from tensordict.memmap import MemmapTensor
+
+    if not isinstance(mem_map_tensor, MemmapTensor):
+        return mem_map_tensor
+    # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
+    # as a Tensor for saving and loading purposes. This doesn't incur any copy.
+    return tensor_from_memoryview(
+        dtype=mem_map_tensor.dtype,
+        shape=list(mem_map_tensor.shape),
+        mv=memoryview(mem_map_tensor._memmap_array),
+    )
