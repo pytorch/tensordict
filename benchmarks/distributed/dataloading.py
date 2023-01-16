@@ -223,19 +223,20 @@ class DummyTrainerNode:
         t0 = time.time()
         iteration = 0
         total = 0
-        while total < len_data:
+        while _prefetch_queue:
             batch = _prefetch_queue.popleft().wait()
             i = iteration % (self.world_size - 1)
             iteration += 1
-            _prefetch_queue.append(
-                rpc.rpc_async(
-                    self.datanodes[i].owner(),
-                    DataNode.sample,
-                    args=(self.datanodes[i], range(_last, _next)),
+            if _last < len_data:
+                _prefetch_queue.append(
+                    rpc.rpc_async(
+                        self.datanodes[i].owner(),
+                        DataNode.sample,
+                        args=(self.datanodes[i], range(_last, _next)),
+                    )
                 )
-            )
-            _last = _next
-            _next = min(len_data - 1, _next + BATCH_SIZE)
+                _last = _next
+                _next = min(len_data - 1, _next + BATCH_SIZE)
             pbar.update(BATCH_SIZE)
             total += batch.shape[0]
         t = time.time() - t0
