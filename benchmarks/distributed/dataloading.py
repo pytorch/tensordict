@@ -244,7 +244,7 @@ class DummyTrainerNode:
         print(f"time spent: {t:4.4f}s, Rate: {total/t} fps")
 
     @tenacity.retry(
-        stop=tenacity.stop_after_attempt(5),
+        stop=tenacity.stop_after_attempt(RETRY_LIMIT),
         wait=tenacity.wait_fixed(RETRY_DELAY_SECS),
         reraise=True,
     )
