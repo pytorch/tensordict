@@ -289,6 +289,11 @@ class Collate(nn.Module):
 ##############################################################################
 # ``DataLoader`` has support for multiple workers loading data in parallel. The
 # tensorclass dataloader will use just one worker, but load data in batches.
+#
+# Note that under this approach our ``collate_fn`` is essentially just an ``nn.Module``,
+# making it transparent and easy to implement. But this approach also offers
+# flexibility, for example, if needed we could move the collation step into the training
+# loop by considering the ``Collate`` module as part of the model.
 
 batch_size = 8
 # sphinx_gallery_start_ignore
