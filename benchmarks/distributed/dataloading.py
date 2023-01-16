@@ -6,13 +6,11 @@ from functools import wraps
 from pathlib import Path
 
 import torch
-
-import torch.distributed.rpc as rpc
 import tqdm
-
 from tensordict import MemmapTensor
 from tensordict.prototype import tensorclass
 from torch import nn
+from torch.distributed import rpc
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.prototype import transforms
@@ -82,7 +80,8 @@ class ImageNetData:
             targets=MemmapTensor(len(dataset), dtype=torch.int64),
             batch_size=[len(dataset)],
         )
-        data = data.memmap_()
+        # locks the tensorclass and ensures that is_memmap will return True.
+        data.memmap_()
 
         batch = 64
         dl = DataLoader(dataset, batch_size=batch, num_workers=NUM_WORKERS)
@@ -347,8 +346,6 @@ if __name__ == "__main__":
         for dest_rank in range(1, args.world_size):
             trainer.create_data(dest_rank)
         trainer.train()
-        breakpoint()
-
     else:
         rpc.init_rpc(
             f"{DATA_NODE}_{rank}",
@@ -359,5 +356,4 @@ if __name__ == "__main__":
         torch.randn(1, device="cuda:0")
         # device = f"cuda:{rank}"
         print(f"Initialised Data node {rank}")
-        breakpoint()
     rpc.shutdown()
