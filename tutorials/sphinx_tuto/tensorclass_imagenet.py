@@ -386,7 +386,8 @@ print(
 # Results from ImageNet
 # ---------------------
 #
-# Repeating the above on full-size ImageNet data, we get the following results
+# Repeating the above on full-size ImageNet data, we get the following results running
+# on an AWS EC2 instance with 96 cores and 8 A100 GPUs
 #
 #  | One iteration over dataloader done! Rate: 2984.8455 fps, time:  428.7951s
 #  | One iteration over tensorclass dataloader done! Rate: 6457.9865 fps, time:  198.1867s
