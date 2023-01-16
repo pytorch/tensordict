@@ -1,3 +1,30 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+"""
+Distributed data-loading with tensorclass
+=========================================
+"""
+
+##############################################################################
+# This file provides an example of distributed dataloading with tensorclass.
+# It can be run with :obj:`torchrun`. Here is an example of the slurm config to
+# use, although torchrun is compatible with any other scheduler too:
+#
+#  .. code-block::
+#
+#     #!/bin/bash
+#     #SBATCH --gpus 8
+#     #SBATCH -p train
+#     #SBATCH -o slurm-%A_%a.out
+#     #SBATCH --exclusive
+#     #SBATCH -c 96
+#     NUM_TRAINERS=5
+#     srun torchrun --standalone --nnodes=1 --nproc_per_node=$NUM_TRAINERS dataloading.py --world_size $NUM_TRAINERS
+#
+
 import argparse
 import collections
 import os
@@ -21,11 +48,6 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
 
-parser.add_argument(
-    "--rank",
-    type=int,
-    help="Node Rank [0 = Replay Buffer, 1 = Dummy Trainer, 2+ = Dummy Data Collector]",
-)
 parser.add_argument(
     "--world_size",
     type=int,
@@ -165,13 +187,11 @@ class Collate(nn.Module):
 @accept_remote_rref_udf_invocation
 class DummyTrainerNode:
     def __init__(self, world_size: int) -> None:
-        print("DummyTrainerNode")
         self.id = rpc.get_worker_info().id
-        self._prepare()
         self.datanodes = []
         self.world_size = world_size
 
-    def _prepare(self):
+    def init(self):
         print("preparing data")
         data_dir = Path("/datasets01_ontap/imagenet_full_size/061417/")
         train_data_raw = datasets.ImageFolder(
@@ -224,11 +244,11 @@ class DummyTrainerNode:
         t0 = time.time()
         iteration = 0
         total = 0
-        while _prefetch_queue:
+        while len(_prefetch_queue):
             batch = _prefetch_queue.popleft().wait()
             i = iteration % (self.world_size - 1)
             iteration += 1
-            if _last < len_data:
+            if _next != _last:
                 _prefetch_queue.append(
                     rpc.rpc_async(
                         self.datanodes[i].owner(),
@@ -236,8 +256,8 @@ class DummyTrainerNode:
                         args=(self.datanodes[i], range(_last, _next)),
                     )
                 )
-                _last = _next
-                _next = min(len_data - 1, _next + BATCH_SIZE)
+            _last = _next
+            _next = min(len_data - 1, _next + BATCH_SIZE)
             pbar.update(BATCH_SIZE)
             total += batch.shape[0]
         t = time.time() - t0
@@ -284,11 +304,13 @@ class DataNode:
             RandomHFlip(),
         )
         self.collate = Collate(self.collate_transform, device=device)
-        self._init()
+        self.initialized = False
         self.count = 0
         print("done!")
 
     def _init(self):
+        print("initializing")
+        self.initialized = True
         self.data: ImageNetData = rpc.rpc_sync(
             self.train_ref.owner(),
             DummyTrainerNode.get_data,
@@ -296,6 +318,8 @@ class DataNode:
         )
 
     def sample(self, idx):
+        if not self.initialized:
+            self._init()
         self.count += 1
         if self.count % 100 == 0:
             print(self.count)
@@ -312,7 +336,7 @@ def get_trainer():
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    rank = args.rank
+    rank = int(os.environ["RANK"])
     world_size = args.world_size
 
     os.environ["MASTER_ADDR"] = "localhost"
@@ -339,6 +363,7 @@ if __name__ == "__main__":
         trainer = DummyTrainerNode(args.world_size)
         for dest_rank in range(1, args.world_size):
             trainer.create_data(dest_rank)
+        trainer.init()
         trainer.train()
     else:
         rpc.init_rpc(
@@ -350,4 +375,5 @@ if __name__ == "__main__":
         torch.randn(1, device="cuda:0")
         # device = f"cuda:{rank}"
         print(f"Initialised Data node {rank}")
+
     rpc.shutdown()
