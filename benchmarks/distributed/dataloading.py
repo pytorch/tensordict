@@ -152,7 +152,7 @@ class Collate(nn.Module):
 
     def __call__(self, x: ImageNetData):
         # move data to RAM
-        out = x.apply(lambda x: x.contiguous())
+        out = x.apply(lambda _tensor: _tensor.contiguous())
         if self.device:
             # move data to gpu
             out = out.to(self.device)
@@ -164,7 +164,7 @@ class Collate(nn.Module):
 
 @accept_remote_rref_udf_invocation
 class DummyTrainerNode:
-    def __init__(self, world_size) -> None:
+    def __init__(self, world_size: int) -> None:
         print("DummyTrainerNode")
         self.id = rpc.get_worker_info().id
         self._prepare()
