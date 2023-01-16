@@ -5,6 +5,7 @@ import time
 from functools import wraps
 from pathlib import Path
 
+import tenacity
 import torch
 import tqdm
 from tensordict import MemmapTensor
@@ -242,26 +243,18 @@ class DummyTrainerNode:
         t = time.time() - t0
         print(f"time spent: {t:4.4f}s, Rate: {total/t} fps")
 
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(5),
+        wait=tenacity.wait_fixed(RETRY_DELAY_SECS),
+        reraise=True,
+    )
     def create_data(self, node) -> rpc.RRef:
         print(f"Creating DataNode object on remote node {node}")
-        while True:
-            try:
-                data_info = rpc.get_worker_info(f"{DATA_NODE}_{node}")
-                data_rref = rpc.remote(
-                    data_info,
-                    DataNode,
-                    args=(
-                        node,
-                        BATCH_SIZE,
-                    ),
-                )
-                print(f"Connected to data node {data_info}")
-                time.sleep(5)
-                self.datanodes.append(data_rref)
-                return
-            except Exception as e:
-                print(f"Failed to connect to data node: {e}")
-                time.sleep(RETRY_DELAY_SECS)
+        data_info = rpc.get_worker_info(f"{DATA_NODE}_{node}")
+        data_rref = rpc.remote(data_info, DataNode, args=(node, BATCH_SIZE))
+        print(f"Connected to data node {data_info}")
+        time.sleep(5)
+        self.datanodes.append(data_rref)
 
     def get_data(self):
         return self.data

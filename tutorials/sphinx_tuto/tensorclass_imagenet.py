@@ -95,7 +95,7 @@ val_transform = transforms.Compose(
 # We use ``torchvision.datasets.ImageFolder`` to conveniently load and
 # transform the data from disk.
 
-data_dir = Path("data/hymenoptera_data/")
+data_dir = Path("data") / "hymenoptera_data/"
 # sphinx_gallery_start_ignore
 if RUN_ON_CLUSTER:
     data_dir = Path("/datasets01_ontap/imagenet_full_size/061417/")
@@ -227,7 +227,8 @@ class ImageNetData:
             targets=MemmapTensor(len(dataset), dtype=torch.int64),
             batch_size=[len(dataset)],
         )
-        data = data.memmap_()
+        # locks the tensorclass and ensures that is_memmap will return True.
+        data.memmap_()
 
         batch = 64
         dl = DataLoader(dataset, batch_size=batch, num_workers=NUM_WORKERS)
