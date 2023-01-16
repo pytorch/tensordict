@@ -1,4 +1,4 @@
-import timeit
+import pytest
 
 # we use deepcopy as our implementation modifies the modules in-place
 from copy import deepcopy
@@ -8,59 +8,30 @@ from functorch import make_functional_with_buffers as functorch_make_functional
 from tensordict.nn.functional_modules import make_functional
 from torch import nn
 
-if __name__ == "__main__":
-    # Creation
-    net = nn.Sequential(
+
+@pytest.fixture
+def net():
+    return nn.Sequential(
         nn.Linear(2, 2),
         nn.Linear(2, 2),
         nn.Linear(2, 2),
         nn.Sequential(nn.Linear(2, 2), nn.Linear(2, 2), nn.Linear(2, 2)),
     )
-    print(
-        "instantiation, functorch:",
-        timeit.timeit(
-            "functorch_make_functional(deepcopy(net))",
-            globals={
-                "functorch_make_functional": functorch_make_functional,
-                "net": net,
-                "deepcopy": deepcopy,
-            },
-            number=1000,
-        ),
-    )
+# Creation
+def test_instantiation_functorch(benchmark, net):
+    benchmark.pedantic(functorch_make_functional, args=(deepcopy(net),), iterations=1000)
 
-    print(
-        "instantiation, tensordict:",
-        timeit.timeit(
-            "make_functional(deepcopy(net))",
-            globals={
-                "make_functional": make_functional,
-                "net": net,
-                "deepcopy": deepcopy,
-            },
-            number=1000,
-        ),
-    )
+def test_instantiation_td(benchmark, net):
+    benchmark.pedantic(make_functional, args=(deepcopy(net),), iterations=1000)
 
-    # Execution
+# Execution
+def test_exec_functorch(benchmark, net):
     x = torch.randn(2, 2)
     fmodule, params, buffers = functorch_make_functional(deepcopy(net))
-    print(
-        "exec, functorch:",
-        timeit.timeit(
-            "fmodule(params, buffers, x)",
-            globals={"fmodule": fmodule, "params": params, "buffers": buffers, "x": x},
-            number=10000,
-        ),
-    )
+    benchmark.pedantic(fmodule, args=(params, buffers, x), iterations=1000)
 
+def test_exec_td(benchmark, net):
+    x = torch.randn(2, 2)
     fmodule = deepcopy(net)
     params = make_functional(fmodule)
-    print(
-        "exec, tensordict:",
-        timeit.timeit(
-            "fmodule(x, params=params)",
-            globals={"fmodule": fmodule, "params": params, "x": x},
-            number=10000,
-        ),
-    )
+    benchmark.pedantic(fmodule, args=(x,), kwargs={'params' : params}, iterations=1000)
