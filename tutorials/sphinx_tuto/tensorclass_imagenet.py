@@ -31,6 +31,7 @@ Batched data loading with tensorclasses
 #
 import os
 import time
+from distutils.util import strtobool
 from pathlib import Path
 
 import torch
@@ -50,13 +51,7 @@ NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "4"))
 # environment variable RUN_ON_CLUSTER set, then we set everything to run on a larger
 # subset of imagenet. the fraction of images can be set with the FRACTION environment
 # variable, we use the first `len(dataset) // FRACTION` images. Default is 10.
-RUN_ON_CLUSTER = os.environ.get("RUN_ON_CLUSTER", False)
-if RUN_ON_CLUSTER in ("0", "False", False):
-    RUN_ON_CLUSTER = False
-elif RUN_ON_CLUSTER in ("1", "True", True):
-    RUN_ON_CLUSTER = True
-else:
-    raise NotImplementedError(RUN_ON_CLUSTER)
+RUN_ON_CLUSTER = strtobool(os.environ.get("RUN_ON_CLUSTER", "False"))
 FRACTION = int(os.environ.get("FRACTION", 10))
 # sphinx_gallery_end_ignore
 if torch.cuda.is_available():
