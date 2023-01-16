@@ -1,6 +1,5 @@
 import dataclasses
 import functools
-import pdb
 import re
 import typing
 import collections
@@ -24,6 +23,7 @@ PY37 = version.parse(python_version()) < version.parse("3.8")
 
 # For __future__.annotations, we keep a dict of str -> class to call the class based on the string
 CLASSES_DICT = {}
+# For nested usecase, we keep dict to save key,value pairs of non-tensor data
 TENSOR_CLASS_NON_TENSOR_DATA = collections.defaultdict(dict)
 
 # Regex precompiled patterns
@@ -43,7 +43,8 @@ def tensorclass(cls: T) -> T:
     :obj:`tensorclass` classes are specialized :obj:`dataclass` instances that
     can execute some pre-defined tensor operations out of the box, such as
     indexing, item assignment, reshaping, casting to device or storage and many
-    others.
+    others. Tensorclass objects can also save non-tensor data but all the operations
+    are performed only on tensor attributes
 
     Examples:
         >>> from tensordict.prototype import tensorclass
@@ -54,6 +55,7 @@ def tensorclass(cls: T) -> T:
         ... class MyData:
         ...     X: torch.Tensor
         ...     y: torch.Tensor
+        ...     z: str
         ...     def expand_and_mask(self):
         ...         X = self.X.unsqueeze(-1).expand_as(self.y)
         ...         X = X[self.y]
@@ -62,11 +64,13 @@ def tensorclass(cls: T) -> T:
         >>> data = MyData(
         ...     X=torch.ones(3, 4, 1),
         ...     y=torch.zeros(3, 4, 2, 2, dtype=torch.bool),
+        ...     z='test_tensorclass'
         ...     batch_size=[3, 4])
         >>> print(data)
         MyData(
             X=Tensor(torch.Size([3, 4, 1]), dtype=torch.float32),
             y=Tensor(torch.Size([3, 4, 2, 2]), dtype=torch.bool),
+            z='test_tensorclass',
             batch_size=[3, 4],
             device=None,
             is_shared=False)
@@ -169,7 +173,7 @@ def _init_wrapper(init, expected_keys):
                     f"Keys from the tensordict ({set(_tensordict.keys())}) must "
                     f"correspond to the class attributes ({expected_keys})."
                 )
-                # Handling Non-Tensor data
+            # Handling Non-Tensor data
             if _non_tensordict:
                 input_dict = _non_tensordict
             else:
@@ -191,7 +195,7 @@ def _init_wrapper(init, expected_keys):
                     kwargs.setdefault(key, default)
 
             new_kwargs = {}
-            # Handling non-tensor data
+            # Handling tensor, non-tensor and nested tensor classes differently
             for key, val in kwargs.items():
                 if isinstance(val, _accepted_classes):
                     new_kwargs[key] = None
@@ -459,7 +463,7 @@ def _get_typed_output(out, expected_type):
     # Otherwise, if the output is some TensorDictBase subclass, we check the type and if it
     # does not match, we map it. In all other cases, just return what has been gathered.
     non_tensor_dict = None
-
+    # Handling nested tensorclasses 
     if expected_type in TENSOR_CLASS_NON_TENSOR_DATA:
         non_tensor_dict = TENSOR_CLASS_NON_TENSOR_DATA[expected_type]
     if isinstance(expected_type, str) and expected_type in CLASSES_DICT:
