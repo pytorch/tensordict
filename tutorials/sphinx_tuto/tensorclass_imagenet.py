@@ -39,7 +39,6 @@ import torch.nn as nn
 import tqdm
 from tensordict import MemmapTensor
 from tensordict.prototype import tensorclass
-from torch import multiprocessing as mp
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
@@ -54,14 +53,7 @@ NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "4"))
 RUN_ON_CLUSTER = strtobool(os.environ.get("RUN_ON_CLUSTER", "False"))
 FRACTION = int(os.environ.get("FRACTION", 10))
 # sphinx_gallery_end_ignore
-if torch.cuda.is_available():
-    # If the data is collected on cuda, we must use the "spawn" multiprocessing
-    # mode, as it is the only one compatible with cuda-shared tensors.
-    mp.set_start_method("spawn")
-    device = "cuda:0"
-else:
-    device = "cpu"
-
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
 
@@ -315,13 +307,11 @@ train_dataloader_tc = DataLoader(
     train_data_tc,
     batch_size=batch_size,
     collate_fn=Collate(collate_transform, device),
-    num_workers=4,
 )
 val_dataloader_tc = DataLoader(
     val_data_tc,
     batch_size=batch_size,
     collate_fn=Collate(device=device),
-    num_workers=4,
 )
 
 ##############################################################################
