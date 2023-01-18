@@ -58,7 +58,6 @@ def test_set_shared(benchmark, td):
 def test_update(benchmark, a, b):
     td = TensorDict({"a": a, "b": b}, [3, 4])
     td2 = td.clone()
-
     def exec_update():
         tdc = td.clone()
         tdc.update(td2)
