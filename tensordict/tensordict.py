@@ -104,12 +104,20 @@ if _has_torchrec:
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
 
-def is_tensordict(datatype: type) -> bool:
-    return issubclass(datatype, TensorDictBase)
+def is_tensordict(datatype: Union[type, Any]) -> bool:
+    return (
+        issubclass(datatype, TensorDictBase)
+        if isinstance(datatype, type)
+        else isinstance(datatype, TensorDictBase)
+    )
 
 
 def is_memmap(datatype: type) -> bool:
-    return issubclass(datatype, MemmapTensor)
+    return (
+        issubclass(datatype, MemmapTensor)
+        if isinstance(datatype, type)
+        else isinstance(datatype, MemmapTensor)
+    )
 
 
 class _TensorDictKeysView:
@@ -146,7 +154,7 @@ class _TensorDictKeysView:
         if not self.include_nested:
             if self.leaves_only:
                 for key in self._keys():
-                    target_class = self.tensordict._entry_class(key)
+                    target_class = self.tensordict.entry_class(key)
                     if is_tensordict(target_class):
                         continue
                     yield key
@@ -209,7 +217,7 @@ class _TensorDictKeysView:
         if type(key) is str:
             if key in self._keys():
                 if self.leaves_only:
-                    return not is_tensordict(self.tensordict._entry_class(key))
+                    return not is_tensordict(self.tensordict.entry_class(key))
                 return True
             return False
 
@@ -219,7 +227,7 @@ class _TensorDictKeysView:
             elif len(key) > 1:
                 if self.include_nested:
                     if key[0] in self:
-                        entry_type = self.tensordict._entry_class(key[0])
+                        entry_type = self.tensordict.entry_class(key[0])
                         is_tensor = entry_type is Tensor
                         is_kjt = not is_tensor and entry_type is KeyedJaggedTensor
                         _is_tensordict = (
@@ -275,9 +283,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def __setstate__(self, state: Dict[str, Any]) -> Dict[str, Any]:
         self.__dict__.update(state)
 
-    def __init__(self):
-        pass
-
     @property
     def shape(self) -> torch.Size:
         """See :obj:`TensorDictBase.batch_size`."""
@@ -329,7 +334,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if not isinstance(new_batch_size, torch.Size):
             new_batch_size = torch.Size(new_batch_size)
         for key in self.keys():
-            if is_tensordict(self._entry_class(key)):
+            if is_tensordict(self.entry_class(key)):
                 tensordict = self.get(key)
                 if len(tensordict.batch_size) < len(new_batch_size):
                     # document as edge case
@@ -446,7 +451,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def _entry_class(self, key: Union[str, Tuple]) -> type:
+    def entry_class(self, key: Union[str, Tuple]) -> type:
         """Returns the class of an entry, avoiding a call to `isinstance(td.get(key), type)`."""
         raise NotImplementedError(f"{self.__class__.__name__}")
 
@@ -673,7 +678,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 subkey = []
             # the key must be a string by now. Let's check if it is present
             if key in keys:
-                target_type = self._entry_class(key)
+                target_type = self.entry_class(key)
                 if is_tensordict(target_type):
                     target = self.get(key)
                     if len(subkey):
@@ -1740,7 +1745,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             elif (
                 separator in key
                 and key_split in existing_keys
-                and not is_tensordict(self._entry_class(key_split))
+                and not is_tensordict(self.entry_class(key_split))
             ):
                 raise KeyError(
                     f"Flattening keys in tensordict collides with existing key '{key}'"
@@ -2008,7 +2013,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             self
 
         """
-        target_class = self._entry_class(key)
+        target_class = self.entry_class(key)
         if is_tensordict(target_class):
             tensordict = self.get(key)
             tensordict.apply_(lambda x: x.fill_(value))
@@ -2064,7 +2069,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def lock(self):
         self._is_locked = True
         for key in self.keys():
-            if is_tensordict(self._entry_class(key)):
+            if is_tensordict(self.entry_class(key)):
                 self.get(key).lock()
         return self
 
@@ -2073,7 +2078,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._is_shared = False
         self._is_memmap = False
         for key in self.keys():
-            if is_tensordict(self._entry_class(key)):
+            if is_tensordict(self.entry_class(key)):
                 self.get(key).unlock()
         return self
 
@@ -2182,7 +2187,6 @@ class TensorDict(TensorDictBase):
         _is_shared: Optional[bool] = False,
         _is_memmap: Optional[bool] = False,
     ) -> None:
-        super().__init__()
 
         self._is_shared = _is_shared
         self._is_memmap = _is_memmap
@@ -2325,10 +2329,10 @@ class TensorDict(TensorDictBase):
         return all(share_list) and len(share_list) > 0
 
     def _check_is_memmap(self) -> bool:
-        memmap_list = [is_memmap(self._entry_class(key)) for key in self.keys()]
+        memmap_list = [is_memmap(self.entry_class(key)) for key in self.keys()]
         if any(memmap_list) and not all(memmap_list):
             memmap_str = ", ".join(
-                [f"{key}: {is_memmap(self._entry_class(key))}" for key in self.keys()]
+                [f"{key}: {is_memmap(self.entry_class(key))}" for key in self.keys()]
             )
             raise RuntimeError(
                 f"tensors must be either all MemmapTensor or not, but mixed "
@@ -2535,7 +2539,7 @@ class TensorDict(TensorDictBase):
         torch.stack(list_item, dim=dim, out=self.get(key))
         return self
 
-    def _entry_class(self, key: Union[str, Tuple]) -> type:
+    def entry_class(self, key: Union[str, Tuple]) -> type:
         return type(self.get(key))
 
     def _stack_onto_at_(
@@ -3308,7 +3312,6 @@ torch.Size([3, 2])
         idx: INDEX_TYPING,
         batch_size: Optional[Sequence[int]] = None,
     ):
-        super().__init__()
 
         if not isinstance(source, TensorDictBase):
             raise TypeError(
@@ -3442,8 +3445,11 @@ torch.Size([3, 2])
 
         return self
 
-    def _entry_class(self, key: Union[str, Tuple]) -> type:
-        return type(self._source.get(key))
+    def entry_class(self, key: Union[str, Tuple]) -> type:
+        source_type = type(self._source.get(key))
+        if is_tensordict(source_type):
+            return self.__class__
+        return source_type
 
     def _stack_onto_(
         self, key: str, list_item: List[COMPATIBLE_TYPES], dim: int
@@ -3552,7 +3558,7 @@ torch.Size([3, 2])
                 subkey = []
             # the key must be a string by now. Let's check if it is present
             if key in keys:
-                target_class = self._entry_class(key)
+                target_class = self.entry_class(key)
                 if is_tensordict(target_class):
                     target = self._source.get(key).get_sub_tensordict(self.idx)
                     if len(subkey):
@@ -3801,7 +3807,6 @@ class LazyStackedTensorDict(TensorDictBase):
         stack_dim: int = 0,
         batch_size: Optional[Sequence[int]] = None,  # TODO: remove
     ):
-        super().__init__()
 
         self._is_shared = False
         self._is_memmap = False
@@ -4167,7 +4172,7 @@ class LazyStackedTensorDict(TensorDictBase):
             valid_keys = valid_keys.intersection(td.keys())
         self._valid_keys = sorted(valid_keys)
 
-    def _entry_class(self, key: Union[str, Tuple]) -> type:
+    def entry_class(self, key: Union[str, Tuple]) -> type:
         return type(self.tensordicts[0].get(key))
 
     def select(
@@ -4408,7 +4413,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 subkey = ()
             # the key must be a string by now. Let's check if it is present
             if key in keys:
-                target_class = self._entry_class(key)
+                target_class = self.entry_class(key)
                 if is_tensordict(target_class):
                     if isinstance(value, dict):
                         value_unbind = TensorDict(
@@ -4577,7 +4582,6 @@ class _CustomOpTensorDict(TensorDictBase):
         inv_op_kwargs: Optional[dict] = None,
         batch_size: Optional[Sequence[int]] = None,
     ):
-        super().__init__()
 
         self._is_shared = source.is_shared()
         self._is_memmap = source.is_memmap()
@@ -4626,7 +4630,7 @@ class _CustomOpTensorDict(TensorDictBase):
         """
         return self.inv_op_kwargs
 
-    def _entry_class(self, key: Union[str, Tuple]) -> type:
+    def entry_class(self, key: Union[str, Tuple]) -> type:
         return type(self._source.get(key))
 
     @property
