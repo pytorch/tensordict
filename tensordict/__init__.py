@@ -4,11 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 from .memmap import MemmapTensor, set_transfer_ownership
-from .metatensor import MetaTensor
 from .tensordict import (
     LazyStackedTensorDict,
     merge_tensordicts,
-    SavedTensorDict,
     SubTensorDict,
     TensorDict,
 )
@@ -21,8 +19,6 @@ except ImportError:
 __all__ = [
     "LazyStackedTensorDict",
     "MemmapTensor",
-    "MetaTensor",
-    "SavedTensorDict",
     "SubTensorDict",
     "TensorDict",
     "merge_tensordicts",
