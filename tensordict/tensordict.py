@@ -34,7 +34,7 @@ from warnings import warn
 import numpy as np
 import torch
 
-from tensordict.utils import _get_item, _is_shared, _set_item, _shape
+from tensordict.utils import _dtype, _get_item, _is_shared, _set_item, _shape
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
@@ -1257,7 +1257,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def _check_new_batch_size(self, new_size: torch.Size):
         n = len(new_size)
         for key, tensor in self.items():
-            if tensor.shape[:n] != new_size:
+            if _shape(tensor)[:n] != new_size:
                 raise RuntimeError(
                     f"the tensor {key} has shape {tensor.shape} which "
                     f"is incompatible with the new shape {new_size}."
@@ -5083,7 +5083,12 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
 
 def get_repr(tensor):
-    return f"{tensor.__class__.__name__}(shape={tensor.shape}, device={tensor.device}, dtype={tensor.dtype}, is_shared={tensor.is_shared()})"
+    s = [f"shape={_shape(tensor)}"]
+    s += [f"device={tensor.device}"]
+    s += [f"dtype={_dtype(tensor)}"]
+    s += [f"is_shared={_is_shared(tensor)}"]
+    s = ", ".join(s)
+    return f"{tensor.__class__.__name__}({s})"
 
 
 def _make_repr(key, item, tensordict):

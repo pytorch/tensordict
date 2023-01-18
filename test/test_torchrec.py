@@ -54,14 +54,14 @@ class TestKJT:
         _ = TensorDict({"b": jag_tensor}, [])
         _ = TensorDict({"b": jag_tensor}, [3])
 
-    def test_td_rep(self):
+    def test_td_repr(self):
         jag_tensor = _get_kjt()
         td = TensorDict({"b": jag_tensor}, [])
         assert (
             str(td)
             == """TensorDict(
     fields={
-        b: KeyedJaggedTensor(torch.Size([3]), dtype=torch.float32)},
+        b: KeyedJaggedTensor(shape=torch.Size([3]), device="cpu", dtype=torch.float32, is_shared=False)},
     batch_size=torch.Size([]),
     device=None,
     is_shared=False)"""
