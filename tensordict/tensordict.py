@@ -1259,7 +1259,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         for key, tensor in self.items():
             if _shape(tensor)[:n] != new_size:
                 raise RuntimeError(
-                    f"the tensor {key} has shape {tensor.shape} which "
+                    f"the tensor {key} has shape {_shape(tensor)} which "
                     f"is incompatible with the new shape {new_size}."
                 )
 
