@@ -39,7 +39,6 @@ import torch.nn as nn
 import tqdm
 from tensordict import MemmapTensor
 from tensordict.prototype import tensorclass
-from torch import multiprocessing as mp
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
@@ -54,14 +53,7 @@ NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "4"))
 RUN_ON_CLUSTER = strtobool(os.environ.get("RUN_ON_CLUSTER", "False"))
 FRACTION = int(os.environ.get("FRACTION", 10))
 # sphinx_gallery_end_ignore
-if torch.cuda.is_available():
-    # If the data is collected on cuda, we must use the "spawn" multiprocessing
-    # mode, as it is the only one compatible with cuda-shared tensors.
-    mp.set_start_method("spawn")
-    device = "cuda:0"
-else:
-    device = "cpu"
-
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
 
 
@@ -315,13 +307,11 @@ train_dataloader_tc = DataLoader(
     train_data_tc,
     batch_size=batch_size,
     collate_fn=Collate(collate_transform, device),
-    num_workers=4,
 )
 val_dataloader_tc = DataLoader(
     val_data_tc,
     batch_size=batch_size,
     collate_fn=Collate(device=device),
-    num_workers=4,
 )
 
 ##############################################################################
@@ -392,14 +382,20 @@ print(
 # Results from ImageNet
 # ---------------------
 #
-# Repeating the above on full-size ImageNet data, we get the following results running
-# on an AWS EC2 instance with 96 cores and 8 A100 GPUs
+# We repeated the above on full-size ImageNet data, running on an AWS EC2 instance with
+# 32 cores and 1 A100 GPU. We compare against the regular ``DataLoader`` with different
+# numbers of workers. We found that our single-threaded TensorClass approach
+# out-performed the ``DataLoader`` even when we used a large number of workers.
 #
-#  | One iteration over dataloader done! Rate: 2984.8455 fps, time:  428.7951s
-#  | One iteration over tensorclass dataloader done! Rate: 6457.9865 fps, time:  198.1867s
-#  | One iteration over val data done! Rate: 2444.2872 fps, time:  19.9322s
-#  | One iteration over tensorclass val data done! Rate: 8813.6024 fps, time:  5.5278s
+# .. image:: images/imagenet-benchmark.png
+#    :alt: Bar chart showing runtimes of dataloaders compared with TensorClass
 #
 # This shows that much of the overhead is coming from i/o operations rather than the
 # transforms, and hence explains how the memory-mapped array helps us load data more
 # efficiently.
+#
+# We can get even better performance with the TensorClass approach by using multiple
+# workers to load batches from the memory-mapped array, though this comes with some
+# added complexity. See `this example in our benchmarks
+# <https://github.com/pytorch-labs/tensordict/blob/main/benchmarks/distributed/dataloading.py>`__
+# for an example of how this could work.
