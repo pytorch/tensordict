@@ -1878,10 +1878,7 @@ class TestTensorDictRepr:
         tensordict = self.memmap_td(device, dtype)
         is_shared = False
         tensor_device = device if device else tensordict["a"].device
-        if tensor_device.type == "cuda":
-            is_shared_tensor = True
-        else:
-            is_shared_tensor = is_shared
+        is_shared_tensor = False
         expected = f"""TensorDict(
     fields={{
         a: MemmapTensor(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
