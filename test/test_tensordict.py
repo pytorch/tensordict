@@ -2089,7 +2089,7 @@ class TestTensorDictRepr:
             is_shared = False
         tensor_class = "Tensor"
         td2 = td.to(device_cast)
-        tensor_device = device if device else td2["a"].device
+        tensor_device = device_cast if device_cast else td2["a"].device
         if tensor_device.type == "cuda":
             is_shared_tensor = True
         else:
