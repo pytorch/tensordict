@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import collections
 import math
 
 import time
@@ -248,25 +247,6 @@ def _unwrap_value(value):
     # batch_dims = out.ndimension() - batch_dims
     # batch_size = out.shape[:batch_dims]
     # return out, batch_size
-
-
-class KeyDependentDefaultDict(collections.defaultdict):
-    """A key-dependent default dict.
-
-    Examples:
-        >>> my_dict = KeyDependentDefaultDict(lambda key: "foo_" + key)
-        >>> print(my_dict["bar"])
-        foo_bar
-    """
-
-    def __init__(self, fun):
-        self.fun = fun
-        super().__init__()
-
-    def __missing__(self, key):
-        value = self.fun(key)
-        self[key] = value
-        return value
 
 
 if hasattr(math, "prod"):

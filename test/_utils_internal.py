@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 import torch.cuda
-from tensordict import SavedTensorDict, TensorDict
+from tensordict import TensorDict
 from tensordict.tensordict import _stack as stack_td
 
 
@@ -123,9 +123,6 @@ class TestTensorDictsBase:
             device=device,
         )
         return td.get_sub_tensordict((slice(None), 1))
-
-    def saved_td(self, device):
-        return SavedTensorDict(source=self.td(device))
 
     def memmap_td(self, device):
         return self.td(device).memmap_()
