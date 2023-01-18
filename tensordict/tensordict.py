@@ -34,7 +34,7 @@ from warnings import warn
 import numpy as np
 import torch
 
-from tensordict.utils import _dtype, _get_item, _is_shared, _set_item, _shape
+from tensordict.utils import _device, _dtype, _get_item, _is_shared, _set_item, _shape
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
@@ -5084,7 +5084,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
 def get_repr(tensor):
     s = [f"shape={_shape(tensor)}"]
-    s += [f"device={tensor.device}"]
+    s += [f"device={_device(tensor)}"]
     s += [f"dtype={_dtype(tensor)}"]
     s += [f"is_shared={_is_shared(tensor)}"]
     s = ", ".join(s)

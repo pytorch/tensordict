@@ -573,6 +573,15 @@ def _shape(tensor: torch.Tensor):
         raise err
 
 
+def _device(tensor: torch.Tensor):
+    if isinstance(tensor, torch.Tensor):
+        return tensor.device
+    elif isinstance(tensor, KeyedJaggedTensor):
+        return tensor.device()
+    else:
+        return tensor.device
+
+
 def _is_shared(tensor: torch.Tensor):
     if isinstance(tensor, torch.Tensor):
         return tensor.is_shared()
