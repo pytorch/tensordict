@@ -61,7 +61,7 @@ class TestKJT:
             str(td)
             == """TensorDict(
     fields={
-        b: KeyedJaggedTensor(shape=torch.Size([3]), device="cpu", dtype=torch.float32, is_shared=False)},
+        b: KeyedJaggedTensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
     batch_size=torch.Size([]),
     device=None,
     is_shared=False)"""
