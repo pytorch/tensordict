@@ -38,27 +38,22 @@ import tqdm
 from tensordict import MemmapTensor
 from tensordict.prototype import tensorclass
 from torch import nn
+
+from datetime import timedelta
+from torch import distributed as dist
+#dist.init_process_group(backend=dist.Backend.NCCL, timeout=timedelta(seconds=30))
+dist.init_process_group(backend=dist.Backend.GLOO, timeout=timedelta(seconds=30))
+
 from torch.distributed import rpc
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.prototype import transforms
 
-parser = argparse.ArgumentParser(
-    description="RPC Replay Buffer Example",
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-)
-
-parser.add_argument(
-    "--world_size",
-    type=int,
-    default=2,
-)
-
 torch.cuda.set_device(0)
 
-RETRY_LIMIT = 2
+RETRY_LIMIT = 100
 NUM_WORKERS = 16
-RETRY_DELAY_SECS = 3
+RETRY_DELAY_SECS = 5
 FRACTION = 1
 DATA_NODE = "Data"
 TRAINER_NODE = "Trainer"
@@ -263,18 +258,25 @@ class DummyTrainerNode:
         t = time.time() - t0
         print(f"time spent: {t:4.4f}s, Rate: {total/t} fps")
 
-    @tenacity.retry(
-        stop=tenacity.stop_after_attempt(RETRY_LIMIT),
-        wait=tenacity.wait_fixed(RETRY_DELAY_SECS),
-        reraise=True,
-    )
+    # @tenacity.retry(
+    #     stop=tenacity.stop_after_attempt(RETRY_LIMIT),
+    #     wait=tenacity.wait_fixed(RETRY_DELAY_SECS),
+    #     reraise=True,
+    # )
     def create_data(self, node) -> rpc.RRef:
-        print(f"Creating DataNode object on remote node {node}")
-        data_info = rpc.get_worker_info(f"{DATA_NODE}_{node}")
-        data_rref = rpc.remote(data_info, DataNode, args=(node, BATCH_SIZE))
-        print(f"Connected to data node {data_info}")
-        time.sleep(5)
-        self.datanodes.append(data_rref)
+        while True:
+            try:
+                print(f"Creating DataNode object on remote node {node}")
+                data_info = rpc.get_worker_info(f"{DATA_NODE}_{node}")
+                data_rref = rpc.remote(data_info, DataNode, args=(node, BATCH_SIZE))
+                print(f"Connected to data node {data_info}")
+                self.datanodes.append(data_rref)
+                time.sleep(5)
+                return True
+            except Exception as err:
+                print(err)
+                time.sleep(5)
+                return False
 
     def get_data(self):
         return self.data
@@ -335,14 +337,11 @@ def get_trainer():
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    rank = int(os.environ["RANK"])
-    world_size = args.world_size
+    world_size = int(os.environ["WORLD_SIZE"])
+    rank = int(os.environ["LOCAL_RANK"])
 
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
-    str_init_method = "tcp://localhost:10003"
+    str_init_method = "tcp://localhost:10000"
 
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16,
@@ -351,8 +350,9 @@ if __name__ == "__main__":
     )
 
     if rank == 0:
-        for dest_rank in range(1, args.world_size):
+        for dest_rank in range(1, world_size):
             options.set_device_map(f"{DATA_NODE}_{dest_rank}", {i: i for i in range(8)})
+        print(f"Initialised Training node {rank}")
         rpc.init_rpc(
             TRAINER_NODE,
             rank=rank,
@@ -360,20 +360,25 @@ if __name__ == "__main__":
             rpc_backend_options=options,
         )
         torch.randn(1, device="cuda:0")
-        trainer = DummyTrainerNode(args.world_size)
-        for dest_rank in range(1, args.world_size):
-            trainer.create_data(dest_rank)
+        trainer = DummyTrainerNode(world_size)
+        to_create = list(range(1, world_size))
+        while len(to_create):
+            dest_rank = to_create.pop(0)
+            if not trainer.create_data(dest_rank):
+                to_create.append(dest_rank)
         trainer.init()
         trainer.train()
     else:
+        time.sleep(rank)
+        print(f"Initialising Data node {rank}")
         rpc.init_rpc(
             f"{DATA_NODE}_{rank}",
             rank=rank,
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
+        print(f"Initialised Data node {rank}")
         torch.randn(1, device="cuda:0")
         # device = f"cuda:{rank}"
-        print(f"Initialised Data node {rank}")
 
-    rpc.shutdown()
+    rpc.shutdown(graceful=True, timeout=10000)
