@@ -854,8 +854,6 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_device = td.to(device_cast)
 
-        for item in td_device.values_meta():
-            assert item.device == device_cast
         for item in td_device.values():
             assert item.device == device_cast
         for item in td_device.clone().values():
