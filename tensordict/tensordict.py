@@ -4173,7 +4173,10 @@ class LazyStackedTensorDict(TensorDictBase):
         self._valid_keys = sorted(valid_keys)
 
     def entry_class(self, key: Union[str, Tuple]) -> type:
-        return type(self.tensordicts[0].get(key))
+        data_type = type(self.tensordicts[0].get(key))
+        if is_tensordict(data_type):
+            return LazyStackedTensorDict
+        return data_type
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = None

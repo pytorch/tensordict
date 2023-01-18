@@ -765,6 +765,11 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_masked3.batch_size[0] == mask.sum()
         assert td_masked3.batch_dims == 1
 
+    def test_entry_type(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        for key in td.keys(include_nested=True):
+            assert type(td.get(key)) is td.entry_class(key)
+
     def test_equal(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
