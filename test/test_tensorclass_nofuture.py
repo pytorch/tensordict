@@ -504,6 +504,25 @@ def test_setattr(any_to_td):
         data.newattr = TensorDict({"smth": torch.zeros(1)}, [])
 
 
+def test_post_init():
+    @tensorclass
+    class MyDataPostInit:
+        X: torch.Tensor
+        y: torch.Tensor
+
+        def __post_init__(self):
+            assert (self.X > 0).all()
+            assert self.y.abs().max() <= 10
+            self.y = self.y.abs()
+
+    y = torch.clamp(torch.randn(3, 4), min=-10, max=10)
+    data = MyDataPostInit(X=torch.rand(3, 4), y=y, batch_size=[3, 4])
+    assert (data.y == y.abs()).all()
+
+    with pytest.raises(AssertionError):
+        MyDataPostInit(X=-torch.ones(2), y=torch.rand(2), batch_size=[2])
+
+
 def test_default():
     @tensorclass
     class MyData:
