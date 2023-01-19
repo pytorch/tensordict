@@ -230,8 +230,6 @@ def _setattr_wrapper(setattr_, expected_keys):
         if type(value) in CLASSES_DICT.values():
             value = value.__dict__["tensordict"]
         self.__dict__["tensordict"][key] = value
-        if value is not None:
-            assert self.__dict__["tensordict"][key] is value
 
     return wrapper
 
