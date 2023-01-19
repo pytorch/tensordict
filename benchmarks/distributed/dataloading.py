@@ -10,20 +10,10 @@ Distributed data-loading with tensorclass
 
 ##############################################################################
 # This file provides an example of distributed dataloading with tensorclass.
-# It can be run with :obj:`torchrun`. Here is an example of the slurm config to
-# use, although torchrun is compatible with any other scheduler too:
+# It can be run by simply calling `python dataloading.py --world_size=5` (optionally
+# adding the wandb entity and key if logging is required).
 #
-#  .. code-block::
-#
-#     #!/bin/bash
-#     #SBATCH --gpus 8
-#     #SBATCH -p train
-#     #SBATCH -o slurm-%A_%a.out
-#     #SBATCH --exclusive
-#     #SBATCH -c 96
-#     NUM_TRAINERS=5
-#     srun torchrun --standalone --nnodes=1 --nproc_per_node=$NUM_TRAINERS dataloading.py --world_size $NUM_TRAINERS
-#
+# The longest part of this script is by far the data construction.
 
 import argparse
 import collections
@@ -37,7 +27,7 @@ import torch
 import tqdm
 from tensordict import MemmapTensor
 from tensordict.prototype import tensorclass
-from torch import nn
+from torch import multiprocessing as mp, nn
 from torch.distributed import rpc
 from torch.utils.data import DataLoader
 from torchvision import datasets
@@ -53,38 +43,31 @@ parser.add_argument(
     type=int,
     default=2,
 )
-
+parser.add_argument(
+    "--wandb_entity",
+    type=str,
+    default="",
+)
+parser.add_argument(
+    "--wandb_key",
+    type=str,
+    default="",
+)
 torch.cuda.set_device(0)
 
 RETRY_LIMIT = 2
-NUM_WORKERS = 16
+NUM_WORKERS = 64
 RETRY_DELAY_SECS = 3
 FRACTION = 1
 DATA_NODE = "Data"
 TRAINER_NODE = "Trainer"
 BATCH_SIZE = 128
+NUM_COLLECTION = 5
 
 
-def accept_remote_rref_invocation(func):
-    """Object method decorator that allows a method to be invoked remotely by passing the `rpc.RRef` associated with the remote object construction as first argument in place of the object reference."""
-
-    @wraps(func)
-    def unpack_rref_and_invoke_function(self, *args, **kwargs):
-        if isinstance(self, torch._C._distributed_rpc.PyRRef):
-            self = self.local_value()
-        return func(self, *args, **kwargs)
-
-    return unpack_rref_and_invoke_function
-
-
-def accept_remote_rref_udf_invocation(decorated_class):
-    """Class decorator that applies `accept_remote_rref_invocation` to all public methods."""
-    # ignores private methods
-    for name in dir(decorated_class):
-        method = getattr(decorated_class, name)
-        if callable(method) and not name.startswith("_"):
-            setattr(decorated_class, name, accept_remote_rref_invocation(method))
-    return decorated_class
+##############################################################################
+# Out tensorclass: contains images and target.
+#
 
 
 @tensorclass
@@ -121,6 +104,40 @@ class ImageNetData:
         return data
 
 
+##############################################################################
+# Utils: allow to query a method of an object through RPC.
+#
+
+
+def accept_remote_rref_invocation(func):
+    """Object method decorator that allows a method to be invoked remotely by passing the `rpc.RRef` associated with the remote object construction as first argument in place of the object reference."""
+
+    @wraps(func)
+    def unpack_rref_and_invoke_function(self, *args, **kwargs):
+        if isinstance(self, torch._C._distributed_rpc.PyRRef):
+            self = self.local_value()
+        return func(self, *args, **kwargs)
+
+    return unpack_rref_and_invoke_function
+
+
+def accept_remote_rref_udf_invocation(decorated_class):
+    """Class decorator that applies `accept_remote_rref_invocation` to all public methods."""
+    # ignores private methods
+    for name in dir(decorated_class):
+        method = getattr(decorated_class, name)
+        if callable(method) and not name.startswith("_"):
+            setattr(decorated_class, name, accept_remote_rref_invocation(method))
+    return decorated_class
+
+
+##############################################################################
+# On-device, random transforms. Notice that these transforms can easily be
+# plugged onto a model as the first layer, making them fully compatible
+# with production pipelines.
+#
+
+
 class InvAffine(nn.Module):
     """A custom normalization layer."""
 
@@ -131,10 +148,6 @@ class InvAffine(nn.Module):
 
     def forward(self, x):
         return (x - self.loc) / self.scale
-
-
-##############################################################################
-# Next two transformations that can be used to randomly crop and flip the images.
 
 
 class RandomHFlip(nn.Module):
@@ -172,16 +185,25 @@ class Collate(nn.Module):
         self.transform = transform
         self.device = device
 
+    @torch.no_grad()
     def __call__(self, x: ImageNetData):
         # move data to RAM
-        out = x.apply(lambda _tensor: _tensor.contiguous())
+        out = x.apply(lambda _tensor: _tensor.contiguous().pin_memory())
         if self.device:
             # move data to gpu
             out = out.to(self.device)
         if self.transform:
             # apply transforms on gpu
-            out.images = self.transform(out.images)
+            for t in self.transform:
+                out.images = t(out.images)
         return out
+
+
+##############################################################################
+# "Trainer" node (even though there is not real training).
+# The train method will query data from each data node and collect them on the
+# trainer node.
+#
 
 
 @accept_remote_rref_udf_invocation
@@ -191,34 +213,7 @@ class DummyTrainerNode:
         self.datanodes = []
         self.world_size = world_size
 
-    def init(self):
-        print("preparing data")
-        data_dir = Path("/datasets01_ontap/imagenet_full_size/061417/")
-        train_data_raw = datasets.ImageFolder(
-            root=data_dir / "train",
-            transform=transforms.Compose(
-                [transforms.Resize((256, 256)), transforms.PILToTensor()]
-            ),
-        )
-        train_data_raw.samples = train_data_raw.samples[
-            : len(train_data_raw) // FRACTION
-        ]
-
-        # val_transform = transforms.Compose(
-        #     [
-        #         transforms.Resize(256),
-        #         transforms.CenterCrop(224),
-        #         transforms.ToTensor(),
-        #         transforms.Normalize([0.485, 0.456, 0.406],
-        #                              [0.229, 0.224, 0.225]),
-        #     ]
-        # )
-
-        # val_data = datasets.ImageFolder(root=data_dir / "val", transform=val_transform)
-        # val_data.samples = val_data.samples[: len(val_data) // FRACTION]
-
-        train_data_tc = ImageNetData.from_dataset(train_data_raw)
-        # val_data_tc = ImageNetData.from_dataset(val_data)
+    def init(self, train_data_tc):
         self.data = train_data_tc
 
     def train(self) -> None:
@@ -241,13 +236,15 @@ class DummyTrainerNode:
             _next = min(len_data - 1, _next + BATCH_SIZE)
             pbar.update(BATCH_SIZE)
 
-        t0 = time.time()
         iteration = 0
-        total = 0
         while len(_prefetch_queue):
             batch = _prefetch_queue.popleft().wait()
             i = iteration % (self.world_size - 1)
             iteration += 1
+            if iteration == self.world_size:
+                t0 = time.time()
+                total = 0
+
             if _next != _last:
                 _prefetch_queue.append(
                     rpc.rpc_async(
@@ -259,9 +256,11 @@ class DummyTrainerNode:
             _last = _next
             _next = min(len_data - 1, _next + BATCH_SIZE)
             pbar.update(BATCH_SIZE)
-            total += batch.shape[0]
+            if iteration >= self.world_size:
+                total += batch.shape[0]
         t = time.time() - t0
         print(f"time spent: {t:4.4f}s, Rate: {total/t} fps")
+        return {"time": t, "rate": total / t}
 
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(RETRY_LIMIT),
@@ -278,6 +277,13 @@ class DummyTrainerNode:
 
     def get_data(self):
         return self.data
+
+
+##############################################################################
+# Data nodes.
+# The data nodes hold a reference to the data stored on disk, execute indexing
+# and return the transformed tensorclass to the training node.
+#
 
 
 @accept_remote_rref_udf_invocation
@@ -321,8 +327,6 @@ class DataNode:
         if not self.initialized:
             self._init()
         self.count += 1
-        if self.count % 100 == 0:
-            print(self.count)
         out = self.collate(self.data[idx])
         return out
 
@@ -334,11 +338,12 @@ def get_trainer():
     return trainer
 
 
-if __name__ == "__main__":
-    args = parser.parse_args()
-    rank = int(os.environ["RANK"])
-    world_size = args.world_size
+##############################################################################
+# Some RPC functions responsible for the control flow.
+#
 
+
+def init_rpc(rank, name, world_size):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29500"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
@@ -349,31 +354,93 @@ if __name__ == "__main__":
         init_method=str_init_method,
         _transports=["uv"],
     )
-
     if rank == 0:
-        for dest_rank in range(1, args.world_size):
-            options.set_device_map(f"{DATA_NODE}_{dest_rank}", {i: i for i in range(8)})
-        rpc.init_rpc(
-            TRAINER_NODE,
-            rank=rank,
-            backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
-        )
-        torch.randn(1, device="cuda:0")
-        trainer = DummyTrainerNode(args.world_size)
-        for dest_rank in range(1, args.world_size):
-            trainer.create_data(dest_rank)
-        trainer.init()
-        trainer.train()
-    else:
-        rpc.init_rpc(
-            f"{DATA_NODE}_{rank}",
-            rank=rank,
-            backend=rpc.BackendType.TENSORPIPE,
-            rpc_backend_options=options,
-        )
-        torch.randn(1, device="cuda:0")
-        # device = f"cuda:{rank}"
-        print(f"Initialised Data node {rank}")
+        # All data must be sent to cuda:0
+        for dest_rank in range(1, world_size):
+            options.set_device_map(f"{DATA_NODE}_{dest_rank}", {0: dest_rank})
 
+    rpc.init_rpc(
+        name,
+        rank=rank,
+        backend=rpc.BackendType.TENSORPIPE,
+        rpc_backend_options=options,
+    )
+
+    print(f"Initialised {name}")
+
+
+def shutdown():
     rpc.shutdown()
+
+
+def func(rank, world_size, args, train_data_tc):
+    global trainer
+    # access GPU
+    torch.randn(1, device="cuda:0")
+    if rank == 0:
+
+        trainer = DummyTrainerNode(world_size)
+        for dest_rank in range(1, world_size):
+            trainer.create_data(dest_rank)
+        trainer.init(train_data_tc)
+        import wandb
+
+        if not args.wandb_key:
+            print("no wandb key provided, using it offline")
+            mode = "offline"
+            if not args.wandb_entity:
+                raise ValueError("Please indicate the wandb entity.")
+        else:
+            mode = "online"
+            wandb.login(key=str(args.wandb_key))
+        with wandb.init(
+            project="dataloading",
+            name="distributed",
+            entity=args.wandb_entity,
+            mode=mode,
+        ):
+            min_time = 10**10
+            for i in range(NUM_COLLECTION):
+                stats = trainer.train()
+                if stats["time"] < min_time:
+                    min_time = stats["time"]
+                    rate = stats["rate"]
+                wandb.log(stats, step=i)
+            print(f"FINAL: time spent: {min_time:4.4f}s, Rate: {rate} fps")
+
+
+if __name__ == "__main__":
+    try:
+        mp.set_start_method("spawn")
+    except Exception as err:
+        print(f"Could not start mp with spawn method. Error: {err}")
+
+    args = parser.parse_args()
+    world_size = args.world_size
+
+    names = [TRAINER_NODE, *[f"{DATA_NODE}_{rank}" for rank in range(1, world_size)]]
+
+    print("preparing data")
+    data_dir = Path("/datasets01_ontap/imagenet_full_size/061417/")
+    train_data_raw = datasets.ImageFolder(
+        root=data_dir / "train",
+        transform=transforms.Compose(
+            [transforms.Resize((256, 256)), transforms.PILToTensor()]
+        ),
+    )
+    train_data_raw.samples = train_data_raw.samples[: len(train_data_raw) // FRACTION]
+
+    train_data_tc = ImageNetData.from_dataset(train_data_raw)
+
+    with mp.Pool(world_size) as pool:
+        pool.starmap(
+            init_rpc, ((rank, name, world_size) for rank, name in enumerate(names))
+        )
+        pool.starmap(
+            func,
+            (
+                (rank, world_size, args, train_data_tc)
+                for rank, name in enumerate(names)
+            ),
+        )
+        pool.apply_async(shutdown)
