@@ -513,7 +513,6 @@ def test_default():
         y: torch.Tensor = torch.ones(3, 4, 5)
 
     data = MyData(batch_size=[3, 4])
-    assert data.__dict__["y"] is None
     assert (data.y == 1).all()
     assert data.X is None
     data.X = torch.zeros(3, 4, 1)
@@ -521,7 +520,7 @@ def test_default():
 
     MyData(batch_size=[3])
     MyData(batch_size=[])
-    with pytest.raises(RuntimeError, match="batch_size are incongruent"):
+    with pytest.raises(RuntimeError, match="batch dimension mismatch"):
         MyData(batch_size=[4])
 
 
@@ -532,7 +531,6 @@ def test_defaultfactory():
         y: torch.Tensor = dataclasses.field(default_factory=lambda: torch.ones(3, 4, 5))
 
     data = MyData(batch_size=[3, 4])
-    assert data.__dict__["y"] is None
     assert (data.y == 1).all()
     assert data.X is None
     data.X = torch.zeros(3, 4, 1)
@@ -540,7 +538,7 @@ def test_defaultfactory():
 
     MyData(batch_size=[3])
     MyData(batch_size=[])
-    with pytest.raises(RuntimeError, match="batch_size are incongruent"):
+    with pytest.raises(RuntimeError, match="batch dimension mismatch"):
         MyData(batch_size=[4])
 
 

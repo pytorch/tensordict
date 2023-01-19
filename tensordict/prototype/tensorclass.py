@@ -185,12 +185,7 @@ def _init_wrapper(init, expected_keys):
 
             self.tensordict = TensorDict({}, batch_size=batch_size, device=device)
             init(
-                self,
-                **{
-                    key: _get_typed_value(value)
-                    for key, value in kwargs.items()
-                    if key not in ("batch_size",)
-                },
+                self, **{key: _get_typed_value(value) for key, value in kwargs.items()}
             )
 
     return wrapper
