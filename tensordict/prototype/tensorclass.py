@@ -183,17 +183,14 @@ def _init_wrapper(init, expected_keys):
                 if default is not None:
                     kwargs.setdefault(key, default)
 
-            new_kwargs = {key: None for key in kwargs}
-
-            init(self, **new_kwargs)
-            self.tensordict = TensorDict(
-                {
+            self.tensordict = TensorDict({}, batch_size=batch_size, device=device)
+            init(
+                self,
+                **{
                     key: _get_typed_value(value)
                     for key, value in kwargs.items()
                     if key not in ("batch_size",)
                 },
-                batch_size=batch_size,
-                device=device,
             )
 
     return wrapper
@@ -238,7 +235,8 @@ def _setattr_wrapper(setattr_, expected_keys):
         if type(value) in CLASSES_DICT.values():
             value = value.__dict__["tensordict"]
         self.__dict__["tensordict"][key] = value
-        assert self.__dict__["tensordict"][key] is value
+        if value is not None:
+            assert self.__dict__["tensordict"][key] is value
 
     return wrapper
 
