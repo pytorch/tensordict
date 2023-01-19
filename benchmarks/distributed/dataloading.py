@@ -241,13 +241,15 @@ class DummyTrainerNode:
             _next = min(len_data - 1, _next + BATCH_SIZE)
             pbar.update(BATCH_SIZE)
 
-        t0 = time.time()
         iteration = 0
-        total = 0
         while len(_prefetch_queue):
             batch = _prefetch_queue.popleft().wait()
             i = iteration % (self.world_size - 1)
             iteration += 1
+            if iteration == self.world_size:
+                t0 = time.time()
+                total = 0
+                
             if _next != _last:
                 _prefetch_queue.append(
                     rpc.rpc_async(
@@ -259,7 +261,8 @@ class DummyTrainerNode:
             _last = _next
             _next = min(len_data - 1, _next + BATCH_SIZE)
             pbar.update(BATCH_SIZE)
-            total += batch.shape[0]
+            if iteration >= self.world_size:
+                total += batch.shape[0]
         t = time.time() - t0
         print(f"time spent: {t:4.4f}s, Rate: {total/t} fps")
 
@@ -375,5 +378,5 @@ if __name__ == "__main__":
         torch.randn(1, device="cuda:0")
         # device = f"cuda:{rank}"
         print(f"Initialised Data node {rank}")
-
+        breakpoint()
     rpc.shutdown()
