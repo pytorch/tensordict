@@ -70,7 +70,7 @@ def test_type():
 
 def test_signature():
     sig = inspect.signature(MyData)
-    assert list(sig.parameters) == ["X", "y", "batch_size", "device", "_tensordict"]
+    assert list(sig.parameters) == ["X", "y", "batch_size", "device"]
 
     with pytest.raises(TypeError, match="missing 2 required positional arguments"):
         MyData()
@@ -84,13 +84,6 @@ def test_signature():
     # if all positional arguments are specified, ommitting batch_size gives error
     with pytest.raises(ValueError, match="batch size was not specified"):
         MyData(X=torch.rand(10), y=torch.rand(10))
-
-    # instantiation via _tensordict ignores argument checks, no TypeError
-    MyData(
-        _tensordict=TensorDict(
-            {"X": torch.rand(10), "y": torch.rand(10)}, batch_size=[10]
-        )
-    )
 
     # all positional arguments + batch_size is fine
     MyData(X=torch.rand(10), y=torch.rand(10), batch_size=[10])
@@ -158,7 +151,7 @@ def test_banned_types():
         subclass: Union[MyOptionalClass, TensorDict] = None
 
     data = MyUnionClass(
-        subclass=MyUnionClass(_tensordict=TensorDict({}, [3])), batch_size=[3]
+        subclass=MyUnionClass.from_tensordict(TensorDict({}, [3])), batch_size=[3]
     )
     with pytest.raises(TypeError, match="can't be deterministically cast."):
         assert data.subclass is not None
