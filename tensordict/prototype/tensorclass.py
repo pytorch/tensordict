@@ -152,6 +152,8 @@ def tensorclass(cls: T) -> T:
     implements_for_tdc(torch.stack)(_stack)
     implements_for_tdc(torch.cat)(_cat)
 
+    cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
+
     CLASSES_DICT[cls.__name__] = cls
     return cls
 
@@ -162,6 +164,7 @@ def _init_wrapper(init, expected_keys):
     # drop first entry of params which corresponds to self and isn't passed by the user
     required_params = [p.name for p in params[1:] if p.default is inspect._empty]
 
+    @functools.wraps(init)
     def wrapper(self, *args, batch_size=None, device=None, _tensordict=None, **kwargs):
         if (args or kwargs) and _tensordict is not None:
             raise ValueError("Cannot pass both args/kwargs and _tensordict.")
