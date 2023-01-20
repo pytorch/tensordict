@@ -11,8 +11,13 @@ import torch
 
 from packaging import version
 
-from tensordict import MetaTensor
-from tensordict.tensordict import _accepted_classes, TensorDict, TensorDictBase
+from tensordict.tensordict import (
+    _accepted_classes,
+    get_repr,
+    is_tensordict,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.utils import DEVICE_TYPING
 
 from torch import Tensor
@@ -432,21 +437,16 @@ def _get_typed_output(out, expected_type):
     return out
 
 
-def _single_td_field_as_str(key, item: MetaTensor, tensordict):
-    if item.is_tensordict():
+def _single_td_field_as_str(key, item, tensordict):
+    if is_tensordict(type(item)):
         return f"{key}={repr(tensordict[key])}"
-    return f"{key}={item.get_repr()}"
+    return f"{key}={get_repr(item)}"
 
 
 def _all_td_fields_as_str(td: TensorDictBase) -> str:
     return indent(
         ",\n".join(
-            sorted(
-                [
-                    _single_td_field_as_str(key, item, td)
-                    for key, item in td.items_meta()
-                ]
-            )
+            sorted([_single_td_field_as_str(key, item, td) for key, item in td.items()])
         ),
         4 * " ",
     )
