@@ -79,12 +79,19 @@ def test_signature():
     with pytest.raises(TypeError, match="missing 1 required positional argument"):
         MyData(X=torch.rand(10), batch_size=[10], device="cpu")
 
+    # if all positional arguments are specified, ommitting batch_size gives error
+    with pytest.raises(ValueError, match="batch size was not specified"):
+        MyData(X=torch.rand(10), y=torch.rand(10))
+
     # instantiation via _tensordict ignores argument checks, no TypeError
     MyData(
         _tensordict=TensorDict(
             {"X": torch.rand(10), "y": torch.rand(10)}, batch_size=[10]
         )
     )
+
+    # all positional arguments + batch_size is fine
+    MyData(X=torch.rand(10), y=torch.rand(10), batch_size=[10])
 
 
 @pytest.mark.parametrize("device", get_available_devices())
