@@ -379,11 +379,16 @@ class DataNode:
         self.rank = rank
         self.id = rpc.get_worker_info().id
         self.single_gpu = single_gpu
-        train_ref = rpc.get_worker_info(f"{TRAINER_NODE}")
-        self.train_ref = rpc.remote(
-            train_ref,
-            get_trainer,
-        )
+        with tenacity.retry(
+            stop=tenacity.stop_after_attempt(RETRY_LIMIT),
+            wait=tenacity.wait_fixed(RETRY_DELAY_SECS),
+            reraise=True,
+        ):
+            train_ref = rpc.get_worker_info(f"{TRAINER_NODE}")
+            self.train_ref = rpc.remote(
+                train_ref,
+                get_trainer,
+            )
         self.batch_size = batch_size
         if self.single_gpu:
             device = "cuda:1"
