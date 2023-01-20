@@ -20,7 +20,7 @@ jobs:
           python-version: 3.8
       - name: Setup Environment
         run: |
-          pip install tensordict-nightly
+          pip install -e .
           pip install pytest pytest-benchmark
       - name: Run benchmarks
         run: |
@@ -91,7 +91,7 @@ jobs:
         echo /usr/local/bin >> $GITHUB_PATH
     - name: Setup Environment
       run: |
-        python -m pip install tensordict-nightly
+        python -m pip install -e .
         python -m pip install pytest pytest-benchmark
     - name: Run benchmarks
       run: |
