@@ -401,6 +401,36 @@ def test_nested():
     assert isinstance(data.y, MyDataNested), type(data.y)
 
 
+def test_nested_eq():
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        y: "MyDataNested" = None
+
+    X = torch.ones(3, 4, 5)
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
+    data_nest2 = MyDataNested(X=X, batch_size=batch_size)
+    data2 = MyDataNested(X=X, y=data_nest2, batch_size=batch_size)
+    assert (data == data2).all()
+
+
+def test_nested_ne():
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        y: "MyDataNested" = None
+
+    X = torch.ones(3, 4, 5)
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
+    data_nest2 = MyDataNested(X=X + 1, batch_size=batch_size)
+    data2 = MyDataNested(X=X + 1, y=data_nest2, batch_size=batch_size)
+    assert (data != data2).all()
+
+
 def test_args():
     @tensorclass
     class MyData:

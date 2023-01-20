@@ -36,14 +36,7 @@ from warnings import warn
 import numpy as np
 import torch
 
-from tensordict.utils import (
-    _get_item,
-    _is_shared,
-    _requires_grad,
-    _set_item,
-    _shape,
-    mem_map_tensor_as_tensor,
-)
+from tensordict.utils import _get_item, _is_shared, _requires_grad, _set_item, _shape
 from torch import Tensor
 from torch.utils._pytree import tree_map
 
@@ -52,7 +45,7 @@ try:
 except ImportError:
     from tensordict.utils import infer_size_impl
 
-from tensordict.memmap import MemmapTensor
+from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
 from tensordict.metatensor import MetaTensor
 from tensordict.utils import (
     _getitem_batch_size,
@@ -404,9 +397,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def state_dict(self) -> OrderedDict:
         out = collections.OrderedDict()
-        for key, item in self.flatten_keys().apply(mem_map_tensor_as_tensor).items():
-            out[key] = item
-        # out.update(self.to_dict())
+        for key, item in self.apply(memmap_tensor_as_tensor).items():
+            out[key] = (
+                item if not isinstance(item, TensorDictBase) else item.state_dict()
+            )
         if "__batch_size" in out:
             raise KeyError(
                 "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
@@ -424,7 +418,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         device = state_dict.pop("__device")
         if device is not None:
             self.to(device)
-        self.update(state_dict, inplace=True)
+        for key, item in state_dict.items():
+            if isinstance(item, dict):
+                self.set(key, TensorDict({}, []).load_state_dict(item), inplace=True)
+            else:
+                self.set(key, item, inplace=True)
         return self
 
     def is_memmap(self) -> bool:

@@ -135,6 +135,8 @@ def tensorclass(cls: T) -> T:
     cls.__setitem__ = _setitem
     cls.__repr__ = _repr
     cls.__len__ = _len
+    cls.__eq__ = __eq__
+    cls.__ne__ = __ne__
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
@@ -327,6 +329,18 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
     self.tensordict._batch_size_setter(new_size)
 
 
+def __eq__(self, other):
+    if is_tensorclass(other):
+        return self.tensordict.__eq__(other.tensordict)
+    return self == other
+
+
+def __ne__(self, other):
+    if is_tensorclass(other):
+        return self.tensordict != other.tensordict
+    return self == other
+
+
 def _unbind(tdc, dim):
     tensordicts = torch.unbind(tdc.tensordict, dim)
     out = [tdc.__class__(_tensordict=td) for td in tensordicts]
@@ -413,7 +427,6 @@ def _get_typed_output(out, expected_type):
     elif isinstance(out, TensorDictBase):
         dest_dtype = _check_td_out_type(expected_type)
         if dest_dtype is not None:
-            print(dest_dtype)
             out = dest_dtype(_tensordict=out)
 
     return out
