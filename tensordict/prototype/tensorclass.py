@@ -1,5 +1,6 @@
 import dataclasses
 import functools
+import inspect
 import re
 import typing
 from dataclasses import dataclass
@@ -156,6 +157,11 @@ def tensorclass(cls: T) -> T:
 
 
 def _init_wrapper(init, expected_keys):
+    init_sig = inspect.signature(init)
+    params = list(init_sig.parameters.values())
+    # drop first entry of params which corresponds to self and isn't passed by the user
+    required_params = [p.name for p in params[1:] if p.default is inspect._empty]
+
     def wrapper(self, *args, batch_size=None, device=None, _tensordict=None, **kwargs):
         if (args or kwargs) and _tensordict is not None:
             raise ValueError("Cannot pass both args/kwargs and _tensordict.")
@@ -176,17 +182,39 @@ def _init_wrapper(init, expected_keys):
                 kwargs[key] = value
 
             for key, field in self.__dataclass_fields__.items():
-                if not isinstance(field.default_factory, dataclasses._MISSING_TYPE):
+                if field.default_factory is not dataclasses.MISSING:
                     default = field.default_factory()
                 else:
                     default = field.default
-                if default is not None:
+                if default not in (None, dataclasses.MISSING):
                     kwargs.setdefault(key, default)
+
+            missing_params = [p for p in required_params if p not in kwargs]
+            if missing_params:
+                n_missing = len(missing_params)
+                raise TypeError(
+                    f"{self.__class__.__name__}.__init__() missing {n_missing} "
+                    f"required positional argument{'' if n_missing == 1 else 's'}: "
+                    f"""{", ".join(f"'{name}'" for name in missing_params)}"""
+                )
 
             self.tensordict = TensorDict({}, batch_size=batch_size, device=device)
             init(
                 self, **{key: _get_typed_value(value) for key, value in kwargs.items()}
             )
+
+    new_params = [
+        inspect.Parameter(
+            "batch_size", inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None
+        ),
+        inspect.Parameter(
+            "device", inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None
+        ),
+        inspect.Parameter(
+            "_tensordict", inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None
+        ),
+    ]
+    wrapper.__signature__ = init_sig.replace(parameters=params + new_params)
 
     return wrapper
 
@@ -381,7 +409,7 @@ def _cat(list_of_tdc, dim):
 
 
 def _get_typed_value(value):
-    if isinstance(value, _accepted_classes + (dataclasses._MISSING_TYPE,)):
+    if isinstance(value, _accepted_classes) or value is dataclasses.MISSING:
         return value
     elif type(value) in CLASSES_DICT.values():
         return value.tensordict

@@ -1,5 +1,6 @@
 import argparse
 import dataclasses
+import inspect
 import os
 import pickle
 import re
@@ -63,6 +64,14 @@ def test_type():
     assert is_tensorclass(MyData)
     # we get an instance of the user defined class, not a dynamically defined subclass
     assert type(data) is MyDataUndecorated
+
+
+def test_signature():
+    sig = inspect.signature(MyData)
+    assert list(sig.parameters) == ["X", "y", "batch_size", "device", "_tensordict"]
+
+    with pytest.raises(TypeError, match="missing 2 required positional arguments"):
+        MyData()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
