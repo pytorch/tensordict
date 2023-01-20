@@ -3481,6 +3481,11 @@ class TestSnapshot:
             app_state=app_state, path=f"/tmp/{uuid.uuid4()}"
         )
 
+        td_plain = td.to_tensordict()
+        # we want to delete refs to MemmapTensors
+        assert not isinstance(td_plain["a"], MemmapTensor)
+        del td
+
         td_dest = TensorDict(
             {"a": torch.zeros(3), "b": TensorDict({"c": torch.zeros(3, 1)}, [3, 1])},
             [3],
@@ -3490,8 +3495,8 @@ class TestSnapshot:
         app_state = {"state": torchsnapshot.StateDict(tensordict=td_dest.state_dict())}
         snapshot.restore(app_state=app_state)
 
-        assert (td_dest == td).all()
-        assert td_dest["b"].batch_size == td["b"].batch_size
+        assert (td_dest == td_plain).all()
+        assert td_dest["b"].batch_size == td_plain["b"].batch_size
         assert isinstance(td_dest["b", "c"], MemmapTensor)
 
     def test_update(self):
@@ -3501,11 +3506,14 @@ class TestSnapshot:
         snapshot = torchsnapshot.Snapshot.take(
             app_state=state, path=f"/tmp/{uuid.uuid4()}"
         )
+        td_plain = tensordict.to_tensordict()
+        assert not isinstance(td_plain["a"], MemmapTensor)
+        del tensordict
 
         tensordict2 = TensorDict({}, [])
         target_state = {"state": tensordict2}
         snapshot.restore(app_state=target_state)
-        assert (tensordict == tensordict2).all()
+        assert (td_plain == tensordict2).all()
 
 
 if __name__ == "__main__":
