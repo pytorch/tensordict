@@ -163,7 +163,15 @@ def tensorclass(cls: T) -> T:
 
 
 def _init_wrapper(init, expected_keys):
-    def wrapper(self, *args, batch_size=None, device=None, _tensordict=None, _non_tensordict=None, **kwargs):
+    def wrapper(
+        self,
+        *args,
+        batch_size=None,
+        device=None,
+        _tensordict=None,
+        _non_tensordict=None,
+        **kwargs,
+    ):
         if (args or kwargs) and _tensordict is not None:
             raise ValueError("Cannot pass both args/kwargs and _tensordict.")
 
@@ -262,7 +270,7 @@ def _setattr_wrapper(setattr_, expected_keys):
             or (not isinstance(value, _accepted_classes) and not is_tensorclass(value))
         ):
             if (
-                key != 'tensordict'
+                key != "tensordict"
                 and value is not None
                 and type(self).__name__ in TENSOR_CLASS_NON_TENSOR_DATA.keys()
             ):
@@ -293,8 +301,7 @@ def _getattr(self, attr):
         if isinstance(res, TensorDictBase):
             new = self.__class__(_tensordict=res, _non_tensordict=non_tensor_dict)
             return new
-        else:
-            return res
+        return res
 
     return wrapped_func
 
@@ -334,7 +341,7 @@ def _repr(self) -> str:
     batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
     device_str = indent(f"device={self.device}", 4 * " ")
     is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-    if len(non_tensor_fields):
+    if len(non_tensor_fields) > 0:
         non_tensor_field_str = indent(
             ",\n".join(non_tensor_fields),
             4 * " ",
@@ -458,9 +465,7 @@ def _stack(list_of_tdc, dim):
         )
         return out
     else:
-        raise ValueError(
-            "Cannot stack different tensor classes"
-        )
+        raise ValueError("Cannot stack different tensor classes")
 
 
 def _cat(list_of_tdc, dim):
@@ -473,9 +478,7 @@ def _cat(list_of_tdc, dim):
         )
         return out
     else:
-        raise ValueError(
-            "Cannot concatenate different tensor classes"
-        )
+        raise ValueError("Cannot concatenate different tensor classes")
 
 
 def _get_typed_value(value):
@@ -559,7 +562,8 @@ def _validate_non_tensor_data(list_tds) -> bool:
             for tds in list_tds_copy:
                 if val != tds.__dict__[key]:
                     raise ValueError(
-                        f"{repr(val)} and {repr(tds.__dict__[key])} for the attribute {repr(key)} are not matching"
+                        f"{repr(val)} and {repr(tds.__dict__[key])} for the attribute "
+                        f"{repr(key)} are not matching"
                     )
 
     return True
