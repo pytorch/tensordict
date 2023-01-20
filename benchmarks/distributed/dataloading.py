@@ -151,6 +151,7 @@ class ImageNetData:
         sd = dict(data.state_dict())
         app_state = {"state": torchsnapshot.StateDict(data=sd)}
         snapshot.restore(app_state=app_state)
+        return data
 
     def save(self, path):
         import torchsnapshot
