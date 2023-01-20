@@ -1,8 +1,8 @@
+import collections
 import dataclasses
 import functools
 import re
 import typing
-import collections
 from dataclasses import dataclass
 from platform import python_version
 from textwrap import indent
@@ -204,7 +204,8 @@ def _init_wrapper(init, expected_keys):
                     TENSOR_CLASS_NON_TENSOR_DATA[expected_type] = {
                         k: v
                         for k, v in val.__dict__.items()
-                        if not isinstance(v, _accepted_classes) and not is_tensorclass(v)
+                        if not isinstance(v, _accepted_classes)
+                        and not is_tensorclass(v)
                     }
                     new_kwargs[key] = None
                 else:
@@ -215,7 +216,8 @@ def _init_wrapper(init, expected_keys):
                 {
                     key: _get_typed_value(value)
                     for key, value in kwargs.items()
-                    if key not in ("batch_size",) and (isinstance(value, _accepted_classes) or is_tensorclass(value))
+                    if key not in ("batch_size",)
+                    and (isinstance(value, _accepted_classes) or is_tensorclass(value))
                 },
                 batch_size=batch_size,
                 device=device,
@@ -254,8 +256,18 @@ def _getattribute_wrapper(getattribute):
 
 def _setattr_wrapper(setattr_, expected_keys):
     def wrapper(self, key, value):
-        if "tensordict" not in self.__dict__ or key in ("batch_size", "device") or \
-                    (not isinstance(value, _accepted_classes) and not is_tensorclass(value)):
+        if (
+            "tensordict" not in self.__dict__
+            or key in ("batch_size", "device")
+            or (not isinstance(value, _accepted_classes) and not is_tensorclass(value))
+        ):
+            if (
+                key != 'tensordict'
+                and value is not None
+                and type(self).__name__ in TENSOR_CLASS_NON_TENSOR_DATA.keys()
+            ):
+                expected_type = type(self).__name__
+                TENSOR_CLASS_NON_TENSOR_DATA[expected_type][key] = value
             return setattr_(self, key, value)
         if key not in expected_keys:
             raise AttributeError(
@@ -294,7 +306,9 @@ def _getitem(self, item):
         raise ValueError("Invalid indexing arguments.")
     tensor_res = self.tensordict[item]
     non_tensor_res = _get_non_tensor_dict(self.__dict__)
-    return self.__class__(_tensordict=tensor_res, _non_tensordict=non_tensor_res)  # device=res.device)
+    return self.__class__(
+        _tensordict=tensor_res, _non_tensordict=non_tensor_res
+    )  # device=res.device)
 
 
 def _setitem(self, item, value):
@@ -321,8 +335,13 @@ def _repr(self) -> str:
     device_str = indent(f"device={self.device}", 4 * " ")
     is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
     if len(non_tensor_fields):
-        non_tensor_field_str = indent(",\n".join(non_tensor_fields), 4 * " ", )
-        string = ",\n".join([field_str, non_tensor_field_str, batch_size_str, device_str, is_shared_str])
+        non_tensor_field_str = indent(
+            ",\n".join(non_tensor_fields),
+            4 * " ",
+        )
+        string = ",\n".join(
+            [field_str, non_tensor_field_str, batch_size_str, device_str, is_shared_str]
+        )
     else:
         string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
     return f"{self.__class__.__name__}(\n{string})"
@@ -369,7 +388,10 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
 def _unbind(tdc, dim):
     tensordicts = torch.unbind(tdc.tensordict, dim)
     non_tensor_dict = _get_non_tensor_dict(tdc.__dict__)
-    out = [tdc.__class__(_tensordict=td, _non_tensordict=non_tensor_dict) for td in tensordicts]
+    out = [
+        tdc.__class__(_tensordict=td, _non_tensordict=non_tensor_dict)
+        for td in tensordicts
+    ]
     return out
 
 
@@ -419,7 +441,10 @@ def _permute(tdc, dims):
 def _split(tdc, split_size_or_sections, dim=0):
     tensordicts = torch.split(tdc.tensordict, split_size_or_sections, dim)
     non_tensor_dict = _get_non_tensor_dict(tdc.__dict__)
-    out = [tdc.__class__(_tensordict=td, _non_tensordict=non_tensor_dict) for td in tensordicts]
+    out = [
+        tdc.__class__(_tensordict=td, _non_tensordict=non_tensor_dict)
+        for td in tensordicts
+    ]
     return out
 
 
@@ -428,11 +453,13 @@ def _stack(list_of_tdc, dim):
         tensordict = torch.stack([tdc.tensordict for tdc in list_of_tdc], dim)
         tdc = list_of_tdc[0]
         non_tensor_dict = _get_non_tensor_dict(tdc.__dict__)
-        out = list_of_tdc[0].__class__(_tensordict=tensordict, _non_tensordict=non_tensor_dict)
+        out = list_of_tdc[0].__class__(
+            _tensordict=tensordict, _non_tensordict=non_tensor_dict
+        )
         return out
     else:
         raise ValueError(
-            f"Cannot stack different tensor classes"
+            "Cannot stack different tensor classes"
         )
 
 
@@ -441,11 +468,13 @@ def _cat(list_of_tdc, dim):
         tensordict = torch.cat([tdc.tensordict for tdc in list_of_tdc], dim)
         tdc = list_of_tdc[0]
         non_tensor_dict = _get_non_tensor_dict(tdc.__dict__)
-        out = list_of_tdc[0].__class__(_tensordict=tensordict, _non_tensordict=non_tensor_dict)
+        out = list_of_tdc[0].__class__(
+            _tensordict=tensordict, _non_tensordict=non_tensor_dict
+        )
         return out
     else:
         raise ValueError(
-            f"Cannot concatenate different tensor classes"
+            "Cannot concatenate different tensor classes"
         )
 
 
@@ -463,11 +492,13 @@ def _get_typed_output(out, expected_type):
     # Otherwise, if the output is some TensorDictBase subclass, we check the type and if it
     # does not match, we map it. In all other cases, just return what has been gathered.
     non_tensor_dict = None
-    # Handling nested tensorclasses 
+    # Handling nested tensorclasses
     if expected_type in TENSOR_CLASS_NON_TENSOR_DATA:
         non_tensor_dict = TENSOR_CLASS_NON_TENSOR_DATA[expected_type]
     if isinstance(expected_type, str) and expected_type in CLASSES_DICT:
-        out = CLASSES_DICT[expected_type](_tensordict=out, _non_tensordict=non_tensor_dict)
+        out = CLASSES_DICT[expected_type](
+            _tensordict=out, _non_tensordict=non_tensor_dict
+        )
     elif (
         isinstance(expected_type, type)
         and not isinstance(out, expected_type)
@@ -503,10 +534,10 @@ def _all_td_fields_as_str(td: TensorDictBase) -> str:
     )
 
 
-def _all_non_td_fields_as_str(dict) -> list:
+def _all_non_td_fields_as_str(src_dict) -> list:
     result = []
-    for key, val in dict.items():
-        if key not in 'tensordict' and val:
+    for key, val in src_dict.items():
+        if key not in "tensordict" and val:
             result.append(f"{key}={repr(val)}")
 
     return result
@@ -515,7 +546,7 @@ def _all_non_td_fields_as_str(dict) -> list:
 def _get_non_tensor_dict(src_dict) -> dict:
     non_tensor_dict = {}
     for key, val in src_dict.items():
-        if key != 'tensordict':
+        if key != "tensordict":
             non_tensor_dict[key] = val
     return non_tensor_dict
 
@@ -524,7 +555,7 @@ def _validate_non_tensor_data(list_tds) -> bool:
     list_tds_copy = list_tds.copy()
     td = list_tds_copy.pop()
     for key, val in td.__dict__.items():
-        if key != 'tensordict' and val:
+        if key != "tensordict" and val is not None:
             for tds in list_tds_copy:
                 if val != tds.__dict__[key]:
                     raise ValueError(
