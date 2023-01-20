@@ -57,12 +57,12 @@ parser.add_argument(
 parser.add_argument(
     "--wandb_entity",
     type=str,
-    default="vmoens",
+    default="",
 )
 parser.add_argument(
     "--wandb_key",
     type=str,
-    default="d0bee782a83f90cbc11177e36a092de77585cbb3",
+    default="",
 )
 
 parser.add_argument(
