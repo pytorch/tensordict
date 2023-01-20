@@ -31,6 +31,7 @@ else
     conda install pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia -y
 fi
 
+
 # smoke test
 python -c "import functorch"
 

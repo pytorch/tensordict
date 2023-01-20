@@ -22,8 +22,15 @@ from tensordict.utils import (
     prod,
     torch_to_numpy_dtype_dict,
 )
-from torchsnapshot.serialization import tensor_from_memoryview
 
+try:
+    from torchsnapshot.serialization import tensor_from_memoryview
+
+    _has_snapshot = True
+    SNAPSHOT_ERR = None
+except ImportError as err:
+    _has_snapshot = False
+    SNAPSHOT_ERR = err
 MEMMAP_HANDLED_FN = {}
 
 __all__ = ["MemmapTensor", "set_transfer_ownership"]
@@ -688,6 +695,11 @@ def memmap_tensor_as_tensor(
 
     if not isinstance(mem_map_tensor, MemmapTensor):
         return mem_map_tensor
+    if not _has_snapshot:
+        raise ImportError(
+            "torchsnapshot not found. Consider installing it to "
+            "serialize memory-mapped tensors."
+        ) from SNAPSHOT_ERR
     # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
     # as a Tensor for saving and loading purposes. This doesn't incur any copy.
     return tensor_from_memoryview(

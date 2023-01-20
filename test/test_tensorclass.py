@@ -12,10 +12,11 @@ from typing import Any, Optional, Union
 
 import pytest
 import torch
+import torchsnapshot
 
 from _utils_internal import get_available_devices
 
-from tensordict import LazyStackedTensorDict, TensorDict
+from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.prototype import is_tensorclass, tensorclass
 from tensordict.tensordict import (
     _PermutedTensorDict,
@@ -631,6 +632,34 @@ def test_pickle():
 
     assert_allclose_td(data.to_tensordict(), data2.to_tensordict())
     assert isinstance(data2, MyData)
+
+
+def test_torochsnapshot(tmpdir):
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        y: Optional[MyClass] = None
+
+    tc = MyClass(
+        x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[]
+    )
+    tc.memmap_()
+    assert isinstance(tc.y.x, MemmapTensor)
+
+    app_state = {"state": torchsnapshot.StateDict(tensordict=tc.state_dict())}
+    snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmpdir))
+
+    tc_dest = MyClass(
+        x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[]
+    )
+    tc_dest.memmap_()
+    assert isinstance(tc_dest.y.x, MemmapTensor)
+    app_state = {"state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict())}
+    snapshot.restore(app_state=app_state)
+
+    assert (tc_dest == tc).all()
+    assert tc_dest.y.batch_size == tc.y.batch_size
+    assert isinstance(tc_dest.y.x, MemmapTensor)
 
 
 def _make_data(shape):

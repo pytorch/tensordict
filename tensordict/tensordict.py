@@ -2660,8 +2660,6 @@ class TensorDict(TensorDictBase):
                 self._tensordict[key] = value.memmap_()
                 continue
             self._tensordict[key] = MemmapTensor(value, prefix=prefix)
-        for value in self.values_meta(make_unset=False):
-            value.memmap_()
         self._is_memmap = True
         self.lock()
         return self
