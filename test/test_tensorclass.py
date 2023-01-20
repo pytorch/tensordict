@@ -75,6 +75,19 @@ def test_signature():
     with pytest.raises(TypeError, match="missing 2 required positional arguments"):
         MyData()
 
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        MyData(X=torch.rand(10))
+
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        MyData(X=torch.rand(10), batch_size=[10], device="cpu")
+
+    # instantiation via _tensordict ignores argument checks, no TypeError
+    MyData(
+        _tensordict=TensorDict(
+            {"X": torch.rand(10), "y": torch.rand(10)}, batch_size=[10]
+        )
+    )
+
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_device(device):
