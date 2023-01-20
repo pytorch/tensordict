@@ -165,7 +165,7 @@ def _init_wrapper(init, expected_keys):
     required_params = [p.name for p in params[1:] if p.default is inspect._empty]
 
     @functools.wraps(init)
-    def wrapper(self, *args, batch_size=None, device=None, **kwargs):
+    def wrapper(self, *args, batch_size, device=None, **kwargs):
         for value, key in zip(args, self.__dataclass_fields__):
             if key in kwargs:
                 raise ValueError(f"The key {key} is already set in kwargs")
@@ -192,12 +192,8 @@ def _init_wrapper(init, expected_keys):
         init(self, **{key: _get_typed_value(value) for key, value in kwargs.items()})
 
     new_params = [
-        inspect.Parameter(
-            "batch_size", inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None
-        ),
-        inspect.Parameter(
-            "device", inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None
-        ),
+        inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY),
+        inspect.Parameter("device", inspect.Parameter.KEYWORD_ONLY, default=None),
     ]
     wrapper.__signature__ = init_sig.replace(parameters=params + new_params)
 

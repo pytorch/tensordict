@@ -71,16 +71,18 @@ def test_signature():
     assert list(sig.parameters) == ["X", "y", "batch_size", "device"]
 
     with pytest.raises(TypeError, match="missing 2 required positional arguments"):
-        MyData()
+        MyData(batch_size=[10])
 
     with pytest.raises(TypeError, match="missing 1 required positional argument"):
-        MyData(X=torch.rand(10))
+        MyData(X=torch.rand(10), batch_size=[10])
 
     with pytest.raises(TypeError, match="missing 1 required positional argument"):
         MyData(X=torch.rand(10), batch_size=[10], device="cpu")
 
     # if all positional arguments are specified, ommitting batch_size gives error
-    with pytest.raises(ValueError, match="batch size was not specified"):
+    with pytest.raises(
+        TypeError, match="missing 1 required keyword-only argument: 'batch_size'"
+    ):
         MyData(X=torch.rand(10), y=torch.rand(10))
 
     # all positional arguments + batch_size is fine
