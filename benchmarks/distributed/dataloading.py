@@ -71,11 +71,15 @@ parser.add_argument(
     type=str,
     default="",
 )
-
 parser.add_argument(
     "--load_path",
     type=str,
     default="",
+)
+parser.add_argument(
+    "--fraction",
+    type=int,
+    default=1,
 )
 
 torch.cuda.set_device(0)
@@ -83,7 +87,7 @@ torch.cuda.set_device(0)
 RETRY_LIMIT = 2
 NUM_WORKERS = 8
 RETRY_DELAY_SECS = 3
-FRACTION = 100
+
 DATA_NODE = "Data"
 TRAINER_NODE = "Trainer"
 BATCH_SIZE = 128
@@ -146,7 +150,6 @@ class ImageNetData:
 
         snapshot = torchsnapshot.Snapshot(path=path)
         sd = dict(data.state_dict())
-        print("loading", sd)
         app_state = {"state": torchsnapshot.StateDict(data=sd)}
         snapshot.restore(app_state=app_state)
 
@@ -154,7 +157,6 @@ class ImageNetData:
         import torchsnapshot
 
         sd = dict(self.state_dict())
-        print("saving", sd)
         app_state = {"state": torchsnapshot.StateDict(data=sd)}
         torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
@@ -537,10 +539,10 @@ if __name__ == "__main__":
             [transforms.Resize((256, 256)), transforms.PILToTensor()]
         ),
     )
-    train_data_raw.samples = train_data_raw.samples[: len(train_data_raw) // FRACTION]
+    train_data_raw.samples = train_data_raw.samples[: len(train_data_raw) // args.fraction]
 
     if load_path:
-        train_data_tc = ImageNetData.load(train_data_raw, save_path)
+        train_data_tc = ImageNetData.load(train_data_raw, load_path)
     else:
         train_data_tc = ImageNetData.from_dataset(train_data_raw)
         if save_path:
