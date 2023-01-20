@@ -196,7 +196,7 @@ def test_batch_size():
         X=torch.rand(2, 3, 4),
         y=torch.rand(2, 3, 4, 5),
         z="test_tensorclass",
-        batch_size=[2, 3]
+        batch_size=[2, 3],
     )
 
     assert myc.batch_size == torch.Size([2, 3])
@@ -303,7 +303,7 @@ def test_stack():
 
     with pytest.raises(
         ValueError,
-        match=f"{repr(data4.z)} and {repr(data1.z)} for the attribute 'z' are not matching"
+        match=f"{repr(data4.z)} and {repr(data1.z)} for the attribute 'z' are not matching",
     ):
         assert torch.stack([data1, data4], dim=0)
 
@@ -338,7 +338,7 @@ def test_cat():
 
     with pytest.raises(
         ValueError,
-        match=f"{repr(data4.z)} and {repr(data1.z)} for the attribute 'z' are not matching"
+        match=f"{repr(data4.z)} and {repr(data1.z)} for the attribute 'z' are not matching",
     ):
         assert torch.cat([data1, data4], dim=0)
 
