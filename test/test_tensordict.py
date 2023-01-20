@@ -3479,9 +3479,7 @@ class TestSnapshot:
 
         app_state = {"state": torchsnapshot.StateDict(**{save_name: td.state_dict()})}
         path = f"/tmp/{uuid.uuid4()}"
-        snapshot = torchsnapshot.Snapshot.take(
-            app_state=app_state, path=path
-        )
+        snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
         td_plain = td.to_tensordict()
         # we want to delete refs to MemmapTensors
@@ -3511,9 +3509,7 @@ class TestSnapshot:
         state = {"state": tensordict}
         tensordict.memmap_()
         path = f"/tmp/{uuid.uuid4()}"
-        snapshot = torchsnapshot.Snapshot.take(
-            app_state=state, path=path
-        )
+        snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
         td_plain = tensordict.to_tensordict()
         assert not isinstance(td_plain["a"], MemmapTensor)
         del tensordict

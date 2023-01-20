@@ -24,7 +24,6 @@ from pathlib import Path
 
 import tenacity
 import torch
-import torchsnapshot
 import tqdm
 from tensordict import MemmapTensor
 from tensordict.prototype import tensorclass
@@ -539,14 +538,20 @@ if __name__ == "__main__":
             [transforms.Resize((256, 256)), transforms.PILToTensor()]
         ),
     )
-    train_data_raw.samples = train_data_raw.samples[: len(train_data_raw) // args.fraction]
+    train_data_raw.samples = train_data_raw.samples[
+        : len(train_data_raw) // args.fraction
+    ]
 
     if load_path:
+        print("loading...", end="\t")
         train_data_tc = ImageNetData.load(train_data_raw, load_path)
+        print("done")
     else:
         train_data_tc = ImageNetData.from_dataset(train_data_raw)
         if save_path:
+            print("saving...", end="\t")
             train_data_tc.save(save_path)
+            print("done")
 
     with mp.Pool(world_size) as pool:
         pool.starmap(
