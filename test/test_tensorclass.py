@@ -302,7 +302,7 @@ def test_stack():
         torch.stack([data1, data3], dim=0)
 
     with pytest.raises(
-            ValueError,
+        ValueError,
         match=f"{repr(data4.z)} and {repr(data1.z)} for the attribute 'z' are not matching"
     ):
         assert torch.stack([data1, data4], dim=0)
@@ -675,7 +675,7 @@ def test_kjt():
         y: KeyedJaggedTensor
         z: str
 
-    z = 'test_tensorclass'
+    z = "test_tensorclass"
     data = MyData(X=torch.zeros(3, 1), y=kjt, z=z, batch_size=[3])
     subdata = data[:2]
     assert (
