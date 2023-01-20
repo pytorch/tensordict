@@ -31,14 +31,16 @@ else
     conda install pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia -y
 fi
 
+
 # smoke test
 python -c "import functorch"
+
+printf "* Installing tensordict\n"
+pip3 install -e .
+
 
 # install torchsnapshot nightly
 pip3 install torchsnapshot-nightly torchrec_nightly
 
 python -c "from torchrec import KeyedJaggedTensor"
 python -c "import torchsnapshot"
-
-printf "* Installing tensordict\n"
-pip3 install -e .

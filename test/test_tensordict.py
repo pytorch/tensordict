@@ -5,10 +5,12 @@
 
 import argparse
 import re
+import uuid
 
 import numpy as np
 import pytest
 import torch
+import torchsnapshot
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
@@ -3463,6 +3465,47 @@ class TestLazyStackedTensorDict:
             match="Found more than one unique shape in the tensors to be stacked",
         ):
             td_a.update_(td_b.to_tensordict())
+
+
+class TestSnapshot:
+    def test_inplace(self):
+        td = TensorDict(
+            {"a": torch.randn(3), "b": TensorDict({"c": torch.randn(3, 1)}, [3, 1])},
+            [3],
+        )
+        td.memmap_()
+        assert isinstance(td["b", "c"], MemmapTensor)
+
+        app_state = {"state": torchsnapshot.StateDict(tensordict=td.state_dict())}
+        snapshot = torchsnapshot.Snapshot.take(
+            app_state=app_state, path=f"/tmp/{uuid.uuid4()}"
+        )
+
+        td_dest = TensorDict(
+            {"a": torch.zeros(3), "b": TensorDict({"c": torch.zeros(3, 1)}, [3, 1])},
+            [3],
+        )
+        td_dest.memmap_()
+        assert isinstance(td_dest["b", "c"], MemmapTensor)
+        app_state = {"state": torchsnapshot.StateDict(tensordict=td_dest.state_dict())}
+        snapshot.restore(app_state=app_state)
+
+        assert (td_dest == td).all()
+        assert td_dest["b"].batch_size == td["b"].batch_size
+        assert isinstance(td_dest["b", "c"], MemmapTensor)
+
+    def test_update(self):
+        tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
+        state = {"state": tensordict}
+        tensordict.memmap_()
+        snapshot = torchsnapshot.Snapshot.take(
+            app_state=state, path=f"/tmp/{uuid.uuid4()}"
+        )
+
+        tensordict2 = TensorDict({}, [])
+        target_state = {"state": tensordict2}
+        snapshot.restore(app_state=target_state)
+        assert (tensordict == tensordict2).all()
 
 
 if __name__ == "__main__":
