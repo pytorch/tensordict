@@ -288,6 +288,12 @@ class DummyTrainerNode:
 
     def init(self, train_data_tc):
         self.data = train_data_tc
+        for i in range(1, self.world_size):
+            rpc.rpc_async(
+                self.datanodes[i].owner(),
+                DataNode.set_data,
+                args=(self.datanodes[i], self.data),
+            )
 
     def train(self) -> None:
         print("train")
@@ -379,16 +385,11 @@ class DataNode:
         self.rank = rank
         self.id = rpc.get_worker_info().id
         self.single_gpu = single_gpu
-        with tenacity.retry(
-            stop=tenacity.stop_after_attempt(RETRY_LIMIT),
-            wait=tenacity.wait_fixed(RETRY_DELAY_SECS),
-            reraise=True,
-        ):
-            train_ref = rpc.get_worker_info(f"{TRAINER_NODE}")
-            self.train_ref = rpc.remote(
-                train_ref,
-                get_trainer,
-            )
+        # train_ref = rpc.get_worker_info(f"{TRAINER_NODE}")
+        # self.train_ref = rpc.remote(
+        #     train_ref,
+        #     get_trainer,
+        # )
         self.batch_size = batch_size
         if self.single_gpu:
             device = "cuda:1"
@@ -415,27 +416,16 @@ class DataNode:
         self.count = 0
         print("done!")
 
-    def _init(self):
+    def set_data(self, data):
         print("initializing")
         self.initialized = True
-        self.data: ImageNetData = rpc.rpc_sync(
-            self.train_ref.owner(),
-            DummyTrainerNode.get_data,
-            args=(self.train_ref,),
-        )
+        self.data: ImageNetData = data
 
     def sample(self, idx):
-        if not self.initialized:
-            self._init()
+        # if not self.initialized:
+        #     self._init()
         self.count += 1
         return self.collate(self.data[idx])
-
-
-global trainer
-
-
-def get_trainer():
-    return trainer
 
 
 ##############################################################################
