@@ -288,7 +288,7 @@ class DummyTrainerNode:
 
     def init(self, train_data_tc):
         self.data = train_data_tc
-        for i in range(1, self.world_size):
+        for i in range(self.world_size-1):
             rpc.rpc_async(
                 self.datanodes[i].owner(),
                 DataNode.set_data,
