@@ -505,7 +505,7 @@ def func(rank, world_size, args, train_data_tc, single_gpu, trainer_transform):
                     min_time = stats["time"]
                     rate = stats["rate"]
                 wandb.log(stats, step=i)
-            wandb.log({"min time": min_time, "min_rate": rate})
+            wandb.log({"min time": min_time, "max_rate": rate})
             print(f"FINAL: time spent: {min_time:4.4f}s, Rate: {rate} fps")
 
 
