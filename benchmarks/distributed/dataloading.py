@@ -146,11 +146,13 @@ class ImageNetData:
         )
         # locks the tensorclass and ensures that is_memmap will return True.
         data.memmap_()
-
+        t0 = time.time()
+        print("loading...", end="\t")
         snapshot = torchsnapshot.Snapshot(path=path)
         sd = dict(data.state_dict())
         app_state = {"state": torchsnapshot.StateDict(data=sd)}
         snapshot.restore(app_state=app_state)
+        print(f"done! Took: {time.time()-t0:4.4f}s")
         return data
 
     def save(self, path):
