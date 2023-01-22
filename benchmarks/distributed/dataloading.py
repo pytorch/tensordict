@@ -288,7 +288,7 @@ class DummyTrainerNode:
 
     def init(self, train_data_tc):
         self.data = train_data_tc
-        for i in range(self.world_size-1):
+        for i in range(self.world_size - 1):
             rpc.rpc_async(
                 self.datanodes[i].owner(),
                 DataNode.set_data,
@@ -494,7 +494,7 @@ def func(rank, world_size, args, train_data_tc, single_gpu, trainer_transform):
                 raise ValueError("Please indicate the wandb entity.")
         with wandb.init(
             project="dataloading",
-            name="distributed",
+            name=f"distributed_w-{args.world_size}_f-{args.fraction}_g-{args.single_gpu}_t-{args.trainer_transform}",
             entity=args.wandb_entity,
             mode=mode,
         ):
