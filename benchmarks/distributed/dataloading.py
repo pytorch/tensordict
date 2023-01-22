@@ -289,7 +289,7 @@ class DummyTrainerNode:
     def init(self, train_data_tc):
         self.data = train_data_tc
         for i in range(self.world_size - 1):
-            rpc.rpc_async(
+            rpc.rpc_sync(
                 self.datanodes[i].owner(),
                 DataNode.set_data,
                 args=(self.datanodes[i], self.data),
@@ -343,6 +343,11 @@ class DummyTrainerNode:
         t = time.time() - t0
         print(f"time spent: {t:4.4f}s, Rate: {total/t} fps")
         return {"time": t, "rate": total / t}
+
+    def create_data_nodes(self, data):
+        for dest_rank in range(1, self.world_size):
+            self.create_data_node(dest_rank, local_transform=self.local_transform)
+        self.init(data)
 
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(RETRY_LIMIT),
@@ -479,9 +484,8 @@ def func(rank, world_size, args, train_data_tc, single_gpu, trainer_transform):
         trainer = DummyTrainerNode(
             world_size, single_gpu, local_transform=not trainer_transform
         )
-        for dest_rank in range(1, world_size):
-            trainer.create_data_node(dest_rank, local_transform=not trainer_transform)
-        trainer.init(train_data_tc)
+        trainer.create_data_nodes(train_data_tc)
+
         import wandb
 
         if not args.wandb_key:
