@@ -393,6 +393,8 @@ print(
 # .. image:: images/imagenet-benchmark-speed.png
 #    :alt: Bar chart showing collection rate of dataloaders compared with TensorClass
 
+
+##############################################################################
 # This shows that much of the overhead is coming from i/o operations rather than the
 # transforms, and hence explains how the memory-mapped array helps us load data more
 # efficiently. Check out the `distributed example <https://github.com/pytorch-labs/tensordict/tree/main/benchmarks/distributed/dataloading.py>`__
