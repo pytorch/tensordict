@@ -3524,14 +3524,14 @@ class TestSnapshot:
 @pytest.mark.parametrize("device", get_available_devices())
 def test_memmap_as_tensor(device):
     td = TensorDict(
-        {"a": torch.randn(3, 4), "b": {"c": torch.randn(3, 4)}}, [3, 4], device=device
+        {"a": torch.randn(3, 4), "b": {"c": torch.randn(3, 4)}}, [3, 4], device="cpu"
     )
     td_memmap = td.clone().memmap_()
     assert (td == td_memmap).all()
 
     assert (td == td_memmap.apply(lambda x: x.as_tensor())).all()
     if device.type == "cuda":
-        td = td.cpu().pin_memory()
+        td = td.pin_memory()
         td_memmap = td.clone().memmap_()
         td_memmap_pm = td_memmap.apply(lambda x: x.as_tensor()).pin_memory()
         assert (td.pin_memory().to(device) == td_memmap_pm.to(device)).all()
