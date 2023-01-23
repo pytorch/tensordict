@@ -31,11 +31,11 @@ else
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
 fi
 
-# smoke test
-python -c "import functorch"
+printf "* Installing tensordict\n"
+pip3 install -e .
 
 # install torchsnapshot nightly
 pip3 install torchsnapshot-nightly
 
-printf "* Installing tensordict\n"
-pip3 install -e .
+# smoke test
+python -c "import functorch;import torchsnapshot"

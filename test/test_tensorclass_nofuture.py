@@ -10,10 +10,11 @@ from typing import Any, Optional, Union
 
 import pytest
 import torch
+import torchsnapshot
 
 from _utils_internal import get_available_devices
 
-from tensordict import LazyStackedTensorDict, TensorDict
+from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.prototype import is_tensorclass, tensorclass
 from tensordict.tensordict import (
     _PermutedTensorDict,
@@ -401,6 +402,36 @@ def test_nested():
     assert isinstance(data.y, MyDataNested), type(data.y)
 
 
+def test_nested_eq():
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        y: "MyDataNested" = None
+
+    X = torch.ones(3, 4, 5)
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
+    data_nest2 = MyDataNested(X=X, batch_size=batch_size)
+    data2 = MyDataNested(X=X, y=data_nest2, batch_size=batch_size)
+    assert (data == data2).all()
+
+
+def test_nested_ne():
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        y: "MyDataNested" = None
+
+    X = torch.ones(3, 4, 5)
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
+    data_nest2 = MyDataNested(X=X + 1, batch_size=batch_size)
+    data2 = MyDataNested(X=X + 1, y=data_nest2, batch_size=batch_size)
+    assert (data != data2).all()
+
+
 def test_args():
     @tensorclass
     class MyData:
@@ -610,6 +641,34 @@ def test_multiprocessing():
         catted = torch.cat(p.map(_make_data, [(i, 2) for i in range(1, 9)]), dim=0)
 
     assert catted.batch_size == torch.Size([36])
+
+
+def test_torochsnapshot(tmpdir):
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        y: "MyClass" = None
+
+    tc = MyClass(
+        x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[]
+    )
+    tc.memmap_()
+    assert isinstance(tc.y.x, MemmapTensor)
+
+    app_state = {"state": torchsnapshot.StateDict(tensordict=tc.state_dict())}
+    snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmpdir))
+
+    tc_dest = MyClass(
+        x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[]
+    )
+    tc_dest.memmap_()
+    assert isinstance(tc_dest.y.x, MemmapTensor)
+    app_state = {"state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict())}
+    snapshot.restore(app_state=app_state)
+
+    assert (tc_dest == tc).all()
+    assert tc_dest.y.batch_size == tc.y.batch_size
+    assert isinstance(tc_dest.y.x, MemmapTensor)
 
 
 if __name__ == "__main__":

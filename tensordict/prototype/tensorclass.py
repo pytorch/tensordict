@@ -12,8 +12,13 @@ import torch
 
 from packaging import version
 
-from tensordict import MetaTensor
-from tensordict.tensordict import _accepted_classes, TensorDict, TensorDictBase
+from tensordict.tensordict import (
+    _accepted_classes,
+    get_repr,
+    is_tensordict,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.utils import DEVICE_TYPING
 
 from torch import Tensor
@@ -142,6 +147,8 @@ def tensorclass(cls: T) -> T:
     cls.__setitem__ = _setitem
     cls.__repr__ = _repr
     cls.__len__ = _len
+    cls.__eq__ = __eq__
+    cls.__ne__ = __ne__
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
@@ -392,6 +399,22 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
     self.tensordict._batch_size_setter(new_size)
 
 
+def __eq__(self, other):
+    if not isinstance(other, self.__class__):
+        return False
+    if is_tensorclass(other):
+        return self.tensordict.__eq__(other.tensordict)
+    return self == other
+
+
+def __ne__(self, other):
+    if not isinstance(other, self.__class__):
+        return True
+    if is_tensorclass(other):
+        return self.tensordict != other.tensordict
+    return self == other
+
+
 def _unbind(tdc, dim):
     tensordicts = torch.unbind(tdc.tensordict, dim)
     non_tensor_dict = _get_non_tensor_dict(tdc.__dict__)
@@ -516,21 +539,16 @@ def _get_typed_output(out, expected_type):
     return out
 
 
-def _single_td_field_as_str(key, item: MetaTensor, tensordict):
-    if item.is_tensordict():
+def _single_td_field_as_str(key, item, tensordict):
+    if is_tensordict(type(item)):
         return f"{key}={repr(tensordict[key])}"
-    return f"{key}={item.get_repr()}"
+    return f"{key}={get_repr(item)}"
 
 
 def _all_td_fields_as_str(td: TensorDictBase) -> str:
     return indent(
         ",\n".join(
-            sorted(
-                [
-                    _single_td_field_as_str(key, item, td)
-                    for key, item in td.items_meta()
-                ]
-            )
+            sorted([_single_td_field_as_str(key, item, td) for key, item in td.items()])
         ),
         4 * " ",
     )

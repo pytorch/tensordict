@@ -131,6 +131,6 @@ if __name__ == "__main__":
         "--branch", default="main", help="branch where to run the benchmark"
     )
     args = parser.parse_args()
-    current = checkout(args.branch)
+    # current = checkout(args.branch)
     main()
-    checkout(current)
+    # checkout(current)
