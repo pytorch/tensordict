@@ -831,6 +831,10 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         td.unlock()
+        if device.type == "cuda":
+            with pytest.raises(RuntimeError, match="cannot pin"):
+                td.pin_memory()
+            return
         td.pin_memory()
         td_device = td.to(device_cast)
         _device_cast = torch.device(device_cast)
