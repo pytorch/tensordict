@@ -32,7 +32,7 @@ The same goes with indexed memory-mapped tensors.
 
 Indexing memory-mapped tensors is much faster than loading several independent files from
 the disk and does not require to load the full content of the array in memory.
-However, physical storage of pytorch tensors should not be any different:
+However, physical storage of PyTorch tensors should not be any different:
 
 .. code-block:: Python
 
