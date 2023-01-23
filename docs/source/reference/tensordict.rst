@@ -21,7 +21,7 @@ Memory-mapped tensors
 
 :obj:`tensordict` offers the :obj:`MemmapTensor` primitive which allows you to work
 with tensors stored in physical memory in a handy way. The main advantages of :obj:`MemmapTensor`
-are its easiness of construction (no need to handle the storage of a tensor), tbe possibility to
+are its easiness of construction (no need to handle the storage of a tensor), the possibility to
 work with big contiguous data that would not fit in memory, an efficient (de)serialization across processes and
 efficient indexing of stored tensors.
 
