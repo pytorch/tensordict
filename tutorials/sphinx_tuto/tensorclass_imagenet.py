@@ -268,7 +268,7 @@ class Collate(nn.Module):
 
     def __call__(self, x: ImageNetData):
         # move data to RAM
-        out = x.apply(lambda x: x.contiguous())
+        out = x.apply(lambda x: x.as_tensor()).pin_memory()
         if self.device:
             # move data to gpu
             out = out.to(self.device)

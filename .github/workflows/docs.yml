@@ -24,8 +24,7 @@ jobs:
           python --version
       - name: Install PyTorch
         run: |
-          python -m pip install torch
-          python -m pip install "git+https://github.com/pytorch/functorch.git@release/0.2"
+          pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Install TensorDict
         run: |
           python -m pip install -e .
