@@ -68,27 +68,22 @@ def test_type():
 
 def test_signature():
     sig = inspect.signature(MyData)
-    assert list(sig.parameters) == ["X", "y", "batch_size", "device", "_tensordict"]
+    assert list(sig.parameters) == ["X", "y", "batch_size", "device"]
 
     with pytest.raises(TypeError, match="missing 2 required positional arguments"):
-        MyData()
+        MyData(batch_size=[10])
 
     with pytest.raises(TypeError, match="missing 1 required positional argument"):
-        MyData(X=torch.rand(10))
+        MyData(X=torch.rand(10), batch_size=[10])
 
     with pytest.raises(TypeError, match="missing 1 required positional argument"):
         MyData(X=torch.rand(10), batch_size=[10], device="cpu")
 
     # if all positional arguments are specified, ommitting batch_size gives error
-    with pytest.raises(ValueError, match="batch size was not specified"):
+    with pytest.raises(
+        TypeError, match="missing 1 required keyword-only argument: 'batch_size'"
+    ):
         MyData(X=torch.rand(10), y=torch.rand(10))
-
-    # instantiation via _tensordict ignores argument checks, no TypeError
-    MyData(
-        _tensordict=TensorDict(
-            {"X": torch.rand(10), "y": torch.rand(10)}, batch_size=[10]
-        )
-    )
 
     # all positional arguments + batch_size is fine
     MyData(X=torch.rand(10), y=torch.rand(10), batch_size=[10])
@@ -156,7 +151,7 @@ def test_banned_types():
         subclass: Union[MyOptionalClass, TensorDict] = None
 
     data = MyUnionClass(
-        subclass=MyUnionClass(_tensordict=TensorDict({}, [3])), batch_size=[3]
+        subclass=MyUnionClass.from_tensordict(TensorDict({}, [3])), batch_size=[3]
     )
     with pytest.raises(TypeError, match="can't be deterministically cast."):
         assert data.subclass is not None
@@ -549,7 +544,7 @@ def test_post_init():
     assert (data.y == y.abs()).all()
 
     # initialising from tensordict is fine
-    data = MyDataPostInit._build_from_tensordict(
+    data = MyDataPostInit.from_tensordict(
         TensorDict({"X": torch.rand(3, 4), "y": y}, batch_size=[3, 4])
     )
 
@@ -557,7 +552,7 @@ def test_post_init():
         MyDataPostInit(X=-torch.ones(2), y=torch.rand(2), batch_size=[2])
 
     with pytest.raises(AssertionError):
-        MyDataPostInit._build_from_tensordict(
+        MyDataPostInit.from_tensordict(
             TensorDict({"X": -torch.ones(2), "y": torch.rand(2)}, batch_size=[2])
         )
 
