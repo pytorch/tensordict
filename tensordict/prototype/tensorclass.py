@@ -124,8 +124,8 @@ def tensorclass(cls: T) -> T:
                 f"Attribute name {attr} can't be used with @tensorclass"
             )
 
-    cls.__init__ = _init_wrapper(cls.__init__, expected_keys)
-    cls.from_tensordict = classmethod(_from_tensordict)
+    cls.__init__ = _init_wrapper(cls.__init__)
+    cls.from_tensordict = classmethod(_from_tensordict_wrapper(expected_keys))
     cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
@@ -158,7 +158,7 @@ def tensorclass(cls: T) -> T:
     return cls
 
 
-def _init_wrapper(init, expected_keys):
+def _init_wrapper(init):
     init_sig = inspect.signature(init)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
@@ -200,10 +200,18 @@ def _init_wrapper(init, expected_keys):
     return wrapper
 
 
-def _from_tensordict(cls, tensordict):
-    tc = cls(**tensordict, batch_size=tensordict.batch_size)
-    tc.__dict__["tensordict"] = tensordict
-    return tc
+def _from_tensordict_wrapper(expected_keys):
+    def wrapper(cls, tensordict):
+        if not all(key in expected_keys for key in tensordict.keys()):
+            raise ValueError(
+                f"Keys from the tensordict ({set(tensordict.keys())}) must "
+                f"correspond to the class attributes ({expected_keys})."
+            )
+        tc = cls(**tensordict, batch_size=tensordict.batch_size)
+        tc.__dict__["tensordict"] = tensordict
+        return tc
+
+    return wrapper
 
 
 def _getstate(self):
