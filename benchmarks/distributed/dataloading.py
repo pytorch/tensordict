@@ -248,7 +248,7 @@ class Collate(nn.Module):
     def __call__(self, x: ImageNetData):
         # move data to cuda: we first assign the devie to the memmap tensors,
         # then call contiguous() to effectively move them to the right device
-        out = x.apply(lambda _tensor: _tensor.to(self.device).contiguous())
+        out = x.apply(lambda _tensor: _tensor.as_tensor()).pin_memory().to(self.device)
         if self.transform:
             # apply transforms on gpu
             out.images = self.transform(out.images)

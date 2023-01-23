@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import os
 import tempfile
+import warnings
 from copy import copy, deepcopy
 from tempfile import _TemporaryFileWrapper
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -23,14 +24,6 @@ from tensordict.utils import (
     torch_to_numpy_dtype_dict,
 )
 
-try:
-    from torchsnapshot.serialization import tensor_from_memoryview
-
-    _has_snapshot = True
-    SNAPSHOT_ERR = None
-except ImportError as err:
-    _has_snapshot = False
-    SNAPSHOT_ERR = err
 MEMMAP_HANDLED_FN = {}
 
 __all__ = ["MemmapTensor", "set_transfer_ownership"]
@@ -636,6 +629,38 @@ MemmapTensor of shape {self.shape}."""
         ]
         return tuple(self[_idx] for _idx in idx)
 
+    def as_tensor(
+        self,
+    ) -> torch.Tensor:
+        # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
+        # as a Tensor for saving and loading purposes. This doesn't incur any copy.
+        if self._index:
+            indexed_memmap = self._get_item(self._index[0], self.memmap_array)
+            for _idx in self._index[1:]:
+                indexed_memmap = self._get_item(_idx, indexed_memmap)
+            return tensor_from_memoryview(
+                dtype=self.dtype,
+                shape=list(self.shape),
+                mv=memoryview(indexed_memmap),
+            )
+        return tensor_from_memoryview(
+            dtype=self.dtype,
+            shape=list(self.shape),
+            mv=memoryview(self.memmap_array),
+        )
+
+
+def tensor_from_memoryview(
+    mv: memoryview, dtype: torch.dtype, shape: List[int]
+) -> torch.Tensor:
+    # From torchsnapshot
+    # PyTorch issues a warning if the given memoryview is non-writable. This is
+    # not a concern for torchsnapshot, as tensors created from non-writable
+    # buffers are all read-only, intermediate tensors.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return torch.reshape(torch.frombuffer(mv, dtype=dtype), shape)
+
 
 def _stack(
     list_of_memmap: List[MemmapTensor],
@@ -695,11 +720,6 @@ def memmap_tensor_as_tensor(
 
     if not isinstance(mem_map_tensor, MemmapTensor):
         return mem_map_tensor
-    if not _has_snapshot:
-        raise ImportError(
-            "torchsnapshot not found. Consider installing it to "
-            "serialize memory-mapped tensors."
-        ) from SNAPSHOT_ERR
     # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
     # as a Tensor for saving and loading purposes. This doesn't incur any copy.
     return tensor_from_memoryview(
