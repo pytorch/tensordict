@@ -195,7 +195,9 @@ def _init_wrapper(init):
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
 
-        self.tensordict = TensorDict({}, batch_size=batch_size, device=device)
+        self.tensordict = TensorDict(
+            {}, batch_size=batch_size, device=device, _run_checks=False
+        )
         init(self, **{key: _get_typed_value(value) for key, value in kwargs.items()})
 
     new_params = [
@@ -214,8 +216,15 @@ def _from_tensordict_wrapper(expected_keys):
                 f"Keys from the tensordict ({set(tensordict.keys())}) must "
                 f"correspond to the class attributes ({expected_keys})."
             )
-        tc = cls(**tensordict, batch_size=tensordict.batch_size)
+        # bypass initialisation. this means we don't incur any overhead creating an
+        # empty tensordict and writing values to it. we can skip this because we already
+        # have a tensordict to use as the underlying tensordict
+        tc = cls.__new__(cls)
         tc.__dict__["tensordict"] = tensordict
+        # since we aren't calling the dataclass init method, we need to manually check
+        # whether a __post_init__ method has been defined and invoke it if so
+        if hasattr(tc, "__post_init__"):
+            tc.__post_init__()
         return tc
 
     return wrapper
