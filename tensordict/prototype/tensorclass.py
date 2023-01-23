@@ -337,17 +337,13 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
 def __eq__(self, other):
     if not isinstance(other, self.__class__):
         return False
-    if is_tensorclass(other):
-        return self.tensordict.__eq__(other.tensordict)
-    return self == other
+    return self.tensordict == other.tensordict
 
 
 def __ne__(self, other):
     if not isinstance(other, self.__class__):
         return True
-    if is_tensorclass(other):
-        return self.tensordict != other.tensordict
-    return self != other
+    return self.tensordict != other.tensordict
 
 
 def _unbind(tdc, dim):
