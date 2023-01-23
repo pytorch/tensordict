@@ -347,7 +347,7 @@ def __ne__(self, other):
         return True
     if is_tensorclass(other):
         return self.tensordict != other.tensordict
-    return self == other
+    return self != other
 
 
 def _unbind(tdc, dim):
