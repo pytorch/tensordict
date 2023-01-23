@@ -632,6 +632,11 @@ MemmapTensor of shape {self.shape}."""
     def as_tensor(
         self,
     ) -> torch.Tensor:
+        """Represents a MemmapTensor as a tensor, with the same storage (ie without any copy)."""
+        if not self.device.type == "cpu":
+            raise RuntimeError(
+                f"memmap.as_tensor() can only be called with MemmapTensors stored on CPU. Got device={self.device}."
+            )
         # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
         # as a Tensor for saving and loading purposes. This doesn't incur any copy.
         if self._index:
