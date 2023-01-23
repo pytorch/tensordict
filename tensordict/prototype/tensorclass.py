@@ -511,7 +511,6 @@ def _get_typed_output(out, expected_type):
     elif isinstance(out, TensorDictBase):
         dest_dtype = _check_td_out_type(expected_type)
         if dest_dtype is not None:
-            print(dest_dtype)
             out = dest_dtype(_tensordict=out, _non_tensordict=non_tensor_dict)
 
     return out
