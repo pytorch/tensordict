@@ -382,6 +382,17 @@ class TestIndexing:
             raise e
 
 
+def test_as_tensor():
+    num_samples = 300
+    rows, cols = 48, 48
+    idx = torch.randint(num_samples, (128,))
+    y = MemmapTensor(num_samples, rows, cols, dtype=torch.uint8)
+    y.copy_(y + torch.randn(num_samples, rows, cols))
+    assert isinstance(y, MemmapTensor)
+    assert isinstance(y[idx], MemmapTensor)
+    assert (y[idx] == y.as_tensor()[idx]).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

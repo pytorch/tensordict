@@ -2366,12 +2366,11 @@ class TensorDict(TensorDictBase):
         return self_copy
 
     def pin_memory(self) -> TensorDictBase:
-        if self.device and self.device.type == "cpu":
-            for key, value in self.items():
-                if isinstance(value, TensorDictBase) or (
-                    value.dtype in (torch.half, torch.float, torch.double)
-                ):
-                    self.set(key, value.pin_memory(), inplace=False)
+        for key, value in self.items():
+            if isinstance(value, TensorDictBase) or (
+                value.dtype in (torch.half, torch.float, torch.double)
+            ):
+                self.set(key, value.pin_memory(), inplace=False)
         return self
 
     def expand(self, *shape) -> TensorDictBase:

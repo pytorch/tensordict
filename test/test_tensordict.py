@@ -831,6 +831,10 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         td.unlock()
+        if device.type == "cuda":
+            with pytest.raises(RuntimeError, match="cannot pin"):
+                td.pin_memory()
+            return
         td.pin_memory()
         td_device = td.to(device_cast)
         _device_cast = torch.device(device_cast)
@@ -3468,7 +3472,8 @@ class TestLazyStackedTensorDict:
 
 
 class TestSnapshot:
-    def test_inplace(self):
+    @pytest.mark.parametrize("save_name", ["doc", "data"])
+    def test_inplace(self, save_name):
         td = TensorDict(
             {"a": torch.randn(3), "b": TensorDict({"c": torch.randn(3, 1)}, [3, 1])},
             [3],
@@ -3476,36 +3481,64 @@ class TestSnapshot:
         td.memmap_()
         assert isinstance(td["b", "c"], MemmapTensor)
 
-        app_state = {"state": torchsnapshot.StateDict(tensordict=td.state_dict())}
-        snapshot = torchsnapshot.Snapshot.take(
-            app_state=app_state, path=f"/tmp/{uuid.uuid4()}"
-        )
+        app_state = {"state": torchsnapshot.StateDict(**{save_name: td.state_dict()})}
+        path = f"/tmp/{uuid.uuid4()}"
+        snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
+        td_plain = td.to_tensordict()
+        # we want to delete refs to MemmapTensors
+        assert not isinstance(td_plain["a"], MemmapTensor)
+        del td
+
+        snapshot = torchsnapshot.Snapshot(path=path)
         td_dest = TensorDict(
             {"a": torch.zeros(3), "b": TensorDict({"c": torch.zeros(3, 1)}, [3, 1])},
             [3],
         )
         td_dest.memmap_()
         assert isinstance(td_dest["b", "c"], MemmapTensor)
-        app_state = {"state": torchsnapshot.StateDict(tensordict=td_dest.state_dict())}
+        app_state = {
+            "state": torchsnapshot.StateDict(**{save_name: td_dest.state_dict()})
+        }
         snapshot.restore(app_state=app_state)
 
-        assert (td_dest == td).all()
-        assert td_dest["b"].batch_size == td["b"].batch_size
+        assert (td_dest == td_plain).all()
+        assert td_dest["b"].batch_size == td_plain["b"].batch_size
         assert isinstance(td_dest["b", "c"], MemmapTensor)
 
-    def test_update(self):
+    def test_update(
+        self,
+    ):
         tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         state = {"state": tensordict}
         tensordict.memmap_()
-        snapshot = torchsnapshot.Snapshot.take(
-            app_state=state, path=f"/tmp/{uuid.uuid4()}"
-        )
+        path = f"/tmp/{uuid.uuid4()}"
+        snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
+        td_plain = tensordict.to_tensordict()
+        assert not isinstance(td_plain["a"], MemmapTensor)
+        del tensordict
 
+        snapshot = torchsnapshot.Snapshot(path=path)
         tensordict2 = TensorDict({}, [])
         target_state = {"state": tensordict2}
         snapshot.restore(app_state=target_state)
-        assert (tensordict == tensordict2).all()
+        assert (td_plain == tensordict2).all()
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+def test_memmap_as_tensor(device):
+    td = TensorDict(
+        {"a": torch.randn(3, 4), "b": {"c": torch.randn(3, 4)}}, [3, 4], device="cpu"
+    )
+    td_memmap = td.clone().memmap_()
+    assert (td == td_memmap).all()
+
+    assert (td == td_memmap.apply(lambda x: x.as_tensor())).all()
+    if device.type == "cuda":
+        td = td.pin_memory()
+        td_memmap = td.clone().memmap_()
+        td_memmap_pm = td_memmap.apply(lambda x: x.as_tensor()).pin_memory()
+        assert (td.pin_memory().to(device) == td_memmap_pm.to(device)).all()
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ pip3 install -e .
 
 
 # install torchsnapshot nightly
-pip3 install torchsnapshot-nightly torchrec_nightly
+pip3 install git+https://github.com/pytorch/torchsnapshot torchrec_nightly
 
 python -c "from torchrec import KeyedJaggedTensor"
 python -c "import torchsnapshot"
