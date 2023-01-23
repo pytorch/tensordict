@@ -545,8 +545,18 @@ def test_post_init():
     data = MyDataPostInit(X=torch.rand(3, 4), y=y, batch_size=[3, 4])
     assert (data.y == y.abs()).all()
 
+    # initialising from tensordict is fine
+    data = MyDataPostInit._build_from_tensordict(
+        TensorDict({"X": torch.rand(3, 4), "y": y}, batch_size=[3, 4])
+    )
+
     with pytest.raises(AssertionError):
         MyDataPostInit(X=-torch.ones(2), y=torch.rand(2), batch_size=[2])
+
+    with pytest.raises(AssertionError):
+        MyDataPostInit._build_from_tensordict(
+            TensorDict({"X": -torch.ones(2), "y": torch.rand(2)}, batch_size=[2])
+        )
 
 
 def test_default():
