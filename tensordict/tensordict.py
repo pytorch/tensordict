@@ -43,7 +43,7 @@ try:
 except ImportError:
     from tensordict.utils import infer_size_impl
 
-from tensordict.memmap import MemmapTensor
+from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
 from tensordict.utils import (
     _getitem_batch_size,
     _nested_key_type_check,
@@ -404,8 +404,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def state_dict(self) -> OrderedDict:
         out = collections.OrderedDict()
-        for key, item in self.flatten_keys().items():
-            out[key] = item
+        for key, item in self.apply(memmap_tensor_as_tensor).items():
+            out[key] = (
+                item if not isinstance(item, TensorDictBase) else item.state_dict()
+            )
         if "__batch_size" in out:
             raise KeyError(
                 "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
@@ -423,7 +425,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         device = state_dict.pop("__device")
         if device is not None:
             self.to(device)
-        self.update(state_dict, inplace=True)
+        for key, item in state_dict.items():
+            if isinstance(item, dict):
+                self.set(key, TensorDict({}, []).load_state_dict(item), inplace=True)
+            else:
+                self.set(key, item, inplace=True)
         return self
 
     def is_memmap(self) -> bool:
@@ -2360,12 +2366,11 @@ class TensorDict(TensorDictBase):
         return self_copy
 
     def pin_memory(self) -> TensorDictBase:
-        if self.device and self.device.type == "cpu":
-            for key, value in self.items():
-                if isinstance(value, TensorDictBase) or (
-                    value.dtype in (torch.half, torch.float, torch.double)
-                ):
-                    self.set(key, value.pin_memory(), inplace=False)
+        for key, value in self.items():
+            if isinstance(value, TensorDictBase) or (
+                value.dtype in (torch.half, torch.float, torch.double)
+            ):
+                self.set(key, value.pin_memory(), inplace=False)
         return self
 
     def expand(self, *shape) -> TensorDictBase:

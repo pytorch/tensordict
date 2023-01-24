@@ -1,5 +1,6 @@
 import dataclasses
 import functools
+import inspect
 import re
 import typing
 from dataclasses import dataclass
@@ -128,8 +129,8 @@ def tensorclass(cls: T) -> T:
                 f"Attribute name {attr} can't be used with @tensorclass"
             )
 
-    cls.__init__ = _init_wrapper(cls.__init__, expected_keys)
-    cls._build_from_tensordict = classmethod(_build_from_tensordict)
+    cls.__init__ = _init_wrapper(cls.__init__)
+    cls.from_tensordict = classmethod(_from_tensordict_wrapper(expected_keys))
     cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
@@ -140,6 +141,8 @@ def tensorclass(cls: T) -> T:
     cls.__setitem__ = _setitem
     cls.__repr__ = _repr
     cls.__len__ = _len
+    cls.__eq__ = __eq__
+    cls.__ne__ = __ne__
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
@@ -156,56 +159,75 @@ def tensorclass(cls: T) -> T:
     implements_for_tdc(torch.stack)(_stack)
     implements_for_tdc(torch.cat)(_cat)
 
+    cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
+
     CLASSES_DICT[cls.__name__] = cls
     return cls
 
 
-def _init_wrapper(init, expected_keys):
-    def wrapper(self, *args, batch_size=None, device=None, _tensordict=None, **kwargs):
-        if (args or kwargs) and _tensordict is not None:
-            raise ValueError("Cannot pass both args/kwargs and _tensordict.")
+def _init_wrapper(init):
+    init_sig = inspect.signature(init)
+    params = list(init_sig.parameters.values())
+    # drop first entry of params which corresponds to self and isn't passed by the user
+    required_params = [p.name for p in params[1:] if p.default is inspect._empty]
 
-        if _tensordict is not None:
-            if not all(key in expected_keys for key in _tensordict.keys()):
-                raise ValueError(
-                    f"Keys from the tensordict ({set(_tensordict.keys())}) must "
-                    f"correspond to the class attributes ({expected_keys})."
-                )
-            input_dict = {key: None for key in _tensordict.keys()}
-            init(self, **input_dict)
-            self.tensordict = _tensordict
-        else:
-            for value, key in zip(args, self.__dataclass_fields__):
-                if key in kwargs:
-                    raise ValueError(f"The key {key} is already set in kwargs")
-                kwargs[key] = value
+    @functools.wraps(init)
+    def wrapper(self, *args, batch_size, device=None, **kwargs):
+        for value, key in zip(args, self.__dataclass_fields__):
+            if key in kwargs:
+                raise ValueError(f"The key {key} is already set in kwargs")
+            kwargs[key] = value
 
-            for key, field in self.__dataclass_fields__.items():
-                if not isinstance(field.default_factory, dataclasses._MISSING_TYPE):
-                    default = field.default_factory()
-                else:
-                    default = field.default
-                if default is not None:
-                    kwargs.setdefault(key, default)
+        for key, field in self.__dataclass_fields__.items():
+            if field.default_factory is not dataclasses.MISSING:
+                default = field.default_factory()
+            else:
+                default = field.default
+            if default not in (None, dataclasses.MISSING):
+                kwargs.setdefault(key, default)
 
-            new_kwargs = {key: None for key in kwargs}
-
-            init(self, **new_kwargs)
-            self.tensordict = TensorDict(
-                {
-                    key: _get_typed_value(value)
-                    for key, value in kwargs.items()
-                    if key not in ("batch_size",)
-                },
-                batch_size=batch_size,
-                device=device,
+        missing_params = [p for p in required_params if p not in kwargs]
+        if missing_params:
+            n_missing = len(missing_params)
+            raise TypeError(
+                f"{self.__class__.__name__}.__init__() missing {n_missing} "
+                f"required positional argument{'' if n_missing == 1 else 's'}: "
+                f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
+
+        self.tensordict = TensorDict(
+            {}, batch_size=batch_size, device=device, _run_checks=False
+        )
+        init(self, **{key: _get_typed_value(value) for key, value in kwargs.items()})
+
+    new_params = [
+        inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY),
+        inspect.Parameter("device", inspect.Parameter.KEYWORD_ONLY, default=None),
+    ]
+    wrapper.__signature__ = init_sig.replace(parameters=params + new_params)
 
     return wrapper
 
 
-def _build_from_tensordict(cls, tensordict):
-    return cls(_tensordict=tensordict)
+def _from_tensordict_wrapper(expected_keys):
+    def wrapper(cls, tensordict):
+        if not all(key in expected_keys for key in tensordict.keys()):
+            raise ValueError(
+                f"Keys from the tensordict ({set(tensordict.keys())}) must "
+                f"correspond to the class attributes ({expected_keys})."
+            )
+        # bypass initialisation. this means we don't incur any overhead creating an
+        # empty tensordict and writing values to it. we can skip this because we already
+        # have a tensordict to use as the underlying tensordict
+        tc = cls.__new__(cls)
+        tc.__dict__["tensordict"] = tensordict
+        # since we aren't calling the dataclass init method, we need to manually check
+        # whether a __post_init__ method has been defined and invoke it if so
+        if hasattr(tc, "__post_init__"):
+            tc.__post_init__()
+        return tc
+
+    return wrapper
 
 
 def _getstate(self):
@@ -243,7 +265,6 @@ def _setattr_wrapper(setattr_, expected_keys):
         if type(value) in CLASSES_DICT.values():
             value = value.__dict__["tensordict"]
         self.__dict__["tensordict"][key] = value
-        assert self.__dict__["tensordict"][key] is value
 
     return wrapper
 
@@ -257,7 +278,7 @@ def _getattr(self, attr):
     def wrapped_func(*args, **kwargs):
         res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
-            new = self.__class__(_tensordict=res)
+            new = self.from_tensordict(res)
             return new
         else:
             return res
@@ -271,7 +292,7 @@ def _getitem(self, item):
     ):
         raise ValueError("Invalid indexing arguments.")
     res = self.tensordict[item]
-    return self.__class__(_tensordict=res)  # device=res.device)
+    return self.from_tensordict(res)  # device=res.device)
 
 
 def _setitem(self, item, value):
@@ -332,15 +353,27 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
     self.tensordict._batch_size_setter(new_size)
 
 
+def __eq__(self, other):
+    if not isinstance(other, self.__class__):
+        return False
+    return self.tensordict == other.tensordict
+
+
+def __ne__(self, other):
+    if not isinstance(other, self.__class__):
+        return True
+    return self.tensordict != other.tensordict
+
+
 def _unbind(tdc, dim):
     tensordicts = torch.unbind(tdc.tensordict, dim)
-    out = [tdc.__class__(_tensordict=td) for td in tensordicts]
+    out = [tdc.from_tensordict(td) for td in tensordicts]
     return out
 
 
 def _full_like(tdc, fill_value):
     tensordict = torch.full_like(tdc.tensordict, fill_value)
-    out = tdc.__class__(_tensordict=tensordict)
+    out = tdc.from_tensordict(tensordict)
     return out
 
 
@@ -354,48 +387,48 @@ def _ones_like(tdc):
 
 def _clone(tdc):
     tensordict = torch.clone(tdc.tensordict)
-    out = tdc.__class__(_tensordict=tensordict)
+    out = tdc.from_tensordict(tensordict)
     return out
 
 
 def _squeeze(tdc):
     tensordict = torch.squeeze(tdc.tensordict)
-    out = tdc.__class__(_tensordict=tensordict)
+    out = tdc.from_tensordict(tensordict)
     return out
 
 
 def _unsqueeze(tdc, dim=0):
     tensordict = torch.unsqueeze(tdc.tensordict, dim)
-    out = tdc.__class__(_tensordict=tensordict)
+    out = tdc.from_tensordict(tensordict)
     return out
 
 
 def _permute(tdc, dims):
     tensordict = torch.permute(tdc.tensordict, dims)
-    out = tdc.__class__(_tensordict=tensordict)
+    out = tdc.from_tensordict(tensordict)
     return out
 
 
 def _split(tdc, split_size_or_sections, dim=0):
     tensordicts = torch.split(tdc.tensordict, split_size_or_sections, dim)
-    out = [tdc.__class__(_tensordict=td) for td in tensordicts]
+    out = [tdc.from_tensordict(td) for td in tensordicts]
     return out
 
 
 def _stack(list_of_tdc, dim):
     tensordict = torch.stack([tdc.tensordict for tdc in list_of_tdc], dim)
-    out = list_of_tdc[0].__class__(_tensordict=tensordict)
+    out = list_of_tdc[0].from_tensordict(tensordict)
     return out
 
 
 def _cat(list_of_tdc, dim):
     tensordict = torch.cat([tdc.tensordict for tdc in list_of_tdc], dim)
-    out = list_of_tdc[0].__class__(_tensordict=tensordict)
+    out = list_of_tdc[0].from_tensordict(tensordict)
     return out
 
 
 def _get_typed_value(value):
-    if isinstance(value, _accepted_classes + (dataclasses._MISSING_TYPE,)):
+    if isinstance(value, _accepted_classes) or value is dataclasses.MISSING:
         return value
     elif type(value) in CLASSES_DICT.values():
         return value.tensordict
@@ -408,18 +441,17 @@ def _get_typed_output(out, expected_type):
     # Otherwise, if the output is some TensorDictBase subclass, we check the type and if it
     # does not match, we map it. In all other cases, just return what has been gathered.
     if isinstance(expected_type, str) and expected_type in CLASSES_DICT:
-        out = CLASSES_DICT[expected_type](_tensordict=out)
+        out = CLASSES_DICT[expected_type].from_tensordict(out)
     elif (
         isinstance(expected_type, type)
         and not isinstance(out, expected_type)
         and isinstance(out, TensorDictBase)
     ):
-        out = expected_type(_tensordict=out)
+        out = expected_type.from_tensordict(out)
     elif isinstance(out, TensorDictBase):
         dest_dtype = _check_td_out_type(expected_type)
         if dest_dtype is not None:
-            print(dest_dtype)
-            out = dest_dtype(_tensordict=out)
+            out = dest_dtype.from_tensordict(out)
 
     return out
 

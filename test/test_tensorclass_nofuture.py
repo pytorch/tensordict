@@ -1,5 +1,6 @@
 import argparse
 import dataclasses
+import inspect
 import os
 import pickle
 import re
@@ -10,10 +11,11 @@ from typing import Any, Optional, Union
 
 import pytest
 import torch
+import torchsnapshot
 
 from _utils_internal import get_available_devices
 
-from tensordict import LazyStackedTensorDict, TensorDict
+from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.prototype import is_tensorclass, tensorclass
 from tensordict.tensordict import (
     _PermutedTensorDict,
@@ -63,6 +65,29 @@ def test_type():
     assert is_tensorclass(MyData)
     # we get an instance of the user defined class, not a dynamically defined subclass
     assert type(data) is MyDataUndecorated
+
+
+def test_signature():
+    sig = inspect.signature(MyData)
+    assert list(sig.parameters) == ["X", "y", "batch_size", "device"]
+
+    with pytest.raises(TypeError, match="missing 2 required positional arguments"):
+        MyData(batch_size=[10])
+
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        MyData(X=torch.rand(10), batch_size=[10])
+
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        MyData(X=torch.rand(10), batch_size=[10], device="cpu")
+
+    # if all positional arguments are specified, ommitting batch_size gives error
+    with pytest.raises(
+        TypeError, match="missing 1 required keyword-only argument: 'batch_size'"
+    ):
+        MyData(X=torch.rand(10), y=torch.rand(10))
+
+    # all positional arguments + batch_size is fine
+    MyData(X=torch.rand(10), y=torch.rand(10), batch_size=[10])
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -127,7 +152,7 @@ def test_banned_types():
         subclass: Union[MyOptionalClass, TensorDict] = None
 
     data = MyUnionClass(
-        subclass=MyUnionClass(_tensordict=TensorDict({}, [3])), batch_size=[3]
+        subclass=MyUnionClass.from_tensordict(TensorDict({}, [3])), batch_size=[3]
     )
     with pytest.raises(TypeError, match="can't be deterministically cast."):
         assert data.subclass is not None
@@ -401,6 +426,36 @@ def test_nested():
     assert isinstance(data.y, MyDataNested), type(data.y)
 
 
+def test_nested_eq():
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        y: "MyDataNested" = None
+
+    X = torch.ones(3, 4, 5)
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
+    data_nest2 = MyDataNested(X=X, batch_size=batch_size)
+    data2 = MyDataNested(X=X, y=data_nest2, batch_size=batch_size)
+    assert (data == data2).all()
+
+
+def test_nested_ne():
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        y: "MyDataNested" = None
+
+    X = torch.ones(3, 4, 5)
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, batch_size=batch_size)
+    data_nest2 = MyDataNested(X=X + 1, batch_size=batch_size)
+    data2 = MyDataNested(X=X + 1, y=data_nest2, batch_size=batch_size)
+    assert (data != data2).all()
+
+
 def test_args():
     @tensorclass
     class MyData:
@@ -504,6 +559,35 @@ def test_setattr(any_to_td):
         data.newattr = TensorDict({"smth": torch.zeros(1)}, [])
 
 
+def test_post_init():
+    @tensorclass
+    class MyDataPostInit:
+        X: torch.Tensor
+        y: torch.Tensor
+
+        def __post_init__(self):
+            assert (self.X > 0).all()
+            assert self.y.abs().max() <= 10
+            self.y = self.y.abs()
+
+    y = torch.clamp(torch.randn(3, 4), min=-10, max=10)
+    data = MyDataPostInit(X=torch.rand(3, 4), y=y, batch_size=[3, 4])
+    assert (data.y == y.abs()).all()
+
+    # initialising from tensordict is fine
+    data = MyDataPostInit.from_tensordict(
+        TensorDict({"X": torch.rand(3, 4), "y": y}, batch_size=[3, 4])
+    )
+
+    with pytest.raises(AssertionError):
+        MyDataPostInit(X=-torch.ones(2), y=torch.rand(2), batch_size=[2])
+
+    with pytest.raises(AssertionError):
+        MyDataPostInit.from_tensordict(
+            TensorDict({"X": -torch.ones(2), "y": torch.rand(2)}, batch_size=[2])
+        )
+
+
 def test_default():
     @tensorclass
     class MyData:
@@ -511,7 +595,6 @@ def test_default():
         y: torch.Tensor = torch.ones(3, 4, 5)
 
     data = MyData(batch_size=[3, 4])
-    assert data.__dict__["y"] is None
     assert (data.y == 1).all()
     assert data.X is None
     data.X = torch.zeros(3, 4, 1)
@@ -519,7 +602,7 @@ def test_default():
 
     MyData(batch_size=[3])
     MyData(batch_size=[])
-    with pytest.raises(RuntimeError, match="batch_size are incongruent"):
+    with pytest.raises(RuntimeError, match="batch dimension mismatch"):
         MyData(batch_size=[4])
 
 
@@ -530,7 +613,6 @@ def test_defaultfactory():
         y: torch.Tensor = dataclasses.field(default_factory=lambda: torch.ones(3, 4, 5))
 
     data = MyData(batch_size=[3, 4])
-    assert data.__dict__["y"] is None
     assert (data.y == 1).all()
     assert data.X is None
     data.X = torch.zeros(3, 4, 1)
@@ -538,7 +620,7 @@ def test_defaultfactory():
 
     MyData(batch_size=[3])
     MyData(batch_size=[])
-    with pytest.raises(RuntimeError, match="batch_size are incongruent"):
+    with pytest.raises(RuntimeError, match="batch dimension mismatch"):
         MyData(batch_size=[4])
 
 
@@ -610,6 +692,34 @@ def test_multiprocessing():
         catted = torch.cat(p.map(_make_data, [(i, 2) for i in range(1, 9)]), dim=0)
 
     assert catted.batch_size == torch.Size([36])
+
+
+def test_torochsnapshot(tmpdir):
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        y: "MyClass" = None
+
+    tc = MyClass(
+        x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[]
+    )
+    tc.memmap_()
+    assert isinstance(tc.y.x, MemmapTensor)
+
+    app_state = {"state": torchsnapshot.StateDict(tensordict=tc.state_dict())}
+    snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmpdir))
+
+    tc_dest = MyClass(
+        x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[]
+    )
+    tc_dest.memmap_()
+    assert isinstance(tc_dest.y.x, MemmapTensor)
+    app_state = {"state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict())}
+    snapshot.restore(app_state=app_state)
+
+    assert (tc_dest == tc).all()
+    assert tc_dest.y.batch_size == tc.y.batch_size
+    assert isinstance(tc_dest.y.x, MemmapTensor)
 
 
 if __name__ == "__main__":

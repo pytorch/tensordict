@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import os
 import tempfile
+import warnings
 from copy import copy, deepcopy
 from tempfile import _TemporaryFileWrapper
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -628,6 +629,43 @@ MemmapTensor of shape {self.shape}."""
         ]
         return tuple(self[_idx] for _idx in idx)
 
+    def as_tensor(
+        self,
+    ) -> torch.Tensor:
+        """Represents a MemmapTensor as a tensor, with the same storage (ie without any copy)."""
+        if not self.device.type == "cpu":
+            raise RuntimeError(
+                f"memmap.as_tensor() can only be called with MemmapTensors stored on CPU. Got device={self.device}."
+            )
+        # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
+        # as a Tensor for saving and loading purposes. This doesn't incur any copy.
+        if self._index:
+            indexed_memmap = self._get_item(self._index[0], self.memmap_array)
+            for _idx in self._index[1:]:
+                indexed_memmap = self._get_item(_idx, indexed_memmap)
+            return tensor_from_memoryview(
+                dtype=self.dtype,
+                shape=list(self.shape),
+                mv=memoryview(indexed_memmap),
+            )
+        return tensor_from_memoryview(
+            dtype=self.dtype,
+            shape=list(self.shape),
+            mv=memoryview(self.memmap_array),
+        )
+
+
+def tensor_from_memoryview(
+    mv: memoryview, dtype: torch.dtype, shape: List[int]
+) -> torch.Tensor:
+    # From torchsnapshot
+    # PyTorch issues a warning if the given memoryview is non-writable. This is
+    # not a concern for torchsnapshot, as tensors created from non-writable
+    # buffers are all read-only, intermediate tensors.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return torch.reshape(torch.frombuffer(mv, dtype=dtype), shape)
+
 
 def _stack(
     list_of_memmap: List[MemmapTensor],
@@ -679,3 +717,18 @@ def set_transfer_ownership(memmap: MemmapTensor, value: bool = True) -> None:
     """Changes the transfer_ownership attribute of a MemmapTensor."""
     if isinstance(memmap, MemmapTensor):
         memmap.set_transfer_ownership(value)
+
+
+def memmap_tensor_as_tensor(
+    mem_map_tensor: Union[torch.Tensor, MemmapTensor]
+) -> torch.Tensor:
+
+    if not isinstance(mem_map_tensor, MemmapTensor):
+        return mem_map_tensor
+    # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
+    # as a Tensor for saving and loading purposes. This doesn't incur any copy.
+    return tensor_from_memoryview(
+        dtype=mem_map_tensor.dtype,
+        shape=list(mem_map_tensor.shape),
+        mv=memoryview(mem_map_tensor._memmap_array),
+    )
