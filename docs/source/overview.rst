@@ -182,14 +182,14 @@ A key pain-point of multiple PyTorch users is the inability of nn.Sequential to 
 For this purpose, we provide the ``TensorDictSequential`` class which passes data through a sequence of ``TensorDictModules``. Each module in the sequence takes its input from, and writes its output to the original ``TensorDict``, meaning it's possible for modules in the sequence to ignore output from their predecessors, or take additional input from the tensordict as necessary. Here's an example.
 
 >>> class Net(nn.Module):
-...    def __init__(self, input_size=100, hidden_size=50, output_size=10):
-...        super().__init__()
-...        self.fc1 = nn.Linear(input_size, hidden_size)
-...        self.fc2 = nn.Linear(hidden_size, output_size)
+...     def __init__(self, input_size=100, hidden_size=50, output_size=10):
+...         super().__init__()
+...         self.fc1 = nn.Linear(input_size, hidden_size)
+...         self.fc2 = nn.Linear(hidden_size, output_size)
 ...
-...    def forward(self, x):
-...        x = torch.relu(self.fc1(x))
-...        return self.fc2(x)
+...     def forward(self, x):
+...         x = torch.relu(self.fc1(x))
+...         return self.fc2(x)
 ...
 ... class Masker(nn.Module):
 ...     def forward(self, x, mask):
@@ -214,7 +214,7 @@ For this purpose, we provide the ``TensorDictSequential`` class which passes dat
 ... )
 >>> tensordict = module(tensordict)
 >>> intermediate_x = tensordict["intermediate", "x"]
->>> probabilities = tensordict["outputs", "probabilities"]
+>>> probabilities = tensordict["output", "probabilities"]
 
 In this example, the second module combines the output of the first with the mask stored under ("inputs", "mask") in the ``TensorDict``.
 

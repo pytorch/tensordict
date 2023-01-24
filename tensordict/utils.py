@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import collections
 import math
 
 import time
@@ -250,25 +249,6 @@ def _unwrap_value(value):
     # return out, batch_size
 
 
-class KeyDependentDefaultDict(collections.defaultdict):
-    """A key-dependent default dict.
-
-    Examples:
-        >>> my_dict = KeyDependentDefaultDict(lambda key: "foo_" + key)
-        >>> print(my_dict["bar"])
-        foo_bar
-    """
-
-    def __init__(self, fun):
-        self.fun = fun
-        super().__init__()
-
-    def __missing__(self, key):
-        value = self.fun(key)
-        self[key] = value
-        return value
-
-
 if hasattr(math, "prod"):
 
     def prod(sequence):
@@ -372,20 +352,16 @@ torch_to_numpy_dtype_dict = {
 
 
 def _nested_key_type_check(key):
-    is_tuple = isinstance(key, tuple)
-    if not (
-        isinstance(key, str)
-        or (
-            is_tuple and len(key) > 0 and all(isinstance(subkey, str) for subkey in key)
-        )
-    ):
-        key_repr = (
-            f"tuple({', '.join(str(type(i)) for i in key)})" if is_tuple else type(key)
-        )
-        raise TypeError(
-            "Expected key to be a string or non-empty tuple of strings, but found "
-            f"{key_repr}"
-        )
+    msg = "Expected key to be a string or non-empty tuple of strings, but found {}."
+    if type(key) is str:
+        return
+    is_tuple = type(key) is tuple
+    if not is_tuple:
+        raise TypeError(msg.format(type(key)))
+    else:
+        for subkey in key:
+            if type(subkey) is not str:
+                raise TypeError(msg.format(type(subkey)))
 
 
 def _normalize_key(key: NESTED_KEY) -> NESTED_KEY:
@@ -589,12 +565,21 @@ def _ndimension(tensor: torch.Tensor):
 
 
 def _shape(tensor: torch.Tensor):
+    try:
+        return tensor.shape
+    except AttributeError as err:
+        if type(tensor) is KeyedJaggedTensor:
+            return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
+        raise err
+
+
+def _device(tensor: torch.Tensor):
     if isinstance(tensor, torch.Tensor):
-        return tensor.shape
+        return tensor.device
     elif isinstance(tensor, KeyedJaggedTensor):
-        return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
+        return tensor.device()
     else:
-        return tensor.shape
+        return tensor.device
 
 
 def _is_shared(tensor: torch.Tensor):

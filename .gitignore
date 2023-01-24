@@ -3,5 +3,4 @@ __pycache__
 *.egg-info
 tensordict/version.py
 .pytest_cache
-build/
-.idea/
+build

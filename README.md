@@ -5,8 +5,14 @@
 <a href="https://pypi.org/project/tensordict-nightly"><img src="https://img.shields.io/pypi/v/tensordict-nightly?label=nightly" alt="pypi nightly version"></a>
 [![Downloads](https://static.pepy.tech/personalized-badge/tensordict?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/tensordict)
 [![Downloads](https://static.pepy.tech/personalized-badge/tensordict-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/tensordict-nightly)
+[![codecov](https://codecov.io/gh/pytorch-labs/tensordict/branch/main/graph/badge.svg?token=9QTUG6NAGQ)](https://codecov.io/gh/pytorch-labs/tensordict)
+[![pytorch](https://circleci.com/gh/pytorch-labs/tensordict.svg?style=shield)](https://circleci.com/gh/pytorch-labs/tensordict)
 
 # TensorDict
+
+[**Installation**](#installation) | [**General features**](#general) |
+[**Tensor-like features**](#tensor-like-features) | [**TensorDict for functional programming using FuncTorch**](#tensordict-for-functional-programming-using-functorch) |
+[**Lazy preallocation**](#lazy-preallocation) | [**Nesting TensorDicts**](#nesting-tensordicts) | [**TensorClass**](#tensorclass)
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.
 
@@ -207,11 +213,65 @@ Accessing nested tensordicts can be achieved with a single index:
 >>> sub_value = tensordict["key 2", "sub-key"]
 ```
 
-# Disclaimer
+## TensorClass
+
+Content flexibility comes at the cost of predictability.
+In some cases, developers may be looking for data structure with a more explicit behavior.
+`tensordict` provides a `dataclass`-like decorator that allows for the creation of custom dataclasses that support
+the tensordict operations:
+```python
+>>> from tensordict.prototype import tensorclass
+>>> import torch
+>>> 
+>>> @tensorclass
+... class MyData:
+...    image: torch.Tensor
+...    mask: torch.Tensor
+...    label: torch.Tensor
+...
+...    def mask_image(self):
+...        return self.image[self.mask.expand_as(self.image)].view(*self.batch_size, -1)
+...
+...    def select_label(self, label):
+...        return self[self.label == label]
+...
+>>> images = torch.randn(100, 3, 64, 64)
+>>> label = torch.randint(10, (100,))
+>>> mask = torch.zeros(1, 64, 64, dtype=torch.bool).bernoulli_().expand(100, 1, 64, 64)
+>>> 
+>>> data = MyData(images, mask, label=label, batch_size=[100])
+>>>
+>>> print(data.select_label(1))
+MyData(
+    image=Tensor(torch.Size([11, 3, 64, 64]), dtype=torch.float32),
+    label=Tensor(torch.Size([11]), dtype=torch.int64),
+    mask=Tensor(torch.Size([11, 1, 64, 64]), dtype=torch.bool),
+    batch_size=torch.Size([11]),
+    device=None,
+    is_shared=False)
+>>> print(data.mask_image().shape)
+torch.Size([100, 6117])
+>>> print(data.reshape(10, 10))
+MyData(
+    image=Tensor(torch.Size([10, 10, 3, 64, 64]), dtype=torch.float32),
+    label=Tensor(torch.Size([10, 10]), dtype=torch.int64),
+    mask=Tensor(torch.Size([10, 10, 1, 64, 64]), dtype=torch.bool),
+    batch_size=torch.Size([10, 10]),
+    device=None,
+    is_shared=False)
+```
+As this example shows, one can write a specific data structures with dedicated methods while still enjoying the TensorDict
+artifacts such as shape operations (e.g. reshape or permutations), data manipulation (indexing, `cat` and `stack`) or calling
+arbitrary functions through the `apply` method (and many more).
+
+Tensorclasses support nesting and many more features.
+
+## Disclaimer
 
 TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
 Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility
 with the broader pytorch ecosystem.
 
 ## License
+
 TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.

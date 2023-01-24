@@ -6,3 +6,4 @@ API Reference
 
     tensordict
     nn
+    prototype

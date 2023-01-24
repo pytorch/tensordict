@@ -21,10 +21,8 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-import torch
 
-from tensordict.nn.common import TensorDictModule
-from tensordict.nn.probabilistic import ProbabilisticTensorDictModule
+from tensordict.nn.common import dispatch_kwargs, TensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _normalize_key, NESTED_KEY
 from torch import nn
@@ -55,22 +53,29 @@ class TensorDictSequential(TensorDictModule):
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import (
         ...     ProbabilisticTensorDictModule,
+        ...     ProbabilisticTensorDictSequential,
         ...     TensorDictModule,
         ...     TensorDictSequential,
         ... )
-        >>> from tensordict.nn.distributions import NormalParamWrapper
+        >>> from tensordict.nn.distributions import NormalParamExtractor
         >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
-        >>> net1 = NormalParamWrapper(torch.nn.Linear(4, 8))
-        >>> module1 = TensorDictModule(net1, in_keys=["input"], out_keys=["loc", "scale"])
-        >>> td_module1 = ProbabilisticTensorDictModule(
-        ...    module=module1,
-        ...    dist_in_keys=["loc", "scale"],
-        ...    sample_out_key=["hidden"],
-        ...    distribution_class=Normal,
-        ...    return_log_prob=True,
-        ...    )
+        >>> net1 = torch.nn.Linear(4, 8)
+        >>> module1 = TensorDictModule(net1, in_keys=["input"], out_keys=["params"])
+        >>> normal_params = TensorDictModule(
+                NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
+            )
+        >>> td_module1 = ProbabilisticTensorDictSequential(
+        ...     module1,
+        ...     normal_params,
+        ...     ProbabilisticTensorDictModule(
+        ...         in_keys=["loc", "scale"],
+        ...         out_keys=["hidden"],
+        ...         distribution_class=Normal,
+        ...         return_log_prob=True,
+        ...     )
+        ... )
         >>> module2 = torch.nn.Linear(4, 8)
         >>> td_module2 = TensorDictModule(
         ...    module=module2, in_keys=["hidden"], out_keys=["output"]
@@ -85,6 +90,7 @@ class TensorDictSequential(TensorDictModule):
                 input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                params: Tensor(torch.Size([3, 8]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([3, 4]), dtype=torch.float32),
                 scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
@@ -102,6 +108,7 @@ class TensorDictSequential(TensorDictModule):
                 input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 loc: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 output: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
+                params: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
                 sample_log_prob: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
                 scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([4, 3]),
@@ -225,6 +232,7 @@ class TensorDictSequential(TensorDictModule):
             tensordict._update_valid_keys()
         return tensordict
 
+    @dispatch_kwargs
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -257,40 +265,3 @@ class TensorDictSequential(TensorDictModule):
 
     def __delitem__(self, index: Union[int, slice]) -> None:
         self.module.__delitem__(idx=index)
-
-    def get_dist(
-        self,
-        tensordict: TensorDictBase,
-        **kwargs,
-    ) -> Tuple[torch.distributions.Distribution, ...]:
-        if isinstance(self.module[-1], ProbabilisticTensorDictModule):
-            if kwargs:
-                raise RuntimeError(
-                    "TensorDictSequential does not support keyword arguments other than 'params', 'buffers' and 'vmap'"
-                )
-            tensordict = self[:-1](tensordict)
-            out = self[-1].get_dist(tensordict)
-            return out
-        else:
-            raise RuntimeError(
-                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict. "
-                f"The sequence items were of type: {[type(m) for m in self.module]}"
-            )
-
-    def get_dist_params(
-        self,
-        tensordict: TensorDictBase,
-        **kwargs,
-    ) -> Tuple[torch.distributions.Distribution, ...]:
-        if isinstance(self.module[-1], ProbabilisticTensorDictModule):
-            if kwargs:
-                raise RuntimeError(
-                    "TensorDictSequential does not support keyword arguments."
-                )
-            tensordict = self[:-1](tensordict)
-            return self[-1].get_dist_params(tensordict)
-        else:
-            raise RuntimeError(
-                "Cannot call get_dist on a sequence of tensordicts that does not end with a probabilistic TensorDict. "
-                f"The sequence items were of type: {[type(m) for m in self.module]}"
-            )

@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 import torch.cuda
-from tensordict import SavedTensorDict, TensorDict
+from tensordict import TensorDict
 from tensordict.tensordict import _stack as stack_td
 
 
@@ -51,6 +51,21 @@ class TestTensorDictsBase:
             batch_size=[4, 3, 2, 1],
             device=device,
         )
+
+    def nested_stacked_td(self, device):
+        td = TensorDict(
+            source={
+                "a": torch.randn(4, 3, 2, 1, 5),
+                "b": torch.randn(4, 3, 2, 1, 10),
+                "c": torch.randint(10, (4, 3, 2, 1, 3)),
+                "my_nested_td": TensorDict(
+                    {"inner": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
+                ),
+            },
+            batch_size=[4, 3, 2, 1],
+            device=device,
+        )
+        return torch.stack(list(td.unbind(1)), 1)
 
     def stacked_td(self, device):
         td1 = TensorDict(
@@ -109,11 +124,8 @@ class TestTensorDictsBase:
         )
         return td.get_sub_tensordict((slice(None), 1))
 
-    def saved_td(self, device):
-        return SavedTensorDict(source=self.td(device))
-
     def memmap_td(self, device):
-        return self.td(device).memmap_(lock=False)
+        return self.td(device).memmap_()
 
     def permute_td(self, device):
         return TensorDict(
