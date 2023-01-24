@@ -10,7 +10,7 @@ class DynamicShapeTensor:
         shape: torch.Size,  # -1 indicates variable size
         total_elts: int,  # size of the storage
         total_index: int,  # number of indexable items along stack dim
-        stack_dim: 0,
+        stack_dim: int = 0,
     ):
         if stack_dim != 0:
             raise NotImplementedError(stack_dim)
