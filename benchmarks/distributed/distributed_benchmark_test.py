@@ -1,12 +1,3 @@
-<<<<<<< HEAD:benchmarks/distributed_benchmark_test.py
-=======
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
-import argparse
->>>>>>> add5f226e9f83435c41e6d87efba101aaa9ce36f:benchmarks/distributed/distributed_benchmark.py
 import os
 import time
 
