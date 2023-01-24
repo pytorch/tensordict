@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import timeit
 
 from argparse import ArgumentParser
@@ -11,8 +16,8 @@ from tensordict import TensorDict
 # use this to checkout a branch
 def checkout(branch):
 
-    repo = git.Repo("..")
-    current = git.Repo(".").git.branch("--show-current")
+    repo = git.Repo("../..")
+    current = git.Repo("..").git.branch("--show-current")
     repo.git.checkout("speed")
     return current
 

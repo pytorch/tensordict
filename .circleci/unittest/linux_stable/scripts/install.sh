@@ -38,7 +38,7 @@ gcc --version
 pip3 install -e .
 
 # install snapshot
-pip3 install torchsnapshot-nightly
+pip3 install git+https://github.com/pytorch/torchsnapshot
 
 # smoke test
 python -c "import functorch;import torchsnapshot"

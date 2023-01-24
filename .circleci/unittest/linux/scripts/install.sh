@@ -35,7 +35,7 @@ printf "* Installing tensordict\n"
 pip3 install -e .
 
 # install torchsnapshot nightly
-pip3 install torchsnapshot-nightly
+pip3 install git+https://github.com/pytorch/torchsnapshot
 
 # smoke test
 python -c "import functorch;import torchsnapshot"

@@ -12,5 +12,5 @@ sphinxcontrib-htmlhelp
 myst-parser>=0.18.1
 docutils>=0.19
 
-kornia
 torchvision
+tqdm
