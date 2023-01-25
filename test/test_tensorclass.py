@@ -88,15 +88,15 @@ def test_type():
 
 def test_signature():
     sig = inspect.signature(MyData)
-    assert list(sig.parameters) == ["X", "y", "batch_size", "device"]
+    assert list(sig.parameters) == ["X", "y", "z", "batch_size", "device"]
 
-    with pytest.raises(TypeError, match="missing 2 required positional arguments"):
+    with pytest.raises(TypeError, match="missing 3 required positional arguments"):
         MyData(batch_size=[10])
 
-    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+    with pytest.raises(TypeError, match="missing 2 required positional argument"):
         MyData(X=torch.rand(10), batch_size=[10])
 
-    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+    with pytest.raises(TypeError, match="missing 2 required positional argument"):
         MyData(X=torch.rand(10), batch_size=[10], device="cpu")
 
     # if all positional arguments are specified, ommitting batch_size gives error
@@ -106,7 +106,7 @@ def test_signature():
         MyData(X=torch.rand(10), y=torch.rand(10))
 
     # all positional arguments + batch_size is fine
-    MyData(X=torch.rand(10), y=torch.rand(10), batch_size=[10])
+    MyData(X=torch.rand(10), y=torch.rand(10), z="test_tensor", batch_size=[10])
 
 
 @pytest.mark.parametrize("device", get_available_devices())
