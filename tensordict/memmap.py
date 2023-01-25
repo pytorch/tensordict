@@ -10,6 +10,7 @@ import os
 import tempfile
 import warnings
 from copy import copy, deepcopy
+from pathlib import Path
 from tempfile import _TemporaryFileWrapper
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -98,7 +99,10 @@ class MemmapTensor:
             serialization. If False, the current process keeps the ownership
             of the temporary file.
             Default: False.
-        prefix (str or path, optional): prefix of the file location.
+        prefix (str or path, optional): *Deprecated* prefix of the file location. Should
+            not be specified together with prefix.
+        filename (str or path, optional): location of the underlying memory-map. Should
+            not be specified together with prefix.
 
     Examples:
         >>> x = torch.ones(3,4)
@@ -135,12 +139,42 @@ class MemmapTensor:
         dtype: torch.dtype = None,
         transfer_ownership: bool = False,
         prefix: Optional[str] = None,
+        filename: Optional[str] = None,
+        mode: str = "r+",
     ):
         self.idx = None
         self._memmap_array = None
         self.prefix = prefix
         self.is_meta = False
-        self.file = tempfile.NamedTemporaryFile(prefix=prefix, delete=False)
+
+        if mode in ("r+", "w+", "c", "copyonwrite", "readwrite", "write"):
+            self.mode = mode
+        else:
+            raise ValueError(
+                'Accepted values for mode are "r+", "readwrite", "w+", "write", "c" or '
+                '"copyonwrite". PyTorch does not support tensors backed by read-only '
+                'NumPy arrays, so "r" and "readonly" are not supported.'
+            )
+
+        if prefix is not None:
+            warnings.warn(
+                "prefix has been deprecated. If you want to control the location of "
+                "the MemmapTensor on disk, consider using filename instead."
+            )
+            if filename is not None:
+                raise ValueError("filename and prefix should not both be specified")
+
+        # open the files in r+ mode so as to not overwrite any data that might exist
+        # there. the actual memmap will be instantiated with user-supplied mode
+        if filename is None:
+            self.file = tempfile.NamedTemporaryFile(
+                prefix=prefix, delete=False, mode="r+"
+            )
+        else:
+            # if filename doesn't exist we must create it
+            Path(filename).touch(exist_ok=True)
+            self.file = open(filename, mode="r+")
+
         self.filename = self.file.name
         self.file.close()  # we close the file for now, but don't delete it
 
@@ -177,6 +211,8 @@ class MemmapTensor:
         tensor: Union[torch.Tensor, MemmapTensor, np.ndarray],
         transfer_ownership=False,
         prefix=None,
+        filename: Optional[str] = None,
+        mode: str = "r+",
     ) -> MemmapTensor:
         if isinstance(tensor, MemmapTensor):
             if transfer_ownership:
@@ -206,6 +242,8 @@ class MemmapTensor:
             dtype=dtype,
             prefix=prefix,
             transfer_ownership=transfer_ownership,
+            filename=filename,
+            mode=mode,
         )
         out.copy_(tensor)
         return out
@@ -242,7 +280,6 @@ class MemmapTensor:
         self._dtype = dtype
         self._ndim = len(shape)
         self._numel = prod(shape)
-        self.mode = "r+"
         self._has_ownership = True
         self._had_ownership = True
 
@@ -479,7 +516,10 @@ MemmapTensor of shape {self.shape}."""
 
     def __del__(self) -> None:
         if "_has_ownership" in self.__dir__() and self._has_ownership:
-            os.unlink(self.filename)
+            if isinstance(self.file, tempfile._TemporaryFileWrapper):
+                # only delete file if we created a temporary file. Otherwise file should
+                # persist on disk
+                os.unlink(self.filename)
             del self.file
 
     def __eq__(self, other: Any) -> torch.Tensor:
