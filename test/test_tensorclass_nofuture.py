@@ -417,7 +417,7 @@ def test_nested():
     @tensorclass
     class MyDataNested:
         X: torch.Tensor
-        y: "MyDataNested" = None
+        y: "MyDataNested" = None  # future: drop quotes
 
     X = torch.ones(3, 4, 5)
     batch_size = [3, 4]
@@ -430,7 +430,7 @@ def test_nested_eq():
     @tensorclass
     class MyDataNested:
         X: torch.Tensor
-        y: "MyDataNested" = None
+        y: "MyDataNested" = None  # future: drop quotes
 
     X = torch.ones(3, 4, 5)
     batch_size = [3, 4]
@@ -445,7 +445,7 @@ def test_nested_ne():
     @tensorclass
     class MyDataNested:
         X: torch.Tensor
-        y: "MyDataNested" = None
+        y: "MyDataNested" = None  # future: drop quotes
 
     X = torch.ones(3, 4, 5)
     batch_size = [3, 4]
@@ -694,11 +694,11 @@ def test_multiprocessing():
     assert catted.batch_size == torch.Size([36])
 
 
-def test_torochsnapshot(tmpdir):
+def test_torchsnapshot(tmpdir):
     @tensorclass
     class MyClass:
         x: torch.Tensor
-        y: "MyClass" = None
+        y: "MyClass" = None  # future: drop quotes
 
     tc = MyClass(
         x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[]
