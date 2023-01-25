@@ -13,6 +13,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from numbers import Number
+from pathlib import Path
 from textwrap import indent
 from typing import (
     Any,
@@ -1117,10 +1118,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def memmap_(
-        self,
-        prefix=None,
-    ) -> TensorDictBase:
+    def memmap_(self, prefix=None) -> TensorDictBase:
         """Writes all tensors onto a MemmapTensor.
 
         Args:
@@ -2682,6 +2680,10 @@ class TensorDict(TensorDictBase):
         return self
 
     def memmap_(self, prefix=None) -> TensorDictBase:
+        if prefix is not None:
+            prefix = Path(prefix)
+            if not prefix.exists():
+                prefix.mkdir(exist_ok=True)
         if self.is_shared() and self.device.type == "cpu":
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2697,9 +2699,17 @@ class TensorDict(TensorDictBase):
                     "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
                 )
             if isinstance(value, TensorDictBase):
-                self._tensordict[key] = value.memmap_()
+                if prefix is not None:
+                    # ensure subdirectory exists
+                    (prefix / key).mkdir(exist_ok=True)
+                    self._tensordict[key] = value.memmap_(prefix=prefix / key)
+                else:
+                    self._tensordict[key] = value.memmap_()
                 continue
-            self._tensordict[key] = MemmapTensor.from_tensor(value, prefix=prefix)
+            self._tensordict[key] = MemmapTensor.from_tensor(
+                value,
+                filename=str(prefix / f"{key}.memmap") if prefix is not None else None,
+            )
         self._is_memmap = True
         self.lock()
         return self
@@ -4413,8 +4423,12 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def memmap_(self, prefix=None) -> TensorDictBase:
-        for td in self.tensordicts:
-            td.memmap_(prefix=prefix)
+        if prefix is not None:
+            prefix = Path(prefix)
+            if not prefix.exists():
+                prefix.mkdir(exist_ok=True)
+        for i, td in enumerate(self.tensordicts):
+            td.memmap_(prefix=(prefix / str(i)) if prefix is not None else None)
         self._is_memmap = True
         self.lock()
         return self
