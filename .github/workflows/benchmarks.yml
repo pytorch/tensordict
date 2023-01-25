@@ -1,9 +1,8 @@
 name: Continuous Benchmark
 on:
-  pull_request:
-    types: [ closed ]
-    branches: 
-    - main
+  push:
+    branches:
+      - main
 
 permissions:
   deployments: write
