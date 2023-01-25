@@ -1696,6 +1696,32 @@ class TestTensorDicts(TestTensorDictsBase):
             td.memmap_()
             assert td.is_memmap()
 
+    def test_memmap_prefix(self, td_name, device, tmpdir):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            with pytest.raises(
+                RuntimeError,
+                match="Converting a sub-tensordict values to memmap cannot be done",
+            ):
+                td.memmap_(tmpdir / "tensordict")
+            return
+        else:
+            td.memmap_(tmpdir / "tensordict")
+
+        assert (tmpdir / "tensordict" / "meta.pt").exists()
+        metadata = torch.load(tmpdir / "tensordict" / "meta.pt")
+        if td_name in ("stacked_td", "nested_stacked_td"):
+            pass
+        elif td_name in ("unsqueezed_td", "squeezed_td", "permute_td"):
+            assert metadata["batch_size"] == td._source.batch_size
+            assert metadata["device"] == td._source.device
+        else:
+            assert metadata["batch_size"] == td.batch_size
+            assert metadata["device"] == td.device
+
+        td2 = td.__class__.load_memmap(tmpdir / "tensordict")
+        assert all(v.all() for v in (td == td2).values(include_nested=True))
+
     def test_set_default_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock()
