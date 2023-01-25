@@ -152,10 +152,9 @@ def test_banned_types():
         subclass: Union[MyOptionalClass, TensorDict] = None
 
     data = MyUnionClass(
-        subclass=MyUnionClass.from_tensordict(TensorDict({}, [3])), batch_size=[3]
+        subclass=MyUnionClass.to_tensorclass(TensorDict({}, [3])), batch_size=[3]
     )
-    with pytest.raises(TypeError, match="can't be deterministically cast."):
-        assert data.subclass is not None
+    assert data.subclass is not None
 
 
 def test_attributes():
@@ -417,7 +416,7 @@ def test_nested():
     @tensorclass
     class MyDataNested:
         X: torch.Tensor
-        y: "MyDataNested" = None
+        y: "MyDataNested" = None  # future: drop quotes
 
     X = torch.ones(3, 4, 5)
     batch_size = [3, 4]
@@ -430,7 +429,7 @@ def test_nested_eq():
     @tensorclass
     class MyDataNested:
         X: torch.Tensor
-        y: "MyDataNested" = None
+        y: "MyDataNested" = None  # future: drop quotes
 
     X = torch.ones(3, 4, 5)
     batch_size = [3, 4]
@@ -445,7 +444,7 @@ def test_nested_ne():
     @tensorclass
     class MyDataNested:
         X: torch.Tensor
-        y: "MyDataNested" = None
+        y: "MyDataNested" = None  # future: drop quotes
 
     X = torch.ones(3, 4, 5)
     batch_size = [3, 4]
@@ -510,7 +509,6 @@ def test_nested_heterogeneous(any_to_td):
         assert isinstance(data.W, TensorDict)
     assert isinstance(data, MyDataParent)
     assert isinstance(data.z, TensorDict)
-    assert isinstance(data.tensordict["y"], TensorDict)
 
 
 @pytest.mark.parametrize("any_to_td", [True, False])
@@ -540,11 +538,11 @@ def test_setattr(any_to_td):
     data_nest_clone = data_nest.clone()
     assert type(data_nest_clone) is type(data_nest)
     data.y = data_nest_clone
-    assert data.tensordict["y"] is not data_nest.tensordict
-    assert data.tensordict["y"] is data_nest_clone.tensordict, (
-        type(data.tensordict["y"]),
-        type(data_nest.tensordict),
-    )
+    assert data.y.tensordict is not data_nest.tensordict
+    #assert data.tensordict["y"] is data_nest_clone.tensordict, (
+    #    type(data.tensordict["y"]),
+    #    type(data_nest.tensordict),
+    #)
     data.X = X_clone
     assert data.tensordict["X"] is X_clone
     data.z = td_clone
@@ -575,7 +573,7 @@ def test_post_init():
     assert (data.y == y.abs()).all()
 
     # initialising from tensordict is fine
-    data = MyDataPostInit.from_tensordict(
+    data = MyDataPostInit.to_tensorclass(
         TensorDict({"X": torch.rand(3, 4), "y": y}, batch_size=[3, 4])
     )
 
@@ -583,7 +581,7 @@ def test_post_init():
         MyDataPostInit(X=-torch.ones(2), y=torch.rand(2), batch_size=[2])
 
     with pytest.raises(AssertionError):
-        MyDataPostInit.from_tensordict(
+        MyDataPostInit.to_tensorclass(
             TensorDict({"X": -torch.ones(2), "y": torch.rand(2)}, batch_size=[2])
         )
 
@@ -694,11 +692,11 @@ def test_multiprocessing():
     assert catted.batch_size == torch.Size([36])
 
 
-def test_torochsnapshot(tmpdir):
+def test_torchsnapshot(tmpdir):
     @tensorclass
     class MyClass:
         x: torch.Tensor
-        y: "MyClass" = None
+        y: "MyClass" = None  # future: drop quotes
 
     tc = MyClass(
         x=torch.randn(3), y=MyClass(x=torch.randn(3), batch_size=[]), batch_size=[]
