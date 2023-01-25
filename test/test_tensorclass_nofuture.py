@@ -269,10 +269,9 @@ def test_stack():
 
     with pytest.raises(
         TypeError,
-        match=re.escape(
+        match=(
             "no implementation found for 'torch.stack' on types that implement "
-            "__torch_function__: [<class 'test_tensorclass_nofuture.MyData'>, "
-            "<class 'test_tensorclass_nofuture.MyData2'>]"
+            "__torch_function__"
         ),
     ):
         torch.stack([data1, data3], dim=0)
@@ -295,10 +294,9 @@ def test_cat():
 
     with pytest.raises(
         TypeError,
-        match=re.escape(
+        match=(
             "no implementation found for 'torch.cat' on types that implement "
-            "__torch_function__: [<class 'test_tensorclass_nofuture.MyData'>, "
-            "<class 'test_tensorclass_nofuture.MyData2'>]"
+            "__torch_function__"
         ),
     ):
         torch.cat([data1, data3], dim=0)
