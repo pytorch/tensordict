@@ -17,7 +17,6 @@ from tensordict.tensordict import TensorDictBase
 from torch import distributions as d, Tensor
 from torch.autograd.grad_mode import _DecoratorContextManager
 
-
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
 
@@ -39,6 +38,10 @@ class set_interaction_mode(_DecoratorContextManager):
     def __init__(self, mode: str = "mode"):
         super().__init__()
         self.mode = mode
+
+    def clone(self):
+        # override this method if your children class takes __init__ parameters
+        return self.__class__(self.mode)
 
     def __enter__(self) -> None:
         global _INTERACTION_MODE

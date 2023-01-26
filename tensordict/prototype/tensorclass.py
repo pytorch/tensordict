@@ -57,6 +57,7 @@ def tensorclass(cls: T) -> T:
         ... class MyData:
         ...     X: torch.Tensor
         ...     y: torch.Tensor
+        ...     z: str
         ...     def expand_and_mask(self):
         ...         X = self.X.unsqueeze(-1).expand_as(self.y)
         ...         X = X[self.y]
@@ -65,11 +66,13 @@ def tensorclass(cls: T) -> T:
         >>> data = MyData(
         ...     X=torch.ones(3, 4, 1),
         ...     y=torch.zeros(3, 4, 2, 2, dtype=torch.bool),
+        ...     z="test"
         ...     batch_size=[3, 4])
         >>> print(data)
         MyData(
             X=Tensor(torch.Size([3, 4, 1]), dtype=torch.float32),
             y=Tensor(torch.Size([3, 4, 2, 2]), dtype=torch.bool),
+            z="test"
             batch_size=[3, 4],
             device=None,
             is_shared=False)
@@ -199,7 +202,7 @@ def _init_wrapper(init):
         self.tensordict = TensorDict(
             {}, batch_size=batch_size, device=device, _run_checks=False
         )
-        # To save non tensor data ( Even the nested classes go here)
+        # To save non tensor data (Nested tensor classes also go here)
         self.non_tensordict = {}
         init(self, **{key: value for key, value in kwargs.items()})
 
@@ -242,8 +245,7 @@ def _to_tensorclass_wrapper(expected_keys):
 
 
 def _getstate(self):
-    return {"tensordict": self.tensordict,
-            "non_tensordict": self.non_tensordict}
+    return {"tensordict": self.tensordict, "non_tensordict": self.non_tensordict}
 
 
 def _setstate(self, state):
@@ -258,15 +260,15 @@ def _getattribute_wrapper(getattribute):
                 "tensordict" in self.__dict__
                 and item in self.__dict__["tensordict"].keys()
             ):
-                out = self.__dict__["tensordict"][item]
+                out = self.tensordict[item]
                 expected_type = self.__dataclass_fields__[item].type
                 out = _get_typed_output(out, expected_type)
                 return out
             elif (
-                 "non_tensordict" in self.__dict__
-                 and item in self.__dict__["non_tensordict"].keys()
+                "non_tensordict" in self.__dict__
+                and item in self.__dict__["non_tensordict"].keys()
             ):
-                out = self.__dict__["non_tensordict"][item]
+                out = self.non_tensordict[item]
                 return out
         return getattribute(self, item)
 
@@ -287,10 +289,10 @@ def _setattr_wrapper(setattr_, expected_keys):
             )
 
         if isinstance(value, _accepted_classes):
-            self.__dict__["tensordict"][key] = value
+            self.tensordict[key] = value
         else:
             # Saving all non-tensor attributes
-            self.__dict__["non_tensordict"][key] = value
+            self.non_tensordict[key] = value
 
     return wrapper
 
@@ -309,6 +311,7 @@ def _getattr(self, attr):
             if is_tensorclass(value):
                 temp = getattr(value, attr)
                 if callable(temp):
+                    # Recursively calling for nested tensor classes
                     non_tensor_dict[key] = temp(*args, **kwargs)
                 else:
                     non_tensor_dict[key] = temp
@@ -413,9 +416,7 @@ def __eq__(self, other):
     keys1 = set(self.non_tensordict.keys())
     keys2 = set(other.non_tensordict.keys())
     if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-        raise KeyError(
-            f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-        )
+        raise KeyError(f"keys in {self} and {other} mismatch, got {keys1} and {keys2}")
     non_tensor = {}
     for key, value in self.non_tensordict.items():
         non_tensor[key] = value == other.non_tensordict.get(key)
@@ -430,9 +431,7 @@ def __ne__(self, other):
     keys1 = set(self.non_tensordict.keys())
     keys2 = set(other.non_tensordict.keys())
     if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-        raise KeyError(
-            f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-        )
+        raise KeyError(f"keys in {self} and {other} mismatch, got {keys1} and {keys2}")
     non_tensor = {}
     for key, value in self.non_tensordict.items():
         non_tensor[key] = value != other.non_tensordict.get(key)
@@ -474,7 +473,7 @@ def _ones_like(tdc):
 def _clone(tdc):
     tensordict = torch.clone(tdc.tensordict)
     non_tensor_dict = tdc.non_tensordict
-    # Cloning internal Tensor classes if any
+    # Cloning nested Tensor classes if any
     for key, value in non_tensor_dict.items():
         if is_tensorclass(value):
             non_tensor_dict[key] = _clone(value)
@@ -485,7 +484,7 @@ def _clone(tdc):
 def _squeeze(tdc):
     tensordict = torch.squeeze(tdc.tensordict)
     non_tensor_dict = tdc.non_tensordict
-    # Squeezing internal Tensor classes if any
+    # Squeezing nested Tensor classes if any
     for key, value in non_tensor_dict.items():
         if is_tensorclass(value):
             non_tensor_dict[key] = _squeeze(value)
@@ -552,7 +551,7 @@ def _cat(list_of_tdc, dim):
         # Concatenating the nested tensor classes
         for key, value in non_tensordict.items():
             if is_tensorclass(value):
-                list_non_tdc = {}
+                list_non_tdc = []
                 for tdc in list_of_tdc:
                     list_non_tdc.append(tdc.non_tensordict[key])
                 non_tensordict[key] = _cat(list_non_tdc, dim)
@@ -621,7 +620,7 @@ def _validate_non_tensor_data(list_tds) -> bool:
     for key, val in td.non_tensordict.items():
         for tds in list_tds_copy:
             if is_tensorclass(val):
-                if type(val) is not type(tds.non_tensordict[key]):
+                if not isinstance(val, type(tds.non_tensordict[key])):
                     raise ValueError(
                         f"{repr(val)} and {repr(tds.non_tensordict[key])} for the attribute "
                         f"{repr(key)} are not matching"
