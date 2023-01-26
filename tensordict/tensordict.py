@@ -663,7 +663,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         kwargs = {}
         if not isinstance(self, SubTensorDict):
             kwargs["_process"] = False
-        is_locked = self.is_locked
+        is_locked = out.is_locked
         if not inplace and is_locked:
             out.unlock()
         for key, item in self.items():
@@ -1199,15 +1199,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if dim < 0:
             dim = self.batch_dims + dim
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
-        return tuple(
-            self.apply(
-                lambda tensor, idx=_idx: tensor[idx],
-                batch_size=batch_size,
-                _is_shared=self.is_shared(),
-                _is_memmap=self.is_memmap(),
+        out = []
+        for _idx in idx:
+            out.append(
+                self.apply(
+                    lambda tensor, idx=_idx: tensor[idx],
+                    batch_size=batch_size,
+                )
             )
-            for _idx in idx
-        )
+            if self.is_shared():
+                out[-1].share_memory_()
+            elif self.is_memmap():
+                out[-1].memmap_()
+        return tuple(out)
 
     def chunk(self, chunks: int, dim: int = 0) -> Tuple[TensorDictBase, ...]:
         """Splits a tendordict into the specified number of chunks, if possible.
