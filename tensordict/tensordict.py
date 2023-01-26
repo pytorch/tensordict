@@ -34,19 +34,17 @@ from warnings import warn
 import numpy as np
 import torch
 
-from tensordict.utils import _device, _dtype, _get_item, _is_shared, _set_item, _shape
-from torch import Tensor
-from torch.utils._pytree import tree_map
-
-try:
-    from torch.jit._shape_functions import infer_size_impl
-except ImportError:
-    from tensordict.utils import infer_size_impl
-
 from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
+
 from tensordict.utils import (
+    _device,
+    _dtype,
+    _get_item,
     _getitem_batch_size,
+    _is_shared,
     _nested_key_type_check,
+    _set_item,
+    _shape,
     _sub_index,
     convert_ellipsis_to_idx,
     DEVICE_TYPING,
@@ -56,6 +54,14 @@ from tensordict.utils import (
     NESTED_KEY,
     prod,
 )
+from torch import Tensor
+from torch.utils._pytree import tree_map
+
+
+try:
+    from torch.jit._shape_functions import infer_size_impl
+except ImportError:
+    from tensordict.utils import infer_size_impl
 
 # from torch.utils._pytree import _register_pytree_node
 
@@ -594,55 +600,86 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def apply(
         self,
         fn: Callable,
+        *others: TensorDictBase,
         batch_size: Optional[Sequence[int]] = None,
         inplace: bool = False,
         **constructor_kwargs,
     ) -> TensorDictBase:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
 
+        The apply method will return an TensorDict instance, regardless of the
+        input type. To keep the same type, one can execute
+
+          >>> out = td.clone(False).update(td.apply(...))
+
         Args:
             fn (Callable): function to be applied to the tensors in the
                 tensordict.
+            *others (TensorDictBase instances, optional): if provided, these
+                tensordicts should have a structure matching the one of the
+                current tensordict. The :obj:`fn` argument should receive as many
+                inputs as the number of tensordicts, including the one where apply is
+                being called.
             batch_size (sequence of int, optional): if provided,
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
-                the transformation.
+                the transformation. This is a keyword only argument.
             inplace (bool, optional): if True, changes are made in-place.
-                Default is False.
+                Default is False. This is a keyword only argument.
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
 
         Returns:
             a new tensordict with transformed_in tensors.
 
+        Example:
+            >>> td = TensorDict({"a": -torch.ones(3), "b": {"c": torch.ones(3)}}, batch_size=[3])
+            >>> td_1 = td.apply(lambda x: x+1)
+            >>> assert (td["a"] == 0).all()
+            >>> assert (td["b", "c"] == 2).all()
+            >>> td_2 = td.apply(lambda x, y: x+y, td)
+            >>> assert (td_2["a"] == -2).all()
+            >>> assert (td_2["b", "c"] == 2).all()
         """
-        out = (
-            self
-            if inplace
-            else TensorDict(
+        if inplace:
+            out = self
+        elif batch_size is not None:
+            out = TensorDict(
                 {},
                 batch_size=batch_size,
                 device=self.device,
                 _run_checks=False,
                 **constructor_kwargs,
             )
-            if batch_size is not None
-            else self.clone(recurse=False)
-        )
-        is_locked = out.is_locked
+        else:
+            out = TensorDict(
+                {},
+                batch_size=self.batch_size,
+                device=self.device,
+                _run_checks=False,
+                **constructor_kwargs,
+            )
+
+        kwargs = {}
+        if not isinstance(self, SubTensorDict):
+            kwargs["_process"] = False
+        is_locked = self.is_locked
         if not inplace and is_locked:
             out.unlock()
         for key, item in self.items():
+            _others = [_other[key] for _other in others]
             if isinstance(item, TensorDictBase):
                 item_trsf = item.apply(
-                    fn, inplace=inplace, batch_size=batch_size, **constructor_kwargs
+                    fn,
+                    *_others,
+                    inplace=inplace,
+                    batch_size=batch_size,
+                    **constructor_kwargs,
                 )
             else:
-                item_trsf = fn(item)
+                item_trsf = fn(item, *_others)
             if item_trsf is not None:
-                out.set(
-                    key, item_trsf, inplace=inplace, _run_checks=False, _process=False
-                )
+                out.set(key, item_trsf, inplace=inplace, _run_checks=False, **kwargs)
         if not inplace and is_locked:
             out.lock()
         return out
@@ -4119,7 +4156,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 *[td.clone() for td in self.tensordicts],
                 stack_dim=self.stack_dim,
             )
-        return LazyStackedTensorDict(*self.tensordicts, stack_dim=self.stack_dim)
+        return LazyStackedTensorDict(
+            *[td.clone(recurse=False) for td in self.tensordicts],
+            stack_dim=self.stack_dim,
+        )
 
     def pin_memory(self) -> TensorDictBase:
         for td in self.tensordicts:

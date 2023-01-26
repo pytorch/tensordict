@@ -739,6 +739,34 @@ class TestTensorDicts(TestTensorDictsBase):
         for k in td.keys():
             assert (td.get(k) == 0).all()
 
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_apply(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+        td_c = td.to_tensordict()
+        td_1 = td.apply(lambda x: x + 1, inplace=inplace)
+        if inplace:
+            for key in td.keys(True, True):
+                assert (td_c[key] + 1 == td[key]).all()
+                assert (td_1[key] == td[key]).all()
+        else:
+            for key in td.keys(True, True):
+                assert (td_c[key] + 1 != td[key]).any()
+                assert (td_1[key] == td[key] + 1).all()
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_apply_other(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+        td_c = td.to_tensordict()
+        td_1 = td.apply(lambda x, y: x + y, td_c, inplace=inplace)
+        if inplace:
+            for key in td.keys(True, True):
+                assert (td_c[key] * 2 == td[key]).all()
+                assert (td_1[key] == td[key]).all()
+        else:
+            for key in td.keys(True, True):
+                assert (td_c[key] * 2 != td[key]).any()
+                assert (td_1[key] == td[key] * 2).all()
+
     def test_from_empty(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
