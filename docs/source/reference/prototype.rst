@@ -7,7 +7,9 @@ The :obj:`@tensorclass` decorator helps you build custom classes that inherit th
 behaviour from :obj:`TensorDict` while being able to restrict the possible entries
 to a predefined set or implement custom methods for your class.
 Like :obj:`TensorDict`, :obj:`@tensorclass` supports nesting, indexing, reshaping,
-item assignment and many more features.
+item assignment and many more features. :obj:`@tensorclass` allows non-tensor entries,
+however all the tensor operations are strictly restricted to tensor attributes. One
+needs to implement their custom methods for non-tensor data
 
 .. code-block::
 
@@ -21,6 +23,7 @@ item assignment and many more features.
   ... class MyData:
   ...     floatdata: torch.Tensor
   ...     intdata: torch.Tensor
+  ...     non_tensordata: str
   ...     nested: Optional[MyData] = None
   ...     # sparse_data: Optional[KeyedJaggedTensor] = None
   ...
@@ -28,8 +31,9 @@ item assignment and many more features.
   ...         assert self.nested is not None
   >>>
   >>> data = MyData(
-  ...   floatdata = torch.randn(3, 4, 5),
+  ...   floatdata=torch.randn(3, 4, 5),
   ...   intdata=torch.randint(10, (3, 4, 1)),
+  ...   non_tensordata="test",
   ...   batch_size=[3, 4]
   ... )
   >>>
@@ -38,26 +42,30 @@ item assignment and many more features.
   indexed: MyData(
       floatdata=Tensor(torch.Size([2, 4, 5]), dtype=torch.float32),
       intdata=Tensor(torch.Size([2, 4, 1]), dtype=torch.int64),
+      non_tensordata="test",
+      nested=None,
       batch_size=torch.Size([2, 4]),
       device=None,
       is_shared=False)
   >>> data.nested = MyData(
   ...     floatdata = torch.randn(3, 4, 5),
   ...     intdata=torch.randint(10, (3, 4, 1)),
+  ...     non_tensordata="nested_test",
   ...     batch_size=[3, 4]
   ... )
   >>> print("nested:", data)
   nested: MyData(
       floatdata=Tensor(torch.Size([3, 4, 5]), dtype=torch.float32),
       intdata=Tensor(torch.Size([3, 4, 1]), dtype=torch.int64),
-      nested=TensorDict(
-          fields={
-              floatdata: Tensor(torch.Size([3, 4, 5]), dtype=torch.float32),
-              intdata: Tensor(torch.Size([3, 4, 1]), dtype=torch.int64)},
-          batch_size=torch.Size([3, 4]),
-          device=None,
-          is_shared=False),
-      batch_size=[3, 4],
+      nested=MyData(
+        floatdata=Tensor(shape=torch.Size([3, 4, 5]), dtype=torch.float32),
+        intdata=Tensor(shape=torch.Size([3, 4, 1]), dtype=torch.int64),
+        non_tensordata='nested_test',
+        nested=None,
+        batch_size=torch.Size([3, 4]),
+        device=None,
+        is_shared=False),
+      batch_size=torch.Size([3, 4]),
       device=None,
       is_shared=False)
 
