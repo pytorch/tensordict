@@ -2743,10 +2743,15 @@ class TensorDict(TensorDictBase):
                 if path == prefix / "meta.pt":
                     # skip prefix / "meta.pt" as we've already read it
                     continue
+                key = key[:-1]  # drop "meta.pt" from key
                 metadata = torch.load(path)
-                out[key[:-1]] = cls(
-                    {}, batch_size=metadata["batch_size"], device=metadata["device"]
-                )
+                if key in out.keys(include_nested=True):
+                    out[key].batch_size = metadata["batch_size"]
+                    out[key] = out[key].to(metadata["device"])
+                else:
+                    out[key] = cls(
+                        {}, batch_size=metadata["batch_size"], device=metadata["device"]
+                    )
             else:
                 leaf, *_ = key[-1].rsplit(".", 2)  # remove .meta.pt suffix
                 key = (*key[:-1], leaf)
