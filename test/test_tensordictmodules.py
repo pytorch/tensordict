@@ -9,6 +9,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 from tensordict.nn import (
+    probabilistic as nn_probabilistic,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
@@ -19,7 +20,6 @@ from tensordict.nn.functional_modules import make_functional
 from tensordict.nn.probabilistic import set_interaction_mode
 from torch import nn
 from torch.distributions import Normal
-
 
 try:
     import functorch  # noqa
@@ -1376,6 +1376,20 @@ class TestTDSequence:
 
         assert not torch.allclose(copy, sub_seq_1[0].module.weight)
         assert torch.allclose(td_module[0].module.weight, sub_seq_1[0].module.weight)
+
+
+@pytest.mark.parametrize("mode", ["random", "mode"])
+class TestSIM:
+    def test_cm(self, mode):
+        with set_interaction_mode(mode):
+            assert nn_probabilistic._INTERACTION_MODE == mode
+
+    def test_dec(self, mode):
+        @set_interaction_mode(mode)
+        def dummy():
+            assert nn_probabilistic._INTERACTION_MODE == mode
+
+        dummy()
 
 
 def test_probabilistic_sequential_type_checks():
