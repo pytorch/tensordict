@@ -172,3 +172,92 @@ Finally, tensorclass also supports this feature. The code is fairly similar to t
   >>> assert (tc_dest == tc).all()
   >>> assert (tc_dest.y.batch_size == tc.y.batch_size)
   >>> assert isinstance(tc_dest.y.x, MemmapTensor)
+
+Saving memmory-mapped TensorDicts
+---------------------------------
+
+When converting entries of a ``TensorDict`` to ``MemmapTensor``, it is possible
+to control where the memory maps are saved on disk so that they persist and can
+be loaded at a later date. Simply specify a ``prefix`` when calling ``TensorDict.memmap_``. For example
+
+.. code-block:: Python
+
+  >>> import torch
+  >>> from tensordict import TensorDict
+  >>> td = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
+  >>> td.memmap_(prefix="tensordict")
+
+yields the following directory structure
+
+.. code-block::
+
+  tensordict
+  ├── a.memmap
+  ├── a.meta.pt
+  ├── b
+  │   ├── c.memmap
+  │   ├── c.meta.pt
+  │   └── meta.pt
+  └── meta.pt
+
+Each key in the ``TensorDict`` corresponds to a single ``*.memmap`` file, with
+the directory structure determined by the key structure: nested keys correspond
+to sub-directories.
+
+.. note::
+
+  Because we must walk the nested directory structure, and write a file for
+  each entry, this is not a fast way to serialize the contents of the
+  ``TensorDict``, and hence should not be used for example inside a training
+  loop.
+
+To load the ``TensorDict`` from these files we can use
+``TensorDict.load_memmap``.
+
+.. code-block:: Python
+
+  >>> td2 = TensorDict.load_memmap(prefix="tensordict")
+  >>> td2
+  TensorDict(
+    fields={
+        a: MemmapTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
+        b: TensorDict(
+            fields={
+                c: MemmapTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)},
+    batch_size=torch.Size([10]),
+    device=None,
+    is_shared=False)
+
+Because all of the information to reconstruct nested items is contained in the
+corresponding subdirectory, we can also load just the nested ``TensorDict`` by
+loading from the sub-directory
+
+.. code-block:: Python
+
+  >>> td3 = TensorDict.load_memmap(prefix="tensordict/b")
+  TensorDict(
+    fields={
+        c: MemmapTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([10]),
+    device=None,
+    is_shared=False)
+
+Handling existing ``MemmapTensors``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If the ``TensorDict`` already has ``MemmapTensor`` entries, there are a few
+possible behaviours.
+
+- If ``prefix`` is not specified, ``memmap_`` does not modify any existing
+  ``MemmapTensors`` in the ``TensorDict``, they will keep their original
+  location on disk.
+- If ``prefix`` is specified, existing ``MemmapTensor`` entries are not
+  modified, and an error will be raised if they are not saved in a location
+  consistent with ``prefix`` and their key in the ``TensorDict``.
+- If ``prefix`` is specified, and the keyword argument ``copy_existing=True``
+  is set, then any existing ``MemmapTensor`` entries are left unmodified if
+  they already exist in the correct location, or are copied to the correct
+  location if they are not.
