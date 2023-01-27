@@ -417,6 +417,7 @@ def test_filename(tmpdir):
     assert mt4 is not mt
 
     del mt
+    del mt4
     # files should persist
     assert (tmpdir / "test.memmap").exists()
     assert (tmpdir / "test2.memmap").exists()
