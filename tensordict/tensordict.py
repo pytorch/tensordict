@@ -2699,7 +2699,7 @@ class TensorDict(TensorDictBase):
             if isinstance(value, TensorDictBase):
                 self._tensordict[key] = value.memmap_()
                 continue
-            self._tensordict[key] = MemmapTensor(value, prefix=prefix)
+            self._tensordict[key] = MemmapTensor.from_tensor(value, prefix=prefix)
         self._is_memmap = True
         self.lock()
         return self
@@ -3455,7 +3455,7 @@ torch.Size([3, 2])
             if self.is_shared() and self.device.type == "cpu":
                 tensor_expand.share_memory_()
             elif self.is_memmap():
-                tensor_expand = MemmapTensor(tensor_expand)
+                tensor_expand = MemmapTensor.from_tensor(tensor_expand)
         parent.set(key, tensor_expand, _run_checks=_run_checks)
         self.set_(key, tensor)
         return self
