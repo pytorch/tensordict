@@ -1696,6 +1696,108 @@ class TestTensorDicts(TestTensorDictsBase):
             td.memmap_()
             assert td.is_memmap()
 
+    def test_memmap_prefix(self, td_name, device, tmpdir):
+        if td_name == "memmap_td":
+            pytest.skip(
+                "Memmap case is redundant, functionality checked by other cases"
+            )
+
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            with pytest.raises(
+                RuntimeError,
+                match="Converting a sub-tensordict values to memmap cannot be done",
+            ):
+                td.memmap_(tmpdir / "tensordict")
+            return
+        else:
+            td.memmap_(tmpdir / "tensordict")
+
+        assert (tmpdir / "tensordict" / "meta.pt").exists()
+        metadata = torch.load(tmpdir / "tensordict" / "meta.pt")
+        if td_name in ("stacked_td", "nested_stacked_td"):
+            pass
+        elif td_name in ("unsqueezed_td", "squeezed_td", "permute_td"):
+            assert metadata["batch_size"] == td._source.batch_size
+            assert metadata["device"] == td._source.device
+        else:
+            assert metadata["batch_size"] == td.batch_size
+            assert metadata["device"] == td.device
+
+        td2 = td.__class__.load_memmap(tmpdir / "tensordict")
+        assert (td == td2).all()
+
+    @pytest.mark.parametrize("copy_existing", [False, True])
+    def test_memmap_existing(self, td_name, device, copy_existing, tmpdir):
+        if td_name == "memmap_td":
+            pytest.skip(
+                "Memmap case is redundant, functionality checked by other cases"
+            )
+        elif td_name in ("sub_td", "sub_td2"):
+            pytest.skip(
+                "SubTensorDict and memmap_ incompatibility is checked elsewhere"
+            )
+
+        td = getattr(self, td_name)(device).memmap_(prefix=tmpdir / "tensordict")
+        td2 = getattr(self, td_name)(device).memmap_()
+
+        if copy_existing:
+            td3 = td.memmap_(prefix=tmpdir / "tensordict2", copy_existing=True)
+            assert (td == td3).all()
+        else:
+            with pytest.raises(
+                RuntimeError, match="TensorDict already contains MemmapTensors"
+            ):
+                # calling memmap_ with prefix that is different to contents gives error
+                td.memmap_(prefix=tmpdir / "tensordict2")
+
+            # calling memmap_ without prefix means no-op, regardless of whether contents
+            # were saved in temporary or designated location (td vs. td2 resp.)
+            td3 = td.memmap_()
+            td4 = td2.memmap_()
+
+            if td_name in ("stacked_td", "nested_stacked_td"):
+                assert all(
+                    all(
+                        td3_[key] is value
+                        for key, value in td_.items(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                    for td_, td3_ in zip(td.tensordicts, td3.tensordicts)
+                )
+                assert all(
+                    all(
+                        td4_[key] is value
+                        for key, value in td2_.items(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                    for td2_, td4_ in zip(td2.tensordicts, td4.tensordicts)
+                )
+            elif td_name in ("permute_td", "squeezed_td", "unsqueezed_td"):
+                assert all(
+                    td3._source[key] is value
+                    for key, value in td._source.items(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                assert all(
+                    td4._source[key] is value
+                    for key, value in td2._source.items(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+            else:
+                assert all(
+                    td3[key] is value
+                    for key, value in td.items(include_nested=True, leaves_only=True)
+                )
+                assert all(
+                    td4[key] is value
+                    for key, value in td2.items(include_nested=True, leaves_only=True)
+                )
+
     def test_set_default_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock()

@@ -13,6 +13,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from numbers import Number
+from pathlib import Path
 from textwrap import indent
 from typing import (
     Any,
@@ -1117,15 +1118,16 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def memmap_(
-        self,
-        prefix=None,
-    ) -> TensorDictBase:
+    def memmap_(self, prefix=None, copy_existing=False) -> TensorDictBase:
         """Writes all tensors onto a MemmapTensor.
 
         Args:
             prefix (str): directory prefix where the memmap tensors will have to
                 be stored.
+            copy_existing (bool): If False (default), an exception will be raised if an
+                entry in the tensordict is already a MemmapTensor but is not saved in
+                the correct location according to prefix. If True, any MemmapTensors
+                that are not in the correct location are copied to the new location.
 
         The TensorDict is then locked, meaning that the only writing operations that
         can be executed must be done in-place.
@@ -1135,6 +1137,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         Returns:
             self.
 
+        Note:
+            Serialising in this fashion might be slow with deeply nested tensordicts, so
+            we do not recommend calling this method inside a training loop.
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
@@ -2681,7 +2686,15 @@ class TensorDict(TensorDictBase):
             value.detach_()
         return self
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, copy_existing=False) -> TensorDictBase:
+        if prefix is not None:
+            prefix = Path(prefix)
+            if not prefix.exists():
+                prefix.mkdir(exist_ok=True)
+            torch.save(
+                {"batch_size": self.batch_size, "device": self.device},
+                prefix / "meta.pt",
+            )
         if self.is_shared() and self.device.type == "cpu":
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2697,12 +2710,93 @@ class TensorDict(TensorDictBase):
                     "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
                 )
             if isinstance(value, TensorDictBase):
-                self._tensordict[key] = value.memmap_()
+                if prefix is not None:
+                    # ensure subdirectory exists
+                    (prefix / key).mkdir(exist_ok=True)
+                    self._tensordict[key] = value.memmap_(
+                        prefix=prefix / key, copy_existing=copy_existing
+                    )
+                    torch.save(
+                        {"batch_size": value.batch_size, "device": value.device},
+                        prefix / key / "meta.pt",
+                    )
+                else:
+                    self._tensordict[key] = value.memmap_()
                 continue
-            self._tensordict[key] = MemmapTensor.from_tensor(value, prefix=prefix)
+            elif isinstance(value, MemmapTensor):
+                if (
+                    # user didn't specify location
+                    prefix is None
+                    # file is already in the correct location
+                    or str(prefix / f"{key}.memmap") == value.filename
+                ):
+                    self._tensordict[key] = value
+                elif copy_existing:
+                    # user did specify location and memmap is in wrong place, so we copy
+                    self._tensordict[key] = MemmapTensor.from_tensor(
+                        value, filename=str(prefix / f"{key}.memmap")
+                    )
+                else:
+                    # memmap in wrong location and copy is disallowed
+                    raise RuntimeError(
+                        "TensorDict already contains MemmapTensors saved to a location "
+                        "incompatible with prefix. Either move the location of the "
+                        "MemmapTensors, or allow automatic copying with "
+                        "copy_existing=True"
+                    )
+            else:
+                self._tensordict[key] = MemmapTensor.from_tensor(
+                    value,
+                    filename=str(prefix / f"{key}.memmap")
+                    if prefix is not None
+                    else None,
+                )
+            if prefix is not None:
+                torch.save(
+                    {
+                        "shape": value.shape,
+                        "device": value.device,
+                        "dtype": value.dtype,
+                    },
+                    prefix / f"{key}.meta.pt",
+                )
         self._is_memmap = True
         self.lock()
         return self
+
+    @classmethod
+    def load_memmap(cls, prefix) -> TensorDictBase:
+        prefix = Path(prefix)
+        metadata = torch.load(prefix / "meta.pt")
+        out = cls({}, batch_size=metadata["batch_size"], device=metadata["device"])
+
+        for path in prefix.glob("**/*meta.pt"):
+            key = path.parts[len(prefix.parts) :]
+            if path.name == "meta.pt":
+                if path == prefix / "meta.pt":
+                    # skip prefix / "meta.pt" as we've already read it
+                    continue
+                key = key[:-1]  # drop "meta.pt" from key
+                metadata = torch.load(path)
+                if key in out.keys(include_nested=True):
+                    out[key].batch_size = metadata["batch_size"]
+                    out[key] = out[key].to(metadata["device"])
+                else:
+                    out[key] = cls(
+                        {}, batch_size=metadata["batch_size"], device=metadata["device"]
+                    )
+            else:
+                leaf, *_ = key[-1].rsplit(".", 2)  # remove .meta.pt suffix
+                key = (*key[:-1], leaf)
+                metadata = torch.load(path)
+                out[key] = MemmapTensor(
+                    *metadata["shape"],
+                    device=metadata["device"],
+                    dtype=metadata["dtype"],
+                    filename=str(path.parent / f"{leaf}.memmap"),
+                )
+
+        return out
 
     def to(
         self, dest: Union[DEVICE_TYPING, torch.Size, Type], **kwargs
@@ -2710,10 +2804,7 @@ class TensorDict(TensorDictBase):
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
                 return self
-            td = dest(
-                source=self,
-                **kwargs,
-            )
+            td = dest(source=self, **kwargs)
             return td
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
@@ -3780,7 +3871,7 @@ torch.Size([3, 2])
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
+    def memmap_(self, prefix=None, copy_existing=False) -> TensorDictBase:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
         )
@@ -4412,12 +4503,32 @@ class LazyStackedTensorDict(TensorDictBase):
             td.detach_()
         return self
 
-    def memmap_(self, prefix=None) -> TensorDictBase:
-        for td in self.tensordicts:
-            td.memmap_(prefix=prefix)
+    def memmap_(self, prefix=None, copy_existing=False) -> TensorDictBase:
+        if prefix is not None:
+            prefix = Path(prefix)
+            if not prefix.exists():
+                prefix.mkdir(exist_ok=True)
+            torch.save({"stack_dim": self.stack_dim}, prefix / "meta.pt")
+        for i, td in enumerate(self.tensordicts):
+            td.memmap_(
+                prefix=(prefix / str(i)) if prefix is not None else None,
+                copy_existing=copy_existing,
+            )
         self._is_memmap = True
         self.lock()
         return self
+
+    @classmethod
+    def load_memmap(cls, prefix) -> LazyStackedTensorDict:
+        prefix = Path(prefix)
+        tensordicts = []
+        i = 0
+        while (prefix / str(i)).exists():
+            tensordicts.append(TensorDict.load_memmap(prefix / str(i)))
+            i += 1
+
+        metadata = torch.load(prefix / "meta.pt")
+        return cls(*tensordicts, stack_dim=metadata["stack_dim"])
 
     def expand(self, *shape, inplace: bool = False) -> TensorDictBase:
         if len(shape) == 1 and isinstance(shape[0], Sequence):
@@ -4921,11 +5032,33 @@ class _CustomOpTensorDict(TensorDictBase):
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix=None):
-        self._source.memmap_(prefix=prefix)
+    def memmap_(self, prefix=None, copy_existing=False):
+        self._source.memmap_(prefix=prefix, copy_existing=copy_existing)
+        if prefix is not None:
+            prefix = Path(prefix)
+            metadata = torch.load(prefix / "meta.pt")
+            metadata["custom_op"] = self.custom_op
+            metadata["inv_op"] = self.inv_op
+            metadata["custom_op_kwargs"] = self.custom_op_kwargs
+            metadata["inv_op_kwargs"] = self.inv_op_kwargs
+            torch.save(metadata, prefix / "meta.pt")
+
         self._is_memmap = True
         self.lock()
         return self
+
+    @classmethod
+    def load_memmap(cls, prefix):
+        prefix = Path(prefix)
+        source = TensorDict.load_memmap(prefix)
+        metadata = torch.load(prefix / "meta.pt")
+        return cls(
+            source,
+            custom_op=metadata["custom_op"],
+            inv_op=metadata["inv_op"],
+            custom_op_kwargs=metadata["custom_op_kwargs"],
+            inv_op_kwargs=metadata["inv_op_kwargs"],
+        )
 
     def share_memory_(self):
         self._source.share_memory_()

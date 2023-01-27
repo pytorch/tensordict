@@ -400,6 +400,65 @@ def test_as_tensor():
     assert (y[idx] == y.as_tensor()[idx]).all()
 
 
+def test_filename(tmpdir):
+    mt = MemmapTensor(10, dtype=torch.float32, filename=tmpdir / "test.memmap")
+    assert mt.filename == str(tmpdir / "test.memmap")
+
+    mt2 = MemmapTensor.from_tensor(mt)
+    assert mt2.filename == str(tmpdir / "test.memmap")
+    assert mt2 is mt
+
+    mt3 = MemmapTensor.from_tensor(mt, filename=tmpdir / "test.memmap")
+    assert mt3.filename == str(tmpdir / "test.memmap")
+    assert mt3 is mt
+
+    mt4 = MemmapTensor.from_tensor(mt, filename=tmpdir / "test2.memmap")
+    assert mt4.filename == str(tmpdir / "test2.memmap")
+    assert mt4 is not mt
+
+    del mt
+    del mt4
+    # files should persist
+    assert (tmpdir / "test.memmap").exists()
+    assert (tmpdir / "test2.memmap").exists()
+
+
+@pytest.mark.parametrize(
+    "mode", ["r", "r+", "w+", "c", "readonly", "readwrite", "write", "copyonwrite"]
+)
+def test_mode(mode, tmpdir):
+    mt = MemmapTensor(10, dtype=torch.float32, filename=tmpdir / "test.memmap")
+    mt[:] = torch.ones(10) * 1.5
+    del mt
+
+    if mode in ("r", "readonly"):
+        with pytest.raises(ValueError, match=r"Accepted values for mode are"):
+            MemmapTensor(
+                10, dtype=torch.float32, filename=tmpdir / "test.memmap", mode=mode
+            )
+        return
+    mt = MemmapTensor(
+        10, dtype=torch.float32, filename=tmpdir / "test.memmap", mode=mode
+    )
+    if mode in ("r+", "readwrite", "c", "copyonwrite"):
+        # data in memmap persists
+        assert (mt.as_tensor() == 1.5).all()
+    elif mode in ("w+", "write"):
+        # memmap is initialized to zero
+        assert (mt.as_tensor() == 0).all()
+
+    mt[:] = torch.ones(10) * 2.5
+    assert (mt.as_tensor() == 2.5).all()
+    del mt
+
+    mt2 = MemmapTensor(10, dtype=torch.float32, filename=tmpdir / "test.memmap")
+    if mode in ("c", "copyonwrite"):
+        # tensor was only mutated in memory, not on disk
+        assert (mt2.as_tensor() == 1.5).all()
+    else:
+        assert (mt2.as_tensor() == 2.5).all()
+
+
 def test_memmap_from_memmap():
     mt2 = MemmapTensor.from_tensor(MemmapTensor(4, 3, 2, 1))
     assert mt2.squeeze(-1).shape == torch.Size([4, 3, 2])
