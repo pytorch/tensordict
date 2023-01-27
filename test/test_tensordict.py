@@ -3569,6 +3569,49 @@ def test_memmap_as_tensor(device):
         assert (td.pin_memory().to(device) == td_memmap_pm.to(device)).all()
 
 
+def test_tensordict_prealloc_nested():
+    N = 3
+    B = 5
+    T = 4
+    buffer = TensorDict({}, batch_size=[B, N])
+
+    td_0 = TensorDict(
+        {
+            "env.time": torch.rand(N, 1),
+            "agent.obs": TensorDict(
+                {  # assuming 3 agents in a multi-agent setting
+                    "image": torch.rand(N, T, 64),
+                    "state": torch.rand(N, T, 3, 32, 32),
+                },
+                batch_size=[N, T],
+            ),
+        },
+        batch_size=[N],
+    )
+
+    td_1 = td_0.clone()
+    buffer[0] = td_0
+    buffer[1] = td_1
+    assert (
+        repr(buffer)
+        == """TensorDict(
+    fields={
+        agent.obs: TensorDict(
+            fields={
+                image: Tensor(shape=torch.Size([5, 3, 4, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                state: Tensor(shape=torch.Size([5, 3, 4, 3, 32, 32]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([5, 3, 4]),
+            device=None,
+            is_shared=False),
+        env.time: Tensor(shape=torch.Size([5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([5, 3]),
+    device=None,
+    is_shared=False)"""
+    )
+    assert buffer.batch_size == torch.Size([B, N])
+    assert buffer["agent.obs"].batch_size == torch.Size([B, N, T])
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
