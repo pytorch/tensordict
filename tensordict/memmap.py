@@ -220,7 +220,13 @@ class MemmapTensor:
                     "from_tensor(memmap_tensor, transfer_ownership=True) is not permitted, as this method will "
                     "simply return the original MemmapTensor instance."
                 )
-            return tensor
+            elif prefix is None and (
+                filename is None
+                or Path(filename).absolute() == Path(tensor.filename).absolute()
+            ):
+                # either location was not specified, or memmap is already in the
+                # correct location, so just return the MemmapTensor unmodified
+                return tensor
         elif isinstance(tensor, np.ndarray):
             raise TypeError(
                 "Convert input to torch.Tensor before calling MemmapTensor."
@@ -232,7 +238,7 @@ class MemmapTensor:
         device = tensor.device if hasattr(tensor, "device") else torch.device("cpu")
         dtype = (
             tensor.dtype
-            if isinstance(tensor, torch.Tensor)
+            if isinstance(tensor, (torch.Tensor, MemmapTensor))
             else numpy_to_torch_dtype_dict[tensor.dtype.name]
         )
         shape = tensor.shape
