@@ -403,10 +403,23 @@ def test_as_tensor():
 def test_filename(tmpdir):
     mt = MemmapTensor(10, dtype=torch.float32, filename=tmpdir / "test.memmap")
     assert mt.filename == str(tmpdir / "test.memmap")
-    del mt
 
-    # file should persist
+    mt2 = MemmapTensor.from_tensor(mt)
+    assert mt2.filename == str(tmpdir / "test.memmap")
+    assert mt2 is mt
+
+    mt3 = MemmapTensor.from_tensor(mt, filename=tmpdir / "test.memmap")
+    assert mt3.filename == str(tmpdir / "test.memmap")
+    assert mt3 is mt
+
+    mt4 = MemmapTensor.from_tensor(mt, filename=tmpdir / "test2.memmap")
+    assert mt4.filename == str(tmpdir / "test2.memmap")
+    assert mt4 is not mt
+
+    del mt
+    # files should persist
     assert (tmpdir / "test.memmap").exists()
+    assert (tmpdir / "test2.memmap").exists()
 
 
 @pytest.mark.parametrize(
