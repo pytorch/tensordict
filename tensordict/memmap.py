@@ -31,6 +31,20 @@ __all__ = ["MemmapTensor", "set_transfer_ownership"]
 NoneType = type(None)
 EllipsisType = type(Ellipsis)
 
+numpy_to_torch_dtype_dict = {
+    "bool": torch.bool,
+    "uint8": torch.uint8,
+    "int8": torch.int8,
+    "int16": torch.int16,
+    "int32": torch.int32,
+    "int64": torch.int64,
+    "float16": torch.float16,
+    "float32": torch.float32,
+    "float64": torch.float64,
+    "complex64": torch.complex64,
+    "complex128": torch.complex128,
+}
+
 
 def implements_for_memmap(torch_function) -> Callable:
     """Register a torch function override for ScalarTensor."""
@@ -50,7 +64,7 @@ def to_numpy(tensor: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
         return tensor
 
 
-class MemmapTensor(object):
+class MemmapTensor:
     """A torch.tensor interface with a np.memmap array.
 
     A temporary file is created and cleared once the object is out-of-scope.
@@ -88,7 +102,7 @@ class MemmapTensor(object):
 
     Examples:
         >>> x = torch.ones(3,4)
-        >>> x_memmap = MemmapTensor(x)
+        >>> x_memmap = MemmapTensor.from_tensor(x)
         >>> # indexing
         >>> x0 = x_memmap[0]
         >>> x0[:] = 2
@@ -96,7 +110,7 @@ class MemmapTensor(object):
         >>>
         >>> # device
         >>> x = x.to('cuda:0')
-        >>> x_memmap = MemmapTensor(x)
+        >>> x_memmap = MemmapTensor.from_tensor(x)
         >>> assert (x_memmap.clone()).device == torch.device('cuda:0')
         >>>
         >>> # operations
@@ -116,7 +130,6 @@ class MemmapTensor(object):
 
     def __init__(
         self,
-        elem: Union[torch.Tensor, MemmapTensor],
         *size: int,
         device: DEVICE_TYPING = None,
         dtype: torch.dtype = None,
@@ -131,33 +144,71 @@ class MemmapTensor(object):
         self.filename = self.file.name
         self.file.close()  # we close the file for now, but don't delete it
 
-        if isinstance(elem, (torch.Tensor, MemmapTensor, np.ndarray)):
-            if device is not None:
-                raise TypeError(
-                    "device cannot be passed when creating a MemmapTensor from a tensor"
-                )
-            if dtype is not None:
-                raise TypeError(
-                    "dtype cannot be passed when creating a MemmapTensor from a tensor"
-                )
-            self._init_tensor(elem, transfer_ownership)
-        else:
-            if not isinstance(elem, int) and size:
-                raise TypeError(
-                    "Valid init methods for MemmapTensor are: "
-                    "\n- MemmapTensor(tensor, ...)"
-                    "\n- MemmapTensor(size, ...)"
-                    "\n- MemmapTensor(*size, ...)"
-                )
-            shape = (
-                torch.Size([elem] + list(size))
-                if isinstance(elem, int)
-                else torch.Size(elem)
+        if isinstance(size[0], (torch.Tensor, MemmapTensor, np.ndarray)):
+            raise NotImplementedError(
+                "Creating a Memmap array from a tensor is not permitted anymore. "
+                "Call MemmapTensor.from_tensor(tensor) instead."
             )
+        else:
+            try:
+                shape = (
+                    torch.Size(list(size[0]))
+                    if len(size) == 1 and not isinstance(size[0], int)
+                    else torch.Size(list(size))
+                )
+            except TypeError:
+                raise TypeError(
+                    f"The *size must be either a single list or tuple of ints, or a sequence of ints. Got {size} instead."
+                )
             device = device if device is not None else torch.device("cpu")
             dtype = dtype if dtype is not None else torch.get_default_dtype()
-            self._init_shape(shape, device, dtype, transfer_ownership)
-        self._index = None
+            self._init_shape(
+                shape=shape,
+                device=device,
+                dtype=dtype,
+                transfer_ownership=transfer_ownership,
+            )
+        if not hasattr(self, "_index"):
+            self._index = None
+
+    @classmethod
+    def from_tensor(
+        cls,
+        tensor: Union[torch.Tensor, MemmapTensor, np.ndarray],
+        transfer_ownership=False,
+        prefix=None,
+    ) -> MemmapTensor:
+        if isinstance(tensor, MemmapTensor):
+            if transfer_ownership:
+                raise RuntimeError(
+                    "from_tensor(memmap_tensor, transfer_ownership=True) is not permitted, as this method will "
+                    "simply return the original MemmapTensor instance."
+                )
+            return tensor
+        elif isinstance(tensor, np.ndarray):
+            raise TypeError(
+                "Convert input to torch.Tensor before calling MemmapTensor."
+            )
+        if tensor.requires_grad:
+            raise RuntimeError(
+                "MemmapTensor is incompatible with tensor.requires_grad."
+            )
+        device = tensor.device if hasattr(tensor, "device") else torch.device("cpu")
+        dtype = (
+            tensor.dtype
+            if isinstance(tensor, torch.Tensor)
+            else numpy_to_torch_dtype_dict[tensor.dtype.name]
+        )
+        shape = tensor.shape
+        out = cls(
+            shape,
+            device=device,
+            dtype=dtype,
+            prefix=prefix,
+            transfer_ownership=transfer_ownership,
+        )
+        out.copy_(tensor)
+        return out
 
     @staticmethod
     def _create_memmap_with_index(memmap_tensor, index):
@@ -193,48 +244,10 @@ class MemmapTensor(object):
         self._numel = prod(shape)
         self.mode = "r+"
         self._has_ownership = True
-
-        self._tensor_dir = torch.zeros(1, device=device, dtype=dtype).__dir__()
-        self._save_item(shape)
-
-    def _init_tensor(
-        self, elem: Union[torch.Tensor, MemmapTensor], transfer_ownership: bool
-    ):
-        if not isinstance(elem, (torch.Tensor, MemmapTensor)):
-            raise TypeError(
-                "convert input to torch.Tensor before calling MemmapTensor() " "on it."
-            )
-
-        if elem.requires_grad:
-            raise RuntimeError(
-                "MemmapTensor is incompatible with tensor.requires_grad. "
-                "Consider calling tensor.detach() first."
-            )
-
-        self._device = elem.device
-        self._shape = elem.shape
-        self._shape_indexed = None
-        self.transfer_ownership = transfer_ownership
-        self.np_shape = tuple(self._shape)
-        self._dtype = elem.dtype
-        self._tensor_dir = elem.__dir__()
-        self._ndim = elem.ndimension()
-        self._numel = elem.numel()
-        self.mode = "r+"
-        self._has_ownership = True
         self._had_ownership = True
-        if isinstance(elem, MemmapTensor):
-            prev_filename = elem.filename
-            self._copy_item(prev_filename)
-            # Do we want to raise an error?
-            # if self.memmap_array is elem.memmap_array:
-            #     raise RuntimeError
-        else:
-            if elem.requires_grad:
-                raise Exception(
-                    "memmap is not compatible with gradients, Tensor has requires_grad equals True"
-                )
-            self._save_item(elem)
+
+        self._tensor_dir = torch.zeros(0, device=device, dtype=dtype).__dir__()
+        self._save_item(shape)
 
     def _get_memmap_array(self) -> np.memmap:
         if self._memmap_array is None:
@@ -457,7 +470,12 @@ MemmapTensor of shape {self.shape}."""
     def __deepcopy__(self, memodict=None):
         if memodict is None:
             memodict = {}
-        return MemmapTensor(self)
+        warnings.warn(
+            "calling deepcopy on a memmap tensor involves loading it in memory "
+            "and recreating a memmap tensor from scratch (as no file destination "
+            "can be passed to deepcopy(...)."
+        )
+        return MemmapTensor.from_tensor(self.clone())
 
     def __del__(self) -> None:
         if "_has_ownership" in self.__dir__() and self._has_ownership:
@@ -605,7 +623,7 @@ MemmapTensor of shape {self.shape}."""
             self.device = dest
             return self
         elif isinstance(dest, torch.dtype):
-            return MemmapTensor(self._tensor.to(dest))
+            return MemmapTensor.from_tensor(self._tensor.to(dest))
         else:
             raise NotImplementedError(
                 f"argument dest={dest} to MemmapTensor.to(dest) is not "
