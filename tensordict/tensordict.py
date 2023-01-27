@@ -3521,21 +3521,21 @@ torch.Size([3, 2])
         tensor = self._process_input(
             tensor, check_device=False, check_tensor_shape=False
         )
-        if isinstance(tensor, TensorDictBase) and tensor.batch_size != self.batch_size:
+        if (
+            isinstance(tensor, TensorDictBase)
+            and tensor.batch_size[: self.batch_dims] != self.batch_size
+        ):
             tensor.batch_size = self.batch_size
         parent = self.get_parent_tensordict()
 
         if isinstance(tensor, TensorDictBase):
-            tensor_expand = TensorDict(
-                {
-                    key: _expand_to_match_shape(
-                        parent.batch_size, _tensor, self.batch_dims, self.device
-                    )
-                    for key, _tensor in tensor.items()
-                },
-                parent.batch_size,
-                _run_checks=False,
+            tensor_expand = _expand_to_match_shape(
+                parent.batch_size, tensor, self.batch_dims, self.device
             )
+            for _key, _tensor in tensor.items():
+                tensor_expand[_key] = _expand_to_match_shape(
+                    parent.batch_size, _tensor, self.batch_dims, self.device
+                )
         else:
             tensor_expand = torch.zeros(
                 *parent.batch_size,

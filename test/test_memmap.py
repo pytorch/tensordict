@@ -49,15 +49,7 @@ def test_grad():
         torch.bool,
     ],
 )
-@pytest.mark.parametrize(
-    "shape",
-    [
-        [
-            2,
-        ],
-        [1, 2],
-    ],
-)
+@pytest.mark.parametrize("shape", [[2], [1, 2]])
 def test_memmap_data_type(dtype, shape):
     """Test that MemmapTensor can be created with a given data type and shape."""
     t = torch.tensor([1, 0], dtype=dtype).reshape(shape)
@@ -451,6 +443,11 @@ def test_mode(mode, tmpdir):
         assert (mt2.as_tensor() == 1.5).all()
     else:
         assert (mt2.as_tensor() == 2.5).all()
+
+
+def test_memmap_from_memmap():
+    mt2 = MemmapTensor.from_tensor(MemmapTensor(4, 3, 2, 1))
+    assert mt2.squeeze(-1).shape == torch.Size([4, 3, 2])
 
 
 if __name__ == "__main__":
