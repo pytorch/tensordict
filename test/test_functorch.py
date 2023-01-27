@@ -403,6 +403,53 @@ class TestNativeFunctorch:
         assert out[0]["a"].shape == torch.Size([4, 3, 1])
 
 
+def test_outputsize_vmap():
+    a = TensorDict(
+        {
+            "a": torch.rand(7, 3, 6),
+            "b": torch.rand(7, 3, 2),
+        },
+        batch_size=[7, 3],
+    )
+
+    class Model(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.a = nn.Linear(6, 5)
+            self.b = nn.Linear(2, 6)
+
+        def forward(self, a, b):
+            return self.a(a), self.b(b)
+
+    # Not testing this as it will be deprecated soon
+    # model = TensorDictModule(Model(), in_keys=["a", "b"],
+    #                          out_keys=["out.a", "out.b"])
+    # # option 1
+    # fmodel, params = make_functional(model)
+    # out = vmap(fmodel, in_dims=(None, 1), out_dims=1)(params, a)
+    # assert out.shape == torch.Size([7, 3])
+
+    # option 2
+    model = TensorDictModule(Model(), in_keys=["a", "b"], out_keys=["out.a", "out.b"])
+    params = make_functional(model)
+    out = vmap(model, in_dims=(1, None), out_dims=1)(a, params)
+    assert out.shape == torch.Size([7, 3])
+
+    # option 2
+    model = TensorDictModule(Model(), in_keys=["a", "b"], out_keys=["out.a", "out.b"])
+    a = TensorDict(
+        {
+            "a": torch.rand(3, 4, 6),
+            "b": torch.rand(3, 4, 2),
+        },
+        batch_size=[3, 4],
+    )
+    params = make_functional(model)
+    params = params.expand(3, *params.shape)
+    out = vmap(model, (0, 0))(a, params)
+    assert out.shape == torch.Size([3, 4])
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
