@@ -239,16 +239,29 @@ def test_len():
 
 
 def test_indexing():
-    x = torch.ones(3, 4, 5)
-    y = torch.zeros(3, 4, 5, dtype=torch.bool)
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        z: list
+        y: "MyDataNested" = None  # future: drop quotes
+
+    X = torch.ones(3, 4, 5)
     z = ["a", "b", "c"]
-    data = MyData2(X=x, y=y, z=z, batch_size=[3, 4])
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
 
     assert data[:2].batch_size == torch.Size([2, 4])
+    assert data[:2].X.shape == torch.Size([2, 4, 5])
+    assert (data[:2].X == X[:2]).all()
+    assert isinstance(data[:2].y, type(data_nest))
+    # Nested tensors all get indexed
+    assert (data[:2].y.X == X[:2]).all()
+    assert data[:2].y.batch_size == torch.Size([2, 4])
     assert data[1].batch_size == torch.Size([4])
     assert data[1][1].batch_size == torch.Size([])
+    # Non-tensor data won't get indexed
     assert data[1].z == data[2].z == data[:2].z == z
-    assert data[:2].X.shape == torch.Size([2, 4, 5])
 
     with pytest.raises(
         RuntimeError,
@@ -702,7 +715,7 @@ def test_nested_heterogeneous(any_to_td):
     # Testing nested indexing
     assert isinstance(data[0], type(data))
     assert isinstance(data[0].y, type(data.y))
-    assert data[0].y[:2].X.shape == torch.Size([2, 4, 5])
+    assert data[0].y.X.shape == torch.Size([4, 5])
 
 
 @pytest.mark.parametrize("any_to_td", [True, False])
@@ -726,40 +739,34 @@ def test_setattr(any_to_td):
     else:
         W = torch.zeros(*batch_size, 1)
     X = torch.ones(3, 4, 5)
-    X_clone = X.clone()
     td = TensorDict({}, batch_size)
-    td_clone = td.clone()
     data_nest = MyDataNest(X=X, v="test_nested", batch_size=batch_size)
     v = "test_tensorclass"
     data = MyDataParent(X=X, y=data_nest, z=td, W=W, v=v, batch_size=batch_size)
-    data_nest_clone = data_nest.clone()
-    assert type(data_nest_clone) is type(data_nest)
-    data.y = data_nest_clone
-    assert data.y.tensordict is not data_nest.tensordict
-    assert data.y.tensordict is data_nest_clone.tensordict, (
-        type(data.y.tensordict),
-        type(data_nest.tensordict),
-    )
-    data.X = X_clone
-    assert data.tensordict["X"] is X_clone
-    data.z = td_clone
-    assert data.tensordict["z"] is td_clone
+    assert isinstance(data.y, type(data_nest))
+    assert data.y.tensordict is data_nest.tensordict
+    data.X = torch.zeros(3, 4, 5)
+    assert (data.X == torch.zeros(3, 4, 5)).all()
     v_new = "test_bluff"
     data.v = v_new
     assert data.v == v_new
-    assert data.y.v == "test_nested"
-    data.y.v = "test_nested_new"
-    assert data.y.v == "test_nested_new"
-    data_nest.v = "test_nested"
-    assert data_nest.v == "test_nested"
     # check that you can't mess up the batch_size
     with pytest.raises(
-        RuntimeError, match=re.escape("the tensor smth has shape torch.Size([1]) which")
+            RuntimeError, match=re.escape("the tensor smth has shape torch.Size([1]) which")
     ):
         data.z = TensorDict({"smth": torch.zeros(1)}, [])
     # check that you can't write any attribute
     with pytest.raises(AttributeError, match=re.escape("Cannot set the attribute")):
         data.newattr = TensorDict({"smth": torch.zeros(1)}, [])
+    # Testing nested cases
+    data_nest.X = torch.zeros(3, 4, 5)
+    assert (data_nest.X == torch.zeros(3, 4, 5)).all()
+    assert (data.y.X == torch.zeros(3, 4, 5)).all()
+    assert data.y.v == "test_nested"
+    data.y.v = "test_nested_new"
+    assert data.y.v == data_nest.v == "test_nested_new"
+    data_nest.v = "test_nested"
+    assert data_nest.v == data.y.v == "test_nested"
 
 
 def test_post_init():

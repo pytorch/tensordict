@@ -233,8 +233,8 @@ def _to_tensorclass_wrapper(expected_keys):
         # have a tensordict to use as the underlying tensordict
         tc = cls.__new__(cls)
         tc.__dict__["tensordict"] = tensordict
-        if non_tensordict is not None:
-            tc.__dict__["non_tensordict"] = non_tensordict
+
+        tc.__dict__["non_tensordict"] = non_tensordict if non_tensordict is not None else {}
         # since we aren't calling the dataclass init method, we need to manually check
         # whether a __post_init__ method has been defined and invoke it if so
         if hasattr(tc, "__post_init__"):
@@ -245,15 +245,17 @@ def _to_tensorclass_wrapper(expected_keys):
 
 
 def _getstate(self):
+    """ Returns a state dict which consists of tensor and non_tensor dicts for serialization"""
     return {"tensordict": self.tensordict, "non_tensordict": self.non_tensordict}
 
 
-def _setstate(self, state):
+def _setstate(self, state) -> None:
     self.tensordict = state.get("tensordict", None)
     self.non_tensordict = state.get("non_tensordict", None)
 
 
 def _getattribute_wrapper(getattribute):
+    @functools.wraps(getattribute)
     def wrapper(self, item):
         if not item.startswith("__"):
             if (
@@ -276,6 +278,7 @@ def _getattribute_wrapper(getattribute):
 
 
 def _setattr_wrapper(setattr_, expected_keys):
+    @functools.wraps(setattr_)
     def wrapper(self, key, value):
         if (
             "tensordict" not in self.__dict__
@@ -332,7 +335,14 @@ def _getitem(self, item):
     ):
         raise ValueError("Invalid indexing arguments.")
     tensor_res = self.tensordict[item]
-    non_tensor_res = self.non_tensordict
+    non_tensor_res = {}
+    for key, value in self.non_tensordict.items():
+        if is_tensorclass(value):
+            # Get the item recursively for the nested tensors
+            non_tensor_res[key] = _getitem(value, item)
+        else:
+            # Non-tensor data remains same
+            non_tensor_res[key] = value
     return self.to_tensorclass(tensor_res, non_tensor_res)  # device=res.device)
 
 
@@ -343,8 +353,16 @@ def _setitem(self, item, value):
         raise ValueError("Invalid indexing arguments.")
     if not isinstance(value, self.__class__):
         raise ValueError("__setitem__ is only allowed for same-class assignement")
+    # Validating the non-tensor data before setting the item
     for key, val in self.non_tensordict.items():
-        if not isinstance(val, _accepted_classes):
+        # Need the nested tensor class to be the same
+        if is_tensorclass(val):
+            if (val != value.non_tensordict[key]).all():
+                raise ValueError(
+                    f"Expecting {repr(val)} for {key} instead got {repr(value.non_tensordict[key])}"
+                )
+        # All the non-tensor attributes needs to be same
+        else:
             if val and val != value.non_tensordict[key]:
                 raise ValueError(
                     f"Expecting {repr(val)} for {key} instead got {repr(value.non_tensordict[key])}"
@@ -419,7 +437,7 @@ def __eq__(self, other):
         raise KeyError(f"keys in {self} and {other} mismatch, got {keys1} and {keys2}")
     non_tensor = {}
     for key, value in self.non_tensordict.items():
-        non_tensor[key] = value == other.non_tensordict.get(key)
+        non_tensor[key] = value == other.non_tensordict[key]
     tensor = self.tensordict == other.tensordict
     out = self.to_tensorclass(tensor, non_tensor)
     return out
@@ -434,7 +452,7 @@ def __ne__(self, other):
         raise KeyError(f"keys in {self} and {other} mismatch, got {keys1} and {keys2}")
     non_tensor = {}
     for key, value in self.non_tensordict.items():
-        non_tensor[key] = value != other.non_tensordict.get(key)
+        non_tensor[key] = value != other.non_tensordict[key]
     tensor = self.tensordict != other.tensordict
     out = self.to_tensorclass(tensor, non_tensor)
     return out
@@ -454,7 +472,7 @@ def _unbind(tdc, dim):
 def _full_like(tdc, fill_value):
     tensordict = torch.full_like(tdc.tensordict, fill_value)
     non_tensor_dict = tdc.non_tensordict
-    # Filling internal Tensor classes values if any
+    # Filling nested Tensor classes values if any
     for key, value in non_tensor_dict.items():
         if is_tensorclass(value):
             non_tensor_dict[key] = _full_like(value, fill_value)
@@ -526,6 +544,7 @@ def _split(tdc, split_size_or_sections, dim=0):
 
 
 def _stack(list_of_tdc, dim):
+    # Validate if all the non-tensor data and nested classes are matched before stacking
     if _validate_non_tensor_data(list_of_tdc):
         tensordict = torch.stack([tdc.tensordict for tdc in list_of_tdc], dim)
         tdc = list_of_tdc[0]
@@ -544,6 +563,7 @@ def _stack(list_of_tdc, dim):
 
 
 def _cat(list_of_tdc, dim):
+    # Validate if all the non-tensor data and nested classes are matched before concatenation
     if _validate_non_tensor_data(list_of_tdc):
         tensordict = torch.cat([tdc.tensordict for tdc in list_of_tdc], dim)
         tdc = list_of_tdc[0]
@@ -559,15 +579,6 @@ def _cat(list_of_tdc, dim):
         return out
     else:
         raise ValueError("Cannot concatenate different tensor classes")
-
-
-def _get_typed_value(value):
-    if isinstance(value, _accepted_classes) or value is dataclasses.MISSING:
-        return value
-    elif type(value) in CLASSES_DICT.values():
-        return value.tensordict
-    else:
-        raise ValueError(f"{type(value)} is not an accepted class")
 
 
 def _get_typed_output(out, expected_type):
@@ -606,6 +617,7 @@ def _all_td_fields_as_str(td: TensorDictBase) -> str:
 
 
 def _all_non_td_fields_as_str(src_dict) -> list:
+    """Returns a string typed key-value pairs of non-tensor data"""
     result = []
     for key, val in src_dict.items():
         if not is_tensordict(val):
@@ -615,6 +627,7 @@ def _all_non_td_fields_as_str(src_dict) -> list:
 
 
 def _validate_non_tensor_data(list_tds) -> bool:
+    """Returns True if all the list of tensor classes has the same non-tensor data"""
     list_tds_copy = list_tds.copy()
     td = list_tds_copy.pop()
     for key, val in td.non_tensordict.items():
