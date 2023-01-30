@@ -701,6 +701,14 @@ MemmapTensor of shape {self.shape}."""
             raise RuntimeError(
                 f"memmap.as_tensor() can only be called with MemmapTensors stored on CPU. Got device={self.device}."
             )
+        if not os.path.isfile(self.filename):
+            # close ref to file if it has been deleted -- ensures all processes
+            # loose access to a file once it's deleted
+            # see https://stackoverflow.com/questions/44691030/numpy-memmap-with-file-deletion
+            self._memmap_array = None
+            # raise a FileNotFoundError as it will not now be possible to load the
+            # underlying tensor
+            raise FileNotFoundError
         # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor
         # as a Tensor for saving and loading purposes. This doesn't incur any copy.
         if self._index:
