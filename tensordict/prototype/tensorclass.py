@@ -340,11 +340,10 @@ def _getitem(self, item):
     non_tensor_res = {}
     for key, value in self.non_tensordict.items():
         if is_tensorclass(value):
-            # Get the item recursively for the nested tensors
             non_tensor_res[key] = _getitem(value, item)
         else:
-            # Non-tensor data remains same
             non_tensor_res[key] = value
+
     return self.to_tensorclass(tensor_res, non_tensor_res)  # device=res.device)
 
 
@@ -619,7 +618,6 @@ def _all_td_fields_as_str(td: TensorDictBase) -> str:
 
 
 def _all_non_td_fields_as_str(src_dict) -> list:
-    """Returns a string typed key-value pairs of non-tensor data"""
     result = []
     for key, val in src_dict.items():
         if not is_tensordict(val):
@@ -629,7 +627,6 @@ def _all_non_td_fields_as_str(src_dict) -> list:
 
 
 def _validate_non_tensor_data(list_tds) -> bool:
-    """Returns True if all the list of tensor classes has the same non-tensor data"""
     list_tds_copy = list_tds.copy()
     td = list_tds_copy.pop()
     for key, val in td.non_tensordict.items():
