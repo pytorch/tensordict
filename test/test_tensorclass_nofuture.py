@@ -160,7 +160,7 @@ def test_banned_types():
         subclass: Union[MyOptionalClass, TensorDict] = None
 
     data = MyUnionClass(
-        subclass=MyUnionClass.to_tensorclass(TensorDict({}, [3])), batch_size=[3]
+        subclass=MyUnionClass.from_tensordict(TensorDict({}, [3])), batch_size=[3]
     )
     assert data.subclass is not None
 
@@ -180,7 +180,7 @@ def test_attributes():
 
     data = MyData(X=X, y=y, z=z, batch_size=batch_size)
 
-    equality_tensordict = data.tensordict == tensordict
+    equality_tensordict = data._tensordict == tensordict
 
     assert torch.equal(data.X, X)
     assert torch.equal(data.y, y)
@@ -303,7 +303,8 @@ def test_setitem():
     # Negative testcase for non-tensor data
     z = "test_bluff"
     with pytest.raises(
-        ValueError, match=f"Expecting {repr(data.z)} for z instead got {repr(z)}"
+        ValueError,
+        match="Value assigned for the attribute 'z' in the item is not matching with the object",
     ):
         data[1] = MyData(X=x, y=y, z=z, batch_size=batch_size)
 
@@ -329,8 +330,8 @@ def test_stack():
     assert stacked_tc.y.X.shape == torch.Size([2, 3, 4, 5])
     assert (stacked_tc.X == 1).all()
     assert (stacked_tc.y.X == 1).all()
-    assert isinstance(stacked_tc.tensordict, LazyStackedTensorDict)
-    assert isinstance(stacked_tc.y.tensordict, LazyStackedTensorDict)
+    assert isinstance(stacked_tc._tensordict, LazyStackedTensorDict)
+    assert isinstance(stacked_tc.y._tensordict, LazyStackedTensorDict)
     assert stacked_tc.z == stacked_tc.y.z == z
 
     # Testing negative scenarios
@@ -349,7 +350,7 @@ def test_stack():
 
     with pytest.raises(
         ValueError,
-        match=f"{repr(data4.z)} and {repr(data1.z)} for the attribute 'z' are not matching",
+        match="The values assigned for the attribute 'z' are not matching",
     ):
         assert torch.stack([data1, data4], dim=0)
 
@@ -375,7 +376,7 @@ def test_cat():
     assert catted_tc.y.X.shape == torch.Size([6, 4, 5])
     assert (catted_tc.X == 1).all()
     assert (catted_tc.y.X == 1).all()
-    assert isinstance(catted_tc.tensordict, TensorDict)
+    assert isinstance(catted_tc._tensordict, TensorDict)
     assert catted_tc.z == catted_tc.y.z == z
 
     # Testing negative scenarios
@@ -394,7 +395,7 @@ def test_cat():
 
     with pytest.raises(
         ValueError,
-        match=f"{repr(data4.z)} and {repr(data1.z)} for the attribute 'z' are not matching",
+        match="The values assigned for the attribute 'z' are not matching",
     ):
         assert torch.cat([data1, data4], dim=0)
 
@@ -545,7 +546,7 @@ def test_reshape():
     assert stacked_tc.y.X.shape == torch.Size([12, 5])
     assert stacked_tc.shape == torch.Size([12])
     assert (stacked_tc.X == 1).all()
-    assert isinstance(stacked_tc.tensordict, TensorDict)
+    assert isinstance(stacked_tc._tensordict, TensorDict)
     assert stacked_tc.z == stacked_tc.y.z == z
 
 
@@ -566,7 +567,7 @@ def test_view():
     assert stacked_tc.y.X.shape == torch.Size([12, 5])
     assert stacked_tc.shape == torch.Size([12])
     assert (stacked_tc.X == 1).all()
-    assert isinstance(stacked_tc.tensordict, _ViewedTensorDict)
+    assert isinstance(stacked_tc._tensordict, _ViewedTensorDict)
     assert stacked_tc.z == stacked_tc.y.z == z
 
 
@@ -587,7 +588,7 @@ def test_permute():
     assert stacked_tc.y.X.shape == torch.Size([4, 3, 5])
     assert stacked_tc.shape == torch.Size([4, 3])
     assert (stacked_tc.X == 1).all()
-    assert isinstance(stacked_tc.tensordict, _PermutedTensorDict)
+    assert isinstance(stacked_tc._tensordict, _PermutedTensorDict)
     assert stacked_tc.z == stacked_tc.y.z == z
 
 
@@ -719,6 +720,45 @@ def test_nested_heterogeneous(any_to_td):
 
 
 @pytest.mark.parametrize("any_to_td", [True, False])
+def test_getattr(any_to_td):
+    @tensorclass
+    class MyDataNest:
+        X: torch.Tensor
+        v: str
+
+    @tensorclass
+    class MyDataParent:
+        W: Any
+        X: Tensor
+        z: TensorDictBase
+        y: MyDataNest
+        v: str
+
+    batch_size = [3, 4]
+    if any_to_td:
+        W = TensorDict({}, batch_size)
+    else:
+        W = torch.zeros(*batch_size, 1)
+    X = torch.ones(3, 4, 5)
+    td = TensorDict({}, batch_size)
+    data_nest = MyDataNest(X=X, v="test_nested", batch_size=batch_size)
+    v = "test_tensorclass"
+    data = MyDataParent(X=X, y=data_nest, z=td, W=W, v=v, batch_size=batch_size)
+    assert isinstance(data.y, type(data_nest))
+    assert (data.X == X).all()
+    assert data.batch_size == torch.Size(batch_size)
+    assert data.v == v
+    assert (data.z == td).all()
+    assert (data.W == W).all()
+
+    # Testing nested tensor class
+    assert data.y._tensordict is data_nest._tensordict
+    assert (data.y.X == X).all()
+    assert data.y.v == "test_nested"
+    assert data.y.batch_size == torch.Size(batch_size)
+
+
+@pytest.mark.parametrize("any_to_td", [True, False])
 def test_setattr(any_to_td):
     @tensorclass
     class MyDataNest:
@@ -744,7 +784,7 @@ def test_setattr(any_to_td):
     v = "test_tensorclass"
     data = MyDataParent(X=X, y=data_nest, z=td, W=W, v=v, batch_size=batch_size)
     assert isinstance(data.y, type(data_nest))
-    assert data.y.tensordict is data_nest.tensordict
+    assert data.y._tensordict is data_nest._tensordict
     data.X = torch.zeros(3, 4, 5)
     assert (data.X == torch.zeros(3, 4, 5)).all()
     v_new = "test_bluff"
@@ -785,7 +825,7 @@ def test_post_init():
     assert (data.y == y.abs()).all()
 
     # initialising from tensordict is fine
-    data = MyDataPostInit.to_tensorclass(
+    data = MyDataPostInit.from_tensordict(
         TensorDict({"X": torch.rand(3, 4), "y": y}, batch_size=[3, 4])
     )
 
@@ -793,7 +833,7 @@ def test_post_init():
         MyDataPostInit(X=-torch.ones(2), y=torch.rand(2), batch_size=[2])
 
     with pytest.raises(AssertionError):
-        MyDataPostInit.to_tensorclass(
+        MyDataPostInit.from_tensordict(
             TensorDict({"X": -torch.ones(2), "y": torch.rand(2)}, batch_size=[2])
         )
 
