@@ -236,7 +236,7 @@ def _from_tensordict_wrapper(expected_keys):
                     f"{tensordict[key]} from the tensordict is invalid."
                     f"Accepted values are ({_accepted_classes})."
                 )
-
+        
         # Validating non-tensor keys and for key clash
         tensor_keys = set(tensordict.keys())
         if non_tensordict is not None:
