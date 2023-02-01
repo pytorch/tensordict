@@ -255,11 +255,13 @@ def test_indexing():
     assert data[:2].X.shape == torch.Size([2, 4, 5])
     assert (data[:2].X == X[:2]).all()
     assert isinstance(data[:2].y, type(data_nest))
+
     # Nested tensors all get indexed
     assert (data[:2].y.X == X[:2]).all()
     assert data[:2].y.batch_size == torch.Size([2, 4])
     assert data[1].batch_size == torch.Size([4])
     assert data[1][1].batch_size == torch.Size([])
+
     # Non-tensor data won't get indexed
     assert data[1].z == data[2].z == data[:2].z == z
 
@@ -276,37 +278,53 @@ def test_indexing():
 def test_setitem():
     data = MyData(
         X=torch.ones(3, 4, 5),
-        y=torch.zeros(3, 4, 5, dtype=torch.bool),
+        y=torch.zeros(3, 4, 5),
         z="test_tensorclass",
         batch_size=[3, 4],
     )
-    data[:2] = data[:2].clone()
-    data[[1, 2]] = data[[1, 2]].clone()
-    data[0] = data[0].clone()
-    data[:, 0] = data[:, 0].clone()
-    data[:, [1, 2]] = data[:, [1, 2]].clone()
+
+    x = torch.randn(3, 4, 5)
+    y = torch.ones(3, 4, 5)
+    z = "test_tensorclass"
+    batch_size = [3, 4]
+    data2 = MyData(X=x, y=y, z=z, batch_size=batch_size)
+    data3 = MyData(X=y, y=x, z=z, batch_size=batch_size)
+
+    # Testing the data before setting
+    assert (data[:2].X == torch.ones(2, 4, 5)).all()
+    assert (data[:2].y == torch.zeros(2, 4, 5)).all()
+    assert data[:2].z == "test_tensorclass"
+    assert (data[[1, 2]].X == torch.ones(5)).all()
+
+    # Setting the item and testing post setting the item
+    data[:2] = data2[:2].clone()
+    assert (data[:2].X == data2[:2].X).all()
+    assert (data[:2].y == data2[:2].y).all()
+    assert data[:2].z == z
+
+    data[[1, 2]] = data3[[1, 2]].clone()
+    assert (data[[1, 2]].X == data3[[1, 2]].X).all()
+    assert (data[[1, 2]].y == data3[[1, 2]].y).all()
+    assert data[[1, 2]].z == z
+
+    data[:, [1, 2]] = data2[:, [1, 2]].clone()
+    assert (data[:, [1, 2]].X == data2[:, [1, 2]].X).all()
+    assert (data[:, [1, 2]].y == data[:, [1, 2]].y).all()
+    assert data[:, [1, 2]].z == z
+
     with pytest.raises(
-        RuntimeError, match="indexed destination TensorDict batch size is"
+            RuntimeError, match="indexed destination TensorDict batch size is"
     ):
         data[:, [1, 2]] = data.clone()
 
-    # Test cases for non-tensor data
-    x = torch.randn(4, 5)
-    y = torch.zeros(4, 5, dtype=torch.bool)
-    z = "test_tensorclass"
-    batch_size = [4]
-    data[1] = MyData(X=x, y=y, z=z, batch_size=batch_size)
-    assert (data[1].X == x).all()
-    assert (data[1].y == y).all()
-    assert data[1].z == z
-
     # Negative testcase for non-tensor data
     z = "test_bluff"
+    data2 = MyData(X=x, y=y, z=z, batch_size=batch_size)
     with pytest.raises(
-        ValueError,
-        match="Value assigned for the attribute 'z' in the item is not matching with the object",
+            ValueError,
+            match="Value assigned for the attribute 'z' in the item is not matching with the object",
     ):
-        data[1] = MyData(X=x, y=y, z=z, batch_size=batch_size)
+        data[1] = data2[1]
 
 
 def test_stack():
