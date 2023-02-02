@@ -152,7 +152,7 @@ def tensorclass(cls: T) -> T:
     cls.batch_size = property(_batch_size, _batch_size_setter)
 
     implements_for_tdc(torch.unbind)(_unbind)
-    implements_for_tdc(torch.full_like)(_fill_like)
+    implements_for_tdc(torch.full_like)(_full_like)
     implements_for_tdc(torch.zeros_like)(_zeros_like)
     implements_for_tdc(torch.zeros_like)(_ones_like)
     implements_for_tdc(torch.clone)(_clone)
@@ -583,7 +583,7 @@ def _unbind(tdc, dim=0):
     return out
 
 
-def _fill_like(tdc, fill_value):
+def _full_like(tdc, fill_value):
     """
     Fill the tensor types of tensor class object with the fill value, the behavior is extended to nested
     tensor classes as well (no impact to non-tensor data)
@@ -600,7 +600,7 @@ def _fill_like(tdc, fill_value):
     # Filling nested Tensor classes values if any
     for key, value in non_tensor_dict.items():
         if is_tensorclass(value):
-            non_tensor_dict[key] = _fill_like(value, fill_value)
+            non_tensor_dict[key] = _full_like(value, fill_value)
     out = tdc.from_tensordict(tensordict, non_tensor_dict)
     return out
 
@@ -616,7 +616,7 @@ def _zeros_like(tdc):
     Returns:
         out: tensor class object filled with zeros
     """
-    return _fill_like(tdc, 0.0)
+    return _full_like(tdc, 0.0)
 
 
 def _ones_like(tdc):
@@ -630,7 +630,7 @@ def _ones_like(tdc):
     Returns:
         out: tensor class object filled with ones
     """
-    return _fill_like(tdc, 1.0)
+    return _full_like(tdc, 1.0)
 
 
 def _clone(tdc):
