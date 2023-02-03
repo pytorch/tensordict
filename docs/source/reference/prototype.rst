@@ -10,7 +10,8 @@ Like :obj:`TensorDict`, :obj:`@tensorclass` supports nesting, indexing, reshapin
 item assignment. It also supports tensor operations like clone, squeeze, cat, split and many more.
 :obj:`@tensorclass` allows non-tensor entries,
 however all the tensor operations are strictly restricted to tensor attributes. One
-needs to implement their custom methods for non-tensor data
+needs to implement their custom methods for non-tensor data. It is important to note that
+:obj:`@tensorclass` does not enforce strict type matching
 
 .. code-block::
 
