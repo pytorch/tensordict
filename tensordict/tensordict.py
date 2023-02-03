@@ -151,11 +151,17 @@ class _TensorDictKeysView:
     """
 
     def __init__(
-        self, tensordict: "TensorDictBase", include_nested: bool, leaves_only: bool
+        self,
+        tensordict: "TensorDictBase",
+        include_nested: bool,
+        leaves_only: bool,
+        error_on_loop: bool = True,
     ):
         self.tensordict = tensordict
         self.include_nested = include_nested
         self.leaves_only = leaves_only
+        self.error_on_loop = error_on_loop
+        self.visited = set()
 
     def __iter__(self):
         if not self.include_nested:
@@ -168,26 +174,32 @@ class _TensorDictKeysView:
             else:
                 yield from self._keys()
         else:
-            try:
-                yield from self._iter_helper(self.tensordict)
-            except RecursionError as e:
-                raise RecursionError(
-                    "Iterating over contents of TensorDict resulted in a recursion "
-                    "error. It's likely that you have auto-nested values, in which "
-                    f"case iteration with `include_nested=True` is not supported. {e}"
-                )
+            yield from self._iter_helper(self.tensordict)
 
     def _iter_helper(self, tensordict, prefix=None):
         for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
             if not self.leaves_only or not isinstance(value, TensorDictBase):
-                yield full_key
+                if id(value) not in self.visited:
+                    yield full_key
             if isinstance(value, (TensorDictBase, KeyedJaggedTensor)):
-                yield from tuple(
-                    self._iter_helper(
-                        value, full_key if isinstance(full_key, tuple) else (full_key,)
+                if id(value) in self.visited:
+                    if self.error_on_loop:
+                        raise RecursionError(
+                            "Iterating over contents of TensorDict resulted in a "
+                            "recursion error. It's likely that you have auto-nested "
+                            "values, in which case iteration with "
+                            "`include_nested=True` is not supported."
+                        )
+                else:
+                    self.visited.add(id(value))
+                    yield from tuple(
+                        self._iter_helper(
+                            value,
+                            full_key if isinstance(full_key, tuple) else (full_key,),
+                        )
                     )
-                )
+                    self.visited.remove(id(value))
 
     def _combine_keys(self, prefix, key):
         if prefix is not None:
@@ -1181,8 +1193,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def zero_(self) -> TensorDictBase:
         """Zeros all tensors in the tensordict in-place."""
-        for _, value in _items_safe(self):
-            value.zero_()
+        for key in _TensorDictKeysView(
+            self, include_nested=True, leaves_only=True, error_on_loop=False
+        ):
+            self.get(key).zero_()
         return self
 
     def unbind(self, dim: int) -> Tuple[TensorDictBase, ...]:
@@ -1744,7 +1758,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             if dim < 0:
                 dim = self.batch_dims + dim
             return _apply_safe(lambda _, value: value.all(dim=dim), self)
-        return all(value.all() for _, value in _items_safe(self))
+        return all(
+            self.get(key).all()
+            for key in _TensorDictKeysView(
+                self, include_nested=True, leaves_only=True, error_on_loop=False
+            )
+        )
 
     def any(self, dim: int = None) -> Union[bool, TensorDictBase]:
         """Checks if any value is True/non-null in the tensordict.
@@ -1766,7 +1785,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             if dim < 0:
                 dim = self.batch_dims + dim
             return _apply_safe(lambda _, value: value.all(dim=dim), self)
-        return any(value.any() for _, value in _items_safe(self))
+        return any(
+            self.get(key).any()
+            for key in _TensorDictKeysView(
+                self, include_nested=True, leaves_only=True, error_on_loop=False
+            )
+        )
 
     def get_sub_tensordict(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Returns a SubTensorDict with the desired index."""
@@ -2191,33 +2215,6 @@ def _apply_safe(fn, tensordict, inplace=False, hook=None):
                 out[nested_key] = out[root_key]
 
     return out
-
-
-def _items_safe(tensordict):
-    """
-    Safely iterate over leaf tensors in the presence of self-nesting
-
-    Args:
-        tensordict (TensorDictBase): TensorDict over which to iterate
-    """
-    # safely iterate over keys and values in a tensordict, accounting for possible
-    # auto-nesting
-    visited = {id(tensordict)}
-    # create a keys view instance we can use to iterate over items
-    _keys_view = _TensorDictKeysView(None, False, False)
-
-    def recurse(td, prefix=()):
-        for key, value in _keys_view._items(td):
-            full_key = prefix + (key if isinstance(key, tuple) else (key,))
-            if isinstance(value, (TensorDictBase, KeyedJaggedTensor)):
-                if id(value) not in visited:
-                    visited.add(id(value))
-                    yield from recurse(value, prefix=full_key)
-                    visited.remove(id(value))
-            else:
-                yield full_key, value
-
-    yield from recurse(tensordict)
 
 
 class TensorDict(TensorDictBase):
