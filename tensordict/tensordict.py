@@ -151,11 +151,17 @@ class _TensorDictKeysView:
     """
 
     def __init__(
-        self, tensordict: "TensorDictBase", include_nested: bool, leaves_only: bool
+        self,
+        tensordict: "TensorDictBase",
+        include_nested: bool,
+        leaves_only: bool,
+        error_on_loop: bool = True,
     ):
         self.tensordict = tensordict
         self.include_nested = include_nested
         self.leaves_only = leaves_only
+        self.error_on_loop = error_on_loop
+        self.visited = set()
 
     def __iter__(self):
         if not self.include_nested:
@@ -171,23 +177,29 @@ class _TensorDictKeysView:
             yield from self._iter_helper(self.tensordict)
 
     def _iter_helper(self, tensordict, prefix=None):
-        items_iter = self._items(tensordict)
-
-        for key, value in items_iter:
+        for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
-            if (
-                isinstance(value, (TensorDictBase, KeyedJaggedTensor))
-                and self.include_nested
-            ):
-                subkeys = tuple(
-                    self._iter_helper(
-                        value,
-                        full_key if isinstance(full_key, tuple) else (full_key,),
+            if not self.leaves_only or not isinstance(value, TensorDictBase):
+                if id(value) not in self.visited:
+                    yield full_key
+            if isinstance(value, (TensorDictBase, KeyedJaggedTensor)):
+                if id(value) in self.visited:
+                    if self.error_on_loop:
+                        raise RecursionError(
+                            "Iterating over contents of TensorDict resulted in a "
+                            "recursion error. It's likely that you have auto-nested "
+                            "values, in which case iteration with "
+                            "`include_nested=True` is not supported."
+                        )
+                else:
+                    self.visited.add(id(value))
+                    yield from tuple(
+                        self._iter_helper(
+                            value,
+                            full_key if isinstance(full_key, tuple) else (full_key,),
+                        )
                     )
-                )
-                yield from subkeys
-            if not (isinstance(value, TensorDictBase) and self.leaves_only):
-                yield full_key
+                    self.visited.remove(id(value))
 
     def _combine_keys(self, prefix, key):
         if prefix is not None:
@@ -596,7 +608,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             self or a copy of self with the function applied
 
         """
-        return self.apply(fn, inplace=True)
+        return _apply_safe(lambda _, value: fn(value), self, inplace=True)
+        # return self.apply(fn, inplace=True)
 
     def apply(
         self,
@@ -990,22 +1003,24 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         if not isinstance(other, (TensorDictBase, dict, float, int)):
             return False
-        if not isinstance(other, TensorDictBase) and isinstance(other, dict):
+        if isinstance(other, dict):
             other = make_tensordict(**other, batch_size=self.batch_size)
-        if not isinstance(other, TensorDictBase):
-            return TensorDict(
-                {key: value == other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        keys1 = set(self.keys())
-        keys2 = set(other.keys())
-        if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-            raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
-        d = {}
-        for (key, item1) in self.items():
-            d[key] = item1 == other.get(key)
-        return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+
+        def hook(key, value):
+            if isinstance(other, TensorDictBase):
+                other_ = other.get(key) if key else other
+                keys1 = set(value.keys())
+                keys2 = set(other_.keys())
+                if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                    raise KeyError(
+                        f"keys in tensordicts mismatch, got {keys1} and {keys2}"
+                    )
+
+        def fn(key, value):
+            other_ = other.get(key) if isinstance(other, TensorDictBase) else other
+            return value == other_
+
+        return _apply_safe(fn, self, hook=hook)
 
     @abc.abstractmethod
     def del_(self, key: str) -> TensorDictBase:
@@ -1174,21 +1189,14 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             a new TensorDict object containing the same values.
 
         """
-        return TensorDict(
-            {
-                key: value.clone()
-                if not isinstance(value, TensorDictBase)
-                else value.to_tensordict()
-                for key, value in self.items()
-            },
-            device=self.device,
-            batch_size=self.batch_size,
-        )
+        return _apply_safe(lambda _, value: value.clone(), self)
 
     def zero_(self) -> TensorDictBase:
         """Zeros all tensors in the tensordict in-place."""
-        for key in self.keys():
-            self.fill_(key, 0)
+        for key in _TensorDictKeysView(
+            self, include_nested=True, leaves_only=True, error_on_loop=False
+        ):
+            self.get(key).zero_()
         return self
 
     def unbind(self, dim: int) -> Tuple[TensorDictBase, ...]:
@@ -1258,15 +1266,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 TensorDict will be copied too. Default is `True`.
 
         """
-
-        return TensorDict(
-            source={key: _clone_value(value, recurse) for key, value in self.items()},
-            batch_size=self.batch_size,
-            device=self.device,
-            _run_checks=False,
-            _is_shared=self.is_shared() if not recurse else False,
-            _is_memmap=self.is_memmap() if not recurse else False,
-        )
+        return _apply_safe(lambda _, value: _clone_value(value, recurse=recurse), self)
 
     @classmethod
     def __torch_function__(
@@ -1714,13 +1714,29 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         )
 
     def __repr__(self) -> str:
-        fields = _td_fields(self)
-        field_str = indent(f"fields={{{fields}}}", 4 * " ")
-        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
-        device_str = indent(f"device={self.device}", 4 * " ")
-        is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
-        string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
-        return f"{type(self).__name__}(\n{string})"
+        visited = {id(self)}
+
+        def _repr(td):
+            fields = []
+            for key, value in td.items():
+                if is_tensordict(value):
+                    if id(value) in visited:
+                        fields.append(f"{key}: {value.__class__.__name__}(...)")
+                    else:
+                        visited.add(id(value))
+                        fields.append(f"{key}: {_repr(value)}")
+                        visited.remove(id(value))
+                else:
+                    fields.append(f"{key}: {get_repr(value)}")
+            fields = indent("\n" + ",\n".join(sorted(fields)), " " * 4)
+            field_str = indent(f"fields={{{fields}}}", 4 * " ")
+            batch_size_str = indent(f"batch_size={td.batch_size}", 4 * " ")
+            device_str = indent(f"device={td.device}", 4 * " ")
+            is_shared_str = indent(f"is_shared={td.is_shared()}", 4 * " ")
+            string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+            return f"{td.__class__.__name__}(\n{string})"
+
+        return _repr(self)
 
     def all(self, dim: int = None) -> Union[bool, TensorDictBase]:
         """Checks if all values are True/non-null in the tensordict.
@@ -1741,12 +1757,13 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if dim is not None:
             if dim < 0:
                 dim = self.batch_dims + dim
-            return TensorDict(
-                source={key: value.all(dim=dim) for key, value in self.items()},
-                batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
-                device=self.device,
+            return _apply_safe(lambda _, value: value.all(dim=dim), self)
+        return all(
+            self.get(key).all()
+            for key in _TensorDictKeysView(
+                self, include_nested=True, leaves_only=True, error_on_loop=False
             )
-        return all(value.all() for value in self.values())
+        )
 
     def any(self, dim: int = None) -> Union[bool, TensorDictBase]:
         """Checks if any value is True/non-null in the tensordict.
@@ -1767,12 +1784,13 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if dim is not None:
             if dim < 0:
                 dim = self.batch_dims + dim
-            return TensorDict(
-                source={key: value.any(dim=dim) for key, value in self.items()},
-                batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
-                device=self.device,
+            return _apply_safe(lambda _, value: value.all(dim=dim), self)
+        return any(
+            self.get(key).any()
+            for key in _TensorDictKeysView(
+                self, include_nested=True, leaves_only=True, error_on_loop=False
             )
-        return any([value.any() for key, value in self.items()])
+        )
 
     def get_sub_tensordict(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Returns a SubTensorDict with the desired index."""
@@ -2133,6 +2151,70 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             if is_tensordict(self.entry_class(key)):
                 self.get(key).unlock()
         return self
+
+
+def _apply_safe(fn, tensordict, inplace=False, hook=None):
+    """
+    Safely apply a function to all values in a TensorDict that may contain self-nested
+    values.
+
+    Args:
+        fn (Callable[[key, value], Any]): Function to apply to each value. Takes the key
+            and value at that key as arguments. The key is useful for example when
+            implementing __eq__, as it lets us do something like
+            fn=lambda key, value: value == other.get(key). The results of this function
+            are used to set / update values in the TensorDict.
+        tensordict (TensorDictBase): The tensordict to apply the function to.
+        inplace (bool): If True, updates are applied in-place.
+        hook (Callable[[key, value], None]): A hook called on any tensordicts
+            encountered during the recursion. Can be used to perform input validation
+            at each level of the recursion (e.g. checking keys match)
+    """
+    # store ids of values together with the keys they appear under. root tensordict is
+    # given the "key" None
+    visited = {id(tensordict): None}
+    # update will map nested keys to the corresponding key higher up in the tree
+    # e.g. if we have
+    # >>> d = {"a": 1, "b": {"c": 0}}
+    # >>> d["b"]["d"] = d
+    # then after recursing update should look like {("b", "d"): "b"}
+    update = {}
+
+    def recurse(td, prefix=()):
+        if hook is not None:
+            hook(prefix, td)
+
+        out = (
+            td
+            if inplace
+            else TensorDict({}, batch_size=td.batch_size, device=td.device)
+        )
+
+        for key, value in td.items():
+            full_key = prefix + (key,)
+            if isinstance(value, TensorDictBase):
+                if id(value) in visited:
+                    # we have already visited this value, capture the key we saw it at
+                    # so that we can restore auto-nesting at the end of recursion
+                    update[full_key] = visited[id(value)]
+                else:
+                    visited[id(value)] = full_key
+                    out.set(key, recurse(value, prefix=full_key), inplace=inplace)
+                    del visited[id(value)]
+            else:
+                out.set(key, fn(full_key, value), inplace=inplace)
+        return out
+
+    out = recurse(tensordict)
+    if not inplace:
+        # only need to restore self-nesting if not inplace
+        for nested_key, root_key in update.items():
+            if root_key is None:
+                out[nested_key] = out
+            else:
+                out[nested_key] = out[root_key]
+
+    return out
 
 
 class TensorDict(TensorDictBase):
@@ -5247,7 +5329,6 @@ class _PermutedTensorDict(_CustomOpTensorDict):
         list_item: List[COMPATIBLE_TYPES],
         dim: int,
     ) -> TensorDictBase:
-
         permute_dims = self.custom_op_kwargs["dims"]
         inv_permute_dims = np.argsort(permute_dims)
         new_dim = [i for i, v in enumerate(inv_permute_dims) if v == dim][0]
@@ -5271,20 +5352,6 @@ def get_repr(tensor):
     s += [f"is_shared={_is_shared(tensor)}"]
     s = ", ".join(s)
     return f"{tensor.__class__.__name__}({s})"
-
-
-def _make_repr(key, item, tensordict):
-    if is_tensordict(type(item)):
-        return f"{key}: {repr(tensordict.get(key))}"
-    return f"{key}: {get_repr(item)}"
-
-
-def _td_fields(td: TensorDictBase) -> str:
-    return indent(
-        "\n"
-        + ",\n".join(sorted([_make_repr(key, item, td) for key, item in td.items()])),
-        4 * " ",
-    )
 
 
 def _check_keys(
