@@ -1,4 +1,4 @@
-[![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat)](https://pytorch.org/rl/tensordict/)
+[![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat)](https://pytorch-labs.github.io/tensordict/)
 [![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)](https://pytorch-labs.github.io/tensordict/dev/bench/)
 [![Python version](https://img.shields.io/pypi/pyversions/tensordict.svg)](https://www.python.org/downloads/)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/pytorch-labs/tensordict/blob/main/LICENSE)
