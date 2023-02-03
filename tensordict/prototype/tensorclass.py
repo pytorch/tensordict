@@ -743,6 +743,7 @@ def _split(tdc, split_size_or_sections, dim=0):
     Returns:
         out[list]: list of smaller tensor class objects
 
+
     """
     tensordicts = torch.split(tdc._tensordict, split_size_or_sections, dim)
     non_tensor_dict = _handle_non_tensor_dict(
