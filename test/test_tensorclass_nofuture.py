@@ -160,7 +160,7 @@ def test_banned_types():
         subclass: Union[MyOptionalClass, TensorDict] = None
 
     data = MyUnionClass(
-        subclass=MyUnionClass.from_tensordict(TensorDict({}, [3])), batch_size=[3]
+        subclass=MyUnionClass._from_tensordict(TensorDict({}, [3])), batch_size=[3]
     )
     assert data.subclass is not None
 
@@ -843,7 +843,7 @@ def test_post_init():
     assert (data.y == y.abs()).all()
 
     # initialising from tensordict is fine
-    data = MyDataPostInit.from_tensordict(
+    data = MyDataPostInit._from_tensordict(
         TensorDict({"X": torch.rand(3, 4), "y": y}, batch_size=[3, 4])
     )
 
@@ -851,7 +851,7 @@ def test_post_init():
         MyDataPostInit(X=-torch.ones(2), y=torch.rand(2), batch_size=[2])
 
     with pytest.raises(AssertionError):
-        MyDataPostInit.from_tensordict(
+        MyDataPostInit._from_tensordict(
             TensorDict({"X": -torch.ones(2), "y": torch.rand(2)}, batch_size=[2])
         )
 
