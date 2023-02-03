@@ -12,7 +12,7 @@ import pytest
 import torch
 import torchsnapshot
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
-from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict, detect_loop
+from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict, detect_loop, _TensorDictKeysView
 from tensordict.tensordict import (
     _stack as stack_td,
     assert_allclose_td,
@@ -3715,6 +3715,90 @@ def test_tensordict_prealloc_nested():
     assert buffer["agent.obs"].batch_size == torch.Size([B, N, T])
 
 
+def test_tensordict_view_iteration():
+
+    td_simple = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": torch.randn(4, 3, 2, 1, 5)
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+
+    view = _TensorDictKeysView(tensordict=td_simple, include_nested=True, leaves_only=True, error_on_loop=True)
+    keys = list(view)
+    assert len(keys) == 2
+    assert "a" in keys
+    assert "b" in keys
+
+    td_nested = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict(
+                {"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+
+    view = _TensorDictKeysView(tensordict=td_nested, include_nested=True, leaves_only=True, error_on_loop=True)
+    keys = list(view)
+    assert len(keys) == 2
+    assert "a" in keys
+    assert ("b", "c") in keys
+
+    view = _TensorDictKeysView(tensordict=td_nested, include_nested=False, leaves_only=True, error_on_loop=True)
+    keys = list(view)
+    assert len(keys) == 1
+    assert "a" in keys
+
+    view = _TensorDictKeysView(tensordict=td_nested, include_nested=True, leaves_only=False, error_on_loop=True)
+    keys = list(view)
+    assert len(keys) == 3
+    assert "a" in keys
+    assert "b" in keys
+    assert ("b", "c") in keys
+
+    # We are not considering loops given by referencing non Dicts (leaf nodes) from two different key sequences
+
+    td_auto_nested_loop = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict(
+                {"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+    td_auto_nested_loop["b"]["d"] = td_auto_nested_loop
+
+    view = _TensorDictKeysView(tensordict=td_auto_nested_loop, include_nested=False, leaves_only=False,
+                               error_on_loop=True)
+    keys = list(view)
+    assert len(keys) == 2
+    assert 'a' in keys
+    assert 'b' in keys
+
+    view = _TensorDictKeysView(tensordict=td_auto_nested_loop, include_nested=False, leaves_only=True,
+                               error_on_loop=True)
+    keys = list(view)
+    assert len(keys) == 1
+    assert 'a' in keys
+
+    with pytest.raises(RecursionError):
+        view = _TensorDictKeysView(tensordict=td_auto_nested_loop, include_nested=True, leaves_only=True,
+                                   error_on_loop=True)
+        list(view)
+
+    with pytest.raises(RecursionError):
+        view = _TensorDictKeysView(tensordict=td_auto_nested_loop, include_nested=True, leaves_only=False,
+                                   error_on_loop=True)
+        list(view)
+
+    view = _TensorDictKeysView(tensordict=td_auto_nested_loop, include_nested=True, leaves_only=False,
+                               error_on_loop=False)
+    # TODO Specify this undefined behavior better
+
 def test_detect_loop():
 
     td_simple = TensorDict(
@@ -3808,6 +3892,8 @@ def test_detect_loop():
     td_auto_nested_loop_2["b"]["d"] = td_auto_nested_loop_2
 
     assert detect_loop(td_auto_nested_loop_2)
+
+
 
 
 if __name__ == "__main__":

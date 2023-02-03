@@ -10,6 +10,7 @@ from .tensordict import (
     SubTensorDict,
     TensorDict,
     detect_loop,
+    _TensorDictKeysView,
 )
 
 try:
@@ -24,4 +25,5 @@ __all__ = [
     "TensorDict",
     "merge_tensordicts",
     "set_transfer_ownership",
+    "_TensorDictKeysView"
 ]
