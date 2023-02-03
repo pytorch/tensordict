@@ -5400,3 +5400,22 @@ def _clone_value(value, recurse):
         return value.clone(recurse=False)
     else:
         return value
+
+
+def detect_loop(tensordict: TensorDict) -> bool:
+    visited = set()
+    visited.add(id(tensordict))
+
+    def detect(t_d: TensorDict):
+        for k, v in t_d.items():
+            if id(v) in visited:
+                return True
+            visited.add(id(v))
+            if isinstance(v, TensorDict):
+                loop = detect(v)
+                if loop:
+                    return True
+            visited.remove(id(v))
+        return False
+
+    return detect(tensordict)

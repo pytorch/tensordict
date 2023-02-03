@@ -9,6 +9,7 @@ from .tensordict import (
     merge_tensordicts,
     SubTensorDict,
     TensorDict,
+    detect_loop,
 )
 
 try:

@@ -12,7 +12,7 @@ import pytest
 import torch
 import torchsnapshot
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
-from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
+from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict, detect_loop
 from tensordict.tensordict import (
     _stack as stack_td,
     assert_allclose_td,
@@ -3712,6 +3712,101 @@ def test_tensordict_prealloc_nested():
     )
     assert buffer.batch_size == torch.Size([B, N])
     assert buffer["agent.obs"].batch_size == torch.Size([B, N, T])
+
+
+def test_detect_loop():
+
+    td_simple = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": torch.randn(4, 3, 2, 1, 5)
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+    assert not detect_loop(td_simple)
+
+    td_nested = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict(
+                {"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+    assert not detect_loop(td_nested)
+
+    td_auto_nested_no_loop_1 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict(
+                {"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+    td_auto_nested_no_loop_1["b"]["d"] = td_auto_nested_no_loop_1["a"]
+
+    assert not detect_loop(td_auto_nested_no_loop_1)
+
+    td_auto_nested_no_loop_2 = TensorDict(
+        source={
+            "a": TensorDict(
+                source={"c": torch.randn(4, 3, 2, 1, 2)},
+                batch_size=[4, 3, 2, 1]
+            ),
+            "b": TensorDict(
+                source={"d": torch.randn(4, 3, 2, 1, 2)},
+                batch_size=[4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+    td_auto_nested_no_loop_2["b"]["e"] = td_auto_nested_no_loop_2["a"]
+
+    assert not detect_loop(td_auto_nested_no_loop_2)
+
+    td_auto_nested_no_loop_3 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 2),
+            "b": TensorDict(
+                source={"c": torch.randn(4, 3, 2, 1, 2)},
+                batch_size=[4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+    td_auto_nested_no_loop_3["b"]["d"] = td_auto_nested_no_loop_3["b"]["c"]
+
+    assert not detect_loop(td_auto_nested_no_loop_3)
+
+    td_auto_nested_loop_1 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 2),
+            "b": TensorDict(
+                source={"c": torch.randn(4, 3, 2, 1, 2)},
+                batch_size=[4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+    td_auto_nested_loop_1["b"]["d"] = td_auto_nested_loop_1["b"]
+
+    assert detect_loop(td_auto_nested_loop_1)
+
+    td_auto_nested_loop_2 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 2),
+            "b": TensorDict(
+                source={"c": torch.randn(4, 3, 2, 1, 2)},
+                batch_size=[4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+    td_auto_nested_loop_2["b"]["d"] = td_auto_nested_loop_2
+
+    assert detect_loop(td_auto_nested_loop_2)
 
 
 if __name__ == "__main__":
