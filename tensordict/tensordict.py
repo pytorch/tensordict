@@ -961,7 +961,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def __bool__(self) -> bool:
         raise ValueError("Converting a tensordict to boolean value is not permitted")
 
-    def __ne__(self, other: object) -> TensorDictBase:
+    def __ne__(self, other: object) -> Union[bool, TensorDictBase]:
         """XOR operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -975,27 +975,27 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
         if not isinstance(other, (TensorDictBase, dict, float, int)):
-            return False
+            return True
         if not isinstance(other, TensorDictBase) and isinstance(other, dict):
             other = make_tensordict(**other, batch_size=self.batch_size)
-        if not isinstance(other, TensorDictBase):
-            return TensorDict(
-                {key: value != other for key, value in self.items()},
-                self.batch_size,
-                device=self.device,
-            )
-        keys1 = set(self.keys())
-        keys2 = set(other.keys())
-        if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-            raise KeyError(
-                f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-            )
-        d = {}
-        for (key, item1) in self.items():
-            d[key] = item1 != other.get(key)
-        return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
 
-    def __eq__(self, other: object) -> TensorDictBase:
+        def hook(key, value):
+            if isinstance(other, TensorDictBase):
+                other_ = other.get(key) if key else other
+                keys1 = set(value.keys())
+                keys2 = set(other_.keys())
+                if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                    raise KeyError(
+                        f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
+                    )
+
+        def fn(key, value):
+            other_ = other.get(key) if isinstance(other, TensorDictBase) else other
+            return value != other_
+
+        return _apply_safe(fn, self, hook=hook)
+
+    def __eq__(self, other: object) -> Union[bool, TensorDictBase]:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
 
         Returns:
@@ -5499,8 +5499,8 @@ def detect_loop(tensordict: TensorDict) -> bool:
     visited = set()
     visited.add(id(tensordict))
 
-    def detect(t_d: TensorDict):
-        for k, v in t_d.items():
+    def detect(td: TensorDict):
+        for v in td.values():
             if id(v) in visited:
                 return True
             visited.add(id(v))
