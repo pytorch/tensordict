@@ -3796,7 +3796,41 @@ def test_tensordict_view_iteration():
 
     view = _TensorDictKeysView(tensordict=td_auto_nested_loop, include_nested=True, leaves_only=False,
                                error_on_loop=False)
-    # TODO Specify this undefined behavior better
+
+    keys = list(view)
+    assert len(keys) == 3
+    assert 'a' in keys
+    assert 'b' in keys
+    assert ('b', 'c') in keys
+
+    view = _TensorDictKeysView(tensordict=td_auto_nested_loop, include_nested=True, leaves_only=True,
+                               error_on_loop=False)
+
+    keys = list(view)
+    assert len(keys) == 2
+    assert 'a' in keys
+    assert ('b', 'c') in keys
+
+    td_auto_nested_loop_2 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict(
+                {"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1]
+    )
+    td_auto_nested_loop_2["b"]["d"] = td_auto_nested_loop_2['b']
+
+    view = _TensorDictKeysView(tensordict=td_auto_nested_loop_2, include_nested=True, leaves_only=False,
+                               error_on_loop=False)
+
+    keys = list(view)
+    assert len(keys) == 3
+    assert 'a' in keys
+    assert 'b' in keys
+    assert ('b', 'c') in keys
+
 
 
 def test_detect_loop():
