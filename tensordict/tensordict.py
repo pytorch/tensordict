@@ -216,6 +216,7 @@ class _TensorDictKeysView:
             i += 1
         return i
 
+    #TODO fix method for SubTensorDict case
     def _items(self, tensordict=None):
         if tensordict is None:
             tensordict = self.tensordict
@@ -900,7 +901,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, error_on_loop: bool = False
     ) -> _TensorDictKeysView:
         """Returns a generator of tensordict keys."""
         raise NotImplementedError(f"{self.__class__.__name__}")
@@ -944,7 +945,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                         new_shape=shape, old_shape=self.batch_size
                     )
                 )
-        for key, value in self.items():
+
+        keys_view = _TensorDictKeysView(self, include_nested=True, leaves_only=False,
+                                        error_on_loop=False)
+        for key in keys_view:
+            value = self.get(key)
             tensor_dims = len(value.shape)
             last_n_dims = tensor_dims - tensordict_dims
             if last_n_dims > 0:
@@ -2140,7 +2145,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def lock(self):
         self._is_locked = True
-        for key in self.keys():
+        keys_view = _TensorDictKeysView(tensordict=self, include_nested=True, leaves_only=False,
+                                        error_on_loop=False)
+        for key in keys_view:
             if is_tensordict(self.entry_class(key)):
                 self.get(key).lock()
         return self
@@ -2149,7 +2156,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
-        for key in self.keys():
+        keys_view = _TensorDictKeysView(tensordict=self, include_nested=True, leaves_only=False,
+                                        error_on_loop=False)
+        for key in keys_view:
             if is_tensordict(self.entry_class(key)):
                 self.get(key).unlock()
         return self
@@ -2534,7 +2543,10 @@ class TensorDict(TensorDictBase):
                     )
                 )
 
-        for key, value in self.items():
+        keys_view = _TensorDictKeysView(self, include_nested=True, leaves_only=False,
+                                        error_on_loop=False)
+        for key in keys_view:
+            value = self.get(key)
             tensor_dims = len(value.shape)
             last_n_dims = tensor_dims - tensordict_dims
             if last_n_dims > 0:
@@ -2979,10 +2991,11 @@ class TensorDict(TensorDictBase):
         )
 
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, error_on_loop: bool = False
     ) -> _TensorDictKeysView:
         return _TensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
+            self, include_nested=include_nested, leaves_only=leaves_only,
+            error_on_loop=error_on_loop
         )
 
 
