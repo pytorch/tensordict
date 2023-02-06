@@ -1585,7 +1585,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 "split(): argument 'split_size' must be int or list of ints"
             )
         dictionaries = [{} for _ in range(len(batch_sizes))]
-        for key, item in self.items():
+        key_view = _TensorDictKeysView(self, include_nested=True, leaves_only=False, error_on_loop=False)
+        for key in key_view:
+            item = self.get(key)
             split_tensors = torch.split(item, split_size, dim)
             for idx, split_tensor in enumerate(split_tensors):
                 dictionaries[idx][key] = split_tensor
@@ -2926,7 +2928,12 @@ class TensorDict(TensorDictBase):
     def masked_fill_(
         self, mask: Tensor, value: Union[float, int, bool]
     ) -> TensorDictBase:
-        for item in self.values():
+
+        key_view = _TensorDictKeysView(self, include_nested=True, leaves_only=False,
+                                       error_on_loop=False)
+
+        for key in key_view:
+            item = self.get(key)
             mask_expand = expand_as_right(mask, item)
             item.masked_fill_(mask_expand, value)
         return self
