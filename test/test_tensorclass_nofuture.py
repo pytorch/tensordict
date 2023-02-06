@@ -804,7 +804,7 @@ def test_setattr(any_to_td):
         X: Tensor
         z: TensorDictBase
         y: MyDataNest
-        v: str
+        v: Any
 
     batch_size = [3, 4]
     if any_to_td:
@@ -814,8 +814,9 @@ def test_setattr(any_to_td):
     X = torch.ones(3, 4, 5)
     td = TensorDict({}, batch_size)
     data_nest = MyDataNest(X=X, v="test_nested", batch_size=batch_size)
-    v = "test_tensorclass"
-    data = MyDataParent(X=X, y=data_nest, z=td, W=W, v=v, batch_size=batch_size)
+    data = MyDataParent(
+        X=X, y=data_nest, z=td, W=W, v="test_tensorclass", batch_size=batch_size
+    )
     assert isinstance(data.y, type(data_nest))
     assert data.y._tensordict is data_nest._tensordict
     data.X = torch.zeros(3, 4, 5)
@@ -840,6 +841,37 @@ def test_setattr(any_to_td):
     assert data.y.v == data_nest.v == "test_nested_new"
     data_nest.v = "test_nested"
     assert data_nest.v == data.y.v == "test_nested"
+
+    # Testing if user can override the type of the attribute
+    data.v = torch.ones(3, 4, 5)
+    assert (data.v == torch.ones(3, 4, 5)).all()
+    assert "v" in data._tensordict.keys()
+    assert "v" not in data._non_tensordict.keys()
+
+    data.v = "test"
+    assert data.v == "test"
+    assert "v" not in data._tensordict.keys()
+    assert "v" in data._non_tensordict.keys()
+
+
+def test_pre_allocate():
+    @tensorclass
+    class M1:
+        X: Any
+
+    @tensorclass
+    class M2:
+        X: Any
+
+    @tensorclass
+    class M3:
+        X: Any
+
+    m1 = M1(M2(M3(X=None, batch_size=[4]), batch_size=[4]), batch_size=[4])
+    m2 = M1(M2(M3(X=torch.randn(2), batch_size=[]), batch_size=[]), batch_size=[])
+    assert m1.X.X.X is None
+    m1[0] = m2
+    assert (m1[0].X.X.X == m2.X.X.X).all()
 
 
 def test_post_init():

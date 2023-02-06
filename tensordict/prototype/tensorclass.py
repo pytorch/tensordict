@@ -340,8 +340,14 @@ def _setattr_wrapper(setattr_, expected_keys):
             )
 
         if isinstance(value, _accepted_classes):
+            # Avoiding key clash, honoring the user input to assign tensor type data to the key
+            if key in self._non_tensordict.keys():
+                del self._non_tensordict[key]
             self._tensordict[key] = value
         else:
+            # Avoiding key clash, honoring the user input to assign non-tensor data to the key
+            if key in self._tensordict.keys():
+                del self._tensordict[key]
             # Saving all non-tensor attributes
             self._non_tensordict[key] = value
 
@@ -428,25 +434,35 @@ def _setitem(self, item, value):
         raise ValueError("__setitem__ is only allowed for same-class assignement")
 
     # Validating the non-tensor data before setting the item
-    for key, val in self._non_tensordict.items():
+    for key, val in value._non_tensordict.items():
         # Setting the item for nested tensor class
-        if is_tensorclass(val):
-            _setitem(val, item, value._non_tensordict[key])
+        if key in self._non_tensordict.keys() and is_tensorclass(val):
+            _setitem(self._non_tensordict[key], item, val)
         else:
             # Raise a warning if non_tensor data doesn't match
-            if val and val is not value._non_tensordict[key]:
+            if (
+                key in self._non_tensordict.keys()
+                and val is not self._non_tensordict[key]
+            ):
                 warnings.warn(
                     f"Meta data at {repr(key)} may or may not be equal, this may result in "
                     f"undefined behaviours",
                     category=UserWarning,
                 )
 
-    for key, val in self._tensordict.items():
+    for key, val in value._tensordict.items():
         # While setting the item, the tensor types needs to be the same
-        if not isinstance(value._tensordict[key], type(val)):
+        if key in self._tensordict.keys() and not isinstance(
+            val, type(self._tensordict[key])
+        ):
             raise TypeError(
                 f"Type of the value assigned for the attribute {repr(key)} to set is not matching with the object"
             )
+        else:
+            # Making sure that the key-clashes won't happen, if the key is present in tensor data in value
+            # we will honor that and remove the key-value pair from non-tensor data
+            if key in self._non_tensordict.keys():
+                del self._non_tensordict[key]
 
     self._tensordict[item] = value._tensordict
 
