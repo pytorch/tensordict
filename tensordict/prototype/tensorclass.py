@@ -3,6 +3,7 @@ import functools
 import inspect
 import re
 import typing
+import warnings
 from dataclasses import dataclass
 from platform import python_version
 from textwrap import indent
@@ -243,7 +244,7 @@ def _from_tensordict_wrapper(expected_keys):
                     )
                 if key in tensor_keys:
                     raise KeyError(
-                        f"{key} is present in both tensor and no-tensor dicts"
+                        f"{key} is present in both tensor and non-tensor dicts"
                     )
         # bypass initialisation. this means we don't incur any overhead creating an
         # empty tensordict and writing values to it. we can skip this because we already
@@ -387,7 +388,7 @@ def _getattr(self, attr):
 
 
 def _getitem(self, item):
-    """Retrieve the class object at the given index.
+    """Retrieve the class object at the given index. Indexing will happen for nested tensors as well
 
     Args:
        item (int or any other valid index type): index of the object to retrieve
@@ -412,7 +413,7 @@ def _getitem(self, item):
 
 
 def _setitem(self, item, value):
-    """Set the value of the Tensor class object at the given index.
+    """Set the value of the Tensor class object at the given index. Note that there is no strict validation on non-tensor values
 
     Args:
         item (int or any other valid index type): index of the object to set
@@ -428,18 +429,22 @@ def _setitem(self, item, value):
 
     # Validating the non-tensor data before setting the item
     for key, val in self._non_tensordict.items():
-        # Need the nested tensor class to be the same
+        # Setting the item for nested tensor class
         if is_tensorclass(val):
-            if (val != value._non_tensordict[key]).any():
-                raise ValueError(
-                    f"Value assigned for the attribute {repr(key)} in the item is not matching with the object"
-                )
-        # All the non-tensor attributes needs to be same
+            _setitem(val, item, value._non_tensordict[key])
         else:
-            if val and val != value._non_tensordict[key]:
-                raise ValueError(
-                    f"Value assigned for the attribute {repr(key)} in the item is not matching with the object"
-                )
+            # Raise a warning if non_tensor data doesn't match
+            if val and val is not value._non_tensordict[key]:
+                warnings.warn(f"Meta data at {repr(key)} may or may not be equal, this may result in "
+                              f"undefined behaviours", category=UserWarning)
+
+    for key, val in self._tensordict.items():
+        # While setting the item, the tensor types needs to be the same
+        if not isinstance(value._tensordict[key], type(val)):
+            raise TypeError(
+                f"Type of the value assigned for the attribute {repr(key)} to set is not matching with the object"
+            )
+
     self._tensordict[item] = value._tensordict
 
 
@@ -517,40 +522,46 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
 
 
 def __eq__(self, other):
-    """Compares the Tensor class object to another object for equality.
+    """Compares the Tensor class object to another object for equality. However, the equality check for non-tensor data is not performed.
 
     Args:
         other: object to compare to this object
 
     Returns:
-        False if the objects are of different class types, Tensorclass of boolean values otherwise
+        False if the objects are of different class types, Tensorclass of boolean values for tensor attributes and None for non-tensor attributes
 
     """
     if not isinstance(other, self.__class__):
         return False
     non_tensor = {}
     for key, value in self._non_tensordict.items():
-        non_tensor[key] = value == other._non_tensordict[key]
+        if is_tensorclass(value):
+            non_tensor[key] = value == other._non_tensordict[key]
+        else:
+            non_tensor[key] = None
     tensor = self._tensordict == other._tensordict
     out = self._from_tensordict(tensor, non_tensor)
     return out
 
 
 def __ne__(self, other):
-    """Compare the Tensor class object to another object for inequality.
+    """Compare the Tensor class object to another object for inequality. However, the equality check for non-tensor data is not performed.
 
     Args:
         other: object to compare to this object
 
     Returns:
-        False if the objects are of different class types, Tensorclass of boolean values otherwise
+        False if the objects are of different class types, Tensorclass of boolean values for tensor attributes and None for non-tensor attributes
 
     """
     if not isinstance(other, self.__class__):
         return True
     non_tensor = {}
     for key, value in self._non_tensordict.items():
-        non_tensor[key] = value != other._non_tensordict[key]
+        if is_tensorclass(value):
+            non_tensor[key] = value != other._non_tensordict[key]
+        else:
+            non_tensor[key] = None
     tensor = self._tensordict != other._tensordict
     out = self._from_tensordict(tensor, non_tensor)
     return out
@@ -595,6 +606,11 @@ def _handle_list_non_tensor_dict(func, list_of_tdc, *args, **kwargs):
         if is_tensorclass(value):
             list_non_tdc = []
             for tdc in list_of_tdc:
+                if not isinstance(value, type(tdc._non_tensordict[key])):
+                    raise ValueError(
+                        f"The values assigned for the attribute "
+                        f"{repr(key)} are not matching"
+                    )
                 list_non_tdc.append(tdc._non_tensordict[key])
             non_tensordict[key] = func(list_non_tdc, *args, **kwargs)
 
@@ -764,14 +780,10 @@ def _stack(list_of_tdc, dim=0):
         out: stacked tensor class object
 
     """
-    # Validate if all the non-tensor data and nested classes are matched before stacking
-    if _validate_non_tensor_data(list_of_tdc):
-        tensordict = torch.stack([tdc._tensordict for tdc in list_of_tdc], dim)
-        non_tensordict = _handle_list_non_tensor_dict(_stack, list_of_tdc, dim)
-        out = list_of_tdc[0]._from_tensordict(tensordict, non_tensordict)
-        return out
-    else:
-        raise ValueError("Cannot stack different tensor classes")
+    tensordict = torch.stack([tdc._tensordict for tdc in list_of_tdc], dim)
+    non_tensordict = _handle_list_non_tensor_dict(_stack, list_of_tdc, dim)
+    out = list_of_tdc[0]._from_tensordict(tensordict, non_tensordict)
+    return out
 
 
 def _cat(list_of_tdc, dim=0):
@@ -785,14 +797,10 @@ def _cat(list_of_tdc, dim=0):
         out: concatenated tensor class object
 
     """
-    # Validate if all the non-tensor data and nested classes are matched before concatenation
-    if _validate_non_tensor_data(list_of_tdc):
-        tensordict = torch.cat([tdc._tensordict for tdc in list_of_tdc], dim)
-        non_tensordict = _handle_list_non_tensor_dict(_cat, list_of_tdc, dim)
-        out = list_of_tdc[0]._from_tensordict(tensordict, non_tensordict)
-        return out
-    else:
-        raise ValueError("Cannot concatenate different tensor classes")
+    tensordict = torch.cat([tdc._tensordict for tdc in list_of_tdc], dim)
+    non_tensordict = _handle_list_non_tensor_dict(_cat, list_of_tdc, dim)
+    out = list_of_tdc[0]._from_tensordict(tensordict, non_tensordict)
+    return out
 
 
 def _get_typed_output(out, expected_type):
@@ -866,34 +874,6 @@ def _all_non_td_fields_as_str(src_dict) -> list:
             result.append(f"{key}={repr(val)}")
 
     return result
-
-
-def _validate_non_tensor_data(list_tds) -> bool:
-    """Validates if all the non-tensor attributes and all the nested tensor classes are equal
-
-    Args:
-        list_tds (list): list of tensor class objects
-
-    Returns:
-        True if all non-tensor data is matching across Tensor class objects
-    """
-    list_tds_copy = list_tds.copy()
-    td = list_tds_copy.pop()
-    for key, val in td._non_tensordict.items():
-        for tds in list_tds_copy:
-            if is_tensorclass(val):
-                if not isinstance(val, type(tds._non_tensordict[key])):
-                    raise ValueError(
-                        f"The values assigned for the attribute "
-                        f"{repr(key)} are not matching"
-                    )
-            else:
-                if key in tds._non_tensordict and val != tds._non_tensordict[key]:
-                    raise ValueError(
-                        f"The values assigned for the attribute "
-                        f"{repr(key)} are not matching"
-                    )
-    return True
 
 
 def _check_td_out_type(field_def):
