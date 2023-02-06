@@ -5499,8 +5499,8 @@ def detect_loop(tensordict: TensorDict) -> bool:
     visited = set()
     visited.add(id(tensordict))
 
-    def detect(t_d: TensorDict):
-        for k, v in t_d.items():
+    def detect(td: TensorDict):
+        for v in td.values():
             if id(v) in visited:
                 return True
             visited.add(id(v))
