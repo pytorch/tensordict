@@ -5,12 +5,12 @@
 
 from .memmap import MemmapTensor, set_transfer_ownership
 from .tensordict import (
+    _TensorDictKeysView,
+    detect_loop,
     LazyStackedTensorDict,
     merge_tensordicts,
     SubTensorDict,
     TensorDict,
-    detect_loop,
-    _TensorDictKeysView,
 )
 
 try:
@@ -25,5 +25,5 @@ __all__ = [
     "TensorDict",
     "merge_tensordicts",
     "set_transfer_ownership",
-    "_TensorDictKeysView"
+    "_TensorDictKeysView",
 ]
