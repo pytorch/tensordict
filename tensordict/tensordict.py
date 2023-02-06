@@ -5469,3 +5469,46 @@ def _clone_value(value, recurse):
         return value.clone(recurse=False)
     else:
         return value
+
+
+def detect_loop(tensordict: TensorDict) -> bool:
+    """
+    This helper function detects the presence of an auto nesting loop inside
+    a TensorDict object. Auto nesting appears when a key of TensorDict references
+    another TensorDict and initiates a recursive infinite loop. It returns True
+    if at least one loop is found, otherwise returns False. An example is:
+
+    >>> td = TensorDict(
+    >>>     source={
+    >>>         "a": TensorDict(
+    >>>             source={"b": torch.randn(4, 3, 1)},
+    >>>             batch_size=[4, 3, 1]),
+    >>>     },
+    >>>     batch_size=[4, 3, 1]
+    >>> )
+    >>> td["b"]["c"] = td
+    >>>
+    >>> print(detect_loop(td))
+    True
+
+    Args:
+        tensordict (TensorDict): The Tensordict Object to check for autonested loops presence.
+    Returns
+        bool: True if one loop is found, otherwise False
+    """
+    visited = set()
+    visited.add(id(tensordict))
+
+    def detect(t_d: TensorDict):
+        for k, v in t_d.items():
+            if id(v) in visited:
+                return True
+            visited.add(id(v))
+            if isinstance(v, TensorDict):
+                loop = detect(v)
+                if loop:
+                    return True
+            visited.remove(id(v))
+        return False
+
+    return detect(tensordict)
