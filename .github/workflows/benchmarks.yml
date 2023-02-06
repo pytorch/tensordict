@@ -1,8 +1,9 @@
 name: Continuous Benchmark
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["Generate documentation"]
+    types:
+      - completed
 
 permissions:
   deployments: write
