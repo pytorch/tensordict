@@ -174,7 +174,9 @@ class _TensorDictKeysView:
             else:
                 yield from self._keys()
         else:
+            self.visited.add(id(self.tensordict))
             yield from self._iter_helper(self.tensordict)
+            self.visited.remove(id(self.tensordict))
 
     def _iter_helper(self, tensordict, prefix=None):
         for key, value in self._items(tensordict):
