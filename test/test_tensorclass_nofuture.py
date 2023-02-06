@@ -320,11 +320,39 @@ def test_setitem():
     # Negative testcase for non-tensor data
     z = "test_bluff"
     data2 = MyData(X=x, y=y, z=z, batch_size=batch_size)
-    with pytest.raises(
-        ValueError,
-        match="Value assigned for the attribute 'z' in the item is not matching with the object",
+    with pytest.warns(
+        UserWarning,
+        match="Meta data at 'z' may or may not be equal, this may result in undefined behaviours",
     ):
         data[1] = data2[1]
+
+    # Validating nested test cases
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        z: list
+        y: "MyDataNested" = None  # future: drop quotes
+
+    X = torch.randn(3, 4, 5)
+    z = ["a", "b", "c"]
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+    X2 = torch.ones(3, 4, 5)
+    data_nest2 = MyDataNested(X=X2, z=z, batch_size=batch_size)
+    data2 = MyDataNested(X=X2, y=data_nest2, z=z, batch_size=batch_size)
+    data[:2] = data2[:2].clone()
+    assert (data[:2].X == data2[:2].X).all()
+    assert (data[:2].y.X == data2[:2].y.X).all()
+    assert data[:2].z == z
+
+    # Negative Scenario
+    data3 = MyDataNested(X=X2, y=data_nest2, z=["e", "f"], batch_size=batch_size)
+    with pytest.warns(
+        UserWarning,
+        match="Meta data at 'z' may or may not be equal, this may result in undefined behaviours",
+    ):
+        data[:2] = data3[:2]
 
 
 def test_stack():
@@ -355,7 +383,6 @@ def test_stack():
     # Testing negative scenarios
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     data3 = MyData(X=X, y=y, z=z, batch_size=batch_size)
-    data4 = MyDataNested(X=X, y=data_nest, z="test_bluff", batch_size=batch_size)
 
     with pytest.raises(
         TypeError,
@@ -365,12 +392,6 @@ def test_stack():
         ),
     ):
         torch.stack([data1, data3], dim=0)
-
-    with pytest.raises(
-        ValueError,
-        match="The values assigned for the attribute 'z' are not matching",
-    ):
-        assert torch.stack([data1, data4], dim=0)
 
 
 def test_cat():
@@ -400,7 +421,6 @@ def test_cat():
     # Testing negative scenarios
     y = torch.zeros(3, 4, 5, dtype=torch.bool)
     data3 = MyData(X=X, y=y, z=z, batch_size=batch_size)
-    data4 = MyDataNested(X=X, y=data_nest, z="test_bluff", batch_size=batch_size)
 
     with pytest.raises(
         TypeError,
@@ -410,12 +430,6 @@ def test_cat():
         ),
     ):
         torch.cat([data1, data3], dim=0)
-
-    with pytest.raises(
-        ValueError,
-        match="The values assigned for the attribute 'z' are not matching",
-    ):
-        assert torch.cat([data1, data4], dim=0)
 
 
 def test_unbind():
@@ -641,9 +655,10 @@ def test_nested_eq():
     data_nest2 = MyDataNested(X=X, z=z, batch_size=batch_size)
     data2 = MyDataNested(X=X, y=data_nest2, z=z, batch_size=batch_size)
     assert (data == data2).all()
-    assert (data == data2).z
     assert (data == data2).X.all()
-    assert (data == data2).y.z
+    assert (data == data2).z is None
+    assert (data == data2).y.X.all()
+    assert (data == data2).y.z is None
 
 
 def test_nested_ne():
@@ -661,11 +676,11 @@ def test_nested_ne():
     data_nest2 = MyDataNested(X=X, z=z, batch_size=batch_size)
     z = "test_bluff"
     data2 = MyDataNested(X=X + 1, y=data_nest2, z=z, batch_size=batch_size)
-    assert (data != data2).all()
-    assert (data != data2).z
+    assert (data != data2).any()
     assert (data != data2).X.all()
-    assert not (data != data2).y.X.all()
-    assert not (data != data2).y.z
+    assert (data != data2).z is None
+    assert not (data != data2).y.X.any()
+    assert (data != data2).y.z is None
 
 
 def test_args():
