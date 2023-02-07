@@ -451,18 +451,10 @@ def _setitem(self, item, value):
                 )
 
     for key, val in value._tensordict.items():
-        # While setting the item, the tensor types needs to be the same
-        if key in self._tensordict.keys() and not isinstance(
-            val, type(self._tensordict[key])
-        ):
-            raise TypeError(
-                f"Type of the value assigned for the attribute {repr(key)} to set is not matching with the object"
-            )
-        else:
-            # Making sure that the key-clashes won't happen, if the key is present in tensor data in value
-            # we will honor that and remove the key-value pair from non-tensor data
-            if key in self._non_tensordict.keys():
-                del self._non_tensordict[key]
+        # Making sure that the key-clashes won't happen, if the key is present in tensor data in value
+        # we will honor that and remove the key-value pair from non-tensor data
+        if key in self._non_tensordict.keys():
+            del self._non_tensordict[key]
 
     self._tensordict[item] = value._tensordict
 
