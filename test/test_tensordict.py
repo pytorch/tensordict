@@ -12,16 +12,10 @@ import pytest
 import torch
 import torchsnapshot
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
-from tensordict import (
-    _TensorDictKeysView,
-    detect_loop,
-    LazyStackedTensorDict,
-    MemmapTensor,
-    TensorDict,
-    SubTensorDict
-)
+from tensordict import detect_loop, LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
     _stack as stack_td,
+    _TensorDictKeysView,
     assert_allclose_td,
     make_tensordict,
     pad,
