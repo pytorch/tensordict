@@ -2155,7 +2155,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return self
 
 
-def _apply_safe(fn, tensordict, inplace=False, hook=None):
+def _apply_safe(fn, tensordict, inplace=False, hook=None, compute_batch_size=None):
     """
     Safely apply a function to all values in a TensorDict that may contain self-nested
     values.
@@ -2182,6 +2182,11 @@ def _apply_safe(fn, tensordict, inplace=False, hook=None):
     # then after recursing update should look like {("b", "d"): "b"}
     update = {}
 
+    if compute_batch_size is None:
+
+        def compute_batch_size(td):
+            return td.batch_size
+
     def recurse(td, prefix=()):
         if hook is not None:
             hook(prefix, td)
@@ -2189,7 +2194,7 @@ def _apply_safe(fn, tensordict, inplace=False, hook=None):
         out = (
             td
             if inplace
-            else TensorDict({}, batch_size=td.batch_size, device=td.device)
+            else TensorDict({}, batch_size=compute_batch_size(td), device=td.device)
         )
 
         for key, value in td.items():
@@ -2487,13 +2492,11 @@ class TensorDict(TensorDictBase):
             )
 
     def _index_tensordict(self, idx: INDEX_TYPING):
-        self_copy = copy(self)
-        self_copy._tensordict = {
-            key: _get_item(item, idx) for key, item in self.items()
-        }
-        self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
-        self_copy._device = self.device
-        return self_copy
+        return _apply_safe(
+            lambda _, value: _get_item(value, idx),
+            self,
+            compute_batch_size=lambda td: _getitem_batch_size(td.batch_size, idx),
+        )
 
     def pin_memory(self) -> TensorDictBase:
         for key, value in self.items():
