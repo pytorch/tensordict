@@ -920,7 +920,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             >>> assert td_expand.get("a").shape == torch.Size([10, 3, 4, 5])
 
         """
-        d = {}
         tensordict_dims = self.batch_dims
 
         if len(shape) == 1 and isinstance(shape[0], Sequence):
