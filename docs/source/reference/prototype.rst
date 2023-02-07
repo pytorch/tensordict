@@ -186,7 +186,7 @@ of an item matches with the object to avoid discrepancies.
 
 Here is an example:
 
-While setting an item with different non_tensor data, a UserWarning will be
+While setting an item with different ``non_tensor`` data, a :class:`UserWarning` will be
 thrown
 
 .. code-block::
