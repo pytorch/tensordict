@@ -76,13 +76,12 @@ however the non-tensor data remains the same
 
 .. code-block::
 
-
- >>>print("indexed:", data[:2])
- indexed: MyData(
-    floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-    intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-    non_tensordata='test',
-    nested=MyData(
+  >>> print("indexed:", data[:2])
+  indexed: MyData(
+     floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+     intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+     non_tensordata='test',
+     nested=MyData(
         floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
         intdata=Tensor(shape=torch.Size([2, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
         non_tensordata='nested_test',
@@ -90,21 +89,21 @@ however the non-tensor data remains the same
         batch_size=torch.Size([2, 4]),
         device=None,
         is_shared=False),
-    batch_size=torch.Size([2, 4]),
-    device=None,
-    is_shared=False)
+     batch_size=torch.Size([2, 4]),
+     device=None,
+     is_shared=False)
 
 :obj:`@tensorclass` also supports setting and resetting attributes, even for nested objects.
 
 .. code-block::
 
- >>> data.non_tensordata = "test_changed"
- >>> print("data.non_tensordata: ", repr(data.non_tensordata))
- data.non_tensordata: 'test_changed'
+  >>> data.non_tensordata = "test_changed"
+  >>> print("data.non_tensordata: ", repr(data.non_tensordata))
+  data.non_tensordata: 'test_changed'
 
- >>> data.floatdata = torch.ones(3, 4, 5)
- >>>print("data.floatdata:", data.floatdata)
- data.floatdata: tensor([[[1., 1., 1., 1., 1.],
+  >>> data.floatdata = torch.ones(3, 4, 5)
+  >>> print("data.floatdata:", data.floatdata)
+  data.floatdata: tensor([[[1., 1., 1., 1., 1.],
          [1., 1., 1., 1., 1.],
          [1., 1., 1., 1., 1.],
          [1., 1., 1., 1., 1.]],
@@ -119,10 +118,10 @@ however the non-tensor data remains the same
          [1., 1., 1., 1., 1.],
          [1., 1., 1., 1., 1.]]])
 
- >>> # Changing nested tensor data
- >>> data.nested.non_tensordata = "nested_test_changed"
- >>>print("data.nested.non_tensordata:", repr(data.nested.non_tensordata))
- data.nested.non_tensordata: 'nested_test_changed'
+  >>> # Changing nested tensor data
+  >>> data.nested.non_tensordata = "nested_test_changed"
+  >>> print("data.nested.non_tensordata:", repr(data.nested.non_tensordata))
+  data.nested.non_tensordata: 'nested_test_changed'
 
 :obj:`@tensorclass` supports multiple torch operations over the shape and device
 of its content, such as `stack`, `cat`, `reshape` or `to(device)`. To get
@@ -132,24 +131,24 @@ Here is an example:
 
 .. code-block::
 
- >>>data2 = data.clone()
- >>>cat_tc = torch.cat([data, data2], 0)
- >>>print("Concatenated data:", catted_tc)
- Concatenated data: MyData(
-    floatdata=Tensor(shape=torch.Size([6, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-    intdata=Tensor(shape=torch.Size([6, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-    non_tensordata='test_changed',
-    nested=MyData(
-        floatdata=Tensor(shape=torch.Size([6, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-        intdata=Tensor(shape=torch.Size([6, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-        non_tensordata='nested_test_changed',
-        nested=None,
-        batch_size=torch.Size([6, 4]),
-        device=None,
-        is_shared=False),
-    batch_size=torch.Size([6, 4]),
-    device=None,
-    is_shared=False)
+  >>> data2 = data.clone()
+  >>> cat_tc = torch.cat([data, data2], 0)
+  >>> print("Concatenated data:", catted_tc)
+  Concatenated data: MyData(
+     floatdata=Tensor(shape=torch.Size([6, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+     intdata=Tensor(shape=torch.Size([6, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+     non_tensordata='test_changed',
+     nested=MyData(
+         floatdata=Tensor(shape=torch.Size([6, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+         intdata=Tensor(shape=torch.Size([6, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+         non_tensordata='nested_test_changed',
+         nested=None,
+         batch_size=torch.Size([6, 4]),
+         device=None,
+         is_shared=False),
+     batch_size=torch.Size([6, 4]),
+     device=None,
+     is_shared=False)
 
 Edge cases
 ~~~~~~~~~~
@@ -162,22 +161,22 @@ Here is an example:
 
 .. code-block::
 
- >>> print(data == data2)
- MyData(
-    floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-    intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-    non_tensordata=None,
-    nested=MyData(
-        floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
-        intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
-        non_tensordata=None,
-        nested=None,
-        batch_size=torch.Size([3, 4]),
-        device=None,
-        is_shared=False),
-    batch_size=torch.Size([3, 4]),
-    device=None,
-    is_shared=False)
+  >>> print(data == data2)
+  MyData(
+     floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+     intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+     non_tensordata=None,
+     nested=MyData(
+         floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+         intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+         non_tensordata=None,
+         nested=None,
+         batch_size=torch.Size([3, 4]),
+         device=None,
+         is_shared=False),
+     batch_size=torch.Size([3, 4]),
+     device=None,
+     is_shared=False)
 
 :obj:`@tensorclass` supports setting an item. However, while setting an item
 the identity check of non-tensor / meta data is done instead of equality to
@@ -191,9 +190,9 @@ thrown
 
 .. code-block::
 
- >>> data2.non_tensordata = "test_new"
- >>> data[0] = data2[0]
- UserWarning: Meta data at 'non_tensordata' may or may not be equal, this may result in undefined behaviours
+  >>> data2.non_tensordata = "test_new"
+  >>> data[0] = data2[0]
+  UserWarning: Meta data at 'non_tensordata' may or may not be equal, this may result in undefined behaviours
 
 Even though :obj:`@tensorclass` supports torch functions like cat and stack, the
 non-tensor / meta data is not validated. The torch operation is performed on the
@@ -205,24 +204,24 @@ Here is an example:
 
 .. code-block::
 
- >>> data2.non_tensordata = "test_new"
- >>> stack_tc = torch.cat([data, data2], dim=0)
- >>> print(stack_tc)
- MyData(
-    floatdata=Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-    intdata=Tensor(shape=torch.Size([2, 3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-    non_tensordata='test',
-    nested=MyData(
-        floatdata=Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-        intdata=Tensor(shape=torch.Size([2, 3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
-        non_tensordata='nested_test',
-        nested=None,
-        batch_size=torch.Size([2, 3, 4]),
-        device=None,
-        is_shared=False),
-    batch_size=torch.Size([2, 3, 4]),
-    device=None,
-    is_shared=False)
+  >>> data2.non_tensordata = "test_new"
+  >>> stack_tc = torch.cat([data, data2], dim=0)
+  >>> print(stack_tc)
+  MyData(
+      floatdata=Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+      intdata=Tensor(shape=torch.Size([2, 3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+      non_tensordata='test',
+      nested=MyData(
+          floatdata=Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+          intdata=Tensor(shape=torch.Size([2, 3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+          non_tensordata='nested_test',
+          nested=None,
+          batch_size=torch.Size([2, 3, 4]),
+          device=None,
+          is_shared=False),
+      batch_size=torch.Size([2, 3, 4]),
+      device=None,
+      is_shared=False)
 
 :obj:`@tensorclass` also supports pre-allocation, you can initialize
 the object with attributes being None and later set them. Note that while
@@ -234,21 +233,21 @@ Here is an example:
 
 .. code-block::
 
- >>>@tensorclass
- ...class MyClass:
- ...   X: Any
- ...   y: Any
+  >>> @tensorclass
+  ... class MyClass:
+  ...   X: Any
+  ...   y: Any
 
- >>>data = MyClass(X=None, y=None, batch_size = [3,4])
- >>>data.X = torch.ones(3, 4, 5)
- >>>data.y = "testing"
- >>>print(data)
- MyClass(
-    X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
-    y='testing',
-    batch_size=torch.Size([3, 4]),
-    device=None,
-    is_shared=False)
+  >>> data = MyClass(X=None, y=None, batch_size = [3,4])
+  >>> data.X = torch.ones(3, 4, 5)
+  >>> data.y = "testing"
+  >>> print(data)
+  MyClass(
+     X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+     y='testing',
+     batch_size=torch.Size([3, 4]),
+     device=None,
+     is_shared=False)
 
 .. autosummary::
     :toctree: generated/
