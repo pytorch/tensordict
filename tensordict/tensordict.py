@@ -956,7 +956,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return _apply_safe(
             fn=lambda _, value: _expand_each(value),
             tensordict=self,
-            compute_batch_size=lambda _: shape,
+            compute_batch_size=lambda td: [*shape, *td.batch_size[tensordict_dims:]],
         )
 
     def __bool__(self) -> bool:
@@ -1523,6 +1523,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             batch_size = shape
         return TensorDict(d, batch_size, device=self.device, _run_checks=False)
 
+    # TODO: this is broken for auto-nested case, requires more care
     def split(
         self, split_size: Union[int, List[int]], dim: int = 0
     ) -> List[TensorDictBase]:
@@ -2562,7 +2563,7 @@ class TensorDict(TensorDictBase):
         return _apply_safe(
             fn=lambda _, value: _expand_each(value),
             tensordict=self,
-            compute_batch_size=lambda _: shape,
+            compute_batch_size=lambda td: [*shape, *td.batch_size[tensordict_dims:]],
         )
 
     def set(
