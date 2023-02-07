@@ -216,6 +216,7 @@ class _TensorDictKeysView:
             i += 1
         return i
 
+    # TODO fix method for SubTensorDict case
     def _items(self, tensordict=None):
         if tensordict is None:
             tensordict = self.tensordict
@@ -611,7 +612,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
         return _apply_safe(lambda _, value: fn(value), self, inplace=True)
-        # return self.apply(fn, inplace=True)
 
     def apply(
         self,
@@ -944,18 +944,19 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                         new_shape=shape, old_shape=self.batch_size
                     )
                 )
-        for key, value in self.items():
+
+        def _expand_each(value):
             tensor_dims = len(value.shape)
             last_n_dims = tensor_dims - tensordict_dims
             if last_n_dims > 0:
-                d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+                return value.expand(*shape, *value.shape[-last_n_dims:])
             else:
-                d[key] = value.expand(*shape)
-        return TensorDict(
-            source=d,
-            batch_size=[*shape],
-            device=self.device,
-            _run_checks=False,
+                return value.expand(*shape)
+
+        return _apply_safe(
+            fn=lambda _, value: _expand_each(value),
+            tensordict=self,
+            compute_batch_size=lambda td: [*shape, *td.batch_size[tensordict_dims:]],
         )
 
     def __bool__(self) -> bool:
@@ -1522,6 +1523,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             batch_size = shape
         return TensorDict(d, batch_size, device=self.device, _run_checks=False)
 
+    # TODO: this is broken for auto-nested case, requires more care
     def split(
         self, split_size: Union[int, List[int]], dim: int = 0
     ) -> List[TensorDictBase]:
@@ -1580,7 +1582,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 "split(): argument 'split_size' must be int or list of ints"
             )
         dictionaries = [{} for _ in range(len(batch_sizes))]
-        for key, item in self.items():
+        key_view = _TensorDictKeysView(
+            self, include_nested=True, leaves_only=False, error_on_loop=False
+        )
+        for key in key_view:
+            item = self.get(key)
             split_tensors = torch.split(item, split_size, dim)
             for idx, split_tensor in enumerate(split_tensors):
                 dictionaries[idx][key] = split_tensor
@@ -2140,18 +2146,28 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def lock(self):
         self._is_locked = True
-        for key in self.keys():
+        keys_view = _TensorDictKeysView(
+            tensordict=self, include_nested=True, leaves_only=False, error_on_loop=False
+        )
+        for key in keys_view:
             if is_tensordict(self.entry_class(key)):
-                self.get(key).lock()
+                self.get(key)._is_locked = True
         return self
 
     def unlock(self):
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
-        for key in self.keys():
+        keys_view = _TensorDictKeysView(
+            tensordict=self, include_nested=True, leaves_only=False, error_on_loop=False
+        )
+
+        for key in keys_view:
             if is_tensordict(self.entry_class(key)):
-                self.get(key).unlock()
+                value = self.get(key)
+                value._is_locked = False
+                value._is_shared = False
+                value._is_memmap = False
         return self
 
 
@@ -2512,7 +2528,6 @@ class TensorDict(TensorDictBase):
         Supports iterables to specify the shape.
 
         """
-        d = {}
         tensordict_dims = self.batch_dims
 
         if len(shape) == 1 and isinstance(shape[0], Sequence):
@@ -2537,18 +2552,18 @@ class TensorDict(TensorDictBase):
                     )
                 )
 
-        for key, value in self.items():
+        def _expand_each(value):
             tensor_dims = len(value.shape)
             last_n_dims = tensor_dims - tensordict_dims
             if last_n_dims > 0:
-                d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+                return value.expand(*shape, *value.shape[-last_n_dims:])
             else:
-                d[key] = value.expand(*shape)
-        return TensorDict(
-            source=d,
-            batch_size=[*shape],
-            device=self.device,
-            _run_checks=False,
+                return value.expand(*shape)
+
+        return _apply_safe(
+            fn=lambda _, value: _expand_each(value),
+            tensordict=self,
+            compute_batch_size=lambda td: [*shape, *td.batch_size[tensordict_dims:]],
         )
 
     def set(
@@ -2917,7 +2932,13 @@ class TensorDict(TensorDictBase):
     def masked_fill_(
         self, mask: Tensor, value: Union[float, int, bool]
     ) -> TensorDictBase:
-        for item in self.values():
+
+        key_view = _TensorDictKeysView(
+            self, include_nested=True, leaves_only=False, error_on_loop=False
+        )
+
+        for key in key_view:
+            item = self.get(key)
             mask_expand = expand_as_right(mask, item)
             item.masked_fill_(mask_expand, value)
         return self
