@@ -503,8 +503,8 @@ TD_BATCH_SIZE = 4
     [
         "td",
         "stacked_td",
-        #"sub_td",
-        #"sub_td2",
+        "sub_td",
+        "sub_td2",
         "idx_td",
         "memmap_td",
         "unsqueezed_td",
@@ -668,20 +668,10 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
 
-        # TODO Fix once _items method is implemented for SubTensorDict
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip("Cannot use TensorDictKeysView for SubTensorDict instances at the"
-                        "moment, skipping test case!!")
-
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         new_td = td.masked_fill_(mask, -10.0)
         assert new_td is td
-        key_view = _TensorDictKeysView(td, include_nested=True, leaves_only=False,
-                                       error_on_loop=False)
-
-        for key in key_view:
-            item = td.get(key)
-            assert (item[mask] == -10).all(), item[mask]
+        assert (td[mask] == -10).all(), td[mask]
 
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)

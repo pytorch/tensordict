@@ -24,7 +24,6 @@ __all__ = [
     "SubTensorDict",
     "TensorDict",
     "detect_loop",
-    "merge_tensordicts",
     "set_transfer_ownership",
     "_TensorDictKeysView",
 ]
