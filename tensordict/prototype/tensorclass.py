@@ -450,7 +450,7 @@ def _setitem(self, item, value):
                     category=UserWarning,
                 )
 
-    for key, val in value._tensordict.items():
+    for key in value._tensordict.keys():
         # Making sure that the key-clashes won't happen, if the key is present in tensor data in value
         # we will honor that and remove the key-value pair from non-tensor data
         if key in self._non_tensordict.keys():
