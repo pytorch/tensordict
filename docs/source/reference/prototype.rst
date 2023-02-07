@@ -72,7 +72,7 @@ needs to implement their custom methods for non-tensor data. It is important to 
 
 
 :obj:`@tensorclass` supports indexing. Internally the tensor objects gets indexed,
-however the non-tensor data remains same
+however the non-tensor data remains the same
 
 .. code-block::
 
@@ -94,8 +94,7 @@ however the non-tensor data remains same
     device=None,
     is_shared=False)
 
-:obj:`@tensorclass` also supports and get and set attributes. One can also access
-nested tensor class data
+:obj:`@tensorclass` also supports setting and resetting attributes, even for nested objects.
 
 .. code-block::
 
@@ -125,9 +124,9 @@ nested tensor class data
  >>>print("data.nested.non_tensordata:", repr(data.nested.non_tensordata))
  data.nested.non_tensordata: 'nested_test_changed'
 
-:obj:`@tensorclass` supports torch functions and the behavior is extened to
-nested tensor classes as well.Note that the operations are strictly restricted
-to tensor data types
+:obj:`@tensorclass` supports multiple torch operations over the shape and device
+of its content, such as `stack`, `cat`, `reshape` or `to(device)`. To get
+a full list of the supported operations, check the tensordict documentation.
 
 Here is an example:
 
@@ -149,6 +148,105 @@ Here is an example:
         device=None,
         is_shared=False),
     batch_size=torch.Size([6, 4]),
+    device=None,
+    is_shared=False)
+
+Edge cases
+~~~~~~~~~~
+:obj:`@tensorclass` supports equality and inequality operators, even for
+nested objects. Note that the non-tensor/ meta data is not validated.
+This will return a tensor class object with boolean values for
+tensor attributes and None for non-tensor attributes
+
+Here is an example:
+
+.. code-block::
+
+ >>> print(data == data2)
+ MyData(
+    floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+    intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+    non_tensordata=None,
+    nested=MyData(
+        floatdata=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
+        intdata=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+        non_tensordata=None,
+        nested=None,
+        batch_size=torch.Size([3, 4]),
+        device=None,
+        is_shared=False),
+    batch_size=torch.Size([3, 4]),
+    device=None,
+    is_shared=False)
+
+:obj:`@tensorclass` supports setting an item. However, while setting an item
+the identity check of non-tensor / meta data is done instead of equality to
+avoid performance issues. User needs to make sure that the non-tensor data
+of an item matches with the object to avoid discrepancies.
+
+Here is an example:
+
+While setting an item with different non_tensor data, a UserWarning will be
+thrown
+
+.. code-block::
+
+ >>> data2.non_tensordata = "test_new"
+ >>> data[0] = data2[0]
+ UserWarning: Meta data at 'non_tensordata' may or may not be equal, this may result in undefined behaviours
+
+Even though :obj:`@tensorclass` supports torch functions like cat and stack, the
+non-tensor / meta data is not validated. The torch operation is performed on the
+tensor data and while returning the output, the non-tensor / meta data of the first
+tensor class object is considered. User needs to make sure that all the
+list of tensor class objects have the same non-tensor data to avoid discrepancies
+
+Here is an example:
+
+.. code-block::
+
+ >>> data2.non_tensordata = "test_new"
+ >>> stack_tc = torch.cat([data, data2], dim=0)
+ >>> print(stack_tc)
+ MyData(
+    floatdata=Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+    intdata=Tensor(shape=torch.Size([2, 3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+    non_tensordata='test',
+    nested=MyData(
+        floatdata=Tensor(shape=torch.Size([2, 3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+        intdata=Tensor(shape=torch.Size([2, 3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
+        non_tensordata='nested_test',
+        nested=None,
+        batch_size=torch.Size([2, 3, 4]),
+        device=None,
+        is_shared=False),
+    batch_size=torch.Size([2, 3, 4]),
+    device=None,
+    is_shared=False)
+
+:obj:`@tensorclass` also supports pre-allocation, you can initialize
+the object with attributes being None and later set them. Note that while
+initializing, internally the None attributes will be saved as non-tensor / meta data
+and while resetting, based on the type of the value of the attribute,
+it will be saved as either tensor data or non-tensor / meta  data
+
+Here is an example:
+
+.. code-block::
+
+ >>>@tensorclass
+ ...class MyClass:
+ ...   X: Any
+ ...   y: Any
+
+ >>>data = MyClass(X=None, y=None, batch_size = [3,4])
+ >>>data.X = torch.ones(3, 4, 5)
+ >>>data.y = "testing"
+ >>>print(data)
+ MyClass(
+    X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+    y='testing',
+    batch_size=torch.Size([3, 4]),
     device=None,
     is_shared=False)
 
