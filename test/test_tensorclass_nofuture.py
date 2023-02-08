@@ -356,14 +356,18 @@ def test_setitem():
     
     # regression test PR #203
     # We should be able to set tensors items with MemmapTensors and viceversa
+    @tensorclass
     class MyDataMemMap1:
         x: torch.Tensor
         y: MemmapTensor
-            
+    
+    
+    @tensorclass
     class MyDataMemMap2:
         x: MemmapTensor
         y: torch.Tensor
-            
+    
+    
     data1 = MyDataMemMap1(
         x=torch.zeros(3, 4, 5),
         y=MemmapTensor.from_tensor(torch.zeros(3, 4, 5), transfer_ownership=True),
