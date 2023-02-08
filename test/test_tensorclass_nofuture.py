@@ -376,11 +376,11 @@ def test_setitem():
         y=torch.ones(3, 4, 5),
         batch_size=[3, 4],
     )
-    data1[:2] = MyDataMemMap2[:2]
+    data1[:2] = data2[:2]
     assert (data1[:2] == 1).all()
     assert (data1.x[:2] == 1).all()
     assert (data1.y[:2] == 1).all()
-    data2[2:] = MyDataMemMap1[2:]
+    data2[2:] = data1[2:]
     assert (data2[2:] == 0).all()
     assert (data2.x[2:] == 0).all()
     assert (data2.y[2:] == 0).all()
