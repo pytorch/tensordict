@@ -807,6 +807,35 @@ class TestTensorDicts(TestTensorDictsBase):
         td0 = td.to_tensordict().zero_()
         assert (td != td0).any()
 
+    def test_equal_float(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.zero_()
+        assert (td == 0.0).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td0 != 1.0).all()
+
+    def test_equal_other(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert not td == "z"
+        assert td != "z"
+
+    def test_equal_int(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.zero_()
+        assert (td == 0).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td0 != 1).all()
+
+    def test_equal_tensor(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.zero_()
+        assert (td == torch.zeros([], dtype=torch.int, device=device)).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td0 != torch.ones([], dtype=torch.int, device=device)).all()
+
     def test_equal_dict(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)

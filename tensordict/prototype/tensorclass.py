@@ -536,21 +536,38 @@ def __eq__(self, other):
     """Compares the Tensor class object to another object for equality. However, the equality check for non-tensor data is not performed.
 
     Args:
-        other: object to compare to this object
+        other: object to compare to this object. Can be a tensorclass, a
+            tensordict or any compatible type (int, float or tensor), in
+            which case the equality check will be propagated to the leaves.
 
     Returns:
         False if the objects are of different class types, Tensorclass of boolean values for tensor attributes and None for non-tensor attributes
 
     """
-    if not isinstance(other, self.__class__):
+    if not is_tensorclass(other) and not isinstance(
+        other, (TensorDictBase, int, float, Tensor)
+    ):
         return False
     non_tensor = {}
     for key, value in self._non_tensordict.items():
         if is_tensorclass(value):
-            non_tensor[key] = value == other._non_tensordict[key]
+            if is_tensorclass(other):
+                non_tensor[key] = value == other._non_tensordict[key]
+            elif isinstance(other, TensorDictBase):
+                non_tensor[key] = value == other[key]
+                # remove tensorclass keys to make sure that the following tensordict comparison works
+                other = other.exclude(key)
+            else:
+                # attempt a broadcast comparison
+                non_tensor[key] = value == other
         else:
             non_tensor[key] = None
-    tensor = self._tensordict == other._tensordict
+    if is_tensorclass(other):
+        tensor = self._tensordict == other._tensordict
+    elif isinstance(other, TensorDictBase):
+        tensor = self._tensordict == other
+    else:
+        tensor = self._tensordict == other
     out = self._from_tensordict(tensor, non_tensor)
     return out
 
@@ -565,15 +582,30 @@ def __ne__(self, other):
         False if the objects are of different class types, Tensorclass of boolean values for tensor attributes and None for non-tensor attributes
 
     """
-    if not isinstance(other, self.__class__):
+    if not is_tensorclass(other) and not isinstance(
+        other, (TensorDictBase, int, float, Tensor)
+    ):
         return True
     non_tensor = {}
     for key, value in self._non_tensordict.items():
         if is_tensorclass(value):
-            non_tensor[key] = value != other._non_tensordict[key]
+            if is_tensorclass(other):
+                non_tensor[key] = value != other._non_tensordict[key]
+            elif isinstance(other, TensorDictBase):
+                non_tensor[key] = value != other[key]
+                # remove tensorclass keys to make sure that the following tensordict comparison works
+                other = other.exclude(key)
+            else:
+                # attempt a broadcast comparison
+                non_tensor[key] = value == other
         else:
             non_tensor[key] = None
-    tensor = self._tensordict != other._tensordict
+    if is_tensorclass(other):
+        tensor = self._tensordict != other._tensordict
+    elif isinstance(other, TensorDictBase):
+        tensor = self._tensordict != other
+    else:
+        tensor = self._tensordict != other
     out = self._from_tensordict(tensor, non_tensor)
     return out
 

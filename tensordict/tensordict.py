@@ -959,8 +959,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, (TensorDictBase, dict, float, int)):
-            return False
+        from tensordict.prototype import is_tensorclass
+
+        if not isinstance(
+            other, (TensorDictBase, dict, float, int, torch.Tensor, MemmapTensor)
+        ) and not is_tensorclass(other):
+            return True
         if not isinstance(other, TensorDictBase) and isinstance(other, dict):
             other = make_tensordict(**other, batch_size=self.batch_size)
         if not isinstance(other, TensorDictBase):
@@ -969,6 +973,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 self.batch_size,
                 device=self.device,
             )
+        if is_tensorclass(other):
+            return other != self
         keys1 = set(self.keys())
         keys2 = set(other.keys())
         if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -988,7 +994,11 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, (TensorDictBase, dict, float, int)):
+        from tensordict.prototype import is_tensorclass
+
+        if not isinstance(
+            other, (TensorDictBase, dict, float, int, torch.Tensor, MemmapTensor)
+        ) and not is_tensorclass(other):
             return False
         if not isinstance(other, TensorDictBase) and isinstance(other, dict):
             other = make_tensordict(**other, batch_size=self.batch_size)
@@ -998,6 +1008,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 self.batch_size,
                 device=self.device,
             )
+        if is_tensorclass(other):
+            return other == self
         keys1 = set(self.keys())
         keys2 = set(other.keys())
         if len(keys1.difference(keys2)) or len(keys1) != len(keys2):

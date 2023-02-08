@@ -1058,6 +1058,54 @@ def test_torchsnapshot(tmpdir):
     assert tc_dest.z == z
 
 
+def test_equal():
+    @tensorclass
+    class MyClass1:
+        x: torch.Tensor
+        z: str
+        y: "MyClass1" = None  # future: drop quotes
+
+    @tensorclass
+    class MyClass2:
+        x: torch.Tensor
+        z: str
+        y: "MyClass2" = None  # future: drop quotes
+
+    a = MyClass1(
+        torch.zeros(3),
+        "z0",
+        MyClass1(
+            torch.ones(3),
+            "z1",
+            None,
+            batch_size=[3],
+        ),
+        batch_size=[3],
+    )
+    b = MyClass2(
+        torch.zeros(3),
+        "z0",
+        MyClass2(
+            torch.ones(3),
+            "z1",
+            None,
+            batch_size=[3],
+        ),
+        batch_size=[3],
+    )
+    c = TensorDict({"x": torch.zeros(3), "y": {"x": torch.ones(3)}}, batch_size=[3])
+
+    assert (a == a.clone()).all()
+    assert (a != 1.0).any()
+    assert (a.y == 1).all()
+    assert (a != torch.ones([])).any()
+    assert (a.y == torch.ones([])).all()
+    assert (a == b).all()
+    assert (b == a).all()
+    assert (a == c).all()
+    assert (c == a).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
