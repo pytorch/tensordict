@@ -9,7 +9,7 @@ import abc
 import collections
 import functools
 import textwrap
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from collections.abc import Mapping
 from copy import copy, deepcopy
 from numbers import Number
@@ -127,6 +127,9 @@ def is_memmap(datatype: type) -> bool:
     )
 
 
+_NestedKey = namedtuple("_NestedKey", ["root_key", "nested_key"])
+
+
 class _TensorDictKeysView:
     """
     _TensorDictKeysView is returned when accessing tensordict.keys() and holds a
@@ -156,12 +159,15 @@ class _TensorDictKeysView:
         include_nested: bool,
         leaves_only: bool,
         error_on_loop: bool = True,
+        yield_autonested_keys: bool = False,
     ):
         self.tensordict = tensordict
         self.include_nested = include_nested
         self.leaves_only = leaves_only
         self.error_on_loop = error_on_loop
-        self.visited = set()
+        self.yield_autonested_keys = yield_autonested_keys
+
+        self.visited = {}
 
     def __iter__(self):
         if not self.include_nested:
@@ -174,16 +180,13 @@ class _TensorDictKeysView:
             else:
                 yield from self._keys()
         else:
-            self.visited.add(id(self.tensordict))
+            self.visited[id(self.tensordict)] = None
             yield from self._iter_helper(self.tensordict)
-            self.visited.remove(id(self.tensordict))
+            del self.visited[id(self.tensordict)]
 
     def _iter_helper(self, tensordict, prefix=None):
         for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
-            if not self.leaves_only or not isinstance(value, TensorDictBase):
-                if id(value) not in self.visited:
-                    yield full_key
             if isinstance(value, (TensorDictBase, KeyedJaggedTensor)):
                 if id(value) in self.visited:
                     if self.error_on_loop:
@@ -193,15 +196,23 @@ class _TensorDictKeysView:
                             "values, in which case iteration with "
                             "`include_nested=True` is not supported."
                         )
+                    elif self.yield_autonested_keys:
+                        yield _NestedKey(
+                            root_key=self.visited[id(value)], nested_key=full_key
+                        )
                 else:
-                    self.visited.add(id(value))
+                    if not self.leaves_only:
+                        yield full_key
+                    self.visited[id(value)] = full_key
                     yield from tuple(
                         self._iter_helper(
                             value,
                             full_key if isinstance(full_key, tuple) else (full_key,),
                         )
                     )
-                    self.visited.remove(id(value))
+                    del self.visited[id(value)]
+            else:
+                yield full_key
 
     def _combine_keys(self, prefix, key):
         if prefix is not None:
@@ -1416,10 +1427,29 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
     def to_dict(self) -> Dict[str, Any]:
         """Returns a dictionary with key-value pairs matching those of the tensordict."""
-        return {
-            key: value.to_dict() if isinstance(value, TensorDictBase) else value
-            for key, value in self.items()
-        }
+        d = {}
+        update = []
+
+        for key in _TensorDictKeysView(
+            self,
+            include_nested=True,
+            leaves_only=True,
+            error_on_loop=False,
+            yield_autonested_keys=True,
+        ):
+            if isinstance(key, _NestedKey):
+                update.append(key)
+                continue
+            _dict_set_nested(d, key, self.get(key))
+
+        for root_key, nested_key in update:
+            _dict_set_nested(
+                d,
+                nested_key,
+                _dict_get_nested(d, root_key) if root_key is not None else d,
+            )
+
+        return d
 
     def unsqueeze(self, dim: int) -> TensorDictBase:
         """Unsqueeze all tensors for a dimension comprised in between `-td.batch_dims` and `td.batch_dims` and returns them in a new tensordict.
@@ -3076,6 +3106,24 @@ def _get_leaf_tensordict(tensordict: TensorDictBase, key: NESTED_KEY, hook=None)
         tensordict = tensordict.get(key[0])
         key = key[1:]
     return tensordict, key[0]
+
+
+def _dict_get_nested(d: Dict[NESTED_KEY, Any], key: NESTED_KEY) -> Any:
+    if isinstance(key, str):
+        return d[key]
+    elif len(key) == 1:
+        return d[key[0]]
+    return _dict_get_nested(d[key[0]], key[1:])
+
+
+def _dict_set_nested(d: Dict[NESTED_KEY, Any], key: NESTED_KEY, value: Any) -> None:
+    if isinstance(key, str):
+        d[key] = value
+    elif len(key) == 1:
+        d[key[0]] = value
+    else:
+        nested = d.setdefault(key[0], {})
+        _dict_set_nested(nested, key[1:], value)
 
 
 def implements_for_td(torch_function: Callable) -> Callable:
