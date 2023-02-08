@@ -403,6 +403,9 @@ class TestNativeFunctorch:
         assert out[0]["a"].shape == torch.Size([4, 3, 1])
 
 
+@pytest.mark.skipif(
+    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+)
 def test_outputsize_vmap():
     a = TensorDict(
         {
