@@ -1774,6 +1774,10 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_memmap_(self, td_name, device):
         td = getattr(self, td_name)(device)
+        if td_name == "autonested_td":
+            pytest.skip(
+                "Memmap function is not  designed for auto-nesting case. Skipping auto-nesting test case!!"
+            )
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(
                 RuntimeError,
@@ -1785,6 +1789,10 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td.is_memmap()
 
     def test_memmap_prefix(self, td_name, device, tmpdir):
+        if td_name == "autonested_td":
+            pytest.skip(
+                "Memmap function is not  designed for auto-nesting case. Skipping auto-nesting test case!!"
+            )
         if td_name == "memmap_td":
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
@@ -1824,6 +1832,10 @@ class TestTensorDicts(TestTensorDictsBase):
         elif td_name in ("sub_td", "sub_td2"):
             pytest.skip(
                 "SubTensorDict and memmap_ incompatibility is checked elsewhere"
+            )
+        elif td_name == "autonested_td":
+            pytest.skip(
+                "Memmap function is not  designed for auto-nesting case. Skipping auto-nesting test case!!"
             )
 
         td = getattr(self, td_name)(device).memmap_(prefix=tmpdir / "tensordict")
