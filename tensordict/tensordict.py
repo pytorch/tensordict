@@ -159,13 +159,13 @@ class _TensorDictKeysView:
         include_nested: bool,
         leaves_only: bool,
         error_on_loop: bool = True,
-        yield_nested_keys: bool = False,
+        yield_autonested_keys: bool = False,
     ):
         self.tensordict = tensordict
         self.include_nested = include_nested
         self.leaves_only = leaves_only
         self.error_on_loop = error_on_loop
-        self.yield_nested_keys = yield_nested_keys
+        self.yield_autonested_keys = yield_autonested_keys
 
         self.visited = {}
 
@@ -196,7 +196,7 @@ class _TensorDictKeysView:
                             "values, in which case iteration with "
                             "`include_nested=True` is not supported."
                         )
-                    elif self.yield_nested_keys:
+                    elif self.yield_autonested_keys:
                         yield _NestedKey(
                             root_key=self.visited[id(value)], nested_key=full_key
                         )
@@ -1435,7 +1435,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             include_nested=True,
             leaves_only=True,
             error_on_loop=False,
-            yield_nested_keys=True,
+            yield_autonested_keys=True,
         ):
             if isinstance(key, _NestedKey):
                 update.append(key)
