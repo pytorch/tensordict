@@ -467,7 +467,7 @@ def test_memmap_from_memmap():
 def test_memmap_cast():
     # ensure memmap can be cast to tensor and viceversa
     x = torch.zeros(3, 4, 5)
-    y = MemmapTensor.from_tensor(torch.ones(3, 4, 5), transfer_ownership=True)
+    y = MemmapTensor.from_tensor(torch.ones(3, 4, 5))
 
     x[:2] = y[:2]
     assert (x[:2] == 1).all()
