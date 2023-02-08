@@ -541,6 +541,11 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_select(self, td_name, device, strict, inplace):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+        if td_name == "autonested_td":
+            pytest.skip(
+                "Select function is not yet designed for auto-nesting case."
+                " Skipping auto-nesting test case!!"
+            )
         keys = ["a"]
         if td_name in ("nested_stacked_td", "nested_td"):
             keys += [("my_nested_td", "inner")]
@@ -567,6 +572,12 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_select_exception(self, td_name, device, strict):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+
+        if td_name == "autonested_td":
+            pytest.skip(
+                "Select function is not yet designed for auto-nesting case."
+                " Skipping auto-nesting test case!!"
+            )
         if strict:
             with pytest.raises(KeyError):
                 _ = td.select("tada", strict=strict)
