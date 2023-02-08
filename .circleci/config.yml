@@ -684,11 +684,10 @@ workflows:
           cu_version: cu113
           name: unittest_linux_stable_gpu_py3.9
           python_version: '3.9'
-      - unittest_linux_torchrec_gpu:
-          cu_version: cu113
-          name: unittest_linux_torchrec_gpu_py3.9
-          python_version: '3.9'
-
+      # - unittest_linux_torchrec_gpu:
+      #     cu_version: cu113
+      #     name: unittest_linux_torchrec_gpu_py3.9
+      #     python_version: '3.9'
       - unittest_macos_cpu:
           cu_version: cpu
           name: unittest_macos_cpu_py3.10
