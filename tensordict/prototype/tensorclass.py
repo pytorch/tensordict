@@ -150,6 +150,8 @@ def tensorclass(cls: T) -> T:
     cls.__ne__ = __ne__
     cls.any = _any
     cls.all = _all
+    cls.state_dict = _state_dict
+    cls.load_state_dict = _load_state_dict
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -551,6 +553,36 @@ def _any(self, dim: int = None):
     return self._tensordict.any() or any(
         value.any() for value in self._non_tensordict.values() if is_tensorclass(value)
     )
+
+
+def _state_dict(self):
+    state_dict = self._tensordict.state_dict()
+    state_dict["_non_tensordict"] = {
+        key: value if not is_tensorclass(value) else value.state_dict()
+        for key, value in self._non_tensordict.items()
+    }
+    return state_dict
+
+
+def _load_state_dict(self, state_dict):
+    for key, item in state_dict.items():
+        # keys will never be nested which facilitates everything, but let's
+        # double check in case someone does something nasty
+        if not isinstance(key, str):
+            raise TypeError("Only str keys are allowed when calling load_state_dict.")
+        if key in self._tensordict.keys():
+            self._tensordict.set(key, item, inplace=True)
+        elif key == "_non_tensordict":
+            for sub_key, sub_item in item.items():
+                if is_tensorclass(self._non_tensordict.get(sub_key, None)):
+                    self._non_tensordict[sub_key].load_state_dict(sub_item)
+                elif isinstance(sub_item, dict) and "_non_tensordict" in sub_item:
+                    raise RuntimeError(
+                        "Loading a saved tensorclass on a uninitialized tensorclass is not allowed"
+                    )
+                else:
+                    self._non_tensordict[sub_key] = sub_item
+    return self
 
 
 def _all(self, dim: int = None):

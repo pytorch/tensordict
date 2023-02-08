@@ -1043,7 +1043,7 @@ def test_torchsnapshot(tmpdir):
 
     tc_dest = MyClass(
         x=torch.randn(3),
-        z=z,
+        z="other",
         y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
         batch_size=[],
     )
@@ -1055,6 +1055,21 @@ def test_torchsnapshot(tmpdir):
     assert (tc_dest == tc).all()
     assert tc_dest.y.batch_size == tc.y.batch_size
     assert isinstance(tc_dest.y.x, MemmapTensor)
+    # torchsnapshot does not support updating strings and such
+    assert tc_dest.z != z
+
+    tc_dest = MyClass(
+        x=torch.randn(3),
+        z="other",
+        y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
+        batch_size=[],
+    )
+    tc_dest.memmap_()
+    tc_dest.load_state_dict(tc.state_dict())
+    assert (tc_dest == tc).all()
+    assert tc_dest.y.batch_size == tc.y.batch_size
+    assert isinstance(tc_dest.y.x, MemmapTensor)
+    # load_state_dict outperforms snapshot in this case
     assert tc_dest.z == z
 
 
