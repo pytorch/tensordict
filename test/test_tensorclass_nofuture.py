@@ -1097,13 +1097,27 @@ def test_equal():
 
     assert (a == a.clone()).all()
     assert (a != 1.0).any()
+    assert (a[:2] != 1.0).any()
+
     assert (a.y == 1).all()
+    assert (a[:2].y == 1).all()
+    assert (a.y[:2] == 1).all()
+
     assert (a != torch.ones([])).any()
     assert (a.y == torch.ones([])).all()
+
     assert (a == b).all()
     assert (b == a).all()
+    assert (b[:2] == a[:2]).all()
+
     assert (a == c).all()
+    assert (a[:2] == c[:2]).all()
+
     assert (c == a).all()
+    assert (c[:2] == a[:2]).all()
+
+    assert (a != c.clone().zero_()).any()
+    assert (c != a.clone().zero_()).any()
 
 
 if __name__ == "__main__":

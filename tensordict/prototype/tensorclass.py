@@ -148,6 +148,9 @@ def tensorclass(cls: T) -> T:
     cls.__len__ = _len
     cls.__eq__ = __eq__
     cls.__ne__ = __ne__
+    cls.any = _any
+    cls.all = _all
+
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
@@ -530,6 +533,40 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
 
     """
     self._tensordict._batch_size_setter(new_size)
+
+
+def _any(self, dim: int = None):
+    if dim is not None and dim < 0:
+        dim = len(self.batch_dims) + dim
+
+    if dim is not None:
+        non_tensor = {
+            key: None if not is_tensorclass(obj) else obj.any(dim=dim)
+            for key, obj in self._non_tensordict.items()
+        }
+        return self._from_tensordict(
+            self._tensordict.any(dim=dim),
+            non_tensor,
+        )
+    return self._tensordict.any() or any(
+        value.any() for value in self._non_tensordict.values() if is_tensorclass(value)
+    )
+def _all(self, dim: int = None):
+    if dim is not None and dim < 0:
+        dim = len(self.batch_dims) + dim
+
+    if dim is not None:
+        non_tensor = {
+            key: None if not is_tensorclass(obj) else obj.all(dim=dim)
+            for key, obj in self._non_tensordict.items()
+        }
+        return self._from_tensordict(
+            self._tensordict.all(dim=dim),
+            non_tensor,
+        )
+    return self._tensordict.all() and all(
+        value.all() for value in self._non_tensordict.values() if is_tensorclass(value)
+    )
 
 
 def __eq__(self, other):

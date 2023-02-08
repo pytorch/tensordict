@@ -967,14 +967,14 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return True
         if not isinstance(other, TensorDictBase) and isinstance(other, dict):
             other = make_tensordict(**other, batch_size=self.batch_size)
+        if is_tensorclass(other):
+            return other != self
         if not isinstance(other, TensorDictBase):
             return TensorDict(
                 {key: value != other for key, value in self.items()},
                 self.batch_size,
                 device=self.device,
             )
-        if is_tensorclass(other):
-            return other != self
         keys1 = set(self.keys())
         keys2 = set(other.keys())
         if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -1002,14 +1002,14 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return False
         if not isinstance(other, TensorDictBase) and isinstance(other, dict):
             other = make_tensordict(**other, batch_size=self.batch_size)
+        if is_tensorclass(other):
+            return other == self
         if not isinstance(other, TensorDictBase):
             return TensorDict(
                 {key: value == other for key, value in self.items()},
                 self.batch_size,
                 device=self.device,
             )
-        if is_tensorclass(other):
-            return other == self
         keys1 = set(self.keys())
         keys2 = set(other.keys())
         if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -1784,7 +1784,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
             )
-        return any([value.any() for key, value in self.items()])
+        return any([value.any() for value in self.values()])
 
     def get_sub_tensordict(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Returns a SubTensorDict with the desired index."""
