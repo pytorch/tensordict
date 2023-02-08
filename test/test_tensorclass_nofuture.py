@@ -1120,6 +1120,58 @@ def test_equal():
     assert (c != a.clone().zero_()).any()
 
 
+def test_all_any():
+    @tensorclass
+    class MyClass1:
+        x: torch.Tensor
+        z: str
+        y: "MyClass1" = None  # future: drop quotes
+
+    # with all 0
+    x = MyClass1(
+        torch.zeros(3, 1),
+        "z",
+        MyClass1(torch.zeros(3, 1), "z", batch_size=[3, 1]),
+        batch_size=[3, 1],
+    )
+    assert not x.all()
+    assert not x.any()
+    assert isinstance(x.all(), bool)
+    assert isinstance(x.any(), bool)
+    for dim in [0, 1, -1, -2]:
+        assert isinstance(x.all(dim=dim), MyClass1)
+        assert isinstance(x.any(dim=dim), MyClass1)
+        assert not x.all(dim=dim).all()
+        assert not x.any(dim=dim).any()
+    # with all 1
+    x = x.apply(lambda x: x.fill_(1.0))
+    assert isinstance(x, MyClass1)
+    assert x.all()
+    assert x.any()
+    assert isinstance(x.all(), bool)
+    assert isinstance(x.any(), bool)
+    for dim in [0, 1]:
+        assert isinstance(x.all(dim=dim), MyClass1)
+        assert isinstance(x.any(dim=dim), MyClass1)
+        assert x.all(dim=dim).all()
+        assert x.any(dim=dim).any()
+
+    # with 0 and 1
+    x.y.x.fill_(0.0)
+    assert not x.all()
+    assert x.any()
+    assert isinstance(x.all(), bool)
+    assert isinstance(x.any(), bool)
+    for dim in [0, 1]:
+        assert isinstance(x.all(dim=dim), MyClass1)
+        assert isinstance(x.any(dim=dim), MyClass1)
+        assert not x.all(dim=dim).all()
+        assert x.any(dim=dim).any()
+
+    assert not x.y.all()
+    assert not x.y.any()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

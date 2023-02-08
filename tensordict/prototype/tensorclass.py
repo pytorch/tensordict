@@ -537,7 +537,7 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
 
 def _any(self, dim: int = None):
     if dim is not None and dim < 0:
-        dim = len(self.batch_dims) + dim
+        dim = self.batch_dims + dim
 
     if dim is not None:
         non_tensor = {
@@ -551,9 +551,11 @@ def _any(self, dim: int = None):
     return self._tensordict.any() or any(
         value.any() for value in self._non_tensordict.values() if is_tensorclass(value)
     )
+
+
 def _all(self, dim: int = None):
     if dim is not None and dim < 0:
-        dim = len(self.batch_dims) + dim
+        dim = self.batch_dims + dim
 
     if dim is not None:
         non_tensor = {
