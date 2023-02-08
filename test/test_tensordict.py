@@ -1462,8 +1462,13 @@ class TestTensorDicts(TestTensorDictsBase):
         assert "a" not in td.keys()
 
     def test_to_dict_nested(self, td_name, device):
+        visited = set()
+
         def recursive_checker(cur_dict):
             for _, value in cur_dict.items():
+                if id(value) in visited:
+                    continue
+                visited.add(id(value))
                 if isinstance(value, TensorDict):
                     return False
                 elif isinstance(value, dict) and not recursive_checker(value):
