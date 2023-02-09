@@ -376,16 +376,19 @@ def test_setitem():
         y=torch.ones(3, 4, 5),
         batch_size=[3, 4],
     )
-    with pytest.raises(ValueError, match="__setitem__ is only allowed for same-class assignement"):
+    with pytest.raises(ValueError, 
+                       match="__setitem__ is only allowed for same-class assignement"):
         data1[:2] = data2_wrong[:2]
-    with pytest.raises(ValueError, match="__setitem__ is only allowed for same-class assignement"):
+    with pytest.raises(ValueError, 
+                       match="__setitem__ is only allowed for same-class assignement"):
         data2_wrong[2:] = data1[2:]
         
     data2 = MyDataMemMap1(
         x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
         y=torch.ones(3, 4, 5),
         batch_size=[3, 4],
-    )    
+    )
+
     data1[:2] = data2[:2]
     assert (data1[:2] == 1).all()
     assert (data1.x[:2] == 1).all()
