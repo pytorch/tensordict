@@ -384,7 +384,7 @@ def test_setitem():
         ValueError, match="__setitem__ is only allowed for same-class assignement"
     ):
         data2_wrong[2:] = data1[2:]
-        
+
     data2 = MyDataMemMap1(
         x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
         y=torch.ones(3, 4, 5),
