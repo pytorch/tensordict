@@ -1020,7 +1020,7 @@ def test_multiprocessing():
     assert catted.z == "test_tensorclass"
 
 
-def test_torchsnapshot(tmpdir):
+def test_torchsnapshot(tmp_path):
     @tensorclass
     class MyClass:
         x: torch.Tensor
@@ -1039,7 +1039,7 @@ def test_torchsnapshot(tmpdir):
     assert tc.z == z
 
     app_state = {"state": torchsnapshot.StateDict(tensordict=tc.state_dict())}
-    snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmpdir))
+    snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmp_path))
 
     tc_dest = MyClass(
         x=torch.randn(3),
