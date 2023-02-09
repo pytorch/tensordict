@@ -540,7 +540,7 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
 
 def _state_dict(self):
     """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
-    state_dict = self._tensordict.state_dict()
+    state_dict = {"_tensordict": self._tensordict.state_dict()}
     state_dict["_non_tensordict"] = {
         key: value if not is_tensorclass(value) else value.state_dict()
         for key, value in self._non_tensordict.items()
@@ -555,9 +555,7 @@ def _load_state_dict(self, state_dict):
         # double check in case someone does something nasty
         if not isinstance(key, str):
             raise TypeError("Only str keys are allowed when calling load_state_dict.")
-        if key in self._tensordict.keys():
-            self._tensordict.set(key, item, inplace=True)
-        elif key == "_non_tensordict":
+        if key == "_non_tensordict":
             for sub_key, sub_item in item.items():
                 if is_tensorclass(self._non_tensordict.get(sub_key, None)):
                     self._non_tensordict[sub_key].load_state_dict(sub_item)
@@ -567,7 +565,26 @@ def _load_state_dict(self, state_dict):
                         "Loading a saved tensorclass on a uninitialized tensorclass is not allowed"
                     )
                 else:
+                    # check that sub_key is part of the tensorclass
+                    if sub_key not in self.__class__.__dataclass_fields__:
+                        raise KeyError(
+                            f"Key '{sub_key}' wasn't expected in the state-dict."
+                        )
                     self._non_tensordict[sub_key] = sub_item
+        elif key == "_tensordict":
+            for sub_key in item.keys():
+                if (
+                    sub_key not in self.__class__.__dataclass_fields__
+                    and sub_key not in ("__batch_size", "__device")
+                ):
+                    raise KeyError(
+                        f"Key '{sub_key}' wasn't expected in the state-dict."
+                    )
+
+            self._tensordict.load_state_dict(item)
+        else:
+            raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
+
     return self
 
 

@@ -1073,6 +1073,39 @@ def test_torchsnapshot(tmpdir):
     assert tc_dest.z == z
 
 
+def test_statedict_errors():
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        z: str
+        y: "MyClass" = None  # future: drop quotes
+
+    z = "test_tensorclass"
+    tc = MyClass(
+        x=torch.randn(3),
+        z=z,
+        y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
+        batch_size=[],
+    )
+
+    sd = tc.state_dict()
+    sd["a"] = None
+    with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
+        tc.load_state_dict(sd)
+    del sd["a"]
+    sd["_tensordict"]["a"] = None
+    with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
+        tc.load_state_dict(sd)
+    del sd["_tensordict"]["a"]
+    sd["_non_tensordict"]["a"] = None
+    with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
+        tc.load_state_dict(sd)
+    del sd["_non_tensordict"]["a"]
+    sd["_non_tensordict"]["y"]["_tensordict"]["a"] = None
+    with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
+        tc.load_state_dict(sd)
+
+
 def test_equal():
     @tensorclass
     class MyClass1:

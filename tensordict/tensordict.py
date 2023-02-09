@@ -429,6 +429,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return out
 
     def load_state_dict(self, state_dict: OrderedDict) -> TensorDictBase:
+        # copy since we'll be using pop
+        state_dict = copy(state_dict)
         self.batch_size = state_dict.pop("__batch_size")
         device = state_dict.pop("__device")
         if device is not None:
@@ -963,11 +965,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         # avoiding circular imports
         from tensordict.prototype import is_tensorclass
 
-        if not isinstance(other, TensorDictBase) and isinstance(other, dict):
-            other = make_tensordict(**other, batch_size=self.batch_size)
         if is_tensorclass(other):
             return other != self
-        if isinstance(other, TensorDictBase):
+        if isinstance(other, (dict, TensorDictBase)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -997,11 +997,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         # avoiding circular imports
         from tensordict.prototype import is_tensorclass
 
-        if not isinstance(other, TensorDictBase) and isinstance(other, dict):
-            other = make_tensordict(**other, batch_size=self.batch_size)
         if is_tensorclass(other):
             return other == self
-        if isinstance(other, TensorDictBase):
+        if isinstance(other, (dict, TensorDictBase)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
