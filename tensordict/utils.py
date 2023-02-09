@@ -101,7 +101,7 @@ def _getitem_batch_size(shape: torch.Size, items: INDEX_TYPING) -> torch.Size:
     for _item in items:
         if isinstance(_item, (list, np.ndarray)):
             _item = torch.tensor(_item)
-        if isinstance(_item, torch.Tensor):
+        elif isinstance(_item, torch.Tensor):
             # np.broadcast will complain if we give it CUDA tensors
             _item = _item.cpu()
         if isinstance(_item, torch.Tensor) and _item.dtype is torch.bool:
