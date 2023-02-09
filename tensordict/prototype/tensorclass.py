@@ -1,6 +1,7 @@
 import dataclasses
 import functools
 import inspect
+import numbers
 import re
 import typing
 import warnings
@@ -550,6 +551,10 @@ def _any(self, dim: int = None):
             of dimensions.
             Defaults to None, i.e., full reduction in a single boolean value.
 
+    Returns:
+        A boolean if ``dim`` is ``None``, a tensorclass of the same class as the
+        parent otherwise (with the target dimension reduced).
+
     Examples:
         >>> @tensorclass
         ... class MyClass:
@@ -560,27 +565,44 @@ def _any(self, dim: int = None):
         ...     torch.randn(3, 4),
         ...     MyClass(torch.randn(3, 4, 1), None, batch_size=[3, 4, 1]),
         ...     batch_size=[3, 4])
-        >>> _ = c.any()  # bool
+        >>> c_any = c.any()  # bool
+        >>> assert isinstance(c_any, bool)
+        >>> print(c.any(dim=0))
+        MyClass(
+            X=Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+            y=MyClass(
+                X=Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                y=None,
+                batch_size=torch.Size([4, 1]),
+                device=None,
+                is_shared=False),
+            batch_size=torch.Size([4]),
+            device=None,
+            is_shared=False)
         >>> # one can work with negative dimensions, which will be converted to positive dims for the root tensorclass
         >>> assert (c.any(-1) == c.any(1)).all()
         >>> assert c.any(-1).y.batch_size == c.any(1).y.batch_size
 
     """
     if dim is None:
-       if self._tensordict.any():
-           return True
-       return any(value.any() for value in self._non_tensordict.values() if is_tensorclass(value))
+        if self._tensordict.any():
+            return True
+        return any(
+            value.any()
+            for value in self._non_tensordict.values()
+            if is_tensorclass(value)
+        )
 
     if dim < 0:
         dim = self.batch_dims + dim
 
     non_tensor = {
-            key: None if not is_tensorclass(obj) else obj.any(dim=dim)
-            for key, obj in self._non_tensordict.items()
+        key: None if not is_tensorclass(obj) else obj.any(dim=dim)
+        for key, obj in self._non_tensordict.items()
     }
     return self._from_tensordict(
-            self._tensordict.any(dim=dim),
-            non_tensor,
+        self._tensordict.any(dim=dim),
+        non_tensor,
     )
 
 
@@ -629,6 +651,10 @@ def _all(self, dim: int = None):
             of dimensions.
             Defaults to None, ie full reduction in a single boolean value.
 
+    Returns:
+        A boolean if ``dim`` is ``None``, a tensorclass of the same class as the
+        parent otherwise (with the target dimension reduced).
+
     Examples:
         >>> @tensorclass
         ... class MyClass:
@@ -639,7 +665,20 @@ def _all(self, dim: int = None):
         ...     torch.randn(3, 4),
         ...     MyClass(torch.randn(3, 4, 1), None, batch_size=[3, 4, 1]),
         ...     batch_size=[3, 4])
-        >>> _ = c.all()  # bool
+        >>> c_all = c.all()  # bool
+        >>> assert isinstance(c_all, bool)
+        >>> print(c.all(dim=0))
+        MyClass(
+            X=Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+            y=MyClass(
+                X=Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                y=None,
+                batch_size=torch.Size([4, 1]),
+                device=None,
+                is_shared=False),
+            batch_size=torch.Size([4]),
+            device=None,
+            is_shared=False)
         >>> # one can work with negative dimensions, which will be converted to positive dims for the root tensorclass
         >>> assert (c.all(-1) == c.all(1)).all()
         >>> assert c.all(-1).y.batch_size == c.all(1).y.batch_size
@@ -671,11 +710,49 @@ def __eq__(self, other):
             which case the equality check will be propagated to the leaves.
 
     Returns:
-        False if the objects are of different class types, Tensorclass of boolean values for tensor attributes and None for non-tensor attributes
+        False if the objects are of different class types, Tensorclass of boolean
+        values for tensor attributes and None for non-tensor attributes
+
+    Examples:
+        >>> @tensorclass
+        ... class MyClass:
+        ...     x: Tensor
+        ...     y: "MyClass"
+        ...     z: str
+        ...
+        >>> c1 = MyClass(
+        ...     x=torch.randn(3, 4),
+        ...     y=MyClass(
+        ...         x=torch.randn(3, 4, 1),
+        ...         y=None,
+        ...         z="bar",
+        ...         batch_size=[3, 4, 1],
+        ...     ),
+        ...     z="foo",
+        ...     batch_size=[3, 4],
+        ... )
+        >>> c2 = c1.clone()
+        >>> print(c1 == c2)
+        MyClass(
+            x=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+            y=MyClass(
+                x=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                y=None,
+                z=None,
+                batch_size=torch.Size([3, 4, 1]),
+                device=None,
+                is_shared=False),
+            z=None,
+            batch_size=torch.Size([3, 4]),
+            device=None,
+            is_shared=False)
+        >>> assert (c1 == c2).all()
+        >>> assert (c1[:2] == c2[:2]).all()
+        >>> assert not (c1 == c2.apply(lambda x: x+1)).all()
 
     """
     if not is_tensorclass(other) and not isinstance(
-        other, (TensorDictBase, int, float, Tensor)
+        other, (TensorDictBase, numbers.Number, Tensor)
     ):
         return False
     non_tensor = {}
@@ -711,9 +788,45 @@ def __ne__(self, other):
     Returns:
         False if the objects are of different class types, Tensorclass of boolean values for tensor attributes and None for non-tensor attributes
 
+    Examples:
+        >>> @tensorclass
+        ... class MyClass:
+        ...     x: Tensor
+        ...     y: "MyClass"
+        ...     z: str
+        ...
+        >>> c1 = MyClass(
+        ...     x=torch.randn(3, 4),
+        ...     y=MyClass(
+        ...         x=torch.randn(3, 4, 1),
+        ...         y=None,
+        ...         z="bar",
+        ...         batch_size=[3, 4, 1],
+        ...     ),
+        ...     z="foo",
+        ...     batch_size=[3, 4],
+        ... )
+        >>> c2 = c1.clone()
+        >>> print(c1 != c2)
+        MyClass(
+            x=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+            y=MyClass(
+                x=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                y=None,
+                z=None,
+                batch_size=torch.Size([3, 4, 1]),
+                device=None,
+                is_shared=False),
+            z=None,
+            batch_size=torch.Size([3, 4]),
+            device=None,
+            is_shared=False)
+        >>> c2 = c2.apply(lambda x: x+1)
+        >>> assert (c1 != c2).all()
+
     """
     if not is_tensorclass(other) and not isinstance(
-        other, (TensorDictBase, int, float, Tensor)
+        other, (TensorDictBase, numbers.Number, Tensor)
     ):
         return True
     non_tensor = {}
