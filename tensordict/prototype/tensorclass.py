@@ -538,6 +538,34 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
 
 
 def _any(self, dim: int = None):
+    """A recursive implementation of `any()` over the tensorclass leaves.
+
+    If the `dim` arg is passed, the resulting tensorclass will have
+    this dimension removed.
+
+    Args:
+        dim (int, optional): if provided, ``any`` will run over that dimension and reduce it.
+            When traversing the tensorclass leaves,  negative dims will be turned to positive
+            ones compared with the root tensorclass' batch-size to avoid any clash
+            of dimensions.
+            Defaults to None, ie full reduction in a single boolean value.
+
+    Examples:
+        >>> @tensorclass
+        ... class MyClass:
+        ...      X: Tensor
+        ...      y: "MyClass"
+        ...
+        >>> c = MyClass(
+        ...     torch.randn(3, 4),
+        ...     MyClass(torch.randn(3, 4, 1), None, batch_size=[3, 4, 1]),
+        ...     batch_size=[3, 4])
+        >>> _ = c.any()  # bool
+        >>> # one can work with negative dimensions, which will be converted to positive dims for the root tensorclass
+        >>> assert (c.any(-1) == c.any(1)).all()
+        >>> assert c.any(-1).y.batch_size == c.any(1).y.batch_size
+
+    """
     if dim is not None and dim < 0:
         dim = self.batch_dims + dim
 
@@ -556,6 +584,7 @@ def _any(self, dim: int = None):
 
 
 def _state_dict(self):
+    """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
     state_dict = self._tensordict.state_dict()
     state_dict["_non_tensordict"] = {
         key: value if not is_tensorclass(value) else value.state_dict()
@@ -565,6 +594,7 @@ def _state_dict(self):
 
 
 def _load_state_dict(self, state_dict):
+    """Loads a state_dict attemptedly in-place on the destination tensorclass."""
     for key, item in state_dict.items():
         # keys will never be nested which facilitates everything, but let's
         # double check in case someone does something nasty
@@ -586,6 +616,34 @@ def _load_state_dict(self, state_dict):
 
 
 def _all(self, dim: int = None):
+    """A recursive implementation of `all()` over the tensorclass leaves.
+
+    If the `dim` arg is passed, the resulting tensorclass will have
+    this dimension removed.
+
+    Args:
+        dim (int, optional): if provided, ``all`` will run over that dimension and reduce it.
+            When traversing the tensorclass leaves,  negative dims will be turned to positive
+            ones compared with the root tensorclass' batch-size to avoid any clash
+            of dimensions.
+            Defaults to None, ie full reduction in a single boolean value.
+
+    Examples:
+        >>> @tensorclass
+        ... class MyClass:
+        ...      X: Tensor
+        ...      y: "MyClass"
+        ...
+        >>> c = MyClass(
+        ...     torch.randn(3, 4),
+        ...     MyClass(torch.randn(3, 4, 1), None, batch_size=[3, 4, 1]),
+        ...     batch_size=[3, 4])
+        >>> _ = c.all()  # bool
+        >>> # one can work with negative dimensions, which will be converted to positive dims for the root tensorclass
+        >>> assert (c.all(-1) == c.all(1)).all()
+        >>> assert c.all(-1).y.batch_size == c.all(1).y.batch_size
+
+    """
     if dim is not None and dim < 0:
         dim = self.batch_dims + dim
 
