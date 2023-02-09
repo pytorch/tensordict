@@ -627,7 +627,7 @@ def _all(self, dim: int = None):
             When traversing the tensorclass leaves,  negative dims will be turned to positive
             ones compared with the root tensorclass' batch-size to avoid any clash
             of dimensions.
-            Defaults to None, ie full reduction in a single boolean value.
+            Defaults to None, i.e., full reduction in a single boolean value.
 
     Examples:
         >>> @tensorclass
