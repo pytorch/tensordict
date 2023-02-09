@@ -1043,7 +1043,7 @@ def test_torchsnapshot(tmpdir):
 
     tc_dest = MyClass(
         x=torch.randn(3),
-        z=z,
+        z="other",
         y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
         batch_size=[],
     )
@@ -1055,7 +1055,169 @@ def test_torchsnapshot(tmpdir):
     assert (tc_dest == tc).all()
     assert tc_dest.y.batch_size == tc.y.batch_size
     assert isinstance(tc_dest.y.x, MemmapTensor)
+    # torchsnapshot does not support updating strings and such
+    assert tc_dest.z != z
+
+    tc_dest = MyClass(
+        x=torch.randn(3),
+        z="other",
+        y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
+        batch_size=[],
+    )
+    tc_dest.memmap_()
+    tc_dest.load_state_dict(tc.state_dict())
+    assert (tc_dest == tc).all()
+    assert tc_dest.y.batch_size == tc.y.batch_size
+    assert isinstance(tc_dest.y.x, MemmapTensor)
+    # load_state_dict outperforms snapshot in this case
     assert tc_dest.z == z
+
+
+def test_statedict_errors():
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        z: str
+        y: "MyClass" = None  # future: drop quotes
+
+    z = "test_tensorclass"
+    tc = MyClass(
+        x=torch.randn(3),
+        z=z,
+        y=MyClass(x=torch.randn(3), z=z, batch_size=[]),
+        batch_size=[],
+    )
+
+    sd = tc.state_dict()
+    sd["a"] = None
+    with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
+        tc.load_state_dict(sd)
+    del sd["a"]
+    sd["_tensordict"]["a"] = None
+    with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
+        tc.load_state_dict(sd)
+    del sd["_tensordict"]["a"]
+    sd["_non_tensordict"]["a"] = None
+    with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
+        tc.load_state_dict(sd)
+    del sd["_non_tensordict"]["a"]
+    sd["_non_tensordict"]["y"]["_tensordict"]["a"] = None
+    with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
+        tc.load_state_dict(sd)
+
+
+def test_equal():
+    @tensorclass
+    class MyClass1:
+        x: torch.Tensor
+        z: str
+        y: "MyClass1" = None  # future: drop quotes
+
+    @tensorclass
+    class MyClass2:
+        x: torch.Tensor
+        z: str
+        y: "MyClass2" = None  # future: drop quotes
+
+    a = MyClass1(
+        torch.zeros(3),
+        "z0",
+        MyClass1(
+            torch.ones(3),
+            "z1",
+            None,
+            batch_size=[3],
+        ),
+        batch_size=[3],
+    )
+    b = MyClass2(
+        torch.zeros(3),
+        "z0",
+        MyClass2(
+            torch.ones(3),
+            "z1",
+            None,
+            batch_size=[3],
+        ),
+        batch_size=[3],
+    )
+    c = TensorDict({"x": torch.zeros(3), "y": {"x": torch.ones(3)}}, batch_size=[3])
+
+    assert (a == a.clone()).all()
+    assert (a != 1.0).any()
+    assert (a[:2] != 1.0).any()
+
+    assert (a.y == 1).all()
+    assert (a[:2].y == 1).all()
+    assert (a.y[:2] == 1).all()
+
+    assert (a != torch.ones([])).any()
+    assert (a.y == torch.ones([])).all()
+
+    assert (a == b).all()
+    assert (b == a).all()
+    assert (b[:2] == a[:2]).all()
+
+    assert (a == c).all()
+    assert (a[:2] == c[:2]).all()
+
+    assert (c == a).all()
+    assert (c[:2] == a[:2]).all()
+
+    assert (a != c.clone().zero_()).any()
+    assert (c != a.clone().zero_()).any()
+
+
+def test_all_any():
+    @tensorclass
+    class MyClass1:
+        x: torch.Tensor
+        z: str
+        y: "MyClass1" = None  # future: drop quotes
+
+    # with all 0
+    x = MyClass1(
+        torch.zeros(3, 1),
+        "z",
+        MyClass1(torch.zeros(3, 1), "z", batch_size=[3, 1]),
+        batch_size=[3, 1],
+    )
+    assert not x.all()
+    assert not x.any()
+    assert isinstance(x.all(), bool)
+    assert isinstance(x.any(), bool)
+    for dim in [0, 1, -1, -2]:
+        assert isinstance(x.all(dim=dim), MyClass1)
+        assert isinstance(x.any(dim=dim), MyClass1)
+        assert not x.all(dim=dim).all()
+        assert not x.any(dim=dim).any()
+    # with all 1
+    x = x.apply(lambda x: x.fill_(1.0))
+    assert isinstance(x, MyClass1)
+    assert x.all()
+    assert x.any()
+    assert isinstance(x.all(), bool)
+    assert isinstance(x.any(), bool)
+    for dim in [0, 1]:
+        assert isinstance(x.all(dim=dim), MyClass1)
+        assert isinstance(x.any(dim=dim), MyClass1)
+        assert x.all(dim=dim).all()
+        assert x.any(dim=dim).any()
+
+    # with 0 and 1
+    x.y.x.fill_(0.0)
+    assert not x.all()
+    assert x.any()
+    assert isinstance(x.all(), bool)
+    assert isinstance(x.any(), bool)
+    for dim in [0, 1]:
+        assert isinstance(x.all(dim=dim), MyClass1)
+        assert isinstance(x.any(dim=dim), MyClass1)
+        assert not x.all(dim=dim).all()
+        assert x.any(dim=dim).any()
+
+    assert not x.y.all()
+    assert not x.y.any()
 
 
 if __name__ == "__main__":
