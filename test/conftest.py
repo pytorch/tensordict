@@ -2,10 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import tempfile
 from pathlib import Path
-
-import pytest
 
 HERE = Path(__file__).parent
 
