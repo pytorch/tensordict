@@ -538,6 +538,38 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
     self._tensordict._batch_size_setter(new_size)
 
 
+def _state_dict(self):
+    """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
+    state_dict = self._tensordict.state_dict()
+    state_dict["_non_tensordict"] = {
+        key: value if not is_tensorclass(value) else value.state_dict()
+        for key, value in self._non_tensordict.items()
+    }
+    return state_dict
+
+
+def _load_state_dict(self, state_dict):
+    """Loads a state_dict attemptedly in-place on the destination tensorclass."""
+    for key, item in state_dict.items():
+        # keys will never be nested which facilitates everything, but let's
+        # double check in case someone does something nasty
+        if not isinstance(key, str):
+            raise TypeError("Only str keys are allowed when calling load_state_dict.")
+        if key in self._tensordict.keys():
+            self._tensordict.set(key, item, inplace=True)
+        elif key == "_non_tensordict":
+            for sub_key, sub_item in item.items():
+                if is_tensorclass(self._non_tensordict.get(sub_key, None)):
+                    self._non_tensordict[sub_key].load_state_dict(sub_item)
+                elif isinstance(sub_item, dict) and "_non_tensordict" in sub_item:
+                    raise RuntimeError(
+                        "Loading a saved tensorclass on a uninitialized tensorclass is not allowed"
+                    )
+                else:
+                    self._non_tensordict[sub_key] = sub_item
+    return self
+
+
 def _any(self, dim: int = None):
     """A recursive implementation of `any()` over the tensorclass leaves.
 
@@ -606,38 +638,6 @@ def _any(self, dim: int = None):
     )
 
 
-def _state_dict(self):
-    """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
-    state_dict = self._tensordict.state_dict()
-    state_dict["_non_tensordict"] = {
-        key: value if not is_tensorclass(value) else value.state_dict()
-        for key, value in self._non_tensordict.items()
-    }
-    return state_dict
-
-
-def _load_state_dict(self, state_dict):
-    """Loads a state_dict attemptedly in-place on the destination tensorclass."""
-    for key, item in state_dict.items():
-        # keys will never be nested which facilitates everything, but let's
-        # double check in case someone does something nasty
-        if not isinstance(key, str):
-            raise TypeError("Only str keys are allowed when calling load_state_dict.")
-        if key in self._tensordict.keys():
-            self._tensordict.set(key, item, inplace=True)
-        elif key == "_non_tensordict":
-            for sub_key, sub_item in item.items():
-                if is_tensorclass(self._non_tensordict.get(sub_key, None)):
-                    self._non_tensordict[sub_key].load_state_dict(sub_item)
-                elif isinstance(sub_item, dict) and "_non_tensordict" in sub_item:
-                    raise RuntimeError(
-                        "Loading a saved tensorclass on a uninitialized tensorclass is not allowed"
-                    )
-                else:
-                    self._non_tensordict[sub_key] = sub_item
-    return self
-
-
 def _all(self, dim: int = None):
     """A recursive implementation of `all()` over the tensorclass leaves.
 
@@ -684,20 +684,23 @@ def _all(self, dim: int = None):
         >>> assert c.all(-1).y.batch_size == c.all(1).y.batch_size
 
     """
-    if dim is not None and dim < 0:
+    if dim is None:
+        return self._tensordict.all() and all(
+            value.all()
+            for value in self._non_tensordict.values()
+            if is_tensorclass(value)
+        )
+
+    if dim < 0:
         dim = self.batch_dims + dim
 
-    if dim is not None:
-        non_tensor = {
-            key: None if not is_tensorclass(obj) else obj.all(dim=dim)
-            for key, obj in self._non_tensordict.items()
-        }
-        return self._from_tensordict(
-            self._tensordict.all(dim=dim),
-            non_tensor,
-        )
-    return self._tensordict.all() and all(
-        value.all() for value in self._non_tensordict.values() if is_tensorclass(value)
+    non_tensor = {
+        key: None if not is_tensorclass(obj) else obj.all(dim=dim)
+        for key, obj in self._non_tensordict.items()
+    }
+    return self._from_tensordict(
+        self._tensordict.all(dim=dim),
+        non_tensor,
     )
 
 
