@@ -566,20 +566,21 @@ def _any(self, dim: int = None):
         >>> assert c.any(-1).y.batch_size == c.any(1).y.batch_size
 
     """
-    if dim is not None and dim < 0:
+    if dim is None:
+       if self._tensordict.any():
+           return True
+       return any(value.any() for value in self._non_tensordict.values() if is_tensorclass(value))
+
+    if dim < 0:
         dim = self.batch_dims + dim
 
-    if dim is not None:
-        non_tensor = {
+    non_tensor = {
             key: None if not is_tensorclass(obj) else obj.any(dim=dim)
             for key, obj in self._non_tensordict.items()
-        }
-        return self._from_tensordict(
+    }
+    return self._from_tensordict(
             self._tensordict.any(dim=dim),
             non_tensor,
-        )
-    return self._tensordict.any() or any(
-        value.any() for value in self._non_tensordict.values() if is_tensorclass(value)
     )
 
 
