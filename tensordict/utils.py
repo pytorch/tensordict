@@ -67,10 +67,7 @@ def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
     return tensor[idx]
 
 
-def _getitem_batch_size(
-    shape: torch.Size,
-    items: INDEX_TYPING,
-) -> torch.Size:
+def _getitem_batch_size(shape: torch.Size, items: INDEX_TYPING) -> torch.Size:
     """Given an input shape and an index, returns the size of the resulting indexed tensor.
 
     This function is aimed to be used when indexing is an
@@ -99,32 +96,72 @@ def _getitem_batch_size(
 
     if not isinstance(items, tuple):
         items = (items,)
-    bs = []
-    iter_bs = iter(shape)
-    if all(isinstance(_item, torch.Tensor) for _item in items) and len(items) == len(
-        shape
-    ):
-        shape0 = items[0].shape
-        for _item in items[1:]:
-            if _item.shape != shape0:
-                raise RuntimeError(
-                    f"all tensor indices must have the same shape, "
-                    f"got {_item.shape} and {shape0}"
-                )
-        return shape0
 
+    sanitized_items = []
     for _item in items:
+        if isinstance(_item, (list, np.ndarray)):
+            _item = torch.tensor(_item)
+        elif isinstance(_item, torch.Tensor):
+            # np.broadcast will complain if we give it CUDA tensors
+            _item = _item.cpu()
+        if isinstance(_item, torch.Tensor) and _item.dtype is torch.bool:
+            # when using NumPy's advanced indexing patterns, any index containing a
+            # boolean array can be equivalently replaced with index.nonzero()
+            # note we add unbind(-1) since behaviour of numpy.ndarray.nonzero returns
+            # tuples of arrays whereas torch.Tensor.nonzero returns a single tensor
+            # https://numpy.org/doc/stable/user/basics.indexing.html#boolean-array-indexing
+            sanitized_items.extend(_item.nonzero().unbind(-1))
+        else:
+            sanitized_items.append(_item)
+
+    # when multiple tensor-like indices are present, they must be broadcastable onto a
+    # common shape. if this is satisfied then they are broadcast to that shape, and used
+    # to extract diagonal entries of the array.
+    # if the tensor indices are contiguous, or separated by scalars, they are replaced
+    # in-place by the broadcast shape. if they are separated by non-scalar indices, the
+    # broadcast shape is prepended to the new batch size
+    # https://numpy.org/doc/stable/user/basics.indexing.html#integer-array-indexing
+    tensor_indices = []
+    contiguous, prev = True, None
+
+    for i, _item in enumerate(sanitized_items):
+        if isinstance(_item, torch.Tensor):
+            tensor_indices.append(_item)
+            if prev is not None and i != prev + 1:
+                contiguous = False
+            prev = i
+        elif isinstance(_item, Number) and prev is not None and i == prev + 1:
+            prev = i
+
+    bs = []
+    if tensor_indices:
+        try:
+            b = np.broadcast(*tensor_indices)
+        except ValueError:
+            raise ValueError(
+                "When indexing with tensor-like indices, each of those indices must be "
+                "broadcastable to a common shape."
+            )
+        if not contiguous:
+            bs.extend(b.shape)
+            b = None
+    else:
+        b = None
+
+    iter_bs = iter(shape)
+
+    for _item in sanitized_items:
         if isinstance(_item, slice):
             batch = next(iter_bs)
-            v = len(range(*_item.indices(batch)))
+            bs.append(len(range(*_item.indices(batch))))
         elif isinstance(_item, (list, torch.Tensor, np.ndarray)):
             batch = next(iter_bs)
-            if isinstance(_item, torch.Tensor) and _item.dtype is torch.bool:
-                v = _item.sum()
-            else:
-                v = len(_item)
+            if b is not None:
+                # we haven't yet accounted for tensor indices, so we insert in-place
+                bs.extend(b.shape)
+                b = None
         elif _item is None:
-            v = 1
+            bs.append(1)
         elif isinstance(_item, Number):
             try:
                 batch = next(iter_bs)
@@ -137,7 +174,7 @@ def _getitem_batch_size(
             raise NotImplementedError(
                 f"batch dim cannot be computed for type {type(_item)}"
             )
-        bs.append(v)
+
     list_iter_bs = list(iter_bs)
     bs += list_iter_bs
     return torch.Size(bs)

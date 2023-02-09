@@ -1,0 +1,96 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+import argparse
+
+import numpy as np
+import pytest
+import torch
+from tensordict.utils import _getitem_batch_size
+
+
+@pytest.mark.parametrize("tensor", [torch.rand(2, 3, 4, 5), torch.rand(2, 3, 4, 5, 6)])
+@pytest.mark.parametrize(
+    "index1",
+    [
+        slice(None),
+        slice(0, 1),
+        0,
+        [0],
+        [0, 1],
+        np.arange(2),
+        torch.arange(2),
+        [True, True],
+    ],
+)
+@pytest.mark.parametrize(
+    "index2",
+    [
+        slice(None),
+        slice(1, 3, 1),
+        slice(-3, -1),
+        0,
+        [0],
+        [0, 1],
+        np.arange(0, 1),
+        torch.arange(2),
+        [True, False, True],
+    ],
+)
+@pytest.mark.parametrize(
+    "index3",
+    [
+        slice(None),
+        slice(1, 3, 1),
+        slice(-3, -1),
+        0,
+        [0],
+        [0, 1],
+        np.arange(1, 3),
+        torch.arange(2),
+        [True, False, True, False],
+    ],
+)
+@pytest.mark.parametrize(
+    "index4",
+    [
+        slice(None),
+        slice(0, 4, 2),
+        slice(-4, -2),
+        0,
+        [0],
+        [0, 1],
+        np.arange(0, 4, 2),
+        torch.arange(2),
+        [True, False, False, False, True],
+    ],
+)
+def test_getitem_batch_size(tensor, index1, index2, index3, index4):
+    index = (index1, index2, index3, index4)
+    assert tensor[index].shape == _getitem_batch_size(tensor.shape, index)
+
+
+@pytest.mark.parametrize("tensor", [torch.rand(2, 3, 4, 5), torch.rand(2, 3, 4, 5, 6)])
+@pytest.mark.parametrize("idx", range(3))
+@pytest.mark.parametrize("ndim", range(1, 4))
+@pytest.mark.parametrize("slice_leading_dims", [True, False])
+def test_getitem_batch_size_mask(tensor, idx, ndim, slice_leading_dims):
+    # test n-dimensional boolean masks are handled correctly
+    if idx + ndim > 4:
+        pytest.skip(
+            "Not enough dimensions in test tensor for this combination of parameters"
+        )
+    mask_shape = (2, 3, 4, 5)[idx : idx + ndim]
+    mask = torch.randint(2, mask_shape, dtype=torch.bool)
+    if slice_leading_dims:
+        index = (slice(None),) * idx + (mask,)
+    else:
+        index = (0,) * idx + (mask,)
+    assert tensor[index].shape == _getitem_batch_size(tensor.shape, index)
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
