@@ -561,6 +561,7 @@ def _load_state_dict(self, state_dict):
             for sub_key, sub_item in item.items():
                 if is_tensorclass(self._non_tensordict.get(sub_key, None)):
                     self._non_tensordict[sub_key].load_state_dict(sub_item)
+                # sub_item is the state dict of a tensorclass
                 elif isinstance(sub_item, dict) and "_non_tensordict" in sub_item:
                     raise RuntimeError(
                         "Loading a saved tensorclass on a uninitialized tensorclass is not allowed"
