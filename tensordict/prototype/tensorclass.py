@@ -1,6 +1,7 @@
 import dataclasses
 import functools
 import inspect
+import numbers
 import re
 import typing
 import warnings
@@ -148,6 +149,11 @@ def tensorclass(cls: T) -> T:
     cls.__len__ = _len
     cls.__eq__ = __eq__
     cls.__ne__ = __ne__
+    cls.any = _any
+    cls.all = _all
+    cls.state_dict = _state_dict
+    cls.load_state_dict = _load_state_dict
+
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
@@ -532,25 +538,264 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
     self._tensordict._batch_size_setter(new_size)
 
 
+def _state_dict(self):
+    """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
+    state_dict = {"_tensordict": self._tensordict.state_dict()}
+    state_dict["_non_tensordict"] = {
+        key: value if not is_tensorclass(value) else value.state_dict()
+        for key, value in self._non_tensordict.items()
+    }
+    return state_dict
+
+
+def _load_state_dict(self, state_dict):
+    """Loads a state_dict attemptedly in-place on the destination tensorclass."""
+    for key, item in state_dict.items():
+        # keys will never be nested which facilitates everything, but let's
+        # double check in case someone does something nasty
+        if not isinstance(key, str):
+            raise TypeError("Only str keys are allowed when calling load_state_dict.")
+        if key == "_non_tensordict":
+            for sub_key, sub_item in item.items():
+                if is_tensorclass(self._non_tensordict.get(sub_key, None)):
+                    self._non_tensordict[sub_key].load_state_dict(sub_item)
+                # sub_item is the state dict of a tensorclass
+                elif isinstance(sub_item, dict) and "_non_tensordict" in sub_item:
+                    raise RuntimeError(
+                        "Loading a saved tensorclass on a uninitialized tensorclass is not allowed"
+                    )
+                else:
+                    # check that sub_key is part of the tensorclass
+                    if sub_key not in self.__class__.__dataclass_fields__:
+                        raise KeyError(
+                            f"Key '{sub_key}' wasn't expected in the state-dict."
+                        )
+                    self._non_tensordict[sub_key] = sub_item
+        elif key == "_tensordict":
+            for sub_key in item.keys():
+                if (
+                    sub_key not in self.__class__.__dataclass_fields__
+                    and sub_key not in ("__batch_size", "__device")
+                ):
+                    raise KeyError(
+                        f"Key '{sub_key}' wasn't expected in the state-dict."
+                    )
+
+            self._tensordict.load_state_dict(item)
+        else:
+            raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
+
+    return self
+
+
+def _any(self, dim: int = None):
+    """A recursive implementation of `any()` over the tensorclass leaves.
+
+    If the `dim` arg is passed, the resulting tensorclass will have
+    this dimension removed.
+
+    Args:
+        dim (int, optional): if provided, ``any`` will run over that dimension and reduce it.
+            When traversing the tensorclass leaves,  negative dims will be turned to positive
+            ones compared with the root tensorclass' batch-size to avoid any clash
+            of dimensions.
+            Defaults to None, i.e., full reduction in a single boolean value.
+
+    Returns:
+        A boolean if ``dim`` is ``None``, a tensorclass of the same class as the
+        parent otherwise (with the target dimension reduced).
+
+    Examples:
+        >>> @tensorclass
+        ... class MyClass:
+        ...      X: Tensor
+        ...      y: "MyClass"
+        ...
+        >>> c = MyClass(
+        ...     torch.randn(3, 4),
+        ...     MyClass(torch.randn(3, 4, 1), None, batch_size=[3, 4, 1]),
+        ...     batch_size=[3, 4])
+        >>> c_any = c.any()  # bool
+        >>> assert isinstance(c_any, bool)
+        >>> print(c.any(dim=0))
+        MyClass(
+            X=Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+            y=MyClass(
+                X=Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                y=None,
+                batch_size=torch.Size([4, 1]),
+                device=None,
+                is_shared=False),
+            batch_size=torch.Size([4]),
+            device=None,
+            is_shared=False)
+        >>> # one can work with negative dimensions, which will be converted to positive dims for the root tensorclass
+        >>> assert (c.any(-1) == c.any(1)).all()
+        >>> assert c.any(-1).y.batch_size == c.any(1).y.batch_size
+
+    """
+    if dim is None:
+        if self._tensordict.any():
+            return True
+        return any(
+            value.any()
+            for value in self._non_tensordict.values()
+            if is_tensorclass(value)
+        )
+
+    if dim < 0:
+        dim = self.batch_dims + dim
+
+    non_tensor = {
+        key: None if not is_tensorclass(obj) else obj.any(dim=dim)
+        for key, obj in self._non_tensordict.items()
+    }
+    return self._from_tensordict(
+        self._tensordict.any(dim=dim),
+        non_tensor,
+    )
+
+
+def _all(self, dim: int = None):
+    """A recursive implementation of `all()` over the tensorclass leaves.
+
+    If the `dim` arg is passed, the resulting tensorclass will have
+    this dimension removed.
+
+    Args:
+        dim (int, optional): if provided, ``all`` will run over that dimension and reduce it.
+            When traversing the tensorclass leaves,  negative dims will be turned to positive
+            ones compared with the root tensorclass' batch-size to avoid any clash
+            of dimensions.
+            Defaults to None, i.e., full reduction in a single boolean value.
+
+    Returns:
+        A boolean if ``dim`` is ``None``, a tensorclass of the same class as the
+        parent otherwise (with the target dimension reduced).
+
+    Examples:
+        >>> @tensorclass
+        ... class MyClass:
+        ...      X: Tensor
+        ...      y: "MyClass"
+        ...
+        >>> c = MyClass(
+        ...     torch.randn(3, 4),
+        ...     MyClass(torch.randn(3, 4, 1), None, batch_size=[3, 4, 1]),
+        ...     batch_size=[3, 4])
+        >>> c_all = c.all()  # bool
+        >>> assert isinstance(c_all, bool)
+        >>> print(c.all(dim=0))
+        MyClass(
+            X=Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.bool, is_shared=False),
+            y=MyClass(
+                X=Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                y=None,
+                batch_size=torch.Size([4, 1]),
+                device=None,
+                is_shared=False),
+            batch_size=torch.Size([4]),
+            device=None,
+            is_shared=False)
+        >>> # one can work with negative dimensions, which will be converted to positive dims for the root tensorclass
+        >>> assert (c.all(-1) == c.all(1)).all()
+        >>> assert c.all(-1).y.batch_size == c.all(1).y.batch_size
+
+    """
+    if dim is None:
+        return self._tensordict.all() and all(
+            value.all()
+            for value in self._non_tensordict.values()
+            if is_tensorclass(value)
+        )
+
+    if dim < 0:
+        dim = self.batch_dims + dim
+
+    non_tensor = {
+        key: None if not is_tensorclass(obj) else obj.all(dim=dim)
+        for key, obj in self._non_tensordict.items()
+    }
+    return self._from_tensordict(
+        self._tensordict.all(dim=dim),
+        non_tensor,
+    )
+
+
 def __eq__(self, other):
     """Compares the Tensor class object to another object for equality. However, the equality check for non-tensor data is not performed.
 
     Args:
-        other: object to compare to this object
+        other: object to compare to this object. Can be a tensorclass, a
+            tensordict or any compatible type (int, float or tensor), in
+            which case the equality check will be propagated to the leaves.
 
     Returns:
-        False if the objects are of different class types, Tensorclass of boolean values for tensor attributes and None for non-tensor attributes
+        False if the objects are of different class types, Tensorclass of boolean
+        values for tensor attributes and None for non-tensor attributes
+
+    Examples:
+        >>> @tensorclass
+        ... class MyClass:
+        ...     x: Tensor
+        ...     y: "MyClass"
+        ...     z: str
+        ...
+        >>> c1 = MyClass(
+        ...     x=torch.randn(3, 4),
+        ...     y=MyClass(
+        ...         x=torch.randn(3, 4, 1),
+        ...         y=None,
+        ...         z="bar",
+        ...         batch_size=[3, 4, 1],
+        ...     ),
+        ...     z="foo",
+        ...     batch_size=[3, 4],
+        ... )
+        >>> c2 = c1.clone()
+        >>> print(c1 == c2)
+        MyClass(
+            x=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+            y=MyClass(
+                x=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                y=None,
+                z=None,
+                batch_size=torch.Size([3, 4, 1]),
+                device=None,
+                is_shared=False),
+            z=None,
+            batch_size=torch.Size([3, 4]),
+            device=None,
+            is_shared=False)
+        >>> assert (c1 == c2).all()
+        >>> assert (c1[:2] == c2[:2]).all()
+        >>> assert not (c1 == c2.apply(lambda x: x+1)).all()
 
     """
-    if not isinstance(other, self.__class__):
+    if not is_tensorclass(other) and not isinstance(
+        other, (TensorDictBase, numbers.Number, Tensor)
+    ):
         return False
     non_tensor = {}
     for key, value in self._non_tensordict.items():
         if is_tensorclass(value):
-            non_tensor[key] = value == other._non_tensordict[key]
+            if is_tensorclass(other):
+                non_tensor[key] = value == other._non_tensordict[key]
+            elif isinstance(other, TensorDictBase):
+                non_tensor[key] = value == other[key]
+                # remove tensorclass keys to make sure that the following tensordict comparison works
+                other = other.exclude(key)
+            else:
+                # attempt a broadcast comparison
+                non_tensor[key] = value == other
         else:
             non_tensor[key] = None
-    tensor = self._tensordict == other._tensordict
+    if is_tensorclass(other):
+        tensor = self._tensordict == other._tensordict
+    elif isinstance(other, TensorDictBase):
+        tensor = self._tensordict == other
+    else:
+        tensor = self._tensordict == other
     out = self._from_tensordict(tensor, non_tensor)
     return out
 
@@ -564,16 +809,67 @@ def __ne__(self, other):
     Returns:
         False if the objects are of different class types, Tensorclass of boolean values for tensor attributes and None for non-tensor attributes
 
+    Examples:
+        >>> @tensorclass
+        ... class MyClass:
+        ...     x: Tensor
+        ...     y: "MyClass"
+        ...     z: str
+        ...
+        >>> c1 = MyClass(
+        ...     x=torch.randn(3, 4),
+        ...     y=MyClass(
+        ...         x=torch.randn(3, 4, 1),
+        ...         y=None,
+        ...         z="bar",
+        ...         batch_size=[3, 4, 1],
+        ...     ),
+        ...     z="foo",
+        ...     batch_size=[3, 4],
+        ... )
+        >>> c2 = c1.clone()
+        >>> print(c1 != c2)
+        MyClass(
+            x=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+            y=MyClass(
+                x=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                y=None,
+                z=None,
+                batch_size=torch.Size([3, 4, 1]),
+                device=None,
+                is_shared=False),
+            z=None,
+            batch_size=torch.Size([3, 4]),
+            device=None,
+            is_shared=False)
+        >>> c2 = c2.apply(lambda x: x+1)
+        >>> assert (c1 != c2).all()
+
     """
-    if not isinstance(other, self.__class__):
+    if not is_tensorclass(other) and not isinstance(
+        other, (TensorDictBase, numbers.Number, Tensor)
+    ):
         return True
     non_tensor = {}
     for key, value in self._non_tensordict.items():
         if is_tensorclass(value):
-            non_tensor[key] = value != other._non_tensordict[key]
+            if is_tensorclass(other):
+                non_tensor[key] = value != other._non_tensordict[key]
+            elif isinstance(other, TensorDictBase):
+                non_tensor[key] = value != other[key]
+                # remove tensorclass keys to make sure that the following tensordict comparison works
+                other = other.exclude(key)
+            else:
+                # attempt a broadcast comparison
+                non_tensor[key] = value == other
         else:
             non_tensor[key] = None
-    tensor = self._tensordict != other._tensordict
+    if is_tensorclass(other):
+        tensor = self._tensordict != other._tensordict
+    elif isinstance(other, TensorDictBase):
+        tensor = self._tensordict != other
+    else:
+        tensor = self._tensordict != other
     out = self._from_tensordict(tensor, non_tensor)
     return out
 

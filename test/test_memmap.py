@@ -400,45 +400,45 @@ def test_as_tensor():
     assert (y[idx] == y.as_tensor()[idx]).all()
 
 
-def test_filename(tmpdir):
-    mt = MemmapTensor(10, dtype=torch.float32, filename=tmpdir / "test.memmap")
-    assert mt.filename == str(tmpdir / "test.memmap")
+def test_filename(tmp_path):
+    mt = MemmapTensor(10, dtype=torch.float32, filename=tmp_path / "test.memmap")
+    assert mt.filename == str(tmp_path / "test.memmap")
 
     mt2 = MemmapTensor.from_tensor(mt)
-    assert mt2.filename == str(tmpdir / "test.memmap")
+    assert mt2.filename == str(tmp_path / "test.memmap")
     assert mt2 is mt
 
-    mt3 = MemmapTensor.from_tensor(mt, filename=tmpdir / "test.memmap")
-    assert mt3.filename == str(tmpdir / "test.memmap")
+    mt3 = MemmapTensor.from_tensor(mt, filename=tmp_path / "test.memmap")
+    assert mt3.filename == str(tmp_path / "test.memmap")
     assert mt3 is mt
 
-    mt4 = MemmapTensor.from_tensor(mt, filename=tmpdir / "test2.memmap")
-    assert mt4.filename == str(tmpdir / "test2.memmap")
+    mt4 = MemmapTensor.from_tensor(mt, filename=tmp_path / "test2.memmap")
+    assert mt4.filename == str(tmp_path / "test2.memmap")
     assert mt4 is not mt
 
     del mt
     del mt4
     # files should persist
-    assert (tmpdir / "test.memmap").exists()
-    assert (tmpdir / "test2.memmap").exists()
+    assert (tmp_path / "test.memmap").exists()
+    assert (tmp_path / "test2.memmap").exists()
 
 
 @pytest.mark.parametrize(
     "mode", ["r", "r+", "w+", "c", "readonly", "readwrite", "write", "copyonwrite"]
 )
-def test_mode(mode, tmpdir):
-    mt = MemmapTensor(10, dtype=torch.float32, filename=tmpdir / "test.memmap")
+def test_mode(mode, tmp_path):
+    mt = MemmapTensor(10, dtype=torch.float32, filename=tmp_path / "test.memmap")
     mt[:] = torch.ones(10) * 1.5
     del mt
 
     if mode in ("r", "readonly"):
         with pytest.raises(ValueError, match=r"Accepted values for mode are"):
             MemmapTensor(
-                10, dtype=torch.float32, filename=tmpdir / "test.memmap", mode=mode
+                10, dtype=torch.float32, filename=tmp_path / "test.memmap", mode=mode
             )
         return
     mt = MemmapTensor(
-        10, dtype=torch.float32, filename=tmpdir / "test.memmap", mode=mode
+        10, dtype=torch.float32, filename=tmp_path / "test.memmap", mode=mode
     )
     if mode in ("r+", "readwrite", "c", "copyonwrite"):
         # data in memmap persists
@@ -451,7 +451,7 @@ def test_mode(mode, tmpdir):
     assert (mt.as_tensor() == 2.5).all()
     del mt
 
-    mt2 = MemmapTensor(10, dtype=torch.float32, filename=tmpdir / "test.memmap")
+    mt2 = MemmapTensor(10, dtype=torch.float32, filename=tmp_path / "test.memmap")
     if mode in ("c", "copyonwrite"):
         # tensor was only mutated in memory, not on disk
         assert (mt2.as_tensor() == 1.5).all()
@@ -462,6 +462,17 @@ def test_mode(mode, tmpdir):
 def test_memmap_from_memmap():
     mt2 = MemmapTensor.from_tensor(MemmapTensor(4, 3, 2, 1))
     assert mt2.squeeze(-1).shape == torch.Size([4, 3, 2])
+
+
+def test_memmap_cast():
+    # ensure memmap can be cast to tensor and viceversa
+    x = torch.zeros(3, 4, 5)
+    y = MemmapTensor.from_tensor(torch.ones(3, 4, 5))
+
+    x[:2] = y[:2]
+    assert (x[:2] == 1).all()
+    y[2:] = x[2:]
+    assert (y[2:] == 0).all()
 
 
 if __name__ == "__main__":

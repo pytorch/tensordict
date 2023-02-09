@@ -8,6 +8,7 @@ from __future__ import annotations
 import abc
 import collections
 import functools
+import numbers
 import textwrap
 from collections import defaultdict
 from collections.abc import Mapping
@@ -428,6 +429,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return out
 
     def load_state_dict(self, state_dict: OrderedDict) -> TensorDictBase:
+        # copy since we'll be using pop
+        state_dict = copy(state_dict)
         self.batch_size = state_dict.pop("__batch_size")
         device = state_dict.pop("__device")
         if device is not None:
@@ -959,26 +962,29 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, (TensorDictBase, dict, float, int)):
-            return False
-        if not isinstance(other, TensorDictBase) and isinstance(other, dict):
-            other = make_tensordict(**other, batch_size=self.batch_size)
-        if not isinstance(other, TensorDictBase):
+        # avoiding circular imports
+        from tensordict.prototype import is_tensorclass
+
+        if is_tensorclass(other):
+            return other != self
+        if isinstance(other, (dict, TensorDictBase)):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                raise KeyError(
+                    f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
+                )
+            d = {}
+            for (key, item1) in self.items():
+                d[key] = item1 != other.get(key)
+            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        if isinstance(other, (numbers.Number, torch.Tensor)):
             return TensorDict(
                 {key: value != other for key, value in self.items()},
                 self.batch_size,
                 device=self.device,
             )
-        keys1 = set(self.keys())
-        keys2 = set(other.keys())
-        if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-            raise KeyError(
-                f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
-            )
-        d = {}
-        for (key, item1) in self.items():
-            d[key] = item1 != other.get(key)
-        return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        return True
 
     def __eq__(self, other: object) -> TensorDictBase:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
@@ -988,24 +994,27 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, (TensorDictBase, dict, float, int)):
-            return False
-        if not isinstance(other, TensorDictBase) and isinstance(other, dict):
-            other = make_tensordict(**other, batch_size=self.batch_size)
-        if not isinstance(other, TensorDictBase):
+        # avoiding circular imports
+        from tensordict.prototype import is_tensorclass
+
+        if is_tensorclass(other):
+            return other == self
+        if isinstance(other, (dict, TensorDictBase)):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for (key, item1) in self.items():
+                d[key] = item1 == other.get(key)
+            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        if isinstance(other, (numbers.Number, torch.Tensor)):
             return TensorDict(
                 {key: value == other for key, value in self.items()},
                 self.batch_size,
                 device=self.device,
             )
-        keys1 = set(self.keys())
-        keys2 = set(other.keys())
-        if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-            raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
-        d = {}
-        for (key, item1) in self.items():
-            d[key] = item1 == other.get(key)
-        return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        return False
 
     @abc.abstractmethod
     def del_(self, key: str) -> TensorDictBase:
@@ -1772,7 +1781,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
             )
-        return any([value.any() for key, value in self.items()])
+        return any([value.any() for value in self.values()])
 
     def get_sub_tensordict(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Returns a SubTensorDict with the desired index."""

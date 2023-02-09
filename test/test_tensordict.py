@@ -807,6 +807,35 @@ class TestTensorDicts(TestTensorDictsBase):
         td0 = td.to_tensordict().zero_()
         assert (td != td0).any()
 
+    def test_equal_float(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.zero_()
+        assert (td == 0.0).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td0 != 1.0).all()
+
+    def test_equal_other(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert not td == "z"
+        assert td != "z"
+
+    def test_equal_int(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.zero_()
+        assert (td == 0).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td0 != 1).all()
+
+    def test_equal_tensor(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.zero_()
+        assert (td == torch.zeros([], dtype=torch.int, device=device)).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td0 != torch.ones([], dtype=torch.int, device=device)).all()
+
     def test_equal_dict(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -1696,7 +1725,7 @@ class TestTensorDicts(TestTensorDictsBase):
             td.memmap_()
             assert td.is_memmap()
 
-    def test_memmap_prefix(self, td_name, device, tmpdir):
+    def test_memmap_prefix(self, td_name, device, tmp_path):
         if td_name == "memmap_td":
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
@@ -1708,13 +1737,13 @@ class TestTensorDicts(TestTensorDictsBase):
                 RuntimeError,
                 match="Converting a sub-tensordict values to memmap cannot be done",
             ):
-                td.memmap_(tmpdir / "tensordict")
+                td.memmap_(tmp_path / "tensordict")
             return
         else:
-            td.memmap_(tmpdir / "tensordict")
+            td.memmap_(tmp_path / "tensordict")
 
-        assert (tmpdir / "tensordict" / "meta.pt").exists()
-        metadata = torch.load(tmpdir / "tensordict" / "meta.pt")
+        assert (tmp_path / "tensordict" / "meta.pt").exists()
+        metadata = torch.load(tmp_path / "tensordict" / "meta.pt")
         if td_name in ("stacked_td", "nested_stacked_td"):
             pass
         elif td_name in ("unsqueezed_td", "squeezed_td", "permute_td"):
@@ -1724,11 +1753,11 @@ class TestTensorDicts(TestTensorDictsBase):
             assert metadata["batch_size"] == td.batch_size
             assert metadata["device"] == td.device
 
-        td2 = td.__class__.load_memmap(tmpdir / "tensordict")
+        td2 = td.__class__.load_memmap(tmp_path / "tensordict")
         assert (td == td2).all()
 
     @pytest.mark.parametrize("copy_existing", [False, True])
-    def test_memmap_existing(self, td_name, device, copy_existing, tmpdir):
+    def test_memmap_existing(self, td_name, device, copy_existing, tmp_path):
         if td_name == "memmap_td":
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
@@ -1738,18 +1767,18 @@ class TestTensorDicts(TestTensorDictsBase):
                 "SubTensorDict and memmap_ incompatibility is checked elsewhere"
             )
 
-        td = getattr(self, td_name)(device).memmap_(prefix=tmpdir / "tensordict")
+        td = getattr(self, td_name)(device).memmap_(prefix=tmp_path / "tensordict")
         td2 = getattr(self, td_name)(device).memmap_()
 
         if copy_existing:
-            td3 = td.memmap_(prefix=tmpdir / "tensordict2", copy_existing=True)
+            td3 = td.memmap_(prefix=tmp_path / "tensordict2", copy_existing=True)
             assert (td == td3).all()
         else:
             with pytest.raises(
                 RuntimeError, match="TensorDict already contains MemmapTensors"
             ):
                 # calling memmap_ with prefix that is different to contents gives error
-                td.memmap_(prefix=tmpdir / "tensordict2")
+                td.memmap_(prefix=tmp_path / "tensordict2")
 
             # calling memmap_ without prefix means no-op, regardless of whether contents
             # were saved in temporary or designated location (td vs. td2 resp.)
