@@ -732,14 +732,20 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not td_clone.is_locked
         assert td.is_locked
         td = td.select(inplace=True)
-        for key, item in td_clone.items(True):
+        keys_view = _TensorDictKeysView(td_clone, include_nested=True, leaves_only=False, error_on_loop=False)
+        for key in keys_view:
+            item = td_clone.get(key)
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
         td.unlock()
-        for key, item in td_clone.items(True):
+        keys_view = _TensorDictKeysView(td_clone, include_nested=True, leaves_only=False, error_on_loop=False)
+        for key in keys_view:
+            item = td_clone.get(key)
             td.set(key, item)
         td.lock()
-        for key, item in td_clone.items(True):
+        keys_view = _TensorDictKeysView(td_clone, include_nested=True, leaves_only=False, error_on_loop=False)
+        for key in keys_view:
+            item = td_clone.get(key)
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
             td.set_(key, item)
