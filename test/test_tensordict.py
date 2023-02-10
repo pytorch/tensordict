@@ -1686,12 +1686,6 @@ class TestTensorDicts(TestTensorDictsBase):
                 " Skipping auto-nesting test case!!"
             )
 
-        # TODO Check why it fails for SubTensorDicts
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Flatten keys test momentarily disabled when applied to SubTensorDicts!!"
-            )
-
         locked = td.is_locked
         td.unlock()
         nested_nested_tensordict = TensorDict(
@@ -1732,6 +1726,13 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("separator", [",", "-"])
     def test_unflatten_keys(self, td_name, device, inplace, separator):
         td = getattr(self, td_name)(device)
+
+        if td_name == "autonested_td":
+            pytest.skip(
+                "Unflatten keys function is not  designed for auto-nesting case."
+                " Skipping auto-nesting test case!!"
+            )
+
         locked = td.is_locked
         td.unlock()
         nested_nested_tensordict = TensorDict(
