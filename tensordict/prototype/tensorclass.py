@@ -153,6 +153,7 @@ def tensorclass(cls: T) -> T:
     cls.all = _all
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
+    cls.gather = _gather
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -169,6 +170,7 @@ def tensorclass(cls: T) -> T:
     implements_for_tdc(torch.split)(_split)
     implements_for_tdc(torch.stack)(_stack)
     implements_for_tdc(torch.cat)(_cat)
+    implements_for_tdc(torch.gather)(_gather)
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
@@ -718,6 +720,64 @@ def _all(self, dim: int = None):
     }
     return self._from_tensordict(
         self._tensordict.all(dim=dim),
+        non_tensor,
+    )
+
+
+def _gather(self, dim, index, out=None):
+    """Gathers values along an axis specified by `dim`.
+
+    Args:
+        dim (int): the dimension along which collect the elements
+        index (torch.Tensor): a long tensor which number of dimension matches
+            the one of the tensordict with only one dimension differring between
+            the two (the gathering dimension). Its elements refer to the
+            index to be gathered along the required dimension.
+        out (TensorDictBase, optional): a destination tensordict. It must
+            have the same shape as the index.
+
+    Examples:
+        >>> @tensorclass
+        ... class MyClass:
+        ...     x: torch.Tensor
+        ...     z: str
+        ...     y: "MyClass1" = None  # future: drop quotes
+        ...
+        >>> c = MyClass(torch.randn(3, 4), "foo", MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]), batch_size=[3, 4])
+        >>> dim = -1
+        >>> index = torch.arange(3).expand(3, 3)
+        >>> c_gather = c.gather(index=index, dim=dim)
+        >>> print(c_gather)
+
+    """
+    if dim < 0:
+        dim = self.batch_dims + dim
+
+    def _get_out(key, nontensor):
+        if out is None:
+            return None
+        if nontensor:
+            return out._non_tensordict[key]
+        else:
+            return out._tensordict
+
+    def _expand_index(obj):
+        index_expand = index
+        while index_expand.ndimension() < obj.ndimension():
+            index_expand = index_expand.unsqueeze(-1)
+        target_shape = list(obj.shape)
+        target_shape[dim] = index_expand.shape[dim]
+        index_expand = index_expand.expand(target_shape)
+        return index_expand
+
+    non_tensor = {
+        key: obj
+        if not is_tensorclass(obj)
+        else obj.gather(dim=dim, index=_expand_index(obj), out=_get_out(key, True))
+        for key, obj in self._non_tensordict.items()
+    }
+    return self._from_tensordict(
+        self._tensordict.gather(dim=dim, index=index, out=_get_out(None, False)),
         non_tensor,
     )
 

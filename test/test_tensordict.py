@@ -843,6 +843,23 @@ class TestTensorDicts(TestTensorDictsBase):
         td0 = td.to_tensordict().zero_().to_dict()
         assert (td != td0).any()
 
+    @pytest.mark.parametrize("dim", [0, 1, 2, 3, -1, -2, -3])
+    def test_gather(self, td_name, device, dim):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        index = torch.ones(td.shape, device=td.device, dtype=torch.long)
+        other_dim = dim + index.ndim if dim < 0 else dim
+        idx = (*[slice(None) for _ in range(other_dim)], slice(2))
+        index = index[idx]
+        index = index.cumsum(dim=other_dim) - 1
+        # gather
+        td_gather = torch.gather(td, dim=dim, index=index)
+        # gather with out
+        td_gather.zero_()
+        out = td_gather.to_tensordict()
+        td_gather2 = torch.gather(td, dim=dim, index=index, out=out)
+        assert (td_gather2 != 0).any()
+
     @pytest.mark.parametrize("from_list", [True, False])
     def test_masking_set(self, td_name, device, from_list):
         def zeros_like(item, n, d):
