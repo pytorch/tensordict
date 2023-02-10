@@ -1220,6 +1220,33 @@ def test_all_any():
     assert not x.y.any()
 
 
+def test_gather():
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        z: str
+        y: "MyClass" = None  # future: drop quotes
+
+    c = MyClass(
+        torch.randn(3, 4),
+        "foo",
+        MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
+        batch_size=[3, 4],
+    )
+    dim = -1
+    index = torch.arange(3).expand(3, 3)
+
+    c_gather = c.gather(index=index, dim=dim)
+    assert c_gather.x.shape == torch.Size([3, 3])
+    assert c_gather.y.shape == torch.Size([3, 3, 5])
+    assert c_gather.y.x.shape == torch.Size([3, 3, 5])
+    assert c_gather.y.z == "bar"
+    assert c_gather.z == "foo"
+    c_gather_zero = c_gather.clone().zero_()
+    c_gather2 = c.gather(index=index, dim=dim, out=c_gather_zero)
+    assert (c_gather2 == c_gather).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
