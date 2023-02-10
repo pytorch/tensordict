@@ -170,6 +170,7 @@ def tensorclass(cls: T) -> T:
     implements_for_tdc(torch.split)(_split)
     implements_for_tdc(torch.stack)(_stack)
     implements_for_tdc(torch.cat)(_cat)
+    implements_for_tdc(torch.gather)(_gather)
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 

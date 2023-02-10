@@ -1220,7 +1220,8 @@ def test_all_any():
     assert not x.y.any()
 
 
-def test_gather():
+@pytest.mark.parametrize("from_torch", [True, False])
+def test_gather(from_torch):
     @tensorclass
     class MyClass:
         x: torch.Tensor
@@ -1235,15 +1236,21 @@ def test_gather():
     )
     dim = -1
     index = torch.arange(3).expand(3, 3)
-
-    c_gather = c.gather(index=index, dim=dim)
+    if from_torch:
+        c_gather = torch.gather(c, index=index, dim=dim)
+    else:
+        c_gather = c.gather(index=index, dim=dim)
     assert c_gather.x.shape == torch.Size([3, 3])
     assert c_gather.y.shape == torch.Size([3, 3, 5])
     assert c_gather.y.x.shape == torch.Size([3, 3, 5])
     assert c_gather.y.z == "bar"
     assert c_gather.z == "foo"
     c_gather_zero = c_gather.clone().zero_()
-    c_gather2 = c.gather(index=index, dim=dim, out=c_gather_zero)
+    if from_torch:
+        c_gather2 = torch.gather(c, index=index, dim=dim, out=c_gather_zero)
+    else:
+        c_gather2 = c.gather(index=index, dim=dim, out=c_gather_zero)
+
     assert (c_gather2 == c_gather).all()
 
 
