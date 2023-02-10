@@ -464,6 +464,17 @@ def test_memmap_from_memmap():
     assert mt2.squeeze(-1).shape == torch.Size([4, 3, 2])
 
 
+def test_memmap_cast():
+    # ensure memmap can be cast to tensor and viceversa
+    x = torch.zeros(3, 4, 5)
+    y = MemmapTensor.from_tensor(torch.ones(3, 4, 5))
+
+    x[:2] = y[:2]
+    assert (x[:2] == 1).all()
+    y[2:] = x[2:]
+    assert (y[2:] == 0).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

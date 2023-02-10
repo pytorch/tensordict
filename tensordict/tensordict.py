@@ -227,12 +227,13 @@ class _TensorDictKeysView:
             i += 1
         return i
 
-    # TODO fix method for SubTensorDict case
     def _items(self, tensordict=None):
         if tensordict is None:
             tensordict = self.tensordict
         if isinstance(tensordict, TensorDict):
             return tensordict._tensordict.items()
+        elif isinstance(tensordict, SubTensorDict):
+            return tensordict._source._tensordict.items()
         elif isinstance(tensordict, LazyStackedTensorDict):
             return _iter_items_lazystack(tensordict)
         elif isinstance(tensordict, KeyedJaggedTensor):
@@ -242,6 +243,9 @@ class _TensorDictKeysView:
             # or _CustomOpTensorDict, so as we iterate through the contents we need to
             # be careful to not rely on tensordict._tensordict existing.
             return ((key, tensordict.get(key)) for key in tensordict._source.keys())
+        raise NotImplementedError(
+            f"_TensorDictKeysView doesn't support {tensordict.__class__}"
+        )
 
     def _keys(self):
         return self.tensordict._tensordict.keys()
@@ -2077,14 +2081,30 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     f"(batch_size = {self.batch_size}, index={index}), "
                     f"which differs from the source batch size {value.batch_size}"
                 )
-            keys = set(self.keys())
-            if not all(key in keys for key in value.keys()):
-                subtd = self.get_sub_tensordict(index)
-            for key, item in value.items():
-                if key in keys:
+            subtd = None
+            autonested_keys = []
+            for key in _TensorDictKeysView(
+                value,
+                include_nested=True,
+                leaves_only=True,
+                error_on_loop=False,
+                yield_autonested_keys=True,
+            ):
+                if isinstance(key, _NestedKey):
+                    autonested_keys.append(key)
+                    continue
+                item = value.get(key)
+                if key in self.keys(include_nested=True):
                     self.set_at_(key, item, index)
                 else:
+                    if subtd is None:
+                        subtd = self.get_sub_tensordict(index)
                     subtd.set(key, item)
+
+            for root_key, nested_key in autonested_keys:
+                self.set(
+                    nested_key, self.get(root_key) if root_key is not None else self
+                )
 
     def __delitem__(self, index: INDEX_TYPING) -> TensorDictBase:
         # if isinstance(index, str):
@@ -4881,6 +4901,11 @@ class LazyStackedTensorDict(TensorDictBase):
         self._is_memmap = False
         for td in self.tensordicts:
             td.unlock()
+        return self
+
+    def zero_(self):
+        for td in self.tensordicts:
+            td.zero_()
         return self
 
 

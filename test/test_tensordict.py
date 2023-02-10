@@ -2489,8 +2489,8 @@ def test_batchsize_reset():
     # test index
     td[torch.tensor([1, 2])]
     with pytest.raises(
-        IndexError,
-        match=re.escape("too many indices for tensor of dimension 1"),
+        RuntimeError,
+        match=re.escape("The shape torch.Size([3]) is incompatible with the index"),
     ):
         td[:, 0]
 
