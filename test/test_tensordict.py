@@ -778,13 +778,15 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_apply(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
-        td_1 = td.apply(lambda x: x + 1, inplace=inplace)
+        td_1 = td.apply_(lambda x: x + 1, inplace=inplace)
+        keys_view = _TensorDictKeysView(td, include_nested=True, leaves_only=True,
+                                        error_on_loop=False)
         if inplace:
-            for key in td.keys(True, True):
+            for key in keys_view:
                 assert (td_c[key] + 1 == td[key]).all()
                 assert (td_1[key] == td[key]).all()
         else:
-            for key in td.keys(True, True):
+            for key in keys_view:
                 assert (td_c[key] + 1 != td[key]).any()
                 assert (td_1[key] == td[key] + 1).all()
 
