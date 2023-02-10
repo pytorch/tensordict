@@ -364,6 +364,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def ndimension(self) -> int:
         return self.batch_dims
 
+    @property
+    def ndim(self):
+        return self.batch_dims
+
     def dim(self) -> int:
         return self.batch_dims
 
@@ -1602,6 +1606,42 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             )
             for i in range(len(dictionaries))
         ]
+
+    def gather(self, dim: int, index: torch.Tensor, out=None):
+        """Gathers values along an axis specified by `dim`.
+
+        Args:
+            dim (int): the dimension along which collect the elements
+            index (torch.Tensor): a long tensor which number of dimension matches
+                the one of the tensordict with only one dimension differring between
+                the two (the gathering dimension). Its elements refer to the
+                index to be gathered along the required dimension.
+            out (TensorDictBase, optional): a destination tensordict. It must
+                have the same shape as the index.
+
+        Examples:
+            >>> td = TensorDict(
+            ...     {"a": torch.randn(3, 4, 5),
+            ...      "b": TensorDict({"c": torch.zeros(3, 4, 5)}, [3, 4, 5])},
+            ...     [3, 4])
+            >>> index = torch.randint(4, (3, 2))
+            >>> td_gather = td.gather(dim=1, index=index)
+            >>> print(td_gather)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 2, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 2]),
+                device=None,
+                is_shared=False)
+
+        """
+        return torch.gather(self, dim, index, out=out)
 
     def view(
         self,
@@ -3042,6 +3082,47 @@ def assert_allclose_td(
 @implements_for_td(torch.unbind)
 def _unbind(td: TensorDictBase, *args, **kwargs) -> Tuple[TensorDictBase, ...]:
     return td.unbind(*args, **kwargs)
+
+
+@implements_for_td(torch.gather)
+def _gather(
+    input: TensorDictBase,
+    dim: int,
+    index: Tensor,
+    *,
+    sparse_grad: bool = False,
+    out: Optional[TensorDictBase] = None,
+):
+    if sparse_grad:
+        raise NotImplementedError(
+            "sparse_grad=True not implemented for torch.gather(tensordict, ...)"
+        )
+    # the index must have as many dims as the tensordict
+    if not len(index):
+        raise RuntimeError("Cannot use torch.gather with an empty index")
+    if dim < 0:
+        dim = input.batch_dims + dim
+
+    def _gather_tensor(tensor, dest=None):
+        index_expand = index
+        while index_expand.ndim < tensor.ndim:
+            index_expand = index_expand.unsqueeze(-1)
+        target_shape = list(tensor.shape)
+        target_shape[dim] = index_expand.shape[dim]
+        index_expand = index_expand.expand(target_shape)
+        out = torch.gather(tensor, dim, index_expand, out=dest)
+        return out
+
+    if out is None:
+        return TensorDict(
+            {key: _gather_tensor(value) for key, value in input.items()},
+            batch_size=index.shape,
+        )
+    TensorDict(
+        {key: _gather_tensor(value, out[key]) for key, value in input.items()},
+        batch_size=index.shape,
+    )
+    return out
 
 
 @implements_for_td(torch.full_like)
