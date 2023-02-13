@@ -1020,6 +1020,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         if not isinstance(other, (TensorDictBase, dict, float, int)):
             return False
+
         if isinstance(other, dict):
             other = make_tensordict(**other, batch_size=self.batch_size)
 
