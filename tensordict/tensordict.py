@@ -615,20 +615,18 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 )
         return out
 
-    def apply_(self, fn: Callable, inplace: bool = True) -> TensorDictBase:
+    def apply_(self, fn: Callable) -> TensorDictBase:
         """Applies a callable to all values stored in the tensordict and re-writes them in-place.
 
         Args:
             fn (Callable): function to be applied to the tensors in the
                 tensordict.
-            inplace (bool): if to apply the function in place or not
-
 
         Returns:
             self or a copy of self with the function applied
 
         """
-        return _apply_safe(lambda _, value: fn(value), self, inplace=inplace)
+        return _apply_safe(lambda _, value: fn(value), self, inplace=True)
 
     def apply(
         self,

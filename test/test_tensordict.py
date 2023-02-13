@@ -738,12 +738,10 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
         td.unlock()
-        keys_view = _TensorDictKeysView(td_clone, include_nested=True, leaves_only=False, error_on_loop=False)
         for key in keys_view:
             item = td_clone.get(key)
             td.set(key, item)
         td.lock()
-        keys_view = _TensorDictKeysView(td_clone, include_nested=True, leaves_only=False, error_on_loop=False)
         for key in keys_view:
             item = td_clone.get(key)
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
@@ -784,7 +782,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_apply(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
-        td_1 = td.apply_(lambda x: x + 1, inplace=inplace)
+        td_1 = td.apply(lambda x: x + 1, inplace=inplace)
         keys_view = _TensorDictKeysView(td, include_nested=True, leaves_only=True,
                                         error_on_loop=False)
         if inplace:
@@ -836,7 +834,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert_allclose_td(td_masked, td_masked2)
         assert td_masked.batch_size[0] == mask.sum()
         assert td_masked.batch_dims == 1
-        #
+
         mask_list = mask.cpu().numpy().tolist()
         td_masked3 = td[mask_list]
         assert_allclose_td(td_masked3, td_masked2)
@@ -1352,7 +1350,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
         td_clone = torch.cat([td_clone, td_clone], 0)
         with pytest.raises(RuntimeError, match="differs from the source batch size"):
-           td[idx] = td_clone
+            td[idx] = td_clone
 
     def test_setitem_string(self, td_name, device):
         torch.manual_seed(1)
