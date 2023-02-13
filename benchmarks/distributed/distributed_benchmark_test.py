@@ -1,17 +1,23 @@
-import argparse
 import os
-import sys
 import time
+
+import pytest
 
 import torch
 from tensordict import MemmapTensor, TensorDict
 from torch.distributed import rpc
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--rank", type=int)
-
 MAIN_NODE = "Main"
 WORKER_NODE = "worker"
+
+
+@pytest.fixture
+def rank(pytestconfig):
+    return pytestconfig.getoption("rank")
+
+
+def test_distributed(benchmark, rank):
+    benchmark.pedantic(exec_distributed_test, args=(rank,), iterations=1)
 
 
 class CloudpickleWrapper(object):
@@ -32,9 +38,7 @@ class CloudpickleWrapper(object):
         return self.fn(*args, **kwargs)
 
 
-if __name__ == "__main__":
-    args = parser.parse_args()
-    rank = args.rank
+def exec_distributed_test(rank_node):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "29549"
     os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
@@ -42,6 +46,7 @@ if __name__ == "__main__":
     options = rpc.TensorPipeRpcBackendOptions(
         num_worker_threads=16, init_method=str_init_method
     )
+    rank = rank_node
     if rank == 0:
         rpc.init_rpc(
             MAIN_NODE,
@@ -78,21 +83,18 @@ if __name__ == "__main__":
 
         fill_tensordict_cp = CloudpickleWrapper(fill_tensordict)
         idx = [0, 1, 2, 3, 999]
-        out = rpc.rpc_sync(
+        rpc.rpc_sync(
             worker_info,
             fill_tensordict_cp,
             args=(tensordict, idx),
         )
 
         idx = [4, 5, 6, 7, 998]
-        t0 = time.time()
-        out = rpc.rpc_sync(
+        rpc.rpc_sync(
             worker_info,
             fill_tensordict_cp,
             args=(tensordict, idx),
         )
-        print("time elapsed:", time.time() - t0)
-        print("check all ones", out["memmap"][idx, :1, :1, :1].clone())
 
         rpc.shutdown()
     elif rank == 1:
@@ -102,7 +104,3 @@ if __name__ == "__main__":
             backend=rpc.BackendType.TENSORPIPE,
             rpc_backend_options=options,
         )
-
-        breakpoint()
-        rpc.shutdown()
-    sys.exit()

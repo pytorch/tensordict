@@ -42,6 +42,7 @@ Contents
    overview
    distributed
    fx
+   saving
    reference/index
 
 Indices and tables

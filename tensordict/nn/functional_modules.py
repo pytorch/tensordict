@@ -172,11 +172,13 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             if not isinstance(batched_output, TensorDictBase):
                 out = _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
             else:
+                new_batch_size = list(batched_output.batch_size)
+                new_batch_size.insert(out_dim, batch_size)
                 out = batched_output.apply(
                     lambda x, out_dim=out_dim: _remove_batch_dim(
                         x, vmap_level, batch_size, out_dim
                     ),
-                    batch_size=[batch_size, *batched_output.batch_size],
+                    batch_size=new_batch_size,
                 )
             flat_outputs.append(out)
         return tree_unflatten(flat_outputs, output_spec)
