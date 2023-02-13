@@ -686,14 +686,6 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)
-
-        # TODO Fix once _items method is implemented for SubTensorDict
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Cannot use TensorDictKeysView for SubTensorDict instances at the"
-                "moment, skipping test case!!"
-            )
-
         is_locked = td.is_locked
         keys_view = _TensorDictKeysView(
             tensordict=td, include_nested=True, leaves_only=False, error_on_loop=False
@@ -733,12 +725,6 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_lock_write(self, td_name, device):
         td = getattr(self, td_name)(device)
-        # TODO Fix once _items method is implemented for SubTensorDict
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Cannot use TensorDictKeysView for SubTensorDict instances at the"
-                "moment, skipping test case!!"
-            )
         td.lock()
         td_clone = td.clone()
         assert not td_clone.is_locked
@@ -746,14 +732,18 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not td_clone.is_locked
         assert td.is_locked
         td = td.select(inplace=True)
-        for key, item in td_clone.items(True):
+        keys_view = _TensorDictKeysView(td_clone, include_nested=True, leaves_only=False, error_on_loop=False)
+        for key in keys_view:
+            item = td_clone.get(key)
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
         td.unlock()
-        for key, item in td_clone.items(True):
+        for key in keys_view:
+            item = td_clone.get(key)
             td.set(key, item)
         td.lock()
-        for key, item in td_clone.items(True):
+        for key in keys_view:
+            item = td_clone.get(key)
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
             td.set_(key, item)
@@ -761,12 +751,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_unlock(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        # TODO Fix once _items method is implemented for SubTensorDict
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Cannot use TensorDictKeysView for SubTensorDict instances at the"
-                "moment, skipping test case!!"
-            )
         td.unlock()
         assert not td.is_locked
         assert td.device.type == "cuda" or not td.is_shared()
@@ -775,13 +759,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-
-        # TODO Fix once _items method is implemented for SubTensorDict
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Cannot use TensorDictKeysView for SubTensorDict instances at the"
-                "moment, skipping test case!!"
-            )
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         new_td = td.masked_fill(mask, -10.0)
         assert new_td is not td
@@ -806,12 +783,14 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
         td_1 = td.apply(lambda x: x + 1, inplace=inplace)
+        keys_view = _TensorDictKeysView(td, include_nested=True, leaves_only=True,
+                                        error_on_loop=False)
         if inplace:
-            for key in td.keys(True, True):
+            for key in keys_view:
                 assert (td_c[key] + 1 == td[key]).all()
                 assert (td_1[key] == td[key]).all()
         else:
-            for key in td.keys(True, True):
+            for key in keys_view:
                 assert (td_c[key] + 1 != td[key]).any()
                 assert (td_1[key] == td[key] + 1).all()
 
@@ -842,6 +821,11 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_masking(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+        if td_name == "autonested_td":
+            pytest.skip(
+                " assert_allclose_td function is not yet designed for auto-nesting case."
+                " Skipping auto-nesting test case!!"
+            )
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
             0.8
         )
@@ -1203,12 +1187,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_nestedtensor_stack(self, td_name, device, dim, key):
         torch.manual_seed(1)
 
-        # TODO Fix once _items method is implemented for SubTensorDict
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Cannot use TensorDictKeysView for SubTensorDict instances at the"
-                "moment, skipping test case!!"
-            )
         td1 = getattr(self, td_name)(device).unlock()
         td2 = getattr(self, td_name)(device).unlock()
 
@@ -1321,7 +1299,11 @@ class TestTensorDicts(TestTensorDictsBase):
     )
     def test_getitem_ellipsis(self, td_name, device, actual_index, expected_index):
         torch.manual_seed(1)
-
+        if td_name == "autonested_td":
+            pytest.skip(
+                " The called assert_allclose_td function is not yet designed for"
+                " auto-nesting case. Skipping auto-nesting test case!!"
+            )
         td = getattr(self, td_name)(device)
 
         actual_td = td[actual_index]
@@ -1352,6 +1334,12 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_setitem(self, td_name, device, idx):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+        if td_name == "autonested_td":
+            pytest.skip(
+                " This test fails for auto-nested case due to the cat function that"
+                " needs to be adapted. Skipping test for autonested case"
+            )
+
         if isinstance(idx, torch.Tensor) and idx.numel() > 1 and td.shape[0] == 1:
             pytest.mark.skip("cannot index tensor with desired index")
             return
@@ -1528,6 +1516,11 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_chunk(self, td_name, device, dim, chunks):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+        if td_name == "autonested_td":
+            pytest.skip(
+                " This test cannot be run in auto-nested case since the cat function"
+                " is not adapted to auto-nested inputs. Skipping auto-nested test case!!"
+            )
         if len(td.shape) - 1 < dim:
             pytest.mark.skip(f"no dim {dim} in td")
             return
@@ -1635,7 +1628,6 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         td_dict["d"] = nested_dict_value
         td_clone["d"] = nested_tensordict_value
-
         # Re-init new TensorDict from dict, and check if they're equal
         td_dict_init = TensorDict(td_dict, batch_size=td.batch_size, device=device)
 
@@ -1686,12 +1678,6 @@ class TestTensorDicts(TestTensorDictsBase):
                 " Skipping auto-nesting test case!!"
             )
 
-        # TODO Check why it fails for SubTensorDicts
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Flatten keys test momentarily disabled when applied to SubTensorDicts!!"
-            )
-
         locked = td.is_locked
         td.unlock()
         nested_nested_tensordict = TensorDict(
@@ -1732,6 +1718,13 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("separator", [",", "-"])
     def test_unflatten_keys(self, td_name, device, inplace, separator):
         td = getattr(self, td_name)(device)
+
+        if td_name == "autonested_td":
+            pytest.skip(
+                "Unflatten keys function is not  designed for auto-nesting case."
+                " Skipping auto-nesting test case!!"
+            )
+
         locked = td.is_locked
         td.unlock()
         nested_nested_tensordict = TensorDict(
@@ -1900,13 +1893,6 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_set_default_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
-
-        # TODO Fix once _items method is implemented for SubTensorDict
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Cannot use TensorDictKeysView for SubTensorDict instances at the"
-                "moment, skipping test case!!"
-            )
         td.unlock()
         expected = torch.ones_like(td.get("a"))
         inserted = td.set_default("z", expected, _run_checks=True)
@@ -1914,28 +1900,13 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_set_default_existing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
-
-        # TODO Fix once _items method is implemented for SubTensorDict
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Cannot use TensorDictKeysView for SubTensorDict instances at the"
-                "moment, skipping test case!!"
-            )
         td.unlock()
         expected = td.get("a")
         inserted = td.set_default("a", torch.ones_like(td.get("b")))
         assert (inserted == expected).all()
 
     def test_setdefault_nested(self, td_name, device):
-
         td = getattr(self, td_name)(device)
-
-        # TODO Fix once _items method is implemented for SubTensorDict
-        if td_name in ["sub_td", "sub_td2"]:
-            pytest.skip(
-                "Cannot use TensorDictKeysView for SubTensorDict instances at the"
-                "moment, skipping test case!!"
-            )
         td.unlock()
         tensor = torch.randn(4, 3, 2, 1, 5, device=device)
         tensor2 = torch.ones(4, 3, 2, 1, 5, device=device)
