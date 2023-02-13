@@ -826,8 +826,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         if td_name == "autonested_td":
             pytest.skip(
-                " assert_allclose_td function is not yet designed for auto-nesting case."
-                " Skipping auto-nesting test case!!"
+                "assert_allclose_td function is not yet designed for auto-nested case."
             )
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
             0.8
@@ -856,12 +855,58 @@ class TestTensorDicts(TestTensorDictsBase):
         td0 = td.to_tensordict().zero_()
         assert (td != td0).any()
 
+    def test_equal_float(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.zero_()
+        assert (td == 0.0).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td0 != 1.0).all()
+
+    def test_equal_other(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert not td == "z"
+        assert td != "z"
+
+    def test_equal_int(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.zero_()
+        assert (td == 0).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td0 != 1).all()
+
+    def test_equal_tensor(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.zero_()
+        assert (td == torch.zeros([], dtype=torch.int, device=device)).all()
+        td0 = td.to_tensordict().zero_()
+        assert (td0 != torch.ones([], dtype=torch.int, device=device)).all()
+
     def test_equal_dict(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         assert (td == td.to_dict()).all()
         td0 = td.to_tensordict().zero_().to_dict()
         assert (td != td0).any()
+
+    @pytest.mark.parametrize("dim", [0, 1, 2, 3, -1, -2, -3])
+    def test_gather(self, td_name, device, dim):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        index = torch.ones(td.shape, device=td.device, dtype=torch.long)
+        other_dim = dim + index.ndim if dim < 0 else dim
+        idx = (*[slice(None) for _ in range(other_dim)], slice(2))
+        index = index[idx]
+        index = index.cumsum(dim=other_dim) - 1
+        # gather
+        td_gather = torch.gather(td, dim=dim, index=index)
+        # gather with out
+        td_gather.zero_()
+        out = td_gather.to_tensordict()
+        td_gather2 = torch.gather(td, dim=dim, index=index, out=out)
+        assert (td_gather2 != 0).any()
 
     @pytest.mark.parametrize("from_list", [True, False])
     def test_masking_set(self, td_name, device, from_list):
@@ -1521,8 +1566,8 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         if td_name == "autonested_td":
             pytest.skip(
-                " This test cannot be run in auto-nested case since the cat function"
-                " is not adapted to auto-nested inputs. Skipping auto-nested test case!!"
+                "This test cannot be run in auto-nested case since the cat function "
+                "is not adapted to auto-nested inputs."
             )
         if len(td.shape) - 1 < dim:
             pytest.mark.skip(f"no dim {dim} in td")
@@ -1771,9 +1816,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_memmap_(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name == "autonested_td":
-            pytest.skip(
-                "Memmap function is not  designed for auto-nesting case. Skipping auto-nesting test case!!"
-            )
+            pytest.skip("Memmap function is not designed for auto-nesting case.")
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(
                 RuntimeError,
@@ -1784,11 +1827,9 @@ class TestTensorDicts(TestTensorDictsBase):
             td.memmap_()
             assert td.is_memmap()
 
-    def test_memmap_prefix(self, td_name, device, tmpdir):
+    def test_memmap_prefix(self, td_name, device, tmp_path):
         if td_name == "autonested_td":
-            pytest.skip(
-                "Memmap function is not  designed for auto-nesting case. Skipping auto-nesting test case!!"
-            )
+            pytest.skip("Memmap function is not designed for auto-nesting case.")
         if td_name == "memmap_td":
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
@@ -1800,13 +1841,13 @@ class TestTensorDicts(TestTensorDictsBase):
                 RuntimeError,
                 match="Converting a sub-tensordict values to memmap cannot be done",
             ):
-                td.memmap_(tmpdir / "tensordict")
+                td.memmap_(tmp_path / "tensordict")
             return
         else:
-            td.memmap_(tmpdir / "tensordict")
+            td.memmap_(tmp_path / "tensordict")
 
-        assert (tmpdir / "tensordict" / "meta.pt").exists()
-        metadata = torch.load(tmpdir / "tensordict" / "meta.pt")
+        assert (tmp_path / "tensordict" / "meta.pt").exists()
+        metadata = torch.load(tmp_path / "tensordict" / "meta.pt")
         if td_name in ("stacked_td", "nested_stacked_td"):
             pass
         elif td_name in ("unsqueezed_td", "squeezed_td", "permute_td"):
@@ -1816,11 +1857,11 @@ class TestTensorDicts(TestTensorDictsBase):
             assert metadata["batch_size"] == td.batch_size
             assert metadata["device"] == td.device
 
-        td2 = td.__class__.load_memmap(tmpdir / "tensordict")
+        td2 = td.__class__.load_memmap(tmp_path / "tensordict")
         assert (td == td2).all()
 
     @pytest.mark.parametrize("copy_existing", [False, True])
-    def test_memmap_existing(self, td_name, device, copy_existing, tmpdir):
+    def test_memmap_existing(self, td_name, device, copy_existing, tmp_path):
         if td_name == "memmap_td":
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
@@ -1830,22 +1871,20 @@ class TestTensorDicts(TestTensorDictsBase):
                 "SubTensorDict and memmap_ incompatibility is checked elsewhere"
             )
         elif td_name == "autonested_td":
-            pytest.skip(
-                "Memmap function is not  designed for auto-nesting case. Skipping auto-nesting test case!!"
-            )
+            pytest.skip("Memmap function is not designed for auto-nesting case.")
 
-        td = getattr(self, td_name)(device).memmap_(prefix=tmpdir / "tensordict")
+        td = getattr(self, td_name)(device).memmap_(prefix=tmp_path / "tensordict")
         td2 = getattr(self, td_name)(device).memmap_()
 
         if copy_existing:
-            td3 = td.memmap_(prefix=tmpdir / "tensordict2", copy_existing=True)
+            td3 = td.memmap_(prefix=tmp_path / "tensordict2", copy_existing=True)
             assert (td == td3).all()
         else:
             with pytest.raises(
                 RuntimeError, match="TensorDict already contains MemmapTensors"
             ):
                 # calling memmap_ with prefix that is different to contents gives error
-                td.memmap_(prefix=tmpdir / "tensordict2")
+                td.memmap_(prefix=tmp_path / "tensordict2")
 
             # calling memmap_ without prefix means no-op, regardless of whether contents
             # were saved in temporary or designated location (td vs. td2 resp.)

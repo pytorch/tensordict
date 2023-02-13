@@ -8,6 +8,7 @@ from __future__ import annotations
 import abc
 import collections
 import functools
+import numbers
 import textwrap
 from collections import defaultdict, namedtuple
 from collections.abc import Mapping
@@ -393,6 +394,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def ndimension(self) -> int:
         return self.batch_dims
 
+    @property
+    def ndim(self):
+        return self.batch_dims
+
     def dim(self) -> int:
         return self.batch_dims
 
@@ -458,6 +463,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return out
 
     def load_state_dict(self, state_dict: OrderedDict) -> TensorDictBase:
+        # copy since we'll be using pop
+        state_dict = copy(state_dict)
         self.batch_size = state_dict.pop("__batch_size")
         device = state_dict.pop("__device")
         if device is not None:
@@ -989,26 +996,36 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, (TensorDictBase, dict, float, int)):
-            return True
-        if not isinstance(other, TensorDictBase) and isinstance(other, dict):
-            other = make_tensordict(**other, batch_size=self.batch_size)
+        # avoiding circular imports
+        from tensordict.prototype import is_tensorclass
 
-        def hook(key, value):
-            if isinstance(other, TensorDictBase):
-                other_ = other.get(key) if key else other
+        if is_tensorclass(other):
+            return other != self
+        if isinstance(other, (dict, TensorDictBase)):
+            if isinstance(other, dict):
+                def get_value(key):
+                    return _dict_get_nested(other, key)
+            else:
+                def get_value(key):
+                    return other.get(key)
+
+            def hook(key, value):
+                other_ = get_value(key) if key else other
                 keys1 = set(value.keys())
                 keys2 = set(other_.keys())
-                if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                if keys1.symmetric_difference(keys2):
                     raise KeyError(
-                        f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
+                        f"Keys in {self} and other mismatch at {key}, got {keys1} and "
+                        f"{keys2}"
                     )
 
-        def fn(key, value):
-            other_ = other.get(key) if isinstance(other, TensorDictBase) else other
-            return value != other_
+            def fn(key, value):
+                return value != get_value(key)
 
-        return _apply_safe(fn, self, hook=hook)
+            return _apply_safe(fn, self, hook=hook)
+        if isinstance(other, (numbers.Number, torch.Tensor)):
+            return _apply_safe(lambda _, value: value != other, self)
+        return True
 
     def __eq__(self, other: object) -> Union[bool, TensorDictBase]:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
@@ -1018,26 +1035,36 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, (TensorDictBase, dict, float, int)):
-            return False
-        if isinstance(other, dict):
-            other = make_tensordict(**other, batch_size=self.batch_size)
+        # avoiding circular imports
+        from tensordict.prototype import is_tensorclass
 
-        def hook(key, value):
-            if isinstance(other, TensorDictBase):
-                other_ = other.get(key) if key else other
+        if is_tensorclass(other):
+            return other == self
+        if isinstance(other, (dict, TensorDictBase)):
+            if isinstance(other, dict):
+                def get_value(key):
+                    return _dict_get_nested(other, key)
+            else:
+                def get_value(key):
+                    return other.get(key)
+
+            def hook(key, value):
+                other_ = get_value(key) if key else other
                 keys1 = set(value.keys())
                 keys2 = set(other_.keys())
-                if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                if keys1.symmetric_difference(keys2):
                     raise KeyError(
-                        f"keys in tensordicts mismatch, got {keys1} and {keys2}"
+                        f"Keys in {self} and other mismatch at {key}, got {keys1} and "
+                        f"{keys2}"
                     )
 
-        def fn(key, value):
-            other_ = other.get(key) if isinstance(other, TensorDictBase) else other
-            return value == other_
+            def fn(key, value):
+                return value == get_value(key)
 
-        return _apply_safe(fn, self, hook=hook)
+            return _apply_safe(fn, self, hook=hook)
+        if isinstance(other, (numbers.Number, torch.Tensor)):
+            return _apply_safe(lambda _, value: value == other, self)
+        return False
 
     @abc.abstractmethod
     def del_(self, key: str) -> TensorDictBase:
@@ -1634,6 +1661,42 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             )
             for i in range(len(dictionaries))
         ]
+
+    def gather(self, dim: int, index: torch.Tensor, out=None):
+        """Gathers values along an axis specified by `dim`.
+
+        Args:
+            dim (int): the dimension along which collect the elements
+            index (torch.Tensor): a long tensor which number of dimension matches
+                the one of the tensordict with only one dimension differring between
+                the two (the gathering dimension). Its elements refer to the
+                index to be gathered along the required dimension.
+            out (TensorDictBase, optional): a destination tensordict. It must
+                have the same shape as the index.
+
+        Examples:
+            >>> td = TensorDict(
+            ...     {"a": torch.randn(3, 4, 5),
+            ...      "b": TensorDict({"c": torch.zeros(3, 4, 5)}, [3, 4, 5])},
+            ...     [3, 4])
+            >>> index = torch.randint(4, (3, 2))
+            >>> td_gather = td.gather(dim=1, index=index)
+            >>> print(td_gather)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 2, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 2]),
+                device=None,
+                is_shared=False)
+
+        """
+        return torch.gather(self, dim, index, out=out)
 
     def view(
         self,
@@ -3208,6 +3271,47 @@ def assert_allclose_td(
 @implements_for_td(torch.unbind)
 def _unbind(td: TensorDictBase, *args, **kwargs) -> Tuple[TensorDictBase, ...]:
     return td.unbind(*args, **kwargs)
+
+
+@implements_for_td(torch.gather)
+def _gather(
+    input: TensorDictBase,
+    dim: int,
+    index: Tensor,
+    *,
+    sparse_grad: bool = False,
+    out: Optional[TensorDictBase] = None,
+):
+    if sparse_grad:
+        raise NotImplementedError(
+            "sparse_grad=True not implemented for torch.gather(tensordict, ...)"
+        )
+    # the index must have as many dims as the tensordict
+    if not len(index):
+        raise RuntimeError("Cannot use torch.gather with an empty index")
+    if dim < 0:
+        dim = input.batch_dims + dim
+
+    def _gather_tensor(tensor, dest=None):
+        index_expand = index
+        while index_expand.ndim < tensor.ndim:
+            index_expand = index_expand.unsqueeze(-1)
+        target_shape = list(tensor.shape)
+        target_shape[dim] = index_expand.shape[dim]
+        index_expand = index_expand.expand(target_shape)
+        out = torch.gather(tensor, dim, index_expand, out=dest)
+        return out
+
+    if out is None:
+        return TensorDict(
+            {key: _gather_tensor(value) for key, value in input.items()},
+            batch_size=index.shape,
+        )
+    TensorDict(
+        {key: _gather_tensor(value, out[key]) for key, value in input.items()},
+        batch_size=index.shape,
+    )
+    return out
 
 
 @implements_for_td(torch.full_like)
