@@ -3628,8 +3628,10 @@ torch.Size([3, 2])
                 )
         else:
             tensor_expand = torch.zeros(
-                *parent.batch_size,
-                *_shape(tensor)[self.batch_dims :],
+                (
+                    *parent.batch_size,
+                    *_shape(tensor)[self.batch_dims :],
+                ),
                 dtype=tensor.dtype,
                 device=self.device,
             )
@@ -5410,8 +5412,10 @@ if _has_torchrec:
 def _expand_to_match_shape(parent_batch_size, tensor, self_batch_dims, self_device):
     if hasattr(tensor, "dtype"):
         return torch.zeros(
-            *parent_batch_size,
-            *_shape(tensor)[self_batch_dims:],
+            (
+                *parent_batch_size,
+                *_shape(tensor)[self_batch_dims:],
+            ),
             dtype=tensor.dtype,
             device=self_device,
         )
