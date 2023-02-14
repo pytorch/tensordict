@@ -825,13 +825,12 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         if td_name == "autonested_td":
             pytest.skip(
-                "Test failing in auto-nested case. The assert_allclose_td  function not"
-                "designed for this case. Skipping!!"
+                "Test failing in auto-nested case. RuntimeError: Originating a BooleanPair() at item"
+                " The assert_allclose_td  function not designed for this case. Skipping!!"
             )
         new_td = TensorDict({}, batch_size=td.batch_size, device=device)
-        keys_view = _TensorDictKeysView(td, include_nested=True, leaves_only=False, error_on_loop=False)
-        for key in keys_view:
-            new_td.set(key, td.get(key))
+        for key, item in td.items():
+            new_td.set(key, item)
         assert_allclose_td(td, new_td)
         assert td.device == new_td.device
         assert td.shape == new_td.shape
@@ -861,8 +860,9 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_entry_type(self, td_name, device):
         td = getattr(self, td_name)(device)
-        for key in _TensorDictKeysView(td, include_nested=True, leaves_only=False,
-                                       error_on_loop=False):
+        for key in _TensorDictKeysView(
+            td, include_nested=True, leaves_only=False, error_on_loop=False
+        ):
             assert type(td.get(key)) is td.entry_class(key)
 
     def test_equal(self, td_name, device):
@@ -957,7 +957,9 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         n = mask.sum()
         d = td.ndimension()
-        keys_view = _TensorDictKeysView(td, include_nested=True, leaves_only=False, error_on_loop=False)
+        keys_view = _TensorDictKeysView(
+            td, include_nested=True, leaves_only=False, error_on_loop=False
+        )
         pseudo_td = TensorDict(
             {k: zeros_like(td.get(k), n, d) for k in keys_view}, [n], device=device
         )
@@ -1161,13 +1163,14 @@ class TestTensorDicts(TestTensorDictsBase):
         assert set(td.keys()) == keys.union({"x"})
         # now with nested
         td["newnested"] = {"z": torch.zeros(td.shape)}
-        keys_view = _TensorDictKeysView(td, include_nested=True, leaves_only=False, error_on_loop=False)
-        keys = list(keys_view)
-        keys = set(keys)
+        keys_view = _TensorDictKeysView(
+            td, include_nested=True, leaves_only=False, error_on_loop=False
+        )
+        keys = set(keys_view)
         assert ("newnested", "z") in keys
         td.update({"newnested": {"y": torch.zeros(td.shape)}}, clone=clone)
         keys = keys.union({("newnested", "y")})
-        assert keys == set(list(keys_view))
+        assert keys == set(keys_view)
         td.update(
             {
                 ("newnested", "x"): torch.zeros(td.shape),
@@ -1176,10 +1179,10 @@ class TestTensorDicts(TestTensorDictsBase):
             clone=clone,
         )
         keys = keys.union({("newnested", "x"), ("newnested", "w")})
-        assert keys == set(list(keys_view))
+        assert keys == set(keys_view)
         td.update({("newnested",): {"v": torch.zeros(td.shape)}}, clone=clone)
-        keys = keys.union({("newnested", "v"),})
-        assert keys == set(list(keys_view))
+        keys = keys.union({("newnested", "v")})
+        assert keys == set(keys_view)
 
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(ValueError, match="Tried to replace a tensordict with"):
@@ -1728,7 +1731,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td_clone["d"] = nested_tensordict_value
         # Re-init new TensorDict from dict, and check if they're equal
         td_dict_init = TensorDict(td_dict, batch_size=td.batch_size, device=device)
-        #
+
         assert (td_clone == td_dict_init).all()
 
     def test_nested_td_index(self, td_name, device):

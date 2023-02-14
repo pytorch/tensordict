@@ -1003,9 +1003,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return other != self
         if isinstance(other, (dict, TensorDictBase)):
             if isinstance(other, dict):
+
                 def get_value(key):
                     return _dict_get_nested(other, key)
+
             else:
+
                 def get_value(key):
                     return other.get(key)
 
@@ -1042,9 +1045,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return other == self
         if isinstance(other, (dict, TensorDictBase)):
             if isinstance(other, dict):
+
                 def get_value(key):
                     return _dict_get_nested(other, key)
+
             else:
+
                 def get_value(key):
                     return other.get(key)
 
