@@ -12,11 +12,13 @@ import pytest
 import torch
 import torchsnapshot
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
-from tensordict import detect_loop, LazyStackedTensorDict, MemmapTensor, TensorDict
+from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
+    _apply_safe,
     _stack as stack_td,
     _TensorDictKeysView,
     assert_allclose_td,
+    detect_loop,
     make_tensordict,
     pad,
     TensorDictBase,
@@ -567,11 +569,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_select_exception(self, td_name, device, strict):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test Failing in auto-nested case. The select function not designed"
-                " for this case. Skipping!!"
-            )
         if strict:
             with pytest.raises(KeyError):
                 _ = td.select("tada", strict=strict)
@@ -632,11 +629,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_broadcast(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. Assignment of slice (setitem) not "
-                "designed for this case. Skipping!!"
-            )
         sub_td = td[:, :2].to_tensordict()
         sub_td.zero_()
         sub_dict = sub_td.to_dict()
@@ -687,7 +679,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         is_locked = td.is_locked
         keys_view = _TensorDictKeysView(
-            tensordict=td, include_nested=True, leaves_only=False, error_on_loop=False
+            td, include_nested=True, leaves_only=False, error_on_loop=False
         )
         for k in keys_view:
             item = td.get(k)
@@ -697,9 +689,6 @@ class TestTensorDicts(TestTensorDictsBase):
         td.is_locked = not is_locked
         assert td.is_locked != is_locked
 
-        keys_view = _TensorDictKeysView(
-            tensordict=td, include_nested=True, leaves_only=False, error_on_loop=False
-        )
         for k in keys_view:
             item = td.get(k)
             if isinstance(item, TensorDictBase):
@@ -708,9 +697,6 @@ class TestTensorDicts(TestTensorDictsBase):
         td.lock()
         assert td.is_locked
 
-        keys_view = _TensorDictKeysView(
-            tensordict=td, include_nested=True, leaves_only=False, error_on_loop=False
-        )
         for k in keys_view:
             item = td.get(k)
             if isinstance(item, TensorDictBase):
@@ -763,13 +749,7 @@ class TestTensorDicts(TestTensorDictsBase):
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         new_td = td.masked_fill(mask, -10.0)
         assert new_td is not td
-        key_view = _TensorDictKeysView(
-            new_td, include_nested=True, leaves_only=False, error_on_loop=False
-        )
-
-        for key in key_view:
-            item = new_td.get(key)
-            assert (item[mask] == -10).all()
+        assert (new_td[mask] == -10).all()
 
     def test_zero_(self, td_name, device):
         torch.manual_seed(1)
@@ -784,10 +764,11 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
         if td_name == "autonested_td":
-            pytest.skip(
-                "Test Failing in auto-nested case. The apply function not designed"
-                " for this case. Skipping!!"
-            )
+            with pytest.raises(
+                RecursionError, match="apply failed due to a recursion error"
+            ):
+                td.apply(lambda x: x + 1, inplace=inplace)
+            return
         td_1 = td.apply(lambda x: x + 1, inplace=inplace)
         keys_view = _TensorDictKeysView(
             td, include_nested=True, leaves_only=True, error_on_loop=False
@@ -806,10 +787,11 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
         if td_name == "autonested_td":
-            pytest.skip(
-                "Test Failing in auto-nested case. The apply function not designed"
-                " for this case. Skipping!!"
-            )
+            with pytest.raises(
+                RecursionError, match="apply failed due to a recursion error"
+            ):
+                td.apply(lambda x: x + 1, inplace=inplace)
+            return
         td_1 = td.apply(lambda x, y: x + y, td_c, inplace=inplace)
         if inplace:
             for key in td.keys(True, True):
@@ -823,11 +805,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_from_empty(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. RuntimeError: Originating a BooleanPair() at item"
-                " The assert_allclose_td  function not designed for this case. Skipping!!"
-            )
         new_td = TensorDict({}, batch_size=td.batch_size, device=device)
         for key, item in td.items():
             new_td.set(key, item)
@@ -838,11 +815,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_masking(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. RuntimeError: Originating a BooleanPair() at item..."
-                "The assert_allclose_td  function not designed for this case. Skipping!!"
-            )
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
             0.8
         )
@@ -904,11 +876,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_equal_dict(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. Comparison operator casts dict"
-                " into Tensordict and causes recursion error. Skipping!!"
-            )
         assert (td == td.to_dict()).all()
         td0 = td.to_tensordict().zero_().to_dict()
         assert (td != td0).any()
@@ -917,17 +884,18 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_gather(self, td_name, device, dim):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. The gather  function not"
-                "designed for this case. Skipping!!"
-            )
         index = torch.ones(td.shape, device=td.device, dtype=torch.long)
         other_dim = dim + index.ndim if dim < 0 else dim
         idx = (*[slice(None) for _ in range(other_dim)], slice(2))
         index = index[idx]
         index = index.cumsum(dim=other_dim) - 1
         # gather
+        if td_name == "autonested_td":
+            with pytest.raises(
+                RecursionError, match="gather failed due to a recursion error"
+            ):
+                torch.gather(td, dim=dim, index=index)
+            return
         td_gather = torch.gather(td, dim=dim, index=index)
         # gather with out
         td_gather.zero_()
@@ -937,19 +905,6 @@ class TestTensorDicts(TestTensorDictsBase):
 
     @pytest.mark.parametrize("from_list", [True, False])
     def test_masking_set(self, td_name, device, from_list):
-        def zeros_like(item, n, d):
-            if isinstance(item, (MemmapTensor, torch.Tensor)):
-                return torch.zeros(n, *item.shape[d:], dtype=item.dtype, device=device)
-            elif isinstance(item, TensorDictBase):
-                batch_size = item.batch_size
-                batch_size = [n, *batch_size[d:]]
-                out = TensorDict(
-                    {k: zeros_like(_item, n, d) for k, _item in item.items()},
-                    batch_size,
-                    device=device,
-                )
-                return out
-
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
@@ -957,11 +912,12 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         n = mask.sum()
         d = td.ndimension()
-        keys_view = _TensorDictKeysView(
-            td, include_nested=True, leaves_only=False, error_on_loop=False
-        )
-        pseudo_td = TensorDict(
-            {k: zeros_like(td.get(k), n, d) for k in keys_view}, [n], device=device
+        pseudo_td = _apply_safe(
+            lambda _, value: torch.zeros(
+                n, *value.shape[d:], dtype=value.dtype, device=device
+            ),
+            td,
+            compute_batch_size=lambda td_: [n, *td_.batch_size[d:]],
         )
         if from_list:
             td_mask = mask.cpu().numpy().tolist()
@@ -1004,10 +960,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_indexed_properties(self, td_name, device):
         td = getattr(self, td_name)(device)
         td_index = td[0]
-        if td_name == "memmap_td":
-            pytest.skip(
-                "Test failing in memmap_td case. Need to investigate. Skipping!!"
-            )
         assert td_index.is_memmap() is td.is_memmap()
         assert td_index.is_shared() is td.is_shared()
         assert td_index.device == td.device
@@ -1052,10 +1004,11 @@ class TestTensorDicts(TestTensorDictsBase):
             torch.manual_seed(1)
             td = getattr(self, td_name)(device)
             if td_name == "autonested_td":
-                pytest.skip(
-                    "Test failing in auto-nested case. The torch.unbind function not"
-                    "designed for this case. Skipping!!"
-                )
+                with pytest.raises(
+                    RecursionError, match="unbind failed due to a recursion error"
+                ):
+                    torch.unbind(td, dim=0)
+                return
             td_unbind = torch.unbind(td, dim=0)
             assert (td == stack_td(td_unbind, 0).contiguous()).all()
             assert (td[0] == td_unbind[0]).all()
@@ -1205,10 +1158,12 @@ class TestTensorDicts(TestTensorDictsBase):
             [1, 0, 2, 1],
         ]
         if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. Pad function not designed for this case."
-                " Skipping!!"
-            )
+            with pytest.raises(
+                RecursionError, match="pad failed due to a recursion error"
+            ):
+                for pad_size in paddings:
+                    pad(td, pad_size)
+            return
         for pad_size in paddings:
             padded_td = pad(td, pad_size)
             padded_td._check_batch_size()
@@ -1279,12 +1234,6 @@ class TestTensorDicts(TestTensorDictsBase):
 
         td1 = getattr(self, td_name)(device).unlock()
         td2 = getattr(self, td_name)(device).unlock()
-
-        if td_name == "autonested_td":
-            pytest.skip(
-                " Test failing for AssertionError: Regex pattern did not match."
-                " Skipping auto-nesting test case!!"
-            )
 
         td1[key] = torch.randn(*td1.shape, 2)
         td2[key] = torch.randn(*td1.shape, 3)
@@ -1395,11 +1344,6 @@ class TestTensorDicts(TestTensorDictsBase):
     )
     def test_getitem_ellipsis(self, td_name, device, actual_index, expected_index):
         torch.manual_seed(1)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test Failing in auto-nested case. The assert_allclose_td function not designed"
-                " for this case. Skipping!!"
-            )
         td = getattr(self, td_name)(device)
 
         actual_td = td[actual_index]
@@ -1458,11 +1402,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_getitem_range(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. The assert_allclose_td  function not"
-                "designed for this case. Skipping!!"
-            )
         assert_allclose_td(td[range(2)], td[[0, 1]])
         assert_allclose_td(td[range(1), range(1)], td[[0], [0]])
         assert_allclose_td(td[:, range(2)], td[:, [0, 1]])
@@ -1600,11 +1539,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_stack_subclasses_on_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. The stack_td function not"
-                " designed for this case. Skipping!!"
-            )
         td = td.expand(3, *td.batch_size).to_tensordict().clone().zero_()
         tds_list = [getattr(self, td_name)(device) for _ in range(3)]
         stacked_td = stack_td(tds_list, 0, out=td)
@@ -1713,11 +1647,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_nested_dict_init(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. Constructing TensorDict from dict"
-                " produces RecursionError. Skipping!!"
-            )
         td.unlock()
 
         # Create TensorDict and dict equivalent values, and populate each with according nested value
@@ -1729,6 +1658,7 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         td_dict["d"] = nested_dict_value
         td_clone["d"] = nested_tensordict_value
+
         # Re-init new TensorDict from dict, and check if they're equal
         td_dict_init = TensorDict(td_dict, batch_size=td.batch_size, device=device)
 
@@ -1772,11 +1702,6 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("separator", [",", "-"])
     def test_flatten_keys(self, td_name, device, inplace, separator):
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. The flatten_keys  function not"
-                "designed for this case. Skipping!!"
-            )
         locked = td.is_locked
         td.unlock()
         nested_nested_tensordict = TensorDict(
@@ -1796,7 +1721,13 @@ class TestTensorDicts(TestTensorDictsBase):
         if locked:
             td.lock()
 
-        if inplace and locked:
+        if td_name == "autonested_td":
+            with pytest.raises(
+                RecursionError, match="flatten_keys failed due to a recursion error"
+            ):
+                td.flatten_keys(inplace=inplace, separator=separator)
+            return
+        elif inplace and locked:
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
             return
@@ -1816,12 +1747,12 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("inplace", [True, False])
     @pytest.mark.parametrize("separator", [",", "-"])
     def test_unflatten_keys(self, td_name, device, inplace, separator):
-        td = getattr(self, td_name)(device)
         if td_name == "autonested_td":
             pytest.skip(
-                "Test failing in auto-nested case. The unflatten_keys  function not"
-                "designed for this case. Skipping!!"
+                "Since flatten_keys is not supported in the presence of auto-nesting, "
+                "this test is ill-defined with auto-nested input."
             )
+        td = getattr(self, td_name)(device)
         locked = td.is_locked
         td.unlock()
         nested_nested_tensordict = TensorDict(
@@ -1863,12 +1794,9 @@ class TestTensorDicts(TestTensorDictsBase):
         _ = str(td)
 
     def test_memmap_(self, td_name, device):
-        td = getattr(self, td_name)(device)
         if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. The memmap  function not"
-                "designed for this case. Skipping!!"
-            )
+            pytest.skip("Memmap function is not designed for auto-nesting case.")
+        td = getattr(self, td_name)(device)
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(
                 RuntimeError,
@@ -2033,7 +1961,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("performer", ["torch", "tensordict"])
     def test_split(self, td_name, device, performer):
         td = getattr(self, td_name)(device)
-        #
+
         for dim in range(td.batch_dims):
             rep, remainder = divmod(td.shape[dim], 2)
             length = rep + remainder
