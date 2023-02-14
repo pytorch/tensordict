@@ -1867,7 +1867,13 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if dim is not None:
             if dim < 0:
                 dim = self.batch_dims + dim
-            return _apply_safe(lambda _, value: value.all(dim=dim), self)
+            return _apply_safe(
+                lambda _, value: value.all(dim=dim),
+                self,
+                compute_batch_size=lambda td: torch.Size(
+                    [s for i, s in enumerate(td.batch_size) if i != dim]
+                ),
+            )
         return all(
             self.get(key).all()
             for key in _TensorDictKeysView(
@@ -1894,7 +1900,13 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if dim is not None:
             if dim < 0:
                 dim = self.batch_dims + dim
-            return _apply_safe(lambda _, value: value.all(dim=dim), self)
+            return _apply_safe(
+                lambda _, value: value.all(dim=dim),
+                self,
+                compute_batch_size=lambda td: torch.Size(
+                    [s for i, s in enumerate(td.batch_size) if i != dim]
+                ),
+            )
         return any(
             self.get(key).any()
             for key in _TensorDictKeysView(
