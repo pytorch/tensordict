@@ -2155,7 +2155,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             for key in _TensorDictKeysView(
                 value,
                 include_nested=True,
-                leaves_only=True,
+                leaves_only=False,
                 error_on_loop=False,
                 yield_autonested_keys=True,
             ):
@@ -2328,7 +2328,13 @@ def _apply_safe(fn, tensordict, inplace=False, hook=None, compute_batch_size=Non
         out = (
             td
             if inplace
-            else TensorDict({}, batch_size=compute_batch_size(td), device=td.device)
+            else TensorDict(
+                {},
+                batch_size=compute_batch_size(td),
+                device=td.device,
+                _is_shared=td.is_shared(),
+                _is_memmap=td.is_memmap(),
+            )
         )
 
         for key, value in td.items():
@@ -2343,7 +2349,9 @@ def _apply_safe(fn, tensordict, inplace=False, hook=None, compute_batch_size=Non
                     out.set(key, recurse(value, prefix=full_key), inplace=inplace)
                     del visited[id(value)]
             else:
-                out.set(key, fn(full_key, value), inplace=inplace)
+                res = fn(full_key, value)
+                if res is not None:
+                    out.set(key, res, inplace=inplace)
         return out
 
     out = recurse(tensordict)
