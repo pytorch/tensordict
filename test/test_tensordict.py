@@ -541,11 +541,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_select(self, td_name, device, strict, inplace):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test Failing in auto-nested case. The select function not designed"
-                " for this case. Skipping!!"
-            )
         keys = ["a"]
         if td_name in ("nested_stacked_td", "nested_td"):
             keys += [("my_nested_td", "inner")]
@@ -846,8 +841,8 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         if td_name == "autonested_td":
             pytest.skip(
-                "Test failing in auto-nested case. The assert_allclose_td  function not"
-                "designed for this case. Skipping!!"
+                "Test failing in auto-nested case. RuntimeError: Originating a BooleanPair() at item..."
+                "The assert_allclose_td  function not designed for this case. Skipping!!"
             )
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
             0.8
@@ -1432,11 +1427,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_setitem(self, td_name, device, idx):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. The cat  function not"
-                "designed for this case. Skipping!!"
-            )
 
         if isinstance(idx, torch.Tensor) and idx.numel() > 1 and td.shape[0] == 1:
             pytest.mark.skip("cannot index tensor with desired index")
@@ -1624,11 +1614,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_chunk(self, td_name, device, dim, chunks):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "autonested_td":
-            pytest.skip(
-                "Test failing in auto-nested case. The cat  function not"
-                "designed for this case. Skipping!!"
-            )
         if len(td.shape) - 1 < dim:
             pytest.mark.skip(f"no dim {dim} in td")
             return
