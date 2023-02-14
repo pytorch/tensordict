@@ -8,6 +8,7 @@ from __future__ import annotations
 import abc
 import collections
 import functools
+import numbers
 import textwrap
 from collections import defaultdict, namedtuple
 from collections.abc import Mapping
@@ -393,6 +394,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def ndimension(self) -> int:
         return self.batch_dims
 
+    @property
+    def ndim(self):
+        return self.batch_dims
+
     def dim(self) -> int:
         return self.batch_dims
 
@@ -458,6 +463,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return out
 
     def load_state_dict(self, state_dict: OrderedDict) -> TensorDictBase:
+        # copy since we'll be using pop
+        state_dict = copy(state_dict)
         self.batch_size = state_dict.pop("__batch_size")
         device = state_dict.pop("__device")
         if device is not None:
@@ -989,26 +996,36 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, (TensorDictBase, dict, float, int)):
-            return True
-        if not isinstance(other, TensorDictBase) and isinstance(other, dict):
-            other = make_tensordict(**other, batch_size=self.batch_size)
+        # avoiding circular imports
+        from tensordict.prototype import is_tensorclass
 
-        def hook(key, value):
-            if isinstance(other, TensorDictBase):
-                other_ = other.get(key) if key else other
+        if is_tensorclass(other):
+            return other != self
+        if isinstance(other, (dict, TensorDictBase)):
+            if isinstance(other, dict):
+                def get_value(key):
+                    return _dict_get_nested(other, key)
+            else:
+                def get_value(key):
+                    return other.get(key)
+
+            def hook(key, value):
+                other_ = get_value(key) if key else other
                 keys1 = set(value.keys())
                 keys2 = set(other_.keys())
-                if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                if keys1.symmetric_difference(keys2):
                     raise KeyError(
-                        f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
+                        f"Keys in {self} and other mismatch at {key}, got {keys1} and "
+                        f"{keys2}"
                     )
 
-        def fn(key, value):
-            other_ = other.get(key) if isinstance(other, TensorDictBase) else other
-            return value != other_
+            def fn(key, value):
+                return value != get_value(key)
 
-        return _apply_safe(fn, self, hook=hook)
+            return _apply_safe(fn, self, hook=hook)
+        if isinstance(other, (numbers.Number, torch.Tensor)):
+            return _apply_safe(lambda _, value: value != other, self)
+        return True
 
     def __eq__(self, other: object) -> Union[bool, TensorDictBase]:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
@@ -1018,27 +1035,36 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             tensors of the same shape as the original tensors.
 
         """
-        if not isinstance(other, (TensorDictBase, dict, float, int)):
-            return False
+        # avoiding circular imports
+        from tensordict.prototype import is_tensorclass
 
-        if isinstance(other, dict):
-            other = make_tensordict(**other, batch_size=self.batch_size)
+        if is_tensorclass(other):
+            return other == self
+        if isinstance(other, (dict, TensorDictBase)):
+            if isinstance(other, dict):
+                def get_value(key):
+                    return _dict_get_nested(other, key)
+            else:
+                def get_value(key):
+                    return other.get(key)
 
-        def hook(key, value):
-            if isinstance(other, TensorDictBase):
-                other_ = other.get(key) if key else other
+            def hook(key, value):
+                other_ = get_value(key) if key else other
                 keys1 = set(value.keys())
                 keys2 = set(other_.keys())
-                if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                if keys1.symmetric_difference(keys2):
                     raise KeyError(
-                        f"keys in tensordicts mismatch, got {keys1} and {keys2}"
+                        f"Keys in {self} and other mismatch at {key}, got {keys1} and "
+                        f"{keys2}"
                     )
 
-        def fn(key, value):
-            other_ = other.get(key) if isinstance(other, TensorDictBase) else other
-            return value == other_
+            def fn(key, value):
+                return value == get_value(key)
 
-        return _apply_safe(fn, self, hook=hook)
+            return _apply_safe(fn, self, hook=hook)
+        if isinstance(other, (numbers.Number, torch.Tensor)):
+            return _apply_safe(lambda _, value: value == other, self)
+        return False
 
     @abc.abstractmethod
     def del_(self, key: str) -> TensorDictBase:
@@ -1635,6 +1661,42 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             )
             for i in range(len(dictionaries))
         ]
+
+    def gather(self, dim: int, index: torch.Tensor, out=None):
+        """Gathers values along an axis specified by `dim`.
+
+        Args:
+            dim (int): the dimension along which collect the elements
+            index (torch.Tensor): a long tensor which number of dimension matches
+                the one of the tensordict with only one dimension differring between
+                the two (the gathering dimension). Its elements refer to the
+                index to be gathered along the required dimension.
+            out (TensorDictBase, optional): a destination tensordict. It must
+                have the same shape as the index.
+
+        Examples:
+            >>> td = TensorDict(
+            ...     {"a": torch.randn(3, 4, 5),
+            ...      "b": TensorDict({"c": torch.zeros(3, 4, 5)}, [3, 4, 5])},
+            ...     [3, 4])
+            >>> index = torch.randint(4, (3, 2))
+            >>> td_gather = td.gather(dim=1, index=index)
+            >>> print(td_gather)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 2, 5]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 2, 5]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3, 2]),
+                device=None,
+                is_shared=False)
+
+        """
+        return torch.gather(self, dim, index, out=out)
 
     def view(
         self,
@@ -2283,9 +2345,9 @@ def _apply_safe(fn, tensordict, inplace=False, hook=None, compute_batch_size=Non
         # only need to restore self-nesting if not inplace
         for nested_key, root_key in update.items():
             if root_key is None:
-                out[nested_key] = out
+                out.set(nested_key, out)
             else:
-                out[nested_key] = out[root_key]
+                out.set(nested_key, out.get(root_key))
 
     return out
 
@@ -3211,6 +3273,47 @@ def _unbind(td: TensorDictBase, *args, **kwargs) -> Tuple[TensorDictBase, ...]:
     return td.unbind(*args, **kwargs)
 
 
+@implements_for_td(torch.gather)
+def _gather(
+    input: TensorDictBase,
+    dim: int,
+    index: Tensor,
+    *,
+    sparse_grad: bool = False,
+    out: Optional[TensorDictBase] = None,
+):
+    if sparse_grad:
+        raise NotImplementedError(
+            "sparse_grad=True not implemented for torch.gather(tensordict, ...)"
+        )
+    # the index must have as many dims as the tensordict
+    if not len(index):
+        raise RuntimeError("Cannot use torch.gather with an empty index")
+    if dim < 0:
+        dim = input.batch_dims + dim
+
+    def _gather_tensor(tensor, dest=None):
+        index_expand = index
+        while index_expand.ndim < tensor.ndim:
+            index_expand = index_expand.unsqueeze(-1)
+        target_shape = list(tensor.shape)
+        target_shape[dim] = index_expand.shape[dim]
+        index_expand = index_expand.expand(target_shape)
+        out = torch.gather(tensor, dim, index_expand, out=dest)
+        return out
+
+    if out is None:
+        return TensorDict(
+            {key: _gather_tensor(value) for key, value in input.items()},
+            batch_size=index.shape,
+        )
+    TensorDict(
+        {key: _gather_tensor(value, out[key]) for key, value in input.items()},
+        batch_size=index.shape,
+    )
+    return out
+
+
 @implements_for_td(torch.full_like)
 def _full_like(td: TensorDictBase, fill_value, **kwargs) -> TensorDictBase:
     td_clone = td.clone()
@@ -3296,39 +3399,48 @@ def _cat(
         raise RuntimeError("list_of_tensordicts cannot be empty")
     if dim < 0:
         raise RuntimeError(
-            f"negative dim in torch.dim(list_of_tensordicts, dim=dim) not "
+            f"negative dim in torch.cat(list_of_tensordicts, dim=dim) not "
             f"allowed, got dim={dim}"
         )
 
-    batch_size = list(list_of_tensordicts[0].batch_size)
-    if dim >= len(batch_size):
-        raise RuntimeError(
-            f"dim must be in the range 0 <= dim < len(batch_size), got dim"
-            f"={dim} and batch_size={batch_size}"
-        )
-    batch_size[dim] = sum([td.batch_size[dim] for td in list_of_tensordicts])
-    batch_size = torch.Size(batch_size)
+    def compute_batch_size(list_of_tds):
+        batch_size = list(list_of_tds[0].batch_size)
+        if dim >= len(batch_size):
+            raise RuntimeError(
+                f"dim must be in the range 0 <= dim < len(batch_size), got dim"
+                f"={dim} and batch_size={batch_size}"
+            )
+        batch_size[dim] = sum([td.batch_size[dim] for td in list_of_tds])
+        return torch.Size(batch_size)
 
-    # check that all tensordict match
-    keys = _check_keys(list_of_tensordicts, strict=True)
-    if out is None:
-        out = {}
-        for key in keys:
-            with _ErrorInteceptor(
-                key, "Attempted to concatenate tensors on different devices at key"
-            ):
-                out[key] = torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-        if device is None:
-            device = list_of_tensordicts[0].device
-            for td in list_of_tensordicts[1:]:
-                if device == td.device:
-                    continue
-                else:
-                    device = None
-                    break
-        return TensorDict(out, device=device, batch_size=batch_size, _run_checks=False)
-    else:
-        if out.batch_size != batch_size:
+    def get_device(list_of_tds):
+        device = list_of_tds[0].device
+        if any(td.device != device for td in list_of_tds[1:]):
+            return None
+        return device
+
+    def cat_and_set(key, list_of_tds, out):
+        if isinstance(out, dict):
+            out[key] = torch.cat([td.get(key) for td in list_of_tds], dim)
+        elif isinstance(out, TensorDict):
+            torch.cat([td.get(key) for td in list_of_tds], dim, out=out.get(key))
+        else:
+            # if out is e.g. LazyStackedTensorDict we cannot use out
+            # argument of torch.cat as we would set the value of a
+            # lazily computed tensor inplace, which would then get lost
+            out.set_(key, torch.cat([td.get(key) for td in list_of_tds], dim))
+
+    visited = {id(list_of_tensordicts[0]): None}
+    update = {}
+
+    def recurse(list_of_tds, out, prefix=()):
+        # check that all tensordict keys match
+        keys = _check_keys(list_of_tensordicts, strict=True)
+        batch_size = compute_batch_size(list_of_tds)
+
+        if out is None:
+            out = {}
+        elif out.batch_size != batch_size:
             raise RuntimeError(
                 "out.batch_size and cat batch size must match, "
                 f"got out.batch_size={out.batch_size} and batch_size"
@@ -3336,20 +3448,42 @@ def _cat(
             )
 
         for key in keys:
-            with _ErrorInteceptor(
-                key, "Attempted to concatenate tensors on different devices at key"
-            ):
-                if isinstance(out, TensorDict):
-                    torch.cat(
-                        [td.get(key) for td in list_of_tensordicts],
-                        dim,
-                        out=out.get(key),
-                    )
+            full_key = prefix + (key,)
+            value = list_of_tds[0].get(key)
+            if isinstance(value, TensorDictBase):
+                if id(value) in visited:
+                    update[full_key] = visited[id(value)]
                 else:
-                    out.set_(
-                        key, torch.cat([td.get(key) for td in list_of_tensordicts], dim)
-                    )
+                    visited[id(value)] = full_key
+                    cat_and_set(key, list_of_tds, out)
+                    del visited[id(value)]
+            else:
+                try:
+                    cat_and_set(key, list_of_tds, out)
+                except RuntimeError as e:
+                    if "Expected all tensors to be on the same device" in str(e):
+                        raise RuntimeError(
+                            "Attempted to concatenate tensors on different devices at "
+                            f"key {full_key}: {e}"
+                        )
+                    raise e
+
+        if isinstance(out, dict):
+            if device is None:
+                device_ = get_device(list_of_tds)
+            return TensorDict(
+                out, device=device_, batch_size=batch_size, _run_checks=False
+            )
         return out
+
+    out = recurse(list_of_tensordicts, out=out)
+    for nested_key, root_key in update.items():
+        if root_key is None:
+            out.set(nested_key, out)
+        else:
+            out.set(nested_key, out.get(root_key))
+
+    return out
 
 
 @implements_for_td(torch.stack)
@@ -3363,98 +3497,106 @@ def _stack(
 ) -> TensorDictBase:
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
-    batch_size = list_of_tensordicts[0].batch_size
-    if dim < 0:
-        dim = len(batch_size) + dim + 1
 
-    for td in list_of_tensordicts[1:]:
-        if td.batch_size != list_of_tensordicts[0].batch_size:
-            raise RuntimeError(
-                "stacking tensordicts requires them to have congruent batch sizes, "
-                f"got td1.batch_size={td.batch_size} and td2.batch_size="
-                f"{list_of_tensordicts[0].batch_size}"
-            )
+    visited = {id(list_of_tensordicts[0]): None}
+    update = {}
 
-    # check that all tensordict match
-    keys = _check_keys(list_of_tensordicts)
-
-    if out is None:
-        device = list_of_tensordicts[0].device
-        if contiguous:
-            out = {}
-            for key in keys:
-                with _ErrorInteceptor(
-                    key, "Attempted to stack tensors on different devices at key"
-                ):
-                    out[key] = torch.stack(
-                        [_tensordict.get(key) for _tensordict in list_of_tensordicts],
-                        dim,
-                    )
-
-            return TensorDict(
-                out,
-                batch_size=LazyStackedTensorDict._compute_batch_size(
-                    batch_size, dim, len(list_of_tensordicts)
-                ),
-                device=device,
-                _run_checks=False,
-            )
+    def stack_and_set(key, list_of_tds, out):
+        if isinstance(out, dict):
+            out[key] = torch.stack([td.get(key) for td in list_of_tds], dim)
+        elif key in out.keys():
+            out._stack_onto_(key, [td.get(key) for td in list_of_tds], dim)
         else:
-            out = LazyStackedTensorDict(
-                *list_of_tensordicts,
-                stack_dim=dim,
-            )
-    else:
-        batch_size = list(batch_size)
-        batch_size.insert(dim, len(list_of_tensordicts))
-        batch_size = torch.Size(batch_size)
-
-        if out.batch_size != batch_size:
-            raise RuntimeError(
-                "out.batch_size and stacked batch size must match, "
-                f"got out.batch_size={out.batch_size} and batch_size"
-                f"={batch_size}"
+            out.set(
+                key,
+                torch.stack([td.get(key) for td in list_of_tds], dim),
+                inplace=True,
             )
 
-        out_keys = set(out.keys())
-        if strict:
-            in_keys = set(keys)
-            if len(out_keys - in_keys) > 0:
+    def recurse(list_of_tds, out, dim, prefix=()):
+        batch_size = list_of_tds[0].batch_size
+        if dim < 0:
+            dim = len(batch_size) + dim + 1
+
+        for td in list_of_tensordicts[1:]:
+            if td.batch_size != list_of_tensordicts[0].batch_size:
                 raise RuntimeError(
-                    "The output tensordict has keys that are missing in the "
-                    "tensordict that has to be written: {out_keys - in_keys}. "
-                    "As per the call to `stack(..., strict=True)`, this "
-                    "is not permitted."
+                    "stacking tensordicts requires them to have congruent batch sizes, "
+                    f"got td1.batch_size={td.batch_size} and td2.batch_size="
+                    f"{list_of_tds[0].batch_size}"
                 )
-            elif len(in_keys - out_keys) > 0:
+
+        # check that all tensordict leys match
+        keys = _check_keys(list_of_tensordicts)
+        batch_size = LazyStackedTensorDict._compute_batch_size(
+            batch_size, dim, len(list_of_tensordicts)
+        )
+
+        if out is None:
+            if not contiguous:
+                return LazyStackedTensorDict(*list_of_tds, stack_dim=dim)
+            out = {}
+        else:
+            if out.batch_size != batch_size:
                 raise RuntimeError(
-                    "The resulting tensordict has keys that are missing in "
-                    f"its destination: {in_keys - out_keys}. As per the call "
-                    "to `stack(..., strict=True)`, this is not permitted."
+                    "out.batch_size and stacked batch size must match, "
+                    f"got out.batch_size={out.batch_size} and batch_size"
+                    f"={batch_size}"
                 )
+
+            out_keys = set(out.keys())
+            if strict:
+                in_keys = set(keys)
+                if len(out_keys - in_keys) > 0:
+                    raise RuntimeError(
+                        "The output tensordict has keys that are missing in the "
+                        "tensordict that has to be written: {out_keys - in_keys}. "
+                        "As per the call to `stack(..., strict=True)`, this "
+                        "is not permitted."
+                    )
+                elif len(in_keys - out_keys) > 0:
+                    raise RuntimeError(
+                        "The resulting tensordict has keys that are missing in "
+                        f"its destination: {in_keys - out_keys}. As per the call "
+                        "to `stack(..., strict=True)`, this is not permitted."
+                    )
 
         for key in keys:
-            if key in out_keys:
-                out._stack_onto_(
-                    key,
-                    [_tensordict.get(key) for _tensordict in list_of_tensordicts],
-                    dim,
-                )
+            full_key = prefix + (key,)
+            value = list_of_tds[0].get(key)
+            if isinstance(value, TensorDictBase):
+                if id(value) in visited:
+                    update[full_key] = visited[id(value)]
+                else:
+                    visited[id(value)] = full_key
+                    stack_and_set(key, list_of_tds, out)
+                    del visited[id(value)]
             else:
-                with _ErrorInteceptor(
-                    key, "Attempted to stack tensors on different devices at key"
-                ):
-                    out.set(
-                        key,
-                        torch.stack(
-                            [
-                                _tensordict.get(key)
-                                for _tensordict in list_of_tensordicts
-                            ],
-                            dim,
-                        ),
-                        inplace=True,
-                    )
+                try:
+                    stack_and_set(key, list_of_tds, out)
+                except RuntimeError as e:
+                    if "Expected all tensors to be on the same device" in str(e):
+                        raise RuntimeError(
+                            "Attempted to concatenate tensors on different devices at "
+                            f"key {full_key}: {e}"
+                        )
+                    raise e
+
+        if isinstance(out, dict):
+            if device is None:
+                device_ = list_of_tds[0].device
+            return TensorDict(
+                out, device=device_, batch_size=batch_size, _run_checks=False
+            )
+
+        return out
+
+    out = recurse(list_of_tensordicts, out=out, dim=dim)
+    for nested_key, root_key in update.items():
+        if root_key is None:
+            out.set(nested_key, out)
+        else:
+            out.set(nested_key, out.get(root_key))
 
     return out
 
