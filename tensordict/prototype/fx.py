@@ -4,7 +4,6 @@ from itertools import filterfalse, tee
 import torch.fx as fx
 import torch.nn as nn
 
-# from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 
 
@@ -73,7 +72,6 @@ def _trace_tensordictmodule(td_module):
     # create a new graph which we will populate from the old one
     new_graph = fx.Graph()
     env = {}
-    # tracer = fx.proxy.GraphAppendingTracer(new_graph)
 
     # create a new placeholder for the input tensordict
     td = fx.Proxy(new_graph.placeholder("tensordict"))
