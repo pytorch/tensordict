@@ -41,6 +41,7 @@ Contents
 
    overview
    distributed
+   fx
    saving
    reference/index
 
