@@ -4,87 +4,110 @@ TensorDict
 ==========
 **Author**: `Vincent Moens <https://github.com/vmoens>`_
 
-``TensorDict`` is a new tensor .
+``TensorDict`` is a ``dict``-like container for PyTorch tensors that supports multiple
+tensor operations such as indexing, shape operations, casting to device and more.
 """
 ##############################################################################
-# With RL, you need to be able to deal with multiple tensors such as actions,
-# observations and reward. ``TensorDict`` makes it more convenient to deal
-# with multiple tensors at the same time for operations such as casting to
-# device, reshaping, stacking etc.
+# The main purpose of ``TensorDict`` is to make code-bases more readable and module by
+# abstracting away tailored operations make it more convenient to deal. In particular
+# it makes it easire to work with multiple tensors at the same time for operations such
+# as casting to device, reshaping, stacking etc.
 #
-# Furthermore, different RL algorithms can deal with different input and
-# outputs. The ``TensorDict`` class makes it possible to abstract away the
-# differences between these algorithms.
-#
-# TensorDict combines the convenience of using ``dicts`` to organize your
-# data with the power of pytorch tensors.
+# In this tutorial we will showcase some of the benefits of using ``TensorDict``.
 #
 # Improving the modularity of codes
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Let's suppose we have 2 datasets: Dataset A which has images and labels and
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Let's suppose we have two datasets: Dataset A which has images and labels and
 # Dataset B which has images, segmentation maps and labels.
 #
 # Suppose we want to train a common algorithm over these two datasets (i.e. an
 # algorithm that would ignore the mask or infer it when needed).
 #
-# In classical pytorch we would need to do the following:
+# In classical PyTorch we would need to do the following:
 #
 # **Method A**
-#     .. code-block:: python
 #
-#       >>> for i in range(optim_steps):
-#       ...     images, labels = get_data_A()
-#       ...     loss = loss_module(images, labels)
-#       ...     loss.backward()
-#       ...     optim.step()
-#       ...     optim.zero_grad()
+# >>> for i in range(optim_steps):
+# ...     images, labels = get_data_A()
+# ...     loss = loss_module(images, labels)
+# ...     loss.backward()
+# ...     optim.step()
+# ...     optim.zero_grad()
 
 ###############################################################################
 # **Method B**
-#     .. code-block:: python
 #
-#       >>> for i in range(optim_steps):
-#       ...     images, labels = get_data_B()
-#       ...     loss = loss_module(images, labels)
-#       ...     loss.backward()
-#       ...     optim.step()
-#       ...     optim.zero_grad()
+# >>> for i in range(optim_steps):
+# ...     images, seg_maps, labels = get_data_B()
+# ...     loss = loss_module(images, seg_maps, labels)
+# ...     loss.backward()
+# ...     optim.step()
+# ...     optim.zero_grad()
 
 ###############################################################################
 # We can see that this limits the reusability of code. A lot of code has to be
-# rewriten because of the modality difference between the 2 datasets.
-# The idea of TensorDict is to do the following:
+# rewriten because of the modality difference between the two datasets.
+# The idea of ``TensorDict`` is to do the following:
 
 ###############################################################################
 # **General Method**
-#     .. code-block:: python
 #
-#       >>> for i in range(optim_steps):
-#       ...     images, labels = get_data()
-#       ...     loss = loss_module(images, labels)
-#       ...     loss.backward()
-#       ...     optim.step()
-#       ...     optim.zero_grad()
+# >>> for i in range(optim_steps):
+# ...     data = get_data()
+# ...     loss = loss_module(data)
+# ...     loss.backward()
+# ...     optim.step()
+# ...     optim.zero_grad()
 
 ###############################################################################
 # We can now reuse the same training loop across datasets and losses.
 #
-# Can't I do this with a python dict?
-# --------------------------------------
+# Can't I do this with a Python ``dict``?
+# ---------------------------------------
 #
 # One could argue that you could achieve the same results with a dataset
-# that outputs a pytorch dict.
-#     .. code-block:: python
+# that outputs a ``dict`` with tensor values.
 #
-#       >>> class DictDataset(Dataset):
-#       ...     ...
-#       ...     def __getitem__(self, idx)
-#       ...         ...
-#       ...         return {"images": image, "masks": mask}
+# >>> class DictDataset(Dataset):
+# ...     ...
+# ...     def __getitem__(self, idx)
+# ...         ...
+# ...         return {"images": image, "masks": mask}
 
 ###############################################################################
 # However to achieve this you would need to write a complicated collate
 # function that make sure that every modality is aggregated properly.
+#
+# >>> def collate_dict_fn(dict_list):
+# ...     final_dict = {}
+# ...     for key in dict_list[0].keys():
+# ...         final_dict[key] = []
+# ...         for single_dict in dict_list:
+# ...             final_dict[key].append(single_dict[key])
+# ...     final_dict[key] = torch.stack(final_dict[key], dim=0)
+# ...     return final_dict
+# ...
+# >>> dataloader = Dataloader(DictDataset(), collate_fn = collate_dict_fn)
+
+###############################################################################
+# With ``TensorDict`` this is much simpler:
+#
+# >>> class DictDataset(Dataset):
+# ...   ...
+# ...   def __getitem__(self, idx)
+# ...       ...
+# ...       return TensorDict({"images": image, "masks": mask})
+# ...
+# >>> dataloader = DataLoader(
+# ...     DictDataSet(),
+# ...     collate_fn=lambda tds : torch.stack(tds, dim=0)
+# ... )
+#
+# This is even more useful when considering nested structures, which ``TensorDict``
+# supports.
+#
+# ``TensorDict`` structure
+# ^^^^^^^^^^^^^^^^^^^^^^^^
 
 # sphinx_gallery_start_ignore
 import warnings
@@ -92,52 +115,7 @@ import warnings
 warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
 
-
-def collate_dict_fn(dict_list):
-    final_dict = {}
-    for key in dict_list[0].keys():
-        final_dict[key] = []
-
-        for single_dict in dict_list:
-            final_dict[key].append(single_dict[key])
-
-        final_dict[key] = torch.stack(final_dict[key], dim=0)
-    return final_dict
-
-
-###############################################################################
-# With TensorDicts this is now much simpler:
-#
-# **dataloader = Dataloader(DictDataset(), collate_fn = collate_dict_fn)**
-#     .. code-block:: python
-#
-#       >>> class DictDataset(Dataset):
-#       ...   ...
-#       ...   def __getitem__(self, idx)
-#       ...       ...
-#       ...       return TensorDict({"images": image, "masks": mask})
-
-###############################################################################
-# Here, the collate function is as simple as:
-#
-# **collate_tensordict_fn = lambda tds : torch.stack(tds, dim=0)**
-#
-# **dataloader = Dataloader(DictDataset(), collate_fn = collate_tensordict_fn)**
-#
-# This is even more useful when considering nested structures
-# (Which ``TensorDict`` supports).
-#
-# TensorDict inherits multiple properties from ``torch.Tensor`` and ``dict``
-# that we will detail furtherdown.
-#
-# TensorDict structure
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-
 import torch
-
-###############################################################################
-
 from tensordict.tensordict import (
     _PermutedTensorDict,
     _UnsqueezedTensorDict,
@@ -146,12 +124,16 @@ from tensordict.tensordict import (
 )
 
 ###############################################################################
-# TensorDict is a Datastructure indexed by either keys or numerical indices.
-# The values can either be tensors, memory-mapped tensors or ``TensorDict``. The
-# values need to share the same memory location (device or shared memory).
-# They can however have different dtypes.
+# ``TensorDict`` is a ``dict``-like data structure whose keys are strings, and values
+# can either be tensors, memory-mapped tensors or other instances of ``TensorDict``. We
+# can index the ``TensorDict`` with the string keys, or even tuples of strings in order
+# to access the nested values. Values need not necessarily share the same device or
+# dtype.
 #
-# Another essential property of TensorDict is the ``batch_size`` (or ``shape``)
+# It's also possible to index the ``TensorDict`` with a numerical index, in which case
+# that index is used to index all of the values in the ``TensorDict``.
+#
+# Another essential property of ``TensorDict`` is the ``batch_size`` (or ``shape``)
 # which is defined as the n-first dimensions of the tensors. It must be common
 # across values, and it must be set explicitly when instantiating a ``TensorDict``.
 
@@ -163,16 +145,22 @@ tensordict = TensorDict({"a": a, "b": b}, batch_size=[3, 4])
 tensordict = TensorDict({"a": a, "b": b}, batch_size=[3])
 tensordict = TensorDict({"a": a, "b": b}, batch_size=[])
 
-# does not work
+# does not work, as entry "a" has only 3 dimensions
 try:
     tensordict = TensorDict({"a": a, "b": b}, batch_size=[3, 4, 5])
 except RuntimeError:
     print("caramba!")
 
+# also does not work, as entries "a" and "b" have leading dimension size 3
+try:
+    tensordict = TensorDict({"a": a, "b": b}, batch_size=[42])
+except RuntimeError:
+    print("caramba!")
+
 ###############################################################################
 # Nested ``TensorDict`` have therefore the following property: the parent
-# ``TensorDict`` needs to have a batch_size included in the childs
-# ``TensorDict`` batch size.
+# ``TensorDict`` needs to have a ``batch_size`` included in the child's ``TensorDict``
+# batch size.
 
 a = torch.zeros(3, 4)
 b = TensorDict(
@@ -186,11 +174,16 @@ tensordict = TensorDict({"a": a, "b": b}, batch_size=[3, 4])
 print(tensordict)
 
 ###############################################################################
+# Nested values can be accessed using tuples of strings
+
+print(tensordict["b", "d"].shape)
+
+###############################################################################
 # ``TensorDict`` does not support algebraic operations by design.
 #
-# TensorDict Dictionary Features
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# ``TensorDict`` shares a lot of features with python dictionaries.
+# ``TensorDict`` Dictionary Features
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ``TensorDict`` shares a lot of features with Python dictionaries.
 
 a = torch.zeros(3, 4, 5)
 b = torch.zeros(3, 4)
@@ -199,7 +192,7 @@ print(tensordict)
 
 ###############################################################################
 # ``get(key)``
-# ------------------------------
+# ------------
 # If we want to access a certain key, we can index the tensordict
 # or alternatively use the ``get`` method:
 
@@ -222,26 +215,35 @@ c = torch.zeros((3, 4, 2, 2))
 tensordict.set("c", c)
 print(f"td[\"c\"] is c: {c is tensordict['c']}")
 
-d = torch.zeros((3, 4, 2, 2))
+d = torch.ones((3, 4, 2, 2))
 tensordict["d"] = d
 print(f"td[\"d\"] is d: {d is tensordict['d']}")
 
+assert (tensordict["c"] == 0).all()
+assert (tensordict["d"] == 1).all()
 ###############################################################################
 # ``keys()``
 # ------------------------------
 # We can access the keys of a tensordict:
 
-tensordict["c"] = torch.zeros(tensordict.shape)
-tensordict.set("d", torch.ones(tensordict.shape))
-assert (tensordict["c"] == 0).all()
-assert (tensordict["d"] == 1).all()
+for key in tensordict.keys():
+    print(key)
+
+###############################################################################
+# Unlike ``dict.keys``, we have the option of iterating over nested values also by
+# using the keyword argument ``include_nested=True``.
+
+tensordict_nested = tensordict.clone()
+tensordict_nested["nested", "key"] = torch.rand(3, 4)
+for key in tensordict_nested.keys(include_nested=True):
+    print(key)
 
 ###############################################################################
 # ``values()``
 # ------------------------------
 # The values of a ``TensorDict`` can be retrieved with the ``values()`` function.
-# Note that, unlike python ``dicts``, the ``values()`` method returns a
-# generator and not a list.
+# Note that, unlike ``dict.values()``, ``TensorDict.values()`` returns a generator
+# rather than a ``dict_values`` object.
 
 for value in tensordict.values():
     print(value.shape)
@@ -253,8 +255,12 @@ for value in tensordict.values():
 # (or with a dict):
 
 tensordict.update({"a": torch.ones((3, 4, 5)), "d": 2 * torch.ones((3, 4, 2))})
-# Also works with tensordict.update(TensorDict({"a":torch.ones((3, 4, 5)),
-# "c":torch.ones((3, 4, 2))}, batch_size=[3,4]))
+# Also works
+tensordict.update(
+    TensorDict(
+        {"a": torch.ones((3, 4, 5)), "c": torch.ones((3, 4, 2))}, batch_size=[3, 4]
+    )
+)
 print(f"a is now equal to 1: {(tensordict['a'] == 1).all()}")
 print(f"d is now equal to 2: {(tensordict['d'] == 2).all()}")
 
@@ -267,26 +273,24 @@ print("before")
 for k in tensordict.keys():
     print(k)
 
-###############################################################################
-
 del tensordict["c"]
 print("after")
 for k in tensordict.keys():
     print(k)
 
 ###############################################################################
-# TensorDict tensor features
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ``TensorDict`` tensor features
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # On many regards, TensorDict is a Tensor-like class: a great deal of tensor
 # operation also work on tensordicts, making it easy to cast them across
 # multiple tensors.
 #
 # Batch size
-# ------------------------------
-# ``TensorDict`` has a batch size which is shared across all tensors. The batch
-# size can be [], unidimensional or multidimensional according to your needs,
-# but it must be shared across tensors. Indeed, you cannot have items that don't
-# share the batch size inside the same TensorDict:
+# ----------
+# ``TensorDict`` has a ``batch_size`` which is shared across the leading dimensions of
+# all tensors. The ``batch_size`` can be [], unidimensional or multidimensional
+# according to your needs, but it must be shared across tensors. Indeed, you cannot
+# have items that don't share the batch size inside the same ``TensorDict``:
 
 tensordict = TensorDict(
     {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
@@ -294,22 +298,11 @@ tensordict = TensorDict(
 print(f"Our TensorDict is of size {tensordict.shape}")
 
 ###############################################################################
-# The batch size can be changed if needed:
-
-# we cannot add tensors that violate the batch size:
-try:
-    tensordict.update({"c": torch.zeros(4, 3, 1)})
-except RuntimeError as err:
-    print(f"Caramba! We got this error: {err}")
-
-###############################################################################
-# but it must comply with the tensor shapes:
+# The batch size can be changed if needed but it must comply with the tensor shapes:
 
 tensordict.batch_size = [3]
 assert tensordict.batch_size == torch.Size([3])
 tensordict.batch_size = [3, 4]
-
-###############################################################################
 
 try:
     tensordict.batch_size = [4, 4]
@@ -317,7 +310,17 @@ except RuntimeError as err:
     print(f"Caramba! We got this error: {err}")
 
 ###############################################################################
-# We can also fill the values of a TensorDict sequentially
+# we cannot add tensors that violate the batch size:
+try:
+    tensordict.update({"c": torch.zeros(4, 3, 1)})
+except RuntimeError as err:
+    print(f"Caramba! We got this error: {err}")
+
+###############################################################################
+# We can also fill the values of a ``TensorDict`` sequentially. In this case, when the
+# first row of entry "a" is set, ``TensorDict`` will pre-allocate an array of zeros
+# with shape ``[10, 3, 4]``. Subsequent iterations of the loop set values in this
+# pre-allocated array inplace
 
 tensordict = TensorDict({}, [10])
 for i in range(10):
@@ -325,7 +328,7 @@ for i in range(10):
 print(tensordict)
 
 ###############################################################################
-# If all values are not filled, they get the default value of zero.
+# As a result, if not all values are filled, they get the default value of zero.
 
 tensordict = TensorDict({}, [10])
 for i in range(2):
@@ -337,28 +340,29 @@ tensordict = TensorDict(
 
 ###############################################################################
 # Devices
-# ------------------------------
-# TensorDict can be sent to the desired devices like a pytorch tensor with
+# -------
+# TensorDict can be sent to the desired devices like a PyTorch tensor with
 # ``td.cuda()`` or ``td.to(device)`` with ``device`` the desired device.
 #
 # Memory sharing via physical memory usage
-# ------------------------------
+# ----------------------------------------
 # When on cpu, one can use either ``tensordict.memmap_()`` or
-# ``tensordict.share_memory_()`` to send a ``tensordict`` to represent it as
+# ``tensordict.share_memory_()`` to send a ``TensorDict`` to represent it as
 # a memory-mapped collection of tensors or put it in shared memory resp.
 #
 # Tensor operations
-# ------------------------------
-# We can perform tensor operations among the batch dimensions:
+# -----------------
+# We can perform tensor operations along the batch dimensions:
 #
 # **Cloning**
 #
-# TensorDict supports cloning. Cloning returns the same TensorDict class
-# than the original item.
+# ``TensorDict`` supports cloning. Cloning returns the same ``TensorDict`` class
+# as the original item.
 
 tensordict_clone = tensordict.clone()
 print(
-    f"Content is identical ({(tensordict['a'] == tensordict_clone['a']).all()}) but duplicated ({tensordict['a'] is not tensordict_clone['a']})"
+    f"Content is identical ({(tensordict['a'] == tensordict_clone['a']).all()}) but "
+    f"duplicated ({tensordict['a'] is not tensordict_clone['a']})"
 )
 
 ###############################################################################
@@ -380,11 +384,11 @@ print(tensordict[:, 2:])
 # **Setting Values with Indexing**
 #
 # In general, ``tensodict[tuple_index] = new_tensordict`` will work as long as
-# the batch sizes match.
+# the batch sizes are compatible.
 #
-# If one wants to build a tensordict that keeps track of the original tensordict,
-# the ``get_sub_tensordict`` method can be used: in that case, a
-# ``SubTensorDict`` instance will be returned. This class will store a pointer
+# If one wants to build a slice of a ``TensorDict`` that keeps track of the original
+# ``TensorDict``, the ``get_sub_tensordict`` method can be used: in that case, a
+# ``SubTensorDict`` instance will be returned. This class will store a reference
 # to the original tensordict as well as the desired index such that tensor
 # modifications can be achieved easily.
 
@@ -418,12 +422,12 @@ tensordict[mask]
 # fashion, returning a ``LazyStackedTensorDict`` item.
 
 # Stack
-clonned_tensordict = tensordict.clone()
-staked_tensordict = torch.stack([tensordict, clonned_tensordict], dim=0)
-print(staked_tensordict)
+cloned_tensordict = tensordict.clone()
+stacked_tensordict = torch.stack([tensordict, cloned_tensordict], dim=0)
+print(stacked_tensordict)
 
 # indexing a lazy stack returns the original tensordicts
-if staked_tensordict[0] is tensordict and staked_tensordict[1] is clonned_tensordict:
+if stacked_tensordict[0] is tensordict and stacked_tensordict[1] is cloned_tensordict:
     print("every tensordict is awesome!")
 
 ###############################################################################
@@ -431,8 +435,8 @@ if staked_tensordict[0] is tensordict and staked_tensordict[1] is clonned_tensor
 # or ``.contiguous()``. It is recommended to perform this operation before
 # accessing the values of the stacked tensordict for efficiency purposes.
 
-assert isinstance(staked_tensordict.contiguous(), TensorDict)
-assert isinstance(staked_tensordict.to_tensordict(), TensorDict)
+assert isinstance(stacked_tensordict.contiguous(), TensorDict)
+assert isinstance(stacked_tensordict.to_tensordict(), TensorDict)
 
 ###############################################################################
 # **Unbind**
