@@ -1300,6 +1300,72 @@ def test_gather(from_torch):
     assert (c_gather2 == c_gather).all()
 
 
+def test_to_tensordict():
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        z: str
+        y: "MyClass" = None  # future: drop quotes
+
+    c = MyClass(
+        torch.randn(3, 4),
+        "foo",
+        MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
+        batch_size=[3, 4],
+    )
+
+    ctd = c.to_tensordict()
+    assert isinstance(ctd, TensorDictBase)
+    assert "x" in ctd.keys()
+    assert "z" not in ctd.keys()
+    assert "y" in ctd.keys()
+    assert ("y", "x") in ctd.keys(True)
+
+
+def test_memmap_():
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        z: str
+        y: "MyClass" = None  # future: drop quotes
+
+    c = MyClass(
+        torch.randn(3, 4),
+        "foo",
+        MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
+        batch_size=[3, 4],
+    )
+
+    cmemmap = c.memmap_()
+    assert cmemmap is c
+    assert isinstance(c.x, MemmapTensor)
+    assert isinstance(c.y.x, MemmapTensor)
+    assert c.z == "foo"
+
+
+def test_memmap_like():
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        z: str
+        y: "MyClass" = None  # future: drop quotes
+
+    c = MyClass(
+        torch.randn(3, 4),
+        "foo",
+        MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
+        batch_size=[3, 4],
+    )
+
+    cmemmap = c.memmap_like()
+    assert cmemmap is not c
+    assert cmemmap.y is not c.y
+    assert (cmemmap == 0).all()
+    assert isinstance(cmemmap.x, MemmapTensor)
+    assert isinstance(cmemmap.y.x, MemmapTensor)
+    assert cmemmap.z == "foo"
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

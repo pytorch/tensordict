@@ -257,7 +257,7 @@ class MemmapTensor:
     @classmethod
     def empty_like(
         cls,
-        tensor: Union[torch.Tensor, MemmapTensor, np.ndarray],
+        tensor: Union[torch.Tensor, MemmapTensor],
         transfer_ownership=False,
         prefix=None,
         filename: Optional[str] = None,
@@ -267,12 +267,8 @@ class MemmapTensor:
             raise TypeError(
                 "Convert input to torch.Tensor before calling MemmapTensor."
             )
-        device = tensor.device if hasattr(tensor, "device") else torch.device("cpu")
-        dtype = (
-            tensor.dtype
-            if isinstance(tensor, (torch.Tensor, MemmapTensor))
-            else numpy_to_torch_dtype_dict[tensor.dtype.name]
-        )
+        device = tensor.device
+        dtype = tensor.dtype
         shape = tensor.shape
         out = cls(
             shape,

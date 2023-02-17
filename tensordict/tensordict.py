@@ -1171,9 +1171,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         Returns:
             a new ``TensorDict`` instance with data stored as memory-mapped tensors.
 
-        Note:
-            Serialising in this fashion might be slow with deeply nested tensordicts, so
-            we do not recommend calling this method inside a training loop.
         """
         if prefix is not None:
             prefix = Path(prefix)
@@ -2804,7 +2801,9 @@ class TensorDict(TensorDictBase):
         return self
 
     def memmap_(
-        self, prefix=None, copy_existing=False, create_empty=False
+        self,
+        prefix=None,
+        copy_existing=False,
     ) -> TensorDictBase:
         if prefix is not None:
             prefix = Path(prefix)
