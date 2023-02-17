@@ -387,10 +387,10 @@ print(
 # numbers of workers. We found that our single-threaded TensorClass approach
 # out-performed the ``DataLoader`` even when we used a large number of workers.
 #
-# .. image:: images/imagenet-benchmark-time.png
+# .. image:: /reference/generated/tutorials/media/imagenet-benchmark-time.png
 #    :alt: Bar chart showing runtimes of dataloaders compared with TensorClass
 #
-# .. image:: images/imagenet-benchmark-speed.png
+# .. image:: /reference/generated/tutorials/media/imagenet-benchmark-speed.png
 #    :alt: Bar chart showing collection rate of dataloaders compared with TensorClass
 
 
