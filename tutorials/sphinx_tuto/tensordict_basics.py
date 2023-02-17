@@ -8,15 +8,16 @@ TensorDict
 tensor operations such as indexing, shape operations, casting to device and more.
 """
 ##############################################################################
-# The main purpose of ``TensorDict`` is to make code-bases more readable and module by
-# abstracting away tailored operations make it more convenient to deal. In particular
-# it makes it easire to work with multiple tensors at the same time for operations such
-# as casting to device, reshaping, stacking etc.
+# The main purpose of ``TensorDict`` is to make code-bases more readable and
+# module by abstracting away tailored operations make it more convenient to
+# deal. Specifically, it makes it easier to work with multiple tensors at the
+# same time for operations such as casting to device, reshaping, stacking etc.
 #
 # In this tutorial we will showcase some of the benefits of using ``TensorDict``.
 #
 # Improving the modularity of codes
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# ---------------------------------
+#
 # Let's suppose we have two datasets: Dataset A which has images and labels and
 # Dataset B which has images, segmentation maps and labels.
 #
@@ -25,32 +26,32 @@ tensor operations such as indexing, shape operations, casting to device and more
 #
 # In classical PyTorch we would need to do the following:
 #
-# **Method A**
+# Method A
+# ########
 #
-# >>> for i in range(optim_steps):
-# ...     images, labels = get_data_A()
-# ...     loss = loss_module(images, labels)
-# ...     loss.backward()
-# ...     optim.step()
-# ...     optim.zero_grad()
-
-###############################################################################
-# **Method B**
+#  >>> for i in range(optim_steps):
+#  ...     images, labels = get_data_A()
+#  ...     loss = loss_module(images, labels)
+#  ...     loss.backward()
+#  ...     optim.step()
+#  ...     optim.zero_grad()
 #
-# >>> for i in range(optim_steps):
-# ...     images, seg_maps, labels = get_data_B()
-# ...     loss = loss_module(images, seg_maps, labels)
-# ...     loss.backward()
-# ...     optim.step()
-# ...     optim.zero_grad()
-
-###############################################################################
+# Method B
+# ########
+#
+#  >>> for i in range(optim_steps):
+#  ...     images, seg_maps, labels = get_data_B()
+#  ...     loss = loss_module(images, seg_maps, labels)
+#  ...     loss.backward()
+#  ...     optim.step()
+#  ...     optim.zero_grad()
+#
 # We can see that this limits the reusability of code. A lot of code has to be
-# rewriten because of the modality difference between the two datasets.
+# rewritten because of the modality difference between the two datasets.
 # The idea of ``TensorDict`` is to do the following:
-
-###############################################################################
-# **General Method**
+#
+# TensorDict
+# ##########
 #
 # >>> for i in range(optim_steps):
 # ...     data = get_data()
