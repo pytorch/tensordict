@@ -249,77 +249,7 @@ print(f"TensorDict before going through module: {td}")
 td_module(td)
 print(f"TensorDict after going through module now as keys action, loc and scale: {td}")
 
-###############################################################################
-# ``Actor``
-# ------------------------------
-# Actor inherits from ``TensorDictModule`` and comes with a default value
-# for ``out_keys`` of ``["action"]``.
-#
-# ``ProbabilisticActor``
-# ------------------------------
-# General class for probabilistic actors in RL that inherits from
-# ``ProbabilisticTensorDictModule``. Similarly to ``Actor``, it comes with
-# default values for the ``out_keys`` (``["action"]``).
-#
-# ``ActorCriticOperator``
-# ------------------------------
-# Similarly, ``ActorCriticOperator`` inherits from ``TensorDictSequentialand``
-# wraps both an actor network and a value Network.
-#
-# ``ActorCriticOperator`` will first compute the action from the actor and
-# then the value according to this action.
-
-from torchrl.modules import (
-    ActorCriticOperator,
-    MLP,
-    NormalParamWrapper,
-    TanhNormal,
-    ValueOperator,
-)
-from torchrl.modules.tensordict_module import ProbabilisticActor
-
-module_hidden = torch.nn.Linear(4, 4)
-td_module_hidden = TensorDictModule(
-    module=module_hidden,
-    in_keys=["observation"],
-    out_keys=["hidden"],
-)
-module_action = NormalParamWrapper(torch.nn.Linear(4, 8))
-module_action = TensorDictModule(
-    module_action, in_keys=["hidden"], out_keys=["loc", "scale"]
-)
-td_module_action = ProbabilisticActor(
-    module=module_action,
-    in_keys=["loc", "scale"],
-    out_keys=["action"],
-    distribution_class=TanhNormal,
-    return_log_prob=True,
-)
-module_value = MLP(in_features=8, out_features=1, num_cells=[])
-td_module_value = ValueOperator(
-    module=module_value,
-    in_keys=["hidden", "action"],
-    out_keys=["state_action_value"],
-)
-td_module = ActorCriticOperator(td_module_hidden, td_module_action, td_module_value)
-td = TensorDict({"observation": torch.randn(3, 4)}, [3])
-print(td)
-td_clone = td_module(td.clone())
-print(td_clone)
-td_clone = td_module.get_policy_operator()(td.clone())
-print(f"Policy: {td_clone}")  # no value
-td_clone = td_module.get_critic_operator()(td.clone())
-print(f"Critic: {td_clone}")  # no action
-
-###############################################################################
-# Other blocks exist such as:
-#
-# - The ``ValueOperator`` which is a general class for value functions in RL.
-# - The ``ActorCriticWrapper`` which wraps together an actor and a value model
-#   that do not share a common observation embedding network.
-# - The ``ActorValueOperator`` which wraps together an actor and a value model
-#   that share a common observation embedding network.
-#
+#################################################################################
 # Showcase: Implementing a transformer using TensorDictModule
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # To demonstrate the flexibility of ``TensorDictModule``, we are going to
