@@ -1156,6 +1156,71 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
+    def memmap_like(self, prefix=None) -> TensorDictBase:
+        """Creates an empty Memory-mapped tensordict with the same content shape as the current one.
+
+        Args:
+            prefix (str): directory prefix where the memmap tensors will have to
+                be stored.
+
+        The resulting TensorDict will be locked and ``is_memmap() = True``,
+        meaning that the only writing operations that can be executed must be done in-place.
+        Once the tensordict is unlocked, the memmap attribute is turned to False,
+        because cross-process identity is not guaranteed anymore.
+
+        Returns:
+            a new ``TensorDict`` instance with data stored as memory-mapped tensors.
+
+        """
+        if prefix is not None:
+            prefix = Path(prefix)
+            if not prefix.exists():
+                prefix.mkdir(exist_ok=True)
+            torch.save(
+                {"batch_size": self.batch_size, "device": self.device},
+                prefix / "meta.pt",
+            )
+        if not self.keys():
+            raise Exception(
+                "memmap_like() must be called when the TensorDict is (partially) "
+                "populated. Set a tensor first."
+            )
+        tensordict = TensorDict({}, self.batch_size, device=self.device)
+        for key, value in self.items():
+            if isinstance(value, TensorDictBase):
+                if prefix is not None:
+                    # ensure subdirectory exists
+                    (prefix / key).mkdir(exist_ok=True)
+                    tensordict[key] = value.memmap_like(
+                        prefix=prefix / key,
+                    )
+                    torch.save(
+                        {"batch_size": value.batch_size, "device": value.device},
+                        prefix / key / "meta.pt",
+                    )
+                else:
+                    tensordict[key] = value.memmap_like()
+                continue
+            else:
+                tensordict[key] = MemmapTensor.empty_like(
+                    value,
+                    filename=str(prefix / f"{key}.memmap")
+                    if prefix is not None
+                    else None,
+                )
+            if prefix is not None:
+                torch.save(
+                    {
+                        "shape": value.shape,
+                        "device": value.device,
+                        "dtype": value.dtype,
+                    },
+                    prefix / f"{key}.meta.pt",
+                )
+        tensordict._is_memmap = True
+        tensordict.lock()
+        return tensordict
+
     @abc.abstractmethod
     def detach_(self) -> TensorDictBase:
         """Detach the tensors in the tensordict in-place.
@@ -2735,7 +2800,11 @@ class TensorDict(TensorDictBase):
             value.detach_()
         return self
 
-    def memmap_(self, prefix=None, copy_existing=False) -> TensorDictBase:
+    def memmap_(
+        self,
+        prefix=None,
+        copy_existing=False,
+    ) -> TensorDictBase:
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
