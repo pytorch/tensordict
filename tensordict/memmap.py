@@ -254,6 +254,37 @@ class MemmapTensor:
         out.copy_(tensor)
         return out
 
+    @classmethod
+    def empty_like(
+        cls,
+        tensor: Union[torch.Tensor, MemmapTensor, np.ndarray],
+        transfer_ownership=False,
+        prefix=None,
+        filename: Optional[str] = None,
+        mode: str = "r+",
+    ) -> MemmapTensor:
+        if isinstance(tensor, np.ndarray):
+            raise TypeError(
+                "Convert input to torch.Tensor before calling MemmapTensor."
+            )
+        device = tensor.device if hasattr(tensor, "device") else torch.device("cpu")
+        dtype = (
+            tensor.dtype
+            if isinstance(tensor, (torch.Tensor, MemmapTensor))
+            else numpy_to_torch_dtype_dict[tensor.dtype.name]
+        )
+        shape = tensor.shape
+        out = cls(
+            shape,
+            device=device,
+            dtype=dtype,
+            prefix=prefix,
+            transfer_ownership=transfer_ownership,
+            filename=filename,
+            mode=mode,
+        )
+        return out
+
     @staticmethod
     def _create_memmap_with_index(memmap_tensor, index):
         memmap_copy = copy(memmap_tensor)

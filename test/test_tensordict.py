@@ -1742,6 +1742,14 @@ class TestTensorDicts(TestTensorDictsBase):
             td.memmap_()
             assert td.is_memmap()
 
+    def test_memmap_like(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdmemmap = td.memmap_like()
+        assert tdmemmap is not td
+        for key in td.keys(True):
+            assert td[key] is not tdmemmap[key]
+        assert (tdmemmap == 0).all()
+
     def test_memmap_prefix(self, td_name, device, tmp_path):
         if td_name == "memmap_td":
             pytest.skip(
