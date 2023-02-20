@@ -409,14 +409,14 @@ def test_setitem():
     )
     with pytest.raises(
         ValueError,
-        match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment"
+        match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment",
     ):
         data1[:2] = data_wrong_cls[:2]
     with pytest.raises(
         ValueError,
-        match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment"
+        match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment",
     ):
-        data_wrong_cls[2:] = data1[2:]   
+        data_wrong_cls[2:] = data1[2:]
 
 
 def test_stack():
