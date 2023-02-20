@@ -401,17 +401,20 @@ def test_setitem():
     class MyDataMemMap3:
         x: MemmapTensor
         z: torch.Tensor
+
     data_wrong_cls = MyDataMemMap3(
         x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
         z=torch.ones(3, 4, 5),
         batch_size=[3, 4],
     )
     with pytest.raises(
-        ValueError, match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment"
+        ValueError,
+        match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment"
     ):
         data1[:2] = data_wrong_cls[:2]
     with pytest.raises(
-        ValueError, match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment"
+        ValueError,
+        match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment"
     ):
         data_wrong_cls[2:] = data1[2:]   
 
