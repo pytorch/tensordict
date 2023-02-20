@@ -276,6 +276,7 @@ jobs:
       - run:
           name: Run tests
           command: .circleci/unittest/linux/scripts/run_test.sh
+          no_output_timeout: 30m
       - run:
           name: Codecov upload
           command: |
@@ -334,6 +335,7 @@ jobs:
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux/scripts/run_test.sh
+          no_output_timeout: 30m
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Codecov upload
@@ -393,6 +395,7 @@ jobs:
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux_torchrec/scripts/run_test.sh
+          no_output_timeout: 30m
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux_torchrec/scripts/run_test.sh
       - run:
           name: Codecov upload
@@ -445,6 +448,7 @@ jobs:
       - run:
           name: Run tests
           command: .circleci/unittest/linux_stable/scripts/run_test.sh
+          no_output_timeout: 30m
       - run:
           name: Codecov upload
           command: |
@@ -495,6 +499,7 @@ jobs:
       - run:
           name: Run tests
           command: bash .circleci/unittest/linux_stable/scripts/run_test.sh
+          no_output_timeout: 30m
 #          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
       - run:
           name: Codecov upload
@@ -544,6 +549,7 @@ jobs:
       - run:
           name: Run tests
           command: .circleci/unittest/linux/scripts/run_test.sh
+          no_output_timeout: 30m
       - run:
           name: Codecov upload
           command: |
