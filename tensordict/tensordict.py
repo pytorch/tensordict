@@ -2086,12 +2086,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     __getitems__ = __getitem__
 
     def __setitem__(
-        self, 
-        index: INDEX_TYPING, 
+        self,
+        index: INDEX_TYPING,
         value: Union[TensorDictBase, dict, numbers.Number, Tensor],
     ) -> None:
 
-        if not not isinstance(value, (TensorDictBase, dict, numbers.Number, Tensor)):
+        if not isinstance(value, (TensorDictBase, dict, numbers.Number, Tensor)):
             raise ValueError(
                 f"__setitem__ only supports tensorclasses, tensordicts,"
                 f" numeric scalars and tensors. Got {type(value)}"
