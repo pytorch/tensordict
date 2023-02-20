@@ -354,6 +354,8 @@ def test_setitem():
     ):
         data[:2] = data3[:2]
 
+
+def test_setitem_memmap():
     # regression test PR #203
     # We should be able to set tensors items with MemmapTensors and viceversa
     @tensorclass
@@ -382,9 +384,16 @@ def test_setitem():
     assert (data2.x[2:] == 0).all()
     assert (data2.y[2:] == 0).all()
 
+
+def test_setitem_other_cls():
+    @tensorclass
+    class MyData1:
+        x: torch.Tensor
+        y: MemmapTensor
+
     # Set Item should work for other tensorclass
     @tensorclass
-    class MyDataMemMap2:
+    class MyData2:
         x: MemmapTensor
         y: torch.Tensor
 
@@ -398,7 +407,7 @@ def test_setitem():
 
     # Set Item should raise if other tensorclass with different members
     @tensorclass
-    class MyDataMemMap3:
+    class MyData3:
         x: MemmapTensor
         z: torch.Tensor
 
@@ -417,6 +426,49 @@ def test_setitem():
         match="__setitem__ is only allowed for same-class or compatible class .* assignment",
     ):
         data_wrong_cls[2:] = data1[2:]
+
+
+def test_setitem_broadcast():
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        z: list
+        y: "MyDataNested" = None  # future: drop quotes
+
+    X = torch.ones(3, 4, 5)
+    z = ["a", "b", "c"]
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+
+    # scalar
+    data[:2] = 3
+    assert (data[:2] == 3).all()
+    assert (data.X[:2] == 3).all()
+    assert (data.y.X[:2] == 3).all()
+    assert (data[2:] == 1).all()
+    assert (data.X[2:] == 1).all()
+    assert (data.y.X[2:] == 1).all()
+
+    # tensor
+    data[:2] = torch.zeros(4, 5)
+    assert (data[:2] == 0).all()
+    assert (data.X[:2] == 0).all()
+    assert (data.y.X[:2] == 0).all()
+    assert (data[2:] == 0).all()
+    assert (data.X[2:] == 0).all()
+    assert (data.y.X[2:] == 0).all()
+
+    # tensordict
+    batch_size = [2, 4]
+    W = TensorDict(X=torch.ones(2, 4, 5) * 2, batch_size=batch_size)
+    data[:2] = 3
+    assert (data[:2] == 2).all()
+    assert (data.X[:2] == 2).all()
+    assert (data.y.X[:2] == 2).all()
+    assert (data[2:] == 1).all()
+    assert (data.X[2:] == 1).all()
+    assert (data.y.X[2:] == 1).all()
 
 
 def test_stack():
