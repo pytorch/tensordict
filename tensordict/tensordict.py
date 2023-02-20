@@ -2115,12 +2115,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     else sub_index
                     for sub_index in index
                 )
-            
+
             if sum(
                 isinstance(_index, str) for _index in index
             ) not in [len(index), 0]:
                 raise IndexError(_STR_MIXED_INDEX_ERROR)
-            
+
             if isinstance(index[0], str):
                 # TODO: would be nicer to have set handle the nested set, but the logic to
                 # preserve the error handling below is complex and requires some thought
@@ -2140,7 +2140,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     raise err
                 return
         # else:
-        
+
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
@@ -2153,7 +2153,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     f"(batch_size = {self.batch_size}, index={index}), "
                     f"which differs from the source batch size {value.batch_size}"
                 )
-                
+
         keys = set(self.keys())
         if not all(key in keys for key in value.keys()):
             subtd = self.get_sub_tensordict(index)
