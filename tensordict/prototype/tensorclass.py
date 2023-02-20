@@ -448,7 +448,7 @@ def _setitem(self, item, value):
         raise ValueError(
             f"__setitem__ only supports tensorclasses, tensordicts,"
             f" numeric scalars and tensors. Got {type(value)}"
-        )   
+        )
 
     # if it is one of accepted "broadcast" types
     if not is_tensorclass(value):
