@@ -468,7 +468,7 @@ def test_setitem_broadcast():
     # tensordict
     batch_size = [2, 4]
     W = TensorDict(X=torch.ones(2, 4, 5) * 2, batch_size=batch_size)
-    data[:2] = 3
+    data[:2] = W
     assert (data[:2] == 2).all()
     assert (data.X[:2] == 2).all()
     assert (data.y.X[:2] == 2).all()
