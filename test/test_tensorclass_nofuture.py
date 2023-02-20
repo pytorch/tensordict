@@ -417,7 +417,7 @@ def test_setitem_other_cls():
         x: MemmapTensor
         z: torch.Tensor
 
-    data_wrong_cls = MyDataMemMap3(
+    data_wrong_cls = MyData3(
         x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
         z=torch.ones(3, 4, 5),
         batch_size=[3, 4],
