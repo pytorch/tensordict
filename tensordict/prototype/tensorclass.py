@@ -446,8 +446,10 @@ def _setitem(self, item, value):
         value_all_keys = set().union(value._non_tensordict, value._tensordict)
         if self_all_keys != value_all_keys:
             # if tensorclass but different class ensure that all keys are equal
-            raise ValueError("__setitem__ is only allowed for same-class or "
-                             "compatible class (i.e. same members) assignment")
+            raise ValueError(
+                "__setitem__ is only allowed for same-class or "
+                "compatible class (i.e. same members) assignment"
+            )
 
     # Validating the non-tensor data before setting the item
     for key, val in value._non_tensordict.items():
