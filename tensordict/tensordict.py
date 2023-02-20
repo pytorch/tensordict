@@ -2086,45 +2086,62 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     __getitems__ = __getitem__
 
     def __setitem__(
-        self, index: INDEX_TYPING, value: Union[TensorDictBase, dict]
+        self, index: INDEX_TYPING, value: Union[TensorDictBase, dict, numbers.Number, Tensor]
     ) -> None:
-        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
-            index = convert_ellipsis_to_idx(index, self.batch_size)
-        if isinstance(index, (list, range)):
-            index = torch.tensor(index, device=self.device)
-        if isinstance(index, tuple) and any(
-            isinstance(sub_index, (list, range)) for sub_index in index
+
+        if not not isinstance(
+            value, (TensorDictBase, dict, numbers.Number, Tensor)
         ):
-            index = tuple(
-                torch.tensor(sub_index, device=self.device)
-                if isinstance(sub_index, (list, range))
-                else sub_index
-                for sub_index in index
+            raise ValueError(
+                f"__setitem__ only supports tensorclasses, tensordicts,"
+                f" numeric scalars and tensors. Got {type(value)}"
             )
-        if isinstance(index, tuple) and sum(
-            isinstance(_index, str) for _index in index
-        ) not in [len(index), 0]:
-            raise IndexError(_STR_MIXED_INDEX_ERROR)
+
         if isinstance(index, str):
             self.set(index, value, inplace=self._inplace_set)
-        elif isinstance(index, tuple) and isinstance(index[0], str):
-            # TODO: would be nicer to have set handle the nested set, but the logic to
-            # preserve the error handling below is complex and requires some thought
-            try:
-                if len(index) == 1:
-                    return self.set(
-                        index[0], value, inplace=isinstance(self, SubTensorDict)
-                    )
-                self.set(index, value, inplace=isinstance(self, SubTensorDict))
-            except AttributeError as err:
-                if "for populating tensordict with new key-value pair" in str(err):
-                    raise RuntimeError(
-                        "Trying to replace an existing nested tensordict with "
-                        "another one with non-matching keys. This leads to "
-                        "unspecified behaviours and is prohibited."
-                    )
-                raise err
-        else:
+            return
+
+        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
+            index = convert_ellipsis_to_idx(index, self.batch_size)
+        elif isinstance(index, (list, range)):
+            index = torch.tensor(index, device=self.device)
+        elif isinstance(index, tuple):
+            if any(
+                isinstance(sub_index, (list, range)) for sub_index in index
+            ):
+                index = tuple(
+                    torch.tensor(sub_index, device=self.device)
+                    if isinstance(sub_index, (list, range))
+                    else sub_index
+                    for sub_index in index
+                )
+            
+            if sum(
+                isinstance(_index, str) for _index in index
+            ) not in [len(index), 0]:
+                raise IndexError(_STR_MIXED_INDEX_ERROR)
+            
+            if isinstance(index[0], str):
+                # TODO: would be nicer to have set handle the nested set, but the logic to
+                # preserve the error handling below is complex and requires some thought
+                try:
+                    if len(index) == 1:
+                        return self.set(
+                            index[0], value, inplace=isinstance(self, SubTensorDict)
+                        )
+                    self.set(index, value, inplace=isinstance(self, SubTensorDict))
+                except AttributeError as err:
+                    if "for populating tensordict with new key-value pair" in str(err):
+                        raise RuntimeError(
+                            "Trying to replace an existing nested tensordict with "
+                            "another one with non-matching keys. This leads to "
+                            "unspecified behaviours and is prohibited."
+                        )
+                    raise err
+                return
+        # else:
+        
+        if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
                 value = TensorDict(
@@ -2136,14 +2153,15 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     f"(batch_size = {self.batch_size}, index={index}), "
                     f"which differs from the source batch size {value.batch_size}"
                 )
-            keys = set(self.keys())
-            if not all(key in keys for key in value.keys()):
-                subtd = self.get_sub_tensordict(index)
-            for key, item in value.items():
-                if key in keys:
-                    self.set_at_(key, item, index)
-                else:
-                    subtd.set(key, item)
+                
+        keys = set(self.keys())
+        if not all(key in keys for key in value.keys()):
+            subtd = self.get_sub_tensordict(index)
+        for key, item in value.items():
+            if key in keys:
+                self.set_at_(key, item, index)
+            else:
+                subtd.set(key, item)
 
     def __delitem__(self, index: INDEX_TYPING) -> TensorDictBase:
         # if isinstance(index, str):
