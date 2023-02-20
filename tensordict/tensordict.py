@@ -2089,9 +2089,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self, index: INDEX_TYPING, value: Union[TensorDictBase, dict, numbers.Number, Tensor]
     ) -> None:
 
-        if not not isinstance(
-            value, (TensorDictBase, dict, numbers.Number, Tensor)
-        ):
+        if not not isinstance(value, (TensorDictBase, dict, numbers.Number, Tensor)):
             raise ValueError(
                 f"__setitem__ only supports tensorclasses, tensordicts,"
                 f" numeric scalars and tensors. Got {type(value)}"
@@ -2106,9 +2104,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         elif isinstance(index, (list, range)):
             index = torch.tensor(index, device=self.device)
         elif isinstance(index, tuple):
-            if any(
-                isinstance(sub_index, (list, range)) for sub_index in index
-            ):
+            if any(isinstance(sub_index, (list, range)) for sub_index in index):
                 index = tuple(
                     torch.tensor(sub_index, device=self.device)
                     if isinstance(sub_index, (list, range))
@@ -2116,9 +2112,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     for sub_index in index
                 )
 
-            if sum(
-                isinstance(_index, str) for _index in index
-            ) not in [len(index), 0]:
+            if sum(isinstance(_index, str) for _index in index) not in [len(index), 0]:
                 raise IndexError(_STR_MIXED_INDEX_ERROR)
 
             if isinstance(index[0], str):
