@@ -361,29 +361,11 @@ def test_setitem():
         x: torch.Tensor
         y: MemmapTensor
 
-    @tensorclass
-    class MyDataMemMap2:
-        x: MemmapTensor
-        y: torch.Tensor
-
     data1 = MyDataMemMap1(
         x=torch.zeros(3, 4, 5),
         y=MemmapTensor.from_tensor(torch.zeros(3, 4, 5)),
         batch_size=[3, 4],
     )
-    data2_wrong = MyDataMemMap2(
-        x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
-        y=torch.ones(3, 4, 5),
-        batch_size=[3, 4],
-    )
-    with pytest.raises(
-        ValueError, match="__setitem__ is only allowed for same-class assignement"
-    ):
-        data1[:2] = data2_wrong[:2]
-    with pytest.raises(
-        ValueError, match="__setitem__ is only allowed for same-class assignement"
-    ):
-        data2_wrong[2:] = data1[2:]
 
     data2 = MyDataMemMap1(
         x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
@@ -399,6 +381,39 @@ def test_setitem():
     assert (data2[2:] == 0).all()
     assert (data2.x[2:] == 0).all()
     assert (data2.y[2:] == 0).all()
+
+    # Set Item should work for other tensorclass
+    @tensorclass
+    class MyDataMemMap2:
+        x: MemmapTensor
+        y: torch.Tensor
+
+    data_other_cls = MyDataMemMap2(
+        x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
+        y=torch.ones(3, 4, 5),
+        batch_size=[3, 4],
+    )
+    data1[:2] = data_other_cls[:2]
+    data_other_cls[2:] = data1[2:]
+
+    # Set Item should raise if other tensorclass with different members
+    @tensorclass
+    class MyDataMemMap3:
+        x: MemmapTensor
+        z: torch.Tensor
+    data_wrong_cls = MyDataMemMap3(
+        x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
+        z=torch.ones(3, 4, 5),
+        batch_size=[3, 4],
+    )
+    with pytest.raises(
+        ValueError, match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment"
+    ):
+        data1[:2] = data_wrong_cls[:2]
+    with pytest.raises(
+        ValueError, match="__setitem__ is only allowed for same-class or compatible class (i.e. same members) assignment"
+    ):
+        data_wrong_cls[2:] = data1[2:]   
 
 
 def test_stack():
