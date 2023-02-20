@@ -5,6 +5,7 @@
 
 from .memmap import MemmapTensor, set_transfer_ownership
 from .tensordict import (
+    detect_loop,
     LazyStackedTensorDict,
     merge_tensordicts,
     SubTensorDict,
@@ -21,6 +22,7 @@ __all__ = [
     "MemmapTensor",
     "SubTensorDict",
     "TensorDict",
+    "detect_loop",
     "merge_tensordicts",
     "set_transfer_ownership",
 ]

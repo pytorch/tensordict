@@ -175,6 +175,11 @@ class TestTensorDictsBase:
         td.batch_size = torch.Size([4, 3, 2, 1])
         return td
 
+    def autonested_td(self, device):
+        td = self.td(device)
+        td["self"] = td
+        return td
+
 
 def expand_list(list_of_tensors, *dims):
     n = len(list_of_tensors)

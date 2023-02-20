@@ -14,8 +14,11 @@ import torchsnapshot
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
+    _apply_safe,
     _stack as stack_td,
+    _TensorDictKeysView,
     assert_allclose_td,
+    detect_loop,
     make_tensordict,
     pad,
     TensorDictBase,
@@ -512,6 +515,7 @@ TD_BATCH_SIZE = 4
         "nested_td",
         "permute_td",
         "nested_stacked_td",
+        "autonested_td",
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
@@ -665,28 +669,39 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_masked_fill_(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         new_td = td.masked_fill_(mask, -10.0)
         assert new_td is td
-        for item in td.values():
-            assert (item[mask] == -10).all(), item[mask]
+        assert (td[mask] == -10).all(), td[mask]
 
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)
         is_locked = td.is_locked
-        for _, item in td.items():
+        keys_view = _TensorDictKeysView(
+            td, include_nested=True, leaves_only=False, error_on_loop=False
+        )
+        for k in keys_view:
+            item = td.get(k)
             if isinstance(item, TensorDictBase):
                 assert item.is_locked == is_locked
+
         td.is_locked = not is_locked
         assert td.is_locked != is_locked
-        for _, item in td.items():
+
+        for k in keys_view:
+            item = td.get(k)
             if isinstance(item, TensorDictBase):
                 assert item.is_locked != is_locked
+
         td.lock()
         assert td.is_locked
-        for _, item in td.items():
+
+        for k in keys_view:
+            item = td.get(k)
             if isinstance(item, TensorDictBase):
                 assert item.is_locked
+
         td.unlock()
         assert not td.is_locked
         for _, item in td.items():
@@ -702,14 +717,20 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not td_clone.is_locked
         assert td.is_locked
         td = td.select(inplace=True)
-        for key, item in td_clone.items(True):
+        keys_view = _TensorDictKeysView(
+            td_clone, include_nested=True, leaves_only=False, error_on_loop=False
+        )
+        for key in keys_view:
+            item = td_clone.get(key)
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
         td.unlock()
-        for key, item in td_clone.items(True):
+        for key in keys_view:
+            item = td_clone.get(key)
             td.set(key, item)
         td.lock()
-        for key, item in td_clone.items(True):
+        for key in keys_view:
+            item = td_clone.get(key)
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
             td.set_(key, item)
@@ -728,8 +749,7 @@ class TestTensorDicts(TestTensorDictsBase):
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         new_td = td.masked_fill(mask, -10.0)
         assert new_td is not td
-        for item in new_td.values():
-            assert (item[mask] == -10).all()
+        assert (new_td[mask] == -10).all()
 
     def test_zero_(self, td_name, device):
         torch.manual_seed(1)
@@ -743,13 +763,22 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_apply(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
+        if td_name == "autonested_td":
+            with pytest.raises(
+                RecursionError, match="apply failed due to a recursion error"
+            ):
+                td.apply(lambda x: x + 1, inplace=inplace)
+            return
         td_1 = td.apply(lambda x: x + 1, inplace=inplace)
+        keys_view = _TensorDictKeysView(
+            td, include_nested=True, leaves_only=True, error_on_loop=False
+        )
         if inplace:
-            for key in td.keys(True, True):
+            for key in keys_view:
                 assert (td_c[key] + 1 == td[key]).all()
                 assert (td_1[key] == td[key]).all()
         else:
-            for key in td.keys(True, True):
+            for key in keys_view:
                 assert (td_c[key] + 1 != td[key]).any()
                 assert (td_1[key] == td[key] + 1).all()
 
@@ -757,6 +786,12 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_apply_other(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
+        if td_name == "autonested_td":
+            with pytest.raises(
+                RecursionError, match="apply failed due to a recursion error"
+            ):
+                td.apply(lambda x: x + 1, inplace=inplace)
+            return
         td_1 = td.apply(lambda x, y: x + y, td_c, inplace=inplace)
         if inplace:
             for key in td.keys(True, True):
@@ -797,7 +832,9 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_entry_type(self, td_name, device):
         td = getattr(self, td_name)(device)
-        for key in td.keys(include_nested=True):
+        for key in _TensorDictKeysView(
+            td, include_nested=True, leaves_only=False, error_on_loop=False
+        ):
             assert type(td.get(key)) is td.entry_class(key)
 
     def test_equal(self, td_name, device):
@@ -853,6 +890,12 @@ class TestTensorDicts(TestTensorDictsBase):
         index = index[idx]
         index = index.cumsum(dim=other_dim) - 1
         # gather
+        if td_name == "autonested_td":
+            with pytest.raises(
+                RecursionError, match="gather failed due to a recursion error"
+            ):
+                torch.gather(td, dim=dim, index=index)
+            return
         td_gather = torch.gather(td, dim=dim, index=index)
         # gather with out
         td_gather.zero_()
@@ -862,19 +905,6 @@ class TestTensorDicts(TestTensorDictsBase):
 
     @pytest.mark.parametrize("from_list", [True, False])
     def test_masking_set(self, td_name, device, from_list):
-        def zeros_like(item, n, d):
-            if isinstance(item, (MemmapTensor, torch.Tensor)):
-                return torch.zeros(n, *item.shape[d:], dtype=item.dtype, device=device)
-            elif isinstance(item, TensorDictBase):
-                batch_size = item.batch_size
-                batch_size = [n, *batch_size[d:]]
-                out = TensorDict(
-                    {k: zeros_like(_item, n, d) for k, _item in item.items()},
-                    batch_size,
-                    device=device,
-                )
-                return out
-
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
@@ -882,8 +912,12 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         n = mask.sum()
         d = td.ndimension()
-        pseudo_td = TensorDict(
-            {k: zeros_like(item, n, d) for k, item in td.items()}, [n], device=device
+        pseudo_td = _apply_safe(
+            lambda _, value: torch.zeros(
+                n, *value.shape[d:], dtype=value.dtype, device=device
+            ),
+            td,
+            compute_batch_size=lambda td_: [n, *td_.batch_size[d:]],
         )
         if from_list:
             td_mask = mask.cpu().numpy().tolist()
@@ -969,6 +1003,12 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name not in ["sub_td", "idx_td", "td_reset_bs"]:
             torch.manual_seed(1)
             td = getattr(self, td_name)(device)
+            if td_name == "autonested_td":
+                with pytest.raises(
+                    RecursionError, match="unbind failed due to a recursion error"
+                ):
+                    torch.unbind(td, dim=0)
+                return
             td_unbind = torch.unbind(td, dim=0)
             assert (td == stack_td(td_unbind, 0).contiguous()).all()
             assert (td[0] == td_unbind[0]).all()
@@ -1076,11 +1116,14 @@ class TestTensorDicts(TestTensorDictsBase):
         assert set(td.keys()) == keys.union({"x"})
         # now with nested
         td["newnested"] = {"z": torch.zeros(td.shape)}
-        keys = set(td.keys(True))
+        keys_view = _TensorDictKeysView(
+            td, include_nested=True, leaves_only=False, error_on_loop=False
+        )
+        keys = set(keys_view)
         assert ("newnested", "z") in keys
         td.update({"newnested": {"y": torch.zeros(td.shape)}}, clone=clone)
         keys = keys.union({("newnested", "y")})
-        assert keys == set(td.keys(True))
+        assert keys == set(keys_view)
         td.update(
             {
                 ("newnested", "x"): torch.zeros(td.shape),
@@ -1089,14 +1132,10 @@ class TestTensorDicts(TestTensorDictsBase):
             clone=clone,
         )
         keys = keys.union({("newnested", "x"), ("newnested", "w")})
-        assert keys == set(td.keys(True))
+        assert keys == set(keys_view)
         td.update({("newnested",): {"v": torch.zeros(td.shape)}}, clone=clone)
-        keys = keys.union(
-            {
-                ("newnested", "v"),
-            }
-        )
-        assert keys == set(td.keys(True))
+        keys = keys.union({("newnested", "v")})
+        assert keys == set(keys_view)
 
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(ValueError, match="Tried to replace a tensordict with"):
@@ -1118,7 +1157,13 @@ class TestTensorDicts(TestTensorDictsBase):
             [1, 0, 0, 2],
             [1, 0, 2, 1],
         ]
-
+        if td_name == "autonested_td":
+            with pytest.raises(
+                RecursionError, match="pad failed due to a recursion error"
+            ):
+                for pad_size in paddings:
+                    pad(td, pad_size)
+            return
         for pad_size in paddings:
             padded_td = pad(td, pad_size)
             padded_td._check_batch_size()
@@ -1186,8 +1231,10 @@ class TestTensorDicts(TestTensorDictsBase):
     )
     def test_nestedtensor_stack(self, td_name, device, dim, key):
         torch.manual_seed(1)
+
         td1 = getattr(self, td_name)(device).unlock()
         td2 = getattr(self, td_name)(device).unlock()
+
         td1[key] = torch.randn(*td1.shape, 2)
         td2[key] = torch.randn(*td1.shape, 3)
         td_stack = torch.stack([td1, td2], dim)
@@ -1297,7 +1344,6 @@ class TestTensorDicts(TestTensorDictsBase):
     )
     def test_getitem_ellipsis(self, td_name, device, actual_index, expected_index):
         torch.manual_seed(1)
-
         td = getattr(self, td_name)(device)
 
         actual_td = td[actual_index]
@@ -1328,6 +1374,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_setitem(self, td_name, device, idx):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+
         if isinstance(idx, torch.Tensor) and idx.numel() > 1 and td.shape[0] == 1:
             pytest.mark.skip("cannot index tensor with desired index")
             return
@@ -1438,8 +1485,13 @@ class TestTensorDicts(TestTensorDictsBase):
         assert "a" not in td.keys()
 
     def test_to_dict_nested(self, td_name, device):
+        visited = set()
+
         def recursive_checker(cur_dict):
             for _, value in cur_dict.items():
+                if id(value) in visited:
+                    continue
+                visited.add(id(value))
                 if isinstance(value, TensorDict):
                     return False
                 elif isinstance(value, dict) and not recursive_checker(value):
@@ -1669,7 +1721,13 @@ class TestTensorDicts(TestTensorDictsBase):
         if locked:
             td.lock()
 
-        if inplace and locked:
+        if td_name == "autonested_td":
+            with pytest.raises(
+                RecursionError, match="flatten_keys failed due to a recursion error"
+            ):
+                td.flatten_keys(inplace=inplace, separator=separator)
+            return
+        elif inplace and locked:
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
             return
@@ -1689,6 +1747,11 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("inplace", [True, False])
     @pytest.mark.parametrize("separator", [",", "-"])
     def test_unflatten_keys(self, td_name, device, inplace, separator):
+        if td_name == "autonested_td":
+            pytest.skip(
+                "Since flatten_keys is not supported in the presence of auto-nesting, "
+                "this test is ill-defined with auto-nested input."
+            )
         td = getattr(self, td_name)(device)
         locked = td.is_locked
         td.unlock()
@@ -1731,6 +1794,8 @@ class TestTensorDicts(TestTensorDictsBase):
         _ = str(td)
 
     def test_memmap_(self, td_name, device):
+        if td_name == "autonested_td":
+            pytest.skip("Memmap function is not designed for auto-nesting case.")
         td = getattr(self, td_name)(device)
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(
@@ -1751,6 +1816,8 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (tdmemmap == 0).all()
 
     def test_memmap_prefix(self, td_name, device, tmp_path):
+        if td_name == "autonested_td":
+            pytest.skip("Memmap function is not designed for auto-nesting case.")
         if td_name == "memmap_td":
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
@@ -1791,6 +1858,8 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.skip(
                 "SubTensorDict and memmap_ incompatibility is checked elsewhere"
             )
+        elif td_name == "autonested_td":
+            pytest.skip("Memmap function is not designed for auto-nesting case.")
 
         td = getattr(self, td_name)(device).memmap_(prefix=tmp_path / "tensordict")
         td2 = getattr(self, td_name)(device).memmap_()
@@ -1867,10 +1936,8 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (inserted == expected).all()
 
     def test_setdefault_nested(self, td_name, device):
-
         td = getattr(self, td_name)(device)
         td.unlock()
-
         tensor = torch.randn(4, 3, 2, 1, 5, device=device)
         tensor2 = torch.ones(4, 3, 2, 1, 5, device=device)
         sub_sub_tensordict = TensorDict({"c": tensor}, [4, 3, 2, 1], device=device)
@@ -2423,8 +2490,8 @@ def test_batchsize_reset():
     # test index
     td[torch.tensor([1, 2])]
     with pytest.raises(
-        IndexError,
-        match=re.escape("too many indices for tensor of dimension 1"),
+        RuntimeError,
+        match=re.escape("The shape torch.Size([3]) is incompatible with the index"),
     ):
         td[:, 0]
 
@@ -3766,6 +3833,232 @@ def test_tensordict_prealloc_nested():
     )
     assert buffer.batch_size == torch.Size([B, N])
     assert buffer["agent.obs"].batch_size == torch.Size([B, N, T])
+
+
+def test_tensordict_view_iteration():
+    td_simple = TensorDict(
+        source={"a": torch.randn(4, 3, 2, 1, 5), "b": torch.randn(4, 3, 2, 1, 5)},
+        batch_size=[4, 3, 2, 1],
+    )
+
+    view = _TensorDictKeysView(
+        tensordict=td_simple, include_nested=True, leaves_only=True, error_on_loop=True
+    )
+    keys = list(view)
+    assert len(keys) == 2
+    assert "a" in keys
+    assert "b" in keys
+
+    td_nested = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict({"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]),
+        },
+        batch_size=[4, 3, 2, 1],
+    )
+
+    view = _TensorDictKeysView(
+        tensordict=td_nested, include_nested=True, leaves_only=True, error_on_loop=True
+    )
+    keys = list(view)
+    assert len(keys) == 2
+    assert "a" in keys
+    assert ("b", "c") in keys
+
+    view = _TensorDictKeysView(
+        tensordict=td_nested, include_nested=False, leaves_only=True, error_on_loop=True
+    )
+    keys = list(view)
+    assert len(keys) == 1
+    assert "a" in keys
+
+    view = _TensorDictKeysView(
+        tensordict=td_nested, include_nested=True, leaves_only=False, error_on_loop=True
+    )
+    keys = list(view)
+    assert len(keys) == 3
+    assert "a" in keys
+    assert "b" in keys
+    assert ("b", "c") in keys
+
+    # We are not considering loops given by referencing non Dicts (leaf nodes) from two different key sequences
+
+    td_auto_nested_loop = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict({"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]),
+        },
+        batch_size=[4, 3, 2, 1],
+    )
+    td_auto_nested_loop["b"]["d"] = td_auto_nested_loop
+
+    view = _TensorDictKeysView(
+        tensordict=td_auto_nested_loop,
+        include_nested=False,
+        leaves_only=False,
+        error_on_loop=True,
+    )
+    keys = list(view)
+    assert len(keys) == 2
+    assert "a" in keys
+    assert "b" in keys
+
+    view = _TensorDictKeysView(
+        tensordict=td_auto_nested_loop,
+        include_nested=False,
+        leaves_only=True,
+        error_on_loop=True,
+    )
+    keys = list(view)
+    assert len(keys) == 1
+    assert "a" in keys
+
+    with pytest.raises(RecursionError):
+        view = _TensorDictKeysView(
+            tensordict=td_auto_nested_loop,
+            include_nested=True,
+            leaves_only=True,
+            error_on_loop=True,
+        )
+        list(view)
+
+    with pytest.raises(RecursionError):
+        view = _TensorDictKeysView(
+            tensordict=td_auto_nested_loop,
+            include_nested=True,
+            leaves_only=False,
+            error_on_loop=True,
+        )
+        list(view)
+
+    view = _TensorDictKeysView(
+        tensordict=td_auto_nested_loop,
+        include_nested=True,
+        leaves_only=False,
+        error_on_loop=False,
+    )
+
+    keys = list(view)
+    assert len(keys) == 3
+    assert "a" in keys
+    assert "b" in keys
+    assert ("b", "c") in keys
+
+    view = _TensorDictKeysView(
+        tensordict=td_auto_nested_loop,
+        include_nested=True,
+        leaves_only=True,
+        error_on_loop=False,
+    )
+
+    keys = list(view)
+    assert len(keys) == 2
+    assert "a" in keys
+    assert ("b", "c") in keys
+
+    td_auto_nested_loop_2 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict({"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]),
+        },
+        batch_size=[4, 3, 2, 1],
+    )
+    td_auto_nested_loop_2["b"]["d"] = td_auto_nested_loop_2["b"]
+
+    view = _TensorDictKeysView(
+        tensordict=td_auto_nested_loop_2,
+        include_nested=True,
+        leaves_only=False,
+        error_on_loop=False,
+    )
+
+    keys = list(view)
+    assert len(keys) == 3
+    assert "a" in keys
+    assert "b" in keys
+    assert ("b", "c") in keys
+
+
+def test_detect_loop():
+    td_simple = TensorDict(
+        source={"a": torch.randn(4, 3, 2, 1, 5), "b": torch.randn(4, 3, 2, 1, 5)},
+        batch_size=[4, 3, 2, 1],
+    )
+    assert not detect_loop(td_simple)
+
+    td_nested = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict({"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]),
+        },
+        batch_size=[4, 3, 2, 1],
+    )
+    assert not detect_loop(td_nested)
+
+    td_auto_nested_no_loop_1 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 5),
+            "b": TensorDict({"c": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]),
+        },
+        batch_size=[4, 3, 2, 1],
+    )
+    td_auto_nested_no_loop_1["b"]["d"] = td_auto_nested_no_loop_1["a"]
+
+    assert not detect_loop(td_auto_nested_no_loop_1)
+
+    td_auto_nested_no_loop_2 = TensorDict(
+        source={
+            "a": TensorDict(
+                source={"c": torch.randn(4, 3, 2, 1, 2)}, batch_size=[4, 3, 2, 1]
+            ),
+            "b": TensorDict(
+                source={"d": torch.randn(4, 3, 2, 1, 2)}, batch_size=[4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1],
+    )
+    td_auto_nested_no_loop_2["b"]["e"] = td_auto_nested_no_loop_2["a"]
+
+    assert not detect_loop(td_auto_nested_no_loop_2)
+
+    td_auto_nested_no_loop_3 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 2),
+            "b": TensorDict(
+                source={"c": torch.randn(4, 3, 2, 1, 2)}, batch_size=[4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1],
+    )
+    td_auto_nested_no_loop_3["b"]["d"] = td_auto_nested_no_loop_3["b"]["c"]
+
+    assert not detect_loop(td_auto_nested_no_loop_3)
+
+    td_auto_nested_loop_1 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 2),
+            "b": TensorDict(
+                source={"c": torch.randn(4, 3, 2, 1, 2)}, batch_size=[4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1],
+    )
+    td_auto_nested_loop_1["b"]["d"] = td_auto_nested_loop_1["b"]
+
+    assert detect_loop(td_auto_nested_loop_1)
+
+    td_auto_nested_loop_2 = TensorDict(
+        source={
+            "a": torch.randn(4, 3, 2, 1, 2),
+            "b": TensorDict(
+                source={"c": torch.randn(4, 3, 2, 1, 2)}, batch_size=[4, 3, 2, 1]
+            ),
+        },
+        batch_size=[4, 3, 2, 1],
+    )
+    td_auto_nested_loop_2["b"]["d"] = td_auto_nested_loop_2
+
+    assert detect_loop(td_auto_nested_loop_2)
 
 
 if __name__ == "__main__":
