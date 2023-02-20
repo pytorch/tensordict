@@ -2086,7 +2086,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     __getitems__ = __getitem__
 
     def __setitem__(
-        self, index: INDEX_TYPING, value: Union[TensorDictBase, dict, numbers.Number, Tensor]
+        self, 
+        index: INDEX_TYPING, 
+        value: Union[TensorDictBase, dict, numbers.Number, Tensor],
     ) -> None:
 
         if not not isinstance(value, (TensorDictBase, dict, numbers.Number, Tensor)):
