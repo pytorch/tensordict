@@ -441,8 +441,15 @@ def _setitem(self, item, value):
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
         raise ValueError("Invalid indexing arguments.")
-    if not isinstance(value, self.__class__):
-        raise ValueError("__setitem__ is only allowed for same-class assignement")
+    if is_tensorclass(value) and not isinstance(value, self.__class__):
+        self_keys = set().union(self._non_tensordict, self._tensordict.keys())
+        value_keys = set().union(value._non_tensordict, value._tensordict.keys())
+        if self_keys != value_keys:
+            # if tensorclass but different class ensure that all keys are equal
+            raise ValueError(
+                "__setitem__ is only allowed for same-class or "
+                "compatible class (i.e. same members) assignment"
+            )
 
     # Validating the non-tensor data before setting the item
     for key, val in value._non_tensordict.items():
