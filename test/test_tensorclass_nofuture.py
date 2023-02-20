@@ -391,13 +391,19 @@ def test_setitem_other_cls():
         x: torch.Tensor
         y: MemmapTensor
 
+    data1 = MyData1(
+        x=torch.zeros(3, 4, 5),
+        y=MemmapTensor.from_tensor(torch.zeros(3, 4, 5)),
+        batch_size=[3, 4],
+    )
+
     # Set Item should work for other tensorclass
     @tensorclass
     class MyData2:
         x: MemmapTensor
         y: torch.Tensor
 
-    data_other_cls = MyDataMemMap2(
+    data_other_cls = MyData2(
         x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
         y=torch.ones(3, 4, 5),
         batch_size=[3, 4],
