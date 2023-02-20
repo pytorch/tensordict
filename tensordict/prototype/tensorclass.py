@@ -441,7 +441,26 @@ def _setitem(self, item, value):
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
         raise ValueError("Invalid indexing arguments.")
-    if is_tensorclass(value) and not isinstance(value, self.__class__):
+
+    if not is_tensorclass(value) and not isinstance(
+        value, (TensorDictBase, numbers.Number, Tensor)
+    ):
+        raise ValueError(
+            f"__setitem__ only supports tensorclasses, tensordicts,"
+            f" numeric scalars and tensors. Got {type(value)}"
+        )   
+
+    # if it is one of accepted "broadcast" types
+    if not is_tensorclass(value):
+        # attempt broadcast on all tensordata and nested tensorclasses
+        self._tensordict[item] = value
+        for key, val in self._non_tensordict.items():
+            if is_tensorclass(val):
+                _setitem(self._non_tensordict[key], item, value)
+        return
+
+    # else it is tensorclass
+    if not isinstance(value, self.__class__):
         self_keys = set().union(self._non_tensordict, self._tensordict.keys())
         value_keys = set().union(value._non_tensordict, value._tensordict.keys())
         if self_keys != value_keys:
