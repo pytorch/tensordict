@@ -206,32 +206,27 @@ def test_memmap_zero_value(device, value, shape):
 
 class TestIndexing:
     @staticmethod
-    def _recv_and_send(queue, filename, shape):
-        t = queue.get(timeout=10.0)
+    def _recv_and_send(queue_out, queue_in, filename, shape, ):
+        t = queue_in.get(timeout=10.0)
         assert isinstance(t, MemmapTensor)
         assert t.filename == filename
         assert t.shape == shape
         assert (t == 0).all()
         msg = "done"
-        queue.put(msg)
-        count = 0
-        while queue.full() and count < 100:
-            count += 1
-            time.sleep(0.1)
-            continue
+        queue_out.put(msg)
 
-        msg = queue.get(timeout=10.0)
+        msg = queue_in.get(timeout=10.0)
         assert msg == "modified"
         assert (t == 1).all()
-        queue.put("done!!")
+        queue_out.put("done!!")
 
-        msg = queue.get(timeout=10.0)
+        msg = queue_in.get(timeout=10.0)
         assert msg == "deleted"
         assert not os.path.isfile(filename)
         with pytest.raises(FileNotFoundError, match="No such file or directory"):
             print(t + 1)
-        queue.put("done again")
-        del queue
+        queue_out.put("done again")
+        del queue_in, queue_out
 
     def test_simple_index(self):
         t = MemmapTensor.from_tensor(torch.zeros(10))
@@ -267,40 +262,26 @@ class TestIndexing:
 
     def test_send_across_procs(self):
         t = MemmapTensor.from_tensor(torch.zeros(10), transfer_ownership=False)
-        queue = mp.Queue(1)
+        queue_in = mp.Queue(1)
+        queue_out = mp.Queue(1)
         filename = t.filename
         p = mp.Process(
-            target=TestIndexing._recv_and_send, args=(queue, filename, torch.Size([10]))
+            target=TestIndexing._recv_and_send, args=(queue_in, queue_out, filename, torch.Size([10]))
         )
         try:
             p.start()
-            queue.put(t, block=True)
-            count = 0
-            while queue.full() and count < 100:
-                count += 1
-                time.sleep(0.1)
-                continue
-            msg = queue.get(timeout=10.0)
+            queue_out.put(t, block=True)
+            msg = queue_in.get(timeout=10.0)
             assert msg == "done"
 
             t.fill_(1.0)
-            queue.put("modified", block=True)
-            count = 0
-            while queue.full() and count < 100:
-                count += 1
-                time.sleep(0.1)
-                continue
-            msg = queue.get(timeout=10.0)
+            queue_out.put("modified", block=True)
+            msg = queue_in.get(timeout=10.0)
             assert msg == "done!!"
 
             del t
-            queue.put("deleted")
-            count = 0
-            while queue.full() and count < 100:
-                count += 1
-                time.sleep(0.1)
-                continue
-            msg = queue.get(timeout=10.0)
+            queue_out.put("deleted")
+            msg = queue_in.get(timeout=10.0)
             assert msg == "done again"
             p.join()
         except Exception as e:
@@ -309,31 +290,26 @@ class TestIndexing:
 
     def test_send_across_procs_index(self):
         t = MemmapTensor.from_tensor(torch.zeros(10), transfer_ownership=False)
-        queue = mp.Queue(1)
+        queue_in = mp.Queue(1)
+        queue_out = mp.Queue(1)
         filename = t.filename
         p = mp.Process(
-            target=TestIndexing._recv_and_send, args=(queue, filename, torch.Size([3]))
+            target=TestIndexing._recv_and_send, args=(queue_in, queue_out, filename, torch.Size([3]))
         )
         try:
             p.start()
-            queue.put(t[:3], block=True)
-            while queue.full():
-                continue
-            msg = queue.get(timeout=10.0)
+            queue_out.put(t[:3], block=True)
+            msg = queue_in.get(timeout=10.0)
             assert msg == "done"
 
             t.fill_(1.0)
-            queue.put("modified", block=True)
-            while queue.full():
-                continue
-            msg = queue.get(timeout=10.0)
+            queue_out.put("modified", block=True)
+            msg = queue_in.get(timeout=10.0)
             assert msg == "done!!"
 
             del t
-            queue.put("deleted")
-            while queue.full():
-                continue
-            msg = queue.get(timeout=10.0)
+            queue_out.put("deleted")
+            msg = queue_in.get(timeout=10.0)
             assert msg == "done again"
             p.join()
         except Exception as e:
