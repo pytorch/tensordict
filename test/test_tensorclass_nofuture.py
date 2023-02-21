@@ -433,7 +433,10 @@ def test_setitem_other_cls():
     ):
         data_wrong_cls[2:] = data1[2:]
 
-
+@pytest.mark.parametrize(
+    "val2broadcast", 
+    [0, torch.zeros(4, 5), TensorDict(X=torch.zeros(2, 4, 5), batch_size=[2, 4]), MemmapTensor.from_tensor(torch.zeros(4, 5))],
+)
 def test_setitem_broadcast():
     @tensorclass
     class MyDataNested:
@@ -448,33 +451,10 @@ def test_setitem_broadcast():
     data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
 
     # scalar
-    data[:2] = 3
-    assert (data[:2] == 3).all()
-    assert (data.X[:2] == 3).all()
-    assert (data.y.X[:2] == 3).all()
-    assert (data[2:] == 1).all()
-    assert (data.X[2:] == 1).all()
-    assert (data.y.X[2:] == 1).all()
-
-    # tensor
-    data[:2] = torch.zeros(4, 5)
+    data[:2] = val2broadcast
     assert (data[:2] == 0).all()
     assert (data.X[:2] == 0).all()
     assert (data.y.X[:2] == 0).all()
-    assert (data[2:] == 0).all()
-    assert (data.X[2:] == 0).all()
-    assert (data.y.X[2:] == 0).all()
-
-    # tensordict
-    batch_size = [2, 4]
-    W = TensorDict(X=torch.ones(2, 4, 5) * 2, batch_size=batch_size)
-    data[:2] = W
-    assert (data[:2] == 2).all()
-    assert (data.X[:2] == 2).all()
-    assert (data.y.X[:2] == 2).all()
-    assert (data[2:] == 1).all()
-    assert (data.X[2:] == 1).all()
-    assert (data.y.X[2:] == 1).all()
 
 
 def test_stack():
