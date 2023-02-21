@@ -433,6 +433,7 @@ def test_setitem_other_cls():
     ):
         data_wrong_cls[2:] = data1[2:]
 
+
 @pytest.mark.parametrize(
     "val2broadcast",
     [
