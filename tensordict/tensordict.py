@@ -2154,14 +2154,18 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     f"which differs from the source batch size {value.batch_size}"
                 )
 
-        keys = set(self.keys())
-        if not all(key in keys for key in value.keys()):
-            subtd = self.get_sub_tensordict(index)
-        for key, item in value.items():
-            if key in keys:
+            keys = set(self.keys())
+            if not all(key in keys for key in value.keys()):
+                subtd = self.get_sub_tensordict(index)
+            for key, item in value.items():
+                if key in keys:
+                    self.set_at_(key, item, index)
+                else:
+                    subtd.set(key, item)
+        else:
+            for key in self.keys():
                 self.set_at_(key, item, index)
-            else:
-                subtd.set(key, item)
+
 
     def __delitem__(self, index: INDEX_TYPING) -> TensorDictBase:
         # if isinstance(index, str):
