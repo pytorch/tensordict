@@ -2164,8 +2164,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     subtd.set(key, item)
         else:
             for key in self.keys():
-                self.set_at_(key, item, index)
-
+                self.set_at_(key, value, index)
 
     def __delitem__(self, index: INDEX_TYPING) -> TensorDictBase:
         # if isinstance(index, str):
