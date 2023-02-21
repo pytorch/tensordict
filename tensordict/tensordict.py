@@ -2094,7 +2094,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         if not isinstance(
             value,
-            (TensorDictBase, dict, numbers.Number, Tensor, MemmapTensor)
+            (TensorDictBase, dict, numbers.Number, Tensor, MemmapTensor),
         ):
             raise ValueError(
                 f"__setitem__ only supports tensorclasses, tensordicts,"
