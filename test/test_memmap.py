@@ -6,6 +6,7 @@ import argparse
 import os.path
 import pickle
 import tempfile
+import time
 
 import numpy as np
 import pytest
@@ -213,7 +214,10 @@ class TestIndexing:
         assert (t == 0).all()
         msg = "done"
         queue.put(msg)
-        while queue.full():
+        count = 0
+        while queue.full() and count < 100:
+            count += 1
+            time.sleep(0.1)
             continue
 
         msg = queue.get(timeout=10.0)
@@ -271,21 +275,30 @@ class TestIndexing:
         try:
             p.start()
             queue.put(t, block=True)
-            while queue.full():
+            count = 0
+            while queue.full() and count < 100:
+                count += 1
+                time.sleep(0.1)
                 continue
             msg = queue.get(timeout=10.0)
             assert msg == "done"
 
             t.fill_(1.0)
             queue.put("modified", block=True)
-            while queue.full():
+            count = 0
+            while queue.full() and count < 100:
+                count += 1
+                time.sleep(0.1)
                 continue
             msg = queue.get(timeout=10.0)
             assert msg == "done!!"
 
             del t
             queue.put("deleted")
-            while queue.full():
+            count = 0
+            while queue.full() and count < 100:
+                count += 1
+                time.sleep(0.1)
                 continue
             msg = queue.get(timeout=10.0)
             assert msg == "done again"
