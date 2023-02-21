@@ -21,6 +21,7 @@ from tensordict.tensordict import (
     is_tensordict,
     TensorDict,
     TensorDictBase,
+    COMPATIBLE_TYPES,
 )
 from tensordict.utils import DEVICE_TYPING
 
@@ -443,7 +444,7 @@ def _setitem(self, item, value):
         raise ValueError("Invalid indexing arguments.")
 
     if not is_tensorclass(value) and not isinstance(
-        value, (TensorDictBase, numbers.Number, Tensor)
+        value, (TensorDictBase, numbers.Number, COMPATIBLE_TYPES)
     ):
         raise ValueError(
             f"__setitem__ only supports tensorclasses, tensordicts,"
@@ -935,7 +936,7 @@ def __eq__(self, other):
 
     """
     if not is_tensorclass(other) and not isinstance(
-        other, (TensorDictBase, numbers.Number, Tensor)
+        other, (TensorDictBase, numbers.Number, COMPATIBLE_TYPES)
     ):
         return False
     non_tensor = {}
@@ -1009,7 +1010,7 @@ def __ne__(self, other):
 
     """
     if not is_tensorclass(other) and not isinstance(
-        other, (TensorDictBase, numbers.Number, Tensor)
+        other, (TensorDictBase, numbers.Number, COMPATIBLE_TYPES)
     ):
         return True
     non_tensor = {}
