@@ -6,7 +6,6 @@ import argparse
 import os.path
 import pickle
 import tempfile
-import time
 
 import numpy as np
 import pytest
@@ -206,7 +205,12 @@ def test_memmap_zero_value(device, value, shape):
 
 class TestIndexing:
     @staticmethod
-    def _recv_and_send(queue_out, queue_in, filename, shape, ):
+    def _recv_and_send(
+        queue_out,
+        queue_in,
+        filename,
+        shape,
+    ):
         t = queue_in.get(timeout=10.0)
         assert isinstance(t, MemmapTensor)
         assert t.filename == filename
@@ -266,7 +270,8 @@ class TestIndexing:
         queue_out = mp.Queue(1)
         filename = t.filename
         p = mp.Process(
-            target=TestIndexing._recv_and_send, args=(queue_in, queue_out, filename, torch.Size([10]))
+            target=TestIndexing._recv_and_send,
+            args=(queue_in, queue_out, filename, torch.Size([10])),
         )
         try:
             p.start()
@@ -294,7 +299,8 @@ class TestIndexing:
         queue_out = mp.Queue(1)
         filename = t.filename
         p = mp.Process(
-            target=TestIndexing._recv_and_send, args=(queue_in, queue_out, filename, torch.Size([3]))
+            target=TestIndexing._recv_and_send,
+            args=(queue_in, queue_out, filename, torch.Size([3])),
         )
         try:
             p.start()
