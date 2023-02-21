@@ -15,6 +15,7 @@ import torch
 
 from packaging import version
 
+from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     _accepted_classes,
     get_repr,
