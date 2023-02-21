@@ -59,8 +59,7 @@ tensor operations such as indexing, shape operations, casting to device and more
 # ...     loss.backward()
 # ...     optim.step()
 # ...     optim.zero_grad()
-
-###############################################################################
+#
 # We can now reuse the same training loop across datasets and losses.
 #
 # Can't I do this with a Python ``dict``?
