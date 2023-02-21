@@ -434,12 +434,11 @@ def test_setitem_other_cls():
         data_wrong_cls[2:] = data1[2:]
 
 @pytest.mark.parametrize(
-    "val2broadcast", 
+    "val2broadcast",
     [
         0,
         torch.zeros(4, 5),
-        TensorDict(X=torch.zeros(2, 4, 5),
-        batch_size=[2, 4]),
+        TensorDict(X=torch.zeros(2, 4, 5), batch_size=[2, 4]),
         MemmapTensor.from_tensor(torch.zeros(4, 5)),
     ],
 )
