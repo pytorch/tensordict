@@ -2096,10 +2096,14 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             value,
             (TensorDictBase, dict, numbers.Number, Tensor, MemmapTensor),
         ):
-            raise ValueError(
-                f"__setitem__ only supports tensorclasses, tensordicts,"
-                f" numeric scalars and tensors. Got {type(value)}"
-            )
+            try:
+                # try to cast value to tensor:
+                value = self._convert_to_tensor()
+            except ValueError as e:
+                raise ValueError(
+                    f"__setitem__ only supports tensorclasses, tensordicts,"
+                    f" numeric scalars and tensors. Got {type(value)}"
+                )
 
         if isinstance(index, str):
             self.set(index, value, inplace=self._inplace_set)
