@@ -439,11 +439,11 @@ def test_setitem_other_cls():
     [
         0,
         torch.zeros(4, 5),
-        TensorDict(X=torch.zeros(2, 4, 5), batch_size=[2, 4]),
+        TensorDict({"X": torch.zeros(2, 4, 5)}, batch_size=[2, 4]),
         MemmapTensor.from_tensor(torch.zeros(4, 5)),
     ],
 )
-def test_setitem_broadcast():
+def test_setitem_broadcast(val2broadcast):
     @tensorclass
     class MyDataNested:
         X: torch.Tensor
