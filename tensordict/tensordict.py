@@ -2021,7 +2021,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def __getitem__(self, idx: INDEX_TYPING) -> TensorDictBase:
         """Indexes all tensors according to the provided index.
 
-        Returns a new tensordict where the values share the storage of the original tensors (even
+        Returns a new tensordict where the values share the storage of the 
+        original tensors (even
         when the index is a torch.Tensor). Any in-place modification to the
         resulting tensordict will impact the parent tensordict too.
 
@@ -2088,10 +2089,10 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def __setitem__(
         self,
         index: INDEX_TYPING,
-        value: Union[TensorDictBase, dict, numbers.Number, Tensor],
+        value: Union[TensorDictBase, dict, numbers.Number, COMPATIBLE_TYPES],
     ) -> None:
 
-        if not isinstance(value, (TensorDictBase, dict, numbers.Number, Tensor)):
+        if not isinstance(value, (TensorDictBase, dict, numbers.Number, Tensor, MemmapTensor)):
             raise ValueError(
                 f"__setitem__ only supports tensorclasses, tensordicts,"
                 f" numeric scalars and tensors. Got {type(value)}"
