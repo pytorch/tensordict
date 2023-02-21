@@ -2099,7 +2099,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             try:
                 # try to cast value to tensor:
                 value = self._convert_to_tensor()
-            except ValueError as e:
+            except ValueError:
                 raise ValueError(
                     f"__setitem__ only supports tensorclasses, tensordicts,"
                     f" numeric scalars and tensors. Got {type(value)}"
