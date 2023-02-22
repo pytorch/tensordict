@@ -65,15 +65,15 @@ class TestGather:
 
     def test_gather(self, set_context, tmp_path):
         queue = mp.Queue(1)
-        master = mp.Process(target=TestGather.server, args=(queue,))
-        slave = mp.Process(target=TestGather.client, args=(str(tmp_path / "sub"),))
+        main_worker = mp.Process(target=TestGather.server, args=(queue,))
+        secondary_worker = mp.Process(target=TestGather.client, args=(str(tmp_path / "sub"),))
 
-        master.start()
-        slave.start()
+        main_worker.start()
+        secondary_worker.start()
         out = queue.get(timeout=10)
         assert out == "yuppie"
-        master.join()
-        slave.join()
+        main_worker.join()
+        secondary_worker.join()
 
 
 @pytest.mark.parametrize("pseudo_rand", [True, False])
@@ -121,15 +121,15 @@ class TestSend:
 
     def test_send(self, pseudo_rand, set_context):
         queue = mp.Queue(1)
-        master = mp.Process(target=TestSend.server, args=(queue, pseudo_rand))
-        slave = mp.Process(target=TestSend.client, args=(pseudo_rand,))
+        main_worker = mp.Process(target=TestSend.server, args=(queue, pseudo_rand))
+        secondary_worker = mp.Process(target=TestSend.client, args=(pseudo_rand,))
 
-        master.start()
-        slave.start()
+        main_worker.start()
+        secondary_worker.start()
         out = queue.get(timeout=10)
         assert out == "yuppie"
-        master.join()
-        slave.join()
+        main_worker.join()
+        secondary_worker.join()
 
 
 @pytest.mark.parametrize("pseudo_rand", [True, False])
@@ -181,17 +181,17 @@ class TestiSend:
     @pytest.mark.parametrize("return_premature", [True, False])
     def test_isend(self, pseudo_rand, return_premature, set_context):
         queue = mp.Queue(1)
-        master = mp.Process(
+        main_worker = mp.Process(
             target=TestiSend.server, args=(queue, return_premature, pseudo_rand)
         )
-        slave = mp.Process(target=TestiSend.client, args=(pseudo_rand,))
+        secondary_worker = mp.Process(target=TestiSend.client, args=(pseudo_rand,))
 
-        master.start()
-        slave.start()
+        main_worker.start()
+        secondary_worker.start()
         out = queue.get(timeout=10)
         assert out == "yuppie"
-        master.join()
-        slave.join()
+        main_worker.join()
+        secondary_worker.join()
 
 
 if __name__ == "__main__":

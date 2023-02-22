@@ -580,14 +580,14 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             >>> if __name__ == "__main__":
             ...     mp.set_start_method("spawn")
             ...
-            ...     master = mp.Process(target=server)
-            ...     slave = mp.Process(target=client)
+            ...     main_worker = mp.Process(target=server)
+            ...     secondary_worker = mp.Process(target=client)
             ...
-            ...     master.start()
-            ...     slave.start()
+            ...     main_worker.start()
+            ...     secondary_worker.start()
             ...
-            ...     master.join()
-            ...     slave.join()
+            ...     main_worker.join()
+            ...     secondary_worker.join()
         """
         if dest == dist.get_rank():
             output = [None for _ in range(dist.get_world_size())]
@@ -663,15 +663,15 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             >>>
             >>> if __name__=="__main__":
             ...     queue = mp.Queue(1)
-            ...     master = mp.Process(target=server, args=(queue,))
-            ...     slave = mp.Process(target=client)
+            ...     main_worker = mp.Process(target=server, args=(queue,))
+            ...     secondary_worker = mp.Process(target=client)
             ...
-            ...     master.start()
-            ...     slave.start()
+            ...     main_worker.start()
+            ...     secondary_worker.start()
             ...     out = queue.get(timeout=10)
             ...     assert out == "yuppie"
-            ...     master.join()
-            ...     slave.join()
+            ...     main_worker.join()
+            ...     secondary_worker.join()
 
         """
         self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
@@ -760,18 +760,18 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             >>>
             >>> if __name__ == "__main__":
             ...     queue = mp.Queue(1)
-            ...     master = mp.Process(
+            ...     main_worker = mp.Process(
             ...         target=server,
             ...         args=(queue, )
             ...         )
-            ...     slave = mp.Process(target=client)
+            ...     secondary_worker = mp.Process(target=client)
             ...
-            ...     master.start()
-            ...     slave.start()
+            ...     main_worker.start()
+            ...     secondary_worker.start()
             ...     out = queue.get(timeout=10)
             ...     assert out == "yuppie"
-            ...     master.join()
-            ...     slave.join()
+            ...     main_worker.join()
+            ...     secondary_worker.join()
 
         """
         return self._isend(dst, init_tag - 1, pseudo_rand=pseudo_rand)
