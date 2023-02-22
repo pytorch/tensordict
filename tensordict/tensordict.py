@@ -56,7 +56,7 @@ from tensordict.utils import (
     NESTED_KEY,
     prod,
 )
-from torch import Tensor
+from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
 
 
@@ -97,6 +97,9 @@ except ImportError as err:
     TORCHREC_ERR = str(err)
 
 
+# some complex string used as separator to concatenate and split keys in
+# distributed frameworks
+DIST_SEPARATOR = ".-|-."
 TD_HANDLED_FUNCTIONS: Dict = {}
 COMPATIBLE_TYPES = Union[
     Tensor,
@@ -530,6 +533,321 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
+
+    def gather_and_stack(self, dest):
+        """Gathers tensordicts from various workers and stacks them onto self in the destination worker.
+
+        Args:
+            dest (int): the rank of the destination worker where :func:`gather_and_stack` will be called.
+
+        Example:
+            >>> from torch import multiprocessing as mp
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>>
+            >>> def client():
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=1,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...     # Create a single tensordict to be sent to server
+            ...     td = TensorDict(
+            ...         {("a", "b"): torch.randn(2),
+            ...          "c": torch.randn(2)}, [2]
+            ...     )
+            ...     td.gather_and_stack(0)
+            ...
+            >>> def server():
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=0,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...     # Creates the destination tensordict on server.
+            ...     # The first dim must be equal to world_size-1
+            ...     td = TensorDict(
+            ...         {("a", "b"): torch.zeros(2),
+            ...          "c": torch.zeros(2)}, [2]
+            ...     ).expand(1, 2).contiguous()
+            ...     td.gather_and_stack(0)
+            ...     assert td["a", "b"] != 0
+            ...     print("yuppie")
+            ...
+            >>> if __name__ == "__main__":
+            ...     mp.set_start_method("spawn")
+            ...
+            ...     master = mp.Process(target=server)
+            ...     slave = mp.Process(target=client)
+            ...
+            ...     master.start()
+            ...     slave.start()
+            ...
+            ...     master.join()
+            ...     slave.join()
+        """
+        if dest == dist.get_rank():
+            output = [None for _ in range(dist.get_world_size())]
+        else:
+            output = None
+        dist.gather_object(self, output, dst=dest)
+        if dest == dist.get_rank():
+            # remove self from output
+            output = [item for i, item in enumerate(output) if i != dest]
+            self.update(torch.stack(output, 0), inplace=True)
+            return self
+
+    def send(self, dst, init_tag=0):
+        """Sends the content of a tensordict to a distant worker.
+
+        Args:
+            dst (int): the rank of the destination worker where the content
+                should be sent.
+            init_tag (int): the initial tag to be used to mark the tensors.
+                Note that this will be incremented by as much as the number of
+                tensors contained in the TensorDict.
+
+        Example:
+            >>> from torch import multiprocessing as mp
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>>
+            >>>
+            >>> def client():
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=1,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...
+            ...     td = TensorDict(
+            ...         {
+            ...             ("a", "b"): torch.randn(2),
+            ...             "c": torch.randn(2, 3),
+            ...             "_": torch.ones(2, 1, 5),
+            ...         },
+            ...         [2],
+            ...     )
+            ...     td.send(0)
+            ...
+            >>>
+            >>> def server(queue):
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=0,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...     td = TensorDict(
+            ...         {
+            ...             ("a", "b"): torch.zeros(2),
+            ...             "c": torch.zeros(2, 3),
+            ...             "_": torch.zeros(2, 1, 5),
+            ...         },
+            ...         [2],
+            ...     )
+            ...     td.recv(1)
+            ...     assert (td != 0).all()
+            ...     queue.put("yuppie")
+            ...
+            >>>
+            >>> if __name__=="__main__":
+            ...     queue = mp.Queue(1)
+            ...     master = mp.Process(target=server, args=(queue,))
+            ...     slave = mp.Process(target=client)
+            ...
+            ...     master.start()
+            ...     slave.start()
+            ...     out = queue.get(timeout=10)
+            ...     assert out == "yuppie"
+            ...     master.join()
+            ...     slave.join()
+
+        """
+        self._send(dst, _tag=init_tag - 1)
+
+    def _send(self, dst, _tag=-1):
+        for value in self.values():
+            if isinstance(value, Tensor):
+                _tag += 1
+                dist.send(value, dst=dst, tag=_tag)
+            elif isinstance(value, TensorDictBase):
+                _tag = value._send(dst, _tag=_tag)
+            elif isinstance(value, MemmapTensor):
+                _tag += 1
+                dist.send(value.as_tensor(), dst=dst, tag=_tag)
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+        return _tag
+
+    def isend(self, dst, init_tag=0):
+        """Sends the content of the tensordict asynchronously.
+
+        Args:
+            dst (int): the rank of the destination worker where the content
+                should be sent.
+            init_tag (int): the initial tag to be used to mark the tensors.
+                Note that this will be incremented by as much as the number of
+                tensors contained in the TensorDict.
+
+        Example:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torch import multiprocessing as mp
+            >>> def client():
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=1,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...
+            ...     td = TensorDict(
+            ...         {
+            ...             ("a", "b"): torch.randn(2),
+            ...             "c": torch.randn(2, 3),
+            ...             "_": torch.ones(2, 1, 5),
+            ...         },
+            ...         [2],
+            ...     )
+            ...     td.isend(0)
+            ...
+            >>>
+            >>> def server(queue, return_premature=True):
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=0,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...     td = TensorDict(
+            ...         {
+            ...             ("a", "b"): torch.zeros(2),
+            ...             "c": torch.zeros(2, 3),
+            ...             "_": torch.zeros(2, 1, 5),
+            ...         },
+            ...         [2],
+            ...     )
+            ...     out = td.irecv(1, return_premature=return_premature)
+            ...     if return_premature:
+            ...         for fut in out:
+            ...             fut.wait()
+            ...     assert (td != 0).all()
+            ...     queue.put("yuppie")
+            ...
+            >>>
+            >>> if __name__ == "__main__":
+            ...     queue = mp.Queue(1)
+            ...     master = mp.Process(
+            ...         target=server,
+            ...         args=(queue, )
+            ...         )
+            ...     slave = mp.Process(target=client)
+            ...
+            ...     master.start()
+            ...     slave.start()
+            ...     out = queue.get(timeout=10)
+            ...     assert out == "yuppie"
+            ...     master.join()
+            ...     slave.join()
+
+        """
+        return self._isend(dst, init_tag - 1)
+
+    def _isend(self, dst, _tag=-1):
+        for value in self.values():
+            if isinstance(value, Tensor):
+                _tag += 1
+                dist.send(value, dst=dst, tag=_tag)
+            elif isinstance(value, TensorDictBase):
+                _tag = value._isend(dst, _tag=_tag)
+            elif isinstance(value, MemmapTensor):
+                _tag += 1
+                dist.send(value.as_tensor(), dst=dst, tag=_tag)
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+        return _tag
+
+    def recv(self, src, init_tag=0):
+        """Receives the content of a tensordict and updates content with it.
+
+        Check the example in the `send` method for context.
+
+        Args:
+            src (int): the rank of the source worker.
+            init_tag (int): the ``init_tag`` used by the source worker.
+
+        """
+        return self._recv(src, _tag=init_tag - 1)
+
+    def _recv(self, src, _tag=-1):
+        for key, value in self.items():
+            if isinstance(value, Tensor):
+                _tag += 1
+                dist.recv(value, src=src, tag=_tag)
+                self.set(key, value, inplace=True)
+            elif isinstance(value, TensorDictBase):
+                _tag = value._recv(src, _tag=_tag)
+            elif isinstance(value, MemmapTensor):
+                _tag += 1
+                value = value.as_tensor()
+                dist.recv(value, src=src, tag=_tag)
+                self.set(key, value, inplace=True)
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+        return _tag
+
+    def irecv(self, src, return_premature=False, init_tag=0):
+        """Receives the content of a tensordict and updates content with it asynchronously.
+
+        Check the example in the `isend` method for context.
+
+        Args:
+            src (int): the rank of the source worker.
+            return_premature (bool): if ``True``, returns a list of futures to wait
+                upon until the tensordict is updated. Defaults to ``False``,
+                i.e. waits until update is completed withing the call.
+            init_tag (int): the ``init_tag`` used by the source worker.
+
+        Returns:
+            if ``return_premature=True``, a list of futures to wait
+                upon until the tensordict is updated.
+        """
+        return self._irecv(src, return_premature, _tag=init_tag - 1)
+
+    def _irecv(self, src, return_premature=False, _tag=-1, future_list=None):
+        root = False
+        if future_list is None:
+            future_list = []
+            root = True
+
+        for key, value in self.items():
+            if isinstance(value, Tensor):
+                _tag += 1
+                future_list.append(dist.irecv(value, src=src, tag=_tag))
+                self.set(key, value, inplace=True)
+            elif isinstance(value, TensorDictBase):
+                _tag, future_list = value._irecv(
+                    src, _tag=_tag, future_list=future_list
+                )
+            elif isinstance(value, MemmapTensor):
+                _tag += 1
+                value = value.as_tensor()
+                future_list.append(dist.irecv(value, src=src, tag=_tag))
+                self.set(key, value, inplace=True)
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+        if not root:
+            return _tag, future_list
+        elif return_premature:
+            return future_list
+        else:
+            for future in future_list:
+                future.wait()
+            return
 
     def _stack_onto_at_(
         self,
