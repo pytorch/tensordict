@@ -53,6 +53,7 @@ from tensordict.utils import (
     expand_as_right,
     expand_right,
     INDEX_TYPING,
+    int_generator,
     NESTED_KEY,
     prod,
 )
@@ -599,7 +600,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             self.update(torch.stack(output, 0), inplace=True)
             return self
 
-    def send(self, dst, init_tag=0):
+    def send(self, dst, init_tag=0, pseudo_rand=False):
         """Sends the content of a tensordict to a distant worker.
 
         Args:
@@ -608,6 +609,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             init_tag (int): the initial tag to be used to mark the tensors.
                 Note that this will be incremented by as much as the number of
                 tensors contained in the TensorDict.
+            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
+                random, allowing to send multiple data from different nodes
+                without overlap. Notice that the generation of these pseudo-random
+                numbers is expensive (1e-5 sec/number), meaning that it could
+                slow down the runtime of your algorithm.
+                Defaults to ``False``.
 
         Example:
             >>> from torch import multiprocessing as mp
@@ -667,23 +674,29 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             ...     slave.join()
 
         """
-        self._send(dst, _tag=init_tag - 1)
+        self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
 
-    def _send(self, dst, _tag=-1):
+    def _send(self, dst, _tag=-1, pseudo_rand=False):
         for value in self.values():
             if isinstance(value, Tensor):
-                _tag += 1
+                if not pseudo_rand:
+                    _tag += 1
+                else:
+                    _tag = int_generator(_tag + 1)
                 dist.send(value, dst=dst, tag=_tag)
             elif isinstance(value, TensorDictBase):
-                _tag = value._send(dst, _tag=_tag)
+                _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand)
             elif isinstance(value, MemmapTensor):
-                _tag += 1
+                if not pseudo_rand:
+                    _tag += 1
+                else:
+                    _tag = int_generator(_tag + 1)
                 dist.send(value.as_tensor(), dst=dst, tag=_tag)
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
         return _tag
 
-    def isend(self, dst, init_tag=0):
+    def isend(self, dst, init_tag=0, pseudo_rand=False):
         """Sends the content of the tensordict asynchronously.
 
         Args:
@@ -692,6 +705,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             init_tag (int): the initial tag to be used to mark the tensors.
                 Note that this will be incremented by as much as the number of
                 tensors contained in the TensorDict.
+            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
+                random, allowing to send multiple data from different nodes
+                without overlap. Notice that the generation of these pseudo-random
+                numbers is expensive (1e-5 sec/number), meaning that it could
+                slow down the runtime of your algorithm.
+                Defaults to ``False``.
 
         Example:
             >>> import torch
@@ -755,23 +774,29 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             ...     slave.join()
 
         """
-        return self._isend(dst, init_tag - 1)
+        return self._isend(dst, init_tag - 1, pseudo_rand=pseudo_rand)
 
-    def _isend(self, dst, _tag=-1):
+    def _isend(self, dst, _tag=-1, pseudo_rand=False):
         for value in self.values():
             if isinstance(value, Tensor):
-                _tag += 1
+                if not pseudo_rand:
+                    _tag += 1
+                else:
+                    _tag = int_generator(_tag + 1)
                 dist.send(value, dst=dst, tag=_tag)
             elif isinstance(value, TensorDictBase):
-                _tag = value._isend(dst, _tag=_tag)
+                _tag = value._isend(dst, _tag=_tag, pseudo_rand=pseudo_rand)
             elif isinstance(value, MemmapTensor):
-                _tag += 1
+                if not pseudo_rand:
+                    _tag += 1
+                else:
+                    _tag = int_generator(_tag + 1)
                 dist.send(value.as_tensor(), dst=dst, tag=_tag)
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
         return _tag
 
-    def recv(self, src, init_tag=0):
+    def recv(self, src, init_tag=0, pseudo_rand=False):
         """Receives the content of a tensordict and updates content with it.
 
         Check the example in the `send` method for context.
@@ -779,20 +804,33 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         Args:
             src (int): the rank of the source worker.
             init_tag (int): the ``init_tag`` used by the source worker.
+            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
+                random, allowing to send multiple data from different nodes
+                without overlap. Notice that the generation of these pseudo-random
+                numbers is expensive (1e-5 sec/number), meaning that it could
+                slow down the runtime of your algorithm.
+                This value must match the one passed to :func:`send`.
+                Defaults to ``False``.
 
         """
-        return self._recv(src, _tag=init_tag - 1)
+        return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
 
-    def _recv(self, src, _tag=-1):
+    def _recv(self, src, _tag=-1, pseudo_rand=False):
         for key, value in self.items():
             if isinstance(value, Tensor):
-                _tag += 1
+                if not pseudo_rand:
+                    _tag += 1
+                else:
+                    _tag = int_generator(_tag + 1)
                 dist.recv(value, src=src, tag=_tag)
                 self.set(key, value, inplace=True)
             elif isinstance(value, TensorDictBase):
-                _tag = value._recv(src, _tag=_tag)
+                _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
             elif isinstance(value, MemmapTensor):
-                _tag += 1
+                if not pseudo_rand:
+                    _tag += 1
+                else:
+                    _tag = int_generator(_tag + 1)
                 value = value.as_tensor()
                 dist.recv(value, src=src, tag=_tag)
                 self.set(key, value, inplace=True)
@@ -800,7 +838,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
         return _tag
 
-    def irecv(self, src, return_premature=False, init_tag=0):
+    def irecv(self, src, return_premature=False, init_tag=0, pseudo_rand=False):
         """Receives the content of a tensordict and updates content with it asynchronously.
 
         Check the example in the `isend` method for context.
@@ -811,14 +849,25 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 upon until the tensordict is updated. Defaults to ``False``,
                 i.e. waits until update is completed withing the call.
             init_tag (int): the ``init_tag`` used by the source worker.
+            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
+                random, allowing to send multiple data from different nodes
+                without overlap. Notice that the generation of these pseudo-random
+                numbers is expensive (1e-5 sec/number), meaning that it could
+                slow down the runtime of your algorithm.
+                This value must match the one passed to :func:`isend`.
+                Defaults to ``False``.
 
         Returns:
             if ``return_premature=True``, a list of futures to wait
                 upon until the tensordict is updated.
         """
-        return self._irecv(src, return_premature, _tag=init_tag - 1)
+        return self._irecv(
+            src, return_premature, _tag=init_tag - 1, pseudo_rand=pseudo_rand
+        )
 
-    def _irecv(self, src, return_premature=False, _tag=-1, future_list=None):
+    def _irecv(
+        self, src, return_premature=False, _tag=-1, future_list=None, pseudo_rand=False
+    ):
         root = False
         if future_list is None:
             future_list = []
@@ -826,15 +875,24 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         for key, value in self.items():
             if isinstance(value, Tensor):
-                _tag += 1
+                if not pseudo_rand:
+                    _tag += 1
+                else:
+                    _tag = int_generator(_tag + 1)
                 future_list.append(dist.irecv(value, src=src, tag=_tag))
                 self.set(key, value, inplace=True)
             elif isinstance(value, TensorDictBase):
                 _tag, future_list = value._irecv(
-                    src, _tag=_tag, future_list=future_list
+                    src,
+                    _tag=_tag,
+                    future_list=future_list,
+                    pseudo_rand=pseudo_rand,
                 )
             elif isinstance(value, MemmapTensor):
-                _tag += 1
+                if not pseudo_rand:
+                    _tag += 1
+                else:
+                    _tag = int_generator(_tag + 1)
                 value = value.as_tensor()
                 future_list.append(dist.irecv(value, src=src, tag=_tag))
                 self.set(key, value, inplace=True)

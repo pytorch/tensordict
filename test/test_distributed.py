@@ -23,7 +23,7 @@ class TestGather:
             "gloo",
             rank=1,
             world_size=2,
-            init_method="tcp://localhost:10005",
+            init_method="tcp://localhost:10006",
         )
 
         td = TensorDict(
@@ -44,7 +44,7 @@ class TestGather:
             "gloo",
             rank=0,
             world_size=2,
-            init_method="tcp://localhost:10005",
+            init_method="tcp://localhost:10006",
         )
 
         td = (
@@ -76,14 +76,15 @@ class TestGather:
         slave.join()
 
 
+@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestSend:
     @staticmethod
-    def client():
+    def client(pseudo_rand):
         torch.distributed.init_process_group(
             "gloo",
             rank=1,
             world_size=2,
-            init_method="tcp://localhost:10005",
+            init_method="tcp://localhost:10006",
         )
 
         td = TensorDict(
@@ -95,15 +96,15 @@ class TestSend:
             },
             [2],
         )
-        td.send(0)
+        td.send(0, pseudo_rand=pseudo_rand)
 
     @staticmethod
-    def server(queue):
+    def server(queue, pseudo_rand):
         torch.distributed.init_process_group(
             "gloo",
             rank=0,
             world_size=2,
-            init_method="tcp://localhost:10005",
+            init_method="tcp://localhost:10006",
         )
         td = TensorDict(
             {
@@ -114,14 +115,14 @@ class TestSend:
             },
             [2],
         )
-        td.recv(1)
+        td.recv(1, pseudo_rand=pseudo_rand)
         assert (td != 0).all()
         queue.put("yuppie")
 
-    def test_send(self, set_context):
+    def test_send(self, pseudo_rand, set_context):
         queue = mp.Queue(1)
-        master = mp.Process(target=TestSend.server, args=(queue,))
-        slave = mp.Process(target=TestSend.client)
+        master = mp.Process(target=TestSend.server, args=(queue, pseudo_rand))
+        slave = mp.Process(target=TestSend.client, args=(pseudo_rand,))
 
         master.start()
         slave.start()
@@ -131,14 +132,15 @@ class TestSend:
         slave.join()
 
 
+@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiSend:
     @staticmethod
-    def client():
+    def client(pseudo_rand):
         torch.distributed.init_process_group(
             "gloo",
             rank=1,
             world_size=2,
-            init_method="tcp://localhost:10005",
+            init_method="tcp://localhost:10006",
         )
 
         td = TensorDict(
@@ -150,15 +152,15 @@ class TestiSend:
             },
             [2],
         )
-        td.isend(0)
+        td.isend(0, pseudo_rand=pseudo_rand)
 
     @staticmethod
-    def server(queue, return_premature):
+    def server(queue, return_premature, pseudo_rand):
         torch.distributed.init_process_group(
             "gloo",
             rank=0,
             world_size=2,
-            init_method="tcp://localhost:10005",
+            init_method="tcp://localhost:10006",
         )
         td = TensorDict(
             {
@@ -169,7 +171,7 @@ class TestiSend:
             },
             [2],
         )
-        out = td.irecv(1, return_premature=return_premature)
+        out = td.irecv(1, return_premature=return_premature, pseudo_rand=pseudo_rand)
         if return_premature:
             for fut in out:
                 fut.wait()
@@ -177,10 +179,12 @@ class TestiSend:
         queue.put("yuppie")
 
     @pytest.mark.parametrize("return_premature", [True, False])
-    def test_isend(self, return_premature, set_context):
+    def test_isend(self, pseudo_rand, return_premature, set_context):
         queue = mp.Queue(1)
-        master = mp.Process(target=TestiSend.server, args=(queue, return_premature))
-        slave = mp.Process(target=TestiSend.client)
+        master = mp.Process(
+            target=TestiSend.server, args=(queue, return_premature, pseudo_rand)
+        )
+        slave = mp.Process(target=TestiSend.client, args=(pseudo_rand,))
 
         master.start()
         slave.start()
