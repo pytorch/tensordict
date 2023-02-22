@@ -66,7 +66,9 @@ class TestGather:
     def test_gather(self, set_context, tmp_path):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=TestGather.server, args=(queue,))
-        secondary_worker = mp.Process(target=TestGather.client, args=(str(tmp_path / "sub"),))
+        secondary_worker = mp.Process(
+            target=TestGather.client, args=(str(tmp_path / "sub"),)
+        )
 
         main_worker.start()
         secondary_worker.start()
