@@ -883,7 +883,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     _tag += 1
                 else:
                     _tag = int_generator(_tag + 1)
-                future_list.append(dist.irecv(value, src=src, tag=_tag).get_future())
+                future_list.append(dist.irecv(value, src=src, tag=_tag))
                 self.set(key, value, inplace=True)
             elif isinstance(value, TensorDictBase):
                 _tag, future_list = value._irecv(
@@ -898,7 +898,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                 else:
                     _tag = int_generator(_tag + 1)
                 value = value.as_tensor()
-                future_list.append(dist.irecv(value, src=src, tag=_tag).get_future())
+                future_list.append(dist.irecv(value, src=src, tag=_tag))
                 self.set(key, value, inplace=True)
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
