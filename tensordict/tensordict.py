@@ -777,13 +777,14 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return self._isend(dst, init_tag - 1, pseudo_rand=pseudo_rand)
 
     def _isend(self, dst, _tag=-1, pseudo_rand=False):
-        for value in self.values():
+        for key in sorted(self.keys()):
+            value = self.get(key)
             if isinstance(value, Tensor):
                 if not pseudo_rand:
                     _tag += 1
                 else:
                     _tag = int_generator(_tag + 1)
-                dist.send(value, dst=dst, tag=_tag)
+                dist.isend(value, dst=dst, tag=_tag)
             elif isinstance(value, TensorDictBase):
                 _tag = value._isend(dst, _tag=_tag, pseudo_rand=pseudo_rand)
             elif isinstance(value, MemmapTensor):
@@ -791,7 +792,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                     _tag += 1
                 else:
                     _tag = int_generator(_tag + 1)
-                dist.send(value.as_tensor(), dst=dst, tag=_tag)
+                dist.isend(value.as_tensor(), dst=dst, tag=_tag)
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
         return _tag
@@ -873,7 +874,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             future_list = []
             root = True
 
-        for key, value in self.items():
+        for key in sorted(self.keys()):
+            value = self.get(key)
             if isinstance(value, Tensor):
                 if not pseudo_rand:
                     _tag += 1
