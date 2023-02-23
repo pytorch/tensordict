@@ -12,7 +12,6 @@ In this tutorial you will learn how to take advantage of memory pre-allocation i
 # Suppose that we have a function that returns a ``TensorDict``
 
 
-
 # sphinx_gallery_start_ignore
 import warnings
 
@@ -24,6 +23,7 @@ from tensordict.tensordict import TensorDict
 
 def make_tensordict():
     return TensorDict({"a": torch.rand(3), "b": torch.rand(3, 4)}, [3])
+
 
 ###############################################################################
 # Perhaps we want to call this function multiple times and use the results to populate
