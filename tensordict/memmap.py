@@ -556,14 +556,10 @@ MemmapTensor of shape {self.shape}."""
             del self.file
 
     def __eq__(self, other: Any) -> torch.Tensor:
-        # if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
-        #     raise NotImplementedError(f"Unknown type {type(other)}")
         return self._tensor == other
 
     def __ne__(self, other: Any) -> torch.Tensor:
-        # if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
-        #     raise NotImplementedError(f"Unknown type {type(other)}")
-        return self._tensor == other
+        return self._tensor != other
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
