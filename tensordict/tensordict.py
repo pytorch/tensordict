@@ -677,7 +677,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
 
     def _send(self, dst, _tag=-1, pseudo_rand=False):
-        for value in self.values():
+        for key in sorted(self.keys()):
+            value = self.get(key)
             if isinstance(value, Tensor):
                 if not pseudo_rand:
                     _tag += 1
@@ -817,7 +818,8 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
 
     def _recv(self, src, _tag=-1, pseudo_rand=False):
-        for key, value in self.items():
+        for key in sorted(self.keys()):
+            value = self.get(key)
             if isinstance(value, Tensor):
                 if not pseudo_rand:
                     _tag += 1
