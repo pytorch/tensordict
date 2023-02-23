@@ -824,7 +824,9 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         for key in sorted(self.keys()):
             value = self.get(key)
             if isinstance(value, TensorDictBase):
-                _tag = value._isend(dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures)
+                _tag = value._isend(
+                    dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures
+                )
                 continue
             elif isinstance(value, Tensor):
                 pass
