@@ -33,6 +33,7 @@ assert tensordict["a"] is a
 
 ###############################################################################
 # .. note::
+#
 #    Unlike a Python ``dict``, all keys in the ``TensorDict`` must be strings. However
 #    as we will see, it is also possible to use tuples of strings to manipulate nested
 #    values.
