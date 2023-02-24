@@ -35,6 +35,7 @@ Basics
    tutorials/tensordict_basics
    tutorials/tensordict_module
    tutorials/tensordict_shapes
+   tutorials/tensordict_keys
 
 Dataloading
 -----------
