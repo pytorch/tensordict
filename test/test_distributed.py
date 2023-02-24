@@ -23,7 +23,7 @@ class TestGather:
             "gloo",
             rank=1,
             world_size=2,
-            init_method="tcp://localhost:10006",
+            init_method="tcp://localhost:10017",
         )
 
         td = TensorDict(
@@ -44,7 +44,7 @@ class TestGather:
             "gloo",
             rank=0,
             world_size=2,
-            init_method="tcp://localhost:10006",
+            init_method="tcp://localhost:10017",
         )
 
         td = (
@@ -72,10 +72,12 @@ class TestGather:
 
         main_worker.start()
         secondary_worker.start()
-        out = queue.get(timeout=10)
-        assert out == "yuppie"
-        main_worker.join()
-        secondary_worker.join()
+        try:
+            out = queue.get(timeout=10)
+            assert out == "yuppie"
+        finally:
+            main_worker.join()
+            secondary_worker.join()
 
 
 @pytest.mark.parametrize("pseudo_rand", [True, False])
@@ -86,18 +88,18 @@ class TestSend:
             "gloo",
             rank=1,
             world_size=2,
-            init_method="tcp://localhost:10006",
+            init_method="tcp://localhost:10017",
         )
 
         td = TensorDict(
             {
                 ("a", "b"): torch.randn(2),
                 "c": torch.randn(2, 3),
-                "_": torch.ones(2, 1, 5),
                 ("d", "e", "f"): MemmapTensor.from_tensor(torch.ones(2, 2)),
             },
             [2],
         )
+        td["_"] = torch.ones(2, 1, 5)
         td.send(0, pseudo_rand=pseudo_rand)
 
     @staticmethod
@@ -106,17 +108,17 @@ class TestSend:
             "gloo",
             rank=0,
             world_size=2,
-            init_method="tcp://localhost:10006",
+            init_method="tcp://localhost:10017",
         )
         td = TensorDict(
             {
                 ("a", "b"): torch.zeros(2),
-                "c": torch.zeros(2, 3),
                 "_": torch.zeros(2, 1, 5),
                 ("d", "e", "f"): MemmapTensor.from_tensor(torch.zeros(2, 2)),
             },
             [2],
         )
+        td["c"] = torch.zeros(2, 3)
         td.recv(1, pseudo_rand=pseudo_rand)
         assert (td != 0).all()
         queue.put("yuppie")
@@ -128,21 +130,23 @@ class TestSend:
 
         main_worker.start()
         secondary_worker.start()
-        out = queue.get(timeout=10)
-        assert out == "yuppie"
-        main_worker.join()
-        secondary_worker.join()
+        try:
+            out = queue.get(timeout=10)
+            assert out == "yuppie"
+        finally:
+            main_worker.join()
+            secondary_worker.join()
 
 
 @pytest.mark.parametrize("pseudo_rand", [True, False])
-class TestiSend:
+class TestiRecv:
     @staticmethod
     def client(pseudo_rand):
         torch.distributed.init_process_group(
             "gloo",
             rank=1,
             world_size=2,
-            init_method="tcp://localhost:10006",
+            init_method="tcp://localhost:10017",
         )
 
         td = TensorDict(
@@ -154,7 +158,7 @@ class TestiSend:
             },
             [2],
         )
-        td.isend(0, pseudo_rand=pseudo_rand)
+        td.send(0, pseudo_rand=pseudo_rand)
 
     @staticmethod
     def server(queue, return_premature, pseudo_rand):
@@ -162,7 +166,7 @@ class TestiSend:
             "gloo",
             rank=0,
             world_size=2,
-            init_method="tcp://localhost:10006",
+            init_method="tcp://localhost:10017",
         )
         td = TensorDict(
             {
@@ -184,16 +188,79 @@ class TestiSend:
     def test_isend(self, pseudo_rand, return_premature, set_context):
         queue = mp.Queue(1)
         main_worker = mp.Process(
-            target=TestiSend.server, args=(queue, return_premature, pseudo_rand)
+            target=TestiRecv.server, args=(queue, return_premature, pseudo_rand)
         )
+        secondary_worker = mp.Process(target=TestiRecv.client, args=(pseudo_rand,))
+
+        main_worker.start()
+        secondary_worker.start()
+        try:
+            out = queue.get(timeout=10)
+            assert out == "yuppie"
+        finally:
+            main_worker.join()
+            secondary_worker.join()
+
+
+@pytest.mark.parametrize("pseudo_rand", [True, False])
+class TestiSend:
+    @staticmethod
+    def client(pseudo_rand):
+        torch.distributed.init_process_group(
+            "gloo",
+            rank=1,
+            world_size=2,
+            init_method="tcp://localhost:10017",
+        )
+
+        td = TensorDict(
+            {
+                ("a", "b"): torch.randn(2),
+                "c": torch.randn(2, 3),
+                ("d", "e", "f"): MemmapTensor.from_tensor(torch.ones(2, 2)),
+            },
+            [2],
+        )
+        td["_"] = torch.ones(2, 1, 5)
+        td.isend(0, pseudo_rand=pseudo_rand)
+
+    @staticmethod
+    def server(queue, pseudo_rand):
+        torch.distributed.init_process_group(
+            "gloo",
+            rank=0,
+            world_size=2,
+            init_method="tcp://localhost:10017",
+        )
+        td = TensorDict(
+            {
+                ("a", "b"): torch.zeros(2),
+                "_": torch.zeros(2, 1, 5),
+                ("d", "e", "f"): MemmapTensor.from_tensor(torch.zeros(2, 2)),
+            },
+            [2],
+        )
+        td["c"] = torch.zeros(2, 3)
+        td.recv(1, pseudo_rand=pseudo_rand)
+        assert (td != 0).all()
+        queue.put("yuppie")
+
+    def test_send(self, pseudo_rand, set_context):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(target=TestiSend.server, args=(queue, pseudo_rand))
         secondary_worker = mp.Process(target=TestiSend.client, args=(pseudo_rand,))
 
         main_worker.start()
         secondary_worker.start()
-        out = queue.get(timeout=10)
-        assert out == "yuppie"
-        main_worker.join()
-        secondary_worker.join()
+        try:
+            out = queue.get(timeout=10)
+            assert out == "yuppie"
+        except Exception as err:
+            # otherwise pytest does not capture it
+            raise err
+        finally:
+            main_worker.join()
+            secondary_worker.join()
 
 
 if __name__ == "__main__":

@@ -722,6 +722,26 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td.device.type == "cuda" or not td.is_shared()
         assert not td.is_memmap()
 
+    def test_sorted_keys(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sorted_keys = td.sorted_keys
+        i = -1
+        for i, (key1, key2) in enumerate(zip(sorted_keys, td.keys())):  # noqa: B007
+            assert key1 == key2
+        assert i == len(td.keys()) - 1
+        if td.is_locked:
+            assert td._sorted_keys is not None
+            td.unlock()
+            assert td._sorted_keys is None
+        else:
+            assert td._sorted_keys is None
+            td.lock()
+            _ = td.sorted_keys
+            assert td._sorted_keys is not None
+            td.unlock()
+            assert td._sorted_keys is None
+
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)

@@ -286,6 +286,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         cls._inplace_set = kwargs.get("_inplace_set", False)
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
+        cls._sorted_keys = None
         return super().__new__(cls)
 
     def __getstate__(self) -> Dict[str, Any]:
@@ -677,23 +678,63 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
 
     def _send(self, dst, _tag=-1, pseudo_rand=False):
-        for value in self.values():
+        for key in self.sorted_keys:
+            value = self.get(key)
             if isinstance(value, Tensor):
-                if not pseudo_rand:
-                    _tag += 1
-                else:
-                    _tag = int_generator(_tag + 1)
-                dist.send(value, dst=dst, tag=_tag)
+                pass
             elif isinstance(value, TensorDictBase):
                 _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand)
+                continue
             elif isinstance(value, MemmapTensor):
-                if not pseudo_rand:
-                    _tag += 1
-                else:
-                    _tag = int_generator(_tag + 1)
-                dist.send(value.as_tensor(), dst=dst, tag=_tag)
+                value = value.as_tensor()
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if not pseudo_rand:
+                _tag += 1
+            else:
+                _tag = int_generator(_tag + 1)
+            dist.send(value, dst=dst, tag=_tag)
+
+        return _tag
+
+    def recv(self, src, init_tag=0, pseudo_rand=False):
+        """Receives the content of a tensordict and updates content with it.
+
+        Check the example in the `send` method for context.
+
+        Args:
+            src (int): the rank of the source worker.
+            init_tag (int): the ``init_tag`` used by the source worker.
+            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
+                random, allowing to send multiple data from different nodes
+                without overlap. Notice that the generation of these pseudo-random
+                numbers is expensive (1e-5 sec/number), meaning that it could
+                slow down the runtime of your algorithm.
+                This value must match the one passed to :func:`send`.
+                Defaults to ``False``.
+
+        """
+        return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
+
+    def _recv(self, src, _tag=-1, pseudo_rand=False):
+        for key in self.sorted_keys:
+            value = self.get(key)
+            if isinstance(value, Tensor):
+                pass
+            elif isinstance(value, TensorDictBase):
+                _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
+                continue
+            elif isinstance(value, MemmapTensor):
+                value = value.as_tensor()
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if not pseudo_rand:
+                _tag += 1
+            else:
+                _tag = int_generator(_tag + 1)
+            dist.recv(value, src=src, tag=_tag)
+            self.set(key, value, inplace=True)
+
         return _tag
 
     def isend(self, dst, init_tag=0, pseudo_rand=False):
@@ -776,66 +817,33 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """
         return self._isend(dst, init_tag - 1, pseudo_rand=pseudo_rand)
 
-    def _isend(self, dst, _tag=-1, pseudo_rand=False):
-        for value in self.values():
-            if isinstance(value, Tensor):
-                if not pseudo_rand:
-                    _tag += 1
-                else:
-                    _tag = int_generator(_tag + 1)
-                dist.send(value, dst=dst, tag=_tag)
-            elif isinstance(value, TensorDictBase):
-                _tag = value._isend(dst, _tag=_tag, pseudo_rand=pseudo_rand)
+    def _isend(self, dst, _tag=-1, _futures=None, pseudo_rand=False):
+        root = False
+        if _futures is None:
+            root = True
+            _futures = []
+        for key in self.sorted_keys:
+            value = self.get(key)
+            if isinstance(value, TensorDictBase):
+                _tag = value._isend(
+                    dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures
+                )
+                continue
+            elif isinstance(value, Tensor):
+                pass
             elif isinstance(value, MemmapTensor):
-                if not pseudo_rand:
-                    _tag += 1
-                else:
-                    _tag = int_generator(_tag + 1)
-                dist.send(value.as_tensor(), dst=dst, tag=_tag)
-            else:
-                raise NotImplementedError(f"Type {type(value)} is not supported.")
-        return _tag
-
-    def recv(self, src, init_tag=0, pseudo_rand=False):
-        """Receives the content of a tensordict and updates content with it.
-
-        Check the example in the `send` method for context.
-
-        Args:
-            src (int): the rank of the source worker.
-            init_tag (int): the ``init_tag`` used by the source worker.
-            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
-                random, allowing to send multiple data from different nodes
-                without overlap. Notice that the generation of these pseudo-random
-                numbers is expensive (1e-5 sec/number), meaning that it could
-                slow down the runtime of your algorithm.
-                This value must match the one passed to :func:`send`.
-                Defaults to ``False``.
-
-        """
-        return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
-
-    def _recv(self, src, _tag=-1, pseudo_rand=False):
-        for key, value in self.items():
-            if isinstance(value, Tensor):
-                if not pseudo_rand:
-                    _tag += 1
-                else:
-                    _tag = int_generator(_tag + 1)
-                dist.recv(value, src=src, tag=_tag)
-                self.set(key, value, inplace=True)
-            elif isinstance(value, TensorDictBase):
-                _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
-            elif isinstance(value, MemmapTensor):
-                if not pseudo_rand:
-                    _tag += 1
-                else:
-                    _tag = int_generator(_tag + 1)
                 value = value.as_tensor()
-                dist.recv(value, src=src, tag=_tag)
-                self.set(key, value, inplace=True)
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if not pseudo_rand:
+                _tag += 1
+            else:
+                _tag = int_generator(_tag + 1)
+            _future = dist.isend(value, dst=dst, tag=_tag)
+            _futures.append(_future)
+        if root:
+            for _future in _futures:
+                _future.wait()
         return _tag
 
     def irecv(self, src, return_premature=False, init_tag=0, pseudo_rand=False):
@@ -866,44 +874,41 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         )
 
     def _irecv(
-        self, src, return_premature=False, _tag=-1, future_list=None, pseudo_rand=False
+        self, src, return_premature=False, _tag=-1, _future_list=None, pseudo_rand=False
     ):
         root = False
-        if future_list is None:
-            future_list = []
+        if _future_list is None:
+            _future_list = []
             root = True
 
-        for key, value in self.items():
-            if isinstance(value, Tensor):
-                if not pseudo_rand:
-                    _tag += 1
-                else:
-                    _tag = int_generator(_tag + 1)
-                future_list.append(dist.irecv(value, src=src, tag=_tag))
-                self.set(key, value, inplace=True)
-            elif isinstance(value, TensorDictBase):
-                _tag, future_list = value._irecv(
+        for key in self.sorted_keys:
+            value = self.get(key)
+            if isinstance(value, TensorDictBase):
+                _tag, _future_list = value._irecv(
                     src,
                     _tag=_tag,
-                    future_list=future_list,
+                    _future_list=_future_list,
                     pseudo_rand=pseudo_rand,
                 )
+                continue
             elif isinstance(value, MemmapTensor):
-                if not pseudo_rand:
-                    _tag += 1
-                else:
-                    _tag = int_generator(_tag + 1)
                 value = value.as_tensor()
-                future_list.append(dist.irecv(value, src=src, tag=_tag))
-                self.set(key, value, inplace=True)
+            elif isinstance(value, Tensor):
+                pass
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if not pseudo_rand:
+                _tag += 1
+            else:
+                _tag = int_generator(_tag + 1)
+            _future_list.append(dist.irecv(value, src=src, tag=_tag))
+            self.set(key, value, inplace=True)
         if not root:
-            return _tag, future_list
+            return _tag, _future_list
         elif return_premature:
-            return future_list
+            return _future_list
         else:
-            for future in future_list:
+            for future in _future_list:
                 future.wait()
             return
 
@@ -1272,6 +1277,24 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     ) -> _TensorDictKeysView:
         """Returns a generator of tensordict keys."""
         raise NotImplementedError(f"{self.__class__.__name__}")
+
+    @property
+    def sorted_keys(self):
+        """Returns the keys sorted in alphabetical order.
+
+        Does not support extra argument.
+
+        If the TensorDict is locked, the keys are cached until the tensordict
+        is unlocked.
+
+        """
+        if self.is_locked and self._sorted_keys is not None:
+            return self._sorted_keys
+        elif self.is_locked:
+            self._sorted_keys = sorted(self.keys())
+            return self._sorted_keys
+        else:
+            return sorted(self.keys())
 
     def expand(self, *shape) -> TensorDictBase:
         """Expands each tensors of the tensordict according to the torch.expand function.
@@ -2619,6 +2642,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
+        self._sorted_keys = None
         for key in self.keys():
             if is_tensordict(self.entry_class(key)):
                 self.get(key).unlock()
@@ -5261,6 +5285,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
+        self._sorted_keys = None
         for td in self.tensordicts:
             td.unlock()
         return self
