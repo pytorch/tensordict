@@ -723,3 +723,24 @@ class timeit:
     def erase():
         for k in timeit._REG:
             timeit._REG[k] = [0.0, 0.0, 0]
+
+
+def int_generator(seed):
+    """A pseudo-random chaing generator.
+
+    To be used to produce deterministic integer sequences
+
+    Examples:
+        >>> for _ in range(2):
+        ...     init_int = 10
+        ...     for _ in range(10):
+        ...        init_int = int_generator(init_int)
+        ...        print(init_int, end=", ")
+        ...     print("")
+        6756, 1717, 4410, 9740, 9611, 9716, 5397, 7745, 4521, 7523,
+        6756, 1717, 4410, 9740, 9611, 9716, 5397, 7745, 4521, 7523,
+    """
+    max_seed_val = 10_000
+    rng = np.random.default_rng(seed)
+    seed = int.from_bytes(rng.bytes(8), "big")
+    return seed % max_seed_val

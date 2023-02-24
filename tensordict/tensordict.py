@@ -53,10 +53,11 @@ from tensordict.utils import (
     expand_as_right,
     expand_right,
     INDEX_TYPING,
+    int_generator,
     NESTED_KEY,
     prod,
 )
-from torch import Tensor
+from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
 
 
@@ -97,6 +98,9 @@ except ImportError as err:
     TORCHREC_ERR = str(err)
 
 
+# some complex string used as separator to concatenate and split keys in
+# distributed frameworks
+DIST_SEPARATOR = ".-|-."
 TD_HANDLED_FUNCTIONS: Dict = {}
 COMPATIBLE_TYPES = Union[
     Tensor,
@@ -282,6 +286,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         cls._inplace_set = kwargs.get("_inplace_set", False)
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
+        cls._sorted_keys = None
         return super().__new__(cls)
 
     def __getstate__(self) -> Dict[str, Any]:
@@ -530,6 +535,382 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
 
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
+
+    def gather_and_stack(self, dest):
+        """Gathers tensordicts from various workers and stacks them onto self in the destination worker.
+
+        Args:
+            dest (int): the rank of the destination worker where :func:`gather_and_stack` will be called.
+
+        Example:
+            >>> from torch import multiprocessing as mp
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>>
+            >>> def client():
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=1,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...     # Create a single tensordict to be sent to server
+            ...     td = TensorDict(
+            ...         {("a", "b"): torch.randn(2),
+            ...          "c": torch.randn(2)}, [2]
+            ...     )
+            ...     td.gather_and_stack(0)
+            ...
+            >>> def server():
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=0,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...     # Creates the destination tensordict on server.
+            ...     # The first dim must be equal to world_size-1
+            ...     td = TensorDict(
+            ...         {("a", "b"): torch.zeros(2),
+            ...          "c": torch.zeros(2)}, [2]
+            ...     ).expand(1, 2).contiguous()
+            ...     td.gather_and_stack(0)
+            ...     assert td["a", "b"] != 0
+            ...     print("yuppie")
+            ...
+            >>> if __name__ == "__main__":
+            ...     mp.set_start_method("spawn")
+            ...
+            ...     main_worker = mp.Process(target=server)
+            ...     secondary_worker = mp.Process(target=client)
+            ...
+            ...     main_worker.start()
+            ...     secondary_worker.start()
+            ...
+            ...     main_worker.join()
+            ...     secondary_worker.join()
+        """
+        if dest == dist.get_rank():
+            output = [None for _ in range(dist.get_world_size())]
+        else:
+            output = None
+        dist.gather_object(self, output, dst=dest)
+        if dest == dist.get_rank():
+            # remove self from output
+            output = [item for i, item in enumerate(output) if i != dest]
+            self.update(torch.stack(output, 0), inplace=True)
+            return self
+
+    def send(self, dst, init_tag=0, pseudo_rand=False):
+        """Sends the content of a tensordict to a distant worker.
+
+        Args:
+            dst (int): the rank of the destination worker where the content
+                should be sent.
+            init_tag (int): the initial tag to be used to mark the tensors.
+                Note that this will be incremented by as much as the number of
+                tensors contained in the TensorDict.
+            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
+                random, allowing to send multiple data from different nodes
+                without overlap. Notice that the generation of these pseudo-random
+                numbers is expensive (1e-5 sec/number), meaning that it could
+                slow down the runtime of your algorithm.
+                Defaults to ``False``.
+
+        Example:
+            >>> from torch import multiprocessing as mp
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>>
+            >>>
+            >>> def client():
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=1,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...
+            ...     td = TensorDict(
+            ...         {
+            ...             ("a", "b"): torch.randn(2),
+            ...             "c": torch.randn(2, 3),
+            ...             "_": torch.ones(2, 1, 5),
+            ...         },
+            ...         [2],
+            ...     )
+            ...     td.send(0)
+            ...
+            >>>
+            >>> def server(queue):
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=0,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...     td = TensorDict(
+            ...         {
+            ...             ("a", "b"): torch.zeros(2),
+            ...             "c": torch.zeros(2, 3),
+            ...             "_": torch.zeros(2, 1, 5),
+            ...         },
+            ...         [2],
+            ...     )
+            ...     td.recv(1)
+            ...     assert (td != 0).all()
+            ...     queue.put("yuppie")
+            ...
+            >>>
+            >>> if __name__=="__main__":
+            ...     queue = mp.Queue(1)
+            ...     main_worker = mp.Process(target=server, args=(queue,))
+            ...     secondary_worker = mp.Process(target=client)
+            ...
+            ...     main_worker.start()
+            ...     secondary_worker.start()
+            ...     out = queue.get(timeout=10)
+            ...     assert out == "yuppie"
+            ...     main_worker.join()
+            ...     secondary_worker.join()
+
+        """
+        self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
+
+    def _send(self, dst, _tag=-1, pseudo_rand=False):
+        for key in self.sorted_keys:
+            value = self.get(key)
+            if isinstance(value, Tensor):
+                pass
+            elif isinstance(value, TensorDictBase):
+                _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand)
+                continue
+            elif isinstance(value, MemmapTensor):
+                value = value.as_tensor()
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if not pseudo_rand:
+                _tag += 1
+            else:
+                _tag = int_generator(_tag + 1)
+            dist.send(value, dst=dst, tag=_tag)
+
+        return _tag
+
+    def recv(self, src, init_tag=0, pseudo_rand=False):
+        """Receives the content of a tensordict and updates content with it.
+
+        Check the example in the `send` method for context.
+
+        Args:
+            src (int): the rank of the source worker.
+            init_tag (int): the ``init_tag`` used by the source worker.
+            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
+                random, allowing to send multiple data from different nodes
+                without overlap. Notice that the generation of these pseudo-random
+                numbers is expensive (1e-5 sec/number), meaning that it could
+                slow down the runtime of your algorithm.
+                This value must match the one passed to :func:`send`.
+                Defaults to ``False``.
+
+        """
+        return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
+
+    def _recv(self, src, _tag=-1, pseudo_rand=False):
+        for key in self.sorted_keys:
+            value = self.get(key)
+            if isinstance(value, Tensor):
+                pass
+            elif isinstance(value, TensorDictBase):
+                _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
+                continue
+            elif isinstance(value, MemmapTensor):
+                value = value.as_tensor()
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if not pseudo_rand:
+                _tag += 1
+            else:
+                _tag = int_generator(_tag + 1)
+            dist.recv(value, src=src, tag=_tag)
+            self.set(key, value, inplace=True)
+
+        return _tag
+
+    def isend(self, dst, init_tag=0, pseudo_rand=False):
+        """Sends the content of the tensordict asynchronously.
+
+        Args:
+            dst (int): the rank of the destination worker where the content
+                should be sent.
+            init_tag (int): the initial tag to be used to mark the tensors.
+                Note that this will be incremented by as much as the number of
+                tensors contained in the TensorDict.
+            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
+                random, allowing to send multiple data from different nodes
+                without overlap. Notice that the generation of these pseudo-random
+                numbers is expensive (1e-5 sec/number), meaning that it could
+                slow down the runtime of your algorithm.
+                Defaults to ``False``.
+
+        Example:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torch import multiprocessing as mp
+            >>> def client():
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=1,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...
+            ...     td = TensorDict(
+            ...         {
+            ...             ("a", "b"): torch.randn(2),
+            ...             "c": torch.randn(2, 3),
+            ...             "_": torch.ones(2, 1, 5),
+            ...         },
+            ...         [2],
+            ...     )
+            ...     td.isend(0)
+            ...
+            >>>
+            >>> def server(queue, return_premature=True):
+            ...     torch.distributed.init_process_group(
+            ...         "gloo",
+            ...         rank=0,
+            ...         world_size=2,
+            ...         init_method=f"tcp://localhost:10003",
+            ...     )
+            ...     td = TensorDict(
+            ...         {
+            ...             ("a", "b"): torch.zeros(2),
+            ...             "c": torch.zeros(2, 3),
+            ...             "_": torch.zeros(2, 1, 5),
+            ...         },
+            ...         [2],
+            ...     )
+            ...     out = td.irecv(1, return_premature=return_premature)
+            ...     if return_premature:
+            ...         for fut in out:
+            ...             fut.wait()
+            ...     assert (td != 0).all()
+            ...     queue.put("yuppie")
+            ...
+            >>>
+            >>> if __name__ == "__main__":
+            ...     queue = mp.Queue(1)
+            ...     main_worker = mp.Process(
+            ...         target=server,
+            ...         args=(queue, )
+            ...         )
+            ...     secondary_worker = mp.Process(target=client)
+            ...
+            ...     main_worker.start()
+            ...     secondary_worker.start()
+            ...     out = queue.get(timeout=10)
+            ...     assert out == "yuppie"
+            ...     main_worker.join()
+            ...     secondary_worker.join()
+
+        """
+        return self._isend(dst, init_tag - 1, pseudo_rand=pseudo_rand)
+
+    def _isend(self, dst, _tag=-1, _futures=None, pseudo_rand=False):
+        root = False
+        if _futures is None:
+            root = True
+            _futures = []
+        for key in self.sorted_keys:
+            value = self.get(key)
+            if isinstance(value, TensorDictBase):
+                _tag = value._isend(
+                    dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures
+                )
+                continue
+            elif isinstance(value, Tensor):
+                pass
+            elif isinstance(value, MemmapTensor):
+                value = value.as_tensor()
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if not pseudo_rand:
+                _tag += 1
+            else:
+                _tag = int_generator(_tag + 1)
+            _future = dist.isend(value, dst=dst, tag=_tag)
+            _futures.append(_future)
+        if root:
+            for _future in _futures:
+                _future.wait()
+        return _tag
+
+    def irecv(self, src, return_premature=False, init_tag=0, pseudo_rand=False):
+        """Receives the content of a tensordict and updates content with it asynchronously.
+
+        Check the example in the `isend` method for context.
+
+        Args:
+            src (int): the rank of the source worker.
+            return_premature (bool): if ``True``, returns a list of futures to wait
+                upon until the tensordict is updated. Defaults to ``False``,
+                i.e. waits until update is completed withing the call.
+            init_tag (int): the ``init_tag`` used by the source worker.
+            pseudo_rand (bool): if True, the sequence of tags will be pseudo-
+                random, allowing to send multiple data from different nodes
+                without overlap. Notice that the generation of these pseudo-random
+                numbers is expensive (1e-5 sec/number), meaning that it could
+                slow down the runtime of your algorithm.
+                This value must match the one passed to :func:`isend`.
+                Defaults to ``False``.
+
+        Returns:
+            if ``return_premature=True``, a list of futures to wait
+                upon until the tensordict is updated.
+        """
+        return self._irecv(
+            src, return_premature, _tag=init_tag - 1, pseudo_rand=pseudo_rand
+        )
+
+    def _irecv(
+        self, src, return_premature=False, _tag=-1, _future_list=None, pseudo_rand=False
+    ):
+        root = False
+        if _future_list is None:
+            _future_list = []
+            root = True
+
+        for key in self.sorted_keys:
+            value = self.get(key)
+            if isinstance(value, TensorDictBase):
+                _tag, _future_list = value._irecv(
+                    src,
+                    _tag=_tag,
+                    _future_list=_future_list,
+                    pseudo_rand=pseudo_rand,
+                )
+                continue
+            elif isinstance(value, MemmapTensor):
+                value = value.as_tensor()
+            elif isinstance(value, Tensor):
+                pass
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+            if not pseudo_rand:
+                _tag += 1
+            else:
+                _tag = int_generator(_tag + 1)
+            _future_list.append(dist.irecv(value, src=src, tag=_tag))
+            self.set(key, value, inplace=True)
+        if not root:
+            return _tag, _future_list
+        elif return_premature:
+            return _future_list
+        else:
+            for future in _future_list:
+                future.wait()
+            return
 
     def _stack_onto_at_(
         self,
@@ -897,6 +1278,24 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         """Returns a generator of tensordict keys."""
         raise NotImplementedError(f"{self.__class__.__name__}")
 
+    @property
+    def sorted_keys(self):
+        """Returns the keys sorted in alphabetical order.
+
+        Does not support extra argument.
+
+        If the TensorDict is locked, the keys are cached until the tensordict
+        is unlocked.
+
+        """
+        if self.is_locked and self._sorted_keys is not None:
+            return self._sorted_keys
+        elif self.is_locked:
+            self._sorted_keys = sorted(self.keys())
+            return self._sorted_keys
+        else:
+            return sorted(self.keys())
+
     def expand(self, *shape) -> TensorDictBase:
         """Expands each tensors of the tensordict according to the torch.expand function.
 
@@ -1155,6 +1554,71 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             we do not recommend calling this method inside a training loop.
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
+
+    def memmap_like(self, prefix=None) -> TensorDictBase:
+        """Creates an empty Memory-mapped tensordict with the same content shape as the current one.
+
+        Args:
+            prefix (str): directory prefix where the memmap tensors will have to
+                be stored.
+
+        The resulting TensorDict will be locked and ``is_memmap() = True``,
+        meaning that the only writing operations that can be executed must be done in-place.
+        Once the tensordict is unlocked, the memmap attribute is turned to False,
+        because cross-process identity is not guaranteed anymore.
+
+        Returns:
+            a new ``TensorDict`` instance with data stored as memory-mapped tensors.
+
+        """
+        if prefix is not None:
+            prefix = Path(prefix)
+            if not prefix.exists():
+                prefix.mkdir(exist_ok=True)
+            torch.save(
+                {"batch_size": self.batch_size, "device": self.device},
+                prefix / "meta.pt",
+            )
+        if not self.keys():
+            raise Exception(
+                "memmap_like() must be called when the TensorDict is (partially) "
+                "populated. Set a tensor first."
+            )
+        tensordict = TensorDict({}, self.batch_size, device=self.device)
+        for key, value in self.items():
+            if isinstance(value, TensorDictBase):
+                if prefix is not None:
+                    # ensure subdirectory exists
+                    (prefix / key).mkdir(exist_ok=True)
+                    tensordict[key] = value.memmap_like(
+                        prefix=prefix / key,
+                    )
+                    torch.save(
+                        {"batch_size": value.batch_size, "device": value.device},
+                        prefix / key / "meta.pt",
+                    )
+                else:
+                    tensordict[key] = value.memmap_like()
+                continue
+            else:
+                tensordict[key] = MemmapTensor.empty_like(
+                    value,
+                    filename=str(prefix / f"{key}.memmap")
+                    if prefix is not None
+                    else None,
+                )
+            if prefix is not None:
+                torch.save(
+                    {
+                        "shape": value.shape,
+                        "device": value.device,
+                        "dtype": value.dtype,
+                    },
+                    prefix / f"{key}.meta.pt",
+                )
+        tensordict._is_memmap = True
+        tensordict.lock()
+        return tensordict
 
     @abc.abstractmethod
     def detach_(self) -> TensorDictBase:
@@ -2136,6 +2600,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def set_default(
         self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
     ) -> COMPATIBLE_TYPES:
+        warn("set_default has been deprecated. Use setdefault instead")
+        return self.setdefault(key, default, **kwargs)
+
+    def setdefault(
+        self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
+    ) -> COMPATIBLE_TYPES:
         """Insert key with a value of default if key is not in the dictionary.
 
         Return the value for key if key is in the dictionary, else default.
@@ -2178,6 +2648,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
+        self._sorted_keys = None
         for key in self.keys():
             if is_tensordict(self.entry_class(key)):
                 self.get(key).unlock()
@@ -2735,7 +3206,11 @@ class TensorDict(TensorDictBase):
             value.detach_()
         return self
 
-    def memmap_(self, prefix=None, copy_existing=False) -> TensorDictBase:
+    def memmap_(
+        self,
+        prefix=None,
+        copy_existing=False,
+    ) -> TensorDictBase:
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
@@ -4816,6 +5291,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
+        self._sorted_keys = None
         for td in self.tensordicts:
             td.unlock()
         return self

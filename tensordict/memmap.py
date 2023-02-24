@@ -254,6 +254,33 @@ class MemmapTensor:
         out.copy_(tensor)
         return out
 
+    @classmethod
+    def empty_like(
+        cls,
+        tensor: Union[torch.Tensor, MemmapTensor],
+        transfer_ownership=False,
+        prefix=None,
+        filename: Optional[str] = None,
+        mode: str = "r+",
+    ) -> MemmapTensor:
+        if isinstance(tensor, np.ndarray):
+            raise TypeError(
+                "Convert input to torch.Tensor before calling MemmapTensor."
+            )
+        device = tensor.device
+        dtype = tensor.dtype
+        shape = tensor.shape
+        out = cls(
+            shape,
+            device=device,
+            dtype=dtype,
+            prefix=prefix,
+            transfer_ownership=transfer_ownership,
+            filename=filename,
+            mode=mode,
+        )
+        return out
+
     @staticmethod
     def _create_memmap_with_index(memmap_tensor, index):
         memmap_copy = copy(memmap_tensor)
@@ -529,14 +556,10 @@ MemmapTensor of shape {self.shape}."""
             del self.file
 
     def __eq__(self, other: Any) -> torch.Tensor:
-        # if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
-        #     raise NotImplementedError(f"Unknown type {type(other)}")
         return self._tensor == other
 
     def __ne__(self, other: Any) -> torch.Tensor:
-        # if not isinstance(other, (MemmapTensor, torch.Tensor, float, int, np.ndarray)):
-        #     raise NotImplementedError(f"Unknown type {type(other)}")
-        return self._tensor == other
+        return self._tensor != other
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():

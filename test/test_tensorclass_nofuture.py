@@ -361,29 +361,11 @@ def test_setitem():
         x: torch.Tensor
         y: MemmapTensor
 
-    @tensorclass
-    class MyDataMemMap2:
-        x: MemmapTensor
-        y: torch.Tensor
-
     data1 = MyDataMemMap1(
         x=torch.zeros(3, 4, 5),
         y=MemmapTensor.from_tensor(torch.zeros(3, 4, 5)),
         batch_size=[3, 4],
     )
-    data2_wrong = MyDataMemMap2(
-        x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
-        y=torch.ones(3, 4, 5),
-        batch_size=[3, 4],
-    )
-    with pytest.raises(
-        ValueError, match="__setitem__ is only allowed for same-class assignement"
-    ):
-        data1[:2] = data2_wrong[:2]
-    with pytest.raises(
-        ValueError, match="__setitem__ is only allowed for same-class assignement"
-    ):
-        data2_wrong[2:] = data1[2:]
 
     data2 = MyDataMemMap1(
         x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
@@ -399,6 +381,42 @@ def test_setitem():
     assert (data2[2:] == 0).all()
     assert (data2.x[2:] == 0).all()
     assert (data2.y[2:] == 0).all()
+
+    # Set Item should work for other tensorclass
+    @tensorclass
+    class MyDataMemMap2:
+        x: MemmapTensor
+        y: torch.Tensor
+
+    data_other_cls = MyDataMemMap2(
+        x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
+        y=torch.ones(3, 4, 5),
+        batch_size=[3, 4],
+    )
+    data1[:2] = data_other_cls[:2]
+    data_other_cls[2:] = data1[2:]
+
+    # Set Item should raise if other tensorclass with different members
+    @tensorclass
+    class MyDataMemMap3:
+        x: MemmapTensor
+        z: torch.Tensor
+
+    data_wrong_cls = MyDataMemMap3(
+        x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
+        z=torch.ones(3, 4, 5),
+        batch_size=[3, 4],
+    )
+    with pytest.raises(
+        ValueError,
+        match="__setitem__ is only allowed for same-class or compatible class .* assignment",
+    ):
+        data1[:2] = data_wrong_cls[:2]
+    with pytest.raises(
+        ValueError,
+        match="__setitem__ is only allowed for same-class or compatible class .* assignment",
+    ):
+        data_wrong_cls[2:] = data1[2:]
 
 
 def test_stack():
@@ -1298,6 +1316,72 @@ def test_gather(from_torch):
         c_gather2 = c.gather(index=index, dim=dim, out=c_gather_zero)
 
     assert (c_gather2 == c_gather).all()
+
+
+def test_to_tensordict():
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        z: str
+        y: "MyClass" = None  # future: drop quotes
+
+    c = MyClass(
+        torch.randn(3, 4),
+        "foo",
+        MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
+        batch_size=[3, 4],
+    )
+
+    ctd = c.to_tensordict()
+    assert isinstance(ctd, TensorDictBase)
+    assert "x" in ctd.keys()
+    assert "z" not in ctd.keys()
+    assert "y" in ctd.keys()
+    assert ("y", "x") in ctd.keys(True)
+
+
+def test_memmap_():
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        z: str
+        y: "MyClass" = None  # future: drop quotes
+
+    c = MyClass(
+        torch.randn(3, 4),
+        "foo",
+        MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
+        batch_size=[3, 4],
+    )
+
+    cmemmap = c.memmap_()
+    assert cmemmap is c
+    assert isinstance(c.x, MemmapTensor)
+    assert isinstance(c.y.x, MemmapTensor)
+    assert c.z == "foo"
+
+
+def test_memmap_like():
+    @tensorclass
+    class MyClass:
+        x: torch.Tensor
+        z: str
+        y: "MyClass" = None  # future: drop quotes
+
+    c = MyClass(
+        torch.randn(3, 4),
+        "foo",
+        MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
+        batch_size=[3, 4],
+    )
+
+    cmemmap = c.memmap_like()
+    assert cmemmap is not c
+    assert cmemmap.y is not c.y
+    assert (cmemmap == 0).all()
+    assert isinstance(cmemmap.x, MemmapTensor)
+    assert isinstance(cmemmap.y.x, MemmapTensor)
+    assert cmemmap.z == "foo"
 
 
 if __name__ == "__main__":

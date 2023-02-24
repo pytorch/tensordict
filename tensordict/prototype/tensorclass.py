@@ -6,6 +6,7 @@ import re
 import typing
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 from platform import python_version
 from textwrap import indent
 from typing import Callable, Dict, Optional, Tuple, Union
@@ -156,6 +157,8 @@ def tensorclass(cls: T) -> T:
     cls.gather = _gather
 
     cls.to_tensordict = _to_tensordict
+    cls.memmap_ = _memmap_
+    cls.memmap_like = _memmap_like
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
 
@@ -438,8 +441,15 @@ def _setitem(self, item, value):
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
         raise ValueError("Invalid indexing arguments.")
-    if not isinstance(value, self.__class__):
-        raise ValueError("__setitem__ is only allowed for same-class assignement")
+    if is_tensorclass(value) and not isinstance(value, self.__class__):
+        self_keys = set().union(self._non_tensordict, self._tensordict.keys())
+        value_keys = set().union(value._non_tensordict, value._tensordict.keys())
+        if self_keys != value_keys:
+            # if tensorclass but different class ensure that all keys are equal
+            raise ValueError(
+                "__setitem__ is only allowed for same-class or "
+                "compatible class (i.e. same members) assignment"
+            )
 
     # Validating the non-tensor data before setting the item
     for key, val in value._non_tensordict.items():
@@ -503,7 +513,80 @@ def _to_tensordict(self) -> TensorDict:
         A new TensorDict object containing the same values as the tensorclass.
 
     """
-    return self._tensordict.to_tensordict()
+    td = self._tensordict.to_tensordict()
+    for key, val in self._non_tensordict.items():
+        if is_tensorclass(val):
+            td[key] = val.to_tensordict()
+    return td
+
+
+def _memmap_(self, prefix=None, copy_existing=False):
+    """Writes all tensors onto a MemmapTensor.
+
+    Args:
+        prefix (str): directory prefix where the memmap tensors will have to
+            be stored.
+        copy_existing (bool): If False (default), an exception will be raised if an
+            entry in the tensorclass is already a MemmapTensor but is not saved in
+            the correct location according to prefix. If True, any MemmapTensors
+            that are not in the correct location are copied to the new location.
+
+    The tensorclass is then locked, meaning that the only writing operations that
+    can be executed must be done in-place.
+    Once the tensordict is unlocked, the memmap attribute is turned to False,
+    because cross-process identity is not guaranteed anymore.
+
+    Returns:
+        self.
+
+    Note:
+        Serialising in this fashion might be slow with deeply nested tensordicts, so
+        we do not recommend calling this method inside a training loop.
+    """
+    if prefix is not None:
+        prefix = Path(prefix)
+    self._tensordict.memmap_(prefix=prefix, copy_existing=copy_existing)
+    for key, val in self._non_tensordict.items():
+        if is_tensorclass(val):
+            if prefix is not None:
+                val.memmap_(prefix=prefix / key, copy_existing=copy_existing)
+            else:
+                val.memmap_()
+    return self
+
+
+def _memmap_like(
+    self,
+    prefix=None,
+):
+    """Creates an empty Memory-mapped tensorclass with the same content shape as the current one.
+
+    Args:
+        prefix (str): directory prefix where the memmap tensors will have to
+            be stored.
+
+    The resulting tensorclass will be locked and ``is_memmap() = True``,
+    meaning that the only writing operations that can be executed must be done in-place.
+    Once the tensorclass is unlocked, the memmap attribute is turned to False,
+    because cross-process identity is not guaranteed anymore.
+
+    Returns:
+        a new tensorclass instance with data stored as memory-mapped tensors.
+
+    """
+    if prefix is not None:
+        prefix = Path(prefix)
+    out_td = self._tensordict.memmap_like(prefix=prefix)
+    out_other = {}
+    for key, val in self._non_tensordict.items():
+        if is_tensorclass(val):
+            if prefix is not None:
+                out_other[key] = val.memmap_like(prefix=prefix / key)
+            else:
+                out_other[key] = val.memmap_like()
+        else:
+            out_other[key] = val
+    return self._from_tensordict(out_td, out_other)
 
 
 def _device(self):

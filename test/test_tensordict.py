@@ -722,6 +722,26 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td.device.type == "cuda" or not td.is_shared()
         assert not td.is_memmap()
 
+    def test_sorted_keys(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sorted_keys = td.sorted_keys
+        i = -1
+        for i, (key1, key2) in enumerate(zip(sorted_keys, td.keys())):  # noqa: B007
+            assert key1 == key2
+        assert i == len(td.keys()) - 1
+        if td.is_locked:
+            assert td._sorted_keys is not None
+            td.unlock()
+            assert td._sorted_keys is None
+        else:
+            assert td._sorted_keys is None
+            td.lock()
+            _ = td.sorted_keys
+            assert td._sorted_keys is not None
+            td.unlock()
+            assert td._sorted_keys is None
+
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -1742,6 +1762,14 @@ class TestTensorDicts(TestTensorDictsBase):
             td.memmap_()
             assert td.is_memmap()
 
+    def test_memmap_like(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdmemmap = td.memmap_like()
+        assert tdmemmap is not td
+        for key in td.keys(True):
+            assert td[key] is not tdmemmap[key]
+        assert (tdmemmap == 0).all()
+
     def test_memmap_prefix(self, td_name, device, tmp_path):
         if td_name == "memmap_td":
             pytest.skip(
@@ -1844,18 +1872,18 @@ class TestTensorDicts(TestTensorDictsBase):
                     for key, value in td2.items(include_nested=True, leaves_only=True)
                 )
 
-    def test_set_default_missing_key(self, td_name, device):
+    def test_setdefault_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock()
         expected = torch.ones_like(td.get("a"))
-        inserted = td.set_default("z", expected, _run_checks=True)
+        inserted = td.setdefault("z", expected, _run_checks=True)
         assert (inserted == expected).all()
 
-    def test_set_default_existing_key(self, td_name, device):
+    def test_setdefault_existing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock()
         expected = td.get("a")
-        inserted = td.set_default("a", torch.ones_like(td.get("b")))
+        inserted = td.setdefault("a", torch.ones_like(td.get("b")))
         assert (inserted == expected).all()
 
     def test_setdefault_nested(self, td_name, device):
@@ -1883,12 +1911,10 @@ class TestTensorDicts(TestTensorDictsBase):
             td.set("a", sub_tensordict)
 
         # if key exists we return the existing value
-        torch.testing.assert_close(td.set_default(("a", "b", "c"), tensor2), tensor)
+        torch.testing.assert_close(td.setdefault(("a", "b", "c"), tensor2), tensor)
 
         if not td_name == "stacked_td":
-            torch.testing.assert_close(
-                td.set_default(("a", "b", "d"), tensor2), tensor2
-            )
+            torch.testing.assert_close(td.setdefault(("a", "b", "d"), tensor2), tensor2)
             torch.testing.assert_close(td.get(("a", "b", "d")), tensor2)
 
     @pytest.mark.parametrize("performer", ["torch", "tensordict"])
@@ -2871,9 +2897,9 @@ def test_setdefault_nested():
     tensordict = TensorDict({"a": sub_tensordict}, [4])
 
     # if key exists we return the existing value
-    assert tensordict.set_default(("a", "b", "c"), tensor2) is tensor
+    assert tensordict.setdefault(("a", "b", "c"), tensor2) is tensor
 
-    assert tensordict.set_default(("a", "b", "d"), tensor2) is tensor2
+    assert tensordict.setdefault(("a", "b", "d"), tensor2) is tensor2
     assert (tensordict["a", "b", "d"] == 1).all()
     assert tensordict.get(("a", "b", "d")) is tensor2
 
