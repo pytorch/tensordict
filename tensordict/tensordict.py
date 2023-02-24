@@ -2600,6 +2600,12 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     def set_default(
         self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
     ) -> COMPATIBLE_TYPES:
+        warn("set_default has been deprecated. Use setdefault instead")
+        return self.setdefault(key, default, **kwargs)
+
+    def setdefault(
+        self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
+    ) -> COMPATIBLE_TYPES:
         """Insert key with a value of default if key is not in the dictionary.
 
         Return the value for key if key is in the dictionary, else default.

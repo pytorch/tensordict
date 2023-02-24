@@ -1872,18 +1872,18 @@ class TestTensorDicts(TestTensorDictsBase):
                     for key, value in td2.items(include_nested=True, leaves_only=True)
                 )
 
-    def test_set_default_missing_key(self, td_name, device):
+    def test_setdefault_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock()
         expected = torch.ones_like(td.get("a"))
-        inserted = td.set_default("z", expected, _run_checks=True)
+        inserted = td.setdefault("z", expected, _run_checks=True)
         assert (inserted == expected).all()
 
-    def test_set_default_existing_key(self, td_name, device):
+    def test_setdefault_existing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock()
         expected = td.get("a")
-        inserted = td.set_default("a", torch.ones_like(td.get("b")))
+        inserted = td.setdefault("a", torch.ones_like(td.get("b")))
         assert (inserted == expected).all()
 
     def test_setdefault_nested(self, td_name, device):
@@ -1911,12 +1911,10 @@ class TestTensorDicts(TestTensorDictsBase):
             td.set("a", sub_tensordict)
 
         # if key exists we return the existing value
-        torch.testing.assert_close(td.set_default(("a", "b", "c"), tensor2), tensor)
+        torch.testing.assert_close(td.setdefault(("a", "b", "c"), tensor2), tensor)
 
         if not td_name == "stacked_td":
-            torch.testing.assert_close(
-                td.set_default(("a", "b", "d"), tensor2), tensor2
-            )
+            torch.testing.assert_close(td.setdefault(("a", "b", "d"), tensor2), tensor2)
             torch.testing.assert_close(td.get(("a", "b", "d")), tensor2)
 
     @pytest.mark.parametrize("performer", ["torch", "tensordict"])
@@ -2899,9 +2897,9 @@ def test_setdefault_nested():
     tensordict = TensorDict({"a": sub_tensordict}, [4])
 
     # if key exists we return the existing value
-    assert tensordict.set_default(("a", "b", "c"), tensor2) is tensor
+    assert tensordict.setdefault(("a", "b", "c"), tensor2) is tensor
 
-    assert tensordict.set_default(("a", "b", "d"), tensor2) is tensor2
+    assert tensordict.setdefault(("a", "b", "d"), tensor2) is tensor2
     assert (tensordict["a", "b", "d"] == 1).all()
     assert tensordict.get(("a", "b", "d")) is tensor2
 
