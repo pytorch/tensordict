@@ -18,6 +18,7 @@ import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
+
 class MultiHeadLinear(nn.Module):
     def __init__(self, in_1, out_1, out_2):
         super().__init__()
@@ -27,13 +28,12 @@ class MultiHeadLinear(nn.Module):
     def forward(self, x):
         return self.linear_1(x), self.linear_2(x)
 
+
 ##############################################################################
 # We can now create a :class:`~.TensorDictModule` that will read the input from a key
 # ``"a"``, and write to the keys ``"output_1"`` and ``"output_2"``.
 splitlinear = TensorDictModule(
-    MultiHeadLinear(3, 4, 10),
-    in_keys=["a"],
-    out_keys=["output_1", "output_2"]
+    MultiHeadLinear(3, 4, 10), in_keys=["a"], out_keys=["output_1", "output_2"]
 )
 
 ##############################################################################
