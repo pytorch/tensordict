@@ -286,6 +286,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         cls._inplace_set = kwargs.get("_inplace_set", False)
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
+        cls._sorted_keys = None
         return super().__new__(cls)
 
     def __getstate__(self) -> Dict[str, Any]:
@@ -677,7 +678,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
 
     def _send(self, dst, _tag=-1, pseudo_rand=False):
-        for key in sorted(self.keys()):
+        for key in self.sorted_keys:
             value = self.get(key)
             if isinstance(value, Tensor):
                 pass
@@ -716,7 +717,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
 
     def _recv(self, src, _tag=-1, pseudo_rand=False):
-        for key in sorted(self.keys()):
+        for key in self.sorted_keys:
             value = self.get(key)
             if isinstance(value, Tensor):
                 pass
@@ -821,7 +822,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         if _futures is None:
             root = True
             _futures = []
-        for key in sorted(self.keys()):
+        for key in self.sorted_keys:
             value = self.get(key)
             if isinstance(value, TensorDictBase):
                 _tag = value._isend(
@@ -880,7 +881,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             _future_list = []
             root = True
 
-        for key in sorted(self.keys()):
+        for key in self.sorted_keys:
             value = self.get(key)
             if isinstance(value, TensorDictBase):
                 _tag, _future_list = value._irecv(
@@ -1276,6 +1277,24 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
     ) -> _TensorDictKeysView:
         """Returns a generator of tensordict keys."""
         raise NotImplementedError(f"{self.__class__.__name__}")
+
+    @property
+    def sorted_keys(self):
+        """Returns the keys sorted in alphabetical order.
+
+        Does not support extra argument.
+
+        If the TensorDict is locked, the keys are cached until the tensordict
+        is unlocked.
+
+        """
+        if self.is_locked and self._sorted_keys is not None:
+            return self._sorted_keys
+        elif self.is_locked:
+            self._sorted_keys = sorted(self.keys())
+            return self._sorted_keys
+        else:
+            return sorted(self.keys())
 
     def expand(self, *shape) -> TensorDictBase:
         """Expands each tensors of the tensordict according to the torch.expand function.
@@ -2623,6 +2642,7 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
+        self._sorted_keys = None
         for key in self.keys():
             if is_tensordict(self.entry_class(key)):
                 self.get(key).unlock()
@@ -5265,6 +5285,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
+        self._sorted_keys = None
         for td in self.tensordicts:
             td.unlock()
         return self
