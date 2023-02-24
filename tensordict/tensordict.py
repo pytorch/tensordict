@@ -2597,12 +2597,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
             return False
         return True
 
-    def set_default(
-        self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
-    ) -> COMPATIBLE_TYPES:
-        warn("set_default has been deprecated. Use setdefault instead")
-        return self.setdefault(key, default, **kwargs)
-
     def setdefault(
         self, key: NESTED_KEY, default: COMPATIBLE_TYPES, **kwargs
     ) -> COMPATIBLE_TYPES:
