@@ -726,9 +726,10 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         sorted_keys = td.sorted_keys
-        for _i, (key1, key2) in enumerate(zip(sorted_keys, td.keys())):
+        i = -1
+        for i, (key1, key2) in enumerate(zip(sorted_keys, td.keys())):  # noqa: B007
             assert key1 == key2
-        assert _i == len(td.keys()) - 1
+        assert i == len(td.keys()) - 1
         if td.is_locked:
             assert td._sorted_keys is not None
             td.unlock()
