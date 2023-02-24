@@ -71,6 +71,7 @@ torch.testing.assert_allclose(chunks[0]["a"], tensordict["a"][:, :-1])
 
 ##############################################################################
 # .. note::
+#
 #    Whenever a function or method accepts a ``dim`` argument, negative dimensions are
 #    interpreted relative to the ``batch_size`` of the :class:`~.TensorDict` that the
 #    function or method is called on. In particular, if there are nested
@@ -130,6 +131,7 @@ assert stacked_tensordict["a"].shape == torch.Size([2, 3, 4])
 
 ###############################################################################
 # .. note::
+#
 #    Since values are stacked on-demand, accessing an item multiple times will mean it
 #    gets stacked multiple times, which is inefficient. If you need to access a value
 #    in the stacked :class:`~.TensorDict` more than once, you may want to consider
@@ -192,6 +194,7 @@ print(unsqueezed_tensordict)
 
 ##############################################################################
 # .. note::
+#
 #    If you are likely to repeated access the same entry in the squeezed or unsqueezed
 #    tensordict, then it may be beneficial to first convert to a regular
 #    :class:`~.TensorDict` using :meth:`.to_tensordict()`
