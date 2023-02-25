@@ -4,7 +4,6 @@ requires = ["setuptools", "wheel", "torch"]
 [tool.black]
 safe = true
 line-length = 88
-target-version = ["py37", "py38", "py39", "py310", "py311"]
 
 [tool.usort]
 first_party_detection = false
