@@ -16,10 +16,9 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import Callable, Union
+from typing import Any, Callable, Sequence, TypeVar, Union
 
 import torch
-
 from tensordict.tensordict import (
     _ACCEPTED_CLASSES,
     get_repr,
@@ -27,22 +26,21 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import DeviceType
-
+from tensordict.utils import DeviceType, NestedKey
 from torch import Tensor
 
-T = typing.TypeVar("T", bound=TensorDictBase)
+T = TypeVar("T", bound=TensorDictBase)
 PY37 = sys.version_info < (3, 8)
 
-# For __future__.annotations, we keep a dict of str -> class to call the class based on the string
-CLASSES_DICT = {}
+# We keep a dict of str -> class to call the class based on the string
+CLASSES_DICT: dict[str, type] = {}
 
 # Regex precompiled patterns
 OPTIONAL_PATTERN = re.compile(r"Optional\[(.*?)\]")
 UNION_PATTERN = re.compile(r"Union\[(.*?)\]")
 
 
-def is_tensorclass(obj):
+def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass"""
     cls = obj if isinstance(obj, type) else type(obj)
     return dataclasses.is_dataclass(cls) and cls.__name__ in CLASSES_DICT
@@ -104,13 +102,13 @@ def tensorclass(cls: T) -> T:
 
 
     """
-    td_handled_functions: dict = {}
+    td_handled_functions: dict[Callable, Callable] = {}
 
     def implements_for_tdc(torch_function: Callable) -> Callable:
         """Register a torch function override for _TensorClass."""
 
         @functools.wraps(torch_function)
-        def decorator(func):
+        def decorator(func: Callable) -> Callable:
             td_handled_functions[torch_function] = func
             return func
 
@@ -119,9 +117,9 @@ def tensorclass(cls: T) -> T:
     def __torch_function__(
         cls,
         func: Callable,
-        types,
-        args: tuple = (),
-        kwargs: dict | None = None,
+        types: tuple[type, ...],
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
     ) -> Callable:
         if kwargs is None:
             kwargs = {}
@@ -186,14 +184,20 @@ def tensorclass(cls: T) -> T:
     return cls
 
 
-def _init_wrapper(init):
+def _init_wrapper(init: Callable) -> Callable:
     init_sig = inspect.signature(init)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
     required_params = [p.name for p in params[1:] if p.default is inspect._empty]
 
     @functools.wraps(init)
-    def wrapper(self, *args, batch_size, device=None, **kwargs):
+    def wrapper(
+        self,
+        *args: Any,
+        batch_size: Sequence[int] | torch.Size | int,
+        device: DeviceType | None = None,
+        **kwargs,
+    ):
         for value, key in zip(args, self.__dataclass_fields__):
             if key in kwargs:
                 raise ValueError(f"The key {key} is already set in kwargs")
@@ -280,7 +284,7 @@ def _from_tensordict_wrapper(expected_keys):
     return wrapper
 
 
-def _getstate(self):
+def _getstate(self) -> dict[str, Any]:
     """Returns a state dict which consists of tensor and non_tensor dicts for serialization.
 
     Returns:
@@ -290,7 +294,7 @@ def _getstate(self):
     return {"tensordict": self._tensordict, "non_tensordict": self._non_tensordict}
 
 
-def _setstate(self, state) -> None:
+def _setstate(self, state: dict[str, Any]) -> None:
     """Used to set the state of an object using state parameter
 
     Args:
@@ -300,7 +304,7 @@ def _setstate(self, state) -> None:
     self._non_tensordict = state.get("non_tensordict", None)
 
 
-def _getattribute_wrapper(getattribute):
+def _getattribute_wrapper(getattribute: Callable) -> Callable:
     """Retrieve the value of an object's attribute or raise AttributeError
 
     Args:
@@ -312,7 +316,7 @@ def _getattribute_wrapper(getattribute):
     """
 
     @functools.wraps(getattribute)
-    def wrapper(self, item):
+    def wrapper(self, item: str) -> Any:
         if not item.startswith("__"):
             if (
                 "_tensordict" in self.__dict__
@@ -333,7 +337,7 @@ def _getattribute_wrapper(getattribute):
     return wrapper
 
 
-def _setattr_wrapper(setattr_, expected_keys):
+def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     """Set the value of an attribute for the tensor class object
 
     Args:
@@ -343,7 +347,7 @@ def _setattr_wrapper(setattr_, expected_keys):
     """
 
     @functools.wraps(setattr_)
-    def wrapper(self, key, value):
+    def wrapper(self, key: str, value: Any) -> None:
         if (
             "_tensordict" not in self.__dict__
             or "_non_tensordict" not in self.__dict__
@@ -366,11 +370,12 @@ def _setattr_wrapper(setattr_, expected_keys):
                 del self._tensordict[key]
             # Saving all non-tensor attributes
             self._non_tensordict[key] = value
+        return None
 
     return wrapper
 
 
-def _getattr(self, attr):
+def _getattr(self, attr: str) -> Any:
     """Retrieve the value of an object's attribute, or a method output if attr is callable
 
     Args:
@@ -409,7 +414,7 @@ def _getattr(self, attr):
     return wrapped_func
 
 
-def _getitem(self, item):
+def _getitem(self, item: NestedKey) -> Any:
     """Retrieve the class object at the given index. Indexing will happen for nested tensors as well
 
     Args:
@@ -434,7 +439,7 @@ def _getitem(self, item):
     return self._from_tensordict(tensor_res, non_tensor_res)  # device=res.device)
 
 
-def _setitem(self, item, value):
+def _setitem(self, item: NestedKey, value: Any) -> None:
     """Set the value of the Tensor class object at the given index. Note that there is no strict validation on non-tensor values
 
     Args:
@@ -526,7 +531,7 @@ def _to_tensordict(self) -> TensorDict:
     return td
 
 
-def _memmap_(self, prefix=None, copy_existing=False):
+def _memmap_(self, prefix: str | None = None, copy_existing: bool = False):
     """Writes all tensors onto a MemmapTensor.
 
     Args:
@@ -563,7 +568,7 @@ def _memmap_(self, prefix=None, copy_existing=False):
 
 def _memmap_like(
     self,
-    prefix=None,
+    prefix: str | None = None,
 ):
     """Creates an empty Memory-mapped tensorclass with the same content shape as the current one.
 
@@ -595,7 +600,7 @@ def _memmap_like(
     return self._from_tensordict(out_td, out_other)
 
 
-def _device(self):
+def _device(self) -> torch.device:
     """Retrieves the device type of tensor class"""
     return self._tensordict.device
 
@@ -629,7 +634,7 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
     self._tensordict._batch_size_setter(new_size)
 
 
-def _state_dict(self):
+def _state_dict(self) -> dict[str, Any]:
     """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
     state_dict = {"_tensordict": self._tensordict.state_dict()}
     state_dict["_non_tensordict"] = {
@@ -639,7 +644,7 @@ def _state_dict(self):
     return state_dict
 
 
-def _load_state_dict(self, state_dict):
+def _load_state_dict(self, state_dict: dict[str, Any]):
     """Loads a state_dict attemptedly in-place on the destination tensorclass."""
     for key, item in state_dict.items():
         # keys will never be nested which facilitates everything, but let's
@@ -679,7 +684,7 @@ def _load_state_dict(self, state_dict):
     return self
 
 
-def _any(self, dim: int = None):
+def _any(self, dim: int | None = None) -> bool:
     """A recursive implementation of `any()` over the tensorclass leaves.
 
     If the `dim` arg is passed, the resulting tensorclass will have
@@ -747,7 +752,7 @@ def _any(self, dim: int = None):
     )
 
 
-def _all(self, dim: int = None):
+def _all(self, dim: int | None = None) -> bool:
     """A recursive implementation of `all()` over the tensorclass leaves.
 
     If the `dim` arg is passed, the resulting tensorclass will have
@@ -813,7 +818,7 @@ def _all(self, dim: int = None):
     )
 
 
-def _gather(self, dim, index, out=None):
+def _gather(self, dim: int, index: torch.Tensor, out: TensorDictBase | None = None):
     """Gathers values along an axis specified by `dim`.
 
     Args:
@@ -871,7 +876,7 @@ def _gather(self, dim, index, out=None):
     )
 
 
-def __eq__(self, other):
+def __eq__(self, other: object) -> bool:
     """Compares the Tensor class object to another object for equality. However, the equality check for non-tensor data is not performed.
 
     Args:
@@ -949,7 +954,7 @@ def __eq__(self, other):
     return out
 
 
-def __ne__(self, other):
+def __ne__(self, other: object) -> bool:
     """Compare the Tensor class object to another object for inequality. However, the equality check for non-tensor data is not performed.
 
     Args:
@@ -1023,7 +1028,9 @@ def __ne__(self, other):
     return out
 
 
-def _handle_non_tensor_dict(func, non_tensor_dict, *args, **kwargs):
+def _handle_non_tensor_dict(
+    func, non_tensor_dict: dict[str, Any], *args: Any, **kwargs: Any
+) -> dict[str, Any]:
     """Helper function to handle  non_tensor_dict in a given tensor class especially the nestor tensor objects
 
     Args:
@@ -1043,7 +1050,9 @@ def _handle_non_tensor_dict(func, non_tensor_dict, *args, **kwargs):
     return non_tensor_dict
 
 
-def _handle_list_non_tensor_dict(func, list_of_tdc, *args, **kwargs):
+def _handle_list_non_tensor_dict(
+    func: Callable, list_of_tdc: list[type], *args: Any, **kwargs: Any
+) -> dict[str, Any]:
     """Helper function to handle  list of non_tensor_dict in a given tensor class especially the nestor tensor objects
 
     Args:
@@ -1073,7 +1082,7 @@ def _handle_list_non_tensor_dict(func, list_of_tdc, *args, **kwargs):
     return non_tensordict
 
 
-def _unbind(tdc, dim=0):
+def _unbind(tdc, dim: int = 0) -> list:
     """Unbind the tensor class object along a given dimension, the behavior is extended to nested tensor classes as well.(no impact to non-tensor data)
 
     Args:
@@ -1090,7 +1099,7 @@ def _unbind(tdc, dim=0):
     return out
 
 
-def _full_like(tdc, fill_value):
+def _full_like(tdc, fill_value: float):
     """Fill the tensor types of tensor class object with the fill value, the behavior is extended to nested tensor classes as well (no impact to non-tensor data)
 
     Args:
@@ -1167,7 +1176,7 @@ def _squeeze(tdc):
     return out
 
 
-def _unsqueeze(tdc, dim=0):
+def _unsqueeze(tdc, dim: int = 0):
     """Insert a single-dimensional entry at the specified position in the shape of a tensor for tensor class objects including the nested tensor classes (no impact on non-tensor data)
 
     Args:
@@ -1184,7 +1193,7 @@ def _unsqueeze(tdc, dim=0):
     return out
 
 
-def _permute(tdc, dims):
+def _permute(tdc, dims: int | Sequence[int]):
     """Permute the dimensions of a tensor class object including nested tensor classes (no impact on non-tensor data)
 
     Args:
@@ -1201,7 +1210,7 @@ def _permute(tdc, dims):
     return out
 
 
-def _split(tdc, split_size_or_sections, dim=0):
+def _split(tdc, split_size_or_sections: int | Sequence[int], dim: int = 0):
     """
     Split a tensor class object into smaller tensor class objects along a given dimension.
 
@@ -1225,7 +1234,7 @@ def _split(tdc, split_size_or_sections, dim=0):
     return out
 
 
-def _stack(list_of_tdc, dim=0):
+def _stack(list_of_tdc: Sequence, dim: int = 0):
     """Stack tensor class objects along a given dimension, the behavior is extended to nested tensor classes. (no impact on non-tensor data)
 
     Args:
@@ -1242,7 +1251,7 @@ def _stack(list_of_tdc, dim=0):
     return out
 
 
-def _cat(list_of_tdc, dim=0):
+def _cat(list_of_tdc: Sequence, dim: int = 0):
     """Concatenate tensor class objects along a given dimension, the behavior is extended to nested tensor classes as well.(no impact on non-tensor data)
 
     Args:
@@ -1259,7 +1268,7 @@ def _cat(list_of_tdc, dim=0):
     return out
 
 
-def _get_typed_output(out, expected_type):
+def _get_typed_output(out, expected_type: str | type):
     # from __future__ import annotations turns types in strings. For those we use CLASSES_DICT.
     # Otherwise, if the output is some TensorDictBase subclass, we check the type and if it
     # does not match, we map it. In all other cases, just return what has been gathered.
@@ -1361,7 +1370,7 @@ def _check_td_out_type(field_def):
             # remove the NoneType from args
             if len(args) == 1 and args[0] in CLASSES_DICT:
                 return CLASSES_DICT[args[0]]
-            if len(args) == 1 and ("TensorDict" in args[0] or "Any" == args[0]):
+            if len(args) == 1 and ("TensorDict" in args[0] or args[0] == "Any"):
                 return None
             else:
                 raise TypeError(
