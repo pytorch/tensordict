@@ -6,22 +6,24 @@
 from __future__ import annotations
 
 import math
-
 import time
 from functools import wraps
 from numbers import Number
-from typing import Any, List, Tuple, Union
+from typing import Any, List, Sequence, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
 import torch
 from torch import Tensor
+
+if TYPE_CHECKING:
+    from tensordict.memmap import MemmapTensor
+    from tensordict.tensordict import TensorDictBase
 
 try:
     try:
         from functorch._C import get_unwrapped, is_batchedtensor
     except ImportError:
         from torch._C._functorch import get_unwrapped, is_batchedtensor
-
 except ImportError:
     pass
 
@@ -36,6 +38,7 @@ except ImportError as err:
         pass
 
     TORCHREC_ERR = str(err)
+
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
@@ -174,7 +177,9 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
     return torch.Size(bs)
 
 
-def convert_ellipsis_to_idx(idx: tuple | Ellipsis, batch_size: list[int]):
+def convert_ellipsis_to_idx(
+    idx: tuple[int | Ellipsis] | Ellipsis, batch_size: list[int]
+) -> tuple[int, ...]:
     """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
 
     Example:
@@ -229,11 +234,8 @@ def convert_ellipsis_to_idx(idx: tuple | Ellipsis, batch_size: list[int]):
     return new_index
 
 
-def _copy(self: list[int]):
-    out: list[int] = []
-    for elem in self:
-        out.append(elem)
-    return out
+def _copy(self: list[int]) -> list[int]:
+    return list(self)
 
 
 def infer_size_impl(shape: list[int], numel: int) -> list[int]:
@@ -266,7 +268,7 @@ def infer_size_impl(shape: list[int], numel: int) -> list[int]:
     return out
 
 
-def _unwrap_value(value):
+def _unwrap_value(value: torch.Tensor) -> torch.Tensor:
     # batch_dims = value.ndimension()
     if not isinstance(value, torch.Tensor):
         out = value
@@ -280,12 +282,12 @@ def _unwrap_value(value):
     # return out, batch_size
 
 
-if hasattr(math, "prod"):
+if hasattr(math, "prod"):  # Python 3.8+
 
     def prod(sequence):
         """General prod function, that generalised usage across math and np.
 
-        Created for multiple python versions compatibility).
+        Created for multiple python versions compatibility.
 
         """
         return math.prod(sequence)
@@ -295,16 +297,16 @@ else:
     def prod(sequence):
         """General prod function, that generalised usage across math and np.
 
-        Created for multiple python versions compatibility).
+        Created for multiple python versions compatibility.
 
         """
         return int(np.prod(sequence))
 
 
 def expand_as_right(
-    tensor: torch.Tensor | MemmapTensor | TensorDictBase,  # noqa: F821
-    dest: torch.Tensor | MemmapTensor | TensorDictBase,  # noqa: F821
-):
+    tensor: torch.Tensor | MemmapTensor | TensorDictBase,
+    dest: torch.Tensor | MemmapTensor | TensorDictBase,
+) -> torch.Tensor | MemmapTensor | TensorDictBase:
     """Expand a tensor on the right to match another tensor shape.
 
     Args:
@@ -339,7 +341,7 @@ def expand_as_right(
 
 
 def expand_right(
-    tensor: torch.Tensor | MemmapTensor, shape: Sequence[int]  # noqa: F821
+    tensor: torch.Tensor | MemmapTensor, shape: Sequence[int]
 ) -> torch.Tensor:
     """Expand a tensor on the right to match a desired shape.
 
@@ -382,7 +384,7 @@ TORCH_TO_NUMPY_DTYPE_DICT = {
 }
 
 
-def _nested_key_type_check(key):
+def _nested_key_type_check(key: NestedKey) -> None:
     msg = "Expected key to be a string or non-empty tuple of strings, but found {}."
     if type(key) is str:
         return
@@ -401,9 +403,9 @@ def _normalize_key(key: NestedKey) -> NestedKey:
 
 
 def index_keyedjaggedtensor(
-    kjt: torchrec.KeyedJaggedTensor,  # noqa
-    index: slice | range | list | torch.Tensor | np.ndarray,  # noqa
-):
+    kjt: KeyedJaggedTensor,
+    index: slice | range | list | torch.Tensor | np.ndarray,
+) -> KeyedJaggedTensor:
     """Indexes a KeyedJaggedTensor along the batch dimension.
 
     Args:
@@ -462,10 +464,10 @@ def index_keyedjaggedtensor(
 
 
 def setitem_keyedjaggedtensor(
-    orig_tensor: torchrec.KeyedJaggedTensor,  # noqa
+    orig_tensor: KeyedJaggedTensor,
     index: slice | range | list | torch.Tensor | np.ndarray,
-    other: torchrec.KeyedJaggedTensor,  # noqa
-):
+    other: KeyedJaggedTensor,
+) -> KeyedJaggedTensor:
     """Equivalent of `tensor[index] = other` for KeyedJaggedTensors indexed along the batch dimension.
 
     Args:
@@ -586,7 +588,7 @@ def setitem_keyedjaggedtensor(
     return orig_tensor
 
 
-def _ndimension(tensor: torch.Tensor):
+def _ndimension(tensor: torch.Tensor) -> int:
     if isinstance(tensor, torch.Tensor):
         return tensor.ndimension()
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -595,7 +597,7 @@ def _ndimension(tensor: torch.Tensor):
         return tensor.ndimension()
 
 
-def _shape(tensor: torch.Tensor):
+def _shape(tensor: torch.Tensor) -> torch.Size:
     try:
         return tensor.shape
     except AttributeError as err:
@@ -604,7 +606,7 @@ def _shape(tensor: torch.Tensor):
         raise err
 
 
-def _device(tensor: torch.Tensor):
+def _device(tensor: torch.Tensor) -> torch.device:
     if isinstance(tensor, torch.Tensor):
         return tensor.device
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -613,7 +615,7 @@ def _device(tensor: torch.Tensor):
         return tensor.device
 
 
-def _is_shared(tensor: torch.Tensor):
+def _is_shared(tensor: torch.Tensor) -> bool:
     if isinstance(tensor, torch.Tensor):
         return tensor.is_shared()
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -622,7 +624,7 @@ def _is_shared(tensor: torch.Tensor):
         return tensor.is_shared()
 
 
-def _is_meta(tensor: torch.Tensor):
+def _is_meta(tensor: torch.Tensor) -> bool:
     if isinstance(tensor, torch.Tensor):
         return tensor.is_meta
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -631,7 +633,7 @@ def _is_meta(tensor: torch.Tensor):
         return tensor.is_meta
 
 
-def _dtype(tensor: torch.Tensor):
+def _dtype(tensor: torch.Tensor) -> torch.dtype:
     if isinstance(tensor, torch.Tensor):
         return tensor.dtype
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -640,7 +642,7 @@ def _dtype(tensor: torch.Tensor):
         return tensor.dtype
 
 
-def _get_item(tensor: torch.Tensor, index):
+def _get_item(tensor: torch.Tensor, index: IndexType) -> torch.Tensor:
     if isinstance(tensor, torch.Tensor):
         return tensor[index]
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -649,7 +651,9 @@ def _get_item(tensor: torch.Tensor, index):
         return tensor[index]
 
 
-def _set_item(tensor: torch.Tensor, value, index):
+def _set_item(
+    tensor: torch.Tensor, value: torch.Tensor, index: IndexType
+) -> torch.Tensor:
     if isinstance(tensor, torch.Tensor):
         tensor[index] = value
         return tensor
@@ -661,7 +665,7 @@ def _set_item(tensor: torch.Tensor, value, index):
         return tensor
 
 
-def _requires_grad(tensor: torch.Tensor):
+def _requires_grad(tensor: torch.Tensor) -> bool:
     if isinstance(tensor, torch.Tensor):
         return tensor.requires_grad
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -675,7 +679,7 @@ class timeit:
 
     _REG = {}
 
-    def __init__(self, name):
+    def __init__(self, name) -> None:
         self.name = name
 
     def __call__(self, fn):
