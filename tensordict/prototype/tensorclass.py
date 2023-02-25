@@ -21,13 +21,13 @@ from typing import Callable, Union
 import torch
 
 from tensordict.tensordict import (
-    _accepted_classes,
+    _ACCEPTED_CLASSES,
     get_repr,
     is_tensordict,
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import DEVICE_TYPING
+from tensordict.utils import DeviceType
 
 from torch import Tensor
 
@@ -355,7 +355,7 @@ def _setattr_wrapper(setattr_, expected_keys):
                 f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
             )
 
-        if isinstance(value, _accepted_classes):
+        if isinstance(value, _ACCEPTED_CLASSES):
             # Avoiding key clash, honoring the user input to assign tensor type data to the key
             if key in self._non_tensordict.keys():
                 del self._non_tensordict[key]
@@ -600,7 +600,7 @@ def _device(self):
     return self._tensordict.device
 
 
-def _device_setter(self, value: DEVICE_TYPING) -> None:
+def _device_setter(self, value: DeviceType) -> None:
     raise RuntimeError(
         "device cannot be set using tensorclass.device = device, "
         "because device cannot be updated in-place. To update device, use "

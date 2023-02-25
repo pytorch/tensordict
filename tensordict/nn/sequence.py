@@ -24,7 +24,7 @@ except ImportError:
 
 from tensordict.nn.common import dispatch_kwargs, TensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from tensordict.utils import _normalize_key, NESTED_KEY
+from tensordict.utils import _normalize_key, NestedKey
 from torch import nn
 
 __all__ = ["TensorDictSequential"]
@@ -170,8 +170,8 @@ class TensorDictSequential(TensorDictModule):
 
     def select_subsequence(
         self,
-        in_keys: Iterable[NESTED_KEY] = None,
-        out_keys: Iterable[NESTED_KEY] = None,
+        in_keys: Iterable[NestedKey] = None,
+        out_keys: Iterable[NestedKey] = None,
     ) -> TensorDictSequential:
         """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 

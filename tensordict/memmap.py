@@ -19,10 +19,11 @@ import torch
 
 from tensordict.utils import (
     _getitem_batch_size,
-    DEVICE_TYPING,
-    INDEX_TYPING,
+    DeviceType,
+    IndexType,
+    NUMPY_TO_TORCH_DTYPE_DICT,
     prod,
-    torch_to_numpy_dtype_dict,
+    TORCH_TO_NUMPY_DTYPE_DICT,
 )
 
 MEMMAP_HANDLED_FN = {}
@@ -31,20 +32,6 @@ __all__ = ["MemmapTensor", "set_transfer_ownership"]
 
 NoneType = type(None)
 EllipsisType = type(Ellipsis)
-
-numpy_to_torch_dtype_dict = {
-    "bool": torch.bool,
-    "uint8": torch.uint8,
-    "int8": torch.int8,
-    "int16": torch.int16,
-    "int32": torch.int32,
-    "int64": torch.int64,
-    "float16": torch.float16,
-    "float32": torch.float32,
-    "float64": torch.float64,
-    "complex64": torch.complex64,
-    "complex128": torch.complex128,
-}
 
 
 def implements_for_memmap(torch_function) -> Callable:
@@ -135,7 +122,7 @@ class MemmapTensor:
     def __init__(
         self,
         *size: int,
-        device: DEVICE_TYPING = None,
+        device: DeviceType = None,
         dtype: torch.dtype = None,
         transfer_ownership: bool = False,
         prefix: str | None = None,
@@ -240,7 +227,7 @@ class MemmapTensor:
         dtype = (
             tensor.dtype
             if isinstance(tensor, (torch.Tensor, MemmapTensor))
-            else numpy_to_torch_dtype_dict[tensor.dtype.name]
+            else NUMPY_TO_TORCH_DTYPE_DICT[np.dtype(tensor.dtype.name)]
         )
         shape = tensor.shape
         out = cls(
@@ -302,7 +289,7 @@ class MemmapTensor:
     def _init_shape(
         self,
         shape: torch.Size,
-        device: DEVICE_TYPING,
+        device: DeviceType,
         dtype: torch.dtype,
         transfer_ownership: bool,
     ):
@@ -324,7 +311,7 @@ class MemmapTensor:
         if self._memmap_array is None:
             self._memmap_array = np.memmap(
                 self.filename,
-                dtype=torch_to_numpy_dtype_dict[self.dtype],
+                dtype=TORCH_TO_NUMPY_DTYPE_DICT[self.dtype],
                 mode=self.mode,
                 shape=self.np_shape,
             )
@@ -359,7 +346,7 @@ class MemmapTensor:
     def _copy_item(self, filename: bytes | str) -> None:
         self.memmap_array[:] = np.memmap(
             filename,
-            dtype=torch_to_numpy_dtype_dict[self.dtype],
+            dtype=TORCH_TO_NUMPY_DTYPE_DICT[self.dtype],
             mode="r",
             shape=self.np_shape,
         )
@@ -613,14 +600,14 @@ MemmapTensor of shape {self.shape}."""
             f"MemmapTensor(shape={size}, device={self.device}, " f"dtype={self.dtype})"
         )
 
-    def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
+    def __getitem__(self, item: IndexType) -> torch.Tensor:
         # return self._load_item(memmap_array=self.memmap_array[item])#[item]
         # return self._load_item()[item]
         if isinstance(item, (NoneType, EllipsisType, int, np.integer, slice)):
             item = (item,)
         return MemmapTensor._create_memmap_with_index(self, item)
 
-    def __setitem__(self, idx: INDEX_TYPING, value: torch.Tensor):
+    def __setitem__(self, idx: IndexType, value: torch.Tensor):
         if self.device == torch.device("cpu"):
             self._load_item()[idx] = value
         else:
@@ -669,7 +656,7 @@ MemmapTensor of shape {self.shape}."""
 
     def to(
         self,
-        dest: DEVICE_TYPING | torch.dtype,
+        dest: DeviceType | torch.dtype,
         non_blocking=False,
     ) -> torch.Tensor | MemmapTensor:
         """Maps a MemmapTensor to a given dtype or device.

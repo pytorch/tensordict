@@ -8,7 +8,6 @@ from __future__ import annotations
 import math
 
 import time
-import typing
 from functools import wraps
 from numbers import Number
 from typing import Any, List, Tuple, Union
@@ -38,17 +37,12 @@ except ImportError as err:
 
     TORCHREC_ERR = str(err)
 
-INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
-DEVICE_TYPING = Union[torch.device, str, int]
-if hasattr(typing, "get_args"):
-    DEVICE_TYPING_ARGS = typing.get_args(DEVICE_TYPING)
-else:
-    DEVICE_TYPING_ARGS = (torch.device, str, int)
-
-NESTED_KEY = Union[str, Tuple[str, ...]]
+IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
+DeviceType = Union[torch.device, str, int]
+NestedKey = Union[str, Tuple[str, ...]]
 
 
-def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
+def _sub_index(tensor: torch.Tensor, idx: IndexType) -> torch.Tensor:
     """Allows indexing of tensors with nested tuples.
 
      >>> sub_tensor1 = tensor[tuple1][tuple2]
@@ -67,7 +61,7 @@ def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
     return tensor[idx]
 
 
-def _getitem_batch_size(shape: torch.Size, items: INDEX_TYPING) -> torch.Size:
+def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
     """Given an input shape and an index, returns the size of the resulting indexed tensor.
 
     This function is aimed to be used when indexing is an
@@ -370,7 +364,7 @@ def expand_right(
     return tensor_expand
 
 
-numpy_to_torch_dtype_dict = {
+NUMPY_TO_TORCH_DTYPE_DICT = {
     np.dtype("bool"): torch.bool,
     np.dtype("uint8"): torch.uint8,
     np.dtype("int8"): torch.int8,
@@ -383,8 +377,8 @@ numpy_to_torch_dtype_dict = {
     np.dtype("complex64"): torch.complex64,
     np.dtype("complex128"): torch.complex128,
 }
-torch_to_numpy_dtype_dict = {
-    value: key for key, value in numpy_to_torch_dtype_dict.items()
+TORCH_TO_NUMPY_DTYPE_DICT = {
+    value: key for key, value in NUMPY_TO_TORCH_DTYPE_DICT.items()
 }
 
 
@@ -401,7 +395,7 @@ def _nested_key_type_check(key):
                 raise TypeError(msg.format(type(subkey)))
 
 
-def _normalize_key(key: NESTED_KEY) -> NESTED_KEY:
+def _normalize_key(key: NestedKey) -> NestedKey:
     # normalises tuples of length one to their string contents
     return key if not isinstance(key, tuple) or len(key) > 1 else key[0]
 

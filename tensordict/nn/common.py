@@ -15,7 +15,7 @@ from typing import Any, Iterable, Sequence
 import torch
 
 from tensordict.tensordict import make_tensordict, TensorDictBase
-from tensordict.utils import _nested_key_type_check, _normalize_key, NESTED_KEY
+from tensordict.utils import _nested_key_type_check, _normalize_key, NestedKey
 from torch import nn, Tensor
 
 
@@ -222,8 +222,8 @@ class TensorDictModule(nn.Module):
             | TensorDictModule
             | nn.Module
         ),
-        in_keys: Iterable[NESTED_KEY],
-        out_keys: Iterable[NESTED_KEY],
+        in_keys: Iterable[NestedKey],
+        out_keys: Iterable[NestedKey],
     ):
         super().__init__()
 
@@ -256,7 +256,7 @@ class TensorDictModule(nn.Module):
         tensordict: TensorDictBase,
         tensors: list,
         tensordict_out: TensorDictBase | None = None,
-        out_keys: Iterable[NESTED_KEY] | None = None,
+        out_keys: Iterable[NestedKey] | None = None,
     ) -> TensorDictBase:
         if out_keys is None:
             out_keys = self.out_keys
