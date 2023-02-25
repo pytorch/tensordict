@@ -11,7 +11,7 @@ import functools
 import numbers
 import textwrap
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import MutableMapping
 from copy import copy, deepcopy
 from numbers import Number
 from pathlib import Path
@@ -261,12 +261,10 @@ class _TensorDictKeysView:
         )
 
 
-class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
+class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        cls = kwargs.get("subcls", cls)
+    def __new__(cls, *args: Any, **kwargs: Any) -> TensorDictBase:
         cls._safe = kwargs.get("_safe", False)
         cls._lazy = kwargs.get("_lazy", False)
         cls._inplace_set = kwargs.get("_inplace_set", False)
@@ -2716,17 +2714,10 @@ class TensorDict(TensorDictBase):
 
     """
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
         cls._is_shared = False
         cls._is_memmap = False
-        return TensorDictBase.__new__(
-            subcls=cls,
-            *args,
-            _safe=True,
-            _lazy=False,
-            **kwargs,
-        )
+        return super().__new__(cls, *args, _safe=True, _lazy=False, **kwargs)
 
     def __init__(
         self,
@@ -3973,13 +3964,10 @@ torch.Size([3, 2])
 
     """
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args: Any, **kwargs: Any) -> SubTensorDict:
         cls._is_shared = False
         cls._is_memmap = False
-        return TensorDictBase.__new__(
-            subcls=cls, _safe=False, _lazy=True, _inplace_set=True
-        )
+        return super().__new__(cls, _safe=False, _lazy=True, _inplace_set=True)
 
     def __init__(
         self,
@@ -4471,9 +4459,8 @@ class LazyStackedTensorDict(TensorDictBase):
 
     """
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        return super().__new__(*args, subcls=cls, _safe=False, _lazy=True, **kwargs)
+    def __new__(cls, *args: Any, **kwargs: Any) -> LazyStackedTensorDict:
+        return super().__new__(cls, *args, _safe=False, _lazy=True, **kwargs)
 
     def __init__(
         self,
@@ -5268,9 +5255,8 @@ class LazyStackedTensorDict(TensorDictBase):
 class _CustomOpTensorDict(TensorDictBase):
     """Encodes lazy operations on tensors contained in a TensorDict."""
 
-    @classmethod
-    def __new__(cls, *args, **kwargs):
-        return super().__new__(*args, subcls=cls, _safe=False, _lazy=True, **kwargs)
+    def __new__(cls, *args: Any, **kwargs: Any) -> _CustomOpTensorDict:
+        return super().__new__(cls, *args, _safe=False, _lazy=True, **kwargs)
 
     def __init__(
         self,
