@@ -652,7 +652,7 @@ def _get_item(tensor: torch.Tensor, index: IndexType) -> torch.Tensor:
 
 
 def _set_item(
-    tensor: torch.Tensor, value: torch.Tensor, index: IndexType
+    tensor: torch.Tensor, index: IndexType, value: torch.Tensor
 ) -> torch.Tensor:
     if isinstance(tensor, torch.Tensor):
         tensor[index] = value

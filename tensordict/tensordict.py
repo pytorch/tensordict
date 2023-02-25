@@ -3125,7 +3125,7 @@ class TensorDict(TensorDictBase):
             tensor_in = _sub_index(tensor_in, idx)
             tensor_in.copy_(value)
         else:
-            _set_item(tensor_in, value, idx)
+            _set_item(tensor_in, idx, value)
 
         return self
 
