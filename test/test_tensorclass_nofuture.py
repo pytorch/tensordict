@@ -12,7 +12,6 @@ from typing import Any, Optional, Union
 import pytest
 import torch
 import torchsnapshot
-
 from _utils_internal import get_available_devices
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict

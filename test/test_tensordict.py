@@ -12,6 +12,7 @@ import pytest
 import torch
 import torchsnapshot
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
+
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
     _stack as stack_td,
@@ -1887,7 +1888,6 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (inserted == expected).all()
 
     def test_setdefault_nested(self, td_name, device):
-
         td = getattr(self, td_name)(device)
         td.unlock()
 
@@ -1928,7 +1928,6 @@ class TestTensorDicts(TestTensorDictsBase):
             # split_sizes to be [2, 2, ..., 2, 1] or [2, 2, ..., 2]
             split_sizes = [2] * rep + [1] * remainder
             for test_split_size in (2, split_sizes):
-
                 if performer == "torch":
                     tds = torch.split(td, test_split_size, dim)
                 elif performer == "tensordict":

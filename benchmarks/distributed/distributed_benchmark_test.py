@@ -2,8 +2,8 @@ import os
 import time
 
 import pytest
-
 import torch
+
 from tensordict import MemmapTensor, TensorDict
 from torch.distributed import rpc
 
