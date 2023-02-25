@@ -7,17 +7,14 @@ from __future__ import annotations
 
 import functools
 import inspect
-
 import warnings
 from textwrap import indent
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 import torch
-
 from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NestedKey
 from torch import nn, Tensor
-
 
 try:
     from functorch import FunctionalModule, FunctionalModuleWithBuffers
@@ -39,26 +36,26 @@ __all__ = [
 ]
 
 
-def _check_all_str(list_of_str):
-    if isinstance(list_of_str, str):
+def _check_all_str(sequence_of_str: Sequence[str]) -> None:
+    if isinstance(sequence_of_str, str):
         raise RuntimeError(
-            f"Expected a list of strings but got a string: {list_of_str}"
+            f"Expected a sequence of strings but got a string: {sequence_of_str}"
         )
-    if any(not isinstance(key, str) for key in list_of_str):
-        raise TypeError(f"Expected a list of strings but got: {list_of_str}")
+    if any(not isinstance(key, str) for key in sequence_of_str):
+        raise TypeError(f"Expected a sequence of strings but got: {sequence_of_str}")
 
 
-def _check_all_nested(list_of_keys):
-    if isinstance(list_of_keys, str):
+def _check_all_nested(sequence_of_keys: Sequence[NestedKey]) -> None:
+    if isinstance(sequence_of_keys, str):
         raise RuntimeError(
-            "Expected a list of strings, or tuples of strings but got a string: "
-            f"{list_of_keys}"
+            "Expected a sequence of strings, or tuples of strings but got a string: "
+            f"{sequence_of_keys}"
         )
-    for key in list_of_keys:
+    for key in sequence_of_keys:
         _nested_key_type_check(key)
 
 
-def dispatch_kwargs(func):
+def dispatch_kwargs(func: Callable) -> Callable:
     """Allows for a function expecting a TensorDict to be called using kwargs.
 
     This method must be used within modules that have an :obj:`in_keys` and
@@ -117,14 +114,13 @@ def dispatch_kwargs(func):
         break
 
     @functools.wraps(func)
-    def wrapper(self, tensordict=None, *args, **kwargs):
+    def wrapper(
+        self, tensordict: TensorDictBase | None = None, *args: Any, **kwargs: Any
+    ) -> Any:
         if tensordict is None:
             tensordict_values = {}
             for key in self.in_keys:
-                if isinstance(key, tuple):
-                    expected_key = "_".join(key)
-                else:
-                    expected_key = key
+                expected_key = "_".join(key) if isinstance(key, tuple) else key
                 if expected_key in kwargs:
                     try:
                         tensordict_values[key] = kwargs.pop(expected_key)
@@ -222,9 +218,9 @@ class TensorDictModule(nn.Module):
             | TensorDictModule
             | nn.Module
         ),
-        in_keys: Iterable[NestedKey],
-        out_keys: Iterable[NestedKey],
-    ):
+        in_keys: Sequence[NestedKey],
+        out_keys: Sequence[NestedKey],
+    ) -> None:
         super().__init__()
 
         if not out_keys:
@@ -245,7 +241,7 @@ class TensorDictModule(nn.Module):
         self.module = module
 
     @property
-    def is_functional(self):
+    def is_functional(self) -> bool:
         return _has_functorch and isinstance(
             self.module,
             (FunctionalModule, FunctionalModuleWithBuffers),
@@ -254,7 +250,7 @@ class TensorDictModule(nn.Module):
     def _write_to_tensordict(
         self,
         tensordict: TensorDictBase,
-        tensors: list,
+        tensors: list[Tensor],
         tensordict_out: TensorDictBase | None = None,
         out_keys: Iterable[NestedKey] | None = None,
     ) -> TensorDictBase:
@@ -268,7 +264,7 @@ class TensorDictModule(nn.Module):
         return tensordict_out
 
     def _call_module(
-        self, tensors: Sequence[Tensor], **kwargs
+        self, tensors: Sequence[Tensor], **kwargs: Any
     ) -> Tensor | Sequence[Tensor]:
         out = self.module(*tensors, **kwargs)
         return out
@@ -278,7 +274,7 @@ class TensorDictModule(nn.Module):
         self,
         tensordict: TensorDictBase,
         tensordict_out: TensorDictBase | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> TensorDictBase:
         """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
@@ -289,16 +285,16 @@ class TensorDictModule(nn.Module):
         return tensordict_out
 
     @property
-    def device(self):
+    def device(self) -> torch.device:
         for p in self.parameters():
             return p.device
         return torch.device("cpu")
 
     def __repr__(self) -> str:
         fields = indent(
-            f"module={self.module}, \n"
-            f"device={self.device}, \n"
-            f"in_keys={self.in_keys}, \n"
+            f"module={self.module},\n"
+            f"device={self.device},\n"
+            f"in_keys={self.in_keys},\n"
             f"out_keys={self.out_keys}",
             4 * " ",
         )
@@ -307,7 +303,7 @@ class TensorDictModule(nn.Module):
 
 
 class TensorDictModuleWrapper(nn.Module):
-    """Wrapper calss for TensorDictModule objects.
+    """Wrapper class for TensorDictModule objects.
 
     Once created, a TensorDictModuleWrapper will behave exactly as the TensorDictModule it contains except for the methods that are
     overwritten.
@@ -317,7 +313,7 @@ class TensorDictModuleWrapper(nn.Module):
 
     """
 
-    def __init__(self, td_module: TensorDictModule):
+    def __init__(self, td_module: TensorDictModule) -> None:
         super().__init__()
         self.td_module = td_module
         if len(self.td_module._forward_hooks):
@@ -335,5 +331,5 @@ class TensorDictModuleWrapper(nn.Module):
                     f"attribute {name} not recognised in {type(self).__name__}"
                 )
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args: Any, **kwargs: Any) -> TensorDictBase:
         return self.td_module.forward(*args, **kwargs)

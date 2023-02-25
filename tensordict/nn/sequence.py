@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Iterable
+from typing import Any, Iterable
 
 _has_functorch = False
 try:
@@ -123,7 +123,7 @@ class TensorDictSequential(TensorDictModule):
         self,
         *modules: TensorDictModule,
         partial_tolerant: bool = False,
-    ):
+    ) -> None:
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
 
         super().__init__(
@@ -132,7 +132,9 @@ class TensorDictSequential(TensorDictModule):
 
         self.partial_tolerant = partial_tolerant
 
-    def _compute_in_and_out_keys(self, modules: list[TensorDictModule]) -> tuple[list]:
+    def _compute_in_and_out_keys(
+        self, modules: list[TensorDictModule]
+    ) -> tuple[list[NestedKey], list[NestedKey]]:
         in_keys = []
         out_keys = []
         for module in modules:
@@ -170,8 +172,8 @@ class TensorDictSequential(TensorDictModule):
 
     def select_subsequence(
         self,
-        in_keys: Iterable[NestedKey] = None,
-        out_keys: Iterable[NestedKey] = None,
+        in_keys: Iterable[NestedKey] | None = None,
+        out_keys: Iterable[NestedKey] | None = None,
     ) -> TensorDictSequential:
         """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 
@@ -215,10 +217,10 @@ class TensorDictSequential(TensorDictModule):
 
     def _run_module(
         self,
-        module,
-        tensordict,
-        **kwargs,
-    ):
+        module: TensorDictModule,
+        tensordict: TensorDictBase,
+        **kwargs: Any,
+    ) -> Any:
         tensordict_keys = set(tensordict.keys(include_nested=True))
         if not self.partial_tolerant or all(
             key in tensordict_keys for key in module.in_keys
@@ -236,8 +238,8 @@ class TensorDictSequential(TensorDictModule):
     def forward(
         self,
         tensordict: TensorDictBase,
-        tensordict_out=None,
-        **kwargs,
+        tensordict_out: TensorDictBase | None = None,
+        **kwargs: Any,
     ) -> TensorDictBase:
         if not len(kwargs):
             for module in self.module:
@@ -251,7 +253,7 @@ class TensorDictSequential(TensorDictModule):
             return tensordict_out
         return tensordict
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.module)
 
     def __getitem__(self, index: int | slice) -> TensorDictModule:

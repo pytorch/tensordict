@@ -42,7 +42,7 @@ class biased_softplus(nn.Module):
             default: 0.1
     """
 
-    def __init__(self, bias: float, min_val: float = 0.01):
+    def __init__(self, bias: float, min_val: float = 0.01) -> None:
         super().__init__()
         self.bias = inv_softplus(bias - min_val)
         self.min_val = min_val
@@ -67,7 +67,7 @@ def mappings(key: str) -> Callable:
          a Callable
 
     """
-    _mappings = {
+    _mappings: dict[str, Callable] = {
         "softplus": torch.nn.functional.softplus,
         "exp": torch.exp,
         "relu": torch.relu,

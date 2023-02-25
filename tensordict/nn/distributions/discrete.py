@@ -63,14 +63,20 @@ class OneHotCategorical(D.Categorical):
         else:
             return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
 
-    def sample(self, sample_shape: torch.Size | Sequence | None = None) -> torch.Tensor:
+    def sample(
+        self,
+        sample_shape: torch.Size | Sequence[int] | None = None,
+    ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
         out = super().sample(sample_shape=sample_shape)
         out = torch.nn.functional.one_hot(out, self.logits.shape[-1]).to(torch.long)
         return out
 
-    def rsample(self, sample_shape: torch.Size | Sequence = None) -> torch.Tensor:
+    def rsample(
+        self,
+        sample_shape: torch.Size | Sequence[int] | None = None,
+    ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
         d = D.relaxed_categorical.RelaxedOneHotCategorical(

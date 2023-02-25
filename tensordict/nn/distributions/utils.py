@@ -6,22 +6,29 @@
 from __future__ import annotations
 
 import torch
-from torch import distributions as d
+from tensordict.utils import DeviceType
+from torch import distributions as D
 
 
-def _cast_device(elt: torch.Tensor | float, device) -> torch.Tensor | float:
+def _cast_device(
+    elt: torch.Tensor | float,
+    device: DeviceType,
+) -> torch.Tensor | float:
     if isinstance(elt, torch.Tensor):
         return elt.to(device)
     return elt
 
 
-def _cast_transform_device(transform, device):
+def _cast_transform_device(
+    transform: D.Transform | None,
+    device: DeviceType,
+) -> D.Transform | None:
     if transform is None:
         return transform
-    elif isinstance(transform, d.ComposeTransform):
+    elif isinstance(transform, D.ComposeTransform):
         for i, t in enumerate(transform.parts):
             transform.parts[i] = _cast_transform_device(t, device)
-    elif isinstance(transform, d.Transform):
+    elif isinstance(transform, D.Transform):
         for attribute in dir(transform):
             value = getattr(transform, attribute)
             if isinstance(value, torch.Tensor):
