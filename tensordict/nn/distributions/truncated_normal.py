@@ -3,11 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
 # from https://github.com/toshas/torch_truncnorm
+
+from __future__ import annotations
 
 import math
 from numbers import Number
+from typing import Sequence
 
 import torch
 from torch.distributions import constraints, Distribution
@@ -33,24 +35,21 @@ class TruncatedStandardNormal(Distribution):
     has_rsample = True
     eps = 1e-6
 
-    def __init__(self, a, b, validate_args=None):
+    def __init__(
+        self,
+        a: Number | torch.Tensor,
+        b: Number | torch.Tensor,
+        validate_args: bool | None = None,
+    ) -> None:
         self.a, self.b = broadcast_all(a, b)
         if isinstance(a, Number) and isinstance(b, Number):
             batch_shape = torch.Size()
         else:
             batch_shape = self.a.size()
-        super(TruncatedStandardNormal, self).__init__(
-            batch_shape, validate_args=validate_args
-        )
+        super().__init__(batch_shape, validate_args=validate_args)
         if self.a.dtype != self.b.dtype:
             raise ValueError("Truncation bounds types are different")
-        if any(
-            (self.a >= self.b)
-            .view(
-                -1,
-            )
-            .tolist()
-        ):
+        if any((self.a >= self.b).view(-1).tolist()):
             raise ValueError("Incorrect truncation range")
         # eps = torch.finfo(self.a.dtype).eps * 10
         eps = self.eps
@@ -77,53 +76,56 @@ class TruncatedStandardNormal(Distribution):
         self._entropy = CONST_LOG_SQRT_2PI_E + self._log_Z - 0.5 * self._lpbb_m_lpaa_d_Z
 
     @constraints.dependent_property
-    def support(self):
+    def support(self) -> constraints.Constraints:
         return constraints.interval(self.a, self.b)
 
     @property
-    def mean(self):
+    def mean(self) -> torch.Tensor:
         return self._mean
 
     @property
-    def variance(self):
+    def variance(self) -> torch.Tensor:
         return self._variance
 
     @property
-    def entropy(self):
+    def entropy(self) -> torch.Tensor:
         return self._entropy
 
     @property
-    def auc(self):
+    def auc(self) -> torch.Tensor:
         return self._Z
 
     @staticmethod
-    def _little_phi(x):
+    def _little_phi(x: torch.Tensor) -> torch.Tensor:
         return (-(x**2) * 0.5).exp() * CONST_INV_SQRT_2PI
 
-    def _big_phi(self, x):
+    def _big_phi(self, x: torch.Tensor) -> torch.Tensor:
         phi = 0.5 * (1 + (x * CONST_INV_SQRT_2).erf())
         return phi.clamp(self.eps, 1 - self.eps)
 
     @staticmethod
-    def _inv_big_phi(x):
+    def _inv_big_phi(x: torch.Tensor) -> torch.Tensor:
         return CONST_SQRT_2 * (2 * x - 1).erfinv()
 
-    def cdf(self, value):
+    def cdf(self, value: torch.Tensor) -> torch.Tensor:
         if self._validate_args:
             self._validate_sample(value)
         return ((self._big_phi(value) - self._big_phi_a) / self._Z).clamp(0, 1)
 
-    def icdf(self, value):
+    def icdf(self, value: torch.Tensor) -> torch.Tensor:
         y = self._big_phi_a + value * self._Z
         y = y.clamp(self.eps, 1 - self.eps)
         return self._inv_big_phi(y)
 
-    def log_prob(self, value):
+    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         if self._validate_args:
             self._validate_sample(value)
         return CONST_LOG_INV_SQRT_2PI - self._log_Z - (value**2) * 0.5
 
-    def rsample(self, sample_shape=None):
+    def rsample(
+        self,
+        sample_shape: torch.Size | Sequence[int] | None = None,
+    ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
         shape = self._extended_shape(sample_shape)
@@ -141,29 +143,36 @@ class TruncatedNormal(TruncatedStandardNormal):
 
     has_rsample = True
 
-    def __init__(self, loc, scale, a, b, validate_args=None):
+    def __init__(
+        self,
+        loc: Number | torch.Tensor,
+        scale: Number | torch.Tensor,
+        a: Number | torch.Tensor,
+        b: Number | torch.Tensor,
+        validate_args: bool | None = None,
+    ) -> None:
         scale = scale.clamp_min(self.eps)
         self.loc, self.scale, a, b = broadcast_all(loc, scale, a, b)
         self._non_std_a = a
         self._non_std_b = b
         a = (a - self.loc) / self.scale
         b = (b - self.loc) / self.scale
-        super(TruncatedNormal, self).__init__(a, b, validate_args=validate_args)
+        super().__init__(a, b, validate_args=validate_args)
         self._log_scale = self.scale.log()
         self._mean = self._mean * self.scale + self.loc
         self._variance = self._variance * self.scale**2
         self._entropy += self._log_scale
 
-    def _to_std_rv(self, value):
+    def _to_std_rv(self, value: torch.Tensor) -> torch.Tensor:
         return (value - self.loc) / self.scale
 
-    def _from_std_rv(self, value):
+    def _from_std_rv(self, value: torch.Tensor) -> torch.Tensor:
         return value * self.scale + self.loc
 
-    def cdf(self, value):
-        return super(TruncatedNormal, self).cdf(self._to_std_rv(value))
+    def cdf(self, value: torch.Tensor) -> torch.Tensor:
+        return super().cdf(self._to_std_rv(value))
 
-    def icdf(self, value):
+    def icdf(self, value: torch.Tensor) -> torch.Tensor:
         sample = self._from_std_rv(super().icdf(value))
 
         # clamp data but keep gradients
@@ -176,6 +185,6 @@ class TruncatedNormal(TruncatedStandardNormal):
         sample.data.copy_(sample_clip)
         return sample
 
-    def log_prob(self, value):
+    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
         value = self._to_std_rv(value)
-        return super(TruncatedNormal, self).log_prob(value) - self._log_scale
+        return super().log_prob(value) - self._log_scale
