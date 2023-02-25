@@ -3,17 +3,15 @@ import functools
 import inspect
 import numbers
 import re
+import sys
 import typing
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from platform import python_version
 from textwrap import indent
 from typing import Callable, Dict, Optional, Tuple, Union
 
 import torch
-
-from packaging import version
 
 from tensordict.tensordict import (
     _accepted_classes,
@@ -27,7 +25,7 @@ from tensordict.utils import DEVICE_TYPING
 from torch import Tensor
 
 T = typing.TypeVar("T", bound=TensorDictBase)
-PY37 = version.parse(python_version()) < version.parse("3.8")
+PY37 = sys.version_info < (3, 8)
 
 # For __future__.annotations, we keep a dict of str -> class to call the class based on the string
 CLASSES_DICT = {}
@@ -466,6 +464,7 @@ def _setitem(self, item, value):
                     f"Meta data at {repr(key)} may or may not be equal, this may result in "
                     f"undefined behaviours",
                     category=UserWarning,
+                    stacklevel=2,
                 )
 
     for key in value._tensordict.keys():
