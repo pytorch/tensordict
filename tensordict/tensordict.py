@@ -201,7 +201,7 @@ class _TensorDictKeysView:
         return key
 
     def __len__(self) -> int:
-        return sum((1 for _ in self), start=0)
+        return sum(1 for _ in self)
 
     def _items(
         self, tensordict: TensorDict | None = None
