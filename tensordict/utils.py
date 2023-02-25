@@ -11,7 +11,7 @@ import time
 import typing
 from functools import wraps
 from numbers import Number
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Tuple, Union
 
 import numpy as np
 import torch
@@ -180,7 +180,7 @@ def _getitem_batch_size(shape: torch.Size, items: INDEX_TYPING) -> torch.Size:
     return torch.Size(bs)
 
 
-def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
+def convert_ellipsis_to_idx(idx: tuple | Ellipsis, batch_size: list[int]):
     """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
 
     Example:
@@ -235,14 +235,14 @@ def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
     return new_index
 
 
-def _copy(self: List[int]):
-    out: List[int] = []
+def _copy(self: list[int]):
+    out: list[int] = []
     for elem in self:
         out.append(elem)
     return out
 
 
-def infer_size_impl(shape: List[int], numel: int) -> List[int]:
+def infer_size_impl(shape: list[int], numel: int) -> list[int]:
     """Infers the shape of an expanded tensor whose number of elements is indicated by :obj:`numel`.
 
     Copied from pytorch for compatibility issues (See #386).
@@ -251,7 +251,7 @@ def infer_size_impl(shape: List[int], numel: int) -> List[int]:
 
     """
     newsize = 1
-    infer_dim: Optional[int] = None
+    infer_dim: int | None = None
     for dim in range(len(shape)):
         if shape[dim] == -1:
             if infer_dim is not None:
@@ -308,8 +308,8 @@ else:
 
 
 def expand_as_right(
-    tensor: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],  # noqa: F821
-    dest: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],  # noqa: F821
+    tensor: torch.Tensor | MemmapTensor | TensorDictBase,  # noqa: F821
+    dest: torch.Tensor | MemmapTensor | TensorDictBase,  # noqa: F821
 ):
     """Expand a tensor on the right to match another tensor shape.
 
@@ -345,7 +345,7 @@ def expand_as_right(
 
 
 def expand_right(
-    tensor: Union[torch.Tensor, "MemmapTensor"], shape: Sequence[int]  # noqa: F821
+    tensor: torch.Tensor | MemmapTensor, shape: Sequence[int]  # noqa: F821
 ) -> torch.Tensor:
     """Expand a tensor on the right to match a desired shape.
 
@@ -407,8 +407,8 @@ def _normalize_key(key: NESTED_KEY) -> NESTED_KEY:
 
 
 def index_keyedjaggedtensor(
-    kjt: "torchrec.KeyedJaggedTensor",  # noqa
-    index: Union[slice, range, list, torch.Tensor, np.ndarray],  # noqa
+    kjt: torchrec.KeyedJaggedTensor,  # noqa
+    index: slice | range | list | torch.Tensor | np.ndarray,  # noqa
 ):
     """Indexes a KeyedJaggedTensor along the batch dimension.
 
@@ -468,9 +468,9 @@ def index_keyedjaggedtensor(
 
 
 def setitem_keyedjaggedtensor(
-    orig_tensor: "torchrec.KeyedJaggedTensor",  # noqa
-    index: Union[slice, range, list, torch.Tensor, np.ndarray],
-    other: "torchrec.KeyedJaggedTensor",  # noqa
+    orig_tensor: torchrec.KeyedJaggedTensor,  # noqa
+    index: slice | range | list | torch.Tensor | np.ndarray,
+    other: torchrec.KeyedJaggedTensor,  # noqa
 ):
     """Equivalent of `tensor[index] = other` for KeyedJaggedTensors indexed along the batch dimension.
 

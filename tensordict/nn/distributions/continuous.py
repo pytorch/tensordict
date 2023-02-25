@@ -3,8 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 from numbers import Number
-from typing import Dict, Sequence, Tuple, Union
+from typing import Sequence
 
 import numpy as np
 import torch
@@ -60,7 +62,7 @@ class NormalParamWrapper(nn.Module):
         self.scale_mapping = scale_mapping
         self.scale_lb = scale_lb
 
-    def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, *tensors: torch.Tensor) -> tuple[torch.Tensor]:
         net_output = self.operator(*tensors)
         others = ()
         if not isinstance(net_output, torch.Tensor):
@@ -111,7 +113,7 @@ class NormalParamExtractor(nn.Module):
         self.scale_mapping = scale_mapping
         self.scale_lb = scale_lb
 
-    def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, *tensors: torch.Tensor) -> tuple[torch.Tensor]:
         tensor, *others = tensors
         loc, scale = tensor.chunk(2, -1)
         scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
@@ -132,15 +134,15 @@ class Delta(D.Distribution):
 
     """
 
-    arg_constraints: Dict = {}
+    arg_constraints: dict = {}
 
     def __init__(
         self,
         param: torch.Tensor,
         atol: float = 1e-6,
         rtol: float = 1e-6,
-        batch_shape: Union[torch.Size, Sequence[int]] = None,
-        event_shape: Union[torch.Size, Sequence[int]] = None,
+        batch_shape: torch.Size | Sequence[int] = None,
+        event_shape: torch.Size | Sequence[int] = None,
     ):
         if batch_shape is None:
             batch_shape = torch.Size([])

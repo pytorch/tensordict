@@ -1,3 +1,10 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+from __future__ import annotations
+
 import dataclasses
 import functools
 import inspect
@@ -9,7 +16,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import Callable, Dict, Optional, Tuple, Union
+from typing import Callable, Union
 
 import torch
 
@@ -97,7 +104,7 @@ def tensorclass(cls: T) -> T:
 
 
     """
-    td_handled_functions: Dict = {}
+    td_handled_functions: dict = {}
 
     def implements_for_tdc(torch_function: Callable) -> Callable:
         """Register a torch function override for _TensorClass."""
@@ -113,8 +120,8 @@ def tensorclass(cls: T) -> T:
         cls,
         func: Callable,
         types,
-        args: Tuple = (),
-        kwargs: Optional[dict] = None,
+        args: tuple = (),
+        kwargs: dict | None = None,
     ) -> Callable:
         if kwargs is None:
             kwargs = {}

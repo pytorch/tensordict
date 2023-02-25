@@ -3,9 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 import re
 from textwrap import indent
-from typing import Any, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Sequence
 
 import torch.nn as nn
 
@@ -23,7 +25,7 @@ __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 _INTERACTION_MODE = None
 
 
-def interaction_mode() -> Union[str, None]:
+def interaction_mode() -> str | None:
     """Returns the current sampling mode."""
     return _INTERACTION_MODE
 
@@ -186,11 +188,11 @@ class ProbabilisticTensorDictModule(nn.Module):
 
     def __init__(
         self,
-        in_keys: Union[str, Sequence[str], dict],
-        out_keys: Optional[Union[str, Sequence[str]]] = None,
+        in_keys: str | Sequence[str] | dict,
+        out_keys: str | Sequence[str] | None = None,
         default_interaction_mode: str = "mode",
-        distribution_class: Type = Delta,
-        distribution_kwargs: Optional[dict] = None,
+        distribution_class: type = Delta,
+        distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
@@ -247,7 +249,7 @@ class ProbabilisticTensorDictModule(nn.Module):
     def forward(
         self,
         tensordict: TensorDictBase,
-        tensordict_out: Optional[TensorDictBase] = None,
+        tensordict_out: TensorDictBase | None = None,
         _requires_sample: bool = True,
     ) -> TensorDictBase:
         if tensordict_out is None:
@@ -278,7 +280,7 @@ class ProbabilisticTensorDictModule(nn.Module):
 
     def _dist_sample(
         self, dist: d.Distribution, interaction_mode: bool = None
-    ) -> Union[Tuple[Tensor], Tensor]:
+    ) -> tuple[Tensor] | Tensor:
         if interaction_mode is None or interaction_mode == "":
             interaction_mode = self.default_interaction_mode
         if not isinstance(dist, d.Distribution):
@@ -341,7 +343,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
     def __init__(
         self,
-        *modules: Union[TensorDictModule, ProbabilisticTensorDictModule],
+        *modules: TensorDictModule | ProbabilisticTensorDictModule,
         partial_tolerant: bool = False,
     ) -> None:
         if len(modules) == 0:
@@ -369,9 +371,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     def get_dist_params(
         self,
         tensordict: TensorDictBase,
-        tensordict_out: Optional[TensorDictBase] = None,
+        tensordict_out: TensorDictBase | None = None,
         **kwargs,
-    ) -> Tuple[d.Distribution, TensorDictBase]:
+    ) -> tuple[d.Distribution, TensorDictBase]:
         tds = TensorDictSequential(*self.module[:-1])
         if self.__dict__.get("_is_stateless", False):
             tds = repopulate_module(tds, kwargs.pop("params"))
@@ -384,7 +386,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     def get_dist(
         self,
         tensordict: TensorDictBase,
-        tensordict_out: Optional[TensorDictBase] = None,
+        tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> d.Distribution:
         """Get the distribution that results from passing the input tensordict through
@@ -402,7 +404,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     def forward(
         self,
         tensordict: TensorDictBase,
-        tensordict_out: Optional[TensorDictBase] = None,
+        tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
         tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)

@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Iterable, List, Tuple, Union
+from typing import Iterable
 
 _has_functorch = False
 try:
@@ -132,7 +132,7 @@ class TensorDictSequential(TensorDictModule):
 
         self.partial_tolerant = partial_tolerant
 
-    def _compute_in_and_out_keys(self, modules: List[TensorDictModule]) -> Tuple[List]:
+    def _compute_in_and_out_keys(self, modules: list[TensorDictModule]) -> tuple[list]:
         in_keys = []
         out_keys = []
         for module in modules:
@@ -172,7 +172,7 @@ class TensorDictSequential(TensorDictModule):
         self,
         in_keys: Iterable[NESTED_KEY] = None,
         out_keys: Iterable[NESTED_KEY] = None,
-    ) -> "TensorDictSequential":
+    ) -> TensorDictSequential:
         """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 
         Args:
@@ -254,7 +254,7 @@ class TensorDictSequential(TensorDictModule):
     def __len__(self):
         return len(self.module)
 
-    def __getitem__(self, index: Union[int, slice]) -> TensorDictModule:
+    def __getitem__(self, index: int | slice) -> TensorDictModule:
         if isinstance(index, int):
             return self.module.__getitem__(index)
         else:
@@ -263,5 +263,5 @@ class TensorDictSequential(TensorDictModule):
     def __setitem__(self, index: int, tensordict_module: TensorDictModule) -> None:
         return self.module.__setitem__(idx=index, module=tensordict_module)
 
-    def __delitem__(self, index: Union[int, slice]) -> None:
+    def __delitem__(self, index: int | slice) -> None:
         self.module.__delitem__(idx=index)

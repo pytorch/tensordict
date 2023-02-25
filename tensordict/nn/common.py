@@ -10,7 +10,7 @@ import inspect
 
 import warnings
 from textwrap import indent
-from typing import Any, Iterable, List, Optional, Sequence, Union
+from typing import Any, Iterable, Sequence
 
 import torch
 
@@ -216,16 +216,15 @@ class TensorDictModule(nn.Module):
 
     def __init__(
         self,
-        module: Union[
-            "FunctionalModule",
-            "FunctionalModuleWithBuffers",
-            TensorDictModule,
-            nn.Module,
-        ],
+        module: (
+            FunctionalModule
+            | FunctionalModuleWithBuffers
+            | TensorDictModule
+            | nn.Module
+        ),
         in_keys: Iterable[NESTED_KEY],
         out_keys: Iterable[NESTED_KEY],
     ):
-
         super().__init__()
 
         if not out_keys:
@@ -239,7 +238,8 @@ class TensorDictModule(nn.Module):
 
         if "_" in in_keys:
             warnings.warn(
-                'key "_" is for ignoring output, it should not be used in input keys'
+                'key "_" is for ignoring output, it should not be used in input keys',
+                stacklevel=2,
             )
 
         self.module = module
@@ -254,11 +254,10 @@ class TensorDictModule(nn.Module):
     def _write_to_tensordict(
         self,
         tensordict: TensorDictBase,
-        tensors: List,
-        tensordict_out: Optional[TensorDictBase] = None,
-        out_keys: Optional[Iterable[NESTED_KEY]] = None,
+        tensors: list,
+        tensordict_out: TensorDictBase | None = None,
+        out_keys: Iterable[NESTED_KEY] | None = None,
     ) -> TensorDictBase:
-
         if out_keys is None:
             out_keys = self.out_keys
         if tensordict_out is None:
@@ -270,7 +269,7 @@ class TensorDictModule(nn.Module):
 
     def _call_module(
         self, tensors: Sequence[Tensor], **kwargs
-    ) -> Union[Tensor, Sequence[Tensor]]:
+    ) -> Tensor | Sequence[Tensor]:
         out = self.module(*tensors, **kwargs)
         return out
 
@@ -278,7 +277,7 @@ class TensorDictModule(nn.Module):
     def forward(
         self,
         tensordict: TensorDictBase,
-        tensordict_out: Optional[TensorDictBase] = None,
+        tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> TensorDictBase:
         """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
