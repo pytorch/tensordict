@@ -56,8 +56,8 @@ def get_nightly_version():
 def write_version_file(version):
     version_path = ROOT_DIR / "tensordict" / "version.py"
     with version_path.open("w") as f:
-        f.write("__version__ = '{}'\n".format(version))
-        f.write("git_version = {}\n".format(repr(sha)))
+        f.write(f"__version__ = '{version}'\n")
+        f.write(f"git_version = {repr(sha)}\n")
 
 
 def _get_pytorch_version():
@@ -98,10 +98,7 @@ def _main(argv):
     name = args.package_name
     is_nightly = "nightly" in name
 
-    if is_nightly:
-        version = get_nightly_version()
-    else:
-        version = get_version()
+    version = get_nightly_version() if is_nightly else get_version()
 
     write_version_file(version)
     print(f"Building wheel {package_name}-{version}")
@@ -111,7 +108,7 @@ def _main(argv):
     print("-- PyTorch dependency:", pytorch_package_dep)
 
     long_description = (ROOT_DIR / "README.md").read_text()
-    sys.argv = [sys.argv[0]] + unknown
+    sys.argv = [sys.argv[0], *unknown]
 
     setup(
         # Metadata

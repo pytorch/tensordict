@@ -3,12 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .continuous import *
-from .continuous import __all__ as _all_continuous
-from .discrete import *
-from .discrete import __all__ as _all_discrete
+from tensordict.nn.distributions import continuous, discrete
+from tensordict.nn.distributions.continuous import *
+from tensordict.nn.distributions.discrete import *
 
 distributions_maps = {
     distribution_class.lower(): eval(distribution_class)
-    for distribution_class in _all_continuous + _all_discrete
+    for distribution_class in (*continuous.__all__, *discrete.__all__)
 }
