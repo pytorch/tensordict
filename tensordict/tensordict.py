@@ -1131,7 +1131,10 @@ class TensorDictBase(MutableMapping):
                     elif isinstance(value, (dict, TensorDictBase)):
                         target.update(value)
                         continue
-            self.set(key, value, inplace=inplace, **kwargs)
+            if len(subkey):
+                self.set((key, *subkey), value, inplace=inplace, **kwargs)
+            else:
+                self.set(key, value, inplace=inplace, **kwargs)
         return self
 
     def update_(
