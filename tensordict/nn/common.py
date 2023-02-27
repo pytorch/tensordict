@@ -39,7 +39,7 @@ __all__ = [
 def _check_all_str(sequence_of_str: Sequence[str]) -> None:
     if isinstance(sequence_of_str, str):
         raise RuntimeError(
-            f"Expected a sequence of strings or tuples of strings, but got a string: {sequence_of_str}"
+            f"Expected a sequence of strings or tuples of strings, but got: {sequence_of_str}"
         )
     for key in sequence_of_str:
         if isinstance(key, str):
@@ -52,11 +52,11 @@ def _check_all_str(sequence_of_str: Sequence[str]) -> None:
                     continue
                 else:
                     RuntimeError(
-                        f"Expected a sequence of strings or tuples of strings, but got a string: {sequence_of_str}"
+                        f"Expected a sequence of strings or tuples of strings, but got: {sequence_of_str}"
                     )
         else:
             RuntimeError(
-                f"Expected a sequence of strings or tuples of strings, but got a string: {sequence_of_str}"
+                f"Expected a sequence of strings or tuples of strings, but got: {sequence_of_str}"
             )
 
 
