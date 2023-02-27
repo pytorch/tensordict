@@ -189,17 +189,21 @@ from tensordict.nn import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
 )
-from torchrl.modules import NormalParamWrapper, TanhNormal
+from tensordict.nn.distributions import NormalParamExtractor
+from torch import distributions as dist
 
 td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3])
-net = NormalParamWrapper(torch.nn.GRUCell(4, 8))
-module = TensorDictModule(net, in_keys=["input", "hidden"], out_keys=["loc", "scale"])
+net = torch.nn.GRUCell(4, 8)
+net = TensorDictModule(net, in_keys=["input", "hidden"], out_keys=["hidden"])
+extractor = NormalParamExtractor()
+extractor = TensorDictModule(extractor, in_keys=["hidden"], out_keys=["loc", "scale"])
 td_module = ProbabilisticTensorDictSequential(
-    module,
+    net,
+    extractor,
     ProbabilisticTensorDictModule(
         in_keys=["loc", "scale"],
         out_keys=["action"],
-        distribution_class=TanhNormal,
+        distribution_class=dist.Normal,
         return_log_prob=True,
     ),
 )
