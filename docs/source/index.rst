@@ -33,10 +33,19 @@ Basics
    :maxdepth: 1
 
    tutorials/tensordict_basics
-   tutorials/tensordict_module
    tutorials/tensordict_shapes
    tutorials/tensordict_keys
    tutorials/tensordict_preallocation
+   tutorials/tensordict_memory
+
+tensordict.nn
+-------------
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/tensordict_module
+   tutorials/tensordict_module_functional
 
 Dataloading
 -----------
