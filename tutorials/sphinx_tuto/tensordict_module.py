@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 TensorDictModule
-============================
-We recommand reading the TensorDict tutorial before going through this one.
+================
+In this tutorial you will learn how to use :class:`~.TensorDictModule` and
+:class:`~.TensorDictSequential` to create generic and reusable modules that can accept
+:class:`~.TensorDict` as input.
 """
 ##############################################################################
-# For a convenient usage of the ``TensorDict`` class with ``nn.Module``,
-# :obj:`tensordict` provides an interface between the two named ``TensorDictModule``.
+# For a convenient usage of the :class:`~.TensorDict` class with ``nn.Module``,
+# :mod:`tensordict` provides an interface between the two named ``TensorDictModule``.
 # The ``TensorDictModule`` class is an ``nn.Module`` that takes a
-# ``TensorDict`` as input when called.
+# :class:`~.TensorDict` as input when called.
 # It is up to the user to define the keys to be read as input and output.
 #
 # TensorDictModule by examples
@@ -28,7 +30,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 ###############################################################################
 # Example 1: Simple usage
 # --------------------------------------
-# We have a ``TensorDict`` with 2 entries ``"a"`` and ``"b"`` but only the
+# We have a :class:`~.TensorDict` with 2 entries ``"a"`` and ``"b"`` but only the
 # value associated with ``"a"`` has to be read by the network.
 
 tensordict = TensorDict(
@@ -109,15 +111,15 @@ splitlinear(tensordict)
 # When having multiple input keys and output keys, make sure they match the
 # order in the module.
 #
-# ``TensorDictModule`` can work with ``TensorDict`` instances that contain
+# ``TensorDictModule`` can work with :class:`~.TensorDict` instances that contain
 # more tensors than what the ``in_keys`` attribute indicates.
 #
-# Unless a ``vmap`` operator is used, the ``TensorDict`` is modified in-place.
+# Unless a ``vmap`` operator is used, the :class:`~.TensorDict` is modified in-place.
 #
 # **Ignoring some outputs**
 #
 # Note that it is possible to avoid writing some of the tensors to the
-# ``TensorDict`` output, using ``"_"`` in ``out_keys``.
+# :class:`~.TensorDict` output, using ``"_"`` in ``out_keys``.
 #
 # Example 4: Combining multiple ``TensorDictModule`` with ``TensorDictSequential``
 # ----------------------------------------------------------------------------------
@@ -145,54 +147,6 @@ mergelinear = TensorDictModule(
 split_and_merge_linear = TensorDictSequential(splitlinear, mergelinear)
 
 assert split_and_merge_linear(tensordict)["output"].shape == torch.Size([5, 13])
-
-###############################################################################
-# Example 5: Compatibility with functorch
-# -----------------------------------------
-# tensordict.nn is compatible with functorch. It also comes with its own functional
-# utilities. Let us have a look:
-
-import functorch
-
-tensordict = TensorDict({"a": torch.randn(5, 3)}, batch_size=[5])
-
-splitlinear = TensorDictModule(
-    MultiHeadLinear(3, 4, 10),
-    in_keys=["a"],
-    out_keys=["output_1", "output_2"],
-)
-func, params, buffers = functorch.make_functional_with_buffers(splitlinear)
-print(func(params, buffers, tensordict))
-
-###############################################################################
-# This can be used with the vmap operator. For example, we use 3 replicas of the
-# params and buffers and execute a vectorized map over these for a single batch
-# of data:
-
-params_expand = [p.expand(3, *p.shape) for p in params]
-buffers_expand = [p.expand(3, *p.shape) for p in buffers]
-print(functorch.vmap(func, (0, 0, None))(params_expand, buffers_expand, tensordict))
-
-###############################################################################
-# We can also use the native :obj:`get_functional()` function from tensordict.nn,
-# which modifies the module to make it accept the parameters as regular inputs:
-
-from tensordict.nn import make_functional
-
-tensordict = TensorDict({"a": torch.randn(5, 3)}, batch_size=[5])
-num_models = 10
-model = TensorDictModule(nn.Linear(3, 4), in_keys=["a"], out_keys=["output"])
-params = make_functional(model)
-# we stack two groups of parameters to show the vmap usage:
-params = torch.stack([params, params.apply(lambda x: torch.zeros_like(x))], 0)
-result_td = functorch.vmap(model, (None, 0))(tensordict, params)
-print("the output tensordict shape is: ", result_td.shape)
-
-
-from tensordict.nn import (
-    ProbabilisticTensorDictModule,
-    ProbabilisticTensorDictSequential,
-)
 
 ###############################################################################
 # Do's and don't with TensorDictModule
@@ -231,6 +185,10 @@ from tensordict.nn import (
 # One can find the parameters in the output tensordict as well as the log
 # probability if needed.
 
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+)
 from torchrl.modules import NormalParamWrapper, TanhNormal
 
 td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3])
@@ -253,7 +211,7 @@ print(f"TensorDict after going through module now as keys action, loc and scale:
 # Showcase: Implementing a transformer using TensorDictModule
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # To demonstrate the flexibility of ``TensorDictModule``, we are going to
-# create a transformer that reads ``TensorDict`` objects using ``TensorDictModule``.
+# create a transformer that reads :class:`~.TensorDict` objects using ``TensorDictModule``.
 #
 # The following figure shows the classical transformer architecture
 # (Vaswani et al, 2017).
