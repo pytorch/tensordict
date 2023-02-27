@@ -1353,12 +1353,12 @@ class TensorDictBase(MutableMapping):
             tensor_dims = len(value.shape)
             last_n_dims = tensor_dims - tensordict_dims
             if last_n_dims > 0:
-                d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+                d[key] = value.expand((*shape, *value.shape[-last_n_dims:]))
             else:
-                d[key] = value.expand(*shape)
+                d[key] = value.expand(shape)
         return TensorDict(
             source=d,
-            batch_size=[*shape],
+            batch_size=shape,
             device=self.device,
             _run_checks=False,
         )
@@ -4287,7 +4287,10 @@ torch.Size([3, 2])
                 else:
                     self.set_(key, value)
             else:
-                self.set(key, value, inplace=inplace, **kwargs)
+                if len(subkey):
+                    self.set((key, *subkey), value, inplace=inplace, **kwargs)
+                else:
+                    self.set(key, value, inplace=inplace, **kwargs)
         return self
 
     def update_(
@@ -4995,7 +4998,11 @@ class LazyStackedTensorDict(TensorDictBase):
         ):
             out = self.get(item[0])
             if len(item) > 1:
-                return out[item[1:]]
+                if not isinstance(out, TensorDictBase):
+                    raise RuntimeError(
+                        f"Got a {type(out)} when a TensorDictBase instance was expected."
+                    )
+                return out.get(item[1:])
             else:
                 return out
         elif isinstance(item, Tensor) and item.dtype == torch.bool:
@@ -5177,7 +5184,10 @@ class LazyStackedTensorDict(TensorDictBase):
                         else:
                             t.update({key: _value})
                     continue
-            self.set(key, value, **kwargs)
+            if len(subkey):
+                self.set((key, *subkey), value, **kwargs)
+            else:
+                self.set(key, value, **kwargs)
         self._update_valid_keys()
         return self
 
