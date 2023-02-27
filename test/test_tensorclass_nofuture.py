@@ -435,15 +435,9 @@ def test_setitem_other_cls():
 
 
 @pytest.mark.parametrize(
-    "val2broadcast",
-    [
-        0,
-        torch.zeros(4, 5),
-        TensorDict({"X": torch.zeros(2, 4, 5)}, batch_size=[2, 4]),
-        MemmapTensor.from_tensor(torch.zeros(4, 5)),
-    ],
+    "broadcast_type", ["scalar", "tensor", "tensordict", "maptensor", ],
 )
-def test_setitem_broadcast(val2broadcast):
+def test_setitem_broadcast(broadcast_type):
     @tensorclass
     class MyDataNested:
         X: torch.Tensor
@@ -456,8 +450,16 @@ def test_setitem_broadcast(val2broadcast):
     data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
     data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
 
-    # scalar
-    data[:2] = val2broadcast
+    if broadcast_type == "scalar":
+        val = 0
+    elif broadcast_type == "tensor":
+        val = torch.zeros(4, 5)
+    elif broadcast_type == "tensordict":
+        val = TensorDict({"X": torch.zeros(2, 4, 5)}, batch_size=[2, 4])
+    elif broadcast_type == "maptensor":
+        val = MemmapTensor.from_tensor(torch.zeros(4, 5))
+
+    data[:2] = val
     assert (data[:2] == 0).all()
     assert (data.X[:2] == 0).all()
     assert (data.y.X[:2] == 0).all()
