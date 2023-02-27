@@ -2143,7 +2143,6 @@ class TensorDictBase(Mapping, metaclass=abc.ABCMeta):
                         )
                     raise err
                 return
-        # else:
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
