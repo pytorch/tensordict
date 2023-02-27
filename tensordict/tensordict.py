@@ -392,9 +392,9 @@ class TensorDictBase(MutableMapping):
 
     def clear_device(self) -> TensorDictBase:
         """Clears the device of the tensordict.
-        
+
         Returns: self
-        
+
         """
         self._device = None
         return self
