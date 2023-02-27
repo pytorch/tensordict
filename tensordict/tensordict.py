@@ -2500,7 +2500,7 @@ class TensorDictBase(MutableMapping):
 
     def __setitem__(
         self,
-        index: INDEX_TYPING,
+        index: IndexType,
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
 
