@@ -435,7 +435,8 @@ def test_setitem_other_cls():
 
 
 @pytest.mark.parametrize(
-    "broadcast_type", ["scalar", "tensor", "tensordict", "maptensor"],
+    "broadcast_type",
+    ["scalar", "tensor", "tensordict", "maptensor"],
 )
 def test_setitem_broadcast(broadcast_type):
     @tensorclass
