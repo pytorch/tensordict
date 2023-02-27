@@ -390,8 +390,9 @@ class TensorDictBase(MutableMapping):
     def device(self, value: DeviceType) -> None:
         raise NotImplementedError
 
-    def clear_device(self) -> None:
+    def clear_device(self) -> TensorDictBase:
         self._device = None
+        return self
 
     def is_shared(self) -> bool:
         """Checks if tensordict is in shared memory.
