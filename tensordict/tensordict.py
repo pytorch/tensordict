@@ -1131,7 +1131,10 @@ class TensorDictBase(MutableMapping):
                     elif isinstance(value, (dict, TensorDictBase)):
                         target.update(value)
                         continue
-            self.set(key, value, inplace=inplace, **kwargs)
+            if len(subkey):
+                self.set((key, *subkey), value, inplace=inplace, **kwargs)
+            else:
+                self.set(key, value, inplace=inplace, **kwargs)
         return self
 
     def update_(
@@ -1350,12 +1353,12 @@ class TensorDictBase(MutableMapping):
             tensor_dims = len(value.shape)
             last_n_dims = tensor_dims - tensordict_dims
             if last_n_dims > 0:
-                d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+                d[key] = value.expand((*shape, *value.shape[-last_n_dims:]))
             else:
-                d[key] = value.expand(*shape)
+                d[key] = value.expand(shape)
         return TensorDict(
             source=d,
-            batch_size=[*shape],
+            batch_size=shape,
             device=self.device,
             _run_checks=False,
         )
@@ -3008,7 +3011,7 @@ class TensorDict(TensorDictBase):
         # if _run_checks:
         #     _nested_key_type_check(key)
 
-        if type(key) is tuple and len(key) == 1:
+        if isinstance(key, tuple) and len(key) == 1:
             key = key[0]
 
         if value is self._tensordict.get(key, None):
@@ -3017,7 +3020,7 @@ class TensorDict(TensorDictBase):
         if inplace and key in self.keys(True):
             return self.set_(key, value)
 
-        if type(key) is str:
+        if isinstance(key, str):
             if _process:
                 proc_value = self._process_input(
                     value,
@@ -3044,7 +3047,7 @@ class TensorDict(TensorDictBase):
         return self
 
     def del_(self, key: str) -> TensorDictBase:
-        if type(key) is tuple:
+        if isinstance(key, tuple):
             td, subkey = _get_leaf_tensordict(self, key)
             del td[subkey]
             return self
@@ -3147,7 +3150,7 @@ class TensorDict(TensorDictBase):
         idx: IndexType,
     ) -> TensorDictBase:
         _nested_key_type_check(key)
-        is_nested = type(key) is tuple
+        is_nested = isinstance(key, tuple)
         # do we need this?
         if not isinstance(value, _ACCEPTED_CLASSES):
             value = self._process_input(
@@ -3176,7 +3179,7 @@ class TensorDict(TensorDictBase):
         _nested_key_type_check(key)
 
         try:
-            if type(key) is tuple:
+            if isinstance(key, tuple):
                 if len(key) > 1:
                     first_lev = self.get(key[0])
                     if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
@@ -3381,13 +3384,14 @@ class TensorDict(TensorDictBase):
     ) -> TensorDictBase:
         # existing_keys = set(self.keys(include_nested=True))
         keys = {
-            key[0] if (type(key) is tuple) and len(key) == 1 else key for key in keys
+            key[0] if (isinstance(key, tuple)) and len(key) == 1 else key
+            for key in keys
         }
 
         nested_keys = defaultdict(list)
         for key in keys:
             _nested_key_type_check(key)
-            if type(key) is str:
+            if isinstance(key, str):
                 # ensure key is in the top level of the dict
                 nested_keys[key]
             elif len(key) == 1:
@@ -3470,7 +3474,7 @@ class _ErrorInteceptor:
 def _nested_keys_to_dict(keys: Iterator[NestedKey]) -> dict[str, Any]:
     nested_keys = {}
     for key in keys:
-        if type(key) is str:
+        if isinstance(key, str):
             nested_keys.setdefault(key, {})
         else:
             d = nested_keys
@@ -4077,7 +4081,7 @@ torch.Size([3, 2])
         inplace: bool = False,
         _run_checks: bool = True,
     ) -> TensorDictBase:
-        is_nested = type(key) is tuple
+        is_nested = isinstance(key, tuple)
         keys = self.keys(is_nested)
         if self.is_locked:
             if not inplace or key not in keys:
@@ -4138,7 +4142,7 @@ torch.Size([3, 2])
         tensor: dict[str, CompatibleType] | CompatibleType,
         no_check: bool = False,
     ) -> SubTensorDict:
-        is_nested = type(key) is tuple
+        is_nested = isinstance(key, tuple)
         if not no_check:
             tensor = self._process_input(
                 tensor, check_device=False, check_tensor_shape=False
@@ -4263,7 +4267,7 @@ torch.Size([3, 2])
                 value = value.clone()
             else:
                 value = tree_map(torch.clone, value)
-            if type(key) is tuple:
+            if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]
             else:
                 subkey = []
@@ -4284,7 +4288,10 @@ torch.Size([3, 2])
                 else:
                     self.set_(key, value)
             else:
-                self.set(key, value, inplace=inplace, **kwargs)
+                if len(subkey):
+                    self.set((key, *subkey), value, inplace=inplace, **kwargs)
+                else:
+                    self.set(key, value, inplace=inplace, **kwargs)
         return self
 
     def update_(
@@ -4660,7 +4667,7 @@ class LazyStackedTensorDict(TensorDictBase):
         proc_tensor = tensor.unbind(self.stack_dim)
         for td, _item in zip(self.tensordicts, proc_tensor):
             td.set(key, _item, **kwargs)
-        first_key = key if (type(key) is str) else key[0]
+        first_key = key if (isinstance(key, str)) else key[0]
         if key not in self._valid_keys:
             self._valid_keys = sorted([*self._valid_keys, first_key], key=str)
         return self
@@ -4738,9 +4745,9 @@ class LazyStackedTensorDict(TensorDictBase):
         # fairly easy to add support if we could add nested keys to valid_keys.
 
         # we can handle the case where the key is a tuple of length 1
-        if (type(key) is tuple) and len(key) == 1:
+        if (isinstance(key, tuple)) and len(key) == 1:
             key = key[0]
-        elif type(key) is tuple:
+        elif isinstance(key, tuple):
             tensordict, key = _get_leaf_tensordict(self, key)
             return tensordict[key]
 
@@ -4789,9 +4796,9 @@ class LazyStackedTensorDict(TensorDictBase):
         # fairly easy to add support if we could add nested keys to valid_keys.
 
         # we can handle the case where the key is a tuple of length 1
-        if (type(key) is tuple) and len(key) == 1:
+        if (isinstance(key, tuple)) and len(key) == 1:
             key = key[0]
-        elif type(key) is tuple:
+        elif isinstance(key, tuple):
             tensordict, key = _get_leaf_tensordict(self, key)
             return tensordict.get_nestedtensor(key)
 
@@ -4992,7 +4999,11 @@ class LazyStackedTensorDict(TensorDictBase):
         ):
             out = self.get(item[0])
             if len(item) > 1:
-                return out[item[1:]]
+                if not isinstance(out, TensorDictBase):
+                    raise RuntimeError(
+                        f"Got a {type(out)} when a TensorDictBase instance was expected."
+                    )
+                return out.get(item[1:])
             else:
                 return out
         elif isinstance(item, Tensor) and item.dtype == torch.bool:
@@ -5154,7 +5165,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 value = value.clone()
             else:
                 value = tree_map(torch.clone, value)
-            if type(key) is tuple:
+            if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]
             else:
                 subkey = ()
@@ -5174,7 +5185,10 @@ class LazyStackedTensorDict(TensorDictBase):
                         else:
                             t.update({key: _value})
                     continue
-            self.set(key, value, **kwargs)
+            if len(subkey):
+                self.set((key, *subkey), value, **kwargs)
+            else:
+                self.set(key, value, **kwargs)
         self._update_valid_keys()
         return self
 
