@@ -98,6 +98,19 @@ torch.testing.assert_allclose(chunks[0]["a"], tensordict["a"][:, :-1])
 #    though we had replaced ``dim=-2`` with ``dim=tensordict.batch_dims - 2`` before
 #    calling.
 #
+# Unbind
+# ------
+# :meth:`TensorDict.unbind <tensordict.TensorDict.unbind>` is similar to
+# :meth:`torch.Tensor.unbind`, and conceptually similar to
+# :meth:`TensorDict.split <tensordict.TensorDict.split>`. It removes the specified
+# dimension and returns a ``tuple`` of all slices along that dimension.
+
+slices = tensordict.unbind(dim=1)
+assert len(slices) == 4
+assert all(s.batch_size == torch.Size([3]) for s in slices)
+torch.testing.assert_allclose(slices[0]["a"], tensordict["a"][:, 0])
+
+##############################################################################
 # Stacking and concatenating
 # --------------------------
 #
@@ -217,6 +230,20 @@ squeezed_tensordict = tensordict.squeeze()
 # only one of the singleton dimensions is dropped as the other
 # is not a batch dimension
 assert squeezed_tensordict["a"].shape == torch.Size([3, 1, 4])
+
+##############################################################################
+# Viewing a TensorDict
+# --------------------
+# :class:`~.TensorDict` also supports ``view``. This creates a ``_ViewedTensorDict``
+# which lazily creates views on its contents when they are accessed.
+
+tensordict = TensorDict({"a": torch.arange(12)}, [12])
+# no views are created at this step
+viewed_tensordict = tensordict.view((2, 3, 2))
+
+# the view of "a" is created on-demand when we access it
+assert viewed_tensordict["a"].shape == torch.Size([2, 3, 2])
+
 
 ##############################################################################
 # Permuting batch dimensions

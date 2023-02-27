@@ -98,6 +98,21 @@ assert tensordict.get("a") is a
 
 tensordict.rename_key("a", "b")
 assert tensordict.get("b") is a
+print(tensordict)
+
+###############################################################################
+# Updating multiple values
+# ------------------------
+# The :meth:`TensorDict.update <tensordict.TensorDict.update>` method can be used to
+# update a :class:`TensorDict`` with another one or with a ``dict``. Keys that already
+# exist are overwritten, and keys that do not already exist are created.
+
+tensordict = TensorDict({"a": torch.rand(10), "b": torch.rand(10)}, [10])
+tensordict.update(TensorDict({"a": torch.zeros(10), "c": torch.zeros(10)}, [10]))
+assert (tensordict["a"] == 0).all()
+assert (tensordict["b"] != 0).all()
+assert (tensordict["c"] == 0).all()
+print(tensordict)
 
 ##############################################################################
 # Nested values
