@@ -5119,6 +5119,26 @@ class LazyStackedTensorDict(TensorDictBase):
         self.lock()
         return self
 
+    def memmap_like(
+        self,
+        prefix: str | None = None,
+    ) -> TensorDictBase:
+        tds = []
+        if prefix is not None:
+            prefix = Path(prefix)
+            if not prefix.exists():
+                prefix.mkdir(exist_ok=True)
+            torch.save({"stack_dim": self.stack_dim}, prefix / "meta.pt")
+        for i, td in enumerate(self.tensordicts):
+            td_like = td.memmap_like(
+                prefix=(prefix / str(i)) if prefix is not None else None,
+            )
+            tds.append(td_like)
+        td_out = torch.stack(tds, self.stack_dim)
+        td_out._is_memmap = True
+        td_out.lock()
+        return td_out
+
     @classmethod
     def load_memmap(cls, prefix: str) -> LazyStackedTensorDict:
         prefix = Path(prefix)
