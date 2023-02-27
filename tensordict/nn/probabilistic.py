@@ -10,7 +10,7 @@ from textwrap import indent
 from typing import Any, Sequence
 
 import torch.nn as nn
-from tensordict.nn.common import _check_all_str, TensorDictModule
+from tensordict.nn.common import _check_all_nested, _check_all_str, TensorDictModule
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.nn.functional_modules import repopulate_module
 from tensordict.nn.sequence import TensorDictSequential
@@ -207,10 +207,11 @@ class ProbabilisticTensorDictModule(nn.Module):
             in_keys = {param_key: param_key for param_key in in_keys}
 
         self.out_keys = out_keys
-        _check_all_str(self.out_keys)
+        _check_all_nested(self.out_keys)
         self.in_keys = in_keys
+        # arguments must be strings
         _check_all_str(self.in_keys.keys())
-        _check_all_str(self.in_keys.values())
+        _check_all_nested(self.in_keys.values())
 
         self.default_interaction_mode = default_interaction_mode
         if isinstance(distribution_class, str):
