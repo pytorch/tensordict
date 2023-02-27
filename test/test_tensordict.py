@@ -1095,7 +1095,11 @@ class TestTensorDicts(TestTensorDictsBase):
         keys = set(td.keys())
         td.update({"x": torch.zeros(td.shape)}, clone=clone)
         assert set(td.keys()) == keys.union({"x"})
-        # now with nested
+        # now with nested: v1
+        td.update({("somenested", "z"): torch.randn(td.shape)})
+        assert td["somenested"].shape == td.shape
+        assert td["somenested", "z"].shape == td.shape
+        # now with nested: v2
         td["newnested"] = {"z": torch.zeros(td.shape)}
         keys = set(td.keys(True))
         assert ("newnested", "z") in keys
