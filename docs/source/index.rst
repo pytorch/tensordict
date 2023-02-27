@@ -34,6 +34,7 @@ Basics
 
    tutorials/tensordict_basics
    tutorials/tensordict_shapes
+   tutorials/tensordict_slicing
    tutorials/tensordict_keys
    tutorials/tensordict_preallocation
    tutorials/tensordict_memory
