@@ -125,6 +125,20 @@ tensordict.memmap_()
 print(tensordict)
 
 ##############################################################################
+# Alternatively one can use the
+# :meth:`TensorDict.memmap_like <tensordict.TensorDict.memmap_like>` method. This will
+# create a new :class:`~.TensorDict` of the same structure with :class:`~.MemmapTensor`
+# values, however it will not copy the contents of the original tensors to the
+# memory-mapped tensors. This allows you to create the memory-mapped
+# :class:`~.TensorDict` and then populate it slowly, and hence should generally be
+# preferred to ``memmap_``.
+
+tensordict = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
+mm_tensordict = tensordict.memmap_like()
+
+print(mm_tensordict["a"].contiguous())
+
+##############################################################################
 # By default the contents of the :class:`TensorDict` will be saved to a temporary
 # location on disk, however if you would like to control where they are saved you can
 # use the keyword argument ``prefix="/path/to/root"``.
