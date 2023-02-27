@@ -3,12 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 from numbers import Number
-from typing import Dict, Sequence, Tuple, Union
+from typing import Sequence
 
 import numpy as np
-import torch
 
+import torch
 from tensordict.nn.utils import mappings
 from torch import distributions as D, nn
 
@@ -60,7 +62,7 @@ class NormalParamWrapper(nn.Module):
         self.scale_mapping = scale_mapping
         self.scale_lb = scale_lb
 
-    def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, *tensors: torch.Tensor) -> tuple[torch.Tensor, ...]:
         net_output = self.operator(*tensors)
         others = ()
         if not isinstance(net_output, torch.Tensor):
@@ -111,7 +113,7 @@ class NormalParamExtractor(nn.Module):
         self.scale_mapping = scale_mapping
         self.scale_lb = scale_lb
 
-    def forward(self, *tensors: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, *tensors: torch.Tensor) -> tuple[torch.Tensor, ...]:
         tensor, *others = tensors
         loc, scale = tensor.chunk(2, -1)
         scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
@@ -132,16 +134,16 @@ class Delta(D.Distribution):
 
     """
 
-    arg_constraints: Dict = {}
+    arg_constraints: dict = {}
 
     def __init__(
         self,
         param: torch.Tensor,
         atol: float = 1e-6,
         rtol: float = 1e-6,
-        batch_shape: Union[torch.Size, Sequence[int]] = None,
-        event_shape: Union[torch.Size, Sequence[int]] = None,
-    ):
+        batch_shape: torch.Size | Sequence[int] | None = None,
+        event_shape: torch.Size | Sequence[int] | None = None,
+    ) -> None:
         if batch_shape is None:
             batch_shape = torch.Size([])
         if event_shape is None:
@@ -154,7 +156,7 @@ class Delta(D.Distribution):
             event_shape = param.shape[-1:]
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)
 
-    def update(self, param):
+    def update(self, param: torch.Tensor) -> None:
         self.param = param
 
     def _is_equal(self, value: torch.Tensor) -> torch.Tensor:
@@ -172,15 +174,21 @@ class Delta(D.Distribution):
         return out
 
     @torch.no_grad()
-    def sample(self, size=None) -> torch.Tensor:
-        if size is None:
-            size = torch.Size([])
-        return self.param.expand(*size, *self.param.shape)
+    def sample(
+        self,
+        sample_shape: torch.Size | Sequence[int] | None = None,
+    ) -> torch.Tensor:
+        if sample_shape is None:
+            sample_shape = torch.Size([])
+        return self.param.expand(*sample_shape, *self.param.shape)
 
-    def rsample(self, size=None) -> torch.Tensor:
-        if size is None:
-            size = torch.Size([])
-        return self.param.expand(*size, *self.param.shape)
+    def rsample(
+        self,
+        sample_shape: torch.Size | Sequence[int] | None = None,
+    ) -> torch.Tensor:
+        if sample_shape is None:
+            sample_shape = torch.Size([])
+        return self.param.expand(*sample_shape, *self.param.shape)
 
     @property
     def mode(self) -> torch.Tensor:

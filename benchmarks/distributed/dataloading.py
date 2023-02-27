@@ -25,6 +25,7 @@ from pathlib import Path
 import tenacity
 import torch
 import tqdm
+
 from tensordict import MemmapTensor
 from tensordict.prototype import tensorclass
 from torch import multiprocessing as mp, nn
@@ -482,7 +483,6 @@ def func(rank, world_size, args, train_data_tc, single_gpu, trainer_transform):
     # access GPU
     torch.randn(1, device="cuda:0")
     if rank == 0:
-
         trainer = DummyTrainerNode(
             world_size, single_gpu, local_transform=not trainer_transform
         )

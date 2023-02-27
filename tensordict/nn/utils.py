@@ -3,7 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Callable, Union
+from __future__ import annotations
+
+from typing import Callable
 
 import torch
 from torch import nn
@@ -11,7 +13,7 @@ from torch import nn
 __all__ = ["mappings", "inv_softplus", "biased_softplus"]
 
 
-def inv_softplus(bias: Union[float, torch.Tensor]) -> Union[float, torch.Tensor]:
+def inv_softplus(bias: float | torch.Tensor) -> float | torch.Tensor:
     """Inverse softplus function.
 
     Args:
@@ -40,7 +42,7 @@ class biased_softplus(nn.Module):
             default: 0.1
     """
 
-    def __init__(self, bias: float, min_val: float = 0.01):
+    def __init__(self, bias: float, min_val: float = 0.01) -> None:
         super().__init__()
         self.bias = inv_softplus(bias - min_val)
         self.min_val = min_val
@@ -65,7 +67,7 @@ def mappings(key: str) -> Callable:
          a Callable
 
     """
-    _mappings = {
+    _mappings: dict[str, Callable] = {
         "softplus": torch.nn.functional.softplus,
         "exp": torch.exp,
         "relu": torch.relu,

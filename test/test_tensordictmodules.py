@@ -7,6 +7,7 @@ import argparse
 
 import pytest
 import torch
+
 from tensordict import TensorDict
 from tensordict.nn import (
     probabilistic as nn_probabilistic,
@@ -90,7 +91,7 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-    @pytest.mark.parametrize("out_keys", [["low"], ["low1"]])
+    @pytest.mark.parametrize("out_keys", [["low"], ["low1"], [("stuff", "low1")]])
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize("max_dist", [1.0, 2.0])
     @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
@@ -112,10 +113,8 @@ class TestTDModule:
         }
         if out_keys == ["low"]:
             dist_in_keys = ["low"]
-        elif out_keys == ["low1"]:
-            dist_in_keys = {"low": "low1"}
         else:
-            raise NotImplementedError
+            dist_in_keys = {"low": out_keys[0]}
 
         prob_module = ProbabilisticTensorDictModule(
             in_keys=dist_in_keys, out_keys=["out"], **kwargs
@@ -129,7 +128,14 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-    @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
+    @pytest.mark.parametrize(
+        "out_keys",
+        [
+            ["loc", "scale"],
+            ["loc_1", "scale_1"],
+            [("params_td", "loc_1"), ("scale_1",)],
+        ],
+    )
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
     def test_stateful_probabilistic(self, lazy, interaction_mode, out_keys):
@@ -149,10 +155,8 @@ class TestTDModule:
         kwargs = {"distribution_class": Normal}
         if out_keys == ["loc", "scale"]:
             dist_in_keys = ["loc", "scale"]
-        elif out_keys == ["loc_1", "scale_1"]:
-            dist_in_keys = {"loc": "loc_1", "scale": "scale_1"}
         else:
-            raise NotImplementedError
+            dist_in_keys = {"loc": out_keys[0], "scale": out_keys[1]}
 
         prob_module = ProbabilisticTensorDictModule(
             in_keys=dist_in_keys, out_keys=["out"], **kwargs

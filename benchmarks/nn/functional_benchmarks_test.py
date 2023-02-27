@@ -2,9 +2,9 @@
 from copy import deepcopy
 
 import pytest
-
 import torch
 from functorch import make_functional_with_buffers as functorch_make_functional
+
 from tensordict.nn.functional_modules import make_functional
 from torch import nn
 

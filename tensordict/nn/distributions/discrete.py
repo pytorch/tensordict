@@ -3,7 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Optional, Sequence, Union
+from __future__ import annotations
+
+from typing import Sequence
 
 import torch
 from torch import distributions as D
@@ -14,8 +16,8 @@ __all__ = [
 
 
 def _treat_categorical_params(
-    params: Optional[torch.Tensor] = None,
-) -> Optional[torch.Tensor]:
+    params: torch.Tensor | None = None,
+) -> torch.Tensor | None:
     if params is None:
         return None
     if params.shape[-1] == 1:
@@ -43,8 +45,8 @@ class OneHotCategorical(D.Categorical):
 
     def __init__(
         self,
-        logits: Optional[torch.Tensor] = None,
-        probs: Optional[torch.Tensor] = None,
+        logits: torch.Tensor | None = None,
+        probs: torch.Tensor | None = None,
         **kwargs,
     ) -> None:
         logits = _treat_categorical_params(logits)
@@ -62,7 +64,8 @@ class OneHotCategorical(D.Categorical):
             return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
 
     def sample(
-        self, sample_shape: Optional[Union[torch.Size, Sequence]] = None
+        self,
+        sample_shape: torch.Size | Sequence[int] | None = None,
     ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
@@ -70,7 +73,10 @@ class OneHotCategorical(D.Categorical):
         out = torch.nn.functional.one_hot(out, self.logits.shape[-1]).to(torch.long)
         return out
 
-    def rsample(self, sample_shape: Union[torch.Size, Sequence] = None) -> torch.Tensor:
+    def rsample(
+        self,
+        sample_shape: torch.Size | Sequence[int] | None = None,
+    ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
         d = D.relaxed_categorical.RelaxedOneHotCategorical(

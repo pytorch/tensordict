@@ -6,23 +6,24 @@
 from __future__ import annotations
 
 import math
-
 import time
-import typing
 from functools import wraps
 from numbers import Number
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Sequence, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
 import torch
 from torch import Tensor
+
+if TYPE_CHECKING:
+    from tensordict.memmap import MemmapTensor
+    from tensordict.tensordict import TensorDictBase
 
 try:
     try:
         from functorch._C import get_unwrapped, is_batchedtensor
     except ImportError:
         from torch._C._functorch import get_unwrapped, is_batchedtensor
-
 except ImportError:
     pass
 
@@ -38,17 +39,13 @@ except ImportError as err:
 
     TORCHREC_ERR = str(err)
 
-INDEX_TYPING = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
-DEVICE_TYPING = Union[torch.device, str, int]
-if hasattr(typing, "get_args"):
-    DEVICE_TYPING_ARGS = typing.get_args(DEVICE_TYPING)
-else:
-    DEVICE_TYPING_ARGS = (torch.device, str, int)
 
-NESTED_KEY = Union[str, Tuple[str, ...]]
+IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
+DeviceType = Union[torch.device, str, int]
+NestedKey = Union[str, Tuple[str, ...]]
 
 
-def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
+def _sub_index(tensor: torch.Tensor, idx: IndexType) -> torch.Tensor:
     """Allows indexing of tensors with nested tuples.
 
      >>> sub_tensor1 = tensor[tuple1][tuple2]
@@ -67,7 +64,7 @@ def _sub_index(tensor: torch.Tensor, idx: INDEX_TYPING) -> torch.Tensor:
     return tensor[idx]
 
 
-def _getitem_batch_size(shape: torch.Size, items: INDEX_TYPING) -> torch.Size:
+def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
     """Given an input shape and an index, returns the size of the resulting indexed tensor.
 
     This function is aimed to be used when indexing is an
@@ -180,7 +177,9 @@ def _getitem_batch_size(shape: torch.Size, items: INDEX_TYPING) -> torch.Size:
     return torch.Size(bs)
 
 
-def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
+def convert_ellipsis_to_idx(
+    idx: tuple[int | Ellipsis] | Ellipsis, batch_size: list[int]
+) -> tuple[int, ...]:
     """Given an index containing an ellipsis or just an ellipsis, converts any ellipsis to slice(None).
 
     Example:
@@ -235,14 +234,11 @@ def convert_ellipsis_to_idx(idx: Union[Tuple, Ellipsis], batch_size: List[int]):
     return new_index
 
 
-def _copy(self: List[int]):
-    out: List[int] = []
-    for elem in self:
-        out.append(elem)
-    return out
+def _copy(self: list[int]) -> list[int]:
+    return list(self)
 
 
-def infer_size_impl(shape: List[int], numel: int) -> List[int]:
+def infer_size_impl(shape: list[int], numel: int) -> list[int]:
     """Infers the shape of an expanded tensor whose number of elements is indicated by :obj:`numel`.
 
     Copied from pytorch for compatibility issues (See #386).
@@ -251,7 +247,7 @@ def infer_size_impl(shape: List[int], numel: int) -> List[int]:
 
     """
     newsize = 1
-    infer_dim: Optional[int] = None
+    infer_dim: int | None = None
     for dim in range(len(shape)):
         if shape[dim] == -1:
             if infer_dim is not None:
@@ -272,7 +268,7 @@ def infer_size_impl(shape: List[int], numel: int) -> List[int]:
     return out
 
 
-def _unwrap_value(value):
+def _unwrap_value(value: torch.Tensor) -> torch.Tensor:
     # batch_dims = value.ndimension()
     if not isinstance(value, torch.Tensor):
         out = value
@@ -286,12 +282,12 @@ def _unwrap_value(value):
     # return out, batch_size
 
 
-if hasattr(math, "prod"):
+if hasattr(math, "prod"):  # Python 3.8+
 
     def prod(sequence):
         """General prod function, that generalised usage across math and np.
 
-        Created for multiple python versions compatibility).
+        Created for multiple python versions compatibility.
 
         """
         return math.prod(sequence)
@@ -301,16 +297,16 @@ else:
     def prod(sequence):
         """General prod function, that generalised usage across math and np.
 
-        Created for multiple python versions compatibility).
+        Created for multiple python versions compatibility.
 
         """
         return int(np.prod(sequence))
 
 
 def expand_as_right(
-    tensor: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],  # noqa: F821
-    dest: Union[torch.Tensor, "MemmapTensor", "TensorDictBase"],  # noqa: F821
-):
+    tensor: torch.Tensor | MemmapTensor | TensorDictBase,
+    dest: torch.Tensor | MemmapTensor | TensorDictBase,
+) -> torch.Tensor | MemmapTensor | TensorDictBase:
     """Expand a tensor on the right to match another tensor shape.
 
     Args:
@@ -345,7 +341,7 @@ def expand_as_right(
 
 
 def expand_right(
-    tensor: Union[torch.Tensor, "MemmapTensor"], shape: Sequence[int]  # noqa: F821
+    tensor: torch.Tensor | MemmapTensor, shape: Sequence[int]
 ) -> torch.Tensor:
     """Expand a tensor on the right to match a desired shape.
 
@@ -370,7 +366,7 @@ def expand_right(
     return tensor_expand
 
 
-numpy_to_torch_dtype_dict = {
+NUMPY_TO_TORCH_DTYPE_DICT = {
     np.dtype("bool"): torch.bool,
     np.dtype("uint8"): torch.uint8,
     np.dtype("int8"): torch.int8,
@@ -383,12 +379,12 @@ numpy_to_torch_dtype_dict = {
     np.dtype("complex64"): torch.complex64,
     np.dtype("complex128"): torch.complex128,
 }
-torch_to_numpy_dtype_dict = {
-    value: key for key, value in numpy_to_torch_dtype_dict.items()
+TORCH_TO_NUMPY_DTYPE_DICT = {
+    value: key for key, value in NUMPY_TO_TORCH_DTYPE_DICT.items()
 }
 
 
-def _nested_key_type_check(key):
+def _nested_key_type_check(key: NestedKey) -> None:
     msg = "Expected key to be a string or non-empty tuple of strings, but found {}."
     if type(key) is str:
         return
@@ -401,15 +397,15 @@ def _nested_key_type_check(key):
                 raise TypeError(msg.format(type(subkey)))
 
 
-def _normalize_key(key: NESTED_KEY) -> NESTED_KEY:
+def _normalize_key(key: NestedKey) -> NestedKey:
     # normalises tuples of length one to their string contents
     return key if not isinstance(key, tuple) or len(key) > 1 else key[0]
 
 
 def index_keyedjaggedtensor(
-    kjt: "torchrec.KeyedJaggedTensor",  # noqa
-    index: Union[slice, range, list, torch.Tensor, np.ndarray],  # noqa
-):
+    kjt: KeyedJaggedTensor,
+    index: slice | range | list | torch.Tensor | np.ndarray,
+) -> KeyedJaggedTensor:
     """Indexes a KeyedJaggedTensor along the batch dimension.
 
     Args:
@@ -468,10 +464,10 @@ def index_keyedjaggedtensor(
 
 
 def setitem_keyedjaggedtensor(
-    orig_tensor: "torchrec.KeyedJaggedTensor",  # noqa
-    index: Union[slice, range, list, torch.Tensor, np.ndarray],
-    other: "torchrec.KeyedJaggedTensor",  # noqa
-):
+    orig_tensor: KeyedJaggedTensor,
+    index: slice | range | list | torch.Tensor | np.ndarray,
+    other: KeyedJaggedTensor,
+) -> KeyedJaggedTensor:
     """Equivalent of `tensor[index] = other` for KeyedJaggedTensors indexed along the batch dimension.
 
     Args:
@@ -592,7 +588,7 @@ def setitem_keyedjaggedtensor(
     return orig_tensor
 
 
-def _ndimension(tensor: torch.Tensor):
+def _ndimension(tensor: torch.Tensor) -> int:
     if isinstance(tensor, torch.Tensor):
         return tensor.ndimension()
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -601,7 +597,7 @@ def _ndimension(tensor: torch.Tensor):
         return tensor.ndimension()
 
 
-def _shape(tensor: torch.Tensor):
+def _shape(tensor: torch.Tensor) -> torch.Size:
     try:
         return tensor.shape
     except AttributeError as err:
@@ -610,7 +606,7 @@ def _shape(tensor: torch.Tensor):
         raise err
 
 
-def _device(tensor: torch.Tensor):
+def _device(tensor: torch.Tensor) -> torch.device:
     if isinstance(tensor, torch.Tensor):
         return tensor.device
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -619,7 +615,7 @@ def _device(tensor: torch.Tensor):
         return tensor.device
 
 
-def _is_shared(tensor: torch.Tensor):
+def _is_shared(tensor: torch.Tensor) -> bool:
     if isinstance(tensor, torch.Tensor):
         return tensor.is_shared()
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -628,7 +624,7 @@ def _is_shared(tensor: torch.Tensor):
         return tensor.is_shared()
 
 
-def _is_meta(tensor: torch.Tensor):
+def _is_meta(tensor: torch.Tensor) -> bool:
     if isinstance(tensor, torch.Tensor):
         return tensor.is_meta
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -637,7 +633,7 @@ def _is_meta(tensor: torch.Tensor):
         return tensor.is_meta
 
 
-def _dtype(tensor: torch.Tensor):
+def _dtype(tensor: torch.Tensor) -> torch.dtype:
     if isinstance(tensor, torch.Tensor):
         return tensor.dtype
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -646,7 +642,7 @@ def _dtype(tensor: torch.Tensor):
         return tensor.dtype
 
 
-def _get_item(tensor: torch.Tensor, index):
+def _get_item(tensor: torch.Tensor, index: IndexType) -> torch.Tensor:
     if isinstance(tensor, torch.Tensor):
         return tensor[index]
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -655,7 +651,9 @@ def _get_item(tensor: torch.Tensor, index):
         return tensor[index]
 
 
-def _set_item(tensor: torch.Tensor, value, index):
+def _set_item(
+    tensor: torch.Tensor, index: IndexType, value: torch.Tensor
+) -> torch.Tensor:
     if isinstance(tensor, torch.Tensor):
         tensor[index] = value
         return tensor
@@ -667,7 +665,7 @@ def _set_item(tensor: torch.Tensor, value, index):
         return tensor
 
 
-def _requires_grad(tensor: torch.Tensor):
+def _requires_grad(tensor: torch.Tensor) -> bool:
     if isinstance(tensor, torch.Tensor):
         return tensor.requires_grad
     elif isinstance(tensor, KeyedJaggedTensor):
@@ -681,7 +679,7 @@ class timeit:
 
     _REG = {}
 
-    def __init__(self, name):
+    def __init__(self, name) -> None:
         self.name = name
 
     def __call__(self, fn):
@@ -723,3 +721,24 @@ class timeit:
     def erase():
         for k in timeit._REG:
             timeit._REG[k] = [0.0, 0.0, 0]
+
+
+def int_generator(seed):
+    """A pseudo-random chaing generator.
+
+    To be used to produce deterministic integer sequences
+
+    Examples:
+        >>> for _ in range(2):
+        ...     init_int = 10
+        ...     for _ in range(10):
+        ...        init_int = int_generator(init_int)
+        ...        print(init_int, end=", ")
+        ...     print("")
+        6756, 1717, 4410, 9740, 9611, 9716, 5397, 7745, 4521, 7523,
+        6756, 1717, 4410, 9740, 9611, 9716, 5397, 7745, 4521, 7523,
+    """
+    max_seed_val = 10_000
+    rng = np.random.default_rng(seed)
+    seed = int.from_bytes(rng.bytes(8), "big")
+    return seed % max_seed_val

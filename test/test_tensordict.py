@@ -12,6 +12,7 @@ import pytest
 import torch
 import torchsnapshot
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
+
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
     _stack as stack_td,
@@ -722,6 +723,26 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td.device.type == "cuda" or not td.is_shared()
         assert not td.is_memmap()
 
+    def test_sorted_keys(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sorted_keys = td.sorted_keys
+        i = -1
+        for i, (key1, key2) in enumerate(zip(sorted_keys, td.keys())):  # noqa: B007
+            assert key1 == key2
+        assert i == len(td.keys()) - 1
+        if td.is_locked:
+            assert td._sorted_keys is not None
+            td.unlock()
+            assert td._sorted_keys is None
+        else:
+            assert td._sorted_keys is None
+            td.lock()
+            _ = td.sorted_keys
+            assert td._sorted_keys is not None
+            td.unlock()
+            assert td._sorted_keys is None
+
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -1074,7 +1095,14 @@ class TestTensorDicts(TestTensorDictsBase):
         keys = set(td.keys())
         td.update({"x": torch.zeros(td.shape)}, clone=clone)
         assert set(td.keys()) == keys.union({"x"})
-        # now with nested
+        # now with nested: using tuples for keys
+        td.update({("somenested", "z"): torch.zeros(td.shape)})
+        assert td["somenested"].shape == td.shape
+        assert td["somenested", "z"].shape == td.shape
+        td.update({("somenested", "zz"): torch.zeros(td.shape)})
+        assert td["somenested"].shape == td.shape
+        assert td["somenested", "zz"].shape == td.shape
+        # now with nested: using nested dicts
         td["newnested"] = {"z": torch.zeros(td.shape)}
         keys = set(td.keys(True))
         assert ("newnested", "z") in keys
@@ -1852,22 +1880,21 @@ class TestTensorDicts(TestTensorDictsBase):
                     for key, value in td2.items(include_nested=True, leaves_only=True)
                 )
 
-    def test_set_default_missing_key(self, td_name, device):
+    def test_setdefault_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock()
         expected = torch.ones_like(td.get("a"))
-        inserted = td.set_default("z", expected, _run_checks=True)
+        inserted = td.setdefault("z", expected, _run_checks=True)
         assert (inserted == expected).all()
 
-    def test_set_default_existing_key(self, td_name, device):
+    def test_setdefault_existing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock()
         expected = td.get("a")
-        inserted = td.set_default("a", torch.ones_like(td.get("b")))
+        inserted = td.setdefault("a", torch.ones_like(td.get("b")))
         assert (inserted == expected).all()
 
     def test_setdefault_nested(self, td_name, device):
-
         td = getattr(self, td_name)(device)
         td.unlock()
 
@@ -1891,12 +1918,10 @@ class TestTensorDicts(TestTensorDictsBase):
             td.set("a", sub_tensordict)
 
         # if key exists we return the existing value
-        torch.testing.assert_close(td.set_default(("a", "b", "c"), tensor2), tensor)
+        torch.testing.assert_close(td.setdefault(("a", "b", "c"), tensor2), tensor)
 
         if not td_name == "stacked_td":
-            torch.testing.assert_close(
-                td.set_default(("a", "b", "d"), tensor2), tensor2
-            )
+            torch.testing.assert_close(td.setdefault(("a", "b", "d"), tensor2), tensor2)
             torch.testing.assert_close(td.get(("a", "b", "d")), tensor2)
 
     @pytest.mark.parametrize("performer", ["torch", "tensordict"])
@@ -1910,7 +1935,6 @@ class TestTensorDicts(TestTensorDictsBase):
             # split_sizes to be [2, 2, ..., 2, 1] or [2, 2, ..., 2]
             split_sizes = [2] * rep + [1] * remainder
             for test_split_size in (2, split_sizes):
-
                 if performer == "torch":
                     tds = torch.split(td, test_split_size, dim)
                 elif performer == "tensordict":
@@ -2879,9 +2903,9 @@ def test_setdefault_nested():
     tensordict = TensorDict({"a": sub_tensordict}, [4])
 
     # if key exists we return the existing value
-    assert tensordict.set_default(("a", "b", "c"), tensor2) is tensor
+    assert tensordict.setdefault(("a", "b", "c"), tensor2) is tensor
 
-    assert tensordict.set_default(("a", "b", "d"), tensor2) is tensor2
+    assert tensordict.setdefault(("a", "b", "d"), tensor2) is tensor2
     assert (tensordict["a", "b", "d"] == 1).all()
     assert tensordict.get(("a", "b", "d")) is tensor2
 

@@ -5,7 +5,8 @@
 import math
 
 import numpy as np
-import torch.cuda
+import torch
+
 from tensordict import TensorDict
 from tensordict.tensordict import _stack as stack_td
 

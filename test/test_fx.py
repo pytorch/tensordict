@@ -1,5 +1,9 @@
+import argparse
+
+import pytest
 import torch
 import torch.nn as nn
+
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.prototype.fx import symbolic_trace
@@ -130,3 +134,8 @@ def test_nested_tensordictsequential_trace_consistency():
 
     assert (module_out["x"] == graph_module_out["x"]).all()
     assert (module_out["probabilities"] == graph_module_out["probabilities"]).all()
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
