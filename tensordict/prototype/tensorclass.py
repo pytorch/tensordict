@@ -22,7 +22,12 @@ from typing import Any, Callable, Sequence, TypeVar, Union
 import tensordict as tensordict_lib
 
 import torch
-from tensordict.tensordict import get_repr, is_tensordict, TensorDict, TensorDictBase
+from tensordict.tensordict import (
+    get_repr,
+    is_tensor_collection,
+    TensorDict,
+    TensorDictBase,
+)
 from tensordict.utils import DeviceType, NestedKey
 from torch import Tensor
 
@@ -872,7 +877,7 @@ def __eq__(self, other: object) -> bool:
         >>> assert not (c1 == c2.apply(lambda x: x+1)).all()
 
     """
-    if not is_tensordict(other) and not isinstance(
+    if not is_tensor_collection(other) and not isinstance(
         other, (dict, numbers.Number, Tensor)
     ):
         return False
@@ -931,7 +936,7 @@ def __ne__(self, other: object) -> bool:
         >>> assert (c1 != c2).all()
 
     """
-    if not is_tensordict(other) and not isinstance(
+    if not is_tensor_collection(other) and not isinstance(
         other, (dict, numbers.Number, Tensor)
     ):
         return True
@@ -1164,7 +1169,7 @@ def _single_td_field_as_str(key, item, tensordict):
         String representation of a key-value pair
 
     """
-    if is_tensordict(type(item)):
+    if is_tensor_collection(type(item)):
         return f"{key}={repr(tensordict[key])}"
     return f"{key}={get_repr(item)}"
 
@@ -1199,7 +1204,7 @@ def _all_non_td_fields_as_str(src_dict) -> list:
     """
     result = []
     for key, val in src_dict.items():
-        if not is_tensordict(val):
+        if not is_tensor_collection(val):
             result.append(f"{key}={repr(val)}")
 
     return result

@@ -110,7 +110,7 @@ if _has_torchrec:
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
 
 
-def is_tensordict(datatype: type | Any) -> bool:
+def is_tensor_collection(datatype: type | Any) -> bool:
     """Checks if a data object or a type is a tensor container from the tensordict lib.
 
     Returns:
@@ -118,14 +118,14 @@ def is_tensordict(datatype: type | Any) -> bool:
         ``False`` otherwise.
 
     Examples:
-        >>> is_tensordict(TensorDictBase)  # True
-        >>> is_tensordict(TensorDict({}, []))  # True
+        >>> is_tensor_collection(TensorDictBase)  # True
+        >>> is_tensor_collection(TensorDict({}, []))  # True
         >>> @tensorclass
         ... class MyClass:
         ...     pass
         ...
-        >>> is_tensordict(MyClass)  # True
-        >>> is_tensordict(MyClass(batch_size=[]))  # True
+        >>> is_tensor_collection(MyClass)  # True
+        >>> is_tensor_collection(MyClass(batch_size=[]))  # True
 
     """
     from tensordict.prototype import is_tensorclass
@@ -183,7 +183,7 @@ class _TensorDictKeysView:
             if self.leaves_only:
                 for key in self._keys():
                     target_class = self.tensordict.entry_class(key)
-                    if is_tensordict(target_class):
+                    if is_tensor_collection(target_class):
                         continue
                     yield key
             else:
@@ -199,7 +199,7 @@ class _TensorDictKeysView:
         for key, value in items_iter:
             full_key = self._combine_keys(prefix, key)
             if (
-                is_tensordict(value)
+                is_tensor_collection(value)
                 or isinstance(value, (KeyedJaggedTensor,))
                 and self.include_nested
             ):
@@ -210,7 +210,7 @@ class _TensorDictKeysView:
                     )
                 )
                 yield from subkeys
-            if not (is_tensordict(value) and self.leaves_only):
+            if not (is_tensor_collection(value) and self.leaves_only):
                 yield full_key
 
     def _combine_keys(self, prefix: str | None, key: NestedKey) -> NestedKey:
@@ -249,7 +249,7 @@ class _TensorDictKeysView:
         if type(key) is str:
             if key in self._keys():
                 if self.leaves_only:
-                    return not is_tensordict(self.tensordict.entry_class(key))
+                    return not is_tensor_collection(self.tensordict.entry_class(key))
                 return True
             return False
 
@@ -262,7 +262,9 @@ class _TensorDictKeysView:
                     is_tensor = entry_type is Tensor
                     is_kjt = not is_tensor and entry_type is KeyedJaggedTensor
                     _is_tensordict = (
-                        not is_tensor and not is_kjt and is_tensordict(entry_type)
+                        not is_tensor
+                        and not is_kjt
+                        and is_tensor_collection(entry_type)
                     )
 
                     # TODO: SavedTensorDict currently doesn't support nested membership checks
@@ -362,7 +364,7 @@ class TensorDictBase(MutableMapping):
         if not isinstance(new_batch_size, torch.Size):
             new_batch_size = torch.Size(new_batch_size)
         for key in self.keys():
-            if is_tensordict(self.entry_class(key)):
+            if is_tensor_collection(self.entry_class(key)):
                 tensordict = self.get(key)
                 if len(tensordict.batch_size) < len(new_batch_size):
                     # document as edge case
@@ -443,7 +445,7 @@ class TensorDictBase(MutableMapping):
     def state_dict(self) -> OrderedDict[str, Any]:
         out = collections.OrderedDict()
         for key, item in self.apply(memmap_tensor_as_tensor).items():
-            out[key] = item if not is_tensordict(item) else item.state_dict()
+            out[key] = item if not is_tensor_collection(item) else item.state_dict()
         if "__batch_size" in out:
             raise KeyError(
                 "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
@@ -707,7 +709,7 @@ class TensorDictBase(MutableMapping):
             value = self.get(key)
             if isinstance(value, Tensor):
                 pass
-            elif is_tensordict(value):
+            elif is_tensor_collection(value):
                 _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand)
                 continue
             elif isinstance(value, MemmapTensor):
@@ -746,7 +748,7 @@ class TensorDictBase(MutableMapping):
             value = self.get(key)
             if isinstance(value, Tensor):
                 pass
-            elif is_tensordict(value):
+            elif is_tensor_collection(value):
                 _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
                 continue
             elif isinstance(value, MemmapTensor):
@@ -855,7 +857,7 @@ class TensorDictBase(MutableMapping):
             _futures = []
         for key in self.sorted_keys:
             value = self.get(key)
-            if is_tensordict(value):
+            if is_tensor_collection(value):
                 _tag = value._isend(
                     dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures
                 )
@@ -925,7 +927,7 @@ class TensorDictBase(MutableMapping):
 
         for key in self.sorted_keys:
             value = self.get(key)
-            if is_tensordict(value):
+            if is_tensor_collection(value):
                 _tag, _future_list = value._irecv(
                     src,
                     _tag=_tag,
@@ -1099,7 +1101,7 @@ class TensorDictBase(MutableMapping):
             out.unlock()
         for key, item in self.items():
             _others = [_other[key] for _other in others]
-            if is_tensordict(item):
+            if is_tensor_collection(item):
                 item_trsf = item.apply(
                     fn,
                     *_others,
@@ -1153,12 +1155,12 @@ class TensorDictBase(MutableMapping):
             # the key must be a string by now. Let's check if it is present
             if key in keys:
                 target_type = self.entry_class(key)
-                if is_tensordict(target_type):
+                if is_tensor_collection(target_type):
                     target = self.get(key)
                     if len(subkey):
                         target.update({subkey: value})
                         continue
-                    elif isinstance(value, (dict,)) or is_tensordict(value):
+                    elif isinstance(value, (dict,)) or is_tensor_collection(value):
                         target.update(value)
                         continue
             if len(subkey):
@@ -1282,7 +1284,7 @@ class TensorDictBase(MutableMapping):
         if check_tensor_shape and _shape(tensor)[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
             if (
-                is_tensordict(tensor)
+                is_tensor_collection(tensor)
                 and tensor.batch_size[: self.batch_dims] != self.batch_size
             ):
                 tensor = tensor.clone(recurse=False)
@@ -1414,7 +1416,7 @@ class TensorDictBase(MutableMapping):
 
         if is_tensorclass(other):
             return other != self
-        if isinstance(other, (dict,)) or is_tensordict(other):
+        if isinstance(other, (dict,)) or is_tensor_collection(other):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -1446,7 +1448,7 @@ class TensorDictBase(MutableMapping):
 
         if is_tensorclass(other):
             return other == self
-        if isinstance(other, (dict,)) or is_tensordict(other):
+        if isinstance(other, (dict,)) or is_tensor_collection(other):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -1632,7 +1634,7 @@ class TensorDictBase(MutableMapping):
             )
         tensordict = TensorDict({}, self.batch_size, device=self.device)
         for key, value in self.items():
-            if is_tensordict(value):
+            if is_tensor_collection(value):
                 if prefix is not None:
                     # ensure subdirectory exists
                     (prefix / key).mkdir(exist_ok=True)
@@ -1700,7 +1702,7 @@ class TensorDictBase(MutableMapping):
         return TensorDict(
             {
                 key: value.clone()
-                if not is_tensordict(value)
+                if not is_tensor_collection(value)
                 else value.to_tensordict()
                 for key, value in self.items()
             },
@@ -1933,7 +1935,7 @@ class TensorDictBase(MutableMapping):
     def to_dict(self) -> dict[str, Any]:
         """Returns a dictionary with key-value pairs matching those of the tensordict."""
         return {
-            key: value.to_dict() if is_tensordict(value) else value
+            key: value.to_dict() if is_tensor_collection(value) else value
             for key, value in self.items()
         }
 
@@ -2351,7 +2353,7 @@ class TensorDictBase(MutableMapping):
             elif (
                 separator in key
                 and key_split in existing_keys
-                and not is_tensordict(self.entry_class(key_split))
+                and not is_tensor_collection(self.entry_class(key_split))
             ):
                 raise KeyError(
                     f"Flattening keys in tensordict collides with existing key '{key}'"
@@ -2623,7 +2625,7 @@ class TensorDictBase(MutableMapping):
 
         """
         target_class = self.entry_class(key)
-        if is_tensordict(target_class):
+        if is_tensor_collection(target_class):
             tensordict = self.get(key)
             tensordict.apply_(lambda x: x.fill_(value))
             self.set_(key, tensordict)
@@ -2684,7 +2686,7 @@ class TensorDictBase(MutableMapping):
     def lock(self) -> TensorDictBase:
         self._is_locked = True
         for key in self.keys():
-            if is_tensordict(self.entry_class(key)):
+            if is_tensor_collection(self.entry_class(key)):
                 self.get(key).lock()
         return self
 
@@ -2694,7 +2696,7 @@ class TensorDictBase(MutableMapping):
         self._is_memmap = False
         self._sorted_keys = None
         for key in self.keys():
-            if is_tensordict(self.entry_class(key)):
+            if is_tensor_collection(self.entry_class(key)):
                 self.get(key).unlock()
         return self
 
@@ -2843,7 +2845,7 @@ class TensorDict(TensorDictBase):
                             _is_memmap=_is_memmap,
                         )
                     elif (
-                        is_tensordict(value)
+                        is_tensor_collection(value)
                         and value.batch_size[: self.batch_dims] != self.batch_size
                     ):
                         value = value.clone(False)
@@ -3234,7 +3236,7 @@ class TensorDict(TensorDictBase):
             if (
                 isinstance(value, Tensor)
                 and value.device.type == "cpu"
-                or is_tensordict(value)
+                or is_tensor_collection(value)
             ):
                 value.share_memory_()
         self._is_shared = True
@@ -3273,7 +3275,7 @@ class TensorDict(TensorDictBase):
                 raise Exception(
                     "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
                 )
-            if is_tensordict(value):
+            if is_tensor_collection(value):
                 if prefix is not None:
                     # ensure subdirectory exists
                     (prefix / key).mkdir(exist_ok=True)
@@ -3561,7 +3563,7 @@ def assert_allclose_td(
     msg: str = "",
 ) -> bool:
     """Compares two tensordicts and raise an exception if their content does not match exactly."""
-    if not is_tensordict(actual) or not is_tensordict(expected):
+    if not is_tensor_collection(actual) or not is_tensor_collection(expected):
         raise TypeError("assert_allclose inputs must be of TensorDict type")
     set1 = set(actual.keys())
     set2 = set(expected.keys())
@@ -3575,7 +3577,7 @@ def assert_allclose_td(
     for key in keys:
         input1 = actual.get(key)
         input2 = expected.get(key)
-        if is_tensordict(input1):
+        if is_tensor_collection(input1):
             assert_allclose_td(input1, input2, rtol=rtol, atol=atol)
             continue
 
@@ -3947,7 +3949,7 @@ def pad(
         if len(pad_size) < len(_shape(tensor)) * 2:
             cur_pad = [0] * (len(_shape(tensor)) * 2 - len(pad_size)) + reverse_pad
 
-        if is_tensordict(tensor):
+        if is_tensor_collection(tensor):
             padded = pad(tensor, pad_size, value)
         else:
             padded = torch.nn.functional.pad(tensor, cur_pad, value=value)
@@ -4190,7 +4192,7 @@ torch.Size([3, 2])
 
     def entry_class(self, key: NestedKey) -> type:
         source_type = type(self._source.get(key))
-        if is_tensordict(source_type):
+        if is_tensor_collection(source_type):
             return self.__class__
         return source_type
 
@@ -4300,7 +4302,7 @@ torch.Size([3, 2])
             # the key must be a string by now. Let's check if it is present
             if key in keys:
                 target_class = self.entry_class(key)
-                if is_tensordict(target_class):
+                if is_tensor_collection(target_class):
                     target = self._source.get(key).get_sub_tensordict(self.idx)
                     if len(subkey):
                         target.update({subkey: value})
@@ -4926,7 +4928,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def entry_class(self, key: NestedKey) -> type:
         data_type = type(self.tensordicts[0].get(key))
-        if is_tensordict(data_type):
+        if is_tensor_collection(data_type):
             return LazyStackedTensorDict
         return data_type
 
@@ -5198,7 +5200,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # the key must be a string by now. Let's check if it is present
             if key in keys:
                 target_class = self.entry_class(key)
-                if is_tensordict(target_class):
+                if is_tensor_collection(target_class):
                     if isinstance(value, dict):
                         value_unbind = TensorDict(
                             value, self.batch_size, _run_checks=False
@@ -5902,7 +5904,7 @@ def get_repr(tensor: Tensor) -> str:
 
 
 def _make_repr(key: str, item: CompatibleType, tensordict: TensorDictBase) -> str:
-    if is_tensordict(type(item)):
+    if is_tensor_collection(type(item)):
         return f"{key}: {repr(tensordict.get(key))}"
     return f"{key}: {get_repr(item)}"
 
@@ -6033,7 +6035,7 @@ def _iter_items_lazystack(
 def _clone_value(value: CompatibleType, recurse: bool) -> CompatibleType:
     if recurse:
         return value.clone()
-    elif is_tensordict(value):
+    elif is_tensor_collection(value):
         return value.clone(recurse=False)
     else:
         return value
