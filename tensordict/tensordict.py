@@ -114,7 +114,7 @@ def is_tensordict(datatype: type | Any) -> bool:
     """Checks if a data object or a type is a tensor container from the tensordict lib.
 
     Returns:
-        ``True`` if the input is a TensorDictBase subclass, a tensorclass or an istance of these.
+        ``True`` if the input is a TensorDictBase subclass, a tensorclass or an instance of these.
         ``False`` otherwise.
 
     Examples:
