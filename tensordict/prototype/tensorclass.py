@@ -187,6 +187,23 @@ def tensorclass(cls: T) -> T:
     return cls
 
 
+def _from_tensordict_with_copy(tc, tensordict):
+    # creates a new tensorclass with the same type as tc, and a copy of the
+    # non_tensordict data
+    return tc._from_tensordict(
+        tensordict=tensordict, non_tensordict=copy(tc._non_tensordict)
+    )
+
+
+def _from_tensordict_with_none(tc, tensordict):
+    # creates a new tensorclass with the same type as tc, and all non_tensordict entries
+    # set to None
+    return tc._from_tensordict(
+        tensordict=tensordict,
+        non_tensordict={key: None for key in tc._non_tensordict},
+    )
+
+
 def _init_wrapper(init: Callable) -> Callable:
     init_sig = inspect.signature(init)
     params = list(init_sig.parameters.values())
@@ -397,7 +414,7 @@ def _getattr(self, attr: str) -> Any:
         return res
     func = res
 
-    @functools.wraps(getattr)
+    @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
         res = func(*args, **kwargs)
         # Handling nested tensor class
@@ -436,9 +453,7 @@ def _getitem(self, item: NestedKey) -> Any:
     ):
         raise ValueError(f"Invalid indexing arguments: {item}.")
     tensor_res = self._tensordict[item]
-    non_tensor_res = copy(self._non_tensordict)
-
-    return self._from_tensordict(tensor_res, non_tensor_res)  # device=res.device)
+    return _from_tensordict_with_copy(self, tensor_res)  # device=res.device)
 
 
 def _setitem(self, item: NestedKey, value: Any) -> None:
@@ -580,10 +595,7 @@ def _memmap_like(
     if prefix is not None:
         prefix = Path(prefix)
     out_td = self._tensordict.memmap_like(prefix=prefix)
-    out_other = {}
-    for key, val in self._non_tensordict.items():
-        out_other[key] = val
-    return self._from_tensordict(out_td, out_other)
+    return _from_tensordict_with_copy(self, out_td)
 
 
 def _device(self) -> torch.device:
@@ -717,11 +729,7 @@ def _any(self, dim: int | None = None) -> bool:
     if dim < 0:
         dim = self.batch_dims + dim
 
-    non_tensor = {key: None for key in self._non_tensordict.keys()}
-    return self._from_tensordict(
-        self._tensordict.any(dim=dim),
-        non_tensor,
-    )
+    return _from_tensordict_with_none(self, self._tensordict.any(dim=dim))
 
 
 def _all(self, dim: int | None = None) -> bool:
@@ -776,11 +784,7 @@ def _all(self, dim: int | None = None) -> bool:
     if dim < 0:
         dim = self.batch_dims + dim
 
-    non_tensor = {key: None for key in self._non_tensordict.keys()}
-    return self._from_tensordict(
-        self._tensordict.all(dim=dim),
-        non_tensor,
-    )
+    return _from_tensordict_with_none(self, self._tensordict.all(dim=dim))
 
 
 def _gather(self, dim: int, index: torch.Tensor, out: TensorDictBase | None = None):
@@ -820,10 +824,8 @@ def _gather(self, dim: int, index: torch.Tensor, out: TensorDictBase | None = No
         else:
             return out._tensordict
 
-    non_tensor = copy(self._non_tensordict)
-    return self._from_tensordict(
-        self._tensordict.gather(dim=dim, index=index, out=_get_out(None, False)),
-        non_tensor,
+    return _from_tensordict_with_copy(
+        self, self._tensordict.gather(dim=dim, index=index, out=_get_out(None, False))
     )
 
 
@@ -881,13 +883,11 @@ def __eq__(self, other: object) -> bool:
         other, (dict, numbers.Number, Tensor)
     ):
         return False
-    non_tensor = {key: None for key in self._non_tensordict.keys()}
     if is_tensorclass(other):
         tensor = self._tensordict == other._tensordict
     else:
         tensor = self._tensordict == other
-    out = self._from_tensordict(tensor, non_tensor)
-    return out
+    return _from_tensordict_with_none(self, tensor)
 
 
 def __ne__(self, other: object) -> bool:
@@ -940,13 +940,11 @@ def __ne__(self, other: object) -> bool:
         other, (dict, numbers.Number, Tensor)
     ):
         return True
-    non_tensor = {key: None for key in self._non_tensordict.keys()}
     if is_tensorclass(other):
         tensor = self._tensordict != other._tensordict
     else:
         tensor = self._tensordict != other
-    out = self._from_tensordict(tensor, non_tensor)
-    return out
+    return _from_tensordict_with_none(self, tensor)
 
 
 def _unbind(tdc, dim: int = 0) -> list:
@@ -977,10 +975,7 @@ def _full_like(tdc, fill_value: float):
         out: the filled tensor class object
 
     """
-    tensordict = torch.full_like(tdc._tensordict, fill_value)
-    non_tensor_dict = tdc._non_tensordict
-    out = tdc._from_tensordict(tensordict, non_tensor_dict)
-    return out
+    return _from_tensordict_with_copy(tdc, torch.full_like(tdc._tensordict, fill_value))
 
 
 def _zeros_like(tdc):
@@ -1019,10 +1014,7 @@ def _clone(tdc):
         out: a shallow copy of the tensor class object
 
     """
-    tensordict = torch.clone(tdc._tensordict)
-    non_tensor_dict = tdc._non_tensordict
-    out = tdc._from_tensordict(tensordict, non_tensor_dict)
-    return out
+    return _from_tensordict_with_copy(tdc, torch.clone(tdc._tensordict))
 
 
 def _squeeze(tdc):
@@ -1035,10 +1027,7 @@ def _squeeze(tdc):
         out: squeezed tensor class object
 
     """
-    tensordict = torch.squeeze(tdc._tensordict)
-    non_tensor_dict = tdc._non_tensordict
-    out = tdc._from_tensordict(tensordict, non_tensor_dict)
-    return out
+    return _from_tensordict_with_copy(tdc, torch.squeeze(tdc._tensordict))
 
 
 def _unsqueeze(tdc, dim: int = 0):
@@ -1052,10 +1041,7 @@ def _unsqueeze(tdc, dim: int = 0):
         out: tensor class object with the single-dimensional entry inserted
 
     """
-    tensordict = torch.unsqueeze(tdc._tensordict, dim)
-    non_tensor_dict = tdc._non_tensordict
-    out = tdc._from_tensordict(tensordict, non_tensor_dict)
-    return out
+    return _from_tensordict_with_copy(tdc, torch.unsqueeze(tdc._tensordict, dim))
 
 
 def _permute(tdc, dims: int | Sequence[int]):
@@ -1069,10 +1055,7 @@ def _permute(tdc, dims: int | Sequence[int]):
         out: permuted tensor class object
 
     """
-    tensordict = torch.permute(tdc._tensordict, dims)
-    non_tensor_dict = tdc._non_tensordict
-    out = tdc._from_tensordict(tensordict, non_tensor_dict)
-    return out
+    return _from_tensordict_with_copy(tdc, torch.permute(tdc._tensordict, dims))
 
 
 def _split(tdc, split_size_or_sections: int | Sequence[int], dim: int = 0):
@@ -1092,9 +1075,7 @@ def _split(tdc, split_size_or_sections: int | Sequence[int], dim: int = 0):
 
     """
     tensordicts = torch.split(tdc._tensordict, split_size_or_sections, dim)
-    non_tensor_dict = tdc._non_tensordict
-    out = [tdc._from_tensordict(td, non_tensor_dict) for td in tensordicts]
-    return out
+    return [_from_tensordict_with_copy(tdc, td) for td in tensordicts]
 
 
 def _stack(list_of_tdc: Sequence[Any], dim: int = 0, out: Any = None):
@@ -1109,13 +1090,11 @@ def _stack(list_of_tdc: Sequence[Any], dim: int = 0, out: Any = None):
 
     """
     tensordict = torch.stack([tdc._tensordict for tdc in list_of_tdc], dim)
-    non_tensordict = list_of_tdc[0]._non_tensordict
     if out is not None:
         out.update_(tensordict)
-        out._non_tensordict.update(non_tensordict)
+        out._non_tensordict.update(list_of_tdc[0]._non_tensordict)
         return out
-    out = list_of_tdc[0]._from_tensordict(tensordict, non_tensordict)
-    return out
+    return _from_tensordict_with_copy(list_of_tdc[0], tensordict)
 
 
 def _cat(list_of_tdc: Sequence, dim: int = 0):
@@ -1129,10 +1108,9 @@ def _cat(list_of_tdc: Sequence, dim: int = 0):
         out: concatenated tensor class object
 
     """
-    tensordict = torch.cat([tdc._tensordict for tdc in list_of_tdc], dim)
-    non_tensordict = list_of_tdc[0]._non_tensordict
-    out = list_of_tdc[0]._from_tensordict(tensordict, non_tensordict)
-    return out
+    return _from_tensordict_with_copy(
+        list_of_tdc[0], torch.cat([tdc._tensordict for tdc in list_of_tdc], dim)
+    )
 
 
 def _get_typed_output(out, expected_type: str | type):
