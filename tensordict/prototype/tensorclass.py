@@ -13,12 +13,13 @@ import re
 import sys
 import typing
 import warnings
+from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
 from typing import Any, Callable, Sequence, TypeVar, Union
 
-import tensordict
+import tensordict as tensordict_lib
 
 import torch
 from tensordict.tensordict import get_repr, is_tensordict, TensorDict, TensorDictBase
@@ -177,7 +178,7 @@ def tensorclass(cls: T) -> T:
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
     CLASSES_DICT[cls.__name__] = cls
-    tensordict.tensordict._ACCEPTED_CLASSES += [cls]
+    tensordict_lib.tensordict._ACCEPTED_CLASSES += [cls]
     return cls
 
 
@@ -234,26 +235,28 @@ def _init_wrapper(init: Callable) -> Callable:
 
 
 def _from_tensordict_wrapper(expected_keys):
-    def wrapper(cls, td, non_tensordict=None):
+    def wrapper(cls, tensordict, non_tensordict=None):
         """Tensor class wrapper to instantiate a new tensor class object
 
         Args:
-            td (TensorDict): Dictionary of tensor types
+            tensordict (TensorDict): Dictionary of tensor types
             non_tensordict (dict): Dictionary with non-tensor and nested tensor class objects
 
         """
-        if not isinstance(td, TensorDictBase):
-            raise RuntimeError(f"Expected a TensorDictBase instance but got {type(td)}")
+        if not isinstance(tensordict, TensorDictBase):
+            raise RuntimeError(
+                f"Expected a TensorDictBase instance but got {type(tensordict)}"
+            )
         # Validating keys of tensordict
-        for key in td.keys():
+        for key in tensordict.keys():
             if key not in expected_keys:
                 raise ValueError(
-                    f"Keys from the tensordict ({set(td.keys())}) must "
+                    f"Keys from the tensordict ({set(tensordict.keys())}) must "
                     f"correspond to the class attributes ({expected_keys})."
                 )
 
         # Validating non-tensor keys and for key clash
-        tensor_keys = set(td.keys())
+        tensor_keys = set(tensordict.keys())
         if non_tensordict is not None:
             for key in non_tensordict.keys():
                 if key not in expected_keys:
@@ -269,8 +272,7 @@ def _from_tensordict_wrapper(expected_keys):
         # empty tensordict and writing values to it. we can skip this because we already
         # have a tensordict to use as the underlying tensordict
         tc = cls.__new__(cls)
-        assert isinstance(td, TensorDictBase), td
-        tc.__dict__["_tensordict"] = td
+        tc.__dict__["_tensordict"] = tensordict
 
         tc.__dict__["_non_tensordict"] = (
             non_tensordict if non_tensordict is not None else {}
@@ -322,7 +324,6 @@ def _getattribute_wrapper(getattribute: Callable) -> Callable:
                 "_tensordict" in self.__dict__
                 and item in self.__dict__["_tensordict"].keys()
             ):
-                assert isinstance(self._tensordict, TensorDictBase)
                 out = self._tensordict[item]
                 expected_type = self.__dataclass_fields__[item].type
                 out = _get_typed_output(out, expected_type)
@@ -360,7 +361,7 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
                 f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
             )
 
-        if isinstance(value, tuple(tensordict.tensordict._ACCEPTED_CLASSES)):
+        if isinstance(value, tuple(tensordict_lib.tensordict._ACCEPTED_CLASSES)):
             # Avoiding key clash, honoring the user input to assign tensor type data to the key
             if key in self._non_tensordict.keys():
                 del self._non_tensordict[key]
@@ -430,9 +431,7 @@ def _getitem(self, item: NestedKey) -> Any:
     ):
         raise ValueError(f"Invalid indexing arguments: {item}.")
     tensor_res = self._tensordict[item]
-    non_tensor_res = {}
-    for key, value in self._non_tensordict.items():
-        non_tensor_res[key] = value
+    non_tensor_res = copy(self._non_tensordict)
 
     return self._from_tensordict(tensor_res, non_tensor_res)  # device=res.device)
 
@@ -619,9 +618,7 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:
 def _state_dict(self) -> dict[str, Any]:
     """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
     state_dict = {"_tensordict": self._tensordict.state_dict()}
-    state_dict["_non_tensordict"] = {
-        key: value for key, value in self._non_tensordict.items()
-    }
+    state_dict["_non_tensordict"] = copy(self._non_tensordict)
     return state_dict
 
 
@@ -715,7 +712,7 @@ def _any(self, dim: int | None = None) -> bool:
     if dim < 0:
         dim = self.batch_dims + dim
 
-    non_tensor = {key: None for key, obj in self._non_tensordict.items()}
+    non_tensor = {key: None for key in self._non_tensordict.keys()}
     return self._from_tensordict(
         self._tensordict.any(dim=dim),
         non_tensor,
@@ -774,7 +771,7 @@ def _all(self, dim: int | None = None) -> bool:
     if dim < 0:
         dim = self.batch_dims + dim
 
-    non_tensor = {key: None for key, obj in self._non_tensordict.items()}
+    non_tensor = {key: None for key in self._non_tensordict.keys()}
     return self._from_tensordict(
         self._tensordict.all(dim=dim),
         non_tensor,
@@ -818,7 +815,7 @@ def _gather(self, dim: int, index: torch.Tensor, out: TensorDictBase | None = No
         else:
             return out._tensordict
 
-    non_tensor = {key: obj for key, obj in self._non_tensordict.items()}
+    non_tensor = copy(self._non_tensordict)
     return self._from_tensordict(
         self._tensordict.gather(dim=dim, index=index, out=_get_out(None, False)),
         non_tensor,

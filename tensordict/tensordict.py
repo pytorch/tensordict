@@ -111,6 +111,23 @@ _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-
 
 
 def is_tensordict(datatype: type | Any) -> bool:
+    """Checks if a data object or a type is a tensor container from the tensordict lib.
+
+    Returns:
+        ``True`` if the input is a TensorDictBase subclass, a tensorclass or an istance of these.
+        ``False`` otherwise.
+
+    Examples:
+        >>> is_tensordict(TensorDictBase)  # True
+        >>> is_tensordict(TensorDict({}, []))  # True
+        >>> @tensorclass
+        ... class MyClass:
+        ...     pass
+        ...
+        >>> is_tensordict(MyClass)  # True
+        >>> is_tensordict(MyClass(batch_size=[]))  # True
+
+    """
     from tensordict.prototype import is_tensorclass
 
     return (
