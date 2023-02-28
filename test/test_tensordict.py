@@ -511,6 +511,7 @@ TD_BATCH_SIZE = 4
         "squeezed_td",
         "td_reset_bs",
         "nested_td",
+        "nested_tensorclass",
         "permute_td",
         "nested_stacked_td",
     ],
@@ -833,7 +834,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td.zero_()
         assert (td == 0.0).all()
-        td0 = td.to_tensordict().zero_()
+        td0 = td.clone().zero_()
         assert (td0 != 1.0).all()
 
     def test_equal_other(self, td_name, device):
@@ -877,25 +878,12 @@ class TestTensorDicts(TestTensorDictsBase):
         td_gather = torch.gather(td, dim=dim, index=index)
         # gather with out
         td_gather.zero_()
-        out = td_gather.to_tensordict()
+        out = td_gather.clone()
         td_gather2 = torch.gather(td, dim=dim, index=index, out=out)
         assert (td_gather2 != 0).any()
 
     @pytest.mark.parametrize("from_list", [True, False])
     def test_masking_set(self, td_name, device, from_list):
-        def zeros_like(item, n, d):
-            if isinstance(item, (MemmapTensor, torch.Tensor)):
-                return torch.zeros(n, *item.shape[d:], dtype=item.dtype, device=device)
-            elif isinstance(item, TensorDictBase):
-                batch_size = item.batch_size
-                batch_size = [n, *batch_size[d:]]
-                out = TensorDict(
-                    {k: zeros_like(_item, n, d) for k, _item in item.items()},
-                    batch_size,
-                    device=device,
-                )
-                return out
-
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
@@ -903,8 +891,11 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         n = mask.sum()
         d = td.ndimension()
-        pseudo_td = TensorDict(
-            {k: zeros_like(item, n, d) for k, item in td.items()}, [n], device=device
+        pseudo_td = td.apply(
+            lambda item: torch.zeros(
+                (n, *item.shape[d:]), dtype=item.dtype, device=device
+            ),
+            batch_size=[n, *td.batch_size[d:]],
         )
         if from_list:
             td_mask = mask.cpu().numpy().tolist()
@@ -1216,6 +1207,7 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td1 = getattr(self, td_name)(device).unlock()
         td2 = getattr(self, td_name)(device).unlock()
+
         td1[key] = torch.randn(*td1.shape, 2)
         td2[key] = torch.randn(*td1.shape, 3)
         td_stack = torch.stack([td1, td2], dim)
@@ -1515,7 +1507,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_stack_subclasses_on_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td = td.expand(3, *td.batch_size).to_tensordict().clone().zero_()
+        td = td.expand(3, *td.batch_size).clone().zero_()
         tds_list = [getattr(self, td_name)(device) for _ in range(3)]
         stacked_td = stack_td(tds_list, 0, out=td)
         assert stacked_td.batch_size == td.batch_size
@@ -2036,6 +2028,41 @@ class TestTensorDictRepr:
         return TensorDict(
             source={
                 "my_nested_td": self.td(device, dtype),
+                "b": torch.zeros(4, 3, 2, 1, 5, dtype=dtype, device=device_not_none),
+            },
+            batch_size=[4, 3, 2, 1],
+            device=device,
+        )
+
+    def nested_tensorclass(self, device, dtype):
+        from tensordict.prototype import tensorclass
+
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+            y: "MyClass"
+            z: str
+
+        if device is not None:
+            device_not_none = device
+        elif torch.has_cuda and torch.cuda.device_count():
+            device_not_none = torch.device("cuda:0")
+        else:
+            device_not_none = torch.device("cpu")
+        nested_class = MyClass(
+            X=torch.zeros(4, 3, 2, 1, dtype=dtype, device=device_not_none),
+            y=MyClass(
+                X=torch.zeros(4, 3, 2, 1, dtype=dtype, device=device_not_none),
+                y=None,
+                z=None,
+                batch_size=[4, 3, 2, 1],
+            ),
+            z="z",
+            batch_size=[4, 3, 2, 1],
+        )
+        return TensorDict(
+            source={
+                "my_nested_td": nested_class,
                 "b": torch.zeros(4, 3, 2, 1, 5, dtype=dtype, device=device_not_none),
             },
             batch_size=[4, 3, 2, 1],
