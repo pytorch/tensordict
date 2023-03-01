@@ -3840,6 +3840,29 @@ def test_tensordict_prealloc_nested():
     assert buffer["agent.obs"].batch_size == torch.Size([B, N, T])
 
 
+@pytest.mark.parametrize("like", [True, False])
+def test_save_load_memmap_stacked_td(
+    like,
+    tmpdir,
+):
+    a = TensorDict({"a": [1]}, [])
+    b = TensorDict({"b": [1]}, [])
+    c = torch.stack([a, b])
+    c = c.expand(10, 2)
+    if like:
+        d = c.memmap_like(prefix=tmpdir)
+    else:
+        d = c.memmap_(prefix=tmpdir)
+
+    d2 = LazyStackedTensorDict.load_memmap(tmpdir)
+    assert (d2 == d).all()
+    assert (d2[:, 0] == d[:, 0]).all()
+    if like:
+        assert (d2[:, 0] == a.zero_()).all()
+    else:
+        assert (d2[:, 0] == a).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
