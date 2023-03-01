@@ -1304,6 +1304,22 @@ class TestTensorDicts(TestTensorDictsBase):
         td.set_("z", new_z)
         torch.testing.assert_close(new_z, td.get("z"))
 
+    def test_rename_key_nested(self, td_name, device) -> None:
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        td.unlock()
+        td["nested", "conflict"] = torch.zeros(td.shape)
+        with pytest.raises(KeyError, match="already present in TensorDict"):
+            td.rename_key(("nested", "conflict"), "b", safe=True)
+        td["nested", "first"] = torch.zeros(td.shape)
+        td.rename_key(("nested", "first"), "second")
+        assert (td["second"] == 0).all()
+        assert ("nested", "first") not in td.keys(True)
+        td.rename_key("second", ("nested", "back"))
+        assert (td[("nested", "back")] == 0).all()
+        assert "second" not in td.keys()
+
+
     def test_set_nontensor(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)

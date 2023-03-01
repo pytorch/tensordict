@@ -3088,13 +3088,16 @@ class TensorDict(TensorDictBase):
     def rename_key(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> TensorDictBase:
-        if not isinstance(old_key, str):
+        # these checks are not perfect, tuples that are not tuples of strings or empty
+        # tuples could go through but (1) it will raise an error anyway and (2)
+        # those checks are expensive when repeated often.
+        if not isinstance(old_key, (str, tuple)):
             raise TypeError(
-                f"Expected old_name to be a string but found {type(old_key)}"
+                f"Expected old_name to be a string or a tuple of strings but found {type(old_key)}"
             )
-        if not isinstance(new_key, str):
+        if not isinstance(new_key, (str, tuple)):
             raise TypeError(
-                f"Expected new_name to be a string but found {type(new_key)}"
+                f"Expected new_name to be a string or a tuple of strings but found {type(new_key)}"
             )
 
         if safe and (new_key in self.keys()):
@@ -5256,10 +5259,15 @@ class LazyStackedTensorDict(TensorDictBase):
     def rename_key(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> TensorDictBase:
+        def sort_keys(element):
+            if isinstance(element, tuple):
+                return "_-|-_".join(element)
+            return element
+
         for td in self.tensordicts:
             td.rename_key(old_key, new_key, safe=safe)
         self._valid_keys = sorted(
-            [key if key != old_key else new_key for key in self._valid_keys]
+            [key if key != old_key else new_key for key in self._valid_keys], key=sort_keys
         )
         return self
 
