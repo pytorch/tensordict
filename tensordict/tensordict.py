@@ -2289,10 +2289,10 @@ class TensorDictBase(MutableMapping):
                 shape.
 
         """
-        if dim is not None and (dim >= self.batch_dims or dim <= -self.batch_dims):
+        if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
-                "dim must be greater than -tensordict.batch_dims and smaller "
-                "than tensordict.batchdims"
+                "dim must be greater than or equal to -tensordict.batch_dims and "
+                "smaller than tensordict.batch_dims"
             )
         if dim is not None:
             if dim < 0:
@@ -2315,10 +2315,10 @@ class TensorDictBase(MutableMapping):
                 the tensordict shape.
 
         """
-        if dim is not None and (dim >= self.batch_dims or dim <= -self.batch_dims):
+        if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
-                "dim must be greater than -tensordict.batch_dims and smaller "
-                "than tensordict.batchdims"
+                "dim must be greater than or equal to -tensordict.batch_dims and "
+                "smaller than tensordict.batch_dims"
             )
         if dim is not None:
             if dim < 0:
