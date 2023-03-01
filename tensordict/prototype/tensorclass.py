@@ -16,7 +16,7 @@ import warnings
 from copy import copy
 from dataclasses import dataclass
 from textwrap import indent
-from typing import Any, Callable, Protocol, Sequence, TypeVar, Union
+from typing import Any, Callable, Sequence, TypeVar, Union
 
 import tensordict as tensordict_lib
 
@@ -33,12 +33,6 @@ from torch import Tensor
 
 T = TypeVar("T", bound=TensorDictBase)
 PY37 = sys.version_info < (3, 8)
-
-
-class TensorClassProtocol(Protocol):
-    _tensordict: TensorDictBase
-    _non_tensordict: dict[str, Any]
-
 
 # We keep a dict of str -> class to call the class based on the string
 CLASSES_DICT: dict[str, type] = {}
@@ -129,17 +123,6 @@ def tensorclass(cls: T) -> T:
 
 
     """
-    tc_handled_functions: dict[Callable, Callable] = {}
-
-    def implements_for_tdc(torch_function: Callable) -> Callable:
-        """Register a torch function override for _TensorClass."""
-
-        @functools.wraps(torch_function)
-        def decorator(func: Callable) -> Callable:
-            tc_handled_functions[torch_function] = func
-            return func
-
-        return decorator
 
     def __torch_function__(
         cls,
@@ -148,34 +131,29 @@ def tensorclass(cls: T) -> T:
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Callable:
-        if (
-            func not in tc_handled_functions and func not in _TD_PASS_THROUGH
-        ) or not all(issubclass(t, (Tensor, cls)) for t in types):
+        if func not in _TD_PASS_THROUGH or not all(
+            issubclass(t, (Tensor, cls)) for t in types
+        ):
             return NotImplemented
+
         if kwargs is None:
             kwargs = {}
-        if func in _TD_PASS_THROUGH:
-            if len(args) > 0:
-                input_ = args[0]
-            else:
-                input_ = kwargs["input"] if "input" in kwargs else kwargs["tensors"]
-            if isinstance(input_, (list, tuple)):
-                tc = input_[0]
-                input_ = input_.__class__(tc._tensordict for tc in input_)
-            else:
-                tc = input_
-                input_ = input_._tensordict
 
-            out = kwargs.get("out")
-            if out is not None:
-                kwargs["out"] = out._tensordict
+        # get the output type from the arguments / keyword arguments
+        if len(args) > 0:
+            tc = args[0]
+        else:
+            tc = kwargs.get("input", kwargs["tensors"])
+        if isinstance(tc, (tuple, list)):
+            tc = tc[0]
 
-            res = TD_HANDLED_FUNCTIONS[func](input_, *args[1:], **kwargs)
-            if isinstance(res, (list, tuple)):
-                return res.__class__(_from_tensordict_with_copy(tc, td) for td in res)
-            return _from_tensordict_with_copy(tc, res)
+        args = tuple(_arg_to_tensordict(arg) for arg in args)
+        kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
 
-        return tc_handled_functions[func](*args, **kwargs)
+        res = TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
+        if isinstance(res, (list, tuple)):
+            return res.__class__(_from_tensordict_with_copy(tc, td) for td in res)
+        return _from_tensordict_with_copy(tc, res)
 
     cls = dataclass(cls)
     expected_keys = set(cls.__dataclass_fields__)
@@ -202,7 +180,6 @@ def tensorclass(cls: T) -> T:
     cls.__ne__ = __ne__
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
-    cls.gather = _gather
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -213,6 +190,16 @@ def tensorclass(cls: T) -> T:
     CLASSES_DICT[cls.__name__] = cls
     tensordict_lib.tensordict._ACCEPTED_CLASSES += [cls]
     return cls
+
+
+def _arg_to_tensordict(arg):
+    # if arg is a tensorclass or sequence of tensorclasses, extract the underlying
+    # tensordicts and return those instead
+    if is_tensorclass(arg):
+        return arg._tensordict
+    elif isinstance(arg, (tuple, list)) and all(is_tensorclass(item) for item in arg):
+        return arg.__class__(item._tensordict for item in arg)
+    return arg
 
 
 def _from_tensordict_with_copy(tc, tensordict):
@@ -444,6 +431,8 @@ def _getattr(self, attr: str) -> Any:
 
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
+        args = tuple(_arg_to_tensordict(arg) for arg in args)
+        kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
         res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
             if attr.endswith("_"):
@@ -645,47 +634,6 @@ def _load_state_dict(self, state_dict: dict[str, Any]):
             raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
 
     return self
-
-
-# this function appears to be required even though we fall back on `TensorDict.gather`
-# because it's not clear how to deal with methods with an `out` argument generically
-def _gather(
-    self, dim: int, index: torch.Tensor, out: TensorClassProtocol | None = None
-):
-    """Gathers values along an axis specified by `dim`.
-
-    Args:
-        dim (int): the dimension along which collect the elements
-        index (torch.Tensor): a long tensor which number of dimension matches
-            the one of the tensordict with only one dimension differring between
-            the two (the gathering dimension). Its elements refer to the
-            index to be gathered along the required dimension.
-        out (TensorDictBase, optional): a destination tensordict. It must
-            have the same shape as the index.
-
-    Examples:
-        >>> @tensorclass
-        ... class MyClass:
-        ...     x: torch.Tensor
-        ...     z: str
-        ...     y: "MyClass1" = None  # future: drop quotes
-        ...
-        >>> c = MyClass(torch.randn(3, 4), "foo", MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]), batch_size=[3, 4])
-        >>> dim = -1
-        >>> index = torch.arange(3).expand(3, 3)
-        >>> c_gather = c.gather(index=index, dim=dim)
-        >>> print(c_gather)
-
-    """
-    if dim < 0:
-        dim = self.batch_dims + dim
-
-    return _from_tensordict_with_copy(
-        self,
-        self._tensordict.gather(
-            dim=dim, index=index, out=out._tensordict if out is not None else None
-        ),
-    )
 
 
 def __eq__(self, other: object) -> bool:
