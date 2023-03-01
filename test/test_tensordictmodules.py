@@ -10,6 +10,7 @@ import torch
 
 from tensordict import TensorDict
 from tensordict.nn import (
+    dispatch_kwargs,
     probabilistic as nn_probabilistic,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
@@ -477,6 +478,20 @@ class TestTDModule:
         tdm(td)
         out = tdm(a_c=torch.zeros(1, 1))
         assert (out == td["b", "d"]).all()
+
+    def test_dispatch_kwargs_nested_sep(self):
+        class MyModuleNest(nn.Module):
+            in_keys = [("a", "c")]
+            out_keys = ["b"]
+
+            @dispatch_kwargs(separator="sep")
+            def forward(self, tensordict):
+                tensordict["b"] = tensordict["a", "c"] + 1
+                return tensordict
+
+        module = MyModuleNest()
+        (b,) = module(asepc=torch.zeros(1, 2))
+        assert (b == 1).all()
 
     def test_dispatch_kwargs_multi(self):
         tdm = TensorDictSequential(
