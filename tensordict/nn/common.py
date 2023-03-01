@@ -12,6 +12,7 @@ from textwrap import indent
 from typing import Any, Callable, Iterable, Sequence
 
 import torch
+
 from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NestedKey
 from torch import nn, Tensor
@@ -55,17 +56,18 @@ def _check_all_nested(sequence_of_keys: Sequence[NestedKey]) -> None:
         _nested_key_type_check(key)
 
 
-def dispatch_kwargs(func: Callable) -> Callable:
+class dispatch_kwargs:
     """Allows for a function expecting a TensorDict to be called using kwargs.
 
-    This method must be used within modules that have an :obj:`in_keys` and
-    :obj:`out_keys` attributes indicating what keys to be read and written
-    from the tensordict. The wrapped function should also have a :obj:`tensordict`
+    This method must be used within modules that have an ``in_keys`` and
+    ``out_keys`` attributes indicating what keys to be read and written
+    from the tensordict. The wrapped function should also have a ``tensordict``
     leading argument.
 
     The resulting function will return a single tensor (if there is a single
-    element in out_keys), otherwise it will return a tuple sorted as the :obj:`out_keys`
+    element in out_keys), otherwise it will return a tuple sorted as the ``out_keys``
     of the module.
+
 
     Examples:
         >>> class MyModule(nn.Module):
@@ -81,8 +83,8 @@ def dispatch_kwargs(func: Callable) -> Callable:
         >>> b = module(a=torch.zeros(1, 2))
         >>> assert (b == 1).all()
 
-    For nested keys, it is assumed that an underscore (`_`) is used to join the
-    sub-keys.
+    :func:`dispatch_kwargs` will also work with nested keys with the default
+    ``"_"`` separator.
 
     Examples:
         >>> class MyModuleNest(nn.Module):
@@ -98,44 +100,78 @@ def dispatch_kwargs(func: Callable) -> Callable:
         >>> b, = module(a_c=torch.zeros(1, 2))
         >>> assert (b == 1).all()
 
+    If another separator is wanted, it can be indicated with the ``separator``
+    argument in the constructor:
+
+    Examples:
+        >>> class MyModuleNest(nn.Module):
+        ...     in_keys = [("a", "c")]
+        ...     out_keys = ["b"]
+        ...
+        ...     @dispatch_kwargs(separator="sep")
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a', 'c'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModuleNest()
+        >>> b, = module(asepc=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+
 
     """
 
-    # sanity check
-    for i, key in enumerate(inspect.signature(func).parameters):
-        if i == 0:
-            # skip self
-            continue
-        if key != "tensordict":
-            raise RuntimeError(
-                "the first argument of the wrapped function must be "
-                "named 'tensordict'."
-            )
-        break
+    DEFAULT_SEPARATOR = "_"
 
-    @functools.wraps(func)
-    def wrapper(
-        self, tensordict: TensorDictBase | None = None, *args: Any, **kwargs: Any
-    ) -> Any:
-        if tensordict is None:
-            tensordict_values = {}
-            for key in self.in_keys:
-                expected_key = "_".join(key) if isinstance(key, tuple) else key
-                if expected_key in kwargs:
-                    try:
-                        tensordict_values[key] = kwargs.pop(expected_key)
-                    except KeyError:
-                        raise KeyError(
-                            f"The key {expected_key} wasn't found in the keyword arguments "
-                            f"but is expected to execute that function."
-                        )
-            tensordict = make_tensordict(tensordict_values)
-            out = func(self, tensordict, *args, **kwargs)
-            out = tuple(out[key] for key in self.out_keys)
-            return out[0] if len(out) == 1 else out
-        return func(self, tensordict, *args, **kwargs)
+    def __new__(cls, separator=DEFAULT_SEPARATOR):
+        if callable(separator):
+            func = separator
+            separator = dispatch_kwargs.DEFAULT_SEPARATOR
+            self = super().__new__(cls)
+            self.__init__(separator)
+            return self.__call__(func)
+        return super().__new__(cls)
 
-    return wrapper
+    def __init__(self, separator=DEFAULT_SEPARATOR):
+        self.separator = separator
+
+    def __call__(self, func: Callable) -> Callable:
+        # sanity check
+        for i, key in enumerate(inspect.signature(func).parameters):
+            if i == 0:
+                # skip self
+                continue
+            if key != "tensordict":
+                raise RuntimeError(
+                    "the first argument of the wrapped function must be "
+                    "named 'tensordict'."
+                )
+            break
+
+        @functools.wraps(func)
+        def wrapper(
+            _self, tensordict: TensorDictBase | None = None, *args: Any, **kwargs: Any
+        ) -> Any:
+            if tensordict is None:
+                tensordict_values = {}
+                for key in _self.in_keys:
+                    expected_key = (
+                        self.separator.join(key) if isinstance(key, tuple) else key
+                    )
+                    if expected_key in kwargs:
+                        try:
+                            tensordict_values[key] = kwargs.pop(expected_key)
+                        except KeyError:
+                            raise KeyError(
+                                f"The key {expected_key} wasn't found in the keyword arguments "
+                                f"but is expected to execute that function."
+                            )
+                tensordict = make_tensordict(tensordict_values)
+                out = func(_self, tensordict, *args, **kwargs)
+                out = tuple(out[key] for key in _self.out_keys)
+                return out[0] if len(out) == 1 else out
+            return func(_self, tensordict, *args, **kwargs)
+
+        return wrapper
 
 
 class TensorDictModule(nn.Module):
