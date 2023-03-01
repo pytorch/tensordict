@@ -1319,7 +1319,6 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td[("nested", "back")] == 0).all()
         assert "second" not in td.keys()
 
-
     def test_set_nontensor(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)

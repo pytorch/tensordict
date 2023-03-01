@@ -5267,7 +5267,8 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             td.rename_key(old_key, new_key, safe=safe)
         self._valid_keys = sorted(
-            [key if key != old_key else new_key for key in self._valid_keys], key=sort_keys
+            [key if key != old_key else new_key for key in self._valid_keys],
+            key=sort_keys,
         )
         return self
 
