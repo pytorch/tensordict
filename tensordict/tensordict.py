@@ -1243,7 +1243,7 @@ class TensorDictBase(MutableMapping):
 
         """
         for key, value in input_dict_or_td.items():
-            if not isinstance(value, _ACCEPTED_CLASSES):
+            if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "
                     f"but got {type(value)}"
