@@ -369,7 +369,7 @@ class TensorDictBase(MutableMapping):
                 if len(tensordict.batch_size) < len(new_batch_size):
                     # document as edge case
                     tensordict.batch_size = new_batch_size
-                    self.set(key, tensordict)
+                    self._set(key, tensordict)
         self._check_new_batch_size(new_batch_size)
         self._change_batch_size(new_batch_size)
 
@@ -1124,7 +1124,6 @@ class TensorDictBase(MutableMapping):
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
         clone: bool = False,
         inplace: bool = False,
-        **kwargs: Any,
     ) -> TensorDictBase:
         """Updates the TensorDict with values from either a dictionary or another TensorDict.
 
@@ -1166,9 +1165,9 @@ class TensorDictBase(MutableMapping):
                         target.update(value)
                         continue
             if len(subkey):
-                self.set((key, *subkey), value, inplace=inplace, **kwargs)
+                self.set((key, *subkey), value, inplace=inplace)
             else:
-                self.set(key, value, inplace=inplace, **kwargs)
+                self.set(key, value, inplace=inplace)
         return self
 
     def update_(
@@ -1252,18 +1251,20 @@ class TensorDictBase(MutableMapping):
                 )
             if clone:
                 value = value.clone()
-            self.set_at_(
-                key,
-                value,
-                idx,
-            )
+            self.set_at_(key, value, idx)
         return self
 
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor | MemmapTensor:
         return torch.as_tensor(array, device=self.device)
 
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> TensorDictBase:
-        return TensorDict(dict_value, batch_size=self.batch_size, device=self.device)
+        return TensorDict(
+            dict_value,
+            batch_size=self.batch_size,
+            device=self.device,
+            _is_shared=self._is_shared,
+            _is_memmap=self._is_memmap,
+        )
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
         _nested_key_type_check(key)
@@ -2627,10 +2628,10 @@ class TensorDictBase(MutableMapping):
         if is_tensor_collection(target_class):
             tensordict = self.get(key)
             tensordict.apply_(lambda x: x.fill_(value))
-            self.set_(key, tensordict)
+            self._set(key, tensordict, inplace=True)
         else:
             tensor = torch.full_like(self.get(key), value)
-            self.set_(key, tensor)
+            self._set(key, tensor, inplace=True)
         return self
 
     def empty(self) -> TensorDictBase:
@@ -2643,13 +2644,13 @@ class TensorDictBase(MutableMapping):
         return True
 
     def set_default(
-        self, key: NestedKey, default: CompatibleType, **kwargs: Any
+        self, key: NestedKey, default: CompatibleType, inplace: bool = False
     ) -> CompatibleType:
         warn("set_default has been deprecated. Use setdefault instead")
-        return self.setdefault(key, default, **kwargs)
+        return self.setdefault(key, default, inplace=inplace)
 
     def setdefault(
-        self, key: NestedKey, default: CompatibleType, **kwargs: Any
+        self, key: NestedKey, default: CompatibleType, inplace: bool = False
     ) -> CompatibleType:
         """Insert key with a value of default if key is not in the dictionary.
 
@@ -2666,7 +2667,7 @@ class TensorDictBase(MutableMapping):
 
         """
         if key not in self.keys(include_nested=(type(key) is tuple)):
-            self.set(key, default, **kwargs)
+            self.set(key, default, inplace=inplace)
         return self.get(key)
 
     @property
@@ -2834,15 +2835,6 @@ class TensorDict(TensorDictBase):
 
             if source is not None:
                 for key, value in source.items():
-                    if isinstance(value, dict):
-                        value = TensorDict(
-                            value,
-                            batch_size=self._batch_size,
-                            device=self._device,
-                            _run_checks=_run_checks,
-                            _is_shared=_is_shared,
-                            _is_memmap=_is_memmap,
-                        )
                     self.set(key, value)
 
     @staticmethod
@@ -3004,11 +2996,17 @@ class TensorDict(TensorDictBase):
         )
 
     def _set(self, key: str, value, inplace: bool = False) -> TensorDictBase:
-        if inplace:
-            self.get(key).copy_(value)
+        if isinstance(key, tuple):
+            td, subkey = _get_leaf_tensordict(
+                self, key, _default_hook if not inplace else None
+            )
         else:
-            if self._tensordict.get(key, None) is not value:
-                self._tensordict[key] = value
+            td, subkey = self, key
+        if inplace:
+            td.get(subkey).copy_(value)
+        else:
+            if td._tensordict.get(subkey, None) is not value:
+                td._tensordict[key] = value
 
         return self
 
@@ -3042,6 +3040,30 @@ class TensorDict(TensorDictBase):
 
         value = self._validate_value(value)
         return self._set(key, value, inplace=inplace)
+
+    def set_(
+        self, key: str, value: dict[str, CompatibleType] | CompatibleType
+    ) -> TensorDictBase:
+        key = self._validate_key(key)
+        try:
+            # we get the leaf tensordict because that is the context in which the value
+            # needs to be validated (batch_size check, device check etc.)
+            # note that unlike set we don't use _default_hook so missing keys are not
+            # created as we iterate through the tree, instead we catch the resulting
+            # KeyError and modify the error message
+            if isinstance(key, tuple):
+                td, subkey = _get_leaf_tensordict(self, key)
+            else:
+                td, subkey = self, key
+            value = td._validate_value(value)
+            td._set(subkey, value, inplace=True)
+        except KeyError as e:
+            raise KeyError(
+                f'key "{key}" not found in tensordict, '
+                f'call td.set("{key}", value) for populating tensordict with '
+                f"new key-value pair"
+            ) from e
+        return self
 
     def del_(self, key: str) -> TensorDictBase:
         if isinstance(key, tuple):
@@ -3080,30 +3102,6 @@ class TensorDict(TensorDictBase):
             td, subkey = self, new_key
         td._set(subkey, self.get(old_key))
         self.del_(old_key)
-        return self
-
-    def set_(
-        self, key: str, value: dict[str, CompatibleType] | CompatibleType
-    ) -> TensorDictBase:
-        key = self._validate_key(key)
-        try:
-            # we get the leaf tensordict because that is the context in which the value
-            # needs to be validated (batch_size check, device check etc.)
-            # note that unlike set we don't use _default_hook so missing keys are not
-            # created as we iterate through the tree, instead we catch the resulting
-            # KeyError and modify the error message
-            if isinstance(key, tuple):
-                td, subkey = _get_leaf_tensordict(self, key)
-            else:
-                td, subkey = self, key
-            value = td._validate_value(value)
-            td._set(subkey, value, inplace=True)
-        except KeyError as e:
-            raise KeyError(
-                f'key "{key}" not found in tensordict, '
-                f'call td.set("{key}", value) for populating tensordict with '
-                f"new key-value pair"
-            ) from e
         return self
 
     def _stack_onto_(
@@ -4065,7 +4063,12 @@ torch.Size([3, 2])
         # it is assumed that if inplace=False then the key doesn't exist. This is
         # checked in set method, but not here. responsibility lies with the caller
         # so that this method can have minimal overhead from runtime checks
-        parent = self._source
+        if isinstance(key, tuple):
+            parent, subkey = _get_leaf_tensordict(
+                self._source, key, _default_hook if not inplace else None
+            )
+        else:
+            parent, subkey = self._source, key
 
         if not inplace:
             if isinstance(value, TensorDictBase):
@@ -4090,17 +4093,17 @@ torch.Size([3, 2])
                 elif self.is_memmap():
                     value_expand = MemmapTensor.from_tensor(value_expand)
 
-            parent._set(key, value_expand)
+            parent._set(subkey, value_expand)
             if (
                 isinstance(parent, LazyStackedTensorDict)
-                and key not in parent._valid_keys
+                and subkey not in parent._valid_keys
             ):
                 # there is some duplication here with LazyStackedTensorDict.set, but
                 # calling that duplicates runtime checks, and some code duplication
                 # seems better than duplicated overhead.
-                parent._valid_keys = sorted([*parent._valid_keys, key], key=str)
+                parent._valid_keys = sorted([*parent._valid_keys, subkey], key=str)
 
-        parent.set_at_(key, value, self.idx)
+        parent.set_at_(subkey, value, self.idx)
         return self
 
     def set(
@@ -4646,14 +4649,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if len(values) != len(self.tensordicts):
             raise RuntimeError
         for tensordict, item in zip(self.tensordicts, values):
-            if isinstance(tensordict, LazyStackedTensorDict):
-                tensordict._set(key, item, inplace)
-            else:
-                if isinstance(key, tuple):
-                    td, subkey = _get_leaf_tensordict(tensordict, key)
-                else:
-                    td, subkey = tensordict, key
-                td._set(subkey, item, inplace)
+            tensordict._set(key, item, inplace)
+
+        first_key = key if (isinstance(key, str)) else key[0]
+        if key not in self._valid_keys:
+            self._valid_keys = sorted([*self._valid_keys, first_key], key=str)
 
         return self
 
@@ -4902,10 +4902,7 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         if inplace:
             return self
-        return LazyStackedTensorDict(
-            *tensordicts,
-            stack_dim=self.stack_dim,
-        )
+        return LazyStackedTensorDict(*tensordicts, stack_dim=self.stack_dim)
 
     def exclude(self, *keys: str, inplace: bool = False) -> LazyStackedTensorDict:
         tensordicts = [
