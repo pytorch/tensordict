@@ -40,7 +40,7 @@ class TDGraphModule(nn.Module):
 
         for out_key, output in zip(self.out_keys, outputs):
             if out_key != "_":
-                tensordict_out.set(out_key, output, _run_checks=False)
+                tensordict_out.set(out_key, output)
 
         return tensordict_out
 
