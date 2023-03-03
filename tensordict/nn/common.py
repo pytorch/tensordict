@@ -269,7 +269,7 @@ class dispatch:
                                 f"but is expected to execute that function."
                             )
                 tensordict = make_tensordict(tensordict_values)
-                out = func(_self, tensordict, **kwargs)
+                out = func(_self, tensordict, *args, **kwargs)
                 out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
             return func(_self, tensordict, *args, **kwargs)

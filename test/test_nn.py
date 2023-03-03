@@ -502,6 +502,21 @@ class TestTDModule:
         with pytest.raises(RuntimeError, match="Duplicated argument"):
             module(torch.zeros(1, 2), a_c=torch.ones(1, 2))
 
+    def test_dispatch_nested_extra_args(self):
+        class MyModuleNest(nn.Module):
+            in_keys = [("a", "c"), "d"]
+            out_keys = ["b"]
+
+            @dispatch(separator="_")
+            def forward(self, tensordict, other):
+                tensordict["b"] = tensordict["a", "c"] + tensordict["d"] + other
+                return tensordict
+
+        module = MyModuleNest()
+        other = 1
+        (b,) = module(torch.zeros(1, 2), torch.ones(1, 2), other)
+        assert (b == 2).all()
+
     def test_dispatch_nested_sep(self):
         class MyModuleNest(nn.Module):
             in_keys = [("a", "c")]
