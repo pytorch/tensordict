@@ -72,6 +72,17 @@ class dispatch:
     :func:`dispatch` can be used either as a method or as a class when extra arguments
     need to be passed.
 
+    Args:
+        separator (str, optional): separator that combines sub-keys together
+            for ``in_keys`` that are tuples of strings.
+            Defaults to ``"_"``.
+        source (str, optional): the module attribute name that refers to the
+            list of input keys to be used.
+            Defaults to ``"in_keys"``.
+        dest (str, optional): the module attribute name that refers to the
+            list of output keys to be used.
+            Defaults to ``"out_keys"``.
+
     Examples:
         >>> class MyModule(nn.Module):
         ...     in_keys = ["a"]
