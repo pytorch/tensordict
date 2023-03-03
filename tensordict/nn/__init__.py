@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict.nn.common import (
-    dispatch_kwargs,
+    dispatch,
     make_tensordict,
     TensorDictModule,
     TensorDictModuleWrapper,
@@ -23,7 +23,7 @@ from tensordict.nn.sequence import TensorDictSequential
 from tensordict.nn.utils import biased_softplus, inv_softplus
 
 __all__ = [
-    "dispatch_kwargs",
+    "dispatch",
     "TensorDictModule",
     "TensorDictModuleWrapper",
     "get_functional",

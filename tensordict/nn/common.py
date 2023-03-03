@@ -56,25 +56,68 @@ def _check_all_nested(sequence_of_keys: Sequence[NestedKey]) -> None:
         _nested_key_type_check(key)
 
 
-class dispatch_kwargs:
+class dispatch:
     """Allows for a function expecting a TensorDict to be called using kwargs.
 
-    This method must be used within modules that have an ``in_keys`` and
-    ``out_keys`` attributes indicating what keys to be read and written
-    from the tensordict. The wrapped function should also have a ``tensordict``
-    leading argument.
+    :func:`dispatch` must be used within modules that have an ``in_keys`` (or
+    another source of keys indicated by the ``source`` keyword argument) and
+    ``out_keys`` (or another ``dest`` key list) attributes indicating what keys
+    to be read and written from the tensordict. The wrapped function should
+    also have a ``tensordict`` leading argument.
 
     The resulting function will return a single tensor (if there is a single
     element in out_keys), otherwise it will return a tuple sorted as the ``out_keys``
     of the module.
 
+    :func:`dispatch` can be used either as a method or as a class when extra arguments
+    need to be passed.
+
+    Args:
+        separator (str, optional): separator that combines sub-keys together
+            for ``in_keys`` that are tuples of strings.
+            Defaults to ``"_"``.
+        source (str or list of keys, optional): if a string is provided,
+            it points to the module attribute that contains the
+            list of input keys to be used. If a list is provided instead, it
+            will contain the keys used as input to the module.
+            Defaults to ``"in_keys"`` which is the attribute name of
+            :class:`~.TensorDictModule` list of input keys.
+        dest (str or list of keys, optional): if a string is provided,
+            it points to the module attribute that contains the
+            list of output keys to be used. If a list is provided instead, it
+            will contain the keys used as output to the module.
+            Defaults to ``"out_keys"`` which is the attribute name of
+            :class:`~.TensorDictModule` list of output keys.
 
     Examples:
         >>> class MyModule(nn.Module):
         ...     in_keys = ["a"]
         ...     out_keys = ["b"]
         ...
-        ...     @dispatch_kwargs
+        ...     @dispatch
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModule()
+        >>> b = module(a=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+        >>> # equivalently
+        >>> class MyModule(nn.Module):
+        ...     keys_in = ["a"]
+        ...     keys_out = ["b"]
+        ...
+        ...     @dispatch(source="keys_in", dest="keys_out")
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModule()
+        >>> b = module(a=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+        >>> # or this
+        >>> class MyModule(nn.Module):
+        ...     @dispatch(source=["a"], dest=["b"])
         ...     def forward(self, tensordict):
         ...         tensordict['b'] = tensordict['a'] + 1
         ...         return tensordict
@@ -91,7 +134,7 @@ class dispatch_kwargs:
         ...     in_keys = [("a", "c")]
         ...     out_keys = ["b"]
         ...
-        ...     @dispatch_kwargs
+        ...     @dispatch
         ...     def forward(self, tensordict):
         ...         tensordict['b'] = tensordict['a', 'c'] + 1
         ...         return tensordict
@@ -108,7 +151,7 @@ class dispatch_kwargs:
         ...     in_keys = [("a", "c")]
         ...     out_keys = ["b"]
         ...
-        ...     @dispatch_kwargs(separator="sep")
+        ...     @dispatch(separator="sep")
         ...     def forward(self, tensordict):
         ...         tensordict['b'] = tensordict['a', 'c'] + 1
         ...         return tensordict
@@ -118,21 +161,64 @@ class dispatch_kwargs:
         >>> assert (b == 1).all()
 
 
+    Since the input keys is a sorted sequence of strings,
+    :func:`dispatch` can also be used with unnamed arguments where the order
+    must match the order of the input keys.
+
+    .. note::
+
+        If the first argument is a :class:`~.TensorDictBase` instance, it is
+        assumed that dispatch is __not__ being used and that this tensordict
+        contains all the necessary information to be run through the module.
+        In other words, one cannot decompose a tensordict with the first key
+        of the module inputs pointing to a tensordict instance.
+        In general, it is preferred to use :func:`dispatch` with tensordict
+        leaves only.
+
+    Examples:
+        >>> class MyModuleNest(nn.Module):
+        ...     in_keys = [("a", "c"), "d"]
+        ...     out_keys = ["b"]
+        ...
+        ...     @dispatch
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a', 'c'] + tensordict["d"]
+        ...         return tensordict
+        ...
+        >>> module = MyModuleNest()
+        >>> b, = module(torch.zeros(1, 2), d=torch.ones(1, 2))  # works
+        >>> assert (b == 1).all()
+        >>> b, = module(torch.zeros(1, 2), torch.ones(1, 2))  # works
+        >>> assert (b == 1).all()
+        >>> try:
+        ...     b, = module(torch.zeros(1, 2), a_c=torch.ones(1, 2))  # fails
+        ... except:
+        ...     print("oopsy!")
+        ...
+
     """
 
     DEFAULT_SEPARATOR = "_"
+    DEFAULT_SOURCE = "in_keys"
+    DEFAULT_DEST = "out_keys"
 
-    def __new__(cls, separator=DEFAULT_SEPARATOR):
+    def __new__(
+        cls, separator=DEFAULT_SEPARATOR, source=DEFAULT_SOURCE, dest=DEFAULT_DEST
+    ):
         if callable(separator):
             func = separator
-            separator = dispatch_kwargs.DEFAULT_SEPARATOR
+            separator = dispatch.DEFAULT_SEPARATOR
             self = super().__new__(cls)
-            self.__init__(separator)
+            self.__init__(separator, source, dest)
             return self.__call__(func)
         return super().__new__(cls)
 
-    def __init__(self, separator=DEFAULT_SEPARATOR):
+    def __init__(
+        self, separator=DEFAULT_SEPARATOR, source=DEFAULT_SOURCE, dest=DEFAULT_DEST
+    ):
         self.separator = separator
+        self.source = source
+        self.dest = dest
 
     def __call__(self, func: Callable) -> Callable:
         # sanity check
@@ -148,16 +234,33 @@ class dispatch_kwargs:
             break
 
         @functools.wraps(func)
-        def wrapper(
-            _self, tensordict: TensorDictBase | None = None, *args: Any, **kwargs: Any
-        ) -> Any:
+        def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
+            source = self.source
+            if isinstance(source, str):
+                source = getattr(_self, source)
+            tensordict = None
+            if len(args):
+                if not isinstance(args[0], TensorDictBase):
+                    pass
+                else:
+                    tensordict, args = args[0], args[1:]
             if tensordict is None:
                 tensordict_values = {}
-                for key in _self.in_keys:
+                dest = self.dest
+                if isinstance(dest, str):
+                    dest = getattr(_self, dest)
+                for key in source:
                     expected_key = (
                         self.separator.join(key) if isinstance(key, tuple) else key
                     )
-                    if expected_key in kwargs:
+                    if len(args):
+                        tensordict_values[key] = args[0]
+                        args = args[1:]
+                        if expected_key in kwargs:
+                            raise RuntimeError(
+                                "Duplicated argument in args and kwargs."
+                            )
+                    elif expected_key in kwargs:
                         try:
                             tensordict_values[key] = kwargs.pop(expected_key)
                         except KeyError:
@@ -167,7 +270,7 @@ class dispatch_kwargs:
                             )
                 tensordict = make_tensordict(tensordict_values)
                 out = func(_self, tensordict, *args, **kwargs)
-                out = tuple(out[key] for key in _self.out_keys)
+                out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
             return func(_self, tensordict, *args, **kwargs)
 
@@ -305,7 +408,7 @@ class TensorDictModule(nn.Module):
         out = self.module(*tensors, **kwargs)
         return out
 
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,

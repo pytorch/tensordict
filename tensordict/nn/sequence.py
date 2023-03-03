@@ -22,7 +22,7 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 
-from tensordict.nn.common import dispatch_kwargs, TensorDictModule
+from tensordict.nn.common import dispatch, TensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import _normalize_key, NestedKey
 from torch import nn
@@ -234,7 +234,7 @@ class TensorDictSequential(TensorDictModule):
             tensordict._update_valid_keys()
         return tensordict
 
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,
