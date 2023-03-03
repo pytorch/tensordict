@@ -113,6 +113,14 @@ def test_set_nested_new(benchmark, td, c):
     benchmark.pedantic(exec_set_nested_new, iterations=10000)
 
 
+def test_select(benchmark, td, c):
+    def exec_select():
+        tdc = td.clone()
+        tdc["c", "c", "c"] = c
+        tdc.select("a", "z", ("c", "c", "c"), strict=False)
+
+    benchmark.pedantic(exec_select, iterations=10000)
+
 def main():
     # creation
     td = TensorDict({}, [3, 4])
@@ -183,6 +191,14 @@ def main():
     tdc["b", "b1"] = b
 
     # set nested new
+    a = torch.zeros(3, 4, 5)
+    b = torch.zeros(3, 4, 5)
+    c = torch.zeros(3, 4, 5)
+    td = TensorDict({"a": a, "b": {"b1": b}}, [3, 4])
+    tdc = td.clone()
+    tdc["c", "c", "c"] = c
+
+    # select
     a = torch.zeros(3, 4, 5)
     b = torch.zeros(3, 4, 5)
     c = torch.zeros(3, 4, 5)
