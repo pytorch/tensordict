@@ -121,6 +121,7 @@ def test_select(benchmark, td, c):
 
     benchmark.pedantic(exec_select, iterations=10000)
 
+
 def main():
     # creation
     td = TensorDict({}, [3, 4])

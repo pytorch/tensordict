@@ -3416,20 +3416,33 @@ class TensorDict(TensorDictBase):
         self, *keys: NestedKey, inplace: bool = False, strict: bool = True
     ) -> TensorDictBase:
         source = {}
+        keys_to_select = None
         for key in keys:
+            if isinstance(key, str):
+                subkey = []
+            else:
+                key, subkey = key[0], key[1:]
             try:
                 source[key] = self.get(key)
+                if len(subkey):
+                    if keys_to_select is None:
+                        # delay creation of defaultdict
+                        keys_to_select = defaultdict(list)
+                    keys_to_select[key].append(subkey)
             except KeyError as err:
                 if not strict:
                     continue
                 else:
                     raise KeyError(f"select failed to get key {key}") from err
+        if keys_to_select is not None:
+            for key, val in keys_to_select.items():
+                source[key] = source[key].select(*val, strict=strict, inplace=inplace)
 
         out = TensorDict(
             device=self.device,
             batch_size=self.batch_size,
             source=source,
-            # _run_checks=False,
+            _run_checks=False,
             _is_memmap=self._is_memmap,
             _is_shared=self._is_shared,
         )
