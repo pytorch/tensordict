@@ -241,6 +241,8 @@ class dispatch:
                     key in tensordict.keys(isinstance(key, tuple)) for key in source
                 ):
                     tensordict = None
+                else:
+                    args = args[1:]
             if tensordict is None:
                 tensordict_values = {}
                 dest = self.dest
