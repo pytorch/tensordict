@@ -76,12 +76,18 @@ class dispatch:
         separator (str, optional): separator that combines sub-keys together
             for ``in_keys`` that are tuples of strings.
             Defaults to ``"_"``.
-        source (str, optional): the module attribute name that refers to the
-            list of input keys to be used.
-            Defaults to ``"in_keys"``.
-        dest (str, optional): the module attribute name that refers to the
-            list of output keys to be used.
-            Defaults to ``"out_keys"``.
+        source (str or list of keys, optional): if a string is provided,
+            it points to the module attribute that contains the
+            list of input keys to be used. If a list is provided instead, it
+            will contain the keys used as input to the module.
+            Defaults to ``"in_keys"`` which is the attribute name of
+            :class:`~.TensorDictModule` list of input keys.
+        dest (str or list of keys, optional): if a string is provided,
+            it points to the module attribute that contains the
+            list of output keys to be used. If a list is provided instead, it
+            will contain the keys used as output to the module.
+            Defaults to ``"out_keys"`` which is the attribute name of
+            :class:`~.TensorDictModule` list of output keys.
 
     Examples:
         >>> class MyModule(nn.Module):
@@ -102,6 +108,16 @@ class dispatch:
         ...     keys_out = ["b"]
         ...
         ...     @dispatch(source="keys_in", dest="keys_out")
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModule()
+        >>> b = module(a=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+        >>> # or this
+        >>> class MyModule(nn.Module):
+        ...     @dispatch(source=["a"], dest=["b"])
         ...     def forward(self, tensordict):
         ...         tensordict['b'] = tensordict['a'] + 1
         ...         return tensordict
@@ -188,7 +204,13 @@ class dispatch:
         ) -> Any:
             if tensordict is None:
                 tensordict_values = {}
-                for key in getattr(_self, self.source):
+                source = self.source
+                if isinstance(source, str):
+                    source = getattr(_self, source)
+                dest = self.dest
+                if isinstance(dest, str):
+                    dest = getattr(_self, dest)
+                for key in source:
                     expected_key = (
                         self.separator.join(key) if isinstance(key, tuple) else key
                     )
@@ -202,7 +224,7 @@ class dispatch:
                             )
                 tensordict = make_tensordict(tensordict_values)
                 out = func(_self, tensordict, *args, **kwargs)
-                out = tuple(out[key] for key in getattr(_self, self.dest))
+                out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
             return func(_self, tensordict, *args, **kwargs)
 

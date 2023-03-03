@@ -500,12 +500,13 @@ class TestTDModule:
         (b,) = module(asepc=torch.zeros(1, 2))
         assert (b == 1).all()
 
-    def test_dispatch_kwargs_nested_source(self):
+    @pytest.mark.parametrize("source", ["keys_in", [("a", "c")]])
+    def test_dispatch_kwargs_nested_source(self, source):
         class MyModuleNest(nn.Module):
             keys_in = [("a", "c")]
             out_keys = ["b"]
 
-            @dispatch(separator="sep", source="keys_in")
+            @dispatch(separator="sep", source=source)
             def forward(self, tensordict):
                 tensordict["b"] = tensordict["a", "c"] + 1
                 return tensordict
@@ -514,12 +515,13 @@ class TestTDModule:
         (b,) = module(asepc=torch.zeros(1, 2))
         assert (b == 1).all()
 
-    def test_dispatch_kwargs_nested_dest(self):
+    @pytest.mark.parametrize("dest", ["other", ["b"]])
+    def test_dispatch_kwargs_nested_dest(self, dest):
         class MyModuleNest(nn.Module):
             in_keys = [("a", "c")]
             other = ["b"]
 
-            @dispatch(separator="sep", dest="other")
+            @dispatch(separator="sep", dest=dest)
             def forward(self, tensordict):
                 tensordict["b"] = tensordict["a", "c"] + 1
                 return tensordict
