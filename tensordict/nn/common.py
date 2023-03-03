@@ -167,9 +167,13 @@ class dispatch:
 
     .. note::
 
-        This can lead to unexpected behaviours when the first unnamed argument
-        is itself a tensordict instance with keys matching those specified
-        by the source.
+        If the first argument is a :class:`~.TensorDictBase` instance, it is
+        assumed that dispatch is __not__ being used and that this tensordict
+        contains all the necessary information to be run through the module.
+        In other words, one cannot decompose a tensordict with the first key
+        of the module inputs pointing to a tensordict instance.
+        In general, it is preferred to use :func:`dispatch` with tensordict
+        leaves only.
 
     Examples:
         >>> class MyModuleNest(nn.Module):
@@ -236,13 +240,10 @@ class dispatch:
                 source = getattr(_self, source)
             tensordict = None
             if len(args):
-                tensordict = args[0]
-                if not isinstance(tensordict, TensorDictBase) or not all(
-                    key in tensordict.keys(isinstance(key, tuple)) for key in source
-                ):
-                    tensordict = None
+                if not isinstance(args[0], TensorDictBase):
+                    pass
                 else:
-                    args = args[1:]
+                    tensordict, args = args[0], args[1:]
             if tensordict is None:
                 tensordict_values = {}
                 dest = self.dest
