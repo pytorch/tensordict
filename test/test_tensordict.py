@@ -44,7 +44,7 @@ def test_tensordict_set(device):
     assert td.get("key_device").device == torch.device(device)
 
     with pytest.raises(
-        AttributeError, match="for populating tensordict with new key-value pair"
+        KeyError, match="for populating tensordict with new key-value pair"
     ):
         td.set_("smartypants", torch.ones(4, 5, device="cpu", dtype=torch.double))
     # test set_at_
@@ -1897,7 +1897,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td.unlock()
         expected = torch.ones_like(td.get("a"))
-        inserted = td.setdefault("z", expected, _run_checks=True)
+        inserted = td.setdefault("z", expected)
         assert (inserted == expected).all()
 
     def test_setdefault_existing_key(self, td_name, device):
@@ -2511,7 +2511,7 @@ def test_batchsize_reset():
         RuntimeError,
         match=re.escape(
             "batch dimension mismatch, "
-            "got self.batch_size=torch.Size([3, 4, 5]) and tensor.shape[:self.batch_dims]=torch.Size([3, 4, 2])"
+            "got self.batch_size=torch.Size([3, 4, 5]) and value.shape[:self.batch_dims]=torch.Size([3, 4, 2])"
         ),
     ):
         td.set("d", torch.randn(3, 4, 2))
