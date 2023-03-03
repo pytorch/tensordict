@@ -977,10 +977,11 @@ class TensorDictBase(MutableMapping):
         if not isinstance(default, str):
             return default
         if default == "_no_default_":
-            raise KeyError(
-                f'key "{key}" not found in {self.__class__.__name__} with '
-                f"keys {sorted(self.keys())}"
-            )
+            raise KeyError
+            # raise KeyError(
+            #     f'key "{key}" not found in {self.__class__.__name__} with '
+            #     f"keys {sorted(self.keys())}"
+            # )
         else:
             raise ValueError(
                 f"default should be None or a Tensor instance, got {default}"
@@ -3006,7 +3007,7 @@ class TensorDict(TensorDictBase):
             td.get(subkey).copy_(value)
         else:
             if td._tensordict.get(subkey, None) is not value:
-                td._tensordict[key] = value
+                td._tensordict[subkey] = value
 
         return self
 
