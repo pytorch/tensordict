@@ -10,7 +10,7 @@ import torch
 
 from tensordict import TensorDict
 from tensordict.nn import (
-    dispatch_kwargs,
+    dispatch,
     probabilistic as nn_probabilistic,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
@@ -479,12 +479,47 @@ class TestTDModule:
         out = tdm(a_c=torch.zeros(1, 1))
         assert (out == td["b", "d"]).all()
 
+    def test_dispatch_kwargs_nested_confusing(self):
+        tdm = TensorDictModule(nn.Linear(1, 1), [("a_1", "c")], [("b_2", "d")])
+        td = TensorDict({("a_1", "c"): torch.zeros(1, 1)}, [1])
+        tdm(td)
+        out = tdm(a_1_c=torch.zeros(1, 1))
+        assert (out == td["b_2", "d"]).all()
+
     def test_dispatch_kwargs_nested_sep(self):
         class MyModuleNest(nn.Module):
             in_keys = [("a", "c")]
             out_keys = ["b"]
 
-            @dispatch_kwargs(separator="sep")
+            @dispatch(separator="sep")
+            def forward(self, tensordict):
+                tensordict["b"] = tensordict["a", "c"] + 1
+                return tensordict
+
+        module = MyModuleNest()
+        (b,) = module(asepc=torch.zeros(1, 2))
+        assert (b == 1).all()
+
+    def test_dispatch_kwargs_nested_source(self):
+        class MyModuleNest(nn.Module):
+            keys_in = [("a", "c")]
+            out_keys = ["b"]
+
+            @dispatch(separator="sep", source="keys_in")
+            def forward(self, tensordict):
+                tensordict["b"] = tensordict["a", "c"] + 1
+                return tensordict
+
+        module = MyModuleNest()
+        (b,) = module(asepc=torch.zeros(1, 2))
+        assert (b == 1).all()
+
+    def test_dispatch_kwargs_nested_dest(self):
+        class MyModuleNest(nn.Module):
+            in_keys = [("a", "c")]
+            other = ["b"]
+
+            @dispatch(separator="sep", dest="other")
             def forward(self, tensordict):
                 tensordict["b"] = tensordict["a", "c"] + 1
                 return tensordict
