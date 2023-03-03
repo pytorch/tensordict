@@ -465,28 +465,44 @@ class TestTDModule:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
-    def test_dispatch_kwargs(self):
+    def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
         tdm(td)
         out = tdm(a=torch.zeros(1, 1))
         assert (out == td["b"]).all()
 
-    def test_dispatch_kwargs_nested(self):
+    def test_dispatch_nested(self):
         tdm = TensorDictModule(nn.Linear(1, 1), [("a", "c")], [("b", "d")])
         td = TensorDict({("a", "c"): torch.zeros(1, 1)}, [1])
         tdm(td)
         out = tdm(a_c=torch.zeros(1, 1))
         assert (out == td["b", "d"]).all()
 
-    def test_dispatch_kwargs_nested_confusing(self):
+    def test_dispatch_nested_confusing(self):
         tdm = TensorDictModule(nn.Linear(1, 1), [("a_1", "c")], [("b_2", "d")])
         td = TensorDict({("a_1", "c"): torch.zeros(1, 1)}, [1])
         tdm(td)
         out = tdm(a_1_c=torch.zeros(1, 1))
         assert (out == td["b_2", "d"]).all()
 
-    def test_dispatch_kwargs_nested_sep(self):
+    def test_dispatch_nested_args(self):
+        class MyModuleNest(nn.Module):
+            in_keys = [("a", "c"), "d"]
+            out_keys = ["b"]
+
+            @dispatch(separator="_")
+            def forward(self, tensordict):
+                tensordict["b"] = tensordict["a", "c"] + tensordict["d"]
+                return tensordict
+
+        module = MyModuleNest()
+        (b,) = module(torch.zeros(1, 2), d=torch.ones(1, 2))
+        assert (b == 1).all()
+        with pytest.raises(RuntimeError, match="Duplicated argument"):
+            module(torch.zeros(1, 2), a_c=torch.ones(1, 2))
+
+    def test_dispatch_nested_sep(self):
         class MyModuleNest(nn.Module):
             in_keys = [("a", "c")]
             out_keys = ["b"]
@@ -501,7 +517,7 @@ class TestTDModule:
         assert (b == 1).all()
 
     @pytest.mark.parametrize("source", ["keys_in", [("a", "c")]])
-    def test_dispatch_kwargs_nested_source(self, source):
+    def test_dispatch_nested_source(self, source):
         class MyModuleNest(nn.Module):
             keys_in = [("a", "c")]
             out_keys = ["b"]
@@ -516,7 +532,7 @@ class TestTDModule:
         assert (b == 1).all()
 
     @pytest.mark.parametrize("dest", ["other", ["b"]])
-    def test_dispatch_kwargs_nested_dest(self, dest):
+    def test_dispatch_nested_dest(self, dest):
         class MyModuleNest(nn.Module):
             in_keys = [("a", "c")]
             other = ["b"]
@@ -530,7 +546,7 @@ class TestTDModule:
         (b,) = module(asepc=torch.zeros(1, 2))
         assert (b == 1).all()
 
-    def test_dispatch_kwargs_multi(self):
+    def test_dispatch_multi(self):
         tdm = TensorDictSequential(
             TensorDictModule(nn.Linear(1, 1), [("a", "c")], [("b", "d")]),
             TensorDictModule(nn.Linear(1, 1), [("a", "c")], ["e"]),
@@ -541,7 +557,7 @@ class TestTDModule:
         assert (out1 == td["b", "d"]).all()
         assert (out2 == td["e"]).all()
 
-    def test_dispatch_kwargs_module_with_additional_parameters(self):
+    def test_dispatch_module_with_additional_parameters(self):
         class MyModule(nn.Identity):
             def forward(self, input, c):
                 return input

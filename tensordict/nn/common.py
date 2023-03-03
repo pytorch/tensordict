@@ -161,6 +161,37 @@ class dispatch:
         >>> assert (b == 1).all()
 
 
+    Since the input keys is a sorted sequence of strings,
+    :func:`dispatch` can also be used with unnamed arguments where the order
+    must match the order of the input keys.
+
+    .. note::
+
+        This can lead to unexpected behaviours when the first unnamed argument
+        is itself a tensordict instance with keys matching those specified
+        by the source.
+
+    Examples:
+        >>> class MyModuleNest(nn.Module):
+        ...     in_keys = [("a", "c"), "d"]
+        ...     out_keys = ["b"]
+        ...
+        ...     @dispatch
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a', 'c'] + tensordict["d"]
+        ...         return tensordict
+        ...
+        >>> module = MyModuleNest()
+        >>> b, = module(torch.zeros(1, 2), d=torch.ones(1, 2))  # works
+        >>> assert (b == 1).all()
+        >>> b, = module(torch.zeros(1, 2), torch.ones(1, 2))  # works
+        >>> assert (b == 1).all()
+        >>> try:
+        ...     b, = module(torch.zeros(1, 2), a_c=torch.ones(1, 2))  # fails
+        ... except:
+        ...     print("oopsy!")
+        ...
+
     """
 
     DEFAULT_SEPARATOR = "_"
@@ -199,14 +230,19 @@ class dispatch:
             break
 
         @functools.wraps(func)
-        def wrapper(
-            _self, tensordict: TensorDictBase | None = None, *args: Any, **kwargs: Any
-        ) -> Any:
+        def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
+            source = self.source
+            if isinstance(source, str):
+                source = getattr(_self, source)
+            tensordict = None
+            if len(args):
+                tensordict = args[0]
+                if not isinstance(tensordict, TensorDictBase) or not all(
+                    key in tensordict.keys(isinstance(key, tuple)) for key in source
+                ):
+                    tensordict = None
             if tensordict is None:
                 tensordict_values = {}
-                source = self.source
-                if isinstance(source, str):
-                    source = getattr(_self, source)
                 dest = self.dest
                 if isinstance(dest, str):
                     dest = getattr(_self, dest)
@@ -214,7 +250,14 @@ class dispatch:
                     expected_key = (
                         self.separator.join(key) if isinstance(key, tuple) else key
                     )
-                    if expected_key in kwargs:
+                    if len(args):
+                        tensordict_values[key] = args[0]
+                        args = args[1:]
+                        if expected_key in kwargs:
+                            raise RuntimeError(
+                                "Duplicated argument in args and kwargs."
+                            )
+                    elif expected_key in kwargs:
                         try:
                             tensordict_values[key] = kwargs.pop(expected_key)
                         except KeyError:
@@ -223,7 +266,7 @@ class dispatch:
                                 f"but is expected to execute that function."
                             )
                 tensordict = make_tensordict(tensordict_values)
-                out = func(_self, tensordict, *args, **kwargs)
+                out = func(_self, tensordict, **kwargs)
                 out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
             return func(_self, tensordict, *args, **kwargs)
