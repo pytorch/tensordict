@@ -3010,6 +3010,14 @@ def test_select_nested(inplace):
         }
 
 
+def test_select_nested_missing():
+    # checks that we keep a nested key even if missing nested keys are present
+    td = TensorDict({"a": {"b": [1], "c": [2]}}, [])
+
+    td_select = td.select(("a", "b"), "r", ("a", "z"), strict=False)
+    assert ("a", "b") in td_select.keys(True, True)
+
+
 @pytest.mark.parametrize("inplace", [True, False])
 def test_exclude_nested(inplace):
     tensor_1 = torch.rand(4, 5, 6, 7)

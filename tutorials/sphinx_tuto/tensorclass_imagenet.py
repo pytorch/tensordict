@@ -266,11 +266,14 @@ class Collate(nn.Module):
     def __init__(self, transform=None, device=None):
         super().__init__()
         self.transform = transform
-        self.device = device
+        self.device = torch.device(device)
 
     def __call__(self, x: ImageNetData):
         # move data to RAM
-        out = x.apply(lambda x: x.as_tensor()).pin_memory()
+        if self.device.type == "cuda":
+            out = x.apply(lambda x: x.as_tensor()).pin_memory()
+        else:
+            out = x.apply(lambda x: x.as_tensor())
         if self.device:
             # move data to gpu
             out = out.to(self.device)

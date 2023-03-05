@@ -977,11 +977,11 @@ class TensorDictBase(MutableMapping):
         if not isinstance(default, str):
             return default
         if default == "_no_default_":
-            raise KeyError
-            # raise KeyError(
-            #     f'key "{key}" not found in {self.__class__.__name__} with '
-            #     f"keys {sorted(self.keys())}"
-            # )
+            # raise KeyError
+            raise KeyError(
+                f'key "{key}" not found in {self.__class__.__name__} with '
+                f"keys {sorted(self.keys())}"
+            )
         else:
             raise ValueError(
                 f"default should be None or a Tensor instance, got {default}"
@@ -3370,50 +3370,41 @@ class TensorDict(TensorDictBase):
     def select(
         self, *keys: NestedKey, inplace: bool = False, strict: bool = True
     ) -> TensorDictBase:
-        # existing_keys = set(self.keys(include_nested=True))
-        keys = {
-            key[0] if (isinstance(key, tuple)) and len(key) == 1 else key
-            for key in keys
-        }
-
-        nested_keys = defaultdict(list)
+        source = {}
+        keys_to_select = None
         for key in keys:
-            _nested_key_type_check(key)
             if isinstance(key, str):
-                # ensure key is in the top level of the dict
-                nested_keys[key]
-            elif len(key) == 1:
-                nested_keys[key[0]]
+                subkey = []
             else:
-                nested_keys[key[0]].append(key[1:])
-
-        d = {}
-
-        for key, subkeys in nested_keys.items():
+                key, subkey = key[0], key[1:]
             try:
-                value = self.get(key)
-                if len(subkeys) > 0 and isinstance(value, TensorDictBase):
-                    value = value.select(*subkeys, inplace=inplace)
-                d[key] = value
-            except KeyError:
-                if strict:
-                    raise KeyError(
-                        f"Key '{key}' was not found among keys {set(self.keys(True))}."
-                    )
-                else:
+                source[key] = self.get(key)
+                if len(subkey):
+                    if keys_to_select is None:
+                        # delay creation of defaultdict
+                        keys_to_select = defaultdict(list)
+                    keys_to_select[key].append(subkey)
+            except KeyError as err:
+                if not strict:
                     continue
+                else:
+                    raise KeyError(f"select failed to get key {key}") from err
+        if keys_to_select is not None:
+            for key, val in keys_to_select.items():
+                source[key] = source[key].select(*val, strict=strict, inplace=inplace)
 
-        if inplace:
-            self._tensordict = d
-            return self
-        return TensorDict(
+        out = TensorDict(
             device=self.device,
             batch_size=self.batch_size,
-            source=d,
+            source=source,
             _run_checks=False,
             _is_memmap=self._is_memmap,
             _is_shared=self._is_shared,
         )
+        if inplace:
+            self._tensordict = out._tensordict
+            return self
+        return out
 
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
