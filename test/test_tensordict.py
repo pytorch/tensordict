@@ -3015,6 +3015,7 @@ def test_select_nested_missing():
     td = TensorDict({"a": {"b": [1], "c": [2]}}, [])
 
     td_select = td.select(("a", "b"), "r", ("a", "z"), strict=False)
+    assert ("a", "b") in list(td_select.keys(True, True))
     assert ("a", "b") in td_select.keys(True, True)
 
 

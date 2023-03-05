@@ -215,7 +215,7 @@ class _TensorDictKeysView:
 
     def _combine_keys(self, prefix: str | None, key: NestedKey) -> NestedKey:
         if prefix is not None:
-            if type(key) is tuple:
+            if isinstance(key, tuple):
                 return prefix + key
             return (*prefix, key)
         return key
@@ -246,18 +246,18 @@ class _TensorDictKeysView:
         return self.tensordict._tensordict.keys()
 
     def __contains__(self, key: NestedKey) -> bool:
-        if type(key) is str:
+        if isinstance(key, str):
             if key in self._keys():
                 if self.leaves_only:
                     return not is_tensor_collection(self.tensordict.entry_class(key))
                 return True
             return False
 
-        elif type(key) is tuple:
+        elif isinstance(key, tuple):
             if len(key) == 1:
                 return key[0] in self
             elif len(key) > 1 and self.include_nested:
-                if key[0] in self:
+                if key[0] in self._keys():
                     entry_type = self.tensordict.entry_class(key[0])
                     is_tensor = entry_type is Tensor
                     is_kjt = not is_tensor and entry_type is KeyedJaggedTensor
@@ -268,18 +268,19 @@ class _TensorDictKeysView:
                     )
 
                     # TODO: SavedTensorDict currently doesn't support nested membership checks
-                    include_nested = self.include_nested  # and not isinstance(
-                    #     val, SavedTensorDict
-                    # )
                     _tensordict_nested = _is_tensordict and key[
                         1:
-                    ] in self.tensordict.get(key[0]).keys(include_nested=include_nested)
+                    ] in self.tensordict.get(key[0]).keys(
+                        include_nested=self.include_nested
+                    )
+                    if _tensordict_nested:
+                        return True
                     _kjt = (
                         is_kjt
                         and len(key) == 2
                         and key[1] in self.tensordict.get(key[0]).keys()
                     )
-                    return _kjt or _tensordict_nested
+                    return _kjt
 
                 return False
             if all(isinstance(subkey, str) for subkey in key):
@@ -1150,7 +1151,7 @@ class TensorDictBase(MutableMapping):
         for key, value in input_dict_or_td.items():
             if clone and hasattr(value, "clone"):
                 value = value.clone()
-            if type(key) is tuple:
+            if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]
             else:
                 subkey = []
@@ -2667,7 +2668,7 @@ class TensorDictBase(MutableMapping):
             previously set.
 
         """
-        if key not in self.keys(include_nested=(type(key) is tuple)):
+        if key not in self.keys(include_nested=isinstance(key, tuple)):
             self.set(key, default, inplace=inplace)
         return self.get(key)
 
