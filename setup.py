@@ -126,7 +126,7 @@ def _main(argv):
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
             "clean": clean,
         },
-        install_requires=[pytorch_package_dep, "numpy", "cloudpickle"],
+        install_requires=[pytorch_package_dep, "numpy", "cloudpickle", "torchsnapshot"],
         extras_require={
             "tests": ["pytest", "pyyaml", "pytest-instafail"],
             "checkpointing": ["torchsnapshot-nightly"],
