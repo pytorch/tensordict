@@ -500,8 +500,8 @@ def _setitem(self, item: NestedKey, value: Any) -> None:
             if is_tensorclass(val):
                 _setitem(self._non_tensordict[key], item, value)
         return
-
     # else it is tensorclass
+
     if not isinstance(value, self.__class__):
         self_keys = set().union(self._non_tensordict, self._tensordict.keys())
         value_keys = set().union(value._non_tensordict, value._tensordict.keys())
@@ -512,30 +512,27 @@ def _setitem(self, item: NestedKey, value: Any) -> None:
                 "compatible class (i.e. same members) assignment"
             )
 
-    if isinstance(value, (TensorDictBase, dict)):
-        self._tensordict[item] = value
-    else:
-        # Validating the non-tensor data before setting the item
-        for key, val in value._non_tensordict.items():
-            # Raise a warning if non_tensor data doesn't match
-            if (
-                key in self._non_tensordict.keys()
-                and val is not self._non_tensordict[key]
-            ):
-                warnings.warn(
-                    f"Meta data at {repr(key)} may or may not be equal, this may result in "
-                    f"undefined behaviours",
-                    category=UserWarning,
-                    stacklevel=2,
-                )
+    # Validating the non-tensor data before setting the item
+    for key, val in value._non_tensordict.items():
+        # Raise a warning if non_tensor data doesn't match
+        if (
+            key in self._non_tensordict.keys()
+            and val is not self._non_tensordict[key]
+        ):
+            warnings.warn(
+                f"Meta data at {repr(key)} may or may not be equal, this may result in "
+                f"undefined behaviours",
+                category=UserWarning,
+                stacklevel=2,
+            )
 
-        for key in value._tensordict.keys():
-            # Making sure that the key-clashes won't happen, if the key is present in tensor data in value
-            # we will honor that and remove the key-value pair from non-tensor data
-            if key in self._non_tensordict.keys():
-                del self._non_tensordict[key]
+    for key in value._tensordict.keys():
+        # Making sure that the key-clashes won't happen, if the key is present in tensor data in value
+        # we will honor that and remove the key-value pair from non-tensor data
+        if key in self._non_tensordict.keys():
+            del self._non_tensordict[key]
 
-        self._tensordict[item] = value._tensordict
+    self._tensordict[item] = value._tensordict
 
 
 def _repr(self) -> str:
