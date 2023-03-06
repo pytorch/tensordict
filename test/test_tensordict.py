@@ -3872,10 +3872,18 @@ def test_save_load_memmap_stacked_td(
         assert (d2[:, 0] == a).all()
 
 
-def test_err_msg_missing_nested():
-    td = TensorDict({"a": torch.zeros(())}, [])
-    with pytest.raises(ValueError, match="Expected a TensorDictBase instance"):
-        td["a", "b"]
+class TestErrorMessage:
+    @staticmethod
+    def test_err_msg_missing_nested():
+        td = TensorDict({"a": torch.zeros(())}, [])
+        with pytest.raises(ValueError, match="Expected a TensorDictBase instance"):
+            td["a", "b"]
+
+    @staticmethod
+    def test_inplace_error():
+        td = TensorDict({"a": torch.rand(())}, [])
+        with pytest.raises(ValueError, match="Failed to update 'a'"):
+            td.set_("a", torch.randn(2))
 
 
 if __name__ == "__main__":

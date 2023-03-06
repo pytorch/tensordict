@@ -3005,7 +3005,12 @@ class TensorDict(TensorDictBase):
         else:
             td, subkey = self, key
         if inplace:
-            td.get(subkey).copy_(value)
+            try:
+                td.get(subkey).copy_(value)
+            except Exception as err:
+                raise ValueError(
+                    f"Failed to update '{subkey}' in tensordict {td}"
+                ) from err
         else:
             if td._tensordict.get(subkey, None) is not value:
                 td._tensordict[subkey] = value
