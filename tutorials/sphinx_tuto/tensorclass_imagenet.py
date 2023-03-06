@@ -24,8 +24,9 @@ Batched data loading with tensorclasses
 # tutorial <https://pytorch.org/tutorials/beginner/transfer_learning_tutorial.html>`__,
 # though we also give results of our experiments running the same code on ImageNet.
 #
-# .. note:: Download the data from
-#   `here <https://download.pytorch.org/tutorial/hymenoptera_data.zip>`__
+# .. note::
+#
+#   Download the data from `here <https://download.pytorch.org/tutorial/hymenoptera_data.zip>`__
 #   and extract it. We assume in this tutorial that the extracted data is
 #   saved in the subdirectory ``data/``.
 #
@@ -265,11 +266,14 @@ class Collate(nn.Module):
     def __init__(self, transform=None, device=None):
         super().__init__()
         self.transform = transform
-        self.device = device
+        self.device = torch.device(device)
 
     def __call__(self, x: ImageNetData):
         # move data to RAM
-        out = x.apply(lambda x: x.as_tensor()).pin_memory()
+        if self.device.type == "cuda":
+            out = x.apply(lambda x: x.as_tensor()).pin_memory()
+        else:
+            out = x.apply(lambda x: x.as_tensor())
         if self.device:
             # move data to gpu
             out = out.to(self.device)
@@ -388,10 +392,10 @@ print(
 # numbers of workers. We found that our single-threaded TensorClass approach
 # out-performed the ``DataLoader`` even when we used a large number of workers.
 #
-# .. image:: images/imagenet-benchmark-time.png
+# .. image:: /reference/generated/tutorials/media/imagenet-benchmark-time.png
 #    :alt: Bar chart showing runtimes of dataloaders compared with TensorClass
 #
-# .. image:: images/imagenet-benchmark-speed.png
+# .. image:: /reference/generated/tutorials/media/imagenet-benchmark-speed.png
 #    :alt: Bar chart showing collection rate of dataloaders compared with TensorClass
 
 

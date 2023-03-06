@@ -12,6 +12,7 @@ from textwrap import indent
 from typing import Any, Callable, Iterable, Sequence
 
 import torch
+
 from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NestedKey
 from torch import nn, Tensor
@@ -55,24 +56,68 @@ def _check_all_nested(sequence_of_keys: Sequence[NestedKey]) -> None:
         _nested_key_type_check(key)
 
 
-def dispatch_kwargs(func: Callable) -> Callable:
+class dispatch:
     """Allows for a function expecting a TensorDict to be called using kwargs.
 
-    This method must be used within modules that have an :obj:`in_keys` and
-    :obj:`out_keys` attributes indicating what keys to be read and written
-    from the tensordict. The wrapped function should also have a :obj:`tensordict`
-    leading argument.
+    :func:`dispatch` must be used within modules that have an ``in_keys`` (or
+    another source of keys indicated by the ``source`` keyword argument) and
+    ``out_keys`` (or another ``dest`` key list) attributes indicating what keys
+    to be read and written from the tensordict. The wrapped function should
+    also have a ``tensordict`` leading argument.
 
     The resulting function will return a single tensor (if there is a single
-    element in out_keys), otherwise it will return a tuple sorted as the :obj:`out_keys`
+    element in out_keys), otherwise it will return a tuple sorted as the ``out_keys``
     of the module.
+
+    :func:`dispatch` can be used either as a method or as a class when extra arguments
+    need to be passed.
+
+    Args:
+        separator (str, optional): separator that combines sub-keys together
+            for ``in_keys`` that are tuples of strings.
+            Defaults to ``"_"``.
+        source (str or list of keys, optional): if a string is provided,
+            it points to the module attribute that contains the
+            list of input keys to be used. If a list is provided instead, it
+            will contain the keys used as input to the module.
+            Defaults to ``"in_keys"`` which is the attribute name of
+            :class:`~.TensorDictModule` list of input keys.
+        dest (str or list of keys, optional): if a string is provided,
+            it points to the module attribute that contains the
+            list of output keys to be used. If a list is provided instead, it
+            will contain the keys used as output to the module.
+            Defaults to ``"out_keys"`` which is the attribute name of
+            :class:`~.TensorDictModule` list of output keys.
 
     Examples:
         >>> class MyModule(nn.Module):
         ...     in_keys = ["a"]
         ...     out_keys = ["b"]
         ...
-        ...     @dispatch_kwargs
+        ...     @dispatch
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModule()
+        >>> b = module(a=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+        >>> # equivalently
+        >>> class MyModule(nn.Module):
+        ...     keys_in = ["a"]
+        ...     keys_out = ["b"]
+        ...
+        ...     @dispatch(source="keys_in", dest="keys_out")
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModule()
+        >>> b = module(a=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+        >>> # or this
+        >>> class MyModule(nn.Module):
+        ...     @dispatch(source=["a"], dest=["b"])
         ...     def forward(self, tensordict):
         ...         tensordict['b'] = tensordict['a'] + 1
         ...         return tensordict
@@ -81,15 +126,15 @@ def dispatch_kwargs(func: Callable) -> Callable:
         >>> b = module(a=torch.zeros(1, 2))
         >>> assert (b == 1).all()
 
-    For nested keys, it is assumed that an underscore (`_`) is used to join the
-    sub-keys.
+    :func:`dispatch_kwargs` will also work with nested keys with the default
+    ``"_"`` separator.
 
     Examples:
         >>> class MyModuleNest(nn.Module):
         ...     in_keys = [("a", "c")]
         ...     out_keys = ["b"]
         ...
-        ...     @dispatch_kwargs
+        ...     @dispatch
         ...     def forward(self, tensordict):
         ...         tensordict['b'] = tensordict['a', 'c'] + 1
         ...         return tensordict
@@ -98,44 +143,138 @@ def dispatch_kwargs(func: Callable) -> Callable:
         >>> b, = module(a_c=torch.zeros(1, 2))
         >>> assert (b == 1).all()
 
+    If another separator is wanted, it can be indicated with the ``separator``
+    argument in the constructor:
+
+    Examples:
+        >>> class MyModuleNest(nn.Module):
+        ...     in_keys = [("a", "c")]
+        ...     out_keys = ["b"]
+        ...
+        ...     @dispatch(separator="sep")
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a', 'c'] + 1
+        ...         return tensordict
+        ...
+        >>> module = MyModuleNest()
+        >>> b, = module(asepc=torch.zeros(1, 2))
+        >>> assert (b == 1).all()
+
+
+    Since the input keys is a sorted sequence of strings,
+    :func:`dispatch` can also be used with unnamed arguments where the order
+    must match the order of the input keys.
+
+    .. note::
+
+        If the first argument is a :class:`~.TensorDictBase` instance, it is
+        assumed that dispatch is __not__ being used and that this tensordict
+        contains all the necessary information to be run through the module.
+        In other words, one cannot decompose a tensordict with the first key
+        of the module inputs pointing to a tensordict instance.
+        In general, it is preferred to use :func:`dispatch` with tensordict
+        leaves only.
+
+    Examples:
+        >>> class MyModuleNest(nn.Module):
+        ...     in_keys = [("a", "c"), "d"]
+        ...     out_keys = ["b"]
+        ...
+        ...     @dispatch
+        ...     def forward(self, tensordict):
+        ...         tensordict['b'] = tensordict['a', 'c'] + tensordict["d"]
+        ...         return tensordict
+        ...
+        >>> module = MyModuleNest()
+        >>> b, = module(torch.zeros(1, 2), d=torch.ones(1, 2))  # works
+        >>> assert (b == 1).all()
+        >>> b, = module(torch.zeros(1, 2), torch.ones(1, 2))  # works
+        >>> assert (b == 1).all()
+        >>> try:
+        ...     b, = module(torch.zeros(1, 2), a_c=torch.ones(1, 2))  # fails
+        ... except:
+        ...     print("oopsy!")
+        ...
 
     """
 
-    # sanity check
-    for i, key in enumerate(inspect.signature(func).parameters):
-        if i == 0:
-            # skip self
-            continue
-        if key != "tensordict":
-            raise RuntimeError(
-                "the first argument of the wrapped function must be "
-                "named 'tensordict'."
-            )
-        break
+    DEFAULT_SEPARATOR = "_"
+    DEFAULT_SOURCE = "in_keys"
+    DEFAULT_DEST = "out_keys"
 
-    @functools.wraps(func)
-    def wrapper(
-        self, tensordict: TensorDictBase | None = None, *args: Any, **kwargs: Any
-    ) -> Any:
-        if tensordict is None:
-            tensordict_values = {}
-            for key in self.in_keys:
-                expected_key = "_".join(key) if isinstance(key, tuple) else key
-                if expected_key in kwargs:
-                    try:
-                        tensordict_values[key] = kwargs.pop(expected_key)
-                    except KeyError:
-                        raise KeyError(
-                            f"The key {expected_key} wasn't found in the keyword arguments "
-                            f"but is expected to execute that function."
-                        )
-            tensordict = make_tensordict(tensordict_values)
-            out = func(self, tensordict, *args, **kwargs)
-            out = tuple(out[key] for key in self.out_keys)
-            return out[0] if len(out) == 1 else out
-        return func(self, tensordict, *args, **kwargs)
+    def __new__(
+        cls, separator=DEFAULT_SEPARATOR, source=DEFAULT_SOURCE, dest=DEFAULT_DEST
+    ):
+        if callable(separator):
+            func = separator
+            separator = dispatch.DEFAULT_SEPARATOR
+            self = super().__new__(cls)
+            self.__init__(separator, source, dest)
+            return self.__call__(func)
+        return super().__new__(cls)
 
-    return wrapper
+    def __init__(
+        self, separator=DEFAULT_SEPARATOR, source=DEFAULT_SOURCE, dest=DEFAULT_DEST
+    ):
+        self.separator = separator
+        self.source = source
+        self.dest = dest
+
+    def __call__(self, func: Callable) -> Callable:
+        # sanity check
+        for i, key in enumerate(inspect.signature(func).parameters):
+            if i == 0:
+                # skip self
+                continue
+            if key != "tensordict":
+                raise RuntimeError(
+                    "the first argument of the wrapped function must be "
+                    "named 'tensordict'."
+                )
+            break
+
+        @functools.wraps(func)
+        def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
+            source = self.source
+            if isinstance(source, str):
+                source = getattr(_self, source)
+            tensordict = None
+            if len(args):
+                if not isinstance(args[0], TensorDictBase):
+                    pass
+                else:
+                    tensordict, args = args[0], args[1:]
+            if tensordict is None:
+                tensordict_values = {}
+                dest = self.dest
+                if isinstance(dest, str):
+                    dest = getattr(_self, dest)
+                for key in source:
+                    expected_key = (
+                        self.separator.join(key) if isinstance(key, tuple) else key
+                    )
+                    if len(args):
+                        tensordict_values[key] = args[0]
+                        args = args[1:]
+                        if expected_key in kwargs:
+                            raise RuntimeError(
+                                "Duplicated argument in args and kwargs."
+                            )
+                    elif expected_key in kwargs:
+                        try:
+                            tensordict_values[key] = kwargs.pop(expected_key)
+                        except KeyError:
+                            raise KeyError(
+                                f"The key {expected_key} wasn't found in the keyword arguments "
+                                f"but is expected to execute that function."
+                            )
+                tensordict = make_tensordict(tensordict_values)
+                out = func(_self, tensordict, *args, **kwargs)
+                out = tuple(out[key] for key in dest)
+                return out[0] if len(out) == 1 else out
+            return func(_self, tensordict, *args, **kwargs)
+
+        return wrapper
 
 
 class TensorDictModule(nn.Module):
@@ -269,7 +408,7 @@ class TensorDictModule(nn.Module):
         out = self.module(*tensors, **kwargs)
         return out
 
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,

@@ -662,9 +662,11 @@ def test_split():
     assert split_tcs[0].batch_size == torch.Size([3, 3])
     assert split_tcs[1].batch_size == torch.Size([3, 2])
     assert split_tcs[2].batch_size == torch.Size([3, 1])
-    assert split_tcs[0].y[0].batch_size == torch.Size([3, 3])
-    assert split_tcs[0].y[1].batch_size == torch.Size([3, 2])
-    assert split_tcs[0].y[2].batch_size == torch.Size([3, 1])
+
+    assert split_tcs[0].y.batch_size == torch.Size([3, 3])
+    assert split_tcs[1].y.batch_size == torch.Size([3, 2])
+    assert split_tcs[2].y.batch_size == torch.Size([3, 1])
+
     assert torch.all(torch.eq(split_tcs[0].X, torch.ones(3, 3, 5)))
     assert torch.all(torch.eq(split_tcs[0].y[0].X, torch.ones(3, 3, 5)))
     assert split_tcs[0].z == split_tcs[1].z == split_tcs[2].z == z
@@ -1211,7 +1213,7 @@ def test_statedict_errors():
     with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
         tc.load_state_dict(sd)
     del sd["_non_tensordict"]["a"]
-    sd["_non_tensordict"]["y"]["_tensordict"]["a"] = None
+    sd["_tensordict"]["y"]["_tensordict"]["a"] = None
     with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
         tc.load_state_dict(sd)
 

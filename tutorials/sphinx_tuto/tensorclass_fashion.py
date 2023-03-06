@@ -79,10 +79,6 @@ class FashionMNISTData:
             data[i] = cls(images=image, targets=torch.tensor(target), batch_size=[])
         return data
 
-    def __len__(self):
-        # need to define explicitly for `len()` to work
-        return self.batch_size[0] if self.batch_dims else 0
-
 
 ###############################################################################
 # We will create two tensorclasses, one each for the training and test data. Note that
