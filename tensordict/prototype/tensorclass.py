@@ -492,48 +492,45 @@ def _setitem(self, item: NestedKey, value: Any) -> None:
             f" numeric scalars and tensors. Got {type(value)}"
         )
 
-    # if it is one of accepted "broadcast" types
-    if not is_tensorclass(value):
+    if is_tensorclass(value):
+        if not isinstance(value, self.__class__):
+            self_keys = set().union(self._non_tensordict, self._tensordict.keys())
+            value_keys = set().union(value._non_tensordict, value._tensordict.keys())
+            if self_keys != value_keys:
+                # if tensorclass but different class ensure that all keys are equal
+                raise ValueError(
+                    "__setitem__ is only allowed for same-class or "
+                    "compatible class (i.e. same members) assignment"
+                )
+
+        # Validating the non-tensor data before setting the item
+        for key, val in value._non_tensordict.items():
+            # Raise a warning if non_tensor data doesn't match
+            if (
+                key in self._non_tensordict.keys()
+                and val is not self._non_tensordict[key]
+            ):
+                warnings.warn(
+                    f"Meta data at {repr(key)} may or may not be equal, "
+                    f"this may result in undefined behaviours",
+                    category=UserWarning,
+                    stacklevel=2,
+                )
+
+        for key in value._tensordict.keys():
+            # Making sure that the key-clashes won't happen, if the key is present 
+            # in tensor data in value we will honor that and remove the key-value 
+            # pair from non-tensor data
+            if key in self._non_tensordict.keys():
+                del self._non_tensordict[key]
+
+        self._tensordict[item] = value._tensordict
+    else:  # it is one of accepted "broadcast" types
         # attempt broadcast on all tensordata and nested tensorclasses
         self._tensordict[item] = value
         for key, val in self._non_tensordict.items():
             if is_tensorclass(val):
                 _setitem(self._non_tensordict[key], item, value)
-        return
-    # else it is tensorclass
-
-    if not isinstance(value, self.__class__):
-        self_keys = set().union(self._non_tensordict, self._tensordict.keys())
-        value_keys = set().union(value._non_tensordict, value._tensordict.keys())
-        if self_keys != value_keys:
-            # if tensorclass but different class ensure that all keys are equal
-            raise ValueError(
-                "__setitem__ is only allowed for same-class or "
-                "compatible class (i.e. same members) assignment"
-            )
-
-    # Validating the non-tensor data before setting the item
-    for key, val in value._non_tensordict.items():
-        # Raise a warning if non_tensor data doesn't match
-        if (
-            key in self._non_tensordict.keys()
-            and val is not self._non_tensordict[key]
-        ):
-            warnings.warn(
-                f"Meta data at {repr(key)} may or may not be equal, this may result in "
-                f"undefined behaviours",
-                category=UserWarning,
-                stacklevel=2,
-            )
-
-    for key in value._tensordict.keys():
-        # Making sure that the key-clashes won't happen, if the key is present in tensor data in value
-        # we will honor that and remove the key-value pair from non-tensor data
-        if key in self._non_tensordict.keys():
-            del self._non_tensordict[key]
-
-    self._tensordict[item] = value._tensordict
-
 
 def _repr(self) -> str:
     """Return a string representation of Tensor class object"""
