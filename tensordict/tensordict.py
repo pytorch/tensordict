@@ -3022,8 +3022,7 @@ class TensorDict(TensorDictBase):
     ) -> TensorDictBase:
         """Sets a value in the TensorDict.
 
-        If inplace=True (default is False), and if the key already exists, set will
-        call set_ (in-place setting).
+        See TensorDictBase.set
         """
         key = self._validate_key(key)
 
@@ -3043,11 +3042,16 @@ class TensorDict(TensorDictBase):
             )
 
         value = self._validate_value(value)
+        # not calling set_ to avoid re-validate key
         return self._set(key, value, inplace=inplace)
 
     def set_(
         self, key: str, value: dict[str, CompatibleType] | CompatibleType
     ) -> TensorDictBase:
+        """Sets a value in the TensorDict in-place. Assumes keys exists.
+
+        See TensorDictBase.set_
+        """
         key = self._validate_key(key)
         try:
             # we get the leaf tensordict because that is the context in which the value
