@@ -19,7 +19,7 @@ try:
 except ImportError as err:
     _has_torchsnapshot = False
     TORCHSNAPSHOT_ERR = str(err)
-    
+
 from _utils_internal import get_available_devices
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
