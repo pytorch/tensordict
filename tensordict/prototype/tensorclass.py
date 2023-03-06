@@ -709,7 +709,7 @@ def __eq__(self, other: object) -> bool:
     """
 
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, TensorDictBase, numbers.Number, Tensor, MemmapTensor)
+        other, (dict, numbers.Number, Tensor, MemmapTensor)
     ):
         return False
     if is_tensorclass(other):
