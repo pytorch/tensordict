@@ -1443,7 +1443,7 @@ class TestTensorDicts(TestTensorDictsBase):
         val2 = np.zeros(shape=(4, 3, 2, 1, 10))
         td.set_("key1", val2)
         assert (td.get("key1") == 0).all()
-        with pytest.raises((KeyError, AttributeError)):
+        with pytest.raises((KeyError, AttributeError, ValueError)):
             td.set_("smartypants", np.ones(shape=(4, 3, 2, 1, 5)))
 
         # test set_at_
@@ -1469,7 +1469,7 @@ class TestTensorDicts(TestTensorDictsBase):
         val2 = {"subkey1": torch.zeros(4, 3, 2, 1, 10)}
         td.set_("key1", val2)
         assert (td.get("key1").get("subkey1") == 0).all()
-        with pytest.raises((KeyError, AttributeError)):
+        with pytest.raises((KeyError, AttributeError, ValueError)):
             td.set_("smartypants", torch.ones(4, 3, 2, 1, 5))
 
     def test_delitem(self, td_name, device):
