@@ -1443,7 +1443,12 @@ class TestTensorDicts(TestTensorDictsBase):
         val2 = np.zeros(shape=(4, 3, 2, 1, 10))
         td.set_("key1", val2)
         assert (td.get("key1") == 0).all()
-        with pytest.raises((KeyError, AttributeError)):
+        if td_name not in ("stacked_td", "nested_stacked_td"):
+            err_msg = 'key "smartypants" not found in '
+        else:
+            err_msg = "setting a value in-place on a stack of TensorDict"
+
+        with pytest.raises(KeyError, match=err_msg):
             td.set_("smartypants", np.ones(shape=(4, 3, 2, 1, 5)))
 
         # test set_at_
@@ -1469,8 +1474,14 @@ class TestTensorDicts(TestTensorDictsBase):
         val2 = {"subkey1": torch.zeros(4, 3, 2, 1, 10)}
         td.set_("key1", val2)
         assert (td.get("key1").get("subkey1") == 0).all()
-        with pytest.raises((KeyError, AttributeError)):
-            td.set_("smartypants", torch.ones(4, 3, 2, 1, 5))
+
+        if td_name not in ("stacked_td", "nested_stacked_td"):
+            err_msg = 'key "smartypants" not found in '
+        else:
+            err_msg = "setting a value in-place on a stack of TensorDict"
+
+        with pytest.raises(KeyError, match=err_msg):
+            td.set_("smartypants", np.ones(shape=(4, 3, 2, 1, 5)))
 
     def test_delitem(self, td_name, device):
         torch.manual_seed(1)
@@ -3870,6 +3881,20 @@ def test_save_load_memmap_stacked_td(
         assert (d2[:, 0] == a.zero_()).all()
     else:
         assert (d2[:, 0] == a).all()
+
+
+class TestErrorMessage:
+    @staticmethod
+    def test_err_msg_missing_nested():
+        td = TensorDict({"a": torch.zeros(())}, [])
+        with pytest.raises(ValueError, match="Expected a TensorDictBase instance"):
+            td["a", "b"]
+
+    @staticmethod
+    def test_inplace_error():
+        td = TensorDict({"a": torch.rand(())}, [])
+        with pytest.raises(ValueError, match="Failed to update 'a'"):
+            td.set_("a", torch.randn(2))
 
 
 if __name__ == "__main__":
