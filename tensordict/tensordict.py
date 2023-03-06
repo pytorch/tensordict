@@ -3179,7 +3179,7 @@ class TensorDict(TensorDictBase):
                         if "has no attribute" in str(err):
                             raise ValueError(
                                 f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
-                                f" for key '{key[0]}' in tensordict:\n{self}."
+                                f" for key '{key[0]}' and subkeys {key[1:]} in tensordict:\n{self}."
                             )
                 return self.get(key[0])
             return self._tensordict[key]
