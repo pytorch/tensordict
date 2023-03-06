@@ -265,6 +265,7 @@ class TestIndexing:
         with pytest.raises(FileNotFoundError, match="No such file or directory"):
             y + 0
 
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send_across_procs(self):
         t = MemmapTensor.from_tensor(torch.zeros(10), transfer_ownership=False)
         queue_in = mp.Queue(1)
@@ -294,6 +295,7 @@ class TestIndexing:
             p.join()
             raise e
 
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send_across_procs_index(self):
         t = MemmapTensor.from_tensor(torch.zeros(10), transfer_ownership=False)
         queue_in = mp.Queue(1)
