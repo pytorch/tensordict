@@ -3020,10 +3020,7 @@ class TensorDict(TensorDictBase):
         value: dict[str, CompatibleType] | CompatibleType,
         inplace: bool = False,
     ) -> TensorDictBase:
-        """Sets a value in the TensorDict.
-
-        See TensorDictBase.set
-        """
+        # See TensorDictBase.set for doc
         key = self._validate_key(key)
 
         if isinstance(key, tuple):
@@ -3048,10 +3045,7 @@ class TensorDict(TensorDictBase):
     def set_(
         self, key: str, value: dict[str, CompatibleType] | CompatibleType
     ) -> TensorDictBase:
-        """Sets a value in the TensorDict in-place. Assumes keys exists.
-
-        See TensorDictBase.set_
-        """
+        # See TensorDictBase.set for doc
         key = self._validate_key(key)
         try:
             # we get the leaf tensordict because that is the context in which the value
