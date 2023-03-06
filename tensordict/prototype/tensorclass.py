@@ -518,8 +518,8 @@ def _setitem(self, item: NestedKey, value: Any) -> None:
                 )
 
         for key in value._tensordict.keys():
-            # Making sure that the key-clashes won't happen, if the key is present 
-            # in tensor data in value we will honor that and remove the key-value 
+            # Making sure that the key-clashes won't happen, if the key is present
+            # in tensor data in value we will honor that and remove the key-value
             # pair from non-tensor data
             if key in self._non_tensordict.keys():
                 del self._non_tensordict[key]
@@ -531,6 +531,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:
         for key, val in self._non_tensordict.items():
             if is_tensorclass(val):
                 _setitem(self._non_tensordict[key], item, value)
+
 
 def _repr(self) -> str:
     """Return a string representation of Tensor class object"""
