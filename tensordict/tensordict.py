@@ -526,7 +526,9 @@ class TensorDictBase(MutableMapping):
 
     @abc.abstractmethod
     def set_(
-        self, key: NestedKey, item: CompatibleType,
+        self,
+        key: NestedKey,
+        item: CompatibleType,
     ) -> TensorDictBase:
         """Sets a value to an existing key while keeping the original storage.
 
