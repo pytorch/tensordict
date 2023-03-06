@@ -3174,7 +3174,7 @@ class TensorDict(TensorDictBase):
                     if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
                         return first_lev[key[1]]
                     return first_lev.get(key[1:])
-                return self.get(key[0])
+                return self.get(key[0], default=default)
             return self._tensordict[key]
         except KeyError:
             # this is slower than a if / else but (1) it allows to avoid checking
@@ -4730,8 +4730,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if (isinstance(key, tuple)) and len(key) == 1:
             key = key[0]
         elif isinstance(key, tuple):
-            tensordict, key = _get_leaf_tensordict(self, key)
-            return tensordict[key]
+            try:
+                tensordict, key = _get_leaf_tensordict(self, key)
+            except KeyError:
+                return self._default_get(key, default)
+            return tensordict.get(key, default=default)
 
         keys = self.valid_keys
         if key not in keys:
@@ -4782,7 +4785,7 @@ class LazyStackedTensorDict(TensorDictBase):
             key = key[0]
         elif isinstance(key, tuple):
             tensordict, key = _get_leaf_tensordict(self, key)
-            return tensordict.get_nestedtensor(key)
+            return tensordict.get_nestedtensor(key, default=default)
 
         keys = self.valid_keys
         if key not in keys:
