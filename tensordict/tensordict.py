@@ -3173,7 +3173,14 @@ class TensorDict(TensorDictBase):
                     first_lev = self.get(key[0])
                     if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
                         return first_lev[key[1]]
-                    return first_lev.get(key[1:])
+                    try:
+                        return first_lev.get(key[1:])
+                    except AttributeError as err:
+                        if "has no attribute" in str(err):
+                            raise ValueError(
+                                f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
+                                f" for key {key[0]} in tensordict:\n{self}."
+                            )
                 return self.get(key[0])
             return self._tensordict[key]
         except KeyError:

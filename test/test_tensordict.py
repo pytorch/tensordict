@@ -3872,6 +3872,12 @@ def test_save_load_memmap_stacked_td(
         assert (d2[:, 0] == a).all()
 
 
+def test_err_msg_missing_nested():
+    td = TensorDict({"a": torch.zeros(())}, [])
+    with pytest.raises(ValueError, match="Expected a TensorDictBase instance"):
+        td["a", "b"]
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
