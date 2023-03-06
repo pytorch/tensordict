@@ -684,12 +684,12 @@ class TestTensorDicts(TestTensorDictsBase):
         for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked != is_locked
-        td.lock()
+        td.lock_()
         assert td.is_locked
         for _, item in td.items():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked
-        td.unlock()
+        td.unlock_()
         assert not td.is_locked
         for _, item in td.items():
             if isinstance(item, TensorDictBase):
@@ -697,7 +697,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_lock_write(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td.lock()
+        td.lock_()
         td_clone = td.clone()
         assert not td_clone.is_locked
         td_clone = td.to_tensordict()
@@ -707,10 +707,10 @@ class TestTensorDicts(TestTensorDictsBase):
         for key, item in td_clone.items(True):
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
-        td.unlock()
+        td.unlock_()
         for key, item in td_clone.items(True):
             td.set(key, item)
-        td.lock()
+        td.lock_()
         for key, item in td_clone.items(True):
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
@@ -719,7 +719,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_unlock(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         assert not td.is_locked
         assert td.device.type == "cuda" or not td.is_shared()
         assert not td.is_memmap()
@@ -734,14 +734,14 @@ class TestTensorDicts(TestTensorDictsBase):
         assert i == len(td.keys()) - 1
         if td.is_locked:
             assert td._sorted_keys is not None
-            td.unlock()
+            td.unlock_()
             assert td._sorted_keys is None
         else:
             assert td._sorted_keys is None
-            td.lock()
+            td.lock_()
             _ = td.sorted_keys
             assert td._sorted_keys is not None
-            td.unlock()
+            td.unlock_()
             assert td._sorted_keys is None
 
     def test_masked_fill(self, td_name, device):
@@ -916,7 +916,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_pin_memory(self, td_name, device_cast, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         if device.type == "cuda":
             with pytest.raises(RuntimeError, match="cannot pin"):
                 td.pin_memory()
@@ -989,7 +989,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_unsqueeze(self, td_name, device, squeeze_dim):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()  # make sure that the td is not locked
+        td.unlock_()  # make sure that the td is not locked
         td_unsqueeze = torch.unsqueeze(td, dim=squeeze_dim)
         tensor = torch.ones_like(td.get("a").unsqueeze(squeeze_dim))
         if td_name in ("sub_td", "sub_td2"):
@@ -1005,7 +1005,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_squeeze(self, td_name, device, squeeze_dim=-1):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()  # make sure that the td is not locked
+        td.unlock_()  # make sure that the td is not locked
         td_squeeze = torch.squeeze(td, dim=-1)
         tensor_squeeze_dim = td.batch_dims + squeeze_dim
         tensor = torch.ones_like(td.get("a").squeeze(tensor_squeeze_dim))
@@ -1049,7 +1049,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("nested", [True, False])
     def test_exclude_nested(self, td_name, device, nested):
         td = getattr(self, td_name)(device)
-        td.unlock()  # make sure that the td is not locked
+        td.unlock_()  # make sure that the td is not locked
         if td_name == "stacked_td":
             for _td in td.tensordicts:
                 _td["newnested", "first"] = torch.randn(_td.shape)
@@ -1082,7 +1082,7 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("clone", [True, False])
     def test_update(self, td_name, device, clone):
         td = getattr(self, td_name)(device)
-        td.unlock()  # make sure that the td is not locked
+        td.unlock_()  # make sure that the td is not locked
         keys = set(td.keys())
         td.update({"x": torch.zeros(td.shape)}, clone=clone)
         assert set(td.keys()) == keys.union({"x"})
@@ -1173,7 +1173,7 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.skip("view incompatible with stride / permutation")
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()  # make sure that the td is not locked
+        td.unlock_()  # make sure that the td is not locked
         td_view = td.view(-1)
         tensor = td.get("a")
         tensor = tensor.view(-1, tensor.numel() // prod(td.batch_size))
@@ -1218,8 +1218,8 @@ class TestTensorDicts(TestTensorDictsBase):
     )
     def test_nestedtensor_stack(self, td_name, device, dim, key):
         torch.manual_seed(1)
-        td1 = getattr(self, td_name)(device).unlock()
-        td2 = getattr(self, td_name)(device).unlock()
+        td1 = getattr(self, td_name)(device).unlock_()
+        td2 = getattr(self, td_name)(device).unlock_()
 
         td1[key] = torch.randn(*td1.shape, 2)
         td2[key] = torch.randn(*td1.shape, 3)
@@ -1280,14 +1280,14 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         with pytest.raises(KeyError, match="already present in TensorDict"):
-            td.rename_key("a", "b", safe=True)
+            td.rename_key_("a", "b", safe=True)
         a = td.get("a")
         if td.is_locked:
             with pytest.raises(RuntimeError, match="Cannot modify"):
-                td.rename_key("a", "z")
+                td.rename_key_("a", "z")
             return
         else:
-            td.rename_key("a", "z")
+            td.rename_key_("a", "z")
         with pytest.raises(KeyError):
             td.get("a")
         assert "a" not in td.keys()
@@ -1314,22 +1314,22 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_rename_key_nested(self, td_name, device) -> None:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         td["nested", "conflict"] = torch.zeros(td.shape)
         with pytest.raises(KeyError, match="already present in TensorDict"):
-            td.rename_key(("nested", "conflict"), "b", safe=True)
+            td.rename_key_(("nested", "conflict"), "b", safe=True)
         td["nested", "first"] = torch.zeros(td.shape)
-        td.rename_key(("nested", "first"), "second")
+        td.rename_key_(("nested", "first"), "second")
         assert (td["second"] == 0).all()
         assert ("nested", "first") not in td.keys(True)
-        td.rename_key("second", ("nested", "back"))
+        td.rename_key_("second", ("nested", "back"))
         assert (td[("nested", "back")] == 0).all()
         assert "second" not in td.keys()
 
     def test_set_nontensor(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         r = torch.randn_like(td.get("a"))
         td.set("numpy", r.cpu().numpy())
         torch.testing.assert_close(td.get("numpy"), r)
@@ -1391,7 +1391,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_setitem_string(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         td["d"] = torch.randn(4, 3, 2, 1, 5)
         assert "d" in td.keys()
 
@@ -1437,7 +1437,7 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         np.random.seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
 
         # test set
         val1 = np.ones(shape=(4, 3, 2, 1, 10))
@@ -1450,7 +1450,12 @@ class TestTensorDicts(TestTensorDictsBase):
         val2 = np.zeros(shape=(4, 3, 2, 1, 10))
         td.set_("key1", val2)
         assert (td.get("key1") == 0).all()
-        with pytest.raises((KeyError, AttributeError)):
+        if td_name not in ("stacked_td", "nested_stacked_td"):
+            err_msg = 'key "smartypants" not found in '
+        else:
+            err_msg = "setting a value in-place on a stack of TensorDict"
+
+        with pytest.raises(KeyError, match=err_msg):
             td.set_("smartypants", np.ones(shape=(4, 3, 2, 1, 5)))
 
         # test set_at_
@@ -1463,7 +1468,7 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         np.random.seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
 
         # test set
         val1 = {"subkey1": torch.ones(4, 3, 2, 1, 10)}
@@ -1476,8 +1481,14 @@ class TestTensorDicts(TestTensorDictsBase):
         val2 = {"subkey1": torch.zeros(4, 3, 2, 1, 10)}
         td.set_("key1", val2)
         assert (td.get("key1").get("subkey1") == 0).all()
-        with pytest.raises((KeyError, AttributeError)):
-            td.set_("smartypants", torch.ones(4, 3, 2, 1, 5))
+
+        if td_name not in ("stacked_td", "nested_stacked_td"):
+            err_msg = 'key "smartypants" not found in '
+        else:
+            err_msg = "setting a value in-place on a stack of TensorDict"
+
+        with pytest.raises(KeyError, match=err_msg):
+            td.set_("smartypants", np.ones(shape=(4, 3, 2, 1, 5)))
 
     def test_delitem(self, td_name, device):
         torch.manual_seed(1)
@@ -1495,7 +1506,7 @@ class TestTensorDicts(TestTensorDictsBase):
             return True
 
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
 
         # Create nested TensorDict
         nested_tensordict_value = TensorDict(
@@ -1560,7 +1571,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_items_values_keys(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         keys = list(td.keys())
         values = list(td.values())
         items = list(td.items())
@@ -1617,7 +1628,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_set_requires_grad(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         assert not td.get("a").requires_grad
         if td_name in ("sub_td", "sub_td2"):
             td.set_("a", torch.randn_like(td.get("a")).requires_grad_())
@@ -1627,7 +1638,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_nested_td_emptyshape(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         tdin = TensorDict({"inner": torch.randn(*td.shape, 1)}, [], device=device)
         td["inner_td"] = tdin
         tdin.batch_size = td.batch_size
@@ -1635,7 +1646,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_nested_td(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         tdin = TensorDict({"inner": torch.randn(td.shape)}, td.shape, device=device)
         td.set("inner_td", tdin)
         assert (td["inner_td"] == tdin).all()
@@ -1643,7 +1654,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_nested_dict_init(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
 
         # Create TensorDict and dict equivalent values, and populate each with according nested value
         td_clone = td.clone(recurse=True)
@@ -1662,7 +1673,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_nested_td_index(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
 
         sub_td = TensorDict({}, [*td.shape, 2], device=device)
         a = torch.zeros([*td.shape, 2, 2], device=device)
@@ -1699,7 +1710,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_flatten_keys(self, td_name, device, inplace, separator):
         td = getattr(self, td_name)(device)
         locked = td.is_locked
-        td.unlock()
+        td.unlock_()
         nested_nested_tensordict = TensorDict(
             {
                 "a": torch.zeros(*td.shape, 2, 3),
@@ -1715,7 +1726,7 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         td["nested_tensordict"] = nested_tensordict
         if locked:
-            td.lock()
+            td.lock_()
 
         if inplace and locked:
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
@@ -1739,7 +1750,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_unflatten_keys(self, td_name, device, inplace, separator):
         td = getattr(self, td_name)(device)
         locked = td.is_locked
-        td.unlock()
+        td.unlock_()
         nested_nested_tensordict = TensorDict(
             {
                 "a": torch.zeros(*td.shape, 2, 3),
@@ -1757,7 +1768,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
         if inplace and locked:
             td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
-            td_flatten.lock()
+            td_flatten.lock_()
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td_unflatten = td_flatten.unflatten_keys(
                     inplace=inplace, separator=separator
@@ -1765,7 +1776,7 @@ class TestTensorDicts(TestTensorDictsBase):
             return
         else:
             if locked:
-                td.lock()
+                td.lock_()
             td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
             td_unflatten = td_flatten.unflatten_keys(
                 inplace=inplace, separator=separator
@@ -1902,21 +1913,21 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_setdefault_missing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         expected = torch.ones_like(td.get("a"))
         inserted = td.setdefault("z", expected)
         assert (inserted == expected).all()
 
     def test_setdefault_existing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
         expected = td.get("a")
         inserted = td.setdefault("a", torch.ones_like(td.get("b")))
         assert (inserted == expected).all()
 
     def test_setdefault_nested(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td.unlock()
+        td.unlock_()
 
         tensor = torch.randn(4, 3, 2, 1, 5, device=device)
         tensor2 = torch.ones(4, 3, 2, 1, 5, device=device)
@@ -2206,7 +2217,7 @@ class TestTensorDictRepr:
 
     def test_repr_nested_update(self, device, dtype):
         nested_td = self.nested_td(device, dtype)
-        nested_td["my_nested_td"].rename_key("a", "z")
+        nested_td["my_nested_td"].rename_key_("a", "z")
         if device is not None and device.type == "cuda":
             is_shared = True
         else:
@@ -3435,8 +3446,8 @@ def test_shared_inheritance():
     td0 = td.select("a")
     assert td0.is_shared()
 
-    td.unlock()
-    td0 = td.rename_key("a", "a.a")
+    td.unlock_()
+    td0 = td.rename_key_("a", "a.a")
     assert not td0.is_shared()
     td.share_memory_()
 
@@ -3877,6 +3888,20 @@ def test_save_load_memmap_stacked_td(
         assert (d2[:, 0] == a.zero_()).all()
     else:
         assert (d2[:, 0] == a).all()
+
+
+class TestErrorMessage:
+    @staticmethod
+    def test_err_msg_missing_nested():
+        td = TensorDict({"a": torch.zeros(())}, [])
+        with pytest.raises(ValueError, match="Expected a TensorDictBase instance"):
+            td["a", "b"]
+
+    @staticmethod
+    def test_inplace_error():
+        td = TensorDict({"a": torch.rand(())}, [])
+        with pytest.raises(ValueError, match="Failed to update 'a'"):
+            td.set_("a", torch.randn(2))
 
 
 if __name__ == "__main__":

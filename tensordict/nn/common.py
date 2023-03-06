@@ -416,8 +416,22 @@ class TensorDictModule(nn.Module):
         **kwargs: Any,
     ) -> TensorDictBase:
         """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
+
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
-        tensors = self._call_module(tensors, **kwargs)
+        try:
+            tensors = self._call_module(tensors, **kwargs)
+        except Exception as err:
+            if any(tensor is None for tensor in tensors) and "None" in str(err):
+                none_set = {
+                    key for key, tensor in zip(self.in_keys, tensors) if tensor is None
+                }
+                raise KeyError(
+                    "Some tensors that are necessary for the module call may "
+                    "not have not been found in the input tensordict: "
+                    f"the following inputs are None: {none_set}."
+                ) from err
+            else:
+                raise err
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
         tensordict_out = self._write_to_tensordict(tensordict, tensors, tensordict_out)

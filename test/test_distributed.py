@@ -123,6 +123,7 @@ class TestSend:
         assert (td != 0).all()
         queue.put("yuppie")
 
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send(self, pseudo_rand, set_context):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=TestSend.server, args=(queue, pseudo_rand))
@@ -245,6 +246,7 @@ class TestiSend:
         assert (td != 0).all()
         queue.put("yuppie")
 
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send(self, pseudo_rand, set_context):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=TestiSend.server, args=(queue, pseudo_rand))
