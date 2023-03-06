@@ -15,6 +15,7 @@ try:
     import torchsnapshot
 
     _has_torchsnapshot = True
+    TORCHSNAPSHOT_ERR = ""
 except ImportError as err:
     _has_torchsnapshot = False
     TORCHSNAPSHOT_ERR = str(err)
