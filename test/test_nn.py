@@ -1491,6 +1491,14 @@ def test_probabilistic_sequential_type_checks():
         ProbabilisticTensorDictSequential(td_module_1, td_module_2)
 
 
+def test_keyerr_msg():
+    module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+    with pytest.raises(
+        KeyError, match="Some tensors that are necessary for the module call"
+    ):
+        module(TensorDict({"c": torch.randn(())}, []))
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
