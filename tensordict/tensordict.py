@@ -2543,9 +2543,9 @@ class TensorDictBase(MutableMapping):
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
 
-        if not isinstance(
+        if not is_tensor_collection(value) and not isinstance(
             value,
-            (TensorDictBase, dict, numbers.Number, Tensor, MemmapTensor),
+            (dict, numbers.Number, Tensor, MemmapTensor),
         ):
             try:
                 # try to cast value to tensor:
