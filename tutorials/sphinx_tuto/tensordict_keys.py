@@ -92,11 +92,11 @@ assert tensordict.get("a") is a
 # Renaming keys
 # -------------
 # To rename a key, simply use the
-# :meth:`TensorDict.rename_key <tensordict.TensorDict.rename_key>` method. The value
+# :meth:`TensorDict.rename_key_ <tensordict.TensorDict.rename_key_>` method. The value
 # stored under the original key will remain in the :class:`~.TensorDict`, but the key
 # will be changed to the specified new key.
 
-tensordict.rename_key("a", "b")
+tensordict.rename_key_("a", "b")
 assert tensordict.get("b") is a
 print(tensordict)
 
