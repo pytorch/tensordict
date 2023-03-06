@@ -526,15 +526,15 @@ class TensorDictBase(MutableMapping):
 
     @abc.abstractmethod
     def set_(
-        self, key: NestedKey, item: CompatibleType, no_check: bool = False
+        self,
+        key: NestedKey,
+        item: CompatibleType,
     ) -> TensorDictBase:
         """Sets a value to an existing key while keeping the original storage.
 
         Args:
             key (str): name of the value
             item (torch.Tensor): value to be stored in the tensordict
-            no_check (bool, optional): if True, it is assumed that device and shape
-                match the original tensor and that the keys is in the tensordict.
 
         Returns:
             self
