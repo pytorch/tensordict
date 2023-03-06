@@ -4764,8 +4764,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if (isinstance(key, tuple)) and len(key) == 1:
             key = key[0]
         elif isinstance(key, tuple):
-            tensordict, key = _get_leaf_tensordict(self, key)
-            return tensordict[key]
+            try:
+                tensordict, key = _get_leaf_tensordict(self, key)
+            except KeyError:
+                return self._default_get(key, default)
+            return tensordict.get(key, default=default)
 
         keys = self.valid_keys
         if key not in keys:
@@ -4816,7 +4819,7 @@ class LazyStackedTensorDict(TensorDictBase):
             key = key[0]
         elif isinstance(key, tuple):
             tensordict, key = _get_leaf_tensordict(self, key)
-            return tensordict.get_nestedtensor(key)
+            return tensordict.get_nestedtensor(key, default=default)
 
         keys = self.valid_keys
         if key not in keys:

@@ -1189,6 +1189,13 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_view.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
+    def test_default_nested(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        default_val = torch.randn(())
+        timbers = td.get(("shiver", "my", "timbers"), default_val)
+        assert timbers == default_val
+
     def test_inferred_view_size(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
             pytest.skip("view incompatible with stride / permutation")
