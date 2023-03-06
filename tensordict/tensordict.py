@@ -1112,6 +1112,8 @@ class TensorDictBase(MutableMapping):
             else:
                 item_trsf = fn(item, *_others)
             if item_trsf is not None:
+                # if `self` is a `SubTensorDict` we want to process the input, 
+                # hence we call `set` rather than `_set`.
                 if isinstance(self, SubTensorDict):
                     out.set(key, item_trsf, inplace=inplace)
                 else:
