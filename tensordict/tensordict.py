@@ -1286,8 +1286,13 @@ class TensorDictBase(MutableMapping):
         if isinstance(value, dict):
             value = self._convert_to_tensordict(value)
         elif not isinstance(value, tuple(_ACCEPTED_CLASSES)):
-            value = self._convert_to_tensor(value)
-
+            try:
+                value = self._convert_to_tensor(value)
+            except ValueError:
+                raise ValueError(
+                    f"we only supports tensorclasses, tensordicts,"
+                    f" numeric scalars and tensors. Got {type(value)}"
+                )
         if self.device is not None:
             value = value.to(self.device)
 
@@ -2542,19 +2547,6 @@ class TensorDictBase(MutableMapping):
         index: IndexType,
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
-
-        if not is_tensor_collection(value) and not isinstance(
-            value,
-            (dict, numbers.Number, Tensor, MemmapTensor),
-        ):
-            try:
-                # try to cast value to tensor:
-                value = self._convert_to_tensor(value)
-            except ValueError:
-                raise ValueError(
-                    f"__setitem__ only supports tensorclasses, tensordicts,"
-                    f" numeric scalars and tensors. Got {type(value)}"
-                )
 
         if isinstance(index, str):
             self.set(index, value, inplace=self._inplace_set)
