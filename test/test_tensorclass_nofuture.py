@@ -11,7 +11,16 @@ from typing import Any, Optional, Union
 
 import pytest
 import torch
-import torchsnapshot
+
+try:
+    import torchsnapshot
+
+    _has_torchsnapshot = True
+    TORCHSNAPSHOT_ERR = ""
+except ImportError as err:
+    _has_torchsnapshot = False
+    TORCHSNAPSHOT_ERR = str(err)
+
 from _utils_internal import get_available_devices
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
@@ -1085,6 +1094,9 @@ def test_multiprocessing():
     assert catted.z == "test_tensorclass"
 
 
+@pytest.mark.skipif(
+    not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
+)
 def test_torchsnapshot(tmp_path):
     @tensorclass
     class MyClass:

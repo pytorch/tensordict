@@ -10,7 +10,16 @@ import uuid
 import numpy as np
 import pytest
 import torch
-import torchsnapshot
+
+try:
+    import torchsnapshot
+
+    _has_torchsnapshot = True
+    TORCHSNAPSHOT_ERR = ""
+except ImportError as err:
+    _has_torchsnapshot = False
+    TORCHSNAPSHOT_ERR = str(err)
+
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
@@ -3754,6 +3763,9 @@ class TestLazyStackedTensorDict:
             td_a.update_(td_b.to_tensordict())
 
 
+@pytest.mark.skipif(
+    not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
+)
 class TestSnapshot:
     @pytest.mark.parametrize("save_name", ["doc", "data"])
     def test_inplace(self, save_name):
