@@ -2866,12 +2866,10 @@ class TensorDict(TensorDictBase):
         source: TensorDictBase | dict,
         batch_size: Sequence[int] | torch.Size | int | None = None,
     ) -> torch.Size:
-        if isinstance(batch_size, (Number, Sequence)):
-            if not isinstance(batch_size, torch.Size):
-                if isinstance(batch_size, int):
-                    return torch.Size([batch_size])
-                return torch.Size(batch_size)
-            return batch_size
+        if isinstance(batch_size, Sequence):
+            return torch.Size(batch_size)
+        elif isinstance(batch_size, Number):
+            return torch.Size([batch_size])
         elif isinstance(source, TensorDictBase):
             return source.batch_size
         raise ValueError(
