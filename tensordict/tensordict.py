@@ -3404,27 +3404,30 @@ class TensorDict(TensorDictBase):
         self, *keys: NestedKey, inplace: bool = False, strict: bool = True
     ) -> TensorDictBase:
         source = {}
-        keys_to_select = None
-        for key in keys:
-            if isinstance(key, str):
-                subkey = []
-            else:
-                key, subkey = key[0], key[1:]
-            try:
-                source[key] = self.get(key)
-                if len(subkey):
-                    if keys_to_select is None:
-                        # delay creation of defaultdict
-                        keys_to_select = defaultdict(list)
-                    keys_to_select[key].append(subkey)
-            except KeyError as err:
-                if not strict:
-                    continue
+        if len(keys):
+            keys_to_select = None
+            for key in keys:
+                if isinstance(key, str):
+                    subkey = []
                 else:
-                    raise KeyError(f"select failed to get key {key}") from err
-        if keys_to_select is not None:
-            for key, val in keys_to_select.items():
-                source[key] = source[key].select(*val, strict=strict, inplace=inplace)
+                    key, subkey = key[0], key[1:]
+                try:
+                    source[key] = self.get(key)
+                    if len(subkey):
+                        if keys_to_select is None:
+                            # delay creation of defaultdict
+                            keys_to_select = defaultdict(list)
+                        keys_to_select[key].append(subkey)
+                except KeyError as err:
+                    if not strict:
+                        continue
+                    else:
+                        raise KeyError(f"select failed to get key {key}") from err
+            if keys_to_select is not None:
+                for key, val in keys_to_select.items():
+                    source[key] = source[key].select(
+                        *val, strict=strict, inplace=inplace
+                    )
 
         out = TensorDict(
             device=self.device,
@@ -3508,18 +3511,24 @@ def _dict_to_nested_keys(
 
 
 def _default_hook(td: TensorDictBase, k: tuple[str, ...]) -> None:
-    if k[0] not in td.keys():
-        td.set(k[0], td.select())
+    try:
+        return td.get(k[0])
+    except KeyError:
+        out = td.select()
+        td._set(k[0], out)
+        return out
 
 
 def _get_leaf_tensordict(
     tensordict: TensorDictBase, key: tuple[str, ...], hook: Callable = None
 ) -> tuple[TensorDictBase, str]:
     # utility function for traversing nested tensordicts
+    # hook should return the default value for tensordit.get(key)
     while len(key) > 1:
         if hook is not None:
-            hook(tensordict, key)
-        tensordict = tensordict.get(key[0])
+            tensordict = hook(tensordict, key)
+        else:
+            tensordict = tensordict.get(key[0])
         key = key[1:]
     return tensordict, key[0]
 
