@@ -91,6 +91,7 @@ except ImportError as err:
 
     TORCHREC_ERR = str(err)
 
+NO_DEFAULT = "_no_default_"
 
 # some complex string used as separator to concatenate and split keys in
 # distributed frameworks
@@ -307,6 +308,11 @@ def _renamed_inplace_method(fn):
 
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
+
+    LOCK_ERROR = (
+        "Cannot modify locked TensorDict. For in-place modification, consider "
+        "using the `set_()` method and make sure the key is present."
+    )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDictBase:
         cls._safe = kwargs.get("_safe", False)
@@ -985,19 +991,15 @@ class TensorDictBase(MutableMapping):
         )
 
     def _default_get(
-        self, key: str, default: str | CompatibleType = "_no_default_"
+        self, key: str, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        if not isinstance(default, str):
+        if default is not NO_DEFAULT:
             return default
-        if default == "_no_default_":
+        else:
             # raise KeyError
             raise KeyError(
                 f'key "{key}" not found in {self.__class__.__name__} with '
                 f"keys {sorted(self.keys())}"
-            )
-        else:
-            raise ValueError(
-                f"default should be None or a Tensor instance, got {default}"
             )
 
     @abc.abstractmethod
@@ -1295,9 +1297,11 @@ class TensorDictBase(MutableMapping):
         value: CompatibleType | dict[str, CompatibleType],
         check_shape: bool = True,
     ) -> CompatibleType | dict[str, CompatibleType]:
-        if isinstance(value, dict):
+        if isinstance(value, tuple(_ACCEPTED_CLASSES)):
+            pass
+        elif isinstance(value, dict):
             value = self._convert_to_tensordict(value)
-        elif not isinstance(value, tuple(_ACCEPTED_CLASSES)):
+        else:
             value = self._convert_to_tensor(value)
 
         if self.device is not None:
@@ -3056,10 +3060,7 @@ class TensorDict(TensorDictBase):
 
         inplace = inplace and key in self.keys()
         if self.is_locked and not inplace:
-            raise RuntimeError(
-                "Cannot modify locked TensorDict. For in-place modification, consider "
-                "using the `set_()` method and make sure the key is present."
-            )
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         value = self._validate_value(value)
         # not calling set_ to avoid re-validate key
@@ -3116,10 +3117,7 @@ class TensorDict(TensorDictBase):
         if safe and (new_key in self.keys(include_nested=True)):
             raise KeyError(f"key {new_key} already present in TensorDict.")
         if self.is_locked:
-            raise RuntimeError(
-                "Cannot modify locked TensorDict. For in-place modification, consider "
-                "using the `set_()` method and make sure the key is present."
-            )
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         if isinstance(new_key, tuple):
             td, subkey = _get_leaf_tensordict(self, new_key)
@@ -3515,6 +3513,8 @@ def _default_hook(td: TensorDictBase, k: tuple[str, ...]) -> None:
         return td.get(k[0])
     except KeyError:
         out = td.select()
+        if td.is_locked:
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
         td._set(k[0], out)
         return out
 
@@ -4158,11 +4158,7 @@ torch.Size([3, 2])
         inplace = inplace and key_present
         if not inplace:
             if self.is_locked:
-                raise RuntimeError(
-                    "Cannot modify locked TensorDict. For in-place modification, "
-                    "consider using the `set_()` method and make sure the key is "
-                    "present."
-                )
+                raise RuntimeError(TensorDictBase.LOCK_ERROR)
             if key_present:
                 raise RuntimeError(
                     "Calling `SubTensorDict.set(key, value, inplace=False)` is "
@@ -4701,10 +4697,7 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
         key = self._validate_key(key)
         if self.is_locked:
-            raise RuntimeError(
-                "Cannot modify locked TensorDict. For in-place modification, consider "
-                "using the `set_()` method."
-            )
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         tensor = self._validate_value(tensor)
         for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
@@ -5519,10 +5512,7 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"Consider calling .contiguous() before calling this method."
             )
         if self.is_locked:
-            raise RuntimeError(
-                "Cannot modify locked TensorDict. For in-place modification, consider "
-                "using the `set_()` method."
-            )
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         if isinstance(key, tuple):
             subsource, subkey = _get_leaf_tensordict(self._source, key, _default_hook)
