@@ -3509,14 +3509,13 @@ def _dict_to_nested_keys(
 
 
 def _default_hook(td: TensorDictBase, k: tuple[str, ...]) -> None:
-    try:
-        return td.get(k[0])
-    except KeyError:
+    out = td.get(k[0], None)
+    if out is None:
         out = td.select()
         if td.is_locked:
             raise RuntimeError(TensorDictBase.LOCK_ERROR)
         td._set(k[0], out)
-        return out
+    return out
 
 
 def _get_leaf_tensordict(
