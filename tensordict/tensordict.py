@@ -3607,8 +3607,13 @@ def _gather(
     # the index must have as many dims as the tensordict
     if not len(index):
         raise RuntimeError("Cannot use torch.gather with an empty index")
+    dim_orig = dim
     if dim < 0:
         dim = input.batch_dims + dim
+    if dim > input.batch_dims - 1 or dim < 0:
+        raise RuntimeError(
+            f"Cannot gather tensordict with shape {input.shape} along dim {dim_orig}."
+        )
 
     def _gather_tensor(tensor, dest=None):
         index_expand = index
@@ -6012,7 +6017,7 @@ def make_tensordict(
         device (torch.device or compatible type, optional): a device for the TensorDict.
 
     """
-    if input_dict:
+    if input_dict is not None:
         kwargs.update(input_dict)
     if batch_size is None:
         batch_size = _find_max_batch_size(kwargs)
