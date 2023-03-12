@@ -965,7 +965,6 @@ class TensorDictBase(MutableMapping):
             else:
                 _tag = int_generator(_tag + 1)
             _future_list.append(dist.irecv(value, src=src, tag=_tag))
-            self.set(key, value, inplace=True)
         if not root:
             return _tag, _future_list
         elif return_premature:
