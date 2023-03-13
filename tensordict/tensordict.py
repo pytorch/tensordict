@@ -438,6 +438,9 @@ class TensorDictBase(MutableMapping):
 
         """
         self._device = None
+        for value in self.values():
+            if is_tensor_collection(value):
+                value.clear_device_()
         return self
 
     clear_device = _renamed_inplace_method(clear_device_)
