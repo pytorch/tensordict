@@ -91,6 +91,7 @@ except ImportError as err:
 
     TORCHREC_ERR = str(err)
 
+NO_DEFAULT = "_no_default_"
 
 # some complex string used as separator to concatenate and split keys in
 # distributed frameworks
@@ -295,8 +296,23 @@ class _TensorDictKeysView:
         )
 
 
+def _renamed_inplace_method(fn):
+    def wrapper(*args, **kwargs):
+        warn(
+            f"{fn.__name__.rstrip('_')} has been deprecated, use {fn.__name__} instead"
+        )
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
+
+    LOCK_ERROR = (
+        "Cannot modify locked TensorDict. For in-place modification, consider "
+        "using the `set_()` method and make sure the key is present."
+    )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDictBase:
         cls._safe = kwargs.get("_safe", False)
@@ -415,14 +431,19 @@ class TensorDictBase(MutableMapping):
     def device(self, value: DeviceType) -> None:
         raise NotImplementedError
 
-    def clear_device(self) -> TensorDictBase:
+    def clear_device_(self) -> TensorDictBase:
         """Clears the device of the tensordict.
 
         Returns: self
 
         """
         self._device = None
+        for value in self.values():
+            if is_tensor_collection(value):
+                value.clear_device_()
         return self
+
+    clear_device = _renamed_inplace_method(clear_device_)
 
     def is_shared(self) -> bool:
         """Checks if tensordict is in shared memory.
@@ -973,19 +994,15 @@ class TensorDictBase(MutableMapping):
         )
 
     def _default_get(
-        self, key: str, default: str | CompatibleType = "_no_default_"
+        self, key: str, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        if not isinstance(default, str):
+        if default is not NO_DEFAULT:
             return default
-        if default == "_no_default_":
+        else:
             # raise KeyError
             raise KeyError(
                 f'key "{key}" not found in {self.__class__.__name__} with '
                 f"keys {sorted(self.keys())}"
-            )
-        else:
-            raise ValueError(
-                f"default should be None or a Tensor instance, got {default}"
             )
 
     @abc.abstractmethod
@@ -1097,7 +1114,7 @@ class TensorDictBase(MutableMapping):
 
         is_locked = out.is_locked
         if not inplace and is_locked:
-            out.unlock()
+            out.unlock_()
 
         for key, item in self.items():
             _others = [_other.get(key) for _other in others]
@@ -1120,7 +1137,7 @@ class TensorDictBase(MutableMapping):
                     out._set(key, item_trsf, inplace=inplace)
 
         if not inplace and is_locked:
-            out.lock()
+            out.lock_()
         return out
 
     def update(
@@ -1283,9 +1300,11 @@ class TensorDictBase(MutableMapping):
         value: CompatibleType | dict[str, CompatibleType],
         check_shape: bool = True,
     ) -> CompatibleType | dict[str, CompatibleType]:
-        if isinstance(value, dict):
+        if isinstance(value, tuple(_ACCEPTED_CLASSES)):
+            pass
+        elif isinstance(value, dict):
             value = self._convert_to_tensordict(value)
-        elif not isinstance(value, tuple(_ACCEPTED_CLASSES)):
+        else:
             try:
                 value = self._convert_to_tensor(value)
             except ValueError:
@@ -1293,6 +1312,7 @@ class TensorDictBase(MutableMapping):
                     f"we only supports tensorclasses, tensordicts,"
                     f" numeric scalars and tensors. Got {type(value)}"
                 )
+
         if self.device is not None:
             value = value.to(self.device)
 
@@ -1677,7 +1697,7 @@ class TensorDictBase(MutableMapping):
                     prefix / f"{key}.meta.pt",
                 )
         tensordict._is_memmap = True
-        tensordict.lock()
+        tensordict.lock_()
         return tensordict
 
     @abc.abstractmethod
@@ -2701,26 +2721,30 @@ class TensorDictBase(MutableMapping):
     @is_locked.setter
     def is_locked(self, value: bool) -> None:
         if value:
-            self.lock()
+            self.lock_()
         else:
-            self.unlock()
+            self.unlock_()
 
-    def lock(self) -> TensorDictBase:
+    def lock_(self) -> TensorDictBase:
         self._is_locked = True
         for key in self.keys():
             if is_tensor_collection(self.entry_class(key)):
-                self.get(key).lock()
+                self.get(key).lock_()
         return self
 
-    def unlock(self) -> TensorDictBase:
+    lock = _renamed_inplace_method(lock_)
+
+    def unlock_(self) -> TensorDictBase:
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
         for key in self.keys():
             if is_tensor_collection(self.entry_class(key)):
-                self.get(key).unlock()
+                self.get(key).unlock_()
         return self
+
+    unlock = _renamed_inplace_method(unlock_)
 
 
 class TensorDict(TensorDictBase):
@@ -2769,7 +2793,7 @@ class TensorDict(TensorDictBase):
 
     - Content modification: :obj:`td.set(key, value)`, :obj:`td.set_(key, value)`,
       :obj:`td.update(td_or_dict)`, :obj:`td.update_(td_or_dict)`, :obj:`td.fill_(key,
-      value)`, :obj:`td.rename_key(old_name, new_name)`, etc.
+      value)`, :obj:`td.rename_key_(old_name, new_name)`, etc.
 
     - Operations on multiple tensordicts: `torch.cat(tensordict_list, dim)`,
       `torch.stack(tensordict_list, dim)`, `td1 == td2` etc.
@@ -2864,12 +2888,10 @@ class TensorDict(TensorDictBase):
         source: TensorDictBase | dict,
         batch_size: Sequence[int] | torch.Size | int | None = None,
     ) -> torch.Size:
-        if isinstance(batch_size, (Number, Sequence)):
-            if not isinstance(batch_size, torch.Size):
-                if isinstance(batch_size, int):
-                    return torch.Size([batch_size])
-                return torch.Size(batch_size)
-            return batch_size
+        if isinstance(batch_size, Sequence):
+            return torch.Size(batch_size)
+        elif isinstance(batch_size, Number):
+            return torch.Size([batch_size])
         elif isinstance(source, TensorDictBase):
             return source.batch_size
         raise ValueError(
@@ -3025,7 +3047,14 @@ class TensorDict(TensorDictBase):
         else:
             td, subkey = self, key
         if inplace:
-            td.get(subkey).copy_(value)
+            try:
+                td.get(subkey).copy_(value)
+            except KeyError as err:
+                raise err
+            except Exception as err:
+                raise ValueError(
+                    f"Failed to update '{subkey}' in tensordict {td}"
+                ) from err
         else:
             if td._tensordict.get(subkey, None) is not value:
                 td._tensordict[subkey] = value
@@ -3051,10 +3080,7 @@ class TensorDict(TensorDictBase):
 
         inplace = inplace and key in self.keys()
         if self.is_locked and not inplace:
-            raise RuntimeError(
-                "Cannot modify locked TensorDict. For in-place modification, consider "
-                "using the `set_()` method and make sure the key is present."
-            )
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         value = self._validate_value(value)
         # not calling set_ to avoid re-validate key
@@ -3094,7 +3120,7 @@ class TensorDict(TensorDictBase):
         del self._tensordict[key]
         return self
 
-    def rename_key(
+    def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> TensorDictBase:
         # these checks are not perfect, tuples that are not tuples of strings or empty
@@ -3111,10 +3137,7 @@ class TensorDict(TensorDictBase):
         if safe and (new_key in self.keys(include_nested=True)):
             raise KeyError(f"key {new_key} already present in TensorDict.")
         if self.is_locked:
-            raise RuntimeError(
-                "Cannot modify locked TensorDict. For in-place modification, consider "
-                "using the `set_()` method and make sure the key is present."
-            )
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         if isinstance(new_key, tuple):
             td, subkey = _get_leaf_tensordict(self, new_key)
@@ -3123,6 +3146,8 @@ class TensorDict(TensorDictBase):
         td._set(subkey, self.get(old_key))
         self.del_(old_key)
         return self
+
+    rename_key = _renamed_inplace_method(rename_key_)
 
     def _stack_onto_(
         self, key: str, list_item: list[CompatibleType], dim: int
@@ -3191,7 +3216,14 @@ class TensorDict(TensorDictBase):
                     first_lev = self.get(key[0])
                     if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
                         return first_lev[key[1]]
-                    return first_lev.get(key[1:])
+                    try:
+                        return first_lev.get(key[1:])
+                    except AttributeError as err:
+                        if "has no attribute" in str(err):
+                            raise ValueError(
+                                f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
+                                f" for key '{key[0]}' and subkeys {key[1:]} in tensordict:\n{self}."
+                            )
                 return self.get(key[0])
             return self._tensordict[key]
         except KeyError:
@@ -3217,7 +3249,7 @@ class TensorDict(TensorDictBase):
             ):
                 value.share_memory_()
         self._is_shared = True
-        self.lock()
+        self.lock_()
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -3304,7 +3336,7 @@ class TensorDict(TensorDictBase):
                     prefix / f"{key}.meta.pt",
                 )
         self._is_memmap = True
-        self.lock()
+        self.lock_()
         return self
 
     @classmethod
@@ -3390,27 +3422,30 @@ class TensorDict(TensorDictBase):
         self, *keys: NestedKey, inplace: bool = False, strict: bool = True
     ) -> TensorDictBase:
         source = {}
-        keys_to_select = None
-        for key in keys:
-            if isinstance(key, str):
-                subkey = []
-            else:
-                key, subkey = key[0], key[1:]
-            try:
-                source[key] = self.get(key)
-                if len(subkey):
-                    if keys_to_select is None:
-                        # delay creation of defaultdict
-                        keys_to_select = defaultdict(list)
-                    keys_to_select[key].append(subkey)
-            except KeyError as err:
-                if not strict:
-                    continue
+        if len(keys):
+            keys_to_select = None
+            for key in keys:
+                if isinstance(key, str):
+                    subkey = []
                 else:
-                    raise KeyError(f"select failed to get key {key}") from err
-        if keys_to_select is not None:
-            for key, val in keys_to_select.items():
-                source[key] = source[key].select(*val, strict=strict, inplace=inplace)
+                    key, subkey = key[0], key[1:]
+                try:
+                    source[key] = self.get(key)
+                    if len(subkey):
+                        if keys_to_select is None:
+                            # delay creation of defaultdict
+                            keys_to_select = defaultdict(list)
+                        keys_to_select[key].append(subkey)
+                except KeyError as err:
+                    if not strict:
+                        continue
+                    else:
+                        raise KeyError(f"select failed to get key {key}") from err
+            if keys_to_select is not None:
+                for key, val in keys_to_select.items():
+                    source[key] = source[key].select(
+                        *val, strict=strict, inplace=inplace
+                    )
 
         out = TensorDict(
             device=self.device,
@@ -3494,18 +3529,25 @@ def _dict_to_nested_keys(
 
 
 def _default_hook(td: TensorDictBase, k: tuple[str, ...]) -> None:
-    if k[0] not in td.keys():
-        td.set(k[0], td.select())
+    out = td.get(k[0], None)
+    if out is None:
+        out = td.select()
+        if td.is_locked:
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+        td._set(k[0], out)
+    return out
 
 
 def _get_leaf_tensordict(
     tensordict: TensorDictBase, key: tuple[str, ...], hook: Callable = None
 ) -> tuple[TensorDictBase, str]:
     # utility function for traversing nested tensordicts
+    # hook should return the default value for tensordit.get(key)
     while len(key) > 1:
         if hook is not None:
-            hook(tensordict, key)
-        tensordict = tensordict.get(key[0])
+            tensordict = hook(tensordict, key)
+        else:
+            tensordict = tensordict.get(key[0])
         key = key[1:]
     return tensordict, key[0]
 
@@ -3587,8 +3629,13 @@ def _gather(
     # the index must have as many dims as the tensordict
     if not len(index):
         raise RuntimeError("Cannot use torch.gather with an empty index")
+    dim_orig = dim
     if dim < 0:
         dim = input.batch_dims + dim
+    if dim > input.batch_dims - 1 or dim < 0:
+        raise RuntimeError(
+            f"Cannot gather tensordict with shape {input.shape} along dim {dim_orig}."
+        )
 
     def _gather_tensor(tensor, dest=None):
         index_expand = index
@@ -4135,11 +4182,7 @@ torch.Size([3, 2])
         inplace = inplace and key_present
         if not inplace:
             if self.is_locked:
-                raise RuntimeError(
-                    "Cannot modify locked TensorDict. For in-place modification, "
-                    "consider using the `set_()` method and make sure the key is "
-                    "present."
-                )
+                raise RuntimeError(TensorDictBase.LOCK_ERROR)
             if key_present:
                 raise RuntimeError(
                     "Calling `SubTensorDict.set(key, value, inplace=False)` is "
@@ -4445,11 +4488,13 @@ torch.Size([3, 2])
     def is_memmap(self) -> bool:
         return self._source.is_memmap()
 
-    def rename_key(
+    def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> SubTensorDict:
-        self._source.rename_key(old_key, new_key, safe=safe)
+        self._source.rename_key_(old_key, new_key, safe=safe)
         return self
+
+    rename_key = _renamed_inplace_method(rename_key_)
 
     def pin_memory(self) -> TensorDictBase:
         self._source.pin_memory()
@@ -4676,10 +4721,7 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
         key = self._validate_key(key)
         if self.is_locked:
-            raise RuntimeError(
-                "Cannot modify locked TensorDict. For in-place modification, consider "
-                "using the `set_()` method."
-            )
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         tensor = self._validate_value(tensor)
         for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
@@ -4748,8 +4790,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if (isinstance(key, tuple)) and len(key) == 1:
             key = key[0]
         elif isinstance(key, tuple):
-            tensordict, key = _get_leaf_tensordict(self, key)
-            return tensordict[key]
+            try:
+                tensordict, key = _get_leaf_tensordict(self, key)
+            except KeyError:
+                return self._default_get(key, default)
+            return tensordict.get(key, default=default)
 
         keys = self.valid_keys
         if key not in keys:
@@ -4800,7 +4845,7 @@ class LazyStackedTensorDict(TensorDictBase):
             key = key[0]
         elif isinstance(key, tuple):
             tensordict, key = _get_leaf_tensordict(self, key)
-            return tensordict.get_nestedtensor(key)
+            return tensordict.get_nestedtensor(key, default=default)
 
         keys = self.valid_keys
         if key not in keys:
@@ -5085,7 +5130,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             td.share_memory_()
         self._is_shared = True
-        self.lock()
+        self.lock_()
         return self
 
     def detach_(self) -> TensorDictBase:
@@ -5107,7 +5152,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 copy_existing=copy_existing,
             )
         self._is_memmap = True
-        self.lock()
+        self.lock_()
         return self
 
     def memmap_like(
@@ -5127,7 +5172,7 @@ class LazyStackedTensorDict(TensorDictBase):
             tds.append(td_like)
         td_out = torch.stack(tds, self.stack_dim)
         td_out._is_memmap = True
-        td_out.lock()
+        td_out.lock_()
         return td_out
 
     @classmethod
@@ -5242,7 +5287,7 @@ class LazyStackedTensorDict(TensorDictBase):
             self.set_(key, value, **kwargs)
         return self
 
-    def rename_key(
+    def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> TensorDictBase:
         def sort_keys(element):
@@ -5251,12 +5296,14 @@ class LazyStackedTensorDict(TensorDictBase):
             return element
 
         for td in self.tensordicts:
-            td.rename_key(old_key, new_key, safe=safe)
+            td.rename_key_(old_key, new_key, safe=safe)
         self._valid_keys = sorted(
             [key if key != old_key else new_key for key in self._valid_keys],
             key=sort_keys,
         )
         return self
+
+    rename_key = _renamed_inplace_method(rename_key_)
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> TensorDictBase:
         mask_unbind = mask.unbind(dim=self.stack_dim)
@@ -5331,24 +5378,28 @@ class LazyStackedTensorDict(TensorDictBase):
     @is_locked.setter
     def is_locked(self, value: bool) -> None:
         if value:
-            self.lock()
+            self.lock_()
         else:
-            self.unlock()
+            self.unlock_()
 
-    def lock(self) -> LazyStackedTensorDict:
+    def lock_(self) -> LazyStackedTensorDict:
         self._is_locked = True
         for td in self.tensordicts:
-            td.lock()
+            td.lock_()
         return self
 
-    def unlock(self) -> LazyStackedTensorDict:
+    lock = _renamed_inplace_method(lock_)
+
+    def unlock_(self) -> LazyStackedTensorDict:
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
         for td in self.tensordicts:
-            td.unlock()
+            td.unlock_()
         return self
+
+    unlock = _renamed_inplace_method(unlock_)
 
 
 class _CustomOpTensorDict(TensorDictBase):
@@ -5485,10 +5536,7 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"Consider calling .contiguous() before calling this method."
             )
         if self.is_locked:
-            raise RuntimeError(
-                "Cannot modify locked TensorDict. For in-place modification, consider "
-                "using the `set_()` method."
-            )
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         if isinstance(key, tuple):
             subsource, subkey = _get_leaf_tensordict(self._source, key, _default_hook)
@@ -5600,11 +5648,13 @@ class _CustomOpTensorDict(TensorDictBase):
             return self
         return self.to(TensorDict)
 
-    def rename_key(
+    def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> _CustomOpTensorDict:
-        self._source.rename_key(old_key, new_key, safe=safe)
+        self._source.rename_key_(old_key, new_key, safe=safe)
         return self
+
+    rename_key = _renamed_inplace_method(rename_key_)
 
     def del_(self, key: str) -> _CustomOpTensorDict:
         self._source = self._source.del_(key)
@@ -5667,7 +5717,7 @@ class _CustomOpTensorDict(TensorDictBase):
             torch.save(metadata, prefix / "meta.pt")
 
         self._is_memmap = True
-        self.lock()
+        self.lock_()
         return self
 
     @classmethod
@@ -5686,7 +5736,7 @@ class _CustomOpTensorDict(TensorDictBase):
     def share_memory_(self) -> _CustomOpTensorDict:
         self._source.share_memory_()
         self._is_shared = True
-        self.lock()
+        self.lock_()
         return self
 
 
@@ -5989,7 +6039,7 @@ def make_tensordict(
         device (torch.device or compatible type, optional): a device for the TensorDict.
 
     """
-    if input_dict:
+    if input_dict is not None:
         kwargs.update(input_dict)
     if batch_size is None:
         batch_size = _find_max_batch_size(kwargs)

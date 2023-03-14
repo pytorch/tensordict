@@ -73,7 +73,7 @@ class TestGather:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=10)
+            out = queue.get(timeout=30)
             assert out == "yuppie"
         finally:
             main_worker.join()
@@ -132,7 +132,7 @@ class TestSend:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=10)
+            out = queue.get(timeout=30)
             assert out == "yuppie"
         finally:
             main_worker.join()
@@ -196,7 +196,7 @@ class TestiRecv:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=10)
+            out = queue.get(timeout=30)
             assert out == "yuppie"
         finally:
             main_worker.join()
@@ -255,7 +255,7 @@ class TestiSend:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=10)
+            out = queue.get(timeout=30)
             assert out == "yuppie"
         except Exception as err:
             # otherwise pytest does not capture it

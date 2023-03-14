@@ -128,7 +128,7 @@ def _main(argv):
         },
         install_requires=[pytorch_package_dep, "numpy", "cloudpickle"],
         extras_require={
-            "tests": ["pytest", "pyyaml", "pytest-instafail"],
+            "tests": ["pytest", "pyyaml", "pytest-instafail", "pytest-rerunfailures"],
             "checkpointing": ["torchsnapshot-nightly"],
         },
         zip_safe=False,

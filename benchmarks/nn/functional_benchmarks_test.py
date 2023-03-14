@@ -22,23 +22,27 @@ def net():
 # Creation
 def test_instantiation_functorch(benchmark, net):
     benchmark.pedantic(
-        functorch_make_functional, args=(deepcopy(net),), iterations=1000
+        functorch_make_functional, args=(deepcopy(net),), iterations=10, rounds=100
     )
 
 
 def test_instantiation_td(benchmark, net):
-    benchmark.pedantic(make_functional, args=(deepcopy(net),), iterations=1000)
+    benchmark.pedantic(
+        make_functional, args=(deepcopy(net),), iterations=10, rounds=100
+    )
 
 
 # Execution
 def test_exec_functorch(benchmark, net):
     x = torch.randn(2, 2)
     fmodule, params, buffers = functorch_make_functional(deepcopy(net))
-    benchmark.pedantic(fmodule, args=(params, buffers, x), iterations=10000)
+    benchmark.pedantic(fmodule, args=(params, buffers, x), iterations=100, rounds=100)
 
 
 def test_exec_td(benchmark, net):
     x = torch.randn(2, 2)
     fmodule = deepcopy(net)
     params = make_functional(fmodule)
-    benchmark.pedantic(fmodule, args=(x,), kwargs={"params": params}, iterations=10000)
+    benchmark.pedantic(
+        fmodule, args=(x,), kwargs={"params": params}, iterations=100, rounds=100
+    )
