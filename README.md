@@ -9,7 +9,7 @@
 [![codecov](https://codecov.io/gh/pytorch-labs/tensordict/branch/main/graph/badge.svg?token=9QTUG6NAGQ)](https://codecov.io/gh/pytorch-labs/tensordict)
 [![pytorch](https://circleci.com/gh/pytorch-labs/tensordict.svg?style=shield)](https://circleci.com/gh/pytorch-labs/tensordict)
 
-# TensorDict \[Beta\]
+# TensorDict
 
 [**Installation**](#installation) | [**General features**](#general) |
 [**Tensor-like features**](#tensor-like-features) |  [**Distributed capabilities**](#distributed-capabilities) |
@@ -310,9 +310,11 @@ If you're using TensorDict, please refer to this BibTeX entry to cite this work:
 
 ## Disclaimer
 
-TensorDict is at the alpha-stage, meaning that there may be bc-breaking changes introduced at any moment without warranty.
-Hopefully that should not happen too often, as the current roadmap mostly involves adding new features and building compatibility
-with the broader pytorch ecosystem.
+TensorDict is at the *beta*-stage, meaning that there may be bc-breaking changes introduced, but 
+they should come with a warranty.
+Hopefully these should not happen too often, as the current roadmap mostly 
+involves adding new features and building compatibility with the broader
+pytorch ecosystem.
 
 ## License
 
