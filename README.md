@@ -286,7 +286,7 @@ To install the latest stable version of tensordict, simply run
 ```bash
 pip install tensordict
 ```
-This will work with python 3.7 and upward as well as pytorch 1.12 and upward.
+This will work with Python 3.7 and upward as well as PyTorch 1.12 and upward.
 
 To enjoy the latest features, one can use
 ```bash
