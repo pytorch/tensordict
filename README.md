@@ -9,13 +9,15 @@
 [![codecov](https://codecov.io/gh/pytorch-labs/tensordict/branch/main/graph/badge.svg?token=9QTUG6NAGQ)](https://codecov.io/gh/pytorch-labs/tensordict)
 [![pytorch](https://circleci.com/gh/pytorch-labs/tensordict.svg?style=shield)](https://circleci.com/gh/pytorch-labs/tensordict)
 
-# TensorDict
+# TensorDict \[Beta\]
 
 [**Installation**](#installation) | [**General features**](#general) |
 [**Tensor-like features**](#tensor-like-features) | [**TensorDict for functional programming using FuncTorch**](#tensordict-for-functional-programming-using-functorch) |
 [**Lazy preallocation**](#lazy-preallocation) | [**Nesting TensorDicts**](#nesting-tensordicts) | [**TensorClass**](#tensorclass)
 
-`TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.
+`TensorDict` is a dictionary-like class that inherits properties from tensors, 
+such as indexing, shape operations, casting to device or point-to-point communication
+in distributed settings.
 
 The main purpose of TensorDict is to make code-bases more _readable_ and _modular_ by abstracting away tailored operations:
 ```python
@@ -31,19 +33,6 @@ With this level of abstraction, one can recycle a training loop for highly heter
 Each individual step of the training loop (data collection and transform, model prediction, loss computation etc.)
 can be tailored to the use case at hand without impacting the others.
 For instance, the above example can be easily used across classification and segmentation tasks, among many others.
-
-## Installation
-
-To install the latest stable version of tensordict, simply run
-```bash
-pip install tensordict
-```
-This will work with python 3.7 and upward as well as pytorch 1.12 and upward.
-
-To enjoy the latest features, one can use
-```bash
-pip install tensordict-nightly
-```
 
 ## Features
 
@@ -118,6 +107,20 @@ clone them, update them in-place or not, split them, unbind them, expand them et
 If a functionality is missing, it is easy to call it using `apply()` or `apply_()`:
 ```python
 tensordict_uniform = tensordict.apply(lambda tensor: tensor.uniform_())
+```
+### Point-to-point communication
+
+Complex data structures can be cumbersome to synchronize in distributed settings.
+`tensordict` solves that problem with synchronous and asynchronous helper methods
+such as `recv`, `irecv`, `send` and `isend` that behave like their `torch.distributed`
+counterparts:
+```python
+>>> # on all workers
+>>> data = TensorDict({"a": torch.zeros(()), ("b", "c"): torch.ones(())}, [])
+>>> # on worker 1
+>>> data.isend(dst=0)
+>>> # on worker 0
+>>> data.irecv(src=1)
 ```
 
 ### TensorDict for functional programming using FuncTorch
@@ -266,6 +269,33 @@ artifacts such as shape operations (e.g. reshape or permutations), data manipula
 arbitrary functions through the `apply` method (and many more).
 
 Tensorclasses support nesting and many more features.
+
+
+## Installation
+
+To install the latest stable version of tensordict, simply run
+```bash
+pip install tensordict
+```
+This will work with python 3.7 and upward as well as pytorch 1.12 and upward.
+
+To enjoy the latest features, one can use
+```bash
+pip install tensordict-nightly
+```
+
+## Citation
+
+If you're using TensorDict, please refer to this BibTeX entry to cite this work:
+```
+@software{TorchRL,
+  author = {Moens, Vincent},
+  title = {{TensorDict: your PyTorch universal data carrier}},
+  url = {https://github.com/pytorch-labs/tensordict},
+  version = {0.1.0},
+  year = {2023}
+}
+```
 
 ## Disclaimer
 
