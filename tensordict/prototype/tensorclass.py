@@ -173,6 +173,7 @@ def tensorclass(cls: T) -> T:
     cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
     cls.__getattr__ = _getattr
     cls.__getitem__ = _getitem
+    cls.__getitems__ = _getitem
     cls.__setitem__ = _setitem
     cls.__repr__ = _repr
     cls.__len__ = _len
