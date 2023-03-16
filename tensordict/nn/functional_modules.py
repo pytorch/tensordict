@@ -292,6 +292,7 @@ def make_functional(
     module: nn.Module,
     funs_to_decorate: Iterable[str] | None = None,
 ) -> TensorDict:
+    """Converts a nn.Module to a functional module in-place, and returns its params."""
     params = extract_weights_and_buffers(module, funs_to_decorate=funs_to_decorate)
     return params
 
@@ -300,6 +301,7 @@ def get_functional(
     module: nn.Module,
     funs_to_decorate: Iterable[str] | None = None,
 ) -> nn.Module:
+    """Converts a nn.Module to a functional module in-place, and returns a stateful version of this module that can be used in functional settings."""
     params = make_functional(module, funs_to_decorate=funs_to_decorate)
     out = deepcopy(module)
     repopulate_module(module, params)
@@ -386,5 +388,6 @@ def _assign_params(
 
 
 def repopulate_module(model: nn.Module, tensordict: TensorDict) -> nn.Module:
+    """Repopulates a module with its parameters, presented as a nested TensorDict."""
     _swap_state(model, tensordict, is_stateless=False)
     return model

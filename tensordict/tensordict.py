@@ -10,6 +10,7 @@ import collections
 import functools
 import numbers
 import textwrap
+import warnings
 from collections import defaultdict
 from collections.abc import MutableMapping
 from copy import copy, deepcopy
@@ -86,7 +87,7 @@ try:
 except ImportError as err:
     _has_torchrec = False
 
-    class KeyedJaggedTensor:
+    class KeyedJaggedTensor:  # noqa: D103, D101
         pass
 
     TORCHREC_ERR = str(err)
@@ -139,6 +140,7 @@ def is_tensor_collection(datatype: type | Any) -> bool:
 
 
 def is_memmap(datatype: type | Any) -> bool:
+    """Returns ``True`` if the class is a subclass of :class:`~.MemmapTensor` or the object an instance of it."""
     return (
         issubclass(datatype, MemmapTensor)
         if isinstance(datatype, type)
@@ -147,7 +149,8 @@ def is_memmap(datatype: type | Any) -> bool:
 
 
 class _TensorDictKeysView:
-    """
+    """A Key view for TensorDictBase instance.
+
     _TensorDictKeysView is returned when accessing tensordict.keys() and holds a
     reference to the original TensorDict. This class enables us to support nested keys
     when performing membership checks and when iterating over keys.
@@ -294,6 +297,11 @@ class _TensorDictKeysView:
             "TensorDict keys are always strings. Membership checks are only supported "
             "for strings or non-empty tuples of strings (for nested TensorDicts)"
         )
+
+    def __repr__(self):
+        include_nested = f"include_nested={self.include_nested}"
+        leaves_only = f"leaves_only={self.leaves_only}"
+        return f"{self.__class__.__name__}({list(self)},\n{indent(include_nested, 4*' ')},\n{indent(leaves_only, 4*' ')})"
 
 
 def _renamed_inplace_method(fn):
@@ -1812,7 +1820,6 @@ class TensorDictBase(MutableMapping):
                 TensorDict will be copied too. Default is `True`.
 
         """
-
         return TensorDict(
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
@@ -2074,6 +2081,7 @@ class TensorDictBase(MutableMapping):
 
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
         """Splits each tensor in the TensorDict with the specified size in the given dimension, like `torch.split`.
+
         Returns a list of TensorDict with the view of split chunks of items. Nested TensorDicts will remain nested.
 
         The list of TensorDict maintains the original order of the tensor chunks.
@@ -3973,20 +3981,52 @@ def pad(
     return out
 
 
-# @implements_for_td(torch.nn.utils.rnn.pad_sequence)
-def pad_sequence_td(
+def pad_sequence(
     list_of_tensordicts: Sequence[TensorDictBase],
     batch_first: bool = True,
     padding_value: float = 0.0,
     out: TensorDictBase | None = None,
     device: DeviceType | None = None,
 ) -> TensorDictBase:
+    """Pads a list of tensordicts in order for them to be stacked together in a contiguous format.
+
+    Args:
+        list_of_tensordicts (List[TensorDictBase]): the list of instances to pad and stack.
+        batch_first (bool, optional): the ``batch_first`` correspondant of :func:`torch.nn.utils.rnn.pad_sequence`.
+            Defaults to ``True``.
+        padding_value (number, optional): the padding value. Defaults to ``0.0``.
+        out (TensorDictBase, optional): if provided, the destination where the data will be
+            written.
+        device (device compatible type, optional): if provded, the device where the
+            TensorDict output will be created.
+
+    Examples:
+        >>> list_td = [
+        ...     TensorDict({"a": torch.zeros((3,))}, []),
+        ...     TensorDict({"a": torch.zeros((4,))}, []),
+        ...     ]
+        >>> padded_td = pad_sequence(list_td)
+        >>> print(padded_td)
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+    """
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
     # check that all tensordict match
-    keys = _check_keys(list_of_tensordicts)
+    keys = _check_keys(list_of_tensordicts, leaves_only=True)
+    shape = list_of_tensordicts[0].shape
+    if batch_first:
+        shape = [len(list_of_tensordicts), *shape]
+    elif len(shape):
+        shape = [shape[0], len(list_of_tensordicts), *shape[1:]]
+    else:
+        shape = []
     if out is None:
-        out = TensorDict({}, [], device=device, _run_checks=False)
+        out = TensorDict({}, shape, device=device, _run_checks=False)
         for key in keys:
             out.set(
                 key,
@@ -4008,6 +4048,15 @@ def pad_sequence_td(
                 ),
             )
         return out
+
+
+@functools.wraps(pad_sequence)
+def pad_sequence_ts(*args, **kwargs):
+    """Warning: this function will soon be deprecated. Please use pad_sequence instead."""
+    warnings.warn(
+        "pad_sequence_ts will soon be deprecated in favour of pad_sequence. Please use the latter instead."
+    )
+    return pad_sequence(*args, **kwargs)
 
 
 @implements_for_td(torch.split)
@@ -5939,7 +5988,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
         return self
 
 
-def get_repr(tensor: Tensor) -> str:
+def _get_repr(tensor: Tensor) -> str:
     s = ", ".join(
         [
             f"shape={_shape(tensor)}",
@@ -5954,7 +6003,7 @@ def get_repr(tensor: Tensor) -> str:
 def _make_repr(key: str, item: CompatibleType, tensordict: TensorDictBase) -> str:
     if is_tensor_collection(type(item)):
         return f"{key}: {repr(tensordict.get(key))}"
-    return f"{key}: {get_repr(item)}"
+    return f"{key}: {_get_repr(item)}"
 
 
 def _td_fields(td: TensorDictBase) -> str:
@@ -5966,17 +6015,27 @@ def _td_fields(td: TensorDictBase) -> str:
 
 
 def _check_keys(
-    list_of_tensordicts: Sequence[TensorDictBase], strict: bool = False
+    list_of_tensordicts: Sequence[TensorDictBase],
+    strict: bool = False,
+    leaves_only: bool = False,
 ) -> set[str]:
     keys: set[str] = set()
     for td in list_of_tensordicts:
         if not len(keys):
-            keys = set(td.keys())
+            keys = set(td.keys(include_nested=True, leaves_only=leaves_only))
         else:
             if not strict:
-                keys = keys.intersection(set(td.keys()))
+                keys = keys.intersection(
+                    set(td.keys(include_nested=True, leaves_only=leaves_only))
+                )
             else:
-                if len(set(td.keys()).difference(keys)) or len(set(td.keys())) != len(
+                if len(
+                    set(
+                        td.keys(include_nested=True, leaves_only=leaves_only)
+                    ).difference(keys)
+                ) or len(
+                    set(td.keys(include_nested=True, leaves_only=leaves_only))
+                ) != len(
                     keys
                 ):
                     raise KeyError(

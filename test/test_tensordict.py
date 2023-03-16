@@ -28,6 +28,7 @@ from tensordict.tensordict import (
     assert_allclose_td,
     make_tensordict,
     pad,
+    pad_sequence,
     TensorDictBase,
 )
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
@@ -3914,6 +3915,29 @@ class TestErrorMessage:
         td = TensorDict({"a": torch.rand(())}, [])
         with pytest.raises(ValueError, match="Failed to update 'a'"):
             td.set_("a", torch.randn(2))
+
+
+@pytest.mark.parametrize("batch_first", [True, False])
+def test_pad_sequence(
+    batch_first,
+):
+    list_td = [
+        TensorDict({"a": torch.ones((3,)), ("b", "c"): torch.ones((2, 3))}, []),
+        TensorDict({"a": torch.ones((4,)), ("b", "c"): torch.ones((4, 3))}, []),
+    ]
+    padded_td = pad_sequence(list_td, batch_first=batch_first)
+    if batch_first:
+        assert padded_td.shape == torch.Size([2])
+        assert padded_td["a"].shape == torch.Size([2, 4])
+        assert padded_td["a"][0, -1] == 0
+        assert padded_td["b", "c"].shape == torch.Size([2, 4, 3])
+        assert padded_td["b", "c"][0, -1, 0] == 0
+    else:
+        assert padded_td.shape == torch.Size([])
+        assert padded_td["a"].shape == torch.Size([4, 2])
+        assert padded_td["a"][-1, 0] == 0
+        assert padded_td["b", "c"].shape == torch.Size([4, 2, 3])
+        assert padded_td["b", "c"][-1, 0, 0] == 0
 
 
 if __name__ == "__main__":
