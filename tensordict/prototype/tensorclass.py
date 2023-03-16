@@ -21,6 +21,8 @@ from typing import Any, Callable, Sequence, TypeVar, Union
 import tensordict as tensordict_lib
 
 import torch
+
+from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     get_repr,
     is_tensor_collection,
@@ -173,6 +175,7 @@ def tensorclass(cls: T) -> T:
     cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
     cls.__getattr__ = _getattr
     cls.__getitem__ = _getitem
+    cls.__getitems__ = _getitem
     cls.__setitem__ = _setitem
     cls.__repr__ = _repr
     cls.__len__ = _len
@@ -481,19 +484,26 @@ def _setitem(self, item: NestedKey, value: Any) -> None:
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
         raise ValueError("Invalid indexing arguments.")
-    if is_tensorclass(value) and not isinstance(value, self.__class__):
-        self_keys = set().union(self._non_tensordict, self._tensordict.keys())
-        value_keys = set().union(value._non_tensordict, value._tensordict.keys())
-        if self_keys != value_keys:
-            # if tensorclass but different class ensure that all keys are equal
-            raise ValueError(
-                "__setitem__ is only allowed for same-class or "
-                "compatible class (i.e. same members) assignment"
-            )
 
-    if isinstance(value, (TensorDictBase, dict)):
-        self._tensordict[item] = value
-    else:
+    if not is_tensorclass(value) and not isinstance(
+        value, (TensorDictBase, numbers.Number, Tensor, MemmapTensor)
+    ):
+        raise ValueError(
+            f"__setitem__ only supports tensorclasses, tensordicts,"
+            f" numeric scalars and tensors. Got {type(value)}"
+        )
+
+    if is_tensorclass(value):
+        if not isinstance(value, self.__class__):
+            self_keys = set().union(self._non_tensordict, self._tensordict.keys())
+            value_keys = set().union(value._non_tensordict, value._tensordict.keys())
+            if self_keys != value_keys:
+                # if tensorclass but different class ensure that all keys are equal
+                raise ValueError(
+                    "__setitem__ is only allowed for same-class or "
+                    "compatible class (i.e. same members) assignment"
+                )
+
         # Validating the non-tensor data before setting the item
         for key, val in value._non_tensordict.items():
             # Raise a warning if non_tensor data doesn't match
@@ -502,19 +512,26 @@ def _setitem(self, item: NestedKey, value: Any) -> None:
                 and val is not self._non_tensordict[key]
             ):
                 warnings.warn(
-                    f"Meta data at {repr(key)} may or may not be equal, this may result in "
-                    f"undefined behaviours",
+                    f"Meta data at {repr(key)} may or may not be equal, "
+                    f"this may result in undefined behaviours",
                     category=UserWarning,
                     stacklevel=2,
                 )
 
         for key in value._tensordict.keys():
-            # Making sure that the key-clashes won't happen, if the key is present in tensor data in value
-            # we will honor that and remove the key-value pair from non-tensor data
+            # Making sure that the key-clashes won't happen, if the key is present
+            # in tensor data in value we will honor that and remove the key-value
+            # pair from non-tensor data
             if key in self._non_tensordict.keys():
                 del self._non_tensordict[key]
 
         self._tensordict[item] = value._tensordict
+    else:  # it is one of accepted "broadcast" types
+        # attempt broadcast on all tensordata and nested tensorclasses
+        self._tensordict[item] = value
+        for key, val in self._non_tensordict.items():
+            if is_tensorclass(val):
+                _setitem(self._non_tensordict[key], item, value)
 
 
 def _repr(self) -> str:
@@ -686,8 +703,9 @@ def __eq__(self, other: object) -> bool:
         >>> assert not (c1 == c2.apply(lambda x: x+1)).all()
 
     """
+
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor)
+        other, (dict, numbers.Number, Tensor, MemmapTensor)
     ):
         return False
     if is_tensorclass(other):
@@ -744,7 +762,7 @@ def __ne__(self, other: object) -> bool:
 
     """
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor)
+        other, (dict, numbers.Number, Tensor, MemmapTensor)
     ):
         return True
     if is_tensorclass(other):
