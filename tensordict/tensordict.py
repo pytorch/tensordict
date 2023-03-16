@@ -4017,7 +4017,7 @@ def pad_sequence(
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
     # check that all tensordict match
-    keys = _check_keys(list_of_tensordicts, leaves_only=True)
+    keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
     shape = list_of_tensordicts[0].shape
     if batch_first:
         shape = [len(list_of_tensordicts), *shape]
@@ -6017,24 +6017,25 @@ def _td_fields(td: TensorDictBase) -> str:
 def _check_keys(
     list_of_tensordicts: Sequence[TensorDictBase],
     strict: bool = False,
+    include_nested: bool = False,
     leaves_only: bool = False,
 ) -> set[str]:
     keys: set[str] = set()
     for td in list_of_tensordicts:
         if not len(keys):
-            keys = set(td.keys(include_nested=True, leaves_only=leaves_only))
+            keys = set(td.keys(include_nested=include_nested, leaves_only=leaves_only))
         else:
             if not strict:
                 keys = keys.intersection(
-                    set(td.keys(include_nested=True, leaves_only=leaves_only))
+                    set(td.keys(include_nested=include_nested, leaves_only=leaves_only))
                 )
             else:
                 if len(
                     set(
-                        td.keys(include_nested=True, leaves_only=leaves_only)
+                        td.keys(include_nested=include_nested, leaves_only=leaves_only)
                     ).difference(keys)
                 ) or len(
-                    set(td.keys(include_nested=True, leaves_only=leaves_only))
+                    set(td.keys(include_nested=include_nested, leaves_only=leaves_only))
                 ) != len(
                     keys
                 ):

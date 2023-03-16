@@ -702,7 +702,6 @@ def __eq__(self, other: object) -> bool:
         >>> assert not (c1 == c2.apply(lambda x: x+1)).all()
 
     """
-
     if not is_tensor_collection(other) and not isinstance(
         other, (dict, numbers.Number, Tensor, MemmapTensor)
     ):
