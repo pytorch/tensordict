@@ -12,7 +12,8 @@
 # TensorDict \[Beta\]
 
 [**Installation**](#installation) | [**General features**](#general) |
-[**Tensor-like features**](#tensor-like-features) | [**TensorDict for functional programming using FuncTorch**](#tensordict-for-functional-programming-using-functorch) |
+[**Tensor-like features**](#tensor-like-features) |  [**Distributed capabilities**](#distributed-capabilities) |
+[**TensorDict for functional programming using FuncTorch**](#tensordict-for-functional-programming-using-functorch) |
 [**Lazy preallocation**](#lazy-preallocation) | [**Nesting TensorDicts**](#nesting-tensordicts) | [**TensorClass**](#tensorclass)
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors, 
@@ -108,7 +109,7 @@ If a functionality is missing, it is easy to call it using `apply()` or `apply_(
 ```python
 tensordict_uniform = tensordict.apply(lambda tensor: tensor.uniform_())
 ```
-### Point-to-point communication
+### Distributed capabilities
 
 Complex data structures can be cumbersome to synchronize in distributed settings.
 `tensordict` solves that problem with synchronous and asynchronous helper methods
@@ -122,6 +123,9 @@ counterparts:
 >>> # on worker 0
 >>> data.irecv(src=1)
 ```
+
+When nodes share a common scratch space, the `MemmapTensor` backend can be used
+to seamlessly send, receive and read huge amount of data.
 
 ### TensorDict for functional programming using FuncTorch
 
@@ -151,6 +155,11 @@ For instance, TensorDict makes it easy to concatenate model weights to do model 
 >>> print(y.shape)
 torch.Size([2, 10, 4])
 ```
+
+Moreover, tensordict modules are compatible with `torch.fx` and `torch.compile`,
+which means that you can get the best of both worlds: a codebase that is
+both readable and future-proof as well as efficient and portable!
+
 
 ### Lazy preallocation
 
@@ -268,7 +277,7 @@ As this example shows, one can write a specific data structures with dedicated m
 artifacts such as shape operations (e.g. reshape or permutations), data manipulation (indexing, `cat` and `stack`) or calling
 arbitrary functions through the `apply` method (and many more).
 
-Tensorclasses support nesting and many more features.
+Tensorclasses support nesting and, in fact, all the TensorDict features.
 
 
 ## Installation
