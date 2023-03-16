@@ -34,7 +34,7 @@ try:
 except ImportError as err:
     _has_torchrec = False
 
-    class KeyedJaggedTensor:
+    class KeyedJaggedTensor:  # noqa: D101, D102
         pass
 
     TORCHREC_ERR = str(err)

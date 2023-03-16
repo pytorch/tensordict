@@ -416,7 +416,6 @@ class TensorDictModule(nn.Module):
         **kwargs: Any,
     ) -> TensorDictBase:
         """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
-
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         try:
             tensors = self._call_module(tensors, **kwargs)

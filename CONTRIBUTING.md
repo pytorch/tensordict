@@ -1,4 +1,4 @@
-# Contributing to torchrl
+# Contributing to tensordict
 We want to make contributing to this project as easy and transparent as
 possible.
 
@@ -6,7 +6,7 @@ possible.
 Install the library as suggested in the README. For advanced features, 
 it is preferable to install the nightly built of pytorch.
 
-Make sure you install torchrl in develop mode by running
+Make sure you install tensordict in develop mode by running
 ```
 python setup.py develop
 ```
@@ -22,7 +22,7 @@ ARCHFLAGS="-arch arm64" python setup.py develop
 ## Formatting your code
 **Type annotation** 
 
-TorchRL is not strongly-typed, i.e. we do not enforce type hints, neither do we check that the ones that are present are valid. We rely on type hints purely for documentary purposes. Although this might change in the future, there is currently no need for this to be enforced at the moment. 
+tensordict is not strongly-typed, i.e. we do not enforce type hints, neither do we check that the ones that are present are valid. We rely on type hints purely for documentary purposes. Although this might change in the future, there is currently no need for this to be enforced at the moment. 
 
 **Linting**
 
@@ -34,7 +34,7 @@ and running
 ```
 pre-commit run --all-files
 ```
-from within the torchrl cloned directory.
+from within the tensordict cloned directory.
 
 You can also install [pre-commit hooks](https://pre-commit.com/) (using `pre-commit install`
 ). You can disable the check by appending `-n` to your commit command: `git commit -m <commit message> -n`

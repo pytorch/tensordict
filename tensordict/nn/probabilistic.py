@@ -391,16 +391,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> D.Distribution:
-        """Get the distribution that results from passing the input tensordict through
-        the sequence, and then using the resulting parameters.
-        """
+        """Get the distribution that results from passing the input tensordict through the sequence, and then using the resulting parameters."""
         tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)
         return self.build_dist_from_params(tensordict_out)
 
     def build_dist_from_params(self, tensordict: TensorDictBase) -> D.Distribution:
-        """Construct a distribution from the input parameters. Other modules in the
-        sequence are not evaluated.
-        """
+        """Construct a distribution from the input parameters. Other modules in the sequence are not evaluated."""
         return self.module[-1].get_dist(tensordict)
 
     def forward(
