@@ -16,7 +16,7 @@
 [**TensorDict for functional programming using FuncTorch**](#tensordict-for-functional-programming-using-functorch) |
 [**Lazy preallocation**](#lazy-preallocation) | [**Nesting TensorDicts**](#nesting-tensordicts) | [**TensorClass**](#tensorclass)
 
-`TensorDict` is a dictionary-like class that inherits properties from tensors, 
+`TensorDict` is a dictionary-like class that inherits properties from tensors,
 such as indexing, shape operations, casting to device or point-to-point communication
 in distributed settings.
 
@@ -124,8 +124,10 @@ counterparts:
 >>> data.irecv(src=1)
 ```
 
-When nodes share a common scratch space, the `MemmapTensor` backend can be used
-to seamlessly send, receive and read huge amount of data.
+When nodes share a common scratch space, the
+[`MemmapTensor` backend](https://pytorch-labs.github.io/tensordict/tutorials/tensordict_memory.html)
+can be used
+to seamlessly send, receive and read a huge amount of data.
 
 ### TensorDict for functional programming using FuncTorch
 
@@ -235,7 +237,7 @@ the tensordict operations:
 ```python
 >>> from tensordict.prototype import tensorclass
 >>> import torch
->>> 
+>>>
 >>> @tensorclass
 ... class MyData:
 ...    image: torch.Tensor
@@ -251,7 +253,7 @@ the tensordict operations:
 >>> images = torch.randn(100, 3, 64, 64)
 >>> label = torch.randint(10, (100,))
 >>> mask = torch.zeros(1, 64, 64, dtype=torch.bool).bernoulli_().expand(100, 1, 64, 64)
->>> 
+>>>
 >>> data = MyData(images, mask, label=label, batch_size=[100])
 >>>
 >>> print(data.select_label(1))
@@ -297,7 +299,7 @@ pip install tensordict-nightly
 
 If you're using TensorDict, please refer to this BibTeX entry to cite this work:
 ```
-@software{TorchRL,
+@software{TensorDict,
   author = {Moens, Vincent},
   title = {{TensorDict: your PyTorch universal data carrier}},
   url = {https://github.com/pytorch-labs/tensordict},
@@ -314,4 +316,4 @@ with the broader pytorch ecosystem.
 
 ## License
 
-TorchRL is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+TensorDict is licensed under the MIT License. See [LICENSE](LICENSE) for details.
