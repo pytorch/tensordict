@@ -58,3 +58,10 @@ Utils
 
     utils.expand_as_right
     utils.expand_right
+    is_memmap
+    is_batchedtensor
+    is_tensor_collection
+    make_tensordict
+    merge_tensordicts
+    pad
+    pad_sequence

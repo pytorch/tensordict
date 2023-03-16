@@ -24,7 +24,7 @@ import torch
 
 from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
-    get_repr,
+    _get_repr,
     is_tensor_collection,
     TD_HANDLED_FUNCTIONS,
     TensorDict,
@@ -64,7 +64,7 @@ _TD_PASS_THROUGH = {
 
 
 def is_tensorclass(obj: type | Any) -> bool:
-    """Returns True if obj is either a tensorclass or an instance of a tensorclass"""
+    """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
     cls = obj if isinstance(obj, type) else type(obj)
     return dataclasses.is_dataclass(cls) and cls.__name__ in CLASSES_DICT
 
@@ -275,8 +275,8 @@ def _init_wrapper(init: Callable) -> Callable:
 
 
 def _from_tensordict_wrapper(expected_keys):
-    def wrapper(cls, tensordict, non_tensordict=None):
-        """Tensor class wrapper to instantiate a new tensor class object
+    def wrapper(cls, tensordict, non_tensordict=None):  # noqa: D417
+        """Tensor class wrapper to instantiate a new tensor class object.
 
         Args:
             tensordict (TensorDict): Dictionary of tensor types
@@ -336,8 +336,8 @@ def _getstate(self) -> dict[str, Any]:
     return {"tensordict": self._tensordict, "non_tensordict": self._non_tensordict}
 
 
-def _setstate(self, state: dict[str, Any]) -> None:
-    """Used to set the state of an object using state parameter
+def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
+    """Used to set the state of an object using state parameter.
 
     Args:
         state (dict): State parameter to set the object
@@ -347,7 +347,7 @@ def _setstate(self, state: dict[str, Any]) -> None:
 
 
 def _getattribute_wrapper(getattribute: Callable) -> Callable:
-    """Retrieve the value of an object's attribute or raise AttributeError
+    """Retrieve the value of an object's attribute or raise AttributeError.
 
     Args:
         item (str) : name of the attribute to retrieve
@@ -380,16 +380,15 @@ def _getattribute_wrapper(getattribute: Callable) -> Callable:
 
 
 def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
-    """Set the value of an attribute for the tensor class object
-
-    Args:
-        key (str): the name of the attribute to set
-        value (any): the value to set for the attribute
-
-    """
-
     @functools.wraps(setattr_)
-    def wrapper(self, key: str, value: Any) -> None:
+    def wrapper(self, key: str, value: Any) -> None:  # noqa: D417
+        """Set the value of an attribute for the tensor class object.
+
+        Args:
+            key (str): the name of the attribute to set
+            value (any): the value to set for the attribute
+
+        """
         if (
             "_tensordict" not in self.__dict__
             or "_non_tensordict" not in self.__dict__
@@ -418,7 +417,7 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
 
 
 def _getattr(self, attr: str) -> Any:
-    """Retrieve the value of an object's attribute, or a method output if attr is callable
+    """Retrieve the value of an object's attribute, or a method output if attr is callable.
 
     Args:
         attr: name of the attribute to retrieve or function to compute
@@ -455,7 +454,7 @@ def _getattr(self, attr: str) -> Any:
 
 
 def _getitem(self, item: NestedKey) -> Any:
-    """Retrieve the class object at the given index. Indexing will happen for nested tensors as well
+    """Retrieve the class object at the given index. Indexing will happen for nested tensors as well.
 
     Args:
        item (int or any other valid index type): index of the object to retrieve
@@ -472,8 +471,8 @@ def _getitem(self, item: NestedKey) -> Any:
     return _from_tensordict_with_copy(self, tensor_res)  # device=res.device)
 
 
-def _setitem(self, item: NestedKey, value: Any) -> None:
-    """Set the value of the Tensor class object at the given index. Note that there is no strict validation on non-tensor values
+def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
+    """Set the value of the Tensor class object at the given index. Note that there is no strict validation on non-tensor values.
 
     Args:
         item (int or any other valid index type): index of the object to set
@@ -535,7 +534,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:
 
 
 def _repr(self) -> str:
-    """Return a string representation of Tensor class object"""
+    """Return a string representation of Tensor class object."""
     fields = _all_td_fields_as_str(self._tensordict)
     field_str = fields
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
@@ -575,7 +574,7 @@ def _to_tensordict(self) -> TensorDict:
 
 
 def _device(self) -> torch.device:
-    """Retrieves the device type of tensor class"""
+    """Retrieves the device type of tensor class."""
     return self._tensordict.device
 
 
@@ -589,7 +588,7 @@ def _device_setter(self, value: DeviceType) -> None:
 
 
 def _batch_size(self) -> torch.Size:
-    """Retrieves the batch size for the tensor class
+    """Retrieves the batch size for the tensor class.
 
     Returns:
         batch size (torch.Size)
@@ -598,8 +597,8 @@ def _batch_size(self) -> torch.Size:
     return self._tensordict.batch_size
 
 
-def _batch_size_setter(self, new_size: torch.Size) -> None:
-    """Set the value of batch_size
+def _batch_size_setter(self, new_size: torch.Size) -> None:  # noqa: D417
+    """Set the value of batch_size.
 
     Args:
         new_size (torch.Size): new_batch size to be set
@@ -703,7 +702,6 @@ def __eq__(self, other: object) -> bool:
         >>> assert not (c1 == c2.apply(lambda x: x+1)).all()
 
     """
-
     if not is_tensor_collection(other) and not isinstance(
         other, (dict, numbers.Number, Tensor, MemmapTensor)
     ):
@@ -795,7 +793,7 @@ def _get_typed_output(out, expected_type: str | type):
 
 
 def _single_td_field_as_str(key, item, tensordict):
-    """Returns a string as a  key-value pair of tensordict
+    """Returns a string as a  key-value pair of tensordict.
 
     Args:
         key (str): key of tensor dict item
@@ -808,11 +806,11 @@ def _single_td_field_as_str(key, item, tensordict):
     """
     if is_tensor_collection(type(item)):
         return f"{key}={repr(tensordict[key])}"
-    return f"{key}={get_repr(item)}"
+    return f"{key}={_get_repr(item)}"
 
 
 def _all_td_fields_as_str(td: TensorDictBase) -> str:
-    """Returns indented representation of tensor dict values as a key-value pairs
+    """Returns indented representation of tensor dict values as a key-value pairs.
 
     Args:
         td (TensorDict) : Tensordict object
@@ -830,7 +828,7 @@ def _all_td_fields_as_str(td: TensorDictBase) -> str:
 
 
 def _all_non_td_fields_as_str(src_dict) -> list:
-    """Returns a list of string representation of non-tensor key-value pairs
+    """Returns a list of string representation of non-tensor key-value pairs.
 
     Args:
         src_dict (dict): non_tensor_dict
@@ -848,7 +846,8 @@ def _all_non_td_fields_as_str(src_dict) -> list:
 
 
 def _check_td_out_type(field_def):
-    """This function determines the type of attributes in the tensorclass,
+    """This function determines the type of attributes in the tensorclass.
+
     in order that results from calls to the underlying tensordict
     can be cast to the expected type before being returned
     """

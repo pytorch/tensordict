@@ -18,6 +18,8 @@ __all__ = ["symbolic_trace"]
 
 
 class TDGraphModule(nn.Module):
+    """A graph module for TensorDict."""
+
     def __init__(
         self,
         graph_module: fx.GraphModule,
@@ -52,6 +54,7 @@ class TDGraphModule(nn.Module):
 
 
 def symbolic_trace(td_module: TensorDictModule) -> TDGraphModule:
+    """A symbolic tracer for TensorDictModule."""
     if isinstance(td_module, TensorDictSequential):
         return _trace_tensordictsequential(td_module)
     elif isinstance(td_module, TensorDictModule):
@@ -63,7 +66,7 @@ def symbolic_trace(td_module: TensorDictModule) -> TDGraphModule:
 def _partition(
     pred: Callable[..., bool], iterable: Iterable[Any]
 ) -> tuple[Iterable[Any], Iterable[Any]]:
-    "Use a predicate to partition entries into false entries and true entries"
+    """Use a predicate to partition entries into false entries and true entries."""
     # partition(is_odd, range(10)) --> 0 2 4 6 8   and  1 3 5 7 9
     t1, t2 = tee(iterable)
     return filterfalse(pred, t1), filter(pred, t2)
