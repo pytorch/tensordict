@@ -314,7 +314,7 @@ TensorDict is at the *beta*-stage, meaning that there may be bc-breaking changes
 they should come with a warranty.
 Hopefully these should not happen too often, as the current roadmap mostly 
 involves adding new features and building compatibility with the broader
-pytorch ecosystem.
+PyTorch ecosystem.
 
 ## License
 
