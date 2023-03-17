@@ -2060,9 +2060,9 @@ class TensorDictBase(MutableMapping):
 
         """
         if len(shape) == 0 and size is not None:
-            return self.view(*size)
+            return self.reshape(*size)
         elif len(shape) == 1 and isinstance(shape[0], (list, tuple, torch.Size)):
-            return self.view(*shape[0])
+            return self.reshape(*shape[0])
         elif not isinstance(shape, torch.Size):
             shape = torch.Size(shape)
 

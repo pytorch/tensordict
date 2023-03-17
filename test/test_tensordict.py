@@ -1178,6 +1178,33 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(RuntimeError):
             pad(td, [0])
 
+    def test_reshape(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_reshape = td.reshape(td.shape)
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == td.shape
+        td_reshape = td.reshape(*td.shape)
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == td.shape
+        td_reshape = td.reshape(size=td.shape)
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == td.shape
+        td_reshape = td.reshape(-1)
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == torch.Size([td.shape.numel()])
+        td_reshape = td.reshape((-1,))
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == torch.Size([td.shape.numel()])
+        td_reshape = td.reshape(size=(-1,))
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == torch.Size([td.shape.numel()])
+
     def test_view(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
             pytest.skip("view incompatible with stride / permutation")
