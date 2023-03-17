@@ -2068,7 +2068,7 @@ class TensorDictBase(MutableMapping):
 
         d = {}
         for key, item in self.items():
-            d[key] = item.reshape(*shape, *item.shape[self.ndimension() :])
+            d[key] = item.reshape((*shape, *item.shape[self.ndimension() :]))
         if d:
             batch_size = d[key].shape[: len(shape)]
         else:
