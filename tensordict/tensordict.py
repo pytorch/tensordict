@@ -2891,6 +2891,31 @@ class TensorDict(TensorDictBase):
                 for key, value in source.items():
                     self.set(key, value)
 
+    @classmethod
+    def from_dict(cls, input_dict, batch_size=None, device=None):
+        """Returns a TensorDict created from the keyword arguments.
+
+        If batch_size is not specified, returns the maximum batch size possible
+
+        Args:
+            input_dict (dictionary, optional): a dictionary to use as a data source
+                (nested keys compatible).
+            batch_size (iterable of int, optional): a batch size for the tensordict.
+            device (torch.device or compatible type, optional): a device for the TensorDict.
+
+        """
+        for key, value in list(input_dict.items()):
+            if isinstance(value, dict):
+                input_dict[key] = TensorDict.from_dict(value)
+        if batch_size is None:
+            batch_size = _find_max_batch_size(input_dict)
+        # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
+        return cls(
+            input_dict,
+            batch_size=batch_size,
+            device=device,
+        )
+
     @staticmethod
     def _parse_batch_size(
         source: TensorDictBase | dict,
@@ -3987,6 +4012,7 @@ def pad_sequence(
     padding_value: float = 0.0,
     out: TensorDictBase | None = None,
     device: DeviceType | None = None,
+    return_mask: bool | None = False,
 ) -> TensorDictBase:
     """Pads a list of tensordicts in order for them to be stacked together in a contiguous format.
 
@@ -3999,6 +4025,8 @@ def pad_sequence(
             written.
         device (device compatible type, optional): if provded, the device where the
             TensorDict output will be created.
+        return_mask (bool, optional): if ``True``, a "mask" entry will be returned.
+            It contains the mask of valid values in the stacked tensordict.
 
     Examples:
         >>> list_td = [
@@ -4017,14 +4045,19 @@ def pad_sequence(
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
     # check that all tensordict match
+    if return_mask:
+        list_of_tensordicts = [
+            td.clone(False).set("mask", torch.ones(td.shape, dtype=torch.bool))
+            for td in list_of_tensordicts
+        ]
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
-    shape = list_of_tensordicts[0].shape
-    if batch_first:
-        shape = [len(list_of_tensordicts), *shape]
-    elif len(shape):
-        shape = [shape[0], len(list_of_tensordicts), *shape[1:]]
+    shape = max(len(td) for td in list_of_tensordicts)
+    if shape == 0:
+        shape = [len(list_of_tensordicts), ]
+    elif batch_first:
+        shape = [len(list_of_tensordicts), shape]
     else:
-        shape = []
+        shape = [shape, len(list_of_tensordicts)]
     if out is None:
         out = TensorDict({}, shape, device=device, _run_checks=False)
         for key in keys:
@@ -6101,14 +6134,7 @@ def make_tensordict(
     """
     if input_dict is not None:
         kwargs.update(input_dict)
-    if batch_size is None:
-        batch_size = _find_max_batch_size(kwargs)
-    # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
-    return TensorDict(
-        kwargs,
-        batch_size=batch_size,
-        device=device,
-    )  # _run_checks=False)
+    return TensorDict.from_dict(kwargs, batch_size=batch_size, device=device)
 
 
 def _find_max_batch_size(source: TensorDictBase | dict) -> list[int]:
