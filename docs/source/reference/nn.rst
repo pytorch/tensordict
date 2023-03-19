@@ -8,7 +8,7 @@ ML pipelines.
 
 Since TensorDict turns parts of one's code to a key-based structure, it is now
 possible to build complex graph structures using these keys as hooks.
-The basic building block is :obj:`TensorDictModule`, which wraps an :obj:`nn.Module`
+The basic building block is :class:`~.TensorDictModule`, which wraps an :class:`torch.nn.Module`
 instance with a list of input and output keys:
 
 .. code-block::
@@ -30,7 +30,7 @@ instance with a list of input and output keys:
       device=None,
       is_shared=False)
 
-One does not necessarily need to use :obj:`TensorDictModule`, a custom :obj:`nn.Module`
+One does not necessarily need to use :class:`~.TensorDictModule`, a custom :class:`torch.nn.Module`
 with an ordered list of input and output keys (named :obj:`module.in_keys` and
 :obj:`module.out_keys`) will suffice.
 
@@ -108,7 +108,7 @@ additional input from the tensordict as necessary. Here's an example:
       device=None,
       is_shared=False)
 
-We can also select sub-graphs easily throught the :obj:`TensorDictSequential.select_subsequence(in_keys, out_keys)` method:
+We can also select sub-graphs easily through the :meth:`~.TensorDictSequential.select_subsequence` method:
 
 .. code-block::
 
@@ -143,7 +143,7 @@ We can also select sub-graphs easily throught the :obj:`TensorDictSequential.sel
       device=None,
       is_shared=False)
 
-Finally, tensordict.nn comes with a :obj:`ProbabilisticTensorDictModule` that allows
+Finally, :mod:`tensordict.nn` comes with a :class:`~.ProbabilisticTensorDictModule` that allows
 to build distributions from network outputs and get summary statistics or samples from it
 (along with the distribution parameters):
 
@@ -204,15 +204,15 @@ The tensordict package is compatible with most functorch capabilities.
 We also provide a dedicated functional API that leverages the advantages of
 tensordict to handle parameters in functional programs.
 
-The :obj:`make_functional` method will turn a module in a functional module. The
-module will be modified in-place and a :obj:`TensorDict` containing the module
+The :func:`~.make_functional` method will turn a module in a functional module. The
+module will be modified in-place and a :class:`tensordict.TensorDict` containing the module
 parameters will be returned. This tensordict has a structure that reflects exactly
 the structure of the model. In the following example, we show that
 
-1. :obj:`make_functional` extracts the parameters of the module;
+1. :func:`~.make_functional` extracts the parameters of the module;
 
 2. These parameters have a structure that matches exactly the structure of the
-   model (though they can be flattened using :obj:`params.flatten_keys(".")`).
+   model (though they can be flattened using ``params.flatten_keys(".")``).
 
 3. It converts the module and all its sub-modules to be functional.
 
@@ -240,7 +240,7 @@ Alternatively, parameters can also be constructed using the following methods:
   >>> params = TensorDict({name: param for name, param in model.named_parameters()}, []).unflatten_keys(".")
   >>> params = TensorDict(model.state_dict(), [])  # provided that the state_dict() just returns params and buffer tensors
 
-Unlike what is done with functorch, :obj:`tensordict.nn.make_functional` does not
+Unlike what is done with functorch, :func:`~.make_functional` does not
 distinguish on a high level parameters and buffers (they are all packed together).
 
 .. autosummary::
@@ -251,8 +251,25 @@ distinguish on a high level parameters and buffers (they are all packed together
     make_functional
     repopulate_module
 
+Tracing and compiling
+---------------------
+
+.. currentmodule:: tensordict.prototype
+
+:class:`~.TensorDictModule` can be compiled using :func:`torch.compile` if it is
+first traced using :func:`~.symbolic_trace`.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    symbolic_trace
+
+
 Utils
 -----
+
+.. currentmodule:: tensordict.nn
 
 .. autosummary::
     :toctree: generated/

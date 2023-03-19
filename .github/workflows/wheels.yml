@@ -4,7 +4,7 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches:
-      - release/0.0.3
+      - release/0.1.0
 
 jobs:
   build-wheel:
@@ -41,7 +41,7 @@ jobs:
       - name: Build wheel
         run: |
           python -m pip install wheel
-          BUILD_VERSION=0.0.3 python setup.py bdist_wheel
+          BUILD_VERSION=0.1.0 python setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:

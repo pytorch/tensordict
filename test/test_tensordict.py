@@ -28,6 +28,7 @@ from tensordict.tensordict import (
     assert_allclose_td,
     make_tensordict,
     pad,
+    pad_sequence,
     TensorDictBase,
 )
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
@@ -1176,6 +1177,33 @@ class TestTensorDicts(TestTensorDictsBase):
 
         with pytest.raises(RuntimeError):
             pad(td, [0])
+
+    def test_reshape(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_reshape = td.reshape(td.shape)
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == td.shape
+        td_reshape = td.reshape(*td.shape)
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == td.shape
+        td_reshape = td.reshape(size=td.shape)
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == td.shape
+        td_reshape = td.reshape(-1)
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == torch.Size([td.shape.numel()])
+        td_reshape = td.reshape((-1,))
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == torch.Size([td.shape.numel()])
+        td_reshape = td.reshape(size=(-1,))
+        assert isinstance(td_reshape, TensorDict)
+        assert td_reshape.shape.numel() == td.shape.numel()
+        assert td_reshape.shape == torch.Size([td.shape.numel()])
 
     def test_view(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
@@ -3256,6 +3284,15 @@ class TestMakeTensorDict:
         assert tensordict["b"].device == device
         assert tensordict["c"].device == device
 
+    def test_nested(self):
+        input_dict = {
+            "a": {"b": torch.randn(3, 4), "c": torch.randn(3, 4, 5)},
+            "d": torch.randn(3),
+        }
+        tensordict = make_tensordict(input_dict)
+        assert tensordict.shape == torch.Size([3])
+        assert tensordict["a"].shape == torch.Size([3, 4])
+
 
 def test_update_nested_dict():
     t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
@@ -3914,6 +3951,33 @@ class TestErrorMessage:
         td = TensorDict({"a": torch.rand(())}, [])
         with pytest.raises(ValueError, match="Failed to update 'a'"):
             td.set_("a", torch.randn(2))
+
+
+@pytest.mark.parametrize("batch_first", [True, False])
+@pytest.mark.parametrize("make_mask", [True, False])
+def test_pad_sequence(batch_first, make_mask):
+    list_td = [
+        TensorDict({"a": torch.ones((2,)), ("b", "c"): torch.ones((2, 3))}, [2]),
+        TensorDict({"a": torch.ones((4,)), ("b", "c"): torch.ones((4, 3))}, [4]),
+    ]
+    padded_td = pad_sequence(list_td, batch_first=batch_first, return_mask=make_mask)
+    if batch_first:
+        assert padded_td.shape == torch.Size([2, 4])
+        assert padded_td["a"].shape == torch.Size([2, 4])
+        assert padded_td["a"][0, -1] == 0
+        assert padded_td["b", "c"].shape == torch.Size([2, 4, 3])
+        assert padded_td["b", "c"][0, -1, 0] == 0
+    else:
+        assert padded_td.shape == torch.Size([4, 2])
+        assert padded_td["a"].shape == torch.Size([4, 2])
+        assert padded_td["a"][-1, 0] == 0
+        assert padded_td["b", "c"].shape == torch.Size([4, 2, 3])
+        assert padded_td["b", "c"][-1, 0, 0] == 0
+    if make_mask:
+        assert "mask" in padded_td.keys()
+        assert not padded_td["mask"].all()
+    else:
+        assert "mask" not in padded_td.keys()
 
 
 if __name__ == "__main__":

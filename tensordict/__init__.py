@@ -5,8 +5,14 @@
 
 from tensordict.memmap import MemmapTensor, set_transfer_ownership
 from tensordict.tensordict import (
+    is_batchedtensor,
+    is_memmap,
+    is_tensor_collection,
     LazyStackedTensorDict,
+    make_tensordict,
     merge_tensordicts,
+    pad,
+    pad_sequence,
     SubTensorDict,
     TensorDict,
 )
@@ -24,4 +30,10 @@ __all__ = [
     "TensorDict",
     "merge_tensordicts",
     "set_transfer_ownership",
+    "pad_sequence",
+    "make_tensordict",
+    "is_memmap",
+    "is_batchedtensor",
+    "is_tensor_collection",
+    "pad",
 ]
