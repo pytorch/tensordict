@@ -2949,13 +2949,14 @@ class TensorDict(TensorDictBase):
                 is_shared=False)
 
         """
+        batch_size_set = [] if batch_size is None else batch_size
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
-                input_dict[key] = TensorDict(value, [], device=device)
+                input_dict[key] = TensorDict(value, batch_size_set, device=device)
         # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
         out = cls(
             input_dict,
-            batch_size=[],
+            batch_size=batch_size_set,
             device=device,
         )
         if batch_size is None:
