@@ -5248,6 +5248,24 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"{item.__class__.__name__} is not supported yet"
             )
 
+    def send(self, dst: int, init_tag: int = 0, pseudo_rand: bool = False) -> None:
+        pass
+
+    def isend(self, dst: int, init_tag: int = 0, pseudo_rand: bool = False) -> int:
+        pass
+
+    def recv(self, src: int, init_tag: int = 0, pseudo_rand: bool = False) -> int:
+        pass
+
+    def irecv(
+        self,
+        src: int,
+        return_premature: bool = False,
+        init_tag: int = 0,
+        pseudo_rand: bool = False,
+    ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
+        pass
+
     def del_(self, key: str, **kwargs: Any) -> TensorDictBase:
         for td in self.tensordicts:
             td.del_(key, **kwargs)
