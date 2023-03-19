@@ -3292,6 +3292,24 @@ class TestMakeTensorDict:
         tensordict = make_tensordict(input_dict)
         assert tensordict.shape == torch.Size([3])
         assert tensordict["a"].shape == torch.Size([3, 4])
+        input_tensordict = TensorDict(
+            {
+                "a": {"b": torch.randn(3, 4), "c": torch.randn(3, 4, 5)},
+                "d": torch.randn(3),
+            },
+            [],
+        )
+        tensordict = make_tensordict(input_tensordict)
+        assert tensordict.shape == torch.Size([3])
+        assert tensordict["a"].shape == torch.Size([3, 4])
+        input_dict = {
+            ("a", "b"): torch.randn(3, 4),
+            ("a", "c"): torch.randn(3, 4, 5),
+            "d": torch.randn(3),
+        }
+        tensordict = make_tensordict(input_dict)
+        assert tensordict.shape == torch.Size([3])
+        assert tensordict["a"].shape == torch.Size([3, 4])
 
 
 def test_update_nested_dict():
