@@ -10,7 +10,7 @@ import torch
 from _utils_internal import expand_list
 
 from tensordict import TensorDict
-from tensordict.nn import dispatch, TensorDictModule, TensorDictSequential
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.functional_modules import (
     get_functional,
     make_functional,
@@ -486,7 +486,7 @@ class TestGetFunctional:
         # check error
         with pytest.raises(
             TypeError,
-            match="It seems you tried to provide the parameters as an argument to the module when the module was not stateless",
+            match=r"It seems you tried to provide",
         ):
             model(a, b, params)
         v3a, v3b = model(a, b)
