@@ -156,6 +156,7 @@ class TestMP:
         assert val is transfer_ownership
         p.join()
 
+
 @pytest.mark.parametrize(
     "index",
     [
