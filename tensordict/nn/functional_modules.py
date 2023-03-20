@@ -378,7 +378,7 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
                 return getattr(type(self), fun_name)(self, *args, **kwargs)
             except TypeError as err:
                 pattern = (
-                    r"forward\(\) takes \d+ positional arguments but \d+ were given"
+                    r"takes \d+ positional arguments but \d+ were given"
                 )
                 if re.match(pattern, str(err)) and isinstance(args[-1], TensorDictBase):
                     raise TypeError(
