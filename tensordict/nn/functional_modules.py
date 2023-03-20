@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 import types
 from copy import deepcopy
 from functools import wraps
@@ -349,8 +350,9 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
     @wraps(fun)
     def new_fun(self, *args, **kwargs):
         # 3 use cases: (1) params is the last arg, (2) params is in kwargs, (3) no params
-        if self.__dict__.get("_is_stateless", False):
-            params = kwargs.pop("params", None)
+        _is_stateless = self.__dict__.get("_is_stateless", False)
+        params = kwargs.pop("params", None)
+        if _is_stateless or params is not None:
             if params is None:
                 params = args[-1]
                 args = args[:-1]
@@ -363,11 +365,29 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
             finally:
                 # reset the previous params, and tell the submodules to look for params
                 _assign_params(
-                    self, old_params, make_stateless=True, return_old_tensordict=True
+                    self,
+                    old_params,
+                    make_stateless=_is_stateless,
+                    return_old_tensordict=True,
                 )
             return out
         else:
-            return getattr(type(self), fun_name)(self, *args, **kwargs)
+            if params is not None:
+                kwargs["params"] = params
+            try:
+                return getattr(type(self), fun_name)(self, *args, **kwargs)
+            except TypeError as err:
+                pattern = (
+                    r"forward\(\) takes \d+ positional arguments but \d+ were given"
+                )
+                if re.match(pattern, str(err)) and isinstance(args[-1], TensorDictBase):
+                    raise TypeError(
+                        "It seems you tried to provide the parameters as an argument to the module when the module was not stateless. "
+                        "If this is the case, this error should vanish by providing the parameters using the ``module(..., params=params)`` "
+                        "syntax."
+                    ) from err
+                else:
+                    raise err
 
     new_fun.__signature__ = sig
     return new_fun

@@ -243,6 +243,25 @@ Alternatively, parameters can also be constructed using the following methods:
 Unlike what is done with functorch, :func:`~.make_functional` does not
 distinguish on a high level parameters and buffers (they are all packed together).
 
+.. note::
+  Tensordict funcitonal modules can be used in several ways, with parameters
+  passed as arguments or keyword arguments.
+
+    >>> params = make_functional(model)
+    >>> model(input_td, params)
+    >>> # alternatively
+    >>> model(input_td, params=params)
+
+  However, this will currently not work:
+
+    >>> get_functional(model)
+    >>> model(input_td, params)  # breaks!
+    >>> model(input_td, params=params)  # works
+
+  as :func:`get_functional` re-populates
+  the module with its parameters, we rely on the keyword argument ``"params"``
+  as a signature for a functional call.
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template_noinherit.rst
