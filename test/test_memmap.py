@@ -260,10 +260,14 @@ class TestIndexing:
 
     def test_ownership(self):
         t = MemmapTensor.from_tensor(torch.zeros(10))
+        filename = t.filename
         y = t[:2][-1:]
         del t
-        with pytest.raises(FileNotFoundError, match="No such file or directory"):
-            y + 0
+        # this would fail if t was gone with its file
+        assert (y * 0 + 1 == 1).all()
+        del y
+        # check that file has gone
+        assert not os.path.isfile(filename)
 
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send_across_procs(self):
