@@ -5248,23 +5248,175 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"{item.__class__.__name__} is not supported yet"
             )
 
-    def send(self, dst: int, init_tag: int = 0, pseudo_rand: bool = False) -> None:
-        pass
+    def __eq__(self, other):
+        # avoiding circular imports
+        from tensordict.prototype import is_tensorclass
 
-    def isend(self, dst: int, init_tag: int = 0, pseudo_rand: bool = False) -> int:
-        pass
+        if is_tensorclass(other):
+            return other == self
+        if isinstance(other, (dict,)) or is_tensor_collection(other):
+            if (
+                isinstance(other, LazyStackedTensorDict)
+                and other.stack_dim == self.stack_dim
+            ):
+                if self.shape != other.shape:
+                    raise RuntimeError(
+                        "Cannot compare LazyStackedTensorDict instances of different shape."
+                    )
+                # in this case, we iterate over the tensordicts
+                return torch.stack(
+                    [
+                        td1 == td2
+                        for td1, td2 in zip(self.tensordicts, other.tensordicts)
+                    ],
+                    self.stack_dim,
+                )
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 == other.get(key)
+            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return torch.stack(
+                [td == other for td in self.tensordicts],
+                self.stack_dim,
+            )
+        return False
 
-    def recv(self, src: int, init_tag: int = 0, pseudo_rand: bool = False) -> int:
-        pass
+    def __ne__(self, other):
+        # avoiding circular imports
+        from tensordict.prototype import is_tensorclass
 
-    def irecv(
+        if is_tensorclass(other):
+            return other != self
+        if isinstance(other, (dict,)) or is_tensor_collection(other):
+            if (
+                isinstance(other, LazyStackedTensorDict)
+                and other.stack_dim == self.stack_dim
+            ):
+                if self.shape != other.shape:
+                    raise RuntimeError(
+                        "Cannot compare LazyStackedTensorDict instances of different shape."
+                    )
+                # in this case, we iterate over the tensordicts
+                return torch.stack(
+                    [
+                        td1 != td2
+                        for td1, td2 in zip(self.tensordicts, other.tensordicts)
+                    ],
+                    self.stack_dim,
+                )
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 != other.get(key)
+            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return torch.stack(
+                [td != other for td in self.tensordicts],
+                self.stack_dim,
+            )
+        return False
+
+    def all(self, dim: int = None) -> bool | TensorDictBase:
+        if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
+            raise RuntimeError(
+                "dim must be greater than or equal to -tensordict.batch_dims and "
+                "smaller than tensordict.batch_dims"
+            )
+        if dim is not None:
+            # TODO: we need to adapt this to LazyStackedTensorDict too
+            if dim < 0:
+                dim = self.batch_dims + dim
+            return TensorDict(
+                source={key: value.all(dim=dim) for key, value in self.items()},
+                batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
+                device=self.device,
+            )
+        return all(value.all() for value in self.tensordicts)
+
+    def any(self, dim: int = None) -> bool | TensorDictBase:
+        if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
+            raise RuntimeError(
+                "dim must be greater than or equal to -tensordict.batch_dims and "
+                "smaller than tensordict.batch_dims"
+            )
+        if dim is not None:
+            # TODO: we need to adapt this to LazyStackedTensorDict too
+            if dim < 0:
+                dim = self.batch_dims + dim
+            return TensorDict(
+                source={key: value.any(dim=dim) for key, value in self.items()},
+                batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
+                device=self.device,
+            )
+        return any(value.any() for value in self.tensordicts)
+
+    def _send(self, dst: int, _tag: int = -1, pseudo_rand: bool = False) -> int:
+        for td in self.tensordicts:
+            _tag = td._send(dst, _tag=_tag, pseudo_rand=pseudo_rand)
+        return _tag
+
+    def _isend(
+        self,
+        dst: int,
+        _tag: int = -1,
+        _futures: list[torch.Future] | None = None,
+        pseudo_rand: bool = False,
+    ) -> int:
+
+        if _futures is None:
+            is_root = True
+            _futures = []
+        else:
+            is_root = False
+        for td in self.tensordicts:
+            _tag = td._isend(dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures)
+        if is_root:
+            for future in _futures:
+                future.wait()
+        return _tag
+
+    def _recv(self, src: int, _tag: int = -1, pseudo_rand: bool = False) -> int:
+        for td in self.tensordicts:
+            _tag = td._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
+        return _tag
+
+    def _irecv(
         self,
         src: int,
         return_premature: bool = False,
-        init_tag: int = 0,
+        _tag: int = -1,
+        _future_list: list[torch.Future] = None,
         pseudo_rand: bool = False,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
-        pass
+        root = False
+        if _future_list is None:
+            _future_list = []
+            root = True
+        for td in self.tensordicts:
+            _tag, _future_list = td._irecv(
+                src=src,
+                return_premature=return_premature,
+                _tag=_tag,
+                _future_list=_future_list,
+                pseudo_rand=pseudo_rand,
+            )
+
+        if not root:
+            return _tag, _future_list
+        elif return_premature:
+            return _future_list
+        else:
+            for future in _future_list:
+                future.wait()
+            return
 
     def del_(self, key: str, **kwargs: Any) -> TensorDictBase:
         for td in self.tensordicts:
