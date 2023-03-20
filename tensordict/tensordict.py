@@ -5322,7 +5322,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 [td != other for td in self.tensordicts],
                 self.stack_dim,
             )
-        return False
+        return True
 
     def all(self, dim: int = None) -> bool | TensorDictBase:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
