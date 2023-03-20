@@ -2949,17 +2949,21 @@ class TensorDict(TensorDictBase):
                 is_shared=False)
 
         """
+        batch_size_set = [] if batch_size is None else batch_size
         for key, value in list(input_dict.items()):
-            if isinstance(value, (dict, TensorDictBase)):
-                input_dict[key] = TensorDict.from_dict(value)
-        if batch_size is None:
-            batch_size = _find_max_batch_size(input_dict)
+            if isinstance(value, (dict,)):
+                input_dict[key] = TensorDict(value, batch_size_set, device=device)
         # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
-        return cls(
+        out = cls(
             input_dict,
-            batch_size=batch_size,
+            batch_size=batch_size_set,
             device=device,
         )
+        if batch_size is None:
+            _find_max_batch_size(out)
+        else:
+            out.batch_size = batch_size
+        return out
 
     @staticmethod
     def _parse_batch_size(
@@ -4108,14 +4112,17 @@ def pad_sequence(
     if out is None:
         out = TensorDict({}, shape, device=device, _run_checks=False)
         for key in keys:
-            out.set(
-                key,
-                torch.nn.utils.rnn.pad_sequence(
-                    [td.get(key) for td in list_of_tensordicts],
-                    batch_first=batch_first,
-                    padding_value=padding_value,
-                ),
-            )
+            try:
+                out.set(
+                    key,
+                    torch.nn.utils.rnn.pad_sequence(
+                        [td.get(key) for td in list_of_tensordicts],
+                        batch_first=batch_first,
+                        padding_value=padding_value,
+                    ),
+                )
+            except Exception as err:
+                raise RuntimeError(f"pad_sequence failed for key {key}") from err
         return out
     else:
         for key in keys:
@@ -6230,20 +6237,27 @@ def make_tensordict(
     return TensorDict.from_dict(kwargs, batch_size=batch_size, device=device)
 
 
-def _find_max_batch_size(source: TensorDictBase | dict) -> list[int]:
+def _find_max_batch_size(source: TensorDictBase):
+    """Updates a tensordict with its maximium batch size."""
     tensor_data = list(source.values())
+    for val in tensor_data:
+        if is_tensor_collection(val):
+            _find_max_batch_size(val)
     batch_size = []
     if not tensor_data:  # when source is empty
-        return batch_size
+        source.batch_size = batch_size
+        return
     curr_dim = 0
     while True:
         if tensor_data[0].dim() > curr_dim:
             curr_dim_size = tensor_data[0].size(curr_dim)
         else:
-            return batch_size
+            source.batch_size = batch_size
+            return
         for tensor in tensor_data[1:]:
             if tensor.dim() <= curr_dim or tensor.size(curr_dim) != curr_dim_size:
-                return batch_size
+                source.batch_size = batch_size
+                return
         batch_size.append(curr_dim_size)
         curr_dim += 1
 
