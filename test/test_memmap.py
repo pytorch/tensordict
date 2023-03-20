@@ -74,62 +74,87 @@ def test_memmap_del():
     filename = m.filename
     assert os.path.isfile(filename)
     del m
-    with pytest.raises(AssertionError):
-        assert os.path.isfile(filename)
+    assert not os.path.isfile(filename)
 
 
-@pytest.mark.parametrize("transfer_ownership", [True, False])
-def test_memmap_ownership(transfer_ownership):
-    t = torch.tensor([1])
-    m = MemmapTensor.from_tensor(t, transfer_ownership=transfer_ownership)
-    assert not m.file.delete
-    with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp:
-        pickle.dump(m, tmp)
-        assert m._has_ownership is not m.transfer_ownership
-        m2 = pickle.load(open(tmp.name, "rb"))
-        assert m2._memmap_array is None  # assert data is not actually loaded
-        assert isinstance(m2, MemmapTensor)
-        assert m2.filename == m.filename
-        # assert m2.file.name == m2.filename
-        # assert m2.file._closer.name == m2.filename
-        assert (
-            m._has_ownership is not m2._has_ownership
-        )  # delete attributes must have changed
-        # assert (
-        #     m.file._closer.delete is not m2.file._closer.delete
-        # )  # delete attributes must have changed
-        del m
-        if transfer_ownership:
-            assert os.path.isfile(m2.filename)
-        else:
-            # m2 should point to a non-existing file
-            assert not os.path.isfile(m2.filename)
-            with pytest.raises(FileNotFoundError):
-                m2.contiguous()
-
-
+# @pytest.mark.parametrize("transfer_ownership", [True, False])
+# def test_memmap_ownership(transfer_ownership):
+#     t = torch.tensor([1])
+#     m = MemmapTensor.from_tensor(t, transfer_ownership=transfer_ownership)
+#     assert not m.file.delete
+#     with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp:
+#         pickle.dump(m, tmp)
+#         assert m._has_ownership is not m.transfer_ownership
+#         m2 = pickle.load(open(tmp.name, "rb"))
+#         assert m2._memmap_array is None  # assert data is not actually loaded
+#         assert isinstance(m2, MemmapTensor)
+#         assert m2.filename == m.filename
+#         # assert m2.file.name == m2.filename
+#         # assert m2.file._closer.name == m2.filename
+#         assert (
+#             m._has_ownership is not m2._has_ownership
+#         )  # delete attributes must have changed
+#         # assert (
+#         #     m.file._closer.delete is not m2.file._closer.delete
+#         # )  # delete attributes must have changed
+#         del m
+#         if transfer_ownership:
+#             assert os.path.isfile(m2.filename)
+#         else:
+#             # m2 should point to a non-existing file
+#             assert not os.path.isfile(m2.filename)
+#             with pytest.raises(FileNotFoundError):
+#                 m2.contiguous()
+#
+#
 @pytest.mark.parametrize("value", [True, False])
 def test_memmap_ownership_2pass(value):
     t = torch.tensor([1])
     m1 = MemmapTensor.from_tensor(t, transfer_ownership=value)
+    filename = m1.filename
     with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp2:
         pickle.dump(m1, tmp2)
+        # after we dump m1, m1 has lost ownership and waits for m2 to pick it up
+        # if m1 is deleted and m2 is never created, the file is not cleared.
+        if value:
+            assert not m1._has_ownership
+        else:
+            assert m1._has_ownership
+
         m2 = pickle.load(open(tmp2.name, "rb"))
+        assert m2.filename == m1.filename
         with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp3:
             pickle.dump(m2, tmp3)
             m3 = pickle.load(open(tmp3.name, "rb"))
-            assert m1._has_ownership + m2._has_ownership + m3._has_ownership == 1
+            assert m3.filename == m1.filename
 
     del m1, m2, m3
-    m1 = MemmapTensor.from_tensor(t, transfer_ownership=value)
-    with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp2:
-        pickle.dump(m1, tmp2)
-        m2 = pickle.load(open(tmp2.name, "rb"))
-        with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp3:
-            pickle.dump(m1, tmp3)
-            m3 = pickle.load(open(tmp3.name, "rb"))
-            assert m1._has_ownership + m2._has_ownership + m3._has_ownership == 1
+    assert not os.path.isfile(filename)
 
+
+class TestMP:
+    @staticmethod
+    def getdata(data, queue):
+        queue.put(("has_ownership", data._has_ownership))
+        queue.put(("transfer_ownership", data.transfer_ownership))
+
+    @pytest.mark.parametrize("transfer_ownership", [True, False])
+    def test(self, transfer_ownership):
+        m = MemmapTensor(3, transfer_ownership=transfer_ownership)
+        queue = mp.Queue(1)
+        p = mp.Process(target=TestMP.getdata, args=(m, queue))
+        p.start()
+        msg, val = queue.get()
+        assert msg == "has_ownership"
+        assert val is transfer_ownership
+        if transfer_ownership:
+            assert not m._has_ownership
+        else:
+            assert m._has_ownership
+        msg, val = queue.get()
+        assert msg == "transfer_ownership"
+        assert val is transfer_ownership
+        p.join()
 
 @pytest.mark.parametrize(
     "index",

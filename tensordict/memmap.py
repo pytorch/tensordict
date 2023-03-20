@@ -36,7 +36,7 @@ EllipsisType = type(Ellipsis)
 
 MEMMAP_HANDLED_FN: dict[Callable, Callable] = {}
 HAS_OWNERSHIP = {}
-HAD_OWNERSHIP = {}
+# HAD_OWNERSHIP = {}
 TRANSFER_OWNERSHIP = {}
 
 
@@ -169,7 +169,7 @@ class MemmapTensor:
             Path(filename).touch(exist_ok=True)
             self.file = open(filename, mode="r+")
 
-        self.filename = self.file.name
+        self.filename = copy(self.file.name)
         self.file.close()  # we close the file for now, but don't delete it
 
         if isinstance(size[0], (torch.Tensor, MemmapTensor, np.ndarray)):
@@ -287,6 +287,7 @@ class MemmapTensor:
         # memmap_copy.transfer_ownership = False
         memmap_copy._shape_indexed = None
         memmap_copy.file = memmap_tensor.file
+
         return memmap_copy
 
     def __iter__(self):
@@ -307,9 +308,10 @@ class MemmapTensor:
         self._dtype = dtype
         self._ndim = len(shape)
         self._numel = prod(shape)
-        TRANSFER_OWNERSHIP[id(self.file)] = transfer_ownership
-        HAS_OWNERSHIP[id(self.file)] = True
-        HAD_OWNERSHIP[id(self.file)] = True
+
+        TRANSFER_OWNERSHIP[self.filename] = transfer_ownership
+        HAS_OWNERSHIP[self.filename] = True
+        # HAD_OWNERSHIP[self.filename] = True
 
         self._tensor_dir = torch.zeros(0, device=device, dtype=dtype).__dir__()
         self._save_item(shape)
@@ -529,7 +531,7 @@ MemmapTensor of shape {self.shape}."""
                 f"value provided to set_transfer_ownership should be a "
                 f"boolean, got {type(value)}"
             )
-        TRANSFER_OWNERSHIP[id(self.file)] = value
+        TRANSFER_OWNERSHIP[self.filename] = value
         return self
 
     def __deepcopy__(self, memo: dict[int, Any] | None = None) -> MemmapTensor:
@@ -545,7 +547,7 @@ MemmapTensor of shape {self.shape}."""
         if not hasattr(self, "file"):
             return
         # for some reason Memmap keeps 2 refs to the file
-        if HAS_OWNERSHIP.get(id(self.file), False) and getrefcount(self.file) <= 2:
+        if HAS_OWNERSHIP.get(self.filename, False) and getrefcount(self.file) <= 2:
             if isinstance(self.file, tempfile._TemporaryFileWrapper):
                 # only delete file if we created a temporary file. Otherwise file should
                 # persist on disk
@@ -628,39 +630,48 @@ MemmapTensor of shape {self.shape}."""
             self.memmap_array[idx] = to_numpy(value)
 
     def __setstate__(self, state: dict[str, Any]) -> None:
+        filename = state["filename"]
         if state["file"] is None:
             # state["_had_ownership"] = state["_had_ownership"]
             # state["_has_ownership"] = delete
             # tmpfile = tempfile.NamedTemporaryFile(delete=False)
             # tmpfile.close()
-            tmpfile = _TemporaryFileWrapper(None, state["filename"], delete=True)
-            tmpfile.name = state["filename"]
-            tmpfile._closer.name = state["filename"]
+            tmpfile = _TemporaryFileWrapper(None, filename, delete=True)
+            tmpfile.name = filename
+            tmpfile._closer.name = filename
             state["file"] = tmpfile
-        TRANSFER_OWNERSHIP[id(tmpfile)] = state["transfer_ownership"]
-        HAD_OWNERSHIP[id(tmpfile)] = state["_has_ownership"]
-        HAS_OWNERSHIP[id(tmpfile)] = state["_has_ownership"]
+
+        # We only set the ownership if it's not set
+        if state["transfer_ownership"]:
+            TRANSFER_OWNERSHIP[filename] = True
+        else:
+            TRANSFER_OWNERSHIP.setdefault(filename, state["transfer_ownership"])
+        if state["_has_ownership"]:
+            HAS_OWNERSHIP[filename] = True
+        else:
+            HAS_OWNERSHIP.setdefault(filename, state["_has_ownership"])
         self.__dict__.update(state)
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
-        id_file = id(self.file)
+        id_file = state["filename"]
         state["file"] = None
         state["_memmap_array"] = None
         state["_fake"] = None
-        state["_has_ownership"] = TRANSFER_OWNERSHIP[id_file] and HAD_OWNERSHIP[id_file]
-        state["transfer_ownership"] = TRANSFER_OWNERSHIP[id_file]
-        HAD_OWNERSHIP[id_file] = HAS_OWNERSHIP[id_file]
+
+        # we are abandoning ownership if we need to transfer it and if we have it
+        if HAS_OWNERSHIP[id_file] and TRANSFER_OWNERSHIP[id_file]:
+            state["_has_ownership"] = True
+            state["transfer_ownership"] = True
+            HAS_OWNERSHIP[id_file] = False
+            TRANSFER_OWNERSHIP[id_file] = False
+        else:
+            state["_has_ownership"] = False
+            state["transfer_ownership"] = False
+
         # self._had_ownership = self._has_ownership = state["_had_ownership"]
         return state
 
-    def __reduce__(self) -> tuple[Any, ...]:
-        if TRANSFER_OWNERSHIP[id(self.file)] and HAS_OWNERSHIP[id(self.file)]:
-            HAS_OWNERSHIP[id(self.file)] = False
-            # those values should already be False
-            # self.file.delete = False
-            # self.file._closer.delete = False
-        return super().__reduce__()
 
     def to(
         self,
@@ -732,15 +743,15 @@ MemmapTensor of shape {self.shape}."""
     # backward compatibility
     @property
     def _has_ownership(self):
-        return HAS_OWNERSHIP[id(self.file)]
+        return HAS_OWNERSHIP[self.filename]
 
-    @property
-    def _had_ownership(self):
-        return HAD_OWNERSHIP[id(self.file)]
+    # @property
+    # def _had_ownership(self):
+    #     return HAD_OWNERSHIP[self.filename]
 
     @property
     def transfer_ownership(self):
-        return TRANSFER_OWNERSHIP[id(self.file)]
+        return TRANSFER_OWNERSHIP[self.filename]
 
 
 def tensor_from_memoryview(
