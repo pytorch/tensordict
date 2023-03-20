@@ -486,7 +486,7 @@ class TestGetFunctional:
         # check error
         with pytest.raises(
             TypeError,
-            match=r"It seems you tried to provide",
+            match="It seems you tried to provide the parameters",
         ):
             model(a, b, params)
         v3a, v3b = model(a, b)
