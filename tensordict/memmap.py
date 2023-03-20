@@ -548,7 +548,9 @@ MemmapTensor of shape {self.shape}."""
             return
         # for some reason Memmap keeps 2 refs to the file
         if HAS_OWNERSHIP.get(self.filename, False) and getrefcount(self.file) <= 2:
-            if isinstance(self.file, tempfile._TemporaryFileWrapper):
+            if isinstance(self.file, tempfile._TemporaryFileWrapper) and os.path.isfile(
+                self.filename
+            ):
                 # only delete file if we created a temporary file. Otherwise file should
                 # persist on disk
                 os.unlink(self.filename)
@@ -671,7 +673,6 @@ MemmapTensor of shape {self.shape}."""
 
         # self._had_ownership = self._has_ownership = state["_had_ownership"]
         return state
-
 
     def to(
         self,
