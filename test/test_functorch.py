@@ -11,7 +11,11 @@ from _utils_internal import expand_list
 
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
-from tensordict.nn.functional_modules import make_functional, repopulate_module
+from tensordict.nn.functional_modules import (
+    get_functional,
+    make_functional,
+    repopulate_module,
+)
 from torch import nn
 from torch.nn import Linear
 
@@ -452,6 +456,44 @@ def test_outputsize_vmap():
     params = params.expand(3, *params.shape)
     out = vmap(model, (0, 0))(a, params)
     assert out.shape == torch.Size([3, 4])
+
+
+class TestGetFunctional:
+    def test_get_functional(self):
+        class Model(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.a = nn.Linear(6, 5)
+                self.b = nn.Linear(2, 6)
+
+            def forward(self, a, b):
+                return self.a(a), self.b(b)
+
+        model = Model()
+        get_functional(model)
+        params = TensorDict(
+            {
+                "a": {"weight": torch.randn(5, 6), "bias": torch.randn(5)},
+                "b": {"weight": torch.randn(6, 2), "bias": torch.randn(6)},
+            },
+            [],
+        )
+        a = torch.randn(6)
+        b = torch.randn(2)
+        v1a, v1b = model(a, b)
+        _ = model(a, b, params=params)
+        v2a, v2b = model(a, b)
+        # check error
+        with pytest.raises(
+            TypeError,
+            match="It seems you tried to provide the parameters",
+        ):
+            model(a, b, params)
+        v3a, v3b = model(a, b)
+        assert (v1a == v2a).all()
+        assert (v1a == v3a).all()
+        assert (v1b == v2b).all()
+        assert (v1b == v3b).all()
 
 
 if __name__ == "__main__":
