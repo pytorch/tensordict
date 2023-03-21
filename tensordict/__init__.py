@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict.memmap import MemmapTensor, set_transfer_ownership
+from tensordict.persistent import PersistentTensorDict
 from tensordict.tensordict import (
     is_batchedtensor,
     is_memmap,
@@ -36,4 +37,5 @@ __all__ = [
     "is_batchedtensor",
     "is_tensor_collection",
     "pad",
+    "PersistentTensorDict",
 ]

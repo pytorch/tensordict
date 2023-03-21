@@ -1580,7 +1580,7 @@ class TensorDictBase(MutableMapping):
         return self.update_at_(tensordict, idx)
 
     def get_at(
-        self, key: str, idx: IndexType, default: CompatibleType = "_no_default_"
+        self, key: str, idx: IndexType, default: CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
         """Get the value of a tensordict from the key `key` at the index `idx`.
 
