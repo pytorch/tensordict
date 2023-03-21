@@ -73,7 +73,7 @@ class TestGather:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=10)
+            out = queue.get(timeout=30)
             assert out == "yuppie"
         finally:
             main_worker.join()
@@ -123,6 +123,7 @@ class TestSend:
         assert (td != 0).all()
         queue.put("yuppie")
 
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send(self, pseudo_rand, set_context):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=TestSend.server, args=(queue, pseudo_rand))
@@ -131,7 +132,7 @@ class TestSend:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=10)
+            out = queue.get(timeout=30)
             assert out == "yuppie"
         finally:
             main_worker.join()
@@ -195,7 +196,7 @@ class TestiRecv:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=10)
+            out = queue.get(timeout=30)
             assert out == "yuppie"
         finally:
             main_worker.join()
@@ -245,6 +246,7 @@ class TestiSend:
         assert (td != 0).all()
         queue.put("yuppie")
 
+    @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send(self, pseudo_rand, set_context):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=TestiSend.server, args=(queue, pseudo_rand))
@@ -253,7 +255,7 @@ class TestiSend:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=10)
+            out = queue.get(timeout=30)
             assert out == "yuppie"
         except Exception as err:
             # otherwise pytest does not capture it

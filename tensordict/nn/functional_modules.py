@@ -2,11 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import inspect
 
+from __future__ import annotations
+
+import inspect
 import types
 from copy import deepcopy
 from functools import wraps
+from typing import Any, Callable, Iterable
 
 import torch
 from tensordict import TensorDict
@@ -48,10 +51,11 @@ except ImportError:
 
 # Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked
 if _has_functorch:
-
     # Monkey-patches
 
-    def _process_batched_inputs(in_dims, args, func):
+    def _process_batched_inputs(
+        in_dims: int | tuple[int, ...], args: Any, func: Callable
+    ) -> tuple[Any, ...]:
         if not isinstance(in_dims, int) and not isinstance(in_dims, tuple):
             raise ValueError(
                 f"""vmap({_get_name(func)}, in_dims={in_dims}, ...)(<inputs>):
@@ -110,7 +114,9 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
 
     vmap_src._process_batched_inputs = _process_batched_inputs
 
-    def _create_batched_inputs(flat_in_dims, flat_args, vmap_level: int, args_spec):
+    def _create_batched_inputs(
+        flat_in_dims: list[int], flat_args: list[Any], vmap_level: int, args_spec
+    ) -> Any:
         # See NOTE [Ignored _remove_batch_dim, _add_batch_dim]
         # If tensordict, we remove the dim at batch_size[in_dim] such that the TensorDict can accept
         # the batched tensors. This will be added in _unwrap_batched
@@ -130,8 +136,12 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
     vmap_src._create_batched_inputs = _create_batched_inputs
 
     def _unwrap_batched(
-        batched_outputs, out_dims, vmap_level: int, batch_size: int, func
-    ):
+        batched_outputs: Any,
+        out_dims: int | tuple[int, ...],
+        vmap_level: int,
+        batch_size: int,
+        func: Callable,
+    ) -> Any:
         flat_batched_outputs, output_spec = tree_flatten(batched_outputs)
 
         for out in flat_batched_outputs:
@@ -189,7 +199,11 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
 # Tensordict-compatible Functional modules
 
 
-def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None, recurse=True):
+def extract_weights_and_buffers(
+    model: nn.Module,
+    funs_to_decorate: Iterable[str] | None = None,
+    recurse: bool = True,
+) -> TensorDict:
     """Extracts the weights and buffers of a model in a tensordict, and adapts the modules to read those inputs."""
     tensordict = {}
     for name, param in list(model.named_parameters(recurse=False)):
@@ -224,8 +238,12 @@ def extract_weights_and_buffers(model: nn.Module, funs_to_decorate=None, recurse
 
 
 def _swap_state(
-    model, tensordict, is_stateless, return_old_tensordict=False, old_tensordict=None
-):
+    model: nn.Module,
+    tensordict: TensorDict,
+    is_stateless: bool,
+    return_old_tensordict: bool = False,
+    old_tensordict: dict[str, torch.Tensor] | TensorDict | None = None,
+) -> dict[str, torch.Tensor] | TensorDict | None:
     model.__dict__["_is_stateless"] = is_stateless
     if return_old_tensordict and old_tensordict is None:
         old_tensordict = {}
@@ -244,10 +262,7 @@ def _swap_state(
             # faster than get(key, Tensordict(...))
             value = {}
 
-        if return_old_tensordict:
-            _old_value = old_tensordict.get(key, None)
-        else:
-            _old_value = None
+        _old_value = old_tensordict.get(key, None) if return_old_tensordict else None
         _old_value = _swap_state(
             child,
             value,
@@ -270,21 +285,30 @@ def _swap_state(
         setattr(model, key, value)
     if return_old_tensordict:
         return old_tensordict
+    return None
 
 
-def make_functional(module, funs_to_decorate=None):
+def make_functional(
+    module: nn.Module,
+    funs_to_decorate: Iterable[str] | None = None,
+) -> TensorDict:
+    """Converts a nn.Module to a functional module in-place, and returns its params."""
     params = extract_weights_and_buffers(module, funs_to_decorate=funs_to_decorate)
     return params
 
 
-def get_functional(module, funs_to_decorate=None):
+def get_functional(
+    module: nn.Module,
+    funs_to_decorate: Iterable[str] | None = None,
+) -> nn.Module:
+    """Converts a nn.Module to a functional module in-place, and returns a stateful version of this module that can be used in functional settings."""
     params = make_functional(module, funs_to_decorate=funs_to_decorate)
     out = deepcopy(module)
     repopulate_module(module, params)
     return out
 
 
-def _make_decorator(module, fun_name):
+def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
     fun = getattr(module, fun_name)
     # we need to update the signature so that params can be the last positional arg
     oldsig = inspect.signature(fun)
@@ -349,13 +373,21 @@ def _make_decorator(module, fun_name):
     return new_fun
 
 
-def _assign_params(module, params, make_stateless, return_old_tensordict):
+def _assign_params(
+    module: nn.Module,
+    params: TensorDict,
+    make_stateless: bool,
+    return_old_tensordict: bool,
+) -> TensorDict | None:
     if params is not None:
         out = _swap_state(module, params, make_stateless, return_old_tensordict)
         if out is not None:
             return TensorDict(out, [], _run_checks=False)
+        return None
+    return None
 
 
-def repopulate_module(model, tensordict):
+def repopulate_module(model: nn.Module, tensordict: TensorDict) -> nn.Module:
+    """Repopulates a module with its parameters, presented as a nested TensorDict."""
     _swap_state(model, tensordict, is_stateless=False)
     return model

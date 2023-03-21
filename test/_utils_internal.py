@@ -5,8 +5,10 @@
 import math
 
 import numpy as np
-import torch.cuda
+import torch
+
 from tensordict import TensorDict
+from tensordict.prototype import tensorclass
 from tensordict.tensordict import _stack as stack_td
 
 
@@ -24,6 +26,13 @@ def get_available_devices():
         for i in range(n_cuda):
             devices += [torch.device(f"cuda:{i}")]
     return devices
+
+
+@tensorclass
+class MyClass:
+    X: torch.Tensor
+    y: "MyClass"
+    z: str
 
 
 class TestTensorDictsBase:
@@ -47,6 +56,35 @@ class TestTensorDictsBase:
                 "my_nested_td": TensorDict(
                     {"inner": torch.randn(4, 3, 2, 1, 2)}, [4, 3, 2, 1]
                 ),
+            },
+            batch_size=[4, 3, 2, 1],
+            device=device,
+        )
+
+    def nested_tensorclass(self, device):
+
+        nested_class = MyClass(
+            X=torch.randn(4, 3, 2, 1),
+            y=MyClass(
+                X=torch.randn(
+                    4,
+                    3,
+                    2,
+                    1,
+                ),
+                y=None,
+                z=None,
+                batch_size=[4, 3, 2, 1],
+            ),
+            z="z",
+            batch_size=[4, 3, 2, 1],
+        )
+        return TensorDict(
+            source={
+                "a": torch.randn(4, 3, 2, 1, 5),
+                "b": torch.randn(4, 3, 2, 1, 10),
+                "c": torch.randint(10, (4, 3, 2, 1, 3)),
+                "my_nested_tc": nested_class,
             },
             batch_size=[4, 3, 2, 1],
             device=device,

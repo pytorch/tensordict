@@ -16,6 +16,7 @@ Using tensorclasses for datasets
 
 import torch
 import torch.nn as nn
+
 from tensordict import MemmapTensor
 from tensordict.prototype import tensorclass
 from torch.utils.data import DataLoader
@@ -77,10 +78,6 @@ class FashionMNISTData:
         for i, (image, target) in enumerate(dataset):
             data[i] = cls(images=image, targets=torch.tensor(target), batch_size=[])
         return data
-
-    def __len__(self):
-        # need to define explicitly for `len()` to work
-        return self.batch_size[0] if self.batch_dims else 0
 
 
 ###############################################################################

@@ -1,22 +1,40 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+from __future__ import annotations
+
 import operator
 from itertools import filterfalse, tee
-
-import torch.fx as fx
-import torch.nn as nn
+from typing import Any, Callable, Iterable
 
 from tensordict.nn import TensorDictModule, TensorDictSequential
-
+from tensordict.tensordict import TensorDictBase
+from tensordict.utils import NestedKey
+from torch import fx, nn
 
 __all__ = ["symbolic_trace"]
 
 
 class TDGraphModule(nn.Module):
-    def __init__(self, graph_module, out_keys):
+    """A graph module for TensorDict."""
+
+    def __init__(
+        self,
+        graph_module: fx.GraphModule,
+        out_keys: list[NestedKey],
+    ) -> None:
         super().__init__()
         self.out_keys = out_keys
         self._gm = graph_module
 
-    def forward(self, tensordict, tensordict_out=None, **kwargs):
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_out: TensorDictBase | None = None,
+        **kwargs,
+    ) -> TensorDictBase:
         outputs = self._gm(tensordict, **kwargs)
 
         if tensordict_out is None:
@@ -24,18 +42,19 @@ class TDGraphModule(nn.Module):
 
         for out_key, output in zip(self.out_keys, outputs):
             if out_key != "_":
-                tensordict_out.set(out_key, output, _run_checks=False)
+                tensordict_out._set(out_key, output)
 
         return tensordict_out
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         try:
             return super().__getattr__(name)
         except AttributeError:
             return getattr(self._gm, name)
 
 
-def symbolic_trace(td_module):
+def symbolic_trace(td_module: TensorDictModule) -> TDGraphModule:
+    """A symbolic tracer for TensorDictModule."""
     if isinstance(td_module, TensorDictSequential):
         return _trace_tensordictsequential(td_module)
     elif isinstance(td_module, TensorDictModule):
@@ -44,14 +63,18 @@ def symbolic_trace(td_module):
 
 
 # cf. https://docs.python.org/3/library/itertools.html#itertools-recipes
-def _partition(pred, iterable):
-    "Use a predicate to partition entries into false entries and true entries"
+def _partition(
+    pred: Callable[..., bool], iterable: Iterable[Any]
+) -> tuple[Iterable[Any], Iterable[Any]]:
+    """Use a predicate to partition entries into false entries and true entries."""
     # partition(is_odd, range(10)) --> 0 2 4 6 8   and  1 3 5 7 9
     t1, t2 = tee(iterable)
     return filterfalse(pred, t1), filter(pred, t2)
 
 
-def _parse_input_nodes(in_keys, nodes, td, inputs, env):
+def _parse_input_nodes(
+    in_keys: list[NestedKey], nodes, td: TensorDictBase, inputs: tuple[Any, ...], env
+):
     for in_key, node in zip(in_keys, nodes):
         if in_key in inputs:
             new_node = inputs[in_key]
@@ -62,7 +85,7 @@ def _parse_input_nodes(in_keys, nodes, td, inputs, env):
         env[node.name] = new_node
 
 
-def _trace_tensordictmodule(td_module):
+def _trace_tensordictmodule(td_module: TensorDictModule) -> TDGraphModule:
     # this graph manipulation is based heavily on example in the PyTorch docs
     # https://pytorch.org/docs/stable/fx.html#proxy-retracing
 
@@ -92,7 +115,7 @@ def _trace_tensordictmodule(td_module):
     )
 
 
-def _trace_tensordictsequential(td_sequential):
+def _trace_tensordictsequential(td_sequential: TensorDictSequential) -> TDGraphModule:
     # we track values previously read from / written to the tensordict by storing the
     # nodes / proxy values in the inputs / outputs dictionaries
     inputs = {}

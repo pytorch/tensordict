@@ -7,8 +7,10 @@ import argparse
 
 import pytest
 import torch
+
 from tensordict import TensorDict
 from tensordict.nn import (
+    dispatch,
     probabilistic as nn_probabilistic,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
@@ -90,7 +92,7 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-    @pytest.mark.parametrize("out_keys", [["low"], ["low1"]])
+    @pytest.mark.parametrize("out_keys", [["low"], ["low1"], [("stuff", "low1")]])
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize("max_dist", [1.0, 2.0])
     @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
@@ -112,10 +114,8 @@ class TestTDModule:
         }
         if out_keys == ["low"]:
             dist_in_keys = ["low"]
-        elif out_keys == ["low1"]:
-            dist_in_keys = {"low": "low1"}
         else:
-            raise NotImplementedError
+            dist_in_keys = {"low": out_keys[0]}
 
         prob_module = ProbabilisticTensorDictModule(
             in_keys=dist_in_keys, out_keys=["out"], **kwargs
@@ -129,7 +129,14 @@ class TestTDModule:
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
-    @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
+    @pytest.mark.parametrize(
+        "out_keys",
+        [
+            ["loc", "scale"],
+            ["loc_1", "scale_1"],
+            [("params_td", "loc_1"), ("scale_1",)],
+        ],
+    )
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
     def test_stateful_probabilistic(self, lazy, interaction_mode, out_keys):
@@ -149,10 +156,8 @@ class TestTDModule:
         kwargs = {"distribution_class": Normal}
         if out_keys == ["loc", "scale"]:
             dist_in_keys = ["loc", "scale"]
-        elif out_keys == ["loc_1", "scale_1"]:
-            dist_in_keys = {"loc": "loc_1", "scale": "scale_1"}
         else:
-            raise NotImplementedError
+            dist_in_keys = {"loc": out_keys[0], "scale": out_keys[1]}
 
         prob_module = ProbabilisticTensorDictModule(
             in_keys=dist_in_keys, out_keys=["out"], **kwargs
@@ -460,21 +465,103 @@ class TestTDModule:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
-    def test_dispatch_kwargs(self):
+    def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
         tdm(td)
         out = tdm(a=torch.zeros(1, 1))
         assert (out == td["b"]).all()
 
-    def test_dispatch_kwargs_nested(self):
+    def test_dispatch_nested(self):
         tdm = TensorDictModule(nn.Linear(1, 1), [("a", "c")], [("b", "d")])
         td = TensorDict({("a", "c"): torch.zeros(1, 1)}, [1])
         tdm(td)
         out = tdm(a_c=torch.zeros(1, 1))
         assert (out == td["b", "d"]).all()
 
-    def test_dispatch_kwargs_multi(self):
+    def test_dispatch_nested_confusing(self):
+        tdm = TensorDictModule(nn.Linear(1, 1), [("a_1", "c")], [("b_2", "d")])
+        td = TensorDict({("a_1", "c"): torch.zeros(1, 1)}, [1])
+        tdm(td)
+        out = tdm(a_1_c=torch.zeros(1, 1))
+        assert (out == td["b_2", "d"]).all()
+
+    def test_dispatch_nested_args(self):
+        class MyModuleNest(nn.Module):
+            in_keys = [("a", "c"), "d"]
+            out_keys = ["b"]
+
+            @dispatch(separator="_")
+            def forward(self, tensordict):
+                tensordict["b"] = tensordict["a", "c"] + tensordict["d"]
+                return tensordict
+
+        module = MyModuleNest()
+        (b,) = module(torch.zeros(1, 2), d=torch.ones(1, 2))
+        assert (b == 1).all()
+        with pytest.raises(RuntimeError, match="Duplicated argument"):
+            module(torch.zeros(1, 2), a_c=torch.ones(1, 2))
+
+    def test_dispatch_nested_extra_args(self):
+        class MyModuleNest(nn.Module):
+            in_keys = [("a", "c"), "d"]
+            out_keys = ["b"]
+
+            @dispatch(separator="_")
+            def forward(self, tensordict, other):
+                tensordict["b"] = tensordict["a", "c"] + tensordict["d"] + other
+                return tensordict
+
+        module = MyModuleNest()
+        other = 1
+        (b,) = module(torch.zeros(1, 2), torch.ones(1, 2), other)
+        assert (b == 2).all()
+
+    def test_dispatch_nested_sep(self):
+        class MyModuleNest(nn.Module):
+            in_keys = [("a", "c")]
+            out_keys = ["b"]
+
+            @dispatch(separator="sep")
+            def forward(self, tensordict):
+                tensordict["b"] = tensordict["a", "c"] + 1
+                return tensordict
+
+        module = MyModuleNest()
+        (b,) = module(asepc=torch.zeros(1, 2))
+        assert (b == 1).all()
+
+    @pytest.mark.parametrize("source", ["keys_in", [("a", "c")]])
+    def test_dispatch_nested_source(self, source):
+        class MyModuleNest(nn.Module):
+            keys_in = [("a", "c")]
+            out_keys = ["b"]
+
+            @dispatch(separator="sep", source=source)
+            def forward(self, tensordict):
+                tensordict["b"] = tensordict["a", "c"] + 1
+                return tensordict
+
+        module = MyModuleNest()
+        (b,) = module(asepc=torch.zeros(1, 2))
+        assert (b == 1).all()
+
+    @pytest.mark.parametrize("dest", ["other", ["b"]])
+    def test_dispatch_nested_dest(self, dest):
+        class MyModuleNest(nn.Module):
+            in_keys = [("a", "c")]
+            other = ["b"]
+
+            @dispatch(separator="sep", dest=dest)
+            def forward(self, tensordict):
+                tensordict["b"] = tensordict["a", "c"] + 1
+                return tensordict
+
+        module = MyModuleNest()
+        (b,) = module(asepc=torch.zeros(1, 2))
+        assert (b == 1).all()
+
+    def test_dispatch_multi(self):
         tdm = TensorDictSequential(
             TensorDictModule(nn.Linear(1, 1), [("a", "c")], [("b", "d")]),
             TensorDictModule(nn.Linear(1, 1), [("a", "c")], ["e"]),
@@ -485,7 +572,7 @@ class TestTDModule:
         assert (out1 == td["b", "d"]).all()
         assert (out2 == td["e"]).all()
 
-    def test_dispatch_kwargs_module_with_additional_parameters(self):
+    def test_dispatch_module_with_additional_parameters(self):
         class MyModule(nn.Identity):
             def forward(self, input, c):
                 return input
@@ -1402,6 +1489,14 @@ def test_probabilistic_sequential_type_checks():
         match="The final module passed to ProbabilisticTensorDictSequential",
     ):
         ProbabilisticTensorDictSequential(td_module_1, td_module_2)
+
+
+def test_keyerr_msg():
+    module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
+    with pytest.raises(
+        KeyError, match="Some tensors that are necessary for the module call"
+    ):
+        module(TensorDict({"c": torch.randn(())}, []))
 
 
 if __name__ == "__main__":

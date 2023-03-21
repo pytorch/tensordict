@@ -11,54 +11,47 @@ import tempfile
 import warnings
 from copy import copy, deepcopy
 from pathlib import Path
+from sys import getrefcount
 from tempfile import _TemporaryFileWrapper
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Sequence
 
 import numpy as np
 import torch
 
 from tensordict.utils import (
     _getitem_batch_size,
-    DEVICE_TYPING,
-    INDEX_TYPING,
+    DeviceType,
+    IndexType,
+    NUMPY_TO_TORCH_DTYPE_DICT,
     prod,
-    torch_to_numpy_dtype_dict,
+    TORCH_TO_NUMPY_DTYPE_DICT,
 )
 
-MEMMAP_HANDLED_FN = {}
-
 __all__ = ["MemmapTensor", "set_transfer_ownership"]
+
 
 NoneType = type(None)
 EllipsisType = type(Ellipsis)
 
-numpy_to_torch_dtype_dict = {
-    "bool": torch.bool,
-    "uint8": torch.uint8,
-    "int8": torch.int8,
-    "int16": torch.int16,
-    "int32": torch.int32,
-    "int64": torch.int64,
-    "float16": torch.float16,
-    "float32": torch.float32,
-    "float64": torch.float64,
-    "complex64": torch.complex64,
-    "complex128": torch.complex128,
-}
+
+MEMMAP_HANDLED_FN: dict[Callable, Callable] = {}
+HAS_OWNERSHIP = {}
+# HAD_OWNERSHIP = {}
+TRANSFER_OWNERSHIP = {}
 
 
-def implements_for_memmap(torch_function) -> Callable:
+def implements_for_memmap(torch_function: Callable) -> Callable:
     """Register a torch function override for ScalarTensor."""
 
     @functools.wraps(torch_function)
-    def decorator(func):
+    def decorator(func: Callable) -> Callable:
         MEMMAP_HANDLED_FN[torch_function] = func
         return func
 
     return decorator
 
 
-def to_numpy(tensor: Union[torch.Tensor, np.ndarray]) -> np.ndarray:
+def to_numpy(tensor: torch.Tensor | np.ndarray) -> np.ndarray:
     if isinstance(tensor, torch.Tensor):
         return tensor.detach().cpu().numpy()
     else:
@@ -130,18 +123,18 @@ class MemmapTensor:
 
     """
 
-    requires_grad = False
+    requires_grad: bool = False
 
     def __init__(
         self,
         *size: int,
-        device: DEVICE_TYPING = None,
-        dtype: torch.dtype = None,
+        device: DeviceType | None = None,
+        dtype: torch.dtype | None = None,
         transfer_ownership: bool = False,
-        prefix: Optional[str] = None,
-        filename: Optional[str] = None,
+        prefix: str | None = None,
+        filename: str | None = None,
         mode: str = "r+",
-    ):
+    ) -> None:
         self.idx = None
         self._memmap_array = None
         self.prefix = prefix
@@ -159,7 +152,8 @@ class MemmapTensor:
         if prefix is not None:
             warnings.warn(
                 "prefix has been deprecated. If you want to control the location of "
-                "the MemmapTensor on disk, consider using filename instead."
+                "the MemmapTensor on disk, consider using filename instead.",
+                stacklevel=2,
             )
             if filename is not None:
                 raise ValueError("filename and prefix should not both be specified")
@@ -175,7 +169,7 @@ class MemmapTensor:
             Path(filename).touch(exist_ok=True)
             self.file = open(filename, mode="r+")
 
-        self.filename = self.file.name
+        self.filename = copy(self.file.name)
         self.file.close()  # we close the file for now, but don't delete it
 
         if isinstance(size[0], (torch.Tensor, MemmapTensor, np.ndarray)):
@@ -208,10 +202,10 @@ class MemmapTensor:
     @classmethod
     def from_tensor(
         cls,
-        tensor: Union[torch.Tensor, MemmapTensor, np.ndarray],
-        transfer_ownership=False,
-        prefix=None,
-        filename: Optional[str] = None,
+        tensor: torch.Tensor | MemmapTensor | np.ndarray,
+        transfer_ownership: bool = False,
+        prefix: str | None = None,
+        filename: str | None = None,
         mode: str = "r+",
     ) -> MemmapTensor:
         if isinstance(tensor, MemmapTensor):
@@ -239,7 +233,7 @@ class MemmapTensor:
         dtype = (
             tensor.dtype
             if isinstance(tensor, (torch.Tensor, MemmapTensor))
-            else numpy_to_torch_dtype_dict[tensor.dtype.name]
+            else NUMPY_TO_TORCH_DTYPE_DICT[np.dtype(tensor.dtype.name)]
         )
         shape = tensor.shape
         out = cls(
@@ -257,10 +251,10 @@ class MemmapTensor:
     @classmethod
     def empty_like(
         cls,
-        tensor: Union[torch.Tensor, MemmapTensor],
-        transfer_ownership=False,
-        prefix=None,
-        filename: Optional[str] = None,
+        tensor: torch.Tensor | MemmapTensor,
+        transfer_ownership: bool = False,
+        prefix: str | None = None,
+        filename: str | None = None,
         mode: str = "r+",
     ) -> MemmapTensor:
         if isinstance(tensor, np.ndarray):
@@ -290,8 +284,10 @@ class MemmapTensor:
             # avoid extending someone else's index
             memmap_copy._index = deepcopy(memmap_copy._index)
         memmap_copy._index.append(index)
-        memmap_copy.transfer_ownership = False
+        # memmap_copy.transfer_ownership = False
         memmap_copy._shape_indexed = None
+        memmap_copy.file = memmap_tensor.file
+
         return memmap_copy
 
     def __iter__(self):
@@ -301,20 +297,21 @@ class MemmapTensor:
     def _init_shape(
         self,
         shape: torch.Size,
-        device: DEVICE_TYPING,
+        device: DeviceType,
         dtype: torch.dtype,
         transfer_ownership: bool,
     ):
         self._device = device
         self._shape = shape
         self._shape_indexed = None
-        self.transfer_ownership = transfer_ownership
         self.np_shape = tuple(self._shape)
         self._dtype = dtype
         self._ndim = len(shape)
         self._numel = prod(shape)
-        self._has_ownership = True
-        self._had_ownership = True
+
+        TRANSFER_OWNERSHIP[self.filename] = transfer_ownership
+        HAS_OWNERSHIP[self.filename] = True
+        # HAD_OWNERSHIP[self.filename] = True
 
         self._tensor_dir = torch.zeros(0, device=device, dtype=dtype).__dir__()
         self._save_item(shape)
@@ -323,7 +320,7 @@ class MemmapTensor:
         if self._memmap_array is None:
             self._memmap_array = np.memmap(
                 self.filename,
-                dtype=torch_to_numpy_dtype_dict[self.dtype],
+                dtype=TORCH_TO_NUMPY_DTYPE_DICT[self.dtype],
                 mode=self.mode,
                 shape=self.np_shape,
             )
@@ -336,8 +333,8 @@ class MemmapTensor:
 
     def _save_item(
         self,
-        value: Union[torch.Tensor, torch.Size, MemmapTensor, np.ndarray],
-        idx: Optional[int] = None,
+        value: torch.Tensor | torch.Size | MemmapTensor | np.ndarray,
+        idx: int | None = None,
     ):
         if isinstance(value, MemmapTensor):
             np_array = value.memmap_array
@@ -355,15 +352,15 @@ class MemmapTensor:
         else:
             memmap_array[idx] = np_array
 
-    def _copy_item(self, filename: Union[bytes, str]) -> None:
+    def _copy_item(self, filename: bytes | str) -> None:
         self.memmap_array[:] = np.memmap(
             filename,
-            dtype=torch_to_numpy_dtype_dict[self.dtype],
+            dtype=TORCH_TO_NUMPY_DTYPE_DICT[self.dtype],
             mode="r",
             shape=self.np_shape,
         )
 
-    def _get_item(self, idx, memmap_array):
+    def _get_item(self, idx: IndexType, memmap_array: np.ndarray) -> np.ndarray:
         if isinstance(idx, torch.Tensor):
             idx = idx.cpu()
         elif isinstance(idx, tuple) and any(
@@ -378,8 +375,8 @@ class MemmapTensor:
 
     def _load_item(
         self,
-        idx: Optional[Union[int, tuple, list]] = None,
-        memmap_array: Optional[np.ndarray] = None,
+        idx: int | tuple | list | None = None,
+        memmap_array: np.ndarray | None = None,
         from_numpy: bool = False,
     ) -> torch.Tensor:
         if memmap_array is None:
@@ -409,9 +406,9 @@ class MemmapTensor:
     def __torch_function__(
         cls,
         func: Callable,
-        types,
-        args: Tuple = (),
-        kwargs: Optional[dict] = None,
+        types: tuple[type, ...],
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
     ):
         if kwargs is None:
             kwargs = {}
@@ -466,7 +463,7 @@ class MemmapTensor:
         return self._device
 
     @device.setter
-    def device(self, device):
+    def device(self, device: DeviceType) -> None:
         self._device = torch.device(device)
 
     @property
@@ -504,7 +501,7 @@ class MemmapTensor:
     def numpy(self) -> np.ndarray:
         return self._tensor.numpy()
 
-    def copy_(self, other: Union[torch.Tensor, MemmapTensor]) -> MemmapTensor:
+    def copy_(self, other: torch.Tensor | MemmapTensor) -> MemmapTensor:
         if isinstance(other, MemmapTensor) and other.filename == self.filename:
             if not self.shape == other.shape:
                 raise ValueError(
@@ -534,22 +531,26 @@ MemmapTensor of shape {self.shape}."""
                 f"value provided to set_transfer_ownership should be a "
                 f"boolean, got {type(value)}"
             )
-        self.transfer_ownership = value
+        TRANSFER_OWNERSHIP[self.filename] = value
         return self
 
-    def __deepcopy__(self, memodict=None):
-        if memodict is None:
-            memodict = {}
+    def __deepcopy__(self, memo: dict[int, Any] | None = None) -> MemmapTensor:
         warnings.warn(
             "calling deepcopy on a memmap tensor involves loading it in memory "
             "and recreating a memmap tensor from scratch (as no file destination "
-            "can be passed to deepcopy(...)."
+            "can be passed to deepcopy(...).",
+            stacklevel=2,
         )
         return MemmapTensor.from_tensor(self.clone())
 
     def __del__(self) -> None:
-        if "_has_ownership" in self.__dir__() and self._has_ownership:
-            if isinstance(self.file, tempfile._TemporaryFileWrapper):
+        if not hasattr(self, "file"):
+            return
+        # for some reason Memmap keeps 2 refs to the file
+        if HAS_OWNERSHIP.get(self.filename, False) and getrefcount(self.file) <= 2:
+            if isinstance(self.file, tempfile._TemporaryFileWrapper) and os.path.isfile(
+                self.filename
+            ):
                 # only delete file if we created a temporary file. Otherwise file should
                 # persist on disk
                 os.unlink(self.filename)
@@ -574,55 +575,48 @@ MemmapTensor of shape {self.shape}."""
         _tensor = self.__getattribute__("_tensor")
         return getattr(_tensor, attr)
 
-    def masked_fill_(self, mask: torch.Tensor, value: float):
+    def masked_fill_(self, mask: torch.Tensor, value: float) -> MemmapTensor:
         self.memmap_array[mask.cpu().numpy()] = value
         return self
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.shape[0] if len(self.shape) else 0
 
     def is_shared(self) -> bool:
         return False
 
-    def __add__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __add__(self, other: float | MemmapTensor | torch.Tensor) -> torch.Tensor:
         return torch.add(self, other)
 
-    def __truediv__(
-        self, other: Union[float, MemmapTensor, torch.Tensor]
-    ) -> torch.Tensor:
+    def __truediv__(self, other: float | MemmapTensor | torch.Tensor) -> torch.Tensor:
         return torch.div(self, other)
 
-    def __neg__(self: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __neg__(self: float | MemmapTensor | torch.Tensor) -> torch.Tensor:
         return torch.neg(self)
 
-    def __sub__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __sub__(self, other: float | MemmapTensor | torch.Tensor) -> torch.Tensor:
         return torch.sub(self, other)
 
-    def __matmul__(
-        self, other: Union[float, MemmapTensor, torch.Tensor]
-    ) -> torch.Tensor:
+    def __matmul__(self, other: float | MemmapTensor | torch.Tensor) -> torch.Tensor:
         return torch.matmul(self, other)
 
-    def __mul__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __mul__(self, other: float | MemmapTensor | torch.Tensor) -> torch.Tensor:
         return torch.mul(self, other)
 
-    def __pow__(self, other: Union[float, MemmapTensor, torch.Tensor]) -> torch.Tensor:
+    def __pow__(self, other: float | MemmapTensor | torch.Tensor) -> torch.Tensor:
         return torch.pow(self, other)
 
     def __repr__(self) -> str:
-        size = self.shape
-        return (
-            f"MemmapTensor(shape={size}, device={self.device}, " f"dtype={self.dtype})"
-        )
+        return f"MemmapTensor(shape={self.shape}, device={self.device}, dtype={self.dtype})"
 
-    def __getitem__(self, item: INDEX_TYPING) -> torch.Tensor:
+    def __getitem__(self, item: IndexType) -> torch.Tensor:
         # return self._load_item(memmap_array=self.memmap_array[item])#[item]
         # return self._load_item()[item]
         if isinstance(item, (NoneType, EllipsisType, int, np.integer, slice)):
             item = (item,)
         return MemmapTensor._create_memmap_with_index(self, item)
 
-    def __setitem__(self, idx: INDEX_TYPING, value: torch.Tensor):
+    def __setitem__(self, idx: IndexType, value: torch.Tensor) -> None:
         if self.device == torch.device("cpu"):
             self._load_item()[idx] = value
         else:
@@ -637,43 +631,54 @@ MemmapTensor of shape {self.shape}."""
                 )
             self.memmap_array[idx] = to_numpy(value)
 
-    def __setstate__(self, state: Dict[str, Any]) -> None:
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        filename = state["filename"]
         if state["file"] is None:
             # state["_had_ownership"] = state["_had_ownership"]
             # state["_has_ownership"] = delete
             # tmpfile = tempfile.NamedTemporaryFile(delete=False)
             # tmpfile.close()
-            tmpfile = _TemporaryFileWrapper(None, state["filename"], delete=True)
-            tmpfile.name = state["filename"]
-            tmpfile._closer.name = state["filename"]
+            tmpfile = _TemporaryFileWrapper(None, filename, delete=True)
+            tmpfile.name = filename
+            tmpfile._closer.name = filename
             state["file"] = tmpfile
+
+        # We only set the ownership if it's not set
+        if state["transfer_ownership"]:
+            TRANSFER_OWNERSHIP[filename] = True
+        else:
+            TRANSFER_OWNERSHIP.setdefault(filename, state["transfer_ownership"])
+        if state["_has_ownership"]:
+            HAS_OWNERSHIP[filename] = True
+        else:
+            HAS_OWNERSHIP.setdefault(filename, state["_has_ownership"])
         self.__dict__.update(state)
 
-    def __getstate__(self) -> Dict[str, Any]:
+    def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
+        id_file = state["filename"]
         state["file"] = None
         state["_memmap_array"] = None
         state["_fake"] = None
-        state["_has_ownership"] = (
-            state["transfer_ownership"] and state["_had_ownership"]
-        )
-        self._had_ownership = self._has_ownership
+
+        # we are abandoning ownership if we need to transfer it and if we have it
+        if HAS_OWNERSHIP[id_file] and TRANSFER_OWNERSHIP[id_file]:
+            state["_has_ownership"] = True
+            state["transfer_ownership"] = True
+            HAS_OWNERSHIP[id_file] = False
+            TRANSFER_OWNERSHIP[id_file] = False
+        else:
+            state["_has_ownership"] = False
+            state["transfer_ownership"] = False
+
         # self._had_ownership = self._has_ownership = state["_had_ownership"]
         return state
 
-    def __reduce__(self, *args, **kwargs):
-        if self.transfer_ownership and self._has_ownership:
-            self._has_ownership = False
-            # those values should already be False
-            # self.file.delete = False
-            # self.file._closer.delete = False
-        return super(MemmapTensor, self).__reduce__(*args, **kwargs)
-
     def to(
         self,
-        dest: Union[DEVICE_TYPING, torch.dtype],
-        non_blocking=False,
-    ) -> Union[torch.Tensor, MemmapTensor]:
+        dest: DeviceType | torch.dtype,
+        non_blocking: bool = False,
+    ) -> torch.Tensor | MemmapTensor:
         """Maps a MemmapTensor to a given dtype or device.
 
         Args:
@@ -700,7 +705,7 @@ MemmapTensor of shape {self.shape}."""
                 f"Please provide a dtype or a device."
             )
 
-    def unbind(self, dim: int) -> Tuple[torch.Tensor, ...]:
+    def unbind(self, dim: int) -> tuple[torch.Tensor, ...]:
         """Unbinds a MemmapTensor along the desired dimension.
 
         Args:
@@ -710,15 +715,10 @@ MemmapTensor of shape {self.shape}."""
             A tuple of indexed MemmapTensors that share the same storage.
 
         """
-        idx = [
-            (tuple(slice(None) for _ in range(dim)) + (i,))
-            for i in range(self.shape[dim])
-        ]
+        idx = [(*(slice(None) for _ in range(dim)), i) for i in range(self.shape[dim])]
         return tuple(self[_idx] for _idx in idx)
 
-    def as_tensor(
-        self,
-    ) -> torch.Tensor:
+    def as_tensor(self) -> torch.Tensor:
         """Represents a MemmapTensor as a tensor, with the same storage (ie without any copy)."""
         if not self.device.type == "cpu":
             raise RuntimeError(
@@ -741,9 +741,22 @@ MemmapTensor of shape {self.shape}."""
             mv=memoryview(self.memmap_array),
         )
 
+    # backward compatibility
+    @property
+    def _has_ownership(self):
+        return HAS_OWNERSHIP[self.filename]
+
+    # @property
+    # def _had_ownership(self):
+    #     return HAD_OWNERSHIP[self.filename]
+
+    @property
+    def transfer_ownership(self):
+        return TRANSFER_OWNERSHIP[self.filename]
+
 
 def tensor_from_memoryview(
-    mv: memoryview, dtype: torch.dtype, shape: List[int]
+    mv: memoryview, dtype: torch.dtype, shape: Sequence[int]
 ) -> torch.Tensor:
     # From torchsnapshot
     # PyTorch issues a warning if the given memoryview is non-writable. This is
@@ -755,14 +768,14 @@ def tensor_from_memoryview(
 
 
 def _stack(
-    list_of_memmap: List[MemmapTensor],
+    sequence_of_memmap: Sequence[MemmapTensor],
     dim: int,
-    out: Optional[Union[torch.Tensor]] = None,
+    out: torch.Tensor | MemmapTensor | None = None,
 ) -> torch.Tensor:
     list_of_tensors = [
-        a._tensor if isinstance(a, (MemmapTensor,)) else a for a in list_of_memmap
+        a._tensor if isinstance(a, MemmapTensor) else a for a in sequence_of_memmap
     ]
-    if isinstance(out, (MemmapTensor,)):
+    if isinstance(out, MemmapTensor):
         list_of_tensors = [tensor.cpu() for tensor in list_of_tensors]
         return torch.stack(list_of_tensors, dim, out=out._tensor_from_numpy)
     else:
@@ -772,7 +785,7 @@ def _stack(
 implements_for_memmap(torch.stack)(_stack)
 
 
-def _unbind(memmap: MemmapTensor, dim: int) -> Tuple[torch.Tensor, ...]:
+def _unbind(memmap: MemmapTensor, dim: int) -> tuple[torch.Tensor, ...]:
     return memmap.unbind(dim)
 
 
@@ -787,12 +800,12 @@ implements_for_memmap(torch.tensor)(_tensor)
 
 
 def _cat(
-    list_of_memmap: List[MemmapTensor],
+    sequence_of_memmap: Sequence[MemmapTensor],
     dim: int,
-    out: Optional[Union[torch.Tensor, MemmapTensor]] = None,
+    out: torch.Tensor | MemmapTensor | None = None,
 ) -> torch.Tensor:
     list_of_tensors = [
-        a._tensor if isinstance(a, (MemmapTensor,)) else a for a in list_of_memmap
+        a._tensor if isinstance(a, MemmapTensor) else a for a in sequence_of_memmap
     ]
     return torch.cat(list_of_tensors, dim, out=out)
 
@@ -807,9 +820,8 @@ def set_transfer_ownership(memmap: MemmapTensor, value: bool = True) -> None:
 
 
 def memmap_tensor_as_tensor(
-    mem_map_tensor: Union[torch.Tensor, MemmapTensor]
+    mem_map_tensor: torch.Tensor | MemmapTensor,
 ) -> torch.Tensor:
-
     if not isinstance(mem_map_tensor, MemmapTensor):
         return mem_map_tensor
     # TorchSnapshot doesn't know how to stream MemmapTensor, so we view MemmapTensor

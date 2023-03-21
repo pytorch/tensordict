@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Iterable, List, Tuple, Union
+from typing import Any, Iterable
 
 _has_functorch = False
 try:
@@ -22,9 +22,9 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 
-from tensordict.nn.common import dispatch_kwargs, TensorDictModule
+from tensordict.nn.common import dispatch, TensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from tensordict.utils import _normalize_key, NESTED_KEY
+from tensordict.utils import _normalize_key, NestedKey
 from torch import nn
 
 __all__ = ["TensorDictSequential"]
@@ -123,7 +123,7 @@ class TensorDictSequential(TensorDictModule):
         self,
         *modules: TensorDictModule,
         partial_tolerant: bool = False,
-    ):
+    ) -> None:
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
 
         super().__init__(
@@ -132,7 +132,9 @@ class TensorDictSequential(TensorDictModule):
 
         self.partial_tolerant = partial_tolerant
 
-    def _compute_in_and_out_keys(self, modules: List[TensorDictModule]) -> Tuple[List]:
+    def _compute_in_and_out_keys(
+        self, modules: list[TensorDictModule]
+    ) -> tuple[list[NestedKey], list[NestedKey]]:
         in_keys = []
         out_keys = []
         for module in modules:
@@ -170,9 +172,9 @@ class TensorDictSequential(TensorDictModule):
 
     def select_subsequence(
         self,
-        in_keys: Iterable[NESTED_KEY] = None,
-        out_keys: Iterable[NESTED_KEY] = None,
-    ) -> "TensorDictSequential":
+        in_keys: Iterable[NestedKey] | None = None,
+        out_keys: Iterable[NestedKey] | None = None,
+    ) -> TensorDictSequential:
         """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 
         Args:
@@ -215,10 +217,10 @@ class TensorDictSequential(TensorDictModule):
 
     def _run_module(
         self,
-        module,
-        tensordict,
-        **kwargs,
-    ):
+        module: TensorDictModule,
+        tensordict: TensorDictBase,
+        **kwargs: Any,
+    ) -> Any:
         tensordict_keys = set(tensordict.keys(include_nested=True))
         if not self.partial_tolerant or all(
             key in tensordict_keys for key in module.in_keys
@@ -232,12 +234,12 @@ class TensorDictSequential(TensorDictModule):
             tensordict._update_valid_keys()
         return tensordict
 
-    @dispatch_kwargs
+    @dispatch
     def forward(
         self,
         tensordict: TensorDictBase,
-        tensordict_out=None,
-        **kwargs,
+        tensordict_out: TensorDictBase | None = None,
+        **kwargs: Any,
     ) -> TensorDictBase:
         if not len(kwargs):
             for module in self.module:
@@ -251,10 +253,10 @@ class TensorDictSequential(TensorDictModule):
             return tensordict_out
         return tensordict
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.module)
 
-    def __getitem__(self, index: Union[int, slice]) -> TensorDictModule:
+    def __getitem__(self, index: int | slice) -> TensorDictModule:
         if isinstance(index, int):
             return self.module.__getitem__(index)
         else:
@@ -263,5 +265,5 @@ class TensorDictSequential(TensorDictModule):
     def __setitem__(self, index: int, tensordict_module: TensorDictModule) -> None:
         return self.module.__setitem__(idx=index, module=tensordict_module)
 
-    def __delitem__(self, index: Union[int, slice]) -> None:
+    def __delitem__(self, index: int | slice) -> None:
         self.module.__delitem__(idx=index)

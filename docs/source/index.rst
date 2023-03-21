@@ -26,8 +26,33 @@ For instance, the above example can be easily used across classification and seg
 Tutorials
 =========
 
+Basics
+------
+
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
+
+   tutorials/tensordict_basics
+   tutorials/tensordict_shapes
+   tutorials/tensordict_slicing
+   tutorials/tensordict_keys
+   tutorials/tensordict_preallocation
+   tutorials/tensordict_memory
+
+tensordict.nn
+-------------
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/tensordict_module
+   tutorials/tensordict_module_functional
+
+Dataloading
+-----------
+
+.. toctree::
+   :maxdepth: 1
 
    tutorials/data_fashion
    tutorials/tensorclass_fashion

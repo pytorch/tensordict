@@ -11,7 +11,15 @@ from typing import Any, Optional, Union
 
 import pytest
 import torch
-import torchsnapshot
+
+try:
+    import torchsnapshot
+
+    _has_torchsnapshot = True
+    TORCHSNAPSHOT_ERR = ""
+except ImportError as err:
+    _has_torchsnapshot = False
+    TORCHSNAPSHOT_ERR = str(err)
 
 from _utils_internal import get_available_devices
 
@@ -354,6 +362,8 @@ def test_setitem():
     ):
         data[:2] = data3[:2]
 
+
+def test_setitem_memmap():
     # regression test PR #203
     # We should be able to set tensors items with MemmapTensors and viceversa
     @tensorclass
@@ -382,13 +392,26 @@ def test_setitem():
     assert (data2.x[2:] == 0).all()
     assert (data2.y[2:] == 0).all()
 
+
+def test_setitem_other_cls():
+    @tensorclass
+    class MyData1:
+        x: torch.Tensor
+        y: MemmapTensor
+
+    data1 = MyData1(
+        x=torch.zeros(3, 4, 5),
+        y=MemmapTensor.from_tensor(torch.zeros(3, 4, 5)),
+        batch_size=[3, 4],
+    )
+
     # Set Item should work for other tensorclass
     @tensorclass
-    class MyDataMemMap2:
+    class MyData2:
         x: MemmapTensor
         y: torch.Tensor
 
-    data_other_cls = MyDataMemMap2(
+    data_other_cls = MyData2(
         x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
         y=torch.ones(3, 4, 5),
         batch_size=[3, 4],
@@ -398,11 +421,11 @@ def test_setitem():
 
     # Set Item should raise if other tensorclass with different members
     @tensorclass
-    class MyDataMemMap3:
+    class MyData3:
         x: MemmapTensor
         z: torch.Tensor
 
-    data_wrong_cls = MyDataMemMap3(
+    data_wrong_cls = MyData3(
         x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
         z=torch.ones(3, 4, 5),
         batch_size=[3, 4],
@@ -417,6 +440,38 @@ def test_setitem():
         match="__setitem__ is only allowed for same-class or compatible class .* assignment",
     ):
         data_wrong_cls[2:] = data1[2:]
+
+
+@pytest.mark.parametrize(
+    "broadcast_type",
+    ["scalar", "tensor", "tensordict", "maptensor"],
+)
+def test_setitem_broadcast(broadcast_type):
+    @tensorclass
+    class MyDataNested:
+        X: torch.Tensor
+        z: list
+        y: "MyDataNested" = None  # future: drop quotes
+
+    X = torch.ones(3, 4, 5)
+    z = ["a", "b", "c"]
+    batch_size = [3, 4]
+    data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+    data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+
+    if broadcast_type == "scalar":
+        val = 0
+    elif broadcast_type == "tensor":
+        val = torch.zeros(4, 5)
+    elif broadcast_type == "tensordict":
+        val = TensorDict({"X": torch.zeros(2, 4, 5)}, batch_size=[2, 4])
+    elif broadcast_type == "maptensor":
+        val = MemmapTensor.from_tensor(torch.zeros(4, 5))
+
+    data[:2] = val
+    assert (data[:2] == 0).all()
+    assert (data.X[:2] == 0).all()
+    assert (data.y.X[:2] == 0).all()
 
 
 def test_stack():
@@ -616,9 +671,11 @@ def test_split():
     assert split_tcs[0].batch_size == torch.Size([3, 3])
     assert split_tcs[1].batch_size == torch.Size([3, 2])
     assert split_tcs[2].batch_size == torch.Size([3, 1])
-    assert split_tcs[0].y[0].batch_size == torch.Size([3, 3])
-    assert split_tcs[0].y[1].batch_size == torch.Size([3, 2])
-    assert split_tcs[0].y[2].batch_size == torch.Size([3, 1])
+
+    assert split_tcs[0].y.batch_size == torch.Size([3, 3])
+    assert split_tcs[1].y.batch_size == torch.Size([3, 2])
+    assert split_tcs[2].y.batch_size == torch.Size([3, 1])
+
     assert torch.all(torch.eq(split_tcs[0].X, torch.ones(3, 3, 5)))
     assert torch.all(torch.eq(split_tcs[0].y[0].X, torch.ones(3, 3, 5)))
     assert split_tcs[0].z == split_tcs[1].z == split_tcs[2].z == z
@@ -1084,6 +1141,9 @@ def test_multiprocessing():
     assert catted.z == "test_tensorclass"
 
 
+@pytest.mark.skipif(
+    not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
+)
 def test_torchsnapshot(tmp_path):
     @tensorclass
     class MyClass:
@@ -1165,7 +1225,7 @@ def test_statedict_errors():
     with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
         tc.load_state_dict(sd)
     del sd["_non_tensordict"]["a"]
-    sd["_non_tensordict"]["y"]["_tensordict"]["a"] = None
+    sd["_tensordict"]["y"]["_tensordict"]["a"] = None
     with pytest.raises(KeyError, match="Key 'a' wasn't expected in the state-dict"):
         tc.load_state_dict(sd)
 
