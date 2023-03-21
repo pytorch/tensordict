@@ -7,7 +7,8 @@
 
 import h5py
 import torch
-from tensordict.tensordict import NO_DEFAULT, TensorDictBase
+from tensordict.tensordict import CompatibleType, NO_DEFAULT, TensorDictBase
+from tensordict.utils import IndexType
 
 
 class PersistentTensorDict(TensorDictBase):
@@ -65,7 +66,6 @@ class PersistentTensorDict(TensorDictBase):
         if isinstance(key, tuple):
             key = "/".join(key)
         array = self.file[key]
-        print(key)
         if isinstance(array, (h5py.Dataset,)):
             if self.device is not None:
                 device = self.device
@@ -74,6 +74,25 @@ class PersistentTensorDict(TensorDictBase):
             return torch.as_tensor(array, device=device)
         else:
             return PersistentTensorDict(group=array, batch_size=self.batch_size)
+
+    def get_at(
+        self, key: str, idx: IndexType, default: CompatibleType = NO_DEFAULT
+    ) -> CompatibleType:
+        if isinstance(key, tuple):
+            key = "/".join(key)
+        array = self.file[key]
+        if isinstance(array, (h5py.Dataset,)):
+            if self.device is not None:
+                device = self.device
+            else:
+                device = torch.device("cpu")
+            # indexing must be done before converting to tensor.
+            # `get_at` is there to save us.
+            return torch.as_tensor(array[idx], device=device)
+        else:
+            return PersistentTensorDict(
+                group=array, batch_size=self.batch_size
+            ).get_sub_tensordict(idx)
 
     def __getitem__(self, item):
         if isinstance(item, str) or (
