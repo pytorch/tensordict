@@ -2693,12 +2693,6 @@ class TensorDictBase(MutableMapping):
             return False
         return True
 
-    def set_default(
-        self, key: NestedKey, default: CompatibleType, inplace: bool = False
-    ) -> CompatibleType:
-        warn("set_default has been deprecated. Use setdefault instead")
-        return self.setdefault(key, default, inplace=inplace)
-
     def setdefault(
         self, key: NestedKey, default: CompatibleType, inplace: bool = False
     ) -> CompatibleType:
