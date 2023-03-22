@@ -230,7 +230,9 @@ class PersistentTensorDict(TensorDictBase):
             out = self._nested_tensordicts.get(key, None)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
-                    group=array, batch_size=self.batch_size
+                    group=array,
+                    batch_size=self.batch_size,
+                    device=self.device,
                 )
             return out
         else:
@@ -268,7 +270,9 @@ class PersistentTensorDict(TensorDictBase):
             out = self._nested_tensordicts.get(key, None)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
-                    group=array, batch_size=self.batch_size
+                    group=array,
+                    batch_size=self.batch_size,
+                    device=self.device,
                 )
             return out.get_sub_tensordict(idx)
 
