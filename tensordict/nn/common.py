@@ -221,6 +221,7 @@ class dispatch:
         self.dest = dest
 
     def __call__(self, func: Callable) -> Callable:
+        from tensordict.prototype import is_tensorclass
         # sanity check
         for i, key in enumerate(inspect.signature(func).parameters):
             if i == 0:
@@ -240,9 +241,7 @@ class dispatch:
                 source = getattr(_self, source)
             tensordict = None
             if len(args):
-                if not isinstance(args[0], TensorDictBase):
-                    pass
-                else:
+                if isinstance(args[0], TensorDictBase) or is_tensorclass(args[0]):
                     tensordict, args = args[0], args[1:]
             if tensordict is None:
                 tensordict_values = {}
