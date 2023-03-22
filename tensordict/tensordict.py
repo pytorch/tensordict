@@ -1732,6 +1732,30 @@ class TensorDictBase(MutableMapping):
             _run_checks=False,
         )
 
+    def to_h5(
+        self,
+        filename,
+    ):
+        """Converts a tensordict to a PersistentTensorDict with the h5 backend.
+
+        Args:
+            filename (str or path): path to the h5 file.
+            device (torch.device or compatible, optional): the device where to
+                expect the tensor once they are returned. Defaults to ``None``
+                (on cpu by default).
+
+        Returns:
+            A :class:`PersitentTensorDict` instance linked to the newly created file.
+
+
+        """
+        from .persistent import PersistentTensorDict
+
+        return PersistentTensorDict.from_dict(
+            self,
+            filename=filename,
+        )
+
     def to_tensordict(self):
         """Returns a regular TensorDict instance from the TensorDictBase.
 

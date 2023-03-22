@@ -17,7 +17,6 @@ import torch
 
 from tensordict import MemmapTensor
 from tensordict.tensordict import (
-    _get_leaf_tensordict,
     _TensorDictKeysView,
     CompatibleType,
     is_tensor_collection,
