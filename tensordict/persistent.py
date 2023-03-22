@@ -502,6 +502,27 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f"key {new_key} already present in TensorDict.") from err
         return self
 
+    def fill_(self, key: str, value: float | bool) -> TensorDictBase:
+        """Fills a tensor pointed by the key with the a given value.
+
+        Args:
+            key (str): key to be remaned
+            value (Number, bool): value to use for the filling
+
+        Returns:
+            self
+
+        """
+        target_class = self.entry_class(key)
+        if is_tensor_collection(target_class):
+            tensordict = self.get(key)
+            tensordict.apply_(lambda x: x.fill_(value))
+            self._set(key, tensordict, inplace=True)
+        else:
+            tensor = torch.full_like(self.get(key), value).numpy()
+            self._set(key, tensor, inplace=True)
+        return self
+
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = True
     ) -> TensorDictBase:
