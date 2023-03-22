@@ -221,7 +221,6 @@ class dispatch:
         self.dest = dest
 
     def __call__(self, func: Callable) -> Callable:
-        from tensordict.prototype import is_tensorclass
         # sanity check
         for i, key in enumerate(inspect.signature(func).parameters):
             if i == 0:
@@ -236,6 +235,7 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
+            from tensordict.prototype import is_tensorclass
             source = self.source
             if isinstance(source, str):
                 source = getattr(_self, source)
