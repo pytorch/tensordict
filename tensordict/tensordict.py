@@ -1735,6 +1735,7 @@ class TensorDictBase(MutableMapping):
     def to_h5(
         self,
         filename,
+        **kwargs,
     ):
         """Converts a tensordict to a PersistentTensorDict with the h5 backend.
 
@@ -1743,9 +1744,36 @@ class TensorDictBase(MutableMapping):
             device (torch.device or compatible, optional): the device where to
                 expect the tensor once they are returned. Defaults to ``None``
                 (on cpu by default).
+            **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
 
         Returns:
             A :class:`PersitentTensorDict` instance linked to the newly created file.
+
+        Examples:
+            >>> import tempfile
+            >>> import timeit
+            >>>
+            >>> from tensordict import TensorDict, MemmapTensor
+            >>> td = TensorDict({
+            ...     "a": MemmapTensor(1_000_000),
+            ...     "b": {"c": MemmapTensor(1_000_000, 3)},
+            ... }, [1_000_000])
+            >>>
+            >>> file = tempfile.NamedTemporaryFile()
+            >>> td_h5 = td.to_h5(file.name, compression="gzip", compression_opts=9)
+            >>> print(td_h5)
+            PersistentTensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([1000000]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: PersistentTensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([1000000, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([1000000]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([1000000]),
+                device=None,
+                is_shared=False)
 
 
         """
@@ -1754,6 +1782,7 @@ class TensorDictBase(MutableMapping):
         return PersistentTensorDict.from_dict(
             self,
             filename=filename,
+            **kwargs,
         )
 
     def to_tensordict(self):

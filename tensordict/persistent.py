@@ -98,6 +98,7 @@ class PersistentTensorDict(TensorDictBase):
         backend (str, optional): storage backend. Currently only ``"h5"`` is supported.
         device (torch.device or compatible, optional): device of the tensordict.
             Defaults to ``None`` (ie. default PyTorch device).
+        **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
 
     """
 
@@ -110,6 +111,7 @@ class PersistentTensorDict(TensorDictBase):
         mode="r",
         backend="h5",
         device=None,
+        **kwargs,
     ):
         super().__init__()
         self.filename = filename
@@ -128,6 +130,7 @@ class PersistentTensorDict(TensorDictBase):
         self._device = device
         self._is_shared = False
         self._is_memmap = False
+        self.kwargs = kwargs
 
         # we use this to allow nested tensordicts to have a different batch-size
         self._nested_tensordicts = {}
@@ -152,7 +155,7 @@ class PersistentTensorDict(TensorDictBase):
         return out
 
     @classmethod
-    def from_dict(cls, input_dict, filename, batch_size=None, device=None):
+    def from_dict(cls, input_dict, filename, batch_size=None, device=None, **kwargs):
         """Converts a dictionary or a TensorDict to a h5 file.
 
         Args:
@@ -164,6 +167,7 @@ class PersistentTensorDict(TensorDictBase):
             device (torch.device or compatible, optional): the device where to
                 expect the tensor once they are returned. Defaults to ``None``
                 (on cpu by default).
+            **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
 
         Returns:
             A :class:`PersitentTensorDict` instance linked to the newly created file.
@@ -179,7 +183,7 @@ class PersistentTensorDict(TensorDictBase):
                 batch_size = torch.Size([])
 
         # let's make a tensordict first
-        out = cls(group=file, batch_size=batch_size, device=device)
+        out = cls(group=file, batch_size=batch_size, device=device, **kwargs)
         if is_tensor_collection(input_dict):
             out.update(input_dict)
         else:
@@ -630,7 +634,7 @@ class PersistentTensorDict(TensorDictBase):
 
         else:
             try:
-                self.file[key] = value
+                self.file.create_dataset(key, data=value, **self.kwargs)
             except OSError as err:
                 if "name already exists" in str(err):
                     warnings.warn(
@@ -704,7 +708,7 @@ class PersistentTensorDict(TensorDictBase):
             f_src = self.file
             for key in self.keys(True, True):
                 key = self._process_key(key)
-                f_dest.create_dataset(key, data=f_src[key])
+                f_dest.create_dataset(key, data=f_src[key], **self.kwargs)
                 # f_src.copy(f_src[key],  f_dest[key], "DataSet")
             # create a non-recursive copy and update the file
             clone = self.clone(False)
