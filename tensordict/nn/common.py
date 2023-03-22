@@ -457,7 +457,7 @@ class TensorDictModule(nn.Module):
         try:
             return super().__getattr__(name)
         except AttributeError:
-            return getattr(self.__dict__['_modules']['module'], name)
+            return getattr(super().__getattr__("module"), name)
 
 
 class TensorDictModuleWrapper(nn.Module):
