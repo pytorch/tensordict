@@ -535,6 +535,7 @@ class TensorDictBase(MutableMapping):
         """Returns the class of an entry, avoiding a call to `isinstance(td.get(key), type)`."""
         raise NotImplementedError(f"{self.__class__.__name__}")
 
+    @abc.abstractmethod
     def set(
         self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
     ) -> TensorDictBase:
@@ -2645,7 +2646,7 @@ class TensorDictBase(MutableMapping):
         # raise IndexError(f"Index has to a string but received {index}.")
 
     @abc.abstractmethod
-    def rename_key(
+    def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> TensorDictBase:
         """Renames a key with a new string.
@@ -4209,11 +4210,47 @@ torch.Size([3, 2])
                 f"got {type(source)}"
             )
         self._source = source
-        idx = (idx,) if not isinstance(idx, (tuple, list, range)) else tuple(idx)
+        idx = (
+            (idx,)
+            if not isinstance(
+                idx,
+                (
+                    tuple,
+                    list,
+                ),
+            )
+            else tuple(idx)
+        )
+        # we msut convert ellipsis into slices
+        idx = self._convert_ellipsis(idx, self._source._batch_size)
+        # idx = self._convert_range(idx)
         self.idx = idx
         self._batch_size = _getitem_batch_size(self._source.batch_size, self.idx)
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
+
+    # @staticmethod
+    # def _convert_range(idx):
+    #     return tuple(list(_idx) if isinstance(_idx, range) else _idx for _idx in idx)
+
+    @staticmethod
+    def _convert_ellipsis(idx, shape):
+        if any(_idx is Ellipsis for _idx in idx):
+            new_idx = []
+            cursor = -1
+            for _idx in idx:
+                if _idx is Ellipsis:
+                    if cursor == len(idx) - 1:
+                        # then we can just skip
+                        continue
+                    n_upcoming = len(idx) - cursor - 1
+                    while cursor < len(shape) - n_upcoming:
+                        cursor += 1
+                        new_idx.append(slice(None))
+                else:
+                    new_idx.append(_idx)
+            return tuple(new_idx)
+        return idx
 
     def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
         if inplace:

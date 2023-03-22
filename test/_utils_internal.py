@@ -3,11 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import math
+import tempfile
+from fileinput import filename
 
 import numpy as np
 import torch
 
-from tensordict import TensorDict
+from tensordict import PersistentTensorDict, TensorDict
 from tensordict.prototype import tensorclass
 from tensordict.tensordict import _stack as stack_td
 
@@ -212,6 +214,17 @@ class TestTensorDictsBase:
         )
         td.batch_size = torch.Size([4, 3, 2, 1])
         return td
+
+    def td_h5(
+        self,
+        device,
+    ):
+        file = tempfile.NamedTemporaryFile()
+        filename = file.name
+        td_h5 = PersistentTensorDict.from_dict(
+            self.nested_td(device), filename=filename, device=device
+        )
+        return td_h5
 
 
 def expand_list(list_of_tensors, *dims):
