@@ -519,7 +519,7 @@ class PersistentTensorDict(TensorDictBase):
             tensordict.apply_(lambda x: x.fill_(value))
             self._set(key, tensordict, inplace=True)
         else:
-            tensor = torch.full_like(self.get(key), value).numpy()
+            tensor = torch.full_like(self.get(key), value).cpu().numpy()
             self._set(key, tensor, inplace=True)
         return self
 
