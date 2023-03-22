@@ -3007,7 +3007,7 @@ class TensorDict(TensorDictBase):
             device=device,
         )
         if batch_size is None:
-            _find_max_batch_size(out)
+            _set_max_batch_size(out)
         else:
             out.batch_size = batch_size
         return out
@@ -6490,12 +6490,12 @@ def make_tensordict(
     return TensorDict.from_dict(kwargs, batch_size=batch_size, device=device)
 
 
-def _find_max_batch_size(source: TensorDictBase):
+def _set_max_batch_size(source: TensorDictBase):
     """Updates a tensordict with its maximium batch size."""
     tensor_data = list(source.values())
     for val in tensor_data:
         if is_tensor_collection(val):
-            _find_max_batch_size(val)
+            _set_max_batch_size(val)
     batch_size = []
     if not tensor_data:  # when source is empty
         source.batch_size = batch_size

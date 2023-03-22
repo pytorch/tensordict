@@ -11,7 +11,15 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-import h5py
+H5_ERR = None
+try:
+    import h5py
+
+    _has_h5 = True
+except ModuleNotFoundError as err:
+    H5_ERR = err
+    _has_h5 = False
+
 import numpy as np
 import torch
 
@@ -51,29 +59,18 @@ class _Visitor:
 
 
 class _PersistentTDKeysView(_TensorDictKeysView):
-    def __init__(self, persistent_td, include_nested, leaves_only):
-        self.include_nested = include_nested
-        self.leaves_only = leaves_only
-        self.persistent_td = persistent_td
-
     def __iter__(self):
         if self.include_nested:
             visitor = _Visitor(lambda key: tuple(key.split("/")))
-            self.persistent_td.file.visit(visitor)
+            self.tensordict.file.visit(visitor)
             if self.leaves_only:
                 for key in visitor:
-                    if self.persistent_td._get_metadata(key)["array"]:
+                    if self.tensordict._get_metadata(key)["array"]:
                         yield key
             else:
                 yield from visitor
         else:
-            yield from self.persistent_td.file.keys()
-
-    def __len__(self):
-        counter = 0
-        for _ in self:
-            counter += 1
-        return counter
+            yield from self.tensordict.file.keys()
 
     def __contains__(self, key):
         if isinstance(key, tuple) and len(key) == 1:
@@ -113,6 +110,8 @@ class PersistentTensorDict(TensorDictBase):
         device=None,
         **kwargs,
     ):
+        if not _has_h5:
+            raise ModuleNotFoundError("Could not load h5py.") from H5_ERR
         super().__init__()
         self.filename = filename
         self.mode = mode
@@ -151,7 +150,7 @@ class PersistentTensorDict(TensorDictBase):
         """
         out = cls(filename=filename, mode=mode, batch_size=[])
         # determine batch size
-        _find_max_batch_size(out)
+        _set_max_batch_size(out)
         return out
 
     @classmethod
@@ -189,7 +188,7 @@ class PersistentTensorDict(TensorDictBase):
         else:
             out.update(TensorDict(input_dict, batch_size=batch_size))
         if not _has_batch_size:
-            _find_max_batch_size(out)
+            _set_max_batch_size(out)
         return out
 
     def _process_key(self, key):
@@ -338,7 +337,7 @@ class PersistentTensorDict(TensorDictBase):
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _PersistentTDKeysView:
         return _PersistentTDKeysView(
-            persistent_td=self,
+            tensordict=self,
             include_nested=include_nested,
             leaves_only=leaves_only,
         )
@@ -635,7 +634,7 @@ class PersistentTensorDict(TensorDictBase):
         else:
             try:
                 self.file.create_dataset(key, data=value, **self.kwargs)
-            except OSError as err:
+            except (ValueError, OSError) as err:
                 if "name already exists" in str(err):
                     warnings.warn(
                         "Replacing an array with another one is inefficient. Consider using different names or populating in-place using `inplace=True`."
@@ -733,12 +732,12 @@ class PersistentTensorDict(TensorDictBase):
             return clone
 
 
-def _find_max_batch_size(source: PersistentTensorDict):
+def _set_max_batch_size(source: PersistentTensorDict):
     """Updates a tensordict with its maximium batch size."""
     tensor_data = list(source._items_metadata())
     for key, val in tensor_data:
         if not val["array"]:
-            _find_max_batch_size(source.get(key))
+            _set_max_batch_size(source.get(key))
 
     batch_size = []
     if not tensor_data:  # when source is empty
