@@ -543,7 +543,7 @@ class TensorDictBase(MutableMapping):
 
         Args:
             key (str, tuple of str): name of the key to be set.
-                If tuple of str it is equivalent to chained calls of getattr 
+                If tuple of str it is equivalent to chained calls of getattr
             item (torch.Tensor): value to be stored in the tensordict
             inplace (bool, optional): if True and if a key matches an existing
                 key in the tensordict, then the update will occur in-place
