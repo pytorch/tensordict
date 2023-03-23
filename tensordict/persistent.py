@@ -590,7 +590,8 @@ class PersistentTensorDict(TensorDictBase):
                 )
         return out
 
-    def _set(self, key: str, value, inplace: bool = False, idx=None) -> TensorDictBase:
+    def _set(self, key: str, value, inplace: bool = False, idx=None, check_shape=True) -> TensorDictBase:
+        value = self._validate_value(value, check_shape=False)
         if not inplace and idx is not None:
             raise RuntimeError("Cannot pass an index to _set when inplace=False.")
         # shortcut set if we're placing a tensordict
@@ -669,7 +670,6 @@ class PersistentTensorDict(TensorDictBase):
         value: dict[str, CompatibleType] | CompatibleType,
         inplace: bool = False,
     ) -> TensorDictBase:
-        value = self._validate_value(value)
 
         key = self._process_key(key)
 
@@ -692,8 +692,7 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f'key "{key}" not found in h5.')
         # we don't need to check shape as the modification will be done
         # in-place and an error will be thrown anyway if shapes don't match
-        value = self._validate_value(value, check_shape=False)
-        return self._set(key, value, inplace=True)
+        return self._set(key, value, inplace=True, check_shape=False)
 
     def set_at_(
         self,
@@ -708,8 +707,7 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f'key "{key}" not found in h5.')
         # we don't need to check shape as the modification will be done
         # in-place and an error will be thrown anyway if shapes don't match
-        value = self._validate_value(value, check_shape=False)
-        return self._set(key, value, inplace=True, idx=idx)
+        return self._set(key, value, inplace=True, idx=idx, check_shape=False)
 
     def clone(self, recurse: bool = True, newfile=None) -> TensorDictBase:
         if recurse:
