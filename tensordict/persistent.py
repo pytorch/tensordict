@@ -299,8 +299,7 @@ class PersistentTensorDict(TensorDictBase):
 
         This method avoids creating a tensor from scratch, and just reads the metadata of the array.
         """
-        key = self._process_key(key)
-        array = self.file[key]
+        array = self._get_array(key)
         if isinstance(array, (h5py.Dataset,)):
             shape = torch.Size(array.shape)
             return {
@@ -704,7 +703,7 @@ class PersistentTensorDict(TensorDictBase):
                         "Replacing an array with another one is inefficient. Consider using different names or populating in-place using `inplace=True`."
                     )
                     del self.file[key]
-                    self.file[key] = value
+                    self.file.create_dataset(key, data=value, **self.kwargs)
         return self
 
     def set(
