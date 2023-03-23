@@ -456,8 +456,11 @@ class TensorDictModule(nn.Module):
     def __getattr__(self, name: str) -> Any:
         try:
             return super().__getattr__(name)
-        except AttributeError:
-            return getattr(super().__getattr__("module"), name)
+        except AttributeError as err1:
+            try:
+                return getattr(super().__getattr__("module"), name)
+            except Exception as err2:
+                raise err2 from err1
 
 
 class TensorDictModuleWrapper(nn.Module):
