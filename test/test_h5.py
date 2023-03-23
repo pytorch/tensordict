@@ -12,7 +12,7 @@ import torch
 
 from tensordict import PersistentTensorDict
 from torch import multiprocessing as mp
-
+TIMEOUT=100
 
 class TestH5Serialization:
     @classmethod
@@ -41,9 +41,9 @@ class TestH5Serialization:
         p = mp.Process(target=self.flummoxydoodle, args=(cyberbliptronics, q))
         p.start()
         try:
-            val = q.get(1)
+            val = q.get(timeout=TIMEOUT)
             assert (torch.tensor(arr) == val["default"]).all()
-            val = q.get(1)
+            val = q.get(timeout=TIMEOUT)
             assert (torch.tensor(arr) + 1 == val).all()
         finally:
             p.join()
