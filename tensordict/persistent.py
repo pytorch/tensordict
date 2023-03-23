@@ -752,12 +752,14 @@ class PersistentTensorDict(TensorDictBase):
                 f_dest.create_dataset(key, data=f_src[key], **self.kwargs)
                 # f_src.copy(f_src[key],  f_dest[key], "DataSet")
             # create a non-recursive copy and update the file
+            # this way, we can keep the batch-size of every nested tensordict
             clone = self.clone(False)
             clone.file = f_src
             clone.filename = newfile
             clone._pin_mem = False
             return clone
         else:
+            # we need to keep the batch-size of nested tds, which we do manually
             nested_tds = {
                 key: td.clone(False) for key, td in self._nested_tensordicts.items()
             }
