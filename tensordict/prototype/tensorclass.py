@@ -181,6 +181,8 @@ def tensorclass(cls: T) -> T:
     cls.__len__ = _len
     cls.__eq__ = __eq__
     cls.__ne__ = __ne__
+    cls.set = _set
+    cls.set_at_ = _set_at
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
 
@@ -585,6 +587,18 @@ def _device_setter(self, value: DeviceType) -> None:
         "tensorclass.to(new_device), which will return a new tensorclass "
         "on the new device."
     )
+
+
+def _set(self, key, value, *args, **kwargs):
+    if key in self._non_tensordict:
+        del self._non_tensordict[key]
+    return self._tensordict.set(key, value, *args, **kwargs)
+
+
+def _set_at(self, key, value, *args, **kwargs):
+    if key in self._non_tensordict:
+        del self._non_tensordict[key]
+    return self._tensordict.set_at_(key, value, *args, **kwargs)
 
 
 def _batch_size(self) -> torch.Size:
