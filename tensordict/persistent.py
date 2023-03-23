@@ -568,8 +568,9 @@ class PersistentTensorDict(TensorDictBase):
             dest = torch.device(dest)
             if self.device is not None and dest == self.device:
                 return self
-            self._device = dest
-            return self
+            out = self.clone(False)
+            out._device = dest
+            return out
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
             return self
