@@ -595,7 +595,9 @@ class PersistentTensorDict(TensorDictBase):
                 )
         return out
 
-    def _set(self, key: str, value, inplace: bool = False, idx=None, check_shape=True) -> TensorDictBase:
+    def _set(
+        self, key: str, value, inplace: bool = False, idx=None, check_shape=True
+    ) -> TensorDictBase:
         # although it is expected that _set will run as few tests as possible,
         # we must do the value transformation here as _set can be called by other
         # methods from TensorDictBase.
