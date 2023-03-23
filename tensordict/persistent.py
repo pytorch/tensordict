@@ -513,14 +513,9 @@ class PersistentTensorDict(TensorDictBase):
             self
 
         """
-        target_class = self.entry_class(key)
-        if is_tensor_collection(target_class):
-            tensordict = self.get(key)
-            tensordict.apply_(lambda x: x.fill_(value))
-            self._set(key, tensordict, inplace=True)
-        else:
-            tensor = torch.full_like(self.get(key), value).cpu().numpy()
-            self._set(key, tensor, inplace=True)
+        for key in self.keys(True, True):
+            array = self._get_array(key)
+            array[:] = 0
         return self
 
     def select(
