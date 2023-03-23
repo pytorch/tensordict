@@ -513,9 +513,14 @@ class PersistentTensorDict(TensorDictBase):
             self
 
         """
-        for key in self.keys(True, True):
+        md = self._get_metadata(key)
+        if md["array"]:
             array = self._get_array(key)
             array[:] = 0
+        else:
+            val = self.get(key)
+            for subkey in val.keys():
+                val.fill_(subkey, value)
         return self
 
     def select(
@@ -591,6 +596,9 @@ class PersistentTensorDict(TensorDictBase):
         return out
 
     def _set(self, key: str, value, inplace: bool = False, idx=None, check_shape=True) -> TensorDictBase:
+        # although it is expected that _set will run as few tests as possible,
+        # we must do the value transformation here as _set can be called by other
+        # methods from TensorDictBase.
         value = self._validate_value(value, check_shape=check_shape)
         if not inplace and idx is not None:
             raise RuntimeError("Cannot pass an index to _set when inplace=False.")
