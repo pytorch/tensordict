@@ -27,8 +27,11 @@ class TestH5Serialization:
             ]
         )
         assert q2.get(timeout=TIMEOUT) == "checked"
-        q1.put(cyberbliptronics["Base_Group", "Sub_Group", "default"] + 1)
+        val = cyberbliptronics["Base_Group", "Sub_Group", "default"] + 1
+        q1.put(val)
+        assert q2.get(timeout=TIMEOUT) == "checked"
         q1.close()
+        q2.close()
 
     def test_h5_serialization(self, tmp_path):
         arr = np.random.randn(1000)
@@ -51,6 +54,7 @@ class TestH5Serialization:
             q2.put("checked")
             val = q1.get(timeout=TIMEOUT)
             assert (torch.tensor(arr) + 1 == val).all()
+            q2.put("checked")
             q1.close()
             q2.close()
         finally:
