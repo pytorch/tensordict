@@ -3061,6 +3061,15 @@ def test_setitem_nested():
     assert tensordict["a", "b"] is sub_sub_tensordict2
     assert (tensordict["a", "b", "c"] == 1).all()
 
+    # check the same with set method
+    sub_tensordict.set("b", sub_sub_tensordict)
+    tensordict.set("a", sub_tensordict)
+    assert tensordict["a", "b"] is sub_sub_tensordict
+
+    tensordict.set(("a", "b"), sub_sub_tensordict2)
+    assert tensordict["a", "b"] is sub_sub_tensordict2
+    assert (tensordict["a", "b", "c"] == 1).all()
+
 
 def test_setdefault_nested():
     tensor = torch.randn(4, 5, 6, 7)
