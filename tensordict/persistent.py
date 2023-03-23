@@ -370,7 +370,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def _stack_onto_(
         self, key: str, list_item: list[CompatibleType], dim: int
-    ) -> TensorDict:
+    ) -> PersistentTensorDict:
         stacked = torch.stack(list_item, dim=dim)
         self.set_(key, stacked)
         return self
@@ -425,7 +425,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def memmap_(
         self, prefix: str | None = None, copy_existing: bool = False
-    ) -> TensorDictBase:
+    ) -> PersistentTensorDict:
         raise RuntimeError(
             "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. Use `td.memmap()` instead."
         )
@@ -507,7 +507,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
-    ) -> TensorDictBase:
+    ) -> PersistentTensorDict:
         old_key = self._process_key(old_key)
         new_key = self._process_key(new_key)
         try:
@@ -539,13 +539,13 @@ class PersistentTensorDict(TensorDictBase):
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = True
-    ) -> TensorDictBase:
+    ) -> PersistentTensorDict:
         raise NotImplementedError(
             "Cannot call select on a PersistentTensorDict. "
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
-    def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+    def exclude(self, *keys: str, inplace: bool = False) -> PersistentTensorDict:
         raise NotImplementedError(
             "Cannot call exclude on a PersistentTensorDict. "
             "Create a regular tensordict first using the `to_tensordict` method."
@@ -557,7 +557,7 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
-    def to(self, dest: DeviceType | torch.Size | type, **kwargs: Any) -> TensorDictBase:
+    def to(self, dest: DeviceType | torch.Size | type, **kwargs: Any) -> PersistentTensorDict:
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
                 return self
@@ -614,7 +614,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def _set(
         self, key: str, value, inplace: bool = False, idx=None, check_shape=True
-    ) -> TensorDictBase:
+    ) -> PersistentTensorDict:
         # although it is expected that _set will run as few tests as possible,
         # we must do the value transformation here as _set can be called by other
         # methods from TensorDictBase.
