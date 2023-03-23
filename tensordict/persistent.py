@@ -133,6 +133,7 @@ class PersistentTensorDict(TensorDictBase):
 
         # we use this to allow nested tensordicts to have a different batch-size
         self._nested_tensordicts = {}
+        self._pin_mem = False
 
         # this must be kept last
         self._check_batch_size(self._batch_size)
@@ -225,7 +226,10 @@ class PersistentTensorDict(TensorDictBase):
                 device = torch.device("cpu")
             # we convert to an array first to avoid "Creating a tensor from a list of numpy.ndarrays is extremely slow."
             array = array[:]
-            return torch.as_tensor(array, device=device)
+            out = torch.as_tensor(array, device=device)
+            if self._pin_mem:
+                return out.pin_memory()
+            return out
         elif array is not default:
             out = self._nested_tensordicts.get(key, None)
             if out is None:
@@ -251,7 +255,7 @@ class PersistentTensorDict(TensorDictBase):
             idx = self._process_index(idx, array)
             # `get_at` is there to save us.
             try:
-                return torch.as_tensor(array[idx], device=device)
+                out = torch.as_tensor(array[idx], device=device)
             except TypeError as err:
                 if "Boolean indexing array has incompatible shape" in str(err):
                     # Known bug in h5py: cannot broadcast boolean mask on the right as
@@ -263,10 +267,13 @@ class PersistentTensorDict(TensorDictBase):
                         "tensordict will cast the entire array in memory and index it using the mask. "
                         "This is suboptimal and may lead to performance issue."
                     )
-                    return torch.as_tensor(array, device=device)[idx]
+                    out = torch.as_tensor(array, device=device)[idx]
                 else:
                     raise err
-        else:
+            if self._pin_mem:
+                return out.pin_memory()
+            return out
+        elif array is not default:
             out = self._nested_tensordicts.get(key, None)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
@@ -275,6 +282,8 @@ class PersistentTensorDict(TensorDictBase):
                     device=self.device,
                 )
             return out.get_sub_tensordict(idx)
+        else:
+            return default
 
     def _get_metadata(self, key):
         """Gets the metadata for an entry.
@@ -487,9 +496,14 @@ class PersistentTensorDict(TensorDictBase):
         return tensordict
 
     def pin_memory(self):
-        raise NotImplementedError(
-            f"cannot call pin_memory on {self.__class__.__name__}."
-        )
+        if self.device.type == "cuda":
+            raise RuntimeError("Cannot call pin_memory on tensordict stored on cuda.")
+        out = self.clone(False)
+        out._pin_mem = True
+        out._nested_tensordicts = {
+            key: val.pin_memory() for key, val in out._nested_tensordicts.items()
+        }
+        return out
 
     def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
@@ -741,6 +755,7 @@ class PersistentTensorDict(TensorDictBase):
             clone = self.clone(False)
             clone.file = f_src
             clone.filename = newfile
+            clone._pin_mem = False
             return clone
         else:
             nested_tds = {
@@ -757,6 +772,7 @@ class PersistentTensorDict(TensorDictBase):
                 batch_size=self.batch_size,
             )
             clone._nested_tensordicts = nested_tds
+            clone._pin_mem = False
             return clone
 
 
