@@ -497,7 +497,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def pin_memory(self):
         if self.device.type == "cuda":
-            raise RuntimeError("Cannot call pin_memory on tensordict stored on cuda.")
+            raise RuntimeError("cannot pin memory on a tensordict stored on cuda.")
         out = self.clone(False)
         out._pin_mem = True
         out._nested_tensordicts = {
