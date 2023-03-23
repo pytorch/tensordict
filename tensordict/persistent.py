@@ -570,6 +570,8 @@ class PersistentTensorDict(TensorDictBase):
                 return self
             out = self.clone(False)
             out._device = dest
+            for key, nested in list(out._nested_tensordicts.items()):
+                out._nested_tensordicts[key] = nested.to(dest)
             return out
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
@@ -694,7 +696,7 @@ class PersistentTensorDict(TensorDictBase):
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         inplace: bool = False,
-    ) -> TensorDictBase:
+    ) -> PersistentTensorDict:
 
         key = self._process_key(key)
 
@@ -709,7 +711,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def set_(
         self, key: str, value: dict[str, CompatibleType] | CompatibleType
-    ) -> TensorDictBase:
+    ) -> PersistentTensorDict:
         visitor = _Visitor()
         self.file.visit(visitor)
         key = self._process_key(key)
@@ -724,7 +726,7 @@ class PersistentTensorDict(TensorDictBase):
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         idx: IndexType,
-    ) -> TensorDictBase:
+    ) -> PersistentTensorDict:
         visitor = _Visitor()
         self.file.visit(visitor)
         key = self._process_key(key)
@@ -734,7 +736,7 @@ class PersistentTensorDict(TensorDictBase):
         # in-place and an error will be thrown anyway if shapes don't match
         return self._set(key, value, inplace=True, idx=idx, check_shape=False)
 
-    def clone(self, recurse: bool = True, newfile=None) -> TensorDictBase:
+    def clone(self, recurse: bool = True, newfile=None) -> PersistentTensorDict:
         if recurse:
             # this should clone the h5 to a new location indicated by newfile
             if newfile is None:
