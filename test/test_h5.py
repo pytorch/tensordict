@@ -12,7 +12,9 @@ import torch
 
 from tensordict import PersistentTensorDict
 from torch import multiprocessing as mp
-TIMEOUT=100
+
+TIMEOUT = 100
+
 
 class TestH5Serialization:
     @classmethod
