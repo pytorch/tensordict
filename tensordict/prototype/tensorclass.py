@@ -29,8 +29,9 @@ from tensordict.tensordict import (
     TD_HANDLED_FUNCTIONS,
     TensorDict,
     TensorDictBase,
+    NO_DEFAULT,
 )
-from tensordict.utils import DeviceType, NestedKey
+from tensordict.utils import DeviceType, NestedKey, IndexType
 from torch import Tensor
 
 T = TypeVar("T", bound=TensorDictBase)
@@ -182,9 +183,9 @@ def tensorclass(cls: T) -> T:
     cls.__eq__ = __eq__
     cls.__ne__ = __ne__
     cls.set = _set
-    cls.set_at_ = _set_at
+    cls.set_at_ = _set_at_
     cls.get = _get
-    cls.get_at_ = _get_at
+    cls.get_at = _get_at
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
 
@@ -591,20 +592,67 @@ def _device_setter(self, value: DeviceType) -> None:
     )
 
 
-def _set(self, key, value, *args, **kwargs):
-    return setattr(self, key, value)
+def _set(self, key: NestedKey, value: Any):
+    """Sets a new key-value pair.
+
+    Args:
+        key (str, tuple of str): name of the key to be set.
+           If tuple of str it is equivalent to chained calls of getattr 
+           followed by a final setattr. 
+        value (Any): value to be stored in the tensorclass
+
+    Returns:
+        self
+
+    """
+
+    if isinstance(key, str):
+        key = (key, )
+
+    if key and isinstance(key, tuple):
+        if len(key) > 1:
+            return getattr(self, key[0]).set(key[1:], value)
+        return setattr(self, key[0], value)
+    raise ValueError(f"Supported type for key are str and tuple, got {key} of type {type(key)}")
 
 
-def _set_at(self, key, value, *args, **kwargs):
-    return self._setitem(key, value, *args, **kwargs)
+def _set_at_(self, key: NestedKey, value: Any, idx: IndexType):
+    if key in self._non_tensordict:
+        del self._non_tensordict[key]
+    return self._tensordict.set_at_(key, value, idx)
 
 
-def _get(self, key, *args, **kwargs):
-    return getattr(self, key)
+def _get(self, key: NestedKey, default: Any = NO_DEFAULT):
+    """Gets the value stored with the input key.
+
+    Args:
+        key (str, tuple of str): key to be queried. If tuple of str it is
+            equivalent to chained calls of getattr.
+        default: default value if the key is not found in the tensorclass.
+
+    """
+    if isinstance(key, str):
+        key = (key, )
+
+    if isinstance(key, tuple):
+        try:
+            if len(key) > 1:
+                return getattr(self, key[0]).get(key[1:])
+            return getattr(self, key[0])
+        except AttributeError:
+            if default is NO_DEFAULT:
+                raise
+            return default
+    raise ValueError(f"Supported type for key are str and tuple, got {type(key)}")
 
 
-def _get_at(self, key, *args, **kwargs):
-    return self._getitem(key, *args, **kwargs)
+def _get_at(self, key: NestedKey, idx, default: Any = NO_DEFAULT):
+    try:
+        return self.get(key, NO_DEFAULT)[idx]
+    except AttributeError:
+        if default is NO_DEFAULT:
+            raise
+        return default
 
 
 def _batch_size(self) -> torch.Size:
