@@ -516,11 +516,11 @@ class PersistentTensorDict(TensorDictBase):
         md = self._get_metadata(key)
         if md["array"]:
             array = self._get_array(key)
-            array[:] = 0
+            array[:] = value
         else:
-            val = self.get(key)
-            for subkey in val.keys():
-                val.fill_(subkey, value)
+            nested = self.get(key)
+            for subkey in nested.keys():
+                nested.fill_(subkey, value)
         return self
 
     def select(
