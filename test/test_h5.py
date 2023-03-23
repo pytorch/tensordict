@@ -18,15 +18,17 @@ TIMEOUT = 100
 
 class TestH5Serialization:
     @classmethod
-    def flummoxydoodle(cls, cyberbliptronics, queue):
+    def worker(cls, cyberbliptronics, q1, q2):
         assert isinstance(cyberbliptronics, PersistentTensorDict)
         assert cyberbliptronics.file.filename.endswith("groups.hdf5")
-        queue.put(
+        q1.put(
             cyberbliptronics["Base_Group"][
                 "Sub_Group",
             ]
         )
-        queue.put(cyberbliptronics["Base_Group", "Sub_Group", "default"] + 1)
+        assert q2.get(timeout=TIMEOUT) == "checked"
+        q1.put(cyberbliptronics["Base_Group", "Sub_Group", "default"] + 1)
+        q1.close()
 
     def test_h5_serialization(self, tmp_path):
         arr = np.random.randn(1000)
@@ -38,15 +40,19 @@ class TestH5Serialization:
             _ = g.create_dataset("default", data=arr)
             _ = gg.create_dataset("default", data=arr)
 
-        cyberbliptronics = PersistentTensorDict(filename=fn, batch_size=[])
-        q = mp.Queue(1)
-        p = mp.Process(target=self.flummoxydoodle, args=(cyberbliptronics, q))
+        persistent_td = PersistentTensorDict(filename=fn, batch_size=[])
+        q1 = mp.Queue(1)
+        q2 = mp.Queue(1)
+        p = mp.Process(target=self.worker, args=(persistent_td, q1, q2))
         p.start()
         try:
-            val = q.get(timeout=TIMEOUT)
+            val = q1.get(timeout=TIMEOUT)
             assert (torch.tensor(arr) == val["default"]).all()
-            val = q.get(timeout=TIMEOUT)
+            q2.put("checked")
+            val = q1.get(timeout=TIMEOUT)
             assert (torch.tensor(arr) + 1 == val).all()
+            q1.close()
+            q2.close()
         finally:
             p.join()
 
