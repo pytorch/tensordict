@@ -591,7 +591,7 @@ class PersistentTensorDict(TensorDictBase):
         return out
 
     def _set(self, key: str, value, inplace: bool = False, idx=None, check_shape=True) -> TensorDictBase:
-        value = self._validate_value(value, check_shape=False)
+        value = self._validate_value(value, check_shape=check_shape)
         if not inplace and idx is not None:
             raise RuntimeError("Cannot pass an index to _set when inplace=False.")
         # shortcut set if we're placing a tensordict
