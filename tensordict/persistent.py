@@ -87,6 +87,15 @@ class _PersistentTDKeysView(_TensorDictKeysView):
 class PersistentTensorDict(TensorDictBase):
     """Persistent TensorDict implementation.
 
+    :class:`PersistentTensorDict` instances provide an interface with data stored
+    on disk such that access to this data is made easy while still taking advantage
+    from the fast access provided by the backend.
+
+    Like other :class:`TensorDictBase` subclasses, :class:`PersistentTensorDict`
+    has a ``device`` attribute. This does *not* mean that the data is being stored
+    on that device, but rather that when loaded, the data will be cast onto
+    the desired device.
+
     Args:
         batch_size (torch.Size or compatible): the tensordict batch size.
         filename (str, optional): the path to the h5 file. Exclusive with ``group``.
@@ -496,6 +505,11 @@ class PersistentTensorDict(TensorDictBase):
         return tensordict
 
     def pin_memory(self):
+        """Returns a new PersistentTensorDict where any given Tensor key returns a tensor with pin_memory=True.
+
+        This will fail with PersistentTensorDict with a ``cuda`` device attribute.
+
+        """
         if self.device.type == "cuda":
             raise RuntimeError("cannot pin memory on a tensordict stored on cuda.")
         out = self.clone(False)
@@ -557,7 +571,9 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
-    def to(self, dest: DeviceType | torch.Size | type, **kwargs: Any) -> PersistentTensorDict:
+    def to(
+        self, dest: DeviceType | torch.Size | type, **kwargs: Any
+    ) -> PersistentTensorDict:
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
                 return self
@@ -779,6 +795,22 @@ class PersistentTensorDict(TensorDictBase):
             clone._nested_tensordicts = nested_tds
             clone._pin_mem = False
             return clone
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        filename = state["file"].file.filename
+        group_name = state["file"].name
+        state["file"] = None
+        state["filename"] = filename
+        state["group_name"] = group_name
+        return state
+
+    def __setstate__(self, state):
+        state["file"] = h5py.File(state["filename"], mode=state["mode"])
+        if state["group_name"] != "/":
+            state["file"] = state["file"][state["group_name"]]
+        del state["group_name"]
+        self.__dict__.update(state)
 
 
 def _set_max_batch_size(source: PersistentTensorDict):
