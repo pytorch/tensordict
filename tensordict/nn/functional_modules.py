@@ -339,7 +339,7 @@ def make_functional(
     _decorate_funs(
         module,
         funs_to_decorate=funs_to_decorate,
-        make_stateless=return_params and not keep_params,
+        make_stateless=not keep_params,
     )
     if return_params:
         params = extract_weights_and_buffers(
@@ -348,6 +348,8 @@ def make_functional(
         if keep_params:
             repopulate_module(module, params)
         return params
+    elif not keep_params:
+        extract_weights_and_buffers(module)
 
 
 def get_functional(

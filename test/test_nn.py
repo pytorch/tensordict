@@ -1541,7 +1541,17 @@ def test_make_functional(return_params, keep_params):
     else:
         assert params is None
     if keep_params:
+        for m in module.modules():
+            assert not m._is_stateless, m
         assert module(torch.randn(3)).shape == torch.Size([3])
+        for m in module.modules():
+            assert not m._is_stateless, m
+    else:
+        for m in module.modules():
+            assert m._is_stateless, m
+        assert module(torch.randn(3), params=td).shape == torch.Size([3])
+        for m in module.modules():
+            assert m._is_stateless, m
 
     assert module(torch.randn(3), params=td).shape == torch.Size([3])
 
