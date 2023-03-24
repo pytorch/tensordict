@@ -17,6 +17,17 @@ from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 from torch import nn
 
+
+def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
+    """Simplified version of torch.nn.utils._named_member_accessor"""
+    if name in module._parameters:
+        module._parameters[name] = tensor  # type: ignore[assignment]
+    elif name in module._buffers:
+        module._buffers[name] = tensor
+    else:
+        setattr(module, name, tensor)
+
+
 _RESET_OLD_TENSORDICT = True
 try:
     import torch._functorch.vmap as vmap_src
@@ -293,7 +304,7 @@ def _swap_state(
             old_tensordict[key] = old_attr
         if is_param:
             delattr(model, key)
-        setattr(model, key, value)
+        set_tensor(model, key, value)
     if return_old_tensordict:
         return old_tensordict
     return None
