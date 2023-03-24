@@ -208,16 +208,15 @@ def _decorate_funs(
     if funs_to_decorate is None:
         funs_to_decorate = ["forward"]
 
-    if not model.__dict__.get("_functionalized", False):
-        for fun_to_decorate in funs_to_decorate:
-            try:
-                setattr(
-                    model,
-                    fun_to_decorate,
-                    types.MethodType(_make_decorator(model, fun_to_decorate), model),
-                )
-            except AttributeError:
-                continue
+    for fun_to_decorate in funs_to_decorate:
+        try:
+            setattr(
+                model,
+                fun_to_decorate,
+                types.MethodType(_make_decorator(model, fun_to_decorate), model),
+            )
+        except AttributeError:
+            continue
     model.__dict__["_functionalized"] = True
     model.__dict__["_is_stateless"] = make_stateless
 
