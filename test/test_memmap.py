@@ -139,22 +139,27 @@ class TestMP:
         queue.put(("transfer_ownership", data.transfer_ownership))
 
     @pytest.mark.parametrize("transfer_ownership", [True, False])
-    def test(self, transfer_ownership):
-        m = MemmapTensor(3, transfer_ownership=transfer_ownership)
+    def test(self, transfer_ownership, tmp_path):
+        m = MemmapTensor(
+            3, transfer_ownership=transfer_ownership, filename=tmp_path / "tensor.mp"
+        )
         queue = mp.Queue(1)
         p = mp.Process(target=TestMP.getdata, args=(m, queue))
         p.start()
-        msg, val = queue.get()
-        assert msg == "has_ownership"
-        assert val is transfer_ownership
-        if transfer_ownership:
-            assert not m._has_ownership
-        else:
-            assert m._has_ownership
-        msg, val = queue.get()
-        assert msg == "transfer_ownership"
-        assert val is transfer_ownership
-        p.join()
+        try:
+            msg, val = queue.get()
+            assert msg == "has_ownership"
+            assert val is transfer_ownership
+            if transfer_ownership:
+                assert not m._has_ownership
+            else:
+                assert m._has_ownership
+            msg, val = queue.get()
+            assert msg == "transfer_ownership"
+            assert val is transfer_ownership
+        finally:
+            p.join()
+            queue.close()
 
 
 @pytest.mark.parametrize(

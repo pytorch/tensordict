@@ -24,6 +24,7 @@ from tensordict.utils import _getitem_batch_size
         np.arange(2),
         torch.arange(2),
         [True, True],
+        Ellipsis,
     ],
 )
 @pytest.mark.parametrize(
@@ -38,6 +39,7 @@ from tensordict.utils import _getitem_batch_size
         np.arange(0, 1),
         torch.arange(2),
         [True, False, True],
+        Ellipsis,
     ],
 )
 @pytest.mark.parametrize(
@@ -52,6 +54,7 @@ from tensordict.utils import _getitem_batch_size
         np.arange(1, 3),
         torch.arange(2),
         [True, False, True, False],
+        Ellipsis,
     ],
 )
 @pytest.mark.parametrize(
@@ -66,11 +69,21 @@ from tensordict.utils import _getitem_batch_size
         np.arange(0, 4, 2),
         torch.arange(2),
         [True, False, False, False, True],
+        Ellipsis,
     ],
 )
 def test_getitem_batch_size(tensor, index1, index2, index3, index4):
+    # cannot have 2 ellipsis
+    if (index1 is Ellipsis) + (index2 is Ellipsis) + (index3 is Ellipsis) + (
+        index4 is Ellipsis
+    ) > 1:
+        pytest.skip("cannot have more than one ellipsis in an index.")
+    if (index1 is Ellipsis) + (index2 is Ellipsis) + (index3 is Ellipsis) + (
+        index4 is Ellipsis
+    ) == 1 and tensor.ndim == 5:
+        pytest.skip("index possibly incompatible with tensor shape.")
     index = (index1, index2, index3, index4)
-    assert tensor[index].shape == _getitem_batch_size(tensor.shape, index)
+    assert tensor[index].shape == _getitem_batch_size(tensor.shape, index), index
 
 
 @pytest.mark.parametrize("tensor", [torch.rand(2, 3, 4, 5), torch.rand(2, 3, 4, 5, 6)])
