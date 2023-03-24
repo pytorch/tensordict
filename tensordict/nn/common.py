@@ -459,6 +459,15 @@ class TensorDictModule(nn.Module):
 
         return f"{self.__class__.__name__}(\n{fields})"
 
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return super().__getattr__(name)
+        except AttributeError as err1:
+            try:
+                return getattr(super().__getattr__("module"), name)
+            except Exception as err2:
+                raise err2 from err1
+
 
 class TensorDictModuleWrapper(nn.Module):
     """Wrapper class for TensorDictModule objects.

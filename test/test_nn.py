@@ -1499,6 +1499,28 @@ def test_keyerr_msg():
         module(TensorDict({"c": torch.randn(())}, []))
 
 
+def test_method_forward():
+    # ensure calls to custom methods are correctly forwarded to wrapped module
+    from unittest.mock import MagicMock
+
+    class MyModule(nn.Module):
+        def mycustommethod(self):
+            pass
+
+        def overwrittenmethod(self):
+            pass
+
+    MyModule.mycustommethod = MagicMock()
+    MyModule.overwrittenmethod = MagicMock()
+
+    module = TensorDictModule(MyModule(), in_keys=["in"], out_keys=["out"])
+    module.mycustommethod()
+    assert MyModule.mycustommethod.called
+
+    module.mycustommethod()
+    assert not MyModule.overwrittenmethod.called
+
+
 @pytest.mark.parametrize("keep_params", [True, False])
 @pytest.mark.parametrize("return_params", [True, False])
 def test_is_functional(return_params, keep_params):
