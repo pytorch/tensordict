@@ -16,6 +16,7 @@ from tensordict.tensordict import (
     pad_sequence,
     SubTensorDict,
     TensorDict,
+    TensorDictBase,
 )
 
 try:
@@ -29,6 +30,7 @@ __all__ = [
     "MemmapTensor",
     "SubTensorDict",
     "TensorDict",
+    "TensorDictBase",
     "merge_tensordicts",
     "set_transfer_ownership",
     "pad_sequence",
