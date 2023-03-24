@@ -1518,6 +1518,34 @@ def test_is_functional(return_params, keep_params):
         assert is_functional(m)
 
 
+@pytest.mark.parametrize("keep_params", [True, False])
+@pytest.mark.parametrize("return_params", [True, False])
+@torch.no_grad()
+def test_make_functional(return_params, keep_params):
+    module = nn.Sequential(
+        nn.Linear(3, 3),
+        nn.Linear(3, 3),
+    )
+    td = TensorDict(
+        {
+            "0": {"weight": torch.zeros(3, 3), "bias": torch.zeros(3)},
+            "1": {"weight": torch.zeros(3, 3), "bias": torch.zeros(3)},
+        },
+        [],
+    )
+    params = make_functional(
+        module, keep_params=keep_params, return_params=return_params
+    )
+    if return_params:
+        assert (params.zero_() == td).all()
+    else:
+        assert params is None
+    if keep_params:
+        assert module(torch.randn(3)).shape == torch.Size([3])
+
+    module(torch.randn(3), params=td).shape == torch.Size([3])
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
