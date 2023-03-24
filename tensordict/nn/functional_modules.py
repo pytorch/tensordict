@@ -365,42 +365,6 @@ def get_functional(
 
 def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
     fun = getattr(module, fun_name)
-    # we need to update the signature so that params can be the last positional arg
-    oldsig = inspect.signature(fun)
-    if "_forward_unimplemented" in fun.__name__:
-        raise AttributeError("_forward_unimplemented not supported")
-    # search if a VAR_POSITIONAL or VAR_KEYWORD is present
-    # if yes insert step parameter before it, else insert it in last position
-    params = list(oldsig.parameters.values())
-    for i, param in enumerate(params):
-        if param.kind == inspect.Parameter.KEYWORD_ONLY:
-            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
-            break
-        if param.kind == inspect.Parameter.VAR_POSITIONAL:
-            out_type = inspect.Parameter.KEYWORD_ONLY
-            i = i + 1
-            break
-        if param.kind == inspect.Parameter.VAR_KEYWORD:
-            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
-            break
-        if (
-            param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
-            and param.default is not inspect._empty
-        ):
-            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
-            break
-    else:
-        out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
-        i = len(params)
-    # new parameter name is params or params_[_...] if params if already present
-    name = "params"
-    while name in oldsig.parameters:
-        name += "_"
-    newparam = inspect.Parameter(name, out_type, default=None)
-    params.insert(i, newparam)
-    # we can now build the signature for the wrapper function
-    sig = oldsig.replace(parameters=params)
-    fun.__signature__ = sig
 
     @wraps(fun)
     def new_fun(self, *args, **kwargs):
@@ -442,6 +406,43 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
                 else:
                     raise err
 
+    # we need to update the signature so that params can be the last positional arg
+    oldsig = inspect.signature(fun)
+    if "_forward_unimplemented" in fun.__name__:
+        raise AttributeError("_forward_unimplemented not supported")
+    # search if a VAR_POSITIONAL or VAR_KEYWORD is present
+    # if yes insert step parameter before it, else insert it in last position
+    params = list(oldsig.parameters.values())
+    for i, param in enumerate(params):
+        if param.kind == inspect.Parameter.KEYWORD_ONLY:
+            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
+            break
+        if param.kind == inspect.Parameter.VAR_POSITIONAL:
+            out_type = inspect.Parameter.KEYWORD_ONLY
+            i = i + 1
+            break
+        if param.kind == inspect.Parameter.VAR_KEYWORD:
+            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
+            break
+        if (
+            param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
+            and param.default is not inspect._empty
+        ):
+            out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
+            break
+    else:
+        out_type = inspect.Parameter.POSITIONAL_OR_KEYWORD
+        i = len(params)
+    # new parameter name is params or params_[_...] if params if already present
+    name = "params"
+    while name in oldsig.parameters:
+        name += "_"
+    newparam = inspect.Parameter(name, out_type, default=None)
+    params.insert(i, newparam)
+    # we can now build the signature for the wrapper function
+    sig = oldsig.replace(parameters=params)
+
+    new_fun.__signature__ = sig
     return new_fun
 
 
