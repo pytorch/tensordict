@@ -221,7 +221,7 @@ def _decorate_funs(
     model.__dict__["_functionalized"] = True
     model.__dict__["_is_stateless"] = make_stateless
 
-    for name, module in model.named_children():
+    for module in model.children():
         # we decorate forward for the sub-modules
         _decorate_funs(module, make_stateless=make_stateless)
 

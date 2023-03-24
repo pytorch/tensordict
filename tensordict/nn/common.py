@@ -13,7 +13,7 @@ from typing import Any, Callable, Iterable, Sequence
 
 import torch
 
-from tensordict.nn.functional_modules import is_functional, make_functional
+from tensordict.nn.functional_modules import make_functional
 from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NestedKey
 from torch import nn, Tensor
