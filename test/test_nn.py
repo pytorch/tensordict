@@ -1499,6 +1499,26 @@ def test_keyerr_msg():
         module(TensorDict({"c": torch.randn(())}, []))
 
 
+def test_method_forward():
+    # ensure calls to custom methods are correctly forwarded to wrapped module
+    from unittest.mock import MagicMock
+    class MyModule(nn.Module):
+        def mycustommethod(self):
+            pass
+        def overwrittenmethod(self):
+            pass
+
+    MyModule.mycustommethod = MagicMock()
+    MyModule.overwrittenmethod = MagicMock()
+
+    module = TensorDictModule(mymodule)
+    module.mycustommethod()
+    assert MyModule.mycustommethod.called
+
+    module.mycustommethod()
+    assert not MyModule.overwrittenmethod.called
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
