@@ -11,12 +11,11 @@ import inspect
 import numbers
 import re
 import sys
-import typing
 import warnings
 from copy import copy
 from dataclasses import dataclass
 from textwrap import indent
-from typing import Any, Callable, Sequence, TypeVar, Union
+from typing import Any, Callable, Sequence, TypeVar
 
 import tensordict as tensordict_lib
 
