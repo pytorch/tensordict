@@ -253,7 +253,9 @@ def _swap_state(
     return_old_tensordict: bool = False,
     old_tensordict: dict[str, torch.Tensor] | TensorDict | None = None,
 ) -> dict[str, torch.Tensor] | TensorDict | None:
+    was_stateless = model.__dict__["_is_stateless"]
     model.__dict__["_is_stateless"] = is_stateless
+    return_old_tensordict = return_old_tensordict and not was_stateless
     if return_old_tensordict and old_tensordict is None:
         old_tensordict = {}
     keys = set(tensordict.keys())
@@ -438,9 +440,7 @@ def _assign_params(
 ) -> TensorDict | None:
     if params is not None:
         out = _swap_state(module, params, make_stateless, return_old_tensordict)
-        if out is not None:
-            return TensorDict(out, [], _run_checks=False)
-        return None
+        return out
     return None
 
 
