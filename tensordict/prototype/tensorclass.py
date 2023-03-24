@@ -62,7 +62,7 @@ _TD_PASS_THROUGH = {
 def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
     cls = obj if isinstance(obj, type) else type(obj)
-    return dataclasses.is_dataclass(cls) and hasattr(cls, "__TENSORCLASS")
+    return dataclasses.is_dataclass(cls) and hasattr(cls, "_non_tensordict") and hasattr(cls, "_tensordict")
 
 
 def tensorclass(cls: T) -> T:
@@ -183,7 +183,6 @@ def tensorclass(cls: T) -> T:
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
-    cls.__TENSORCLASS = True
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
