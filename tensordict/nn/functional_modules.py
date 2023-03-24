@@ -385,6 +385,7 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
     params.insert(i, newparam)
     # we can now build the signature for the wrapper function
     sig = oldsig.replace(parameters=params)
+    fun.__signature__ = sig
 
     @wraps(fun)
     def new_fun(self, *args, **kwargs):
@@ -426,7 +427,9 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
                 else:
                     raise err
 
+    # print("0", new_fun.__signature__)
     new_fun.__signature__ = sig
+    # print("1", new_fun.__signature__)
     return new_fun
 
 
