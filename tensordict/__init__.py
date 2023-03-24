@@ -40,4 +40,5 @@ __all__ = [
     "is_tensor_collection",
     "pad",
     "PersistentTensorDict",
+    "is_functional",
 ]
