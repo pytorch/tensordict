@@ -2911,10 +2911,7 @@ class TensorDict(TensorDictBase):
         self._device = device
 
         if not _run_checks:
-            if isinstance(source, dict):
-                self._tensordict: dict = copy(source)
-            else:
-                self._tensordict: dict = dict(source)
+            self._tensordict: dict = dict(source)
             self._batch_size = torch.Size(batch_size)
             upd_dict = {}
             for key, value in self._tensordict.items():
