@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 
-import h5py
-
 import numpy as np
 import pytest
 import torch
@@ -15,7 +13,15 @@ from torch import multiprocessing as mp
 
 TIMEOUT = 100
 
+try:
+    import h5py
 
+    _has_h5py = True
+except ImportError:
+    _has_h5py = False
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 class TestH5Serialization:
     @classmethod
     def worker(cls, cyberbliptronics, q1, q2):

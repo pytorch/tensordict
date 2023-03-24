@@ -20,6 +20,13 @@ except ImportError as err:
     _has_torchsnapshot = False
     TORCHSNAPSHOT_ERR = str(err)
 
+try:
+    import h5py  # noqa
+
+    _has_h5py = True
+except ImportError:
+    _has_h5py = False
+
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
@@ -524,7 +531,9 @@ TD_BATCH_SIZE = 4
         "nested_tensorclass",
         "permute_td",
         "nested_stacked_td",
-        "td_h5",
+        pytest.param(
+            "td_h5", marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+        ),
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
