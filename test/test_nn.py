@@ -1513,7 +1513,7 @@ def test_method_forward():
     MyModule.mycustommethod = MagicMock()
     MyModule.overwrittenmethod = MagicMock()
 
-    module = TensorDictModule(MyModule, in_keys=[], out_keys=[])
+    module = TensorDictModule(MyModule, in_keys=["in"], out_keys=["out"])
     module.mycustommethod()
     assert MyModule.mycustommethod.called
 
