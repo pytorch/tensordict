@@ -17,6 +17,17 @@ from tensordict import TensorDict
 from tensordict.tensordict import TensorDictBase
 from torch import nn
 
+
+def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
+    """Simplified version of torch.nn.utils._named_member_accessor."""
+    if name in module._parameters:
+        module._parameters[name] = tensor  # type: ignore[assignment]
+    elif name in module._buffers:
+        module._buffers[name] = tensor
+    else:
+        setattr(module, name, tensor)
+
+
 _RESET_OLD_TENSORDICT = True
 try:
     import torch._functorch.vmap as vmap_src
@@ -253,8 +264,10 @@ def _swap_state(
     return_old_tensordict: bool = False,
     old_tensordict: dict[str, torch.Tensor] | TensorDict | None = None,
 ) -> dict[str, torch.Tensor] | TensorDict | None:
+    was_stateless = model.__dict__["_is_stateless"]
     model.__dict__["_is_stateless"] = is_stateless
-    if return_old_tensordict and old_tensordict is None:
+    # return_old_tensordict = return_old_tensordict and not was_stateless
+    if old_tensordict is None:
         old_tensordict = {}
     keys = set(tensordict.keys())
     children = []
@@ -271,7 +284,7 @@ def _swap_state(
             # faster than get(key, Tensordict(...))
             value = {}
 
-        _old_value = old_tensordict.get(key, None) if return_old_tensordict else None
+        _old_value = old_tensordict.get(key, None)
         _old_value = _swap_state(
             child,
             value,
@@ -279,8 +292,7 @@ def _swap_state(
             old_tensordict=_old_value,
             is_stateless=is_stateless,
         )
-        if old_tensordict is not None:
-            old_tensordict[key] = _old_value
+        old_tensordict[key] = _old_value
     for key in keys:
         value = tensordict.get(key)
         is_param = key in model.__dict__.get("_parameters")
@@ -291,10 +303,11 @@ def _swap_state(
             old_tensordict[key] = old_attr
         if is_param:
             delattr(model, key)
-        setattr(model, key, value)
-    if return_old_tensordict:
+        set_tensor(model, key, value)
+    if was_stateless or not return_old_tensordict:
         return old_tensordict
-    return None
+    else:
+        return TensorDict(old_tensordict, [])
 
 
 def is_functional(module: nn.Module):
@@ -326,7 +339,7 @@ def make_functional(
     _decorate_funs(
         module,
         funs_to_decorate=funs_to_decorate,
-        make_stateless=return_params and not keep_params,
+        make_stateless=not keep_params,
     )
     if return_params:
         params = extract_weights_and_buffers(
@@ -335,6 +348,8 @@ def make_functional(
         if keep_params:
             repopulate_module(module, params)
         return params
+    elif not keep_params:
+        extract_weights_and_buffers(module)
 
 
 def get_functional(
@@ -350,6 +365,47 @@ def get_functional(
 
 def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
     fun = getattr(module, fun_name)
+
+    @wraps(fun)
+    def new_fun(self, *args, **kwargs):
+        # 3 use cases: (1) params is the last arg, (2) params is in kwargs, (3) no params
+        _is_stateless = self.__dict__.get("_is_stateless", False)
+        params = kwargs.pop("params", None)
+        if _is_stateless or params is not None:
+            if params is None:
+                params = args[-1]
+                args = args[:-1]
+                # get the previous params, and tell the submodules not to look for params anymore
+            old_params = _assign_params(
+                self, params, make_stateless=False, return_old_tensordict=True
+            )
+            try:
+                out = getattr(type(self), fun_name)(self, *args, **kwargs)
+            finally:
+                # reset the previous params, and tell the submodules to look for params
+                _assign_params(
+                    self,
+                    old_params,
+                    make_stateless=_is_stateless,
+                    return_old_tensordict=False,
+                )
+            return out
+        else:
+            if params is not None:
+                kwargs["params"] = params
+            try:
+                return getattr(type(self), fun_name)(self, *args, **kwargs)
+            except TypeError as err:
+                pattern = r".*takes \d+ positional arguments but \d+ were given"
+                if re.match(pattern, str(err)) and isinstance(args[-1], TensorDictBase):
+                    raise TypeError(
+                        "It seems you tried to provide the parameters as an argument to the module when the module was not stateless. "
+                        "If this is the case, this error should vanish by providing the parameters using the ``module(..., params=params)`` "
+                        "syntax."
+                    ) from err
+                else:
+                    raise err
+
     # we need to update the signature so that params can be the last positional arg
     oldsig = inspect.signature(fun)
     if "_forward_unimplemented" in fun.__name__:
@@ -385,48 +441,8 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
     params.insert(i, newparam)
     # we can now build the signature for the wrapper function
     sig = oldsig.replace(parameters=params)
-    fun.__signature__ = sig
 
-    @wraps(fun)
-    def new_fun(self, *args, **kwargs):
-        # 3 use cases: (1) params is the last arg, (2) params is in kwargs, (3) no params
-        _is_stateless = self.__dict__.get("_is_stateless", False)
-        params = kwargs.pop("params", None)
-        if _is_stateless or params is not None:
-            if params is None:
-                params = args[-1]
-                args = args[:-1]
-                # get the previous params, and tell the submodules not to look for params anymore
-            old_params = _assign_params(
-                self, params, make_stateless=False, return_old_tensordict=True
-            )
-            try:
-                out = getattr(type(self), fun_name)(self, *args, **kwargs)
-            finally:
-                # reset the previous params, and tell the submodules to look for params
-                _assign_params(
-                    self,
-                    old_params,
-                    make_stateless=_is_stateless,
-                    return_old_tensordict=True,
-                )
-            return out
-        else:
-            if params is not None:
-                kwargs["params"] = params
-            try:
-                return getattr(type(self), fun_name)(self, *args, **kwargs)
-            except TypeError as err:
-                pattern = r".*takes \d+ positional arguments but \d+ were given"
-                if re.match(pattern, str(err)) and isinstance(args[-1], TensorDictBase):
-                    raise TypeError(
-                        "It seems you tried to provide the parameters as an argument to the module when the module was not stateless. "
-                        "If this is the case, this error should vanish by providing the parameters using the ``module(..., params=params)`` "
-                        "syntax."
-                    ) from err
-                else:
-                    raise err
-
+    new_fun.__signature__ = sig
     return new_fun
 
 
@@ -437,10 +453,8 @@ def _assign_params(
     return_old_tensordict: bool,
 ) -> TensorDict | None:
     if params is not None:
-        out = _swap_state(module, params, make_stateless, return_old_tensordict)
-        if out is not None:
-            return TensorDict(out, [], _run_checks=False)
-        return None
+        return _swap_state(module, params, make_stateless, return_old_tensordict)
+
     return None
 
 
