@@ -236,14 +236,14 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
+            from tensordict.prototype import is_tensorclass
+
             source = self.source
             if isinstance(source, str):
                 source = getattr(_self, source)
             tensordict = None
             if len(args):
-                if not isinstance(args[0], TensorDictBase):
-                    pass
-                else:
+                if isinstance(args[0], TensorDictBase) or is_tensorclass(args[0]):
                     tensordict, args = args[0], args[1:]
             if tensordict is None:
                 tensordict_values = {}

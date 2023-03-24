@@ -20,6 +20,7 @@ from tensordict.nn import (
 from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import set_interaction_mode
+from tensordict.prototype import tensorclass
 from torch import nn
 from torch.distributions import Normal
 
@@ -55,6 +56,29 @@ class TestTDModule:
         tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
+
+    @pytest.mark.parametrize("lazy", [True, False])
+    def test_stateful_tensorclass(self, lazy):
+        @tensorclass
+        class Data:
+            inputs: torch.Tensor
+            outputs: torch.Tensor = None
+
+        torch.manual_seed(0)
+        param_multiplier = 1
+        if lazy:
+            net = nn.LazyLinear(4 * param_multiplier)
+        else:
+            net = nn.Linear(3, 4 * param_multiplier)
+
+        tensordict_module = TensorDictModule(
+            module=net, in_keys=["inputs"], out_keys=["outputs"]
+        )
+
+        tc = Data(inputs=torch.randn(3, 3), batch_size=[3])
+        tensordict_module(tc)
+        assert tc.shape == torch.Size([3])
+        assert tc.get("outputs").shape == torch.Size([3, 4])
 
     @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
     @pytest.mark.parametrize("lazy", [True, False])
@@ -212,6 +236,31 @@ class TestTDModule:
         tensordict_module(td, params=params)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    def test_functional_tensorclass(self):
+        @tensorclass
+        class Data:
+            inputs: torch.Tensor
+            outputs: torch.Tensor = None
+
+        torch.manual_seed(0)
+        param_multiplier = 1
+
+        net = nn.Linear(3, 4 * param_multiplier)
+
+        tensordict_module = TensorDictModule(
+            module=net, in_keys=["inputs"], out_keys=["outputs"]
+        )
+
+        params = make_functional(tensordict_module)
+
+        tc = Data(inputs=torch.randn(3, 3), batch_size=[3])
+        tensordict_module(tc, params=params)
+        assert tc.shape == torch.Size([3])
+        assert tc.get("outputs").shape == torch.Size([3, 4])
 
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
