@@ -19,7 +19,7 @@ from torch import nn
 
 
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
-    """Simplified version of torch.nn.utils._named_member_accessor"""
+    """Simplified version of torch.nn.utils._named_member_accessor."""
     if name in module._parameters:
         module._parameters[name] = tensor  # type: ignore[assignment]
     elif name in module._buffers:
