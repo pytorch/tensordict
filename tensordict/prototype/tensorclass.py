@@ -625,6 +625,9 @@ def _get(self, key: NestedKey, default: Any = NO_DEFAULT):
             equivalent to chained calls of getattr.
         default: default value if the key is not found in the tensorclass.
 
+    Returns:
+        value stored with the input key
+
     """
     if isinstance(key, str):
         key = (key,)
