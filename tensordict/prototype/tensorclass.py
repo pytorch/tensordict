@@ -25,12 +25,12 @@ from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     _get_repr,
     is_tensor_collection,
+    NO_DEFAULT,
     TD_HANDLED_FUNCTIONS,
     TensorDict,
     TensorDictBase,
-    NO_DEFAULT,
 )
-from tensordict.utils import DeviceType, NestedKey, IndexType
+from tensordict.utils import DeviceType, IndexType, NestedKey
 from torch import Tensor
 
 T = TypeVar("T", bound=TensorDictBase)
@@ -591,8 +591,8 @@ def _set(self, key: NestedKey, value: Any):
 
     Args:
         key (str, tuple of str): name of the key to be set.
-           If tuple of str it is equivalent to chained calls of getattr 
-           followed by a final setattr. 
+           If tuple of str it is equivalent to chained calls of getattr
+           followed by a final setattr.
         value (Any): value to be stored in the tensorclass
 
     Returns:
@@ -601,13 +601,15 @@ def _set(self, key: NestedKey, value: Any):
     """
 
     if isinstance(key, str):
-        key = (key, )
+        key = (key,)
 
     if key and isinstance(key, tuple):
         if len(key) > 1:
             return getattr(self, key[0]).set(key[1:], value)
         return setattr(self, key[0], value)
-    raise ValueError(f"Supported type for key are str and tuple, got {key} of type {type(key)}")
+    raise ValueError(
+        f"Supported type for key are str and tuple, got {key} of type {type(key)}"
+    )
 
 
 def _set_at_(self, key: NestedKey, value: Any, idx: IndexType):
@@ -626,7 +628,7 @@ def _get(self, key: NestedKey, default: Any = NO_DEFAULT):
 
     """
     if isinstance(key, str):
-        key = (key, )
+        key = (key,)
 
     if isinstance(key, tuple):
         try:

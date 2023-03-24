@@ -997,13 +997,14 @@ def test_set():
         y: MyDataNest
         v: str
         k: Optional[Tensor] = None
-        
+
     batch_size = [3, 4]
     X = torch.ones(3, 4, 5)
     td = TensorDict({}, batch_size)
     data_nest = MyDataNest(X=X, v="test_nested", batch_size=batch_size)
     data = MyDataParent(
-        X=X, y=data_nest, z=td, v="test_tensorclass", batch_size=batch_size)
+        X=X, y=data_nest, z=td, v="test_tensorclass", batch_size=batch_size
+    )
 
     assert isinstance(data.y, type(data_nest))
     assert data.y._tensordict is data_nest._tensordict
@@ -1041,7 +1042,7 @@ def test_set():
     assert data.v == "test"
     assert "v" not in data._tensordict.keys()
     assert "v" in data._non_tensordict.keys()
-    
+
     # ensure optional fields are writable
     data.set("k", torch.zeros(3, 4, 5))
 
@@ -1075,7 +1076,7 @@ def test_get():
     # Testing nested tensor class
     assert data.get("y")._tensordict is data_nest._tensordict
     assert (data.get("y").X == X).all()
-    assert (data.get(("y","X")) == X).all()
+    assert (data.get(("y", "X")) == X).all()
     assert data.get("y").v == "test_nested"
     assert data.get(("y", "v")) == "test_nested"
     assert data.get("y").batch_size == torch.Size(batch_size)
@@ -1090,6 +1091,7 @@ def test_get():
 
     assert (data.get("X", "working") == X).all()
     assert data.get("v", "working") == v
+
 
 def test_tensorclass_set_at_():
     @tensorclass
@@ -1112,15 +1114,16 @@ def test_tensorclass_set_at_():
     v = "test_tensorclass"
     data = MyDataParent(X=X, y=data_nest, z=td, v=v, batch_size=batch_size)
 
-    data.set_at_("X", 5, slice(2,3)) 
-    data.set_at_(("y", "X"), 5, slice(2,3))
-    assert (data.get_at("X", slice(2,3)) == 5).all()
-    assert (data.get_at(("y", "X"), slice(2,3)) == 5).all()
+    data.set_at_("X", 5, slice(2, 3))
+    data.set_at_(("y", "X"), 5, slice(2, 3))
+    assert (data.get_at("X", slice(2, 3)) == 5).all()
+    assert (data.get_at(("y", "X"), slice(2, 3)) == 5).all()
     # assert other not changed
-    assert (data.get_at("X", slice(0,2)) == 1).all()
-    assert (data.get_at(("y", "X"), slice(0,2)) == 1).all()
-    assert (data.get_at("X", slice(3,5)) == 1).all()
-    assert (data.get_at(("y", "X"), slice(3,5)) == 1).all()
+    assert (data.get_at("X", slice(0, 2)) == 1).all()
+    assert (data.get_at(("y", "X"), slice(0, 2)) == 1).all()
+    assert (data.get_at("X", slice(3, 5)) == 1).all()
+    assert (data.get_at(("y", "X"), slice(3, 5)) == 1).all()
+
 
 def test_tensorclass_get_at():
     @tensorclass
@@ -1143,12 +1146,12 @@ def test_tensorclass_get_at():
     v = "test_tensorclass"
     data = MyDataParent(X=X, y=data_nest, z=td, v=v, batch_size=batch_size)
 
-    assert (data.get("X")[2:3] == data.get_at("X", slice(2,3))).all()
-    assert (data.get(("y","X"))[2:3] == data.get_at(("y", "X"), slice(2,3))).all()
-    
+    assert (data.get("X")[2:3] == data.get_at("X", slice(2, 3))).all()
+    assert (data.get(("y", "X"))[2:3] == data.get_at(("y", "X"), slice(2, 3))).all()
+
     # check default
-    assert data.get_at(("y", "foo"), slice(2,3), "working") == "working"
-    assert data.get_at("foo", slice(2,3), "working") == "working"
+    assert data.get_at(("y", "foo"), slice(2, 3), "working") == "working"
+    assert data.get_at("foo", slice(2, 3), "working") == "working"
 
 
 def test_pre_allocate():
