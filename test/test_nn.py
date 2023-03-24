@@ -1502,9 +1502,11 @@ def test_keyerr_msg():
 def test_method_forward():
     # ensure calls to custom methods are correctly forwarded to wrapped module
     from unittest.mock import MagicMock
+
     class MyModule(nn.Module):
         def mycustommethod(self):
             pass
+
         def overwrittenmethod(self):
             pass
 
