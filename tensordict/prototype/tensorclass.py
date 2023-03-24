@@ -599,7 +599,6 @@ def _set(self, key: NestedKey, value: Any):
         self
 
     """
-
     if isinstance(key, str):
         key = (key,)
 
