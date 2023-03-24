@@ -398,17 +398,32 @@ TORCH_TO_NUMPY_DTYPE_DICT = {
 }
 
 
-def _nested_key_type_check(key: NestedKey) -> None:
-    msg = "Expected key to be a string or non-empty tuple of strings, but found {}."
-    if type(key) is str:
-        return
-    is_tuple = type(key) is tuple
-    if not is_tuple:
-        raise TypeError(msg.format(type(key)))
-    else:
-        for subkey in key:
-            if type(subkey) is not str:
-                raise TypeError(msg.format(type(subkey)))
+def is_nested_key(key: NestedKey) -> bool:
+    """Returns True if key is a NestedKey."""
+    if key is None:
+        return False
+    if isinstance(key, str):
+        return True
+    if key and isinstance(key, (list, tuple)):
+        return all(isinstance(subkey, str) for subkey in key)
+    return False
+
+
+def is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
+    """Returns True if seq is a Sequence[NestedKey]."""
+    if seq and isinstance(seq, Sequence):
+        return all(is_nested_key(k) for k in seq)
+    return False
+
+
+def _seq_of_nested_key_check(seq: Sequence[NestedKey]) -> None:
+    if not is_seq_of_nested_key(seq):
+        raise ValueError(f"seq should be a Sequence[NestedKey]. Got {seq}")
+
+
+def _nested_key_check(key: NestedKey) -> None:
+    if not is_nested_key(key):
+        raise ValueError(f"key should be a Sequence[NestedKey]. Got {key}")
 
 
 def _normalize_key(key: NestedKey) -> NestedKey:

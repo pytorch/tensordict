@@ -1548,6 +1548,44 @@ def test_keyerr_msg():
         module(TensorDict({"c": torch.randn(())}, []))
 
 
+def test_input():
+    class MyModule(nn.Module):
+        pass
+
+    def mycallable():
+        pass
+
+    # this should work
+    for module in [MyModule(), mycallable]:
+        TensorDictModule(module, in_keys=["i"], out_keys=["o"])
+        TensorDictModule(module, in_keys=["i", "i2"], out_keys=["o"])
+        TensorDictModule(module, in_keys=["i"], out_keys=["o", "o2"])
+        TensorDictModule(module, in_keys=["i", "i2"], out_keys=["o", "o2"])
+        TensorDictModule(module, in_keys=[tuple("i")], out_keys=[tuple("o")])
+        TensorDictModule(module, in_keys=[("i", "i2")], out_keys=[tuple("o")])
+        TensorDictModule(module, in_keys=[tuple("i")], out_keys=[("o", "o2")])
+        TensorDictModule(module, in_keys=[("i", "i2")], out_keys=[("o", "o2")])
+
+        # corner cases that should work
+        TensorDictModule(module, in_keys=[("_", "")], out_keys=[("_", "")])
+        TensorDictModule(module, in_keys=[("_", "")], out_keys=[("a", "a")])
+        TensorDictModule(module, in_keys=[""], out_keys=["_"])
+        TensorDictModule(module, in_keys=["_"], out_keys=[""])
+
+    # this should raise
+    for wrong_model in (MyModule, int, [123], 1, torch.randn(2)):
+        with pytest.raises(ValueError, match=r"Module .* is not callable"):
+            TensorDictModule(wrong_model, in_keys=["in"], out_keys=["out"])
+
+    # missing or wrong keys
+    for wrong_keys in (None, (), 123, [123], [(("too", "much", "nesting"),)]):
+        with pytest.raises(ValueError, match="seq should be a Sequence"):
+            TensorDictModule(MyModule(), in_keys=["in"], out_keys=wrong_keys)
+
+        with pytest.raises(ValueError, match="seq should be a Sequence"):
+            TensorDictModule(MyModule(), in_keys=wrong_keys, out_keys=["out"])
+
+
 def test_method_forward():
     # ensure calls to custom methods are correctly forwarded to wrapped module
     from unittest.mock import MagicMock
