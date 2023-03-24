@@ -62,7 +62,11 @@ _TD_PASS_THROUGH = {
 def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
     cls = obj if isinstance(obj, type) else type(obj)
-    return dataclasses.is_dataclass(cls) and hasattr(cls, "_non_tensordict") and hasattr(cls, "_tensordict")
+    return (
+        dataclasses.is_dataclass(cls) 
+        and hasattr(cls, "_non_tensordict")
+        and hasattr(cls, "_tensordict")
+    )
 
 
 def tensorclass(cls: T) -> T:
