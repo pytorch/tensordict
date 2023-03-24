@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import argparse
 import dataclasses
 import inspect
@@ -926,6 +931,7 @@ def test_setattr(any_to_td):
         z: TensorDictBase
         y: MyDataNest
         v: Any
+        k: Optional[Tensor] = None
 
     batch_size = [3, 4]
     if any_to_td:
@@ -973,6 +979,179 @@ def test_setattr(any_to_td):
     assert data.v == "test"
     assert "v" not in data._tensordict.keys()
     assert "v" in data._non_tensordict.keys()
+
+    # ensure optional fields are writable
+    data.k = torch.zeros(3, 4, 5)
+
+
+def test_set():
+    @tensorclass
+    class MyDataNest:
+        X: torch.Tensor
+        v: str
+
+    @tensorclass
+    class MyDataParent:
+        X: Tensor
+        z: TensorDictBase
+        y: MyDataNest
+        v: str
+        k: Optional[Tensor] = None
+
+    batch_size = [3, 4]
+    X = torch.ones(3, 4, 5)
+    td = TensorDict({}, batch_size)
+    data_nest = MyDataNest(X=X, v="test_nested", batch_size=batch_size)
+    data = MyDataParent(
+        X=X, y=data_nest, z=td, v="test_tensorclass", batch_size=batch_size
+    )
+
+    assert isinstance(data.y, type(data_nest))
+    assert data.y._tensordict is data_nest._tensordict
+    data.set("X", torch.zeros(3, 4, 5))
+    assert (data.X == torch.zeros(3, 4, 5)).all()
+    v_new = "test_bluff"
+    data.set("v", v_new)
+    assert data.v == v_new
+    # check that you can't mess up the batch_size
+    with pytest.raises(
+        RuntimeError, match=re.escape("the tensor smth has shape torch.Size([1]) which")
+    ):
+        data.set("z", TensorDict({"smth": torch.zeros(1)}, []))
+    # check that you can't write any attribute
+    with pytest.raises(AttributeError, match=re.escape("Cannot set the attribute")):
+        data.set("newattr", TensorDict({"smth": torch.zeros(1)}, []))
+
+    # Testing nested cases
+    data_nest.set("X", torch.zeros(3, 4, 5))
+    assert (data_nest.X == torch.zeros(3, 4, 5)).all()
+    assert (data.y.X == torch.zeros(3, 4, 5)).all()
+    assert data.y.v == "test_nested"
+    data.set(("y", "v"), "test_nested_new")
+    assert data.y.v == data_nest.v == "test_nested_new"
+    data_nest.set("v", "test_nested")
+    assert data_nest.v == data.y.v == "test_nested"
+
+    # Testing if user can override the type of the attribute
+    data.set("v", torch.ones(3, 4, 5))
+    assert (data.v == torch.ones(3, 4, 5)).all()
+    assert "v" in data._tensordict.keys()
+    assert "v" not in data._non_tensordict.keys()
+
+    data.set("v", "test")
+    assert data.v == "test"
+    assert "v" not in data._tensordict.keys()
+    assert "v" in data._non_tensordict.keys()
+
+    # ensure optional fields are writable
+    data.set("k", torch.zeros(3, 4, 5))
+
+
+def test_get():
+    @tensorclass
+    class MyDataNest:
+        X: torch.Tensor
+        v: str
+
+    @tensorclass
+    class MyDataParent:
+        X: Tensor
+        z: TensorDictBase
+        y: MyDataNest
+        v: str
+        k: Optional[Tensor] = None
+
+    batch_size = [3, 4]
+    X = torch.ones(3, 4, 5)
+    td = TensorDict({}, batch_size)
+    data_nest = MyDataNest(X=X, v="test_nested", batch_size=batch_size)
+    v = "test_tensorclass"
+    data = MyDataParent(X=X, y=data_nest, z=td, v=v, batch_size=batch_size)
+    assert isinstance(data.y, type(data_nest))
+    assert (data.get("X") == X).all()
+    assert data.get("batch_size") == torch.Size(batch_size)
+    assert data.get("v") == v
+    assert (data.get("z") == td).all()
+
+    # Testing nested tensor class
+    assert data.get("y")._tensordict is data_nest._tensordict
+    assert (data.get("y").X == X).all()
+    assert (data.get(("y", "X")) == X).all()
+    assert data.get("y").v == "test_nested"
+    assert data.get(("y", "v")) == "test_nested"
+    assert data.get("y").batch_size == torch.Size(batch_size)
+
+    # ensure optional fields are there
+    assert data.get("k") is None
+
+    # ensure default works
+    assert data.get("foo", "working") == "working"
+    assert data.get(("foo", "foo2"), "working") == "working"
+    assert data.get(("X", "foo2"), "working") == "working"
+
+    assert (data.get("X", "working") == X).all()
+    assert data.get("v", "working") == v
+
+
+def test_tensorclass_set_at_():
+    @tensorclass
+    class MyDataNest:
+        X: torch.Tensor
+        v: str
+
+    @tensorclass
+    class MyDataParent:
+        X: Tensor
+        z: TensorDictBase
+        y: MyDataNest
+        v: str
+        k: Optional[Tensor] = None
+
+    batch_size = [3, 4]
+    X = torch.ones(3, 4, 5)
+    td = TensorDict({}, batch_size)
+    data_nest = MyDataNest(X=X, v="test_nested", batch_size=batch_size)
+    v = "test_tensorclass"
+    data = MyDataParent(X=X, y=data_nest, z=td, v=v, batch_size=batch_size)
+
+    data.set_at_("X", 5, slice(2, 3))
+    data.set_at_(("y", "X"), 5, slice(2, 3))
+    assert (data.get_at("X", slice(2, 3)) == 5).all()
+    assert (data.get_at(("y", "X"), slice(2, 3)) == 5).all()
+    # assert other not changed
+    assert (data.get_at("X", slice(0, 2)) == 1).all()
+    assert (data.get_at(("y", "X"), slice(0, 2)) == 1).all()
+    assert (data.get_at("X", slice(3, 5)) == 1).all()
+    assert (data.get_at(("y", "X"), slice(3, 5)) == 1).all()
+
+
+def test_tensorclass_get_at():
+    @tensorclass
+    class MyDataNest:
+        X: torch.Tensor
+        v: str
+
+    @tensorclass
+    class MyDataParent:
+        X: Tensor
+        z: TensorDictBase
+        y: MyDataNest
+        v: str
+        k: Optional[Tensor] = None
+
+    batch_size = [3, 4]
+    X = torch.ones(3, 4, 5)
+    td = TensorDict({}, batch_size)
+    data_nest = MyDataNest(X=X, v="test_nested", batch_size=batch_size)
+    v = "test_tensorclass"
+    data = MyDataParent(X=X, y=data_nest, z=td, v=v, batch_size=batch_size)
+
+    assert (data.get("X")[2:3] == data.get_at("X", slice(2, 3))).all()
+    assert (data.get(("y", "X"))[2:3] == data.get_at(("y", "X"), slice(2, 3))).all()
+
+    # check default
+    assert data.get_at(("y", "foo"), slice(2, 3), "working") == "working"
+    assert data.get_at("foo", slice(2, 3), "working") == "working"
 
 
 def test_pre_allocate():

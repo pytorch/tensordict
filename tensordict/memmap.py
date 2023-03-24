@@ -547,7 +547,11 @@ MemmapTensor of shape {self.shape}."""
         if not hasattr(self, "file"):
             return
         # for some reason Memmap keeps 2 refs to the file
-        if HAS_OWNERSHIP.get(self.filename, False) and getrefcount(self.file) <= 2:
+        if (
+            HAS_OWNERSHIP
+            and HAS_OWNERSHIP.get(self.filename, False)
+            and getrefcount(self.file) <= 2
+        ):
             if isinstance(self.file, tempfile._TemporaryFileWrapper) and os.path.isfile(
                 self.filename
             ):

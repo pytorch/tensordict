@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterable, Sequence
 
 import torch
 
+from tensordict.nn.functional_modules import make_functional
 from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NestedKey
 from torch import nn, Tensor
@@ -279,6 +280,10 @@ class dispatch:
 class TensorDictModule(nn.Module):
     """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
 
+    By default, :class:`TensorDictModule` subclasses are always functional,
+    meaning that they support the ``td_module(input, params=params)`` function
+    call signature.
+
     Args:
         module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
             module (FunctionalModule or FunctionalModuleWithBuffers), in which case the :obj:`forward` method will expect
@@ -377,6 +382,7 @@ class TensorDictModule(nn.Module):
             )
 
         self.module = module
+        make_functional(self, keep_params=True, return_params=False)
 
     @property
     def is_functional(self) -> bool:

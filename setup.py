@@ -130,6 +130,7 @@ def _main(argv):
         extras_require={
             "tests": ["pytest", "pyyaml", "pytest-instafail", "pytest-rerunfailures"],
             "checkpointing": ["torchsnapshot-nightly"],
+            "h5": ["h5py>=3.8"],
         },
         zip_safe=False,
         classifiers=[

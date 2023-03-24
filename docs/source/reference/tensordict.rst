@@ -15,6 +15,7 @@ regular pytorch tensors.
     TensorDict
     SubTensorDict
     LazyStackedTensorDict
+    PersistentTensorDict
 
 Memory-mapped tensors
 ---------------------

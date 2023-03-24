@@ -200,10 +200,33 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
 # Tensordict-compatible Functional modules
 
 
+def _decorate_funs(
+    model: nn.Module,
+    make_stateless: bool,
+    funs_to_decorate: Iterable[str] | None = None,
+) -> None:
+    if funs_to_decorate is None:
+        funs_to_decorate = ["forward"]
+
+    for fun_to_decorate in funs_to_decorate:
+        try:
+            setattr(
+                model,
+                fun_to_decorate,
+                types.MethodType(_make_decorator(model, fun_to_decorate), model),
+            )
+        except AttributeError:
+            continue
+    model.__dict__["_functionalized"] = True
+    model.__dict__["_is_stateless"] = make_stateless
+
+    for module in model.children():
+        # we decorate forward for the sub-modules
+        _decorate_funs(module, make_stateless=make_stateless)
+
+
 def extract_weights_and_buffers(
     model: nn.Module,
-    funs_to_decorate: Iterable[str] | None = None,
-    recurse: bool = True,
 ) -> TensorDict:
     """Extracts the weights and buffers of a model in a tensordict, and adapts the modules to read those inputs."""
     tensordict = {}
@@ -220,21 +243,6 @@ def extract_weights_and_buffers(
         if module_tensordict is not None:
             tensordict[name] = module_tensordict
 
-    if funs_to_decorate is None:
-        funs_to_decorate = ["forward"]
-
-    if not model.__dict__.get("_functionalized", False):
-        for fun_to_decorate in funs_to_decorate:
-            try:
-                setattr(
-                    model,
-                    fun_to_decorate,
-                    types.MethodType(_make_decorator(model, fun_to_decorate), model),
-                )
-            except AttributeError:
-                continue
-    model.__dict__["_functionalized"] = True
-    model.__dict__["_is_stateless"] = True
     return TensorDict(tensordict, [], _run_checks=False)
 
 
@@ -289,13 +297,44 @@ def _swap_state(
     return None
 
 
+def is_functional(module: nn.Module):
+    """Checks if :func:`make_functional` has been called on the module."""
+    return "_functionalized" in module.__dict__
+
+
 def make_functional(
     module: nn.Module,
     funs_to_decorate: Iterable[str] | None = None,
+    keep_params: bool = False,
+    return_params: bool = True,
 ) -> TensorDict:
-    """Converts a nn.Module to a functional module in-place, and returns its params."""
-    params = extract_weights_and_buffers(module, funs_to_decorate=funs_to_decorate)
-    return params
+    """Converts a nn.Module to a functional module in-place, and returns its params.
+
+    Args:
+        module (torch.nn.Module): module that is to be made functional.
+        funs_to_decorate (iterable of str, optional): each string must correspond
+            to a function belonging to module. For nested modules, the
+            :meth:`torch.nn.Module.forward` method will be decorated.
+            Defaults to ``"forward"``.
+        keep_params (bool, optional): if ``True``, the module will keep its
+            parameters. Defaults to ``False``.
+        return_params (bool, optional): if ``True``, the parameters will
+            be collected in a nested tensordict and returned. If ``False``,
+            the module will be made functional but still be stateful.
+
+    """
+    _decorate_funs(
+        module,
+        funs_to_decorate=funs_to_decorate,
+        make_stateless=return_params and not keep_params,
+    )
+    if return_params:
+        params = extract_weights_and_buffers(
+            module,
+        )
+        if keep_params:
+            repopulate_module(module, params)
+        return params
 
 
 def get_functional(

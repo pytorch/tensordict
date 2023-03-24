@@ -92,7 +92,8 @@ class ProbabilisticTensorDictModule(nn.Module):
         out_keys (str or iterable of str): keys where the sampled values will be
             written. Importantly, if these keys are found in the input TensorDict, the
             sampling step will be skipped.
-        default_interaction_mode (str, optional): default method to be used to retrieve
+        default_interaction_mode (str, optional): keyword-only argument.
+            Default method to be used to retrieve
             the output value. Should be one of: 'mode', 'median', 'mean' or 'random'
             (in which case the value is sampled randomly from the distribution). Default
             is 'mode'.
@@ -102,20 +103,26 @@ class ProbabilisticTensorDictModule(nn.Module):
             `default_interaction_mode` of the `ProbabilisticTDModule` instance will be
             used. Note that DataCollector instances will use `set_interaction_mode` to
             `"random"` by default.
-        distribution_class (Type, optional): a torch.distributions.Distribution class to
-            be used for sampling. Default is Delta.
-        distribution_kwargs (dict, optional): kwargs to be passed to the distribution.
-        return_log_prob (bool, optional): if True, the log-probability of the
+        distribution_class (Type, optional): keyword-only argument.
+            A :class:`torch.distributions.Distribution` class to
+            be used for sampling.
+            Default is :class:`tensordict.nn.distributions.Delta`.
+        distribution_kwargs (dict, optional): keyword-only argument.
+            Keyword-argument pairs to be passed to the distribution.
+        return_log_prob (bool, optional): keyword-only argument.
+            If ``True``, the log-probability of the
             distribution sample will be written in the tensordict with the key
-            `'sample_log_prob'`. Default is `False`.
-        cache_dist (bool, optional): EXPERIMENTAL: if True, the parameters of the
+            `'sample_log_prob'`. Default is ``False``.
+        cache_dist (bool, optional): keyword-only argument.
+            EXPERIMENTAL: if ``True``, the parameters of the
             distribution (i.e. the output of the module) will be written to the
             tensordict along with the sample. Those parameters can be used to re-compute
             the original distribution later on (e.g. to compute the divergence between
             the distribution used to sample the action and the updated distribution in
-            PPO). Default is `False`.
-        n_empirical_estimate (int, optional): number of samples to compute the empirical
-            mean when it is not available. Default is 1000
+            PPO). Default is ``False``.
+        n_empirical_estimate (int, optional): keyword-only argument.
+            Number of samples to compute the empirical
+            mean when it is not available. Defaults to 1000.
 
     Examples:
         >>> import torch
@@ -189,6 +196,7 @@ class ProbabilisticTensorDictModule(nn.Module):
         self,
         in_keys: str | Sequence[str] | dict,
         out_keys: str | Sequence[str] | None = None,
+        *,
         default_interaction_mode: str = "mode",
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
@@ -330,7 +338,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     method to recover the distribution object from the ``ProbabilisticTensorDictModule``
 
     Args:
-         modules (iterable of TensorDictModules): ordered sequence of TensorDictModule
+         modules (sequence of TensorDictModules): ordered sequence of TensorDictModule
             instances, terminating in ProbabilisticTensorDictModule, to be run
             sequentially.
          partial_tolerant (bool, optional): if True, the input tensordict can miss some

@@ -11,12 +11,11 @@ import inspect
 import numbers
 import re
 import sys
-import typing
 import warnings
 from copy import copy
 from dataclasses import dataclass
 from textwrap import indent
-from typing import Any, Callable, Sequence, TypeVar, Union
+from typing import Any, Callable, Sequence, TypeVar
 
 import tensordict as tensordict_lib
 
@@ -26,18 +25,16 @@ from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     _get_repr,
     is_tensor_collection,
+    NO_DEFAULT,
     TD_HANDLED_FUNCTIONS,
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import DeviceType, NestedKey
+from tensordict.utils import DeviceType, IndexType, NestedKey
 from torch import Tensor
 
 T = TypeVar("T", bound=TensorDictBase)
 PY37 = sys.version_info < (3, 8)
-
-# We keep a dict of str -> class to call the class based on the string
-CLASSES_DICT: dict[str, type] = {}
 
 # Regex precompiled patterns
 OPTIONAL_PATTERN = re.compile(r"Optional\[(.*?)\]")
@@ -66,7 +63,7 @@ _TD_PASS_THROUGH = {
 def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
     cls = obj if isinstance(obj, type) else type(obj)
-    return dataclasses.is_dataclass(cls) and cls.__name__ in CLASSES_DICT
+    return dataclasses.is_dataclass(cls) and hasattr(cls, "__TENSORCLASS")
 
 
 def tensorclass(cls: T) -> T:
@@ -181,16 +178,20 @@ def tensorclass(cls: T) -> T:
     cls.__len__ = _len
     cls.__eq__ = __eq__
     cls.__ne__ = __ne__
+    cls.set = _set
+    cls.set_at_ = _set_at_
+    cls.get = _get
+    cls.get_at = _get_at
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
+    cls.__TENSORCLASS = True
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
-    CLASSES_DICT[cls.__name__] = cls
     tensordict_lib.tensordict._ACCEPTED_CLASSES += [cls]
     return cls
 
@@ -365,8 +366,6 @@ def _getattribute_wrapper(getattribute: Callable) -> Callable:
                 and item in self.__dict__["_tensordict"].keys()
             ):
                 out = self._tensordict[item]
-                expected_type = self.__dataclass_fields__[item].type
-                out = _get_typed_output(out, expected_type)
                 return out
             elif (
                 "_non_tensordict" in self.__dict__
@@ -587,6 +586,73 @@ def _device_setter(self, value: DeviceType) -> None:
     )
 
 
+def _set(self, key: NestedKey, value: Any):
+    """Sets a new key-value pair.
+
+    Args:
+        key (str, tuple of str): name of the key to be set.
+           If tuple of str it is equivalent to chained calls of getattr
+           followed by a final setattr.
+        value (Any): value to be stored in the tensorclass
+
+    Returns:
+        self
+
+    """
+    if isinstance(key, str):
+        key = (key,)
+
+    if key and isinstance(key, tuple):
+        if len(key) > 1:
+            return getattr(self, key[0]).set(key[1:], value)
+        return setattr(self, key[0], value)
+    raise ValueError(
+        f"Supported type for key are str and tuple, got {key} of type {type(key)}"
+    )
+
+
+def _set_at_(self, key: NestedKey, value: Any, idx: IndexType):
+    if key in self._non_tensordict:
+        del self._non_tensordict[key]
+    return self._tensordict.set_at_(key, value, idx)
+
+
+def _get(self, key: NestedKey, default: Any = NO_DEFAULT):
+    """Gets the value stored with the input key.
+
+    Args:
+        key (str, tuple of str): key to be queried. If tuple of str it is
+            equivalent to chained calls of getattr.
+        default: default value if the key is not found in the tensorclass.
+
+    Returns:
+        value stored with the input key
+
+    """
+    if isinstance(key, str):
+        key = (key,)
+
+    if isinstance(key, tuple):
+        try:
+            if len(key) > 1:
+                return getattr(self, key[0]).get(key[1:])
+            return getattr(self, key[0])
+        except AttributeError:
+            if default is NO_DEFAULT:
+                raise
+            return default
+    raise ValueError(f"Supported type for key are str and tuple, got {type(key)}")
+
+
+def _get_at(self, key: NestedKey, idx, default: Any = NO_DEFAULT):
+    try:
+        return self.get(key, NO_DEFAULT)[idx]
+    except AttributeError:
+        if default is NO_DEFAULT:
+            raise
+        return default
+
+
 def _batch_size(self) -> torch.Size:
     """Retrieves the batch size for the tensor class.
 
@@ -770,28 +836,6 @@ def __ne__(self, other: object) -> bool:
     return _from_tensordict_with_none(self, tensor)
 
 
-def _get_typed_output(out, expected_type: str | type):
-    # from __future__ import annotations turns types in strings. For those we use CLASSES_DICT.
-    # Otherwise, if the output is some TensorDictBase subclass, we check the type and if it
-    # does not match, we map it. In all other cases, just return what has been gathered.
-    if isinstance(expected_type, str) and expected_type in CLASSES_DICT:
-        if isinstance(out, CLASSES_DICT[expected_type]):
-            return out
-        out = CLASSES_DICT[expected_type]._from_tensordict(out)
-    elif (
-        isinstance(expected_type, type)
-        and not isinstance(out, expected_type)
-        and isinstance(out, TensorDictBase)
-    ):
-        out = expected_type._from_tensordict(out)
-    elif isinstance(out, TensorDictBase):
-        dest_dtype = _check_td_out_type(expected_type)
-        if dest_dtype is not None:
-            out = dest_dtype._from_tensordict(out)
-
-    return out
-
-
 def _single_td_field_as_str(key, item, tensordict):
     """Returns a string as a  key-value pair of tensordict.
 
@@ -843,79 +887,3 @@ def _all_non_td_fields_as_str(src_dict) -> list:
             result.append(f"{key}={repr(val)}")
 
     return result
-
-
-def _check_td_out_type(field_def):
-    """This function determines the type of attributes in the tensorclass.
-
-    in order that results from calls to the underlying tensordict
-    can be cast to the expected type before being returned
-    """
-    if PY37:
-        field_def = str(field_def)
-    if isinstance(field_def, str):
-        optional_match = OPTIONAL_PATTERN.search(field_def)
-        union_match = UNION_PATTERN.search(field_def)
-        if optional_match is not None:
-            args = [optional_match.group(1)]
-        elif union_match is not None:
-            args = union_match.group(1).split(", ")
-        else:
-            args = None
-        if args:
-            args = [arg for arg in args if arg not in ("NoneType",)]
-        # skip all Any or TensorDict or Optional[TensorDict] or Union[TensorDict] or Optional[Any]
-        if (args is None and (field_def == "Any" or "TensorDict" in field_def)) or (
-            args and len(args) == 1 and args[0] == "Any"
-        ):
-            return None
-        if args and len(args) == 1 and "TensorDict" in args[0]:
-            return None
-        elif args:
-            # remove the NoneType from args
-            if len(args) == 1 and args[0] in CLASSES_DICT:
-                return CLASSES_DICT[args[0]]
-            if len(args) == 1 and ("TensorDict" in args[0] or args[0] == "Any"):
-                return None
-            else:
-                raise TypeError(
-                    f"{field_def} has args {args} which can't be deterministically cast."
-                )
-        elif args is None:
-            return None
-        else:
-            raise TypeError(
-                f"{field_def} has args {args} which can't be deterministically cast."
-            )
-    else:
-        if typing.get_origin(field_def) is Union:
-            args = typing.get_args(field_def)
-            # remove the NoneType from args
-            args = [arg for arg in args if arg not in (type(None),)]
-            if len(args) == 1 and (
-                typing.Any is not args[0]
-                and args[0] is not TensorDictBase
-                and TensorDictBase not in args[0].__bases__
-            ):
-                # If there is just one type in Union or Optional, we return that type
-                return args[0]
-            elif len(args) == 1 and (
-                typing.Any is args[0]
-                or args[0] is TensorDictBase
-                or TensorDictBase in args[0].__bases__
-            ):
-                # Any or any TensorDictBase subclass are always ok if alone
-                return None
-            else:
-                raise TypeError(
-                    f"{field_def} has args {args} which can't be deterministically cast."
-                )
-        elif (
-            field_def is typing.Any
-            or field_def is TensorDictBase
-            or TensorDictBase in field_def.__bases__
-        ):
-            # Any or any TensorDictBase subclass are alway ok if alone
-            return None
-        else:
-            raise TypeError(f"{field_def} can't be deterministically cast.")

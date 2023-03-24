@@ -134,11 +134,11 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
     if tensor_indices:
         try:
             b = np.broadcast(*tensor_indices)
-        except ValueError:
+        except ValueError as err:
             raise ValueError(
                 "When indexing with tensor-like indices, each of those indices must be "
-                "broadcastable to a common shape."
-            )
+                f"broadcastable to a common shape. Got indices: {tensor_indices}."
+            ) from err
         if not contiguous:
             bs.extend(b.shape)
             b = None
@@ -147,10 +147,15 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
 
     iter_bs = iter(shape)
 
+    cursor = -1
     for _item in sanitized_items:
+        cursor += 1
         if isinstance(_item, slice):
             batch = next(iter_bs)
             bs.append(len(range(*_item.indices(batch))))
+        elif isinstance(_item, range):
+            batch = next(iter_bs)
+            bs.append(min(batch, len(_item)))
         elif isinstance(_item, (list, torch.Tensor, np.ndarray)):
             batch = next(iter_bs)
             if b is not None:
@@ -167,6 +172,15 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
                     f"The shape {shape} is incompatible with " f"the index {items}."
                 )
             continue
+        elif _item is Ellipsis:
+            if cursor == len(sanitized_items) - 1:
+                # then we can just skip
+                continue
+            n_upcoming = len(sanitized_items) - cursor - 1
+            while cursor < len(shape) - n_upcoming:
+                batch = next(iter_bs)
+                bs.append(batch)
+                cursor += 1
         else:
             raise NotImplementedError(
                 f"batch dim cannot be computed for type {type(_item)}"
@@ -599,7 +613,7 @@ def _ndimension(tensor: torch.Tensor) -> int:
 
 def _shape(tensor: torch.Tensor) -> torch.Size:
     try:
-        return tensor.shape
+        return torch.Size(tensor.shape)
     except AttributeError as err:
         if type(tensor) is KeyedJaggedTensor:
             return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
