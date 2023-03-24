@@ -266,8 +266,8 @@ def _swap_state(
 ) -> dict[str, torch.Tensor] | TensorDict | None:
     was_stateless = model.__dict__["_is_stateless"]
     model.__dict__["_is_stateless"] = is_stateless
-    return_old_tensordict = return_old_tensordict and not was_stateless
-    if return_old_tensordict and old_tensordict is None:
+    # return_old_tensordict = return_old_tensordict and not was_stateless
+    if old_tensordict is None:
         old_tensordict = {}
     keys = set(tensordict.keys())
     children = []
@@ -284,7 +284,7 @@ def _swap_state(
             # faster than get(key, Tensordict(...))
             value = {}
 
-        _old_value = old_tensordict.get(key, None) if return_old_tensordict else None
+        _old_value = old_tensordict.get(key, None)
         _old_value = _swap_state(
             child,
             value,
@@ -292,8 +292,7 @@ def _swap_state(
             old_tensordict=_old_value,
             is_stateless=is_stateless,
         )
-        if old_tensordict is not None:
-            old_tensordict[key] = _old_value
+        old_tensordict[key] = _old_value
     for key in keys:
         value = tensordict.get(key)
         is_param = key in model.__dict__.get("_parameters")
@@ -305,9 +304,10 @@ def _swap_state(
         if is_param:
             delattr(model, key)
         set_tensor(model, key, value)
-    if return_old_tensordict:
+    if was_stateless or not return_old_tensordict:
         return old_tensordict
-    return None
+    else:
+        return TensorDict(old_tensordict, [])
 
 
 def is_functional(module: nn.Module):
@@ -420,7 +420,7 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
                     self,
                     old_params,
                     make_stateless=_is_stateless,
-                    return_old_tensordict=True,
+                    return_old_tensordict=False,
                 )
             return out
         else:
@@ -450,8 +450,8 @@ def _assign_params(
     return_old_tensordict: bool,
 ) -> TensorDict | None:
     if params is not None:
-        out = _swap_state(module, params, make_stateless, return_old_tensordict)
-        return out
+        return _swap_state(module, params, make_stateless, return_old_tensordict)
+
     return None
 
 
