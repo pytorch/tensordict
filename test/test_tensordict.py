@@ -20,6 +20,13 @@ except ImportError as err:
     _has_torchsnapshot = False
     TORCHSNAPSHOT_ERR = str(err)
 
+try:
+    import h5py  # noqa
+
+    _has_h5py = True
+except ImportError:
+    _has_h5py = False
+
 from _utils_internal import get_available_devices, prod, TestTensorDictsBase
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
@@ -524,6 +531,9 @@ TD_BATCH_SIZE = 4
         "nested_tensorclass",
         "permute_td",
         "nested_stacked_td",
+        pytest.param(
+            "td_h5", marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+        ),
     ],
 )
 @pytest.mark.parametrize("device", get_available_devices())
@@ -552,6 +562,11 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         keys = ["a"]
+        if td_name == "td_h5":
+            with pytest.raises(NotImplementedError, match="Cannot call select"):
+                td.select(*keys, strict=strict, inplace=inplace)
+            return
+
         if td_name in ("nested_stacked_td", "nested_td"):
             keys += [("my_nested_td", "inner")]
 
@@ -577,6 +592,11 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_select_exception(self, td_name, device, strict):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+        if td_name == "td_h5":
+            with pytest.raises(NotImplementedError, match="Cannot call select"):
+                _ = td.select("tada", strict=strict)
+            return
+
         if strict:
             with pytest.raises(KeyError):
                 _ = td.select("tada", strict=strict)
@@ -588,6 +608,10 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_exclude(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+        if td_name == "td_h5":
+            with pytest.raises(NotImplementedError, match="Cannot call exclude"):
+                _ = td.exclude("a")
+            return
         td2 = td.exclude("a")
         assert td2 is not td
         assert (
@@ -713,7 +737,13 @@ class TestTensorDicts(TestTensorDictsBase):
         td_clone = td.to_tensordict()
         assert not td_clone.is_locked
         assert td.is_locked
-        td = td.select(inplace=True)
+        if td_name == "td_h5":
+            td.unlock_()
+            for key in list(td.keys()):
+                del td[key]
+            td.lock_()
+        else:
+            td = td.select(inplace=True)
         for key, item in td_clone.items(True):
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
@@ -731,7 +761,10 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td.unlock_()
         assert not td.is_locked
-        assert td.device.type == "cuda" or not td.is_shared()
+        if td.device is not None:
+            assert td.device.type == "cuda" or not td.is_shared()
+        else:
+            assert not td.is_shared()
         assert not td.is_memmap()
 
     def test_sorted_keys(self, td_name, device):
@@ -812,9 +845,12 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_masking(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
-            0.8
-        )
+        while True:
+            mask = torch.zeros(
+                td.batch_size, dtype=torch.bool, device=device
+            ).bernoulli_(0.8)
+            if not mask.all() and mask.any():
+                break
         td_masked = td[mask]
         td_masked2 = torch.masked_select(td, mask)
         assert_allclose_td(td_masked, td_masked2)
@@ -1047,6 +1083,8 @@ class TestTensorDicts(TestTensorDictsBase):
 
     @pytest.mark.parametrize("nested", [True, False])
     def test_exclude_missing(self, td_name, device, nested):
+        if td_name == "td_h5":
+            raise pytest.skip("exclude not implemented for PersitentTensorDict")
         td = getattr(self, td_name)(device)
         if nested:
             td2 = td.exclude("this key is missing", ("this one too",))
@@ -1058,6 +1096,8 @@ class TestTensorDicts(TestTensorDictsBase):
 
     @pytest.mark.parametrize("nested", [True, False])
     def test_exclude_nested(self, td_name, device, nested):
+        if td_name == "td_h5":
+            raise pytest.skip("exclude not implemented for PersitentTensorDict")
         td = getattr(self, td_name)(device)
         td.unlock_()  # make sure that the td is not locked
         if td_name == "stacked_td":
@@ -1293,11 +1333,18 @@ class TestTensorDicts(TestTensorDictsBase):
         # cloning is type-preserving: we can do that operation
         td_stack.clone()
 
-    def test_clone_td(self, td_name, device):
+    def test_clone_td(self, td_name, device, tmp_path):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        assert (torch.clone(td) == td).all()
-        assert td.batch_size == torch.clone(td).batch_size
+        if td_name == "td_h5":
+            # need a new file
+            newfile = tmp_path / "file.h5"
+            clone = td.clone(newfile=newfile)
+        else:
+            clone = torch.clone(td)
+        assert (clone == td).all()
+        assert td.batch_size == clone.batch_size
+        assert type(td.clone(recurse=False)) is type(td)
         if td_name in (
             "stacked_td",
             "nested_stacked_td",
@@ -1307,9 +1354,9 @@ class TestTensorDicts(TestTensorDictsBase):
             "sub_td",
             "sub_td2",
             "permute_td",
+            "td_h5",
         ):
-            with pytest.raises(AssertionError):
-                assert td.clone(recurse=False).get("a") is td.get("a")
+            assert td.clone(recurse=False).get("a") is not td.get("a")
         else:
             assert td.clone(recurse=False).get("a") is td.get("a")
 
@@ -1422,7 +1469,10 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td[idx].get("a") == 0).all()
 
         td_clone = torch.cat([td_clone, td_clone], 0)
-        with pytest.raises(RuntimeError, match="differs from the source batch size"):
+        with pytest.raises(
+            RuntimeError,
+            match=r"differs from the source batch size|batch dimension mismatch",
+        ):
             td[idx] = td_clone
 
     def test_setitem_string(self, td_name, device):
@@ -1441,7 +1491,9 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         assert_allclose_td(td[range(2)], td[[0, 1]])
-        assert_allclose_td(td[range(1), range(1)], td[[0], [0]])
+        if td_name not in ("td_h5",):
+            # for h5, we can't use a double list index
+            assert_allclose_td(td[range(1), range(1)], td[[0], [0]])
         assert_allclose_td(td[:, range(2)], td[:, [0, 1]])
         assert_allclose_td(td[..., range(1)], td[..., [0]])
 
@@ -1667,10 +1719,17 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td.unlock_()
         assert not td.get("a").requires_grad
+        if td_name in ("td_h5",):
+            with pytest.raises(
+                RuntimeError, match="Cannot set a tensor that has requires_grad=True"
+            ):
+                td.set("a", torch.randn_like(td.get("a")).requires_grad_())
+            return
         if td_name in ("sub_td", "sub_td2"):
             td.set_("a", torch.randn_like(td.get("a")).requires_grad_())
         else:
             td.set("a", torch.randn_like(td.get("a")).requires_grad_())
+
         assert td.get("a").requires_grad
 
     def test_nested_td_emptyshape(self, td_name, device):
@@ -1834,6 +1893,12 @@ class TestTensorDicts(TestTensorDictsBase):
                 match="Converting a sub-tensordict values to memmap cannot be done",
             ):
                 td.memmap_()
+        elif td_name in ("td_h5",):
+            with pytest.raises(
+                RuntimeError,
+                match="Cannot build a memmap TensorDict in-place",
+            ):
+                td.memmap_()
         else:
             td.memmap_()
             assert td.is_memmap()
@@ -1860,6 +1925,13 @@ class TestTensorDicts(TestTensorDictsBase):
             ):
                 td.memmap_(tmp_path / "tensordict")
             return
+        elif td_name in ("td_h5",):
+            with pytest.raises(
+                RuntimeError,
+                match="Cannot build a memmap TensorDict in-place",
+            ):
+                td.memmap_(tmp_path / "tensordict")
+            return
         else:
             td.memmap_(tmp_path / "tensordict")
 
@@ -1883,9 +1955,9 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
             )
-        elif td_name in ("sub_td", "sub_td2"):
+        elif td_name in ("sub_td", "sub_td2", "td_h5"):
             pytest.skip(
-                "SubTensorDict and memmap_ incompatibility is checked elsewhere"
+                "SubTensorDict/H5 and memmap_ incompatibility is checked elsewhere"
             )
 
         td = getattr(self, td_name)(device).memmap_(prefix=tmp_path / "tensordict")
@@ -1972,7 +2044,8 @@ class TestTensorDicts(TestTensorDictsBase):
         sub_tensordict = TensorDict(
             {"b": sub_sub_tensordict}, [4, 3, 2, 1], device=device
         )
-
+        if td_name == "td_h5":
+            del td["a"]
         if td_name == "sub_td":
             td = td._source.set(
                 "a", sub_tensordict.expand(2, *sub_tensordict.shape)
@@ -2994,6 +3067,15 @@ def test_setitem_nested():
     assert tensordict["a", "b"] is sub_sub_tensordict
 
     tensordict["a", "b"] = sub_sub_tensordict2
+    assert tensordict["a", "b"] is sub_sub_tensordict2
+    assert (tensordict["a", "b", "c"] == 1).all()
+
+    # check the same with set method
+    sub_tensordict.set("b", sub_sub_tensordict)
+    tensordict.set("a", sub_tensordict)
+    assert tensordict["a", "b"] is sub_sub_tensordict
+
+    tensordict.set(("a", "b"), sub_sub_tensordict2)
     assert tensordict["a", "b"] is sub_sub_tensordict2
     assert (tensordict["a", "b", "c"] == 1).all()
 

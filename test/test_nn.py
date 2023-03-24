@@ -18,7 +18,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
-from tensordict.nn.functional_modules import make_functional
+from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import set_interaction_mode
 from torch import nn
 from torch.distributions import Normal
@@ -189,7 +189,7 @@ class TestTDModule:
         )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tensordict_module(td, params=params)
+        tensordict_module(td, params=TensorDict({"module": params}, []))
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
 
@@ -305,7 +305,7 @@ class TestTDModule:
         tdmodule = TensorDictModule(module=net, in_keys=["in"], out_keys=["out"])
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
-        tdmodule(td, params=params)
+        tdmodule(td, params=TensorDict({"module": params}, []))
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
 
@@ -1517,6 +1517,53 @@ def test_method_forward():
 
     module.mycustommethod()
     assert not MyModule.overwrittenmethod.called
+
+
+@pytest.mark.parametrize("keep_params", [True, False])
+@pytest.mark.parametrize("return_params", [True, False])
+def test_is_functional(return_params, keep_params):
+    module = nn.Sequential(
+        nn.ModuleList(
+            [
+                nn.Linear(3, 3),
+                nn.Dropout(0.1),
+            ]
+        ),
+        nn.Transformer(16),
+    )
+    for m in module.modules():
+        assert not is_functional(m)
+    make_functional(module, keep_params=keep_params, return_params=return_params)
+    for m in module.modules():
+        assert is_functional(m)
+
+
+@pytest.mark.parametrize("keep_params", [True, False])
+@pytest.mark.parametrize("return_params", [True, False])
+@torch.no_grad()
+def test_make_functional(return_params, keep_params):
+    module = nn.Sequential(
+        nn.Linear(3, 3),
+        nn.Linear(3, 3),
+    )
+    td = TensorDict(
+        {
+            "0": {"weight": torch.zeros(3, 3), "bias": torch.zeros(3)},
+            "1": {"weight": torch.zeros(3, 3), "bias": torch.zeros(3)},
+        },
+        [],
+    )
+    params = make_functional(
+        module, keep_params=keep_params, return_params=return_params
+    )
+    if return_params:
+        assert (params.zero_() == td).all()
+    else:
+        assert params is None
+    if keep_params:
+        assert module(torch.randn(3)).shape == torch.Size([3])
+
+    assert module(torch.randn(3), params=td).shape == torch.Size([3])
 
 
 if __name__ == "__main__":

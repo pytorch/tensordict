@@ -11,6 +11,7 @@ from tensordict.nn.common import (
 )
 from tensordict.nn.functional_modules import (
     get_functional,
+    is_functional,
     make_functional,
     repopulate_module,
 )
@@ -36,4 +37,5 @@ __all__ = [
     "make_tensordict",
     "biased_softplus",
     "inv_softplus",
+    "is_functional",
 ]
