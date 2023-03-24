@@ -21,7 +21,7 @@ except ImportError as err:
     TORCHSNAPSHOT_ERR = str(err)
 
 try:
-    import h5py
+    import h5py  # noqa
 
     _has_h5py = True
 except ImportError:
