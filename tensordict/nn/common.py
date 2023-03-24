@@ -13,7 +13,7 @@ from typing import Any, Callable, Iterable, Sequence
 
 import torch
 
-from tensordict.nn.functional_modules import get_functional
+from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _nested_key_type_check, _normalize_key, NestedKey
 from torch import nn, Tensor
@@ -383,7 +383,7 @@ class TensorDictModule(nn.Module):
             )
 
         self.module = module
-        get_functional(self)
+        make_functional(self, keep_params=True, return_params=False)
 
     @property
     def is_functional(self) -> bool:
