@@ -1543,7 +1543,7 @@ def test_make_functional(return_params, keep_params):
     if keep_params:
         assert module(torch.randn(3)).shape == torch.Size([3])
 
-    module(torch.randn(3), params=td).shape == torch.Size([3])
+    assert module(torch.randn(3), params=td).shape == torch.Size([3])
 
 
 if __name__ == "__main__":
