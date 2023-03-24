@@ -256,7 +256,7 @@ def test_indexing():
     class MyDataNested:
         X: torch.Tensor
         z: list
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = ["a", "b", "c"]
@@ -344,7 +344,7 @@ def test_setitem():
     class MyDataNested:
         X: torch.Tensor
         z: list
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.randn(3, 4, 5)
     z = ["a", "b", "c"]
@@ -456,7 +456,7 @@ def test_setitem_broadcast(broadcast_type):
     class MyDataNested:
         X: torch.Tensor
         z: list
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = ["a", "b", "c"]
@@ -484,7 +484,7 @@ def test_stack():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -523,7 +523,7 @@ def test_cat():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -561,7 +561,7 @@ def test_unbind():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -583,7 +583,7 @@ def test_full_like():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -606,7 +606,7 @@ def test_clone():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -626,7 +626,7 @@ def test_squeeze():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(1, 4, 5)
     z = "test_tensorclass"
@@ -645,7 +645,7 @@ def test_unsqueeze():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -692,7 +692,7 @@ def test_reshape():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -713,7 +713,7 @@ def test_view():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -734,7 +734,7 @@ def test_permute():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -755,7 +755,7 @@ def test_nested():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -771,7 +771,7 @@ def test_nested_eq():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -792,7 +792,7 @@ def test_nested_ne():
     class MyDataNested:
         X: torch.Tensor
         z: str
-        y: "MyDataNested" = None  # future: drop quotes
+        y: "MyDataNested" = None
 
     X = torch.ones(3, 4, 5)
     z = "test_tensorclass"
@@ -1328,7 +1328,7 @@ def test_torchsnapshot(tmp_path):
     class MyClass:
         x: torch.Tensor
         z: str
-        y: "MyClass" = None  # future: drop quotes
+        y: "MyClass" = None
 
     z = "test_tensorclass"
     tc = MyClass(
@@ -1381,7 +1381,7 @@ def test_statedict_errors():
     class MyClass:
         x: torch.Tensor
         z: str
-        y: "MyClass" = None  # future: drop quotes
+        y: "MyClass" = None
 
     z = "test_tensorclass"
     tc = MyClass(
@@ -1414,13 +1414,13 @@ def test_equal():
     class MyClass1:
         x: torch.Tensor
         z: str
-        y: "MyClass1" = None  # future: drop quotes
+        y: "MyClass1" = None
 
     @tensorclass
     class MyClass2:
         x: torch.Tensor
         z: str
-        y: "MyClass2" = None  # future: drop quotes
+        y: "MyClass2" = None
 
     a = MyClass1(
         torch.zeros(3),
@@ -1476,7 +1476,7 @@ def test_all_any():
     class MyClass1:
         x: torch.Tensor
         z: str
-        y: "MyClass1" = None  # future: drop quotes
+        y: "MyClass1" = None
 
     # with all 0
     x = MyClass1(
@@ -1529,7 +1529,7 @@ def test_gather(from_torch):
     class MyClass:
         x: torch.Tensor
         z: str
-        y: "MyClass" = None  # future: drop quotes
+        y: "MyClass" = None
 
     c = MyClass(
         torch.randn(3, 4),
@@ -1562,7 +1562,7 @@ def test_to_tensordict():
     class MyClass:
         x: torch.Tensor
         z: str
-        y: "MyClass" = None  # future: drop quotes
+        y: "MyClass" = None
 
     c = MyClass(
         torch.randn(3, 4),
@@ -1584,7 +1584,7 @@ def test_memmap_():
     class MyClass:
         x: torch.Tensor
         z: str
-        y: "MyClass" = None  # future: drop quotes
+        y: "MyClass" = None
 
     c = MyClass(
         torch.randn(3, 4),
@@ -1605,7 +1605,7 @@ def test_memmap_like():
     class MyClass:
         x: torch.Tensor
         z: str
-        y: "MyClass" = None  # future: drop quotes
+        y: "MyClass" = None
 
     c = MyClass(
         torch.randn(3, 4),
