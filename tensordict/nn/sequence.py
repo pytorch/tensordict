@@ -33,6 +33,10 @@ __all__ = ["TensorDictSequential"]
 class TensorDictSequential(TensorDictModule):
     """A sequence of TensorDictModules.
 
+    By default, :class:`TensorDictSequential` subclasses are always functional,
+    meaning that they support the ``td_module(input, params=params)`` function
+    call signature.
+
     Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
     When calling a :obj:`TensorDictSequencial` instance with a functional module, it is expected that the parameter lists (and
