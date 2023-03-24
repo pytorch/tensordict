@@ -64,8 +64,8 @@ def is_tensorclass(obj: type | Any) -> bool:
     cls = obj if isinstance(obj, type) else type(obj)
     return (
         dataclasses.is_dataclass(cls)
-        and hasattr(cls, "_non_tensordict")
-        and hasattr(cls, "_tensordict")
+        and "_non_tensordict" is in cls.__dict__
+        and "_tensordict" is in cls.__dict__
     )
 
 
