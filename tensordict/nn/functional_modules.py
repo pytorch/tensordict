@@ -229,7 +229,8 @@ def _decorate_funs(
         except AttributeError:
             continue
     model.__dict__["_functionalized"] = True
-    model.__dict__["_is_stateless"] = make_stateless
+    if not model.__dict__.get("_is_stateless", False):
+        model.__dict__["_is_stateless"] = make_stateless
 
     for module in model.children():
         # we decorate forward for the sub-modules
@@ -336,18 +337,23 @@ def make_functional(
             the module will be made functional but still be stateful.
 
     """
+    _is_stateless = module.__dict__.get("_is_stateless", False)
     _decorate_funs(
         module,
         funs_to_decorate=funs_to_decorate,
         make_stateless=not keep_params,
     )
-    if return_params:
+    if return_params and not _is_stateless:
         params = extract_weights_and_buffers(
             module,
         )
         if keep_params:
             repopulate_module(module, params)
         return params
+    elif return_params and _is_stateless:
+        raise RuntimeError(
+            "Calling make_functional with return_params=True on a functional, stateless module. "
+        )
     elif not keep_params:
         extract_weights_and_buffers(module)
 
