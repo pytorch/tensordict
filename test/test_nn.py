@@ -1627,24 +1627,24 @@ class TestMakeFunctional:
         assert module(torch.randn(3), params=td).shape == torch.Size([3])
 
     def test_make_functional_twice(self):
-        l = nn.Linear(3, 4)
-        make_functional(l)
-        assert l._is_stateless
-        make_functional(l, keep_params=True, return_params=False)
-        assert l._is_stateless
+        model = nn.Linear(3, 4)
+        make_functional(model)
+        assert model._is_stateless
+        make_functional(model, keep_params=True, return_params=False)
+        assert model._is_stateless
         with pytest.raises(
             RuntimeError, match="Calling make_functional with return_params=True"
         ):
-            make_functional(l, keep_params=True, return_params=True)
-        assert l._is_stateless
+            make_functional(model, keep_params=True, return_params=True)
+        assert model._is_stateless
 
-        l = nn.Linear(3, 4)
-        make_functional(l, keep_params=True, return_params=False)
-        assert not l._is_stateless
-        make_functional(l, keep_params=True, return_params=True)
-        assert not l._is_stateless
-        make_functional(l)
-        assert l._is_stateless
+        model = nn.Linear(3, 4)
+        make_functional(model, keep_params=True, return_params=False)
+        assert not model._is_stateless
+        make_functional(model, keep_params=True, return_params=True)
+        assert not model._is_stateless
+        make_functional(model)
+        assert model._is_stateless
 
 
 if __name__ == "__main__":
