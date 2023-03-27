@@ -267,9 +267,7 @@ class TensorDictModule(nn.Module):
     call signature.
 
     Args:
-        module (Callable): a callable, typically a nn.Module, used to map the input to the output parameter space.
-            Can be a functional module (FunctionalModule or FunctionalModuleWithBuffers),
-            in which case the :obj:`forward` method will expect the params (and possibly) buffers keyword arguments.
+        module (Callable): a callable, typically a :class:`torch.nn.Module`, used to map the input to the output parameter space.
         in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the order given by the in_keys iterable.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
@@ -347,15 +345,9 @@ class TensorDictModule(nn.Module):
         _seq_of_nested_key_check(in_keys)
 
         if type(module) is type or not callable(module):
-            COMMON_MODULE_TYPES = (
-                FunctionalModule,
-                FunctionalModuleWithBuffers,
-                TensorDictModule,
-                nn.Module,
-            )
             raise ValueError(
                 f"Module {module} if type {type(module)} is not callable. "
-                f"Typical accepted types are are {COMMON_MODULE_TYPES}."
+                f"Typical accepted types are nn.Module or TensorDictModule."
             )
         self.out_keys = [_normalize_key(key) for key in out_keys]
         self.in_keys = [_normalize_key(key) for key in in_keys]
