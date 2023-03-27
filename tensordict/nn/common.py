@@ -236,14 +236,14 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
+            from tensordict.prototype import is_tensorclass
+
             source = self.source
             if isinstance(source, str):
                 source = getattr(_self, source)
             tensordict = None
             if len(args):
-                if not isinstance(args[0], TensorDictBase):
-                    pass
-                else:
+                if isinstance(args[0], TensorDictBase) or is_tensorclass(args[0]):
                     tensordict, args = args[0], args[1:]
             if tensordict is None:
                 tensordict_values = {}
@@ -458,6 +458,15 @@ class TensorDictModule(nn.Module):
         )
 
         return f"{self.__class__.__name__}(\n{fields})"
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return super().__getattr__(name)
+        except AttributeError as err1:
+            try:
+                return getattr(super().__getattr__("module"), name)
+            except Exception as err2:
+                raise err2 from err1
 
 
 class TensorDictModuleWrapper(nn.Module):
