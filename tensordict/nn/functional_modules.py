@@ -229,7 +229,8 @@ def _decorate_funs(
         except AttributeError:
             continue
     model.__dict__["_functionalized"] = True
-    model.__dict__["_is_stateless"] = make_stateless
+    if not model.__dict__.get("_is_stateless", False):
+        model.__dict__["_is_stateless"] = make_stateless
 
     for module in model.children():
         # we decorate forward for the sub-modules
