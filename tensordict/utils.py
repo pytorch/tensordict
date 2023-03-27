@@ -400,8 +400,6 @@ TORCH_TO_NUMPY_DTYPE_DICT = {
 
 def is_nested_key(key: NestedKey) -> bool:
     """Returns True if key is a NestedKey."""
-    if key is None:
-        return False
     if isinstance(key, str):
         return True
     if key and isinstance(key, (list, tuple)):
