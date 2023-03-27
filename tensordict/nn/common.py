@@ -15,7 +15,7 @@ import torch
 
 from tensordict.nn.functional_modules import make_functional
 from tensordict.tensordict import make_tensordict, TensorDictBase
-from tensordict.utils import _nested_key_type_check, _normalize_key, NestedKey
+from tensordict.utils import _normalize_key, _seq_of_nested_key_check, NestedKey
 from torch import nn, Tensor
 
 try:
@@ -36,25 +36,6 @@ __all__ = [
     "TensorDictModule",
     "TensorDictModuleWrapper",
 ]
-
-
-def _check_all_str(sequence_of_str: Sequence[str]) -> None:
-    if isinstance(sequence_of_str, str):
-        raise RuntimeError(
-            f"Expected a sequence of strings but got a string: {sequence_of_str}"
-        )
-    if any(not isinstance(key, str) for key in sequence_of_str):
-        raise TypeError(f"Expected a sequence of strings but got: {sequence_of_str}")
-
-
-def _check_all_nested(sequence_of_keys: Sequence[NestedKey]) -> None:
-    if isinstance(sequence_of_keys, str):
-        raise RuntimeError(
-            "Expected a sequence of strings, or tuples of strings but got a string: "
-            f"{sequence_of_keys}"
-        )
-    for key in sequence_of_keys:
-        _nested_key_type_check(key)
 
 
 class dispatch:
@@ -286,9 +267,7 @@ class TensorDictModule(nn.Module):
     call signature.
 
     Args:
-        module (nn.Module): a nn.Module used to map the input to the output parameter space. Can be a functional
-            module (FunctionalModule or FunctionalModuleWithBuffers), in which case the :obj:`forward` method will expect
-            the params (and possibly) buffers keyword arguments.
+        module (Callable): a callable, typically a :class:`torch.nn.Module`, used to map the input to the output parameter space.
         in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the order given by the in_keys iterable.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
@@ -356,24 +335,21 @@ class TensorDictModule(nn.Module):
 
     def __init__(
         self,
-        module: (
-            FunctionalModule
-            | FunctionalModuleWithBuffers
-            | TensorDictModule
-            | nn.Module
-        ),
+        module: Callable,
         in_keys: Sequence[NestedKey],
         out_keys: Sequence[NestedKey],
     ) -> None:
         super().__init__()
 
-        if not out_keys:
-            raise RuntimeError(f"out_keys were not passed to {self.__class__.__name__}")
-        if not in_keys:
-            raise RuntimeError(f"in_keys were not passed to {self.__class__.__name__}")
-        _check_all_nested(out_keys)
+        _seq_of_nested_key_check(out_keys)
+        _seq_of_nested_key_check(in_keys)
+
+        if type(module) is type or not callable(module):
+            raise ValueError(
+                f"Module {module} if type {type(module)} is not callable. "
+                f"Typical accepted types are nn.Module or TensorDictModule."
+            )
         self.out_keys = [_normalize_key(key) for key in out_keys]
-        _check_all_nested(in_keys)
         self.in_keys = [_normalize_key(key) for key in in_keys]
 
         if "_" in in_keys:

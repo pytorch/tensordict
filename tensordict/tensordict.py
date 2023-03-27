@@ -39,7 +39,7 @@ from tensordict.utils import (
     _get_item,
     _getitem_batch_size,
     _is_shared,
-    _nested_key_type_check,
+    _nested_key_check,
     _set_item,
     _shape,
     _sub_index,
@@ -1031,7 +1031,7 @@ class TensorDictBase(MutableMapping):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        _nested_key_type_check(key)
+        _nested_key_check(key)
         try:
             # using try/except for get/del is suboptimal, but
             # this is faster that checkink if key in self keys
@@ -1298,7 +1298,7 @@ class TensorDictBase(MutableMapping):
         )
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
-        _nested_key_type_check(key)
+        _nested_key_check(key)
 
         if isinstance(key, tuple) and len(key) == 1:
             key = key[0]
@@ -3339,7 +3339,7 @@ class TensorDict(TensorDictBase):
     def get(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        _nested_key_type_check(key)
+        _nested_key_check(key)
 
         try:
             if isinstance(key, tuple):

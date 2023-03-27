@@ -10,11 +10,12 @@ from textwrap import indent
 from typing import Any, Sequence
 
 import torch.nn as nn
-from tensordict.nn.common import _check_all_nested, _check_all_str, TensorDictModule
+from tensordict.nn.common import TensorDictModule
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.nn.functional_modules import repopulate_module
 from tensordict.nn.sequence import TensorDictSequential
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import _seq_of_nested_key_check
 from torch import distributions as D, Tensor
 from torch.autograd.grad_mode import _DecoratorContextManager
 
@@ -210,16 +211,21 @@ class ProbabilisticTensorDictModule(nn.Module):
         if isinstance(out_keys, str):
             out_keys = [out_keys]
         elif out_keys is None:
-            out_keys = []
+            out_keys = ["_"]
         if not isinstance(in_keys, dict):
             in_keys = {param_key: param_key for param_key in in_keys}
+        else:
+            # keys must be strings
+            if not all(isinstance(v, str) for v in in_keys.keys()):
+                raise ValueError(
+                    f"in_keys keys should all be strings. "
+                    f"{self.__class__.__name__} got {in_keys}"
+                )
 
+        _seq_of_nested_key_check(out_keys)
+        _seq_of_nested_key_check(tuple(in_keys.values()))
         self.out_keys = out_keys
-        _check_all_nested(self.out_keys)
         self.in_keys = in_keys
-        # arguments must be strings
-        _check_all_str(self.in_keys.keys())
-        _check_all_nested(self.in_keys.values())
 
         self.default_interaction_mode = default_interaction_mode
         if isinstance(distribution_class, str):
