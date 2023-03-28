@@ -130,7 +130,7 @@ def is_tensor_collection(datatype: type | Any) -> bool:
         >>> is_tensor_collection(MyClass(batch_size=[]))  # True
 
     """
-    from tensordict.prototype import is_tensorclass
+    from tensordict.tensorclass import is_tensorclass
 
     return (
         issubclass(datatype, TensorDictBase)
@@ -230,7 +230,7 @@ class _TensorDictKeysView:
     def _items(
         self, tensordict: TensorDict | None = None
     ) -> Iterable[tuple[NestedKey, CompatibleType]]:
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if tensordict is None:
             tensordict = self.tensordict
@@ -1454,7 +1454,7 @@ class TensorDictBase(MutableMapping):
 
         """
         # avoiding circular imports
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if is_tensorclass(other):
             return other != self
@@ -1486,7 +1486,7 @@ class TensorDictBase(MutableMapping):
 
         """
         # avoiding circular imports
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if is_tensorclass(other):
             return other == self
@@ -5343,7 +5343,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def __eq__(self, other):
         # avoiding circular imports
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if is_tensorclass(other):
             return other == self
@@ -5381,7 +5381,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def __ne__(self, other):
         # avoiding circular imports
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if is_tensorclass(other):
             return other != self

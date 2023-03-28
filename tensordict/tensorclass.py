@@ -79,7 +79,7 @@ def tensorclass(cls: T) -> T:
     others.
 
     Examples:
-        >>> from tensordict.prototype import tensorclass
+        >>> from tensordict import tensorclass
         >>> import torch
         >>> from typing import Optional
         >>>
@@ -111,7 +111,7 @@ def tensorclass(cls: T) -> T:
 
     It is also possible to nest tensorclasses instances within each other:
         Examples:
-        >>> from tensordict.prototype import tensorclass
+        >>> from tensordict import tensorclass
         >>> import torch
         >>> from typing import Optional
         >>>
