@@ -229,7 +229,7 @@ We provide and API to use ``TensorDict`` in conjunction with ``functorch``. For 
 >>> from tensordict import TensorDict
 >>> from tensordict.nn import make_functional
 >>> import torch
->>> from functorch import vmap
+>>> from torch import vmap
 >>> layer1 = nn.Linear(3, 4)
 >>> layer2 = nn.Linear(4, 4)
 >>> model = nn.Sequential(layer1, layer2)

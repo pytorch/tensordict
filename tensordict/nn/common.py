@@ -318,7 +318,7 @@ class TensorDictModule(nn.Module):
             is_shared=False)
 
     One can use a vmap operator to call the functional module.
-        >>> from functorch import vmap
+        >>> from torch import vmap
         >>> params_repeat = params.expand(4)
         >>> td_vmap = vmap(td_fmodule, (None, 0))(td.clone(), params_repeat)
         >>> print(td_vmap)

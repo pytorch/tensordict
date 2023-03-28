@@ -22,8 +22,8 @@ from torch.nn import Linear
 try:
     from functorch import (
         make_functional_with_buffers as functorch_make_functional_with_buffers,
-        vmap,
     )
+    from torch import vmap
 
     _has_functorch = True
     FUNCTORCH_ERR = ""
