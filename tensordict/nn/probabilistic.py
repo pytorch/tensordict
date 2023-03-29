@@ -398,8 +398,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         **kwargs,
     ) -> tuple[D.Distribution, TensorDictBase]:
         tds = self.det_part
-        if self.__dict__.get("_is_stateless", False):
-            tds = repopulate_module(tds, kwargs.pop("params"))
         mode = interaction_mode()
         if mode is None:
             mode = self.module[-1].default_interaction_mode
