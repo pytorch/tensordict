@@ -217,7 +217,7 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
-            from tensordict.prototype import is_tensorclass
+            from tensordict.tensorclass import is_tensorclass
 
             source = self.source
             if isinstance(source, str):

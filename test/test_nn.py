@@ -8,7 +8,7 @@ import argparse
 import pytest
 import torch
 
-from tensordict import TensorDict
+from tensordict import tensorclass, TensorDict
 from tensordict.nn import (
     dispatch,
     probabilistic as nn_probabilistic,
@@ -20,7 +20,6 @@ from tensordict.nn import (
 from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import set_interaction_mode
-from tensordict.prototype import tensorclass
 from torch import nn
 from torch.distributions import Normal
 

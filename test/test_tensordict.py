@@ -2184,7 +2184,7 @@ class TestTensorDictRepr:
         )
 
     def nested_tensorclass(self, device, dtype):
-        from tensordict.prototype import tensorclass
+        from tensordict import tensorclass
 
         @tensorclass
         class MyClass:
