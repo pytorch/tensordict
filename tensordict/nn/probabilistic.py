@@ -384,13 +384,19 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         self._requires_sample = modules[-1].out_keys[0] not in set(out_keys)
         super().__init__(*modules, partial_tolerant=partial_tolerant)
 
+    @property
+    def det_part(self):
+        if not hasattr(self, "_det_part"):
+            self._det_part = TensorDictSequential(*self.module[:-1])
+        return self._det_part
+
     def get_dist_params(
         self,
         tensordict: TensorDictBase,
         tensordict_out: TensorDictBase | None = None,
         **kwargs,
     ) -> tuple[D.Distribution, TensorDictBase]:
-        tds = TensorDictSequential(*self.module[:-1])
+        tds = self.det_part
         if self.__dict__.get("_is_stateless", False):
             tds = repopulate_module(tds, kwargs.pop("params"))
         mode = interaction_mode()
