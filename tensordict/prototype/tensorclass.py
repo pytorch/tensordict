@@ -262,6 +262,8 @@ def _init_wrapper(init: Callable) -> Callable:
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
 
+        if not isinstance(batch_size, torch.Size):
+            batch_size = torch.Size(batch_size)
         self._tensordict = TensorDict(
             {}, batch_size=batch_size, device=device, _run_checks=False
         )
