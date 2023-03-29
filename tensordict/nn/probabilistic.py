@@ -12,7 +12,6 @@ from typing import Any, Sequence
 import torch.nn as nn
 from tensordict.nn.common import TensorDictModule
 from tensordict.nn.distributions import Delta, distributions_maps
-from tensordict.nn.functional_modules import repopulate_module
 from tensordict.nn.sequence import TensorDictSequential
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _seq_of_nested_key_check
