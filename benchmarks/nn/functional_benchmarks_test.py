@@ -9,8 +9,7 @@ from tensordict.nn.functional_modules import make_functional
 from torch import nn
 
 
-@pytest.fixture
-def net():
+def make_net():
     return nn.Sequential(
         nn.Linear(2, 2),
         nn.Linear(2, 2),
@@ -19,29 +18,40 @@ def net():
     )
 
 
+@pytest.fixture
+def net():
+    return make_net()
+
+
+def _functorch_make_functional(net):
+    functorch_make_functional(deepcopy(net))
+
+
+def _make_functional(net):
+    make_functional(deepcopy(net))
+
+
 # Creation
 def test_instantiation_functorch(benchmark, net):
     benchmark.pedantic(
-        functorch_make_functional, args=(deepcopy(net),), iterations=10, rounds=100
+        _functorch_make_functional, args=(net,), iterations=10, rounds=100
     )
 
 
 def test_instantiation_td(benchmark, net):
-    benchmark.pedantic(
-        make_functional, args=(deepcopy(net),), iterations=10, rounds=100
-    )
+    benchmark.pedantic(_make_functional, args=(net,), iterations=10, rounds=100)
 
 
 # Execution
 def test_exec_functorch(benchmark, net):
     x = torch.randn(2, 2)
-    fmodule, params, buffers = functorch_make_functional(deepcopy(net))
+    fmodule, params, buffers = functorch_make_functional(net)
     benchmark.pedantic(fmodule, args=(params, buffers, x), iterations=100, rounds=100)
 
 
 def test_exec_td(benchmark, net):
     x = torch.randn(2, 2)
-    fmodule = deepcopy(net)
+    fmodule = net
     params = make_functional(fmodule)
     benchmark.pedantic(
         fmodule, args=(x,), kwargs={"params": params}, iterations=100, rounds=100
