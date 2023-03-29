@@ -12,7 +12,6 @@ from typing import Any, Sequence
 import torch.nn as nn
 from tensordict.nn.common import TensorDictModule
 from tensordict.nn.distributions import Delta, distributions_maps
-from tensordict.nn.functional_modules import repopulate_module
 from tensordict.nn.sequence import TensorDictSequential
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _seq_of_nested_key_check
@@ -387,8 +386,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     @property
     def det_part(self):
         if not hasattr(self, "_det_part"):
-            self._det_part = TensorDictSequential(*self.module[:-1])
-        return self._det_part
+            # we use a list to avoid having the submodules listed in module.modules()
+            self._det_part = [TensorDictSequential(*self.module[:-1])]
+        return self._det_part[0]
 
     def get_dist_params(
         self,
@@ -397,8 +397,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         **kwargs,
     ) -> tuple[D.Distribution, TensorDictBase]:
         tds = self.det_part
-        if self.__dict__.get("_is_stateless", False):
-            tds = repopulate_module(tds, kwargs.pop("params"))
         mode = interaction_mode()
         if mode is None:
             mode = self.module[-1].default_interaction_mode
