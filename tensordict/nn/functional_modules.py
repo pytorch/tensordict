@@ -261,7 +261,7 @@ def extract_weights_and_buffers(
         if module_tensordict is not None:
             tensordict[name] = module_tensordict
 
-    return TensorDict(tensordict, [], _run_checks=False)
+    return TensorDict(tensordict, batch_size=[], _run_checks=False)
 
 
 def _swap_state(

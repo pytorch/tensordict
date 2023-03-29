@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="5989bffc-6cac-4977-a8aa-25e8b8a81759" name="a100">
+        <fileTransfer accessType="SFTP" host="nlb-9bcd206c4a79-a57e1091b953dfd7.elb.us-east-1.amazonaws.com" port="22" sshConfigId="37a320b4-c0ca-4fca-a55e-2830c4375ca8" sshConfig="vmoens@nlb-9bcd206c4a79-a57e1091b953dfd7.elb.us-east-1.amazonaws.com:22 key" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="10000" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

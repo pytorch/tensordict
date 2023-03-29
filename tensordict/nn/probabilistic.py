@@ -387,8 +387,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     @property
     def det_part(self):
         if not hasattr(self, "_det_part"):
-            self._det_part = TensorDictSequential(*self.module[:-1])
-        return self._det_part
+            # we use a list to avoid having the submodules listed in module.modules()
+            self._det_part = [TensorDictSequential(*self.module[:-1])]
+        return self._det_part[0]
 
     def get_dist_params(
         self,
