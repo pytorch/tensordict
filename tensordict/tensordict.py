@@ -2680,11 +2680,15 @@ class TensorDictBase(MutableMapping):
                     value, batch_size=indexed_bs, device=self.device, _run_checks=False
                 )
             if value.batch_size != indexed_bs:
-                raise RuntimeError(
-                    f"indexed destination TensorDict batch size is {indexed_bs} "
-                    f"(batch_size = {self.batch_size}, index={index}), "
-                    f"which differs from the source batch size {value.batch_size}"
-                )
+                # try to expand
+                try:
+                    value = value.expand(indexed_bs)
+                except RuntimeError as err:
+                    raise RuntimeError(
+                        f"indexed destination TensorDict batch size is {indexed_bs} "
+                        f"(batch_size = {self.batch_size}, index={index}), "
+                        f"which differs from the source batch size {value.batch_size}"
+                    ) from err
 
             keys = set(self.keys())
             if not all(key in keys for key in value.keys()):
@@ -4624,11 +4628,12 @@ torch.Size([3, 2])
         return SubTensorDict(source=self._source, idx=self.idx)
 
     def is_contiguous(self) -> bool:
-        return all([value.is_contiguous() for _, value in self.items()])
+        return False
+        return all([value.is_contiguous() for value in self.values()])
 
     def contiguous(self) -> TensorDictBase:
-        if self.is_contiguous():
-            return self
+        # if self.is_contiguous():
+        #     return self
         return TensorDict(
             batch_size=self.batch_size,
             source={key: value for key, value in self.items()},
@@ -4645,6 +4650,7 @@ torch.Size([3, 2])
         return self._source.select(*keys, strict=strict)[self.idx]
 
     def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
+        return self.contiguous().expand(shape)
         if len(shape) == 1 and isinstance(shape[0], Sequence):
             shape = tuple(shape[0])
 

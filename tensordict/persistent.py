@@ -343,16 +343,24 @@ class PersistentTensorDict(TensorDictBase):
 
     __getitems__ = __getitem__
 
-    def __setitem__(self, item, value):
-        if isinstance(item, str) or (
-            isinstance(item, tuple) and all(isinstance(val, str) for val in item)
+    def __setitem__(self, index, value):
+        if isinstance(index, str) or (
+            isinstance(index, tuple) and all(isinstance(val, str) for val in index)
         ):
-            return self.set(item, value, inplace=True)
+            return self.set(index, value, inplace=True)
 
-        if isinstance(item, list):
+        if isinstance(index, list):
             # convert to tensor
-            item = torch.tensor(item)
-        return self.get_sub_tensordict(item).update(value, inplace=True)
+            index = torch.tensor(index)
+        sub_td = self.get_sub_tensordict(index)
+        if value.shape != sub_td.shape:
+            try:
+                print(sub_td.shape)
+                print(value)
+                value = value.expand(sub_td.shape)
+            except RuntimeError as err:
+                raise RuntimeError(f"Cannot broadcast the tensordict {value} to the shape of the indexed persistent tensordict {self}[{index}].") from err
+        sub_td.update(value, inplace=True)
 
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False

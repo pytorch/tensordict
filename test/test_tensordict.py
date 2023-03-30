@@ -2147,6 +2147,38 @@ class TestTensorDicts(TestTensorDictsBase):
         ):
             td.pop("z")
 
+    def test_setitem_slice(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td[:] = td.clone()
+        td[:1] = td[:1].clone().zero_()
+        assert (td[:1] == 0).all()
+        td = getattr(self, td_name)(device)
+        td[:1] = td[:1].to_tensordict().zero_()
+        assert (td[:1] == 0).all()
+
+        # with broadcast
+        td = getattr(self, td_name)(device)
+        td[:1] = td[0].clone().zero_()
+        assert (td[:1] == 0).all()
+        td = getattr(self, td_name)(device)
+        td[:1] = td[0].to_tensordict().zero_()
+        assert (td[:1] == 0).all()
+
+
+        td = getattr(self, td_name)(device)
+        td[:1, 0] = td[0, 0].clone().zero_()
+        assert (td[:1, 0] == 0).all()
+        td = getattr(self, td_name)(device)
+        td[:1, 0] = td[0, 0].to_tensordict().zero_()
+        assert (td[:1, 0] == 0).all()
+
+        td = getattr(self, td_name)(device)
+        td[:1, :, 0] = td[0, :, 0].clone().zero_()
+        assert (td[:1, :, 0] == 0).all()
+        td = getattr(self, td_name)(device)
+        td[:1, :, 0] = td[0, :, 0].to_tensordict().zero_()
+        assert (td[:1, :, 0] == 0).all()
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
