@@ -1471,7 +1471,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td_clone = torch.cat([td_clone, td_clone], 0)
         with pytest.raises(
             RuntimeError,
-            match=r"differs from the source batch size|batch dimension mismatch",
+            match=r"differs from the source batch size|batch dimension mismatch|Cannot broadcast the tensordict",
         ):
             td[idx] = td_clone
 
@@ -2163,7 +2163,6 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td[:1] = td[0].to_tensordict().zero_()
         assert (td[:1] == 0).all()
-
 
         td = getattr(self, td_name)(device)
         td[:1, 0] = td[0, 0].clone().zero_()

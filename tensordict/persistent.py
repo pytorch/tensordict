@@ -353,13 +353,24 @@ class PersistentTensorDict(TensorDictBase):
             # convert to tensor
             index = torch.tensor(index)
         sub_td = self.get_sub_tensordict(index)
+        err_set_batch_size = None
+        if not isinstance(value, TensorDictBase):
+            value = TensorDict.from_dict(value, batch_size=[])
+            # try to assign the current shape. If that does not work, we can
+            # try to expand
+            try:
+                value.batch_size = sub_td.batch_size
+            except RuntimeError as err0:
+                err_set_batch_size = err0
         if value.shape != sub_td.shape:
             try:
-                print(sub_td.shape)
-                print(value)
                 value = value.expand(sub_td.shape)
             except RuntimeError as err:
-                raise RuntimeError(f"Cannot broadcast the tensordict {value} to the shape of the indexed persistent tensordict {self}[{index}].") from err
+                if err_set_batch_size is not None:
+                    raise err from err_set_batch_size
+                raise RuntimeError(
+                    f"Cannot broadcast the tensordict {value} to the shape of the indexed persistent tensordict {self}[{index}]."
+                ) from err
         sub_td.update(value, inplace=True)
 
     def keys(
