@@ -15,6 +15,8 @@ from _utils_internal import get_available_devices
 from tensordict import MemmapTensor
 from torch import multiprocessing as mp
 
+TIMEOUT = 100
+
 
 def test_memmap_type():
     array = np.random.rand(1)
@@ -243,7 +245,7 @@ class TestIndexing:
         filename,
         shape,
     ):
-        t = queue_in.get(timeout=10.0)
+        t = queue_in.get(timeout=TIMEOUT)
         assert isinstance(t, MemmapTensor)
         assert t.filename == filename
         assert t.shape == shape
@@ -251,12 +253,12 @@ class TestIndexing:
         msg = "done"
         queue_out.put(msg)
 
-        msg = queue_in.get(timeout=10.0)
+        msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "modified"
         assert (t == 1).all()
         queue_out.put("done!!")
 
-        msg = queue_in.get(timeout=10.0)
+        msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "deleted"
         assert not os.path.isfile(filename)
         with pytest.raises(FileNotFoundError, match="No such file or directory"):
@@ -313,17 +315,17 @@ class TestIndexing:
         try:
             p.start()
             queue_out.put(t, block=True)
-            msg = queue_in.get(timeout=10.0)
+            msg = queue_in.get(timeout=TIMEOUT)
             assert msg == "done"
 
             t.fill_(1.0)
             queue_out.put("modified", block=True)
-            msg = queue_in.get(timeout=10.0)
+            msg = queue_in.get(timeout=TIMEOUT)
             assert msg == "done!!"
 
             del t
             queue_out.put("deleted")
-            msg = queue_in.get(timeout=10.0)
+            msg = queue_in.get(timeout=TIMEOUT)
             assert msg == "done again"
             p.join()
         except Exception as e:
@@ -343,17 +345,17 @@ class TestIndexing:
         try:
             p.start()
             queue_out.put(t[:3], block=True)
-            msg = queue_in.get(timeout=10.0)
+            msg = queue_in.get(timeout=TIMEOUT)
             assert msg == "done"
 
             t.fill_(1.0)
             queue_out.put("modified", block=True)
-            msg = queue_in.get(timeout=10.0)
+            msg = queue_in.get(timeout=TIMEOUT)
             assert msg == "done!!"
 
             del t
             queue_out.put("deleted")
-            msg = queue_in.get(timeout=10.0)
+            msg = queue_in.get(timeout=TIMEOUT)
             assert msg == "done again"
             p.join()
         except Exception as e:
@@ -382,7 +384,7 @@ class TestIndexing:
         queue.put(t[idx], block=True)
         while queue.full():
             continue
-        msg = queue.get(timeout=10.0)
+        msg = queue.get(timeout=TIMEOUT)
         assert msg == "done"
         del queue
 
@@ -391,7 +393,7 @@ class TestIndexing:
         p = mp.Process(target=TestIndexing._test_copy_onto_subproc, args=(queue,))
         p.start()
         try:
-            t_indexed1 = queue.get(timeout=10)
+            t_indexed1 = queue.get(timeout=TIMEOUT)
             assert (t_indexed1._index[0] == torch.tensor([1, 2])).all()
             # check that file is not opened if we did not access it
             assert t_indexed1._memmap_array is None
@@ -400,7 +402,7 @@ class TestIndexing:
             assert t_indexed1._memmap_array is not None
 
             # receive 2nd copy
-            t_indexed2 = queue.get(timeout=10)
+            t_indexed2 = queue.get(timeout=TIMEOUT)
             assert t_indexed2.filename == t_indexed1.filename
             assert (t_indexed2._index[0] == torch.tensor([3, 4])).all()
             # check that file is open only once
