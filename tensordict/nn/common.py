@@ -250,7 +250,9 @@ class dispatch:
                                 f"The key {expected_key} wasn't found in the keyword arguments "
                                 f"but is expected to execute that function."
                             )
-                tensordict = make_tensordict(tensordict_values)
+                tensordict = make_tensordict(
+                    tensordict_values, batch_size=torch.Size([])
+                )
                 out = func(_self, tensordict, *args, **kwargs)
                 out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
