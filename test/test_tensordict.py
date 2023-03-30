@@ -1585,6 +1585,20 @@ class TestTensorDicts(TestTensorDictsBase):
         del td["a"]
         assert "a" not in td.keys()
 
+    def test_delitem_items(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        del td["a"]
+        for key, item in td.items():
+            assert item is not None
+
+    def test_pop_items(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        _ = td.pop("a", None)
+        for key, item in td.items():
+            assert item is not None
+
     def test_to_dict_nested(self, td_name, device):
         def recursive_checker(cur_dict):
             for _, value in cur_dict.items():

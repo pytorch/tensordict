@@ -1039,11 +1039,12 @@ class TensorDictBase(MutableMapping):
             self.del_(key)
         except KeyError:
             # if default provided, 'out' value will return, else raise error
-            if default == NO_DEFAULT:
+            if default is NO_DEFAULT:
                 raise KeyError(
                     f"You are trying to pop key `{key}` which is not in dict"
                     f"without providing default value."
                 )
+            raise err
         return out
 
     def apply_(self, fn: Callable) -> TensorDictBase:
@@ -5510,6 +5511,10 @@ class LazyStackedTensorDict(TensorDictBase):
             for future in _future_list:
                 future.wait()
             return
+
+    # def __delitem__(self, key):
+    #     self._valid_keys.remove(key)
+    #     return super().__delitem__(key)
 
     def del_(self, key: str, **kwargs: Any) -> TensorDictBase:
         for td in self.tensordicts:
