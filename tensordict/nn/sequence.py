@@ -238,7 +238,7 @@ class TensorDictSequential(TensorDictModule):
             tensordict._update_valid_keys()
         return tensordict
 
-    @dispatch
+    @dispatch(auto_batch_size=False)
     def forward(
         self,
         tensordict: TensorDictBase,
