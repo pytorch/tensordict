@@ -520,6 +520,14 @@ class TestTDModule:
         out = tdm(a=torch.zeros(1, 1))
         assert (out == td["b"]).all()
 
+    def test_dispatch_changing_size(self):
+        # regression test on non max batch-size for dispatch
+        tdm = TensorDictModule(nn.Linear(1, 2), ["a"], ["b"])
+        td = TensorDict({"a": torch.zeros(1, 1)}, 1)
+        tdm(td)
+        out = tdm(a=torch.zeros(1, 1))
+        assert (out == td["b"]).all()
+
     def test_dispatch_nested(self):
         tdm = TensorDictModule(nn.Linear(1, 1), [("a", "c")], [("b", "d")])
         td = TensorDict({("a", "c"): torch.zeros(1, 1)}, [1])
