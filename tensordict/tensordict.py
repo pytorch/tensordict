@@ -4628,12 +4628,11 @@ torch.Size([3, 2])
         return SubTensorDict(source=self._source, idx=self.idx)
 
     def is_contiguous(self) -> bool:
-        return False
-        return all([value.is_contiguous() for value in self.values()])
+        return all(value.is_contiguous() for value in self.values())
 
     def contiguous(self) -> TensorDictBase:
-        # if self.is_contiguous():
-        #     return self
+        if self.is_contiguous():
+            return self
         return TensorDict(
             batch_size=self.batch_size,
             source={key: value for key, value in self.items()},
