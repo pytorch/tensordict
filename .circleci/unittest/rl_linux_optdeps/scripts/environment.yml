@@ -15,4 +15,3 @@ dependencies:
     - expecttest
     - pyyaml
     - scipy
-    - coverage
