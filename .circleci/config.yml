@@ -761,6 +761,4 @@ workflows:
           python_version: '3.9'
           filters:
             branches:
-              ignore: /.*/
-            pull-requests:
-              only: /.*/
+              ignore: main
