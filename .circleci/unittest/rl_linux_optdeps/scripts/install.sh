@@ -42,7 +42,8 @@ pip3 install -e .
 python -c "import functorch"
 
 printf "* Installing torchrl\n"
-pip install git+https://github.com/pytorch/rl
+git clone https://github.com/pytorch/rl
+pip install -e rl
 
 # smoke test
 python -c "import torchrl"

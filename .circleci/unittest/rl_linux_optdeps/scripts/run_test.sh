@@ -14,4 +14,4 @@ export MKL_THREADING_LAYER=GNU
 export CKPT_BACKEND=torch
 
 #MUJOCO_GL=glfw pytest --cov=torchrl --junitxml=test-results/junit.xml -v --durations 20
-MUJOCO_GL=egl python -m pytest --instafail -v --durations 20 --ignore test/test_distributed.py
+MUJOCO_GL=egl python -m pytest rl/test --instafail -v --durations 20 --ignore rl/test/test_distributed.py
