@@ -759,3 +759,8 @@ workflows:
           cu_version: cu117
           name: unittest_rl_linux_optdeps_gpu_py3.9
           python_version: '3.9'
+          filters:
+            branches:
+              ignore: /.*/
+            pull-requests:
+              only: /.*/
