@@ -298,21 +298,19 @@ class ProbabilisticTensorDictModule(nn.Module):
     ) -> tuple[Tensor, ...] | Tensor:
         if interaction_mode is None or interaction_mode == "":
             interaction_mode = self.default_interaction_mode
-        if not isinstance(dist, D.Distribution):
-            raise TypeError(f"type {type(dist)} not recognised by _dist_sample")
 
         if interaction_mode == "mode":
-            if hasattr(dist, "mode"):
+            try:
                 return dist.mode
-            else:
+            except AttributeError:
                 raise NotImplementedError(
                     f"method {type(dist)}.mode is not implemented"
                 )
 
         elif interaction_mode == "median":
-            if hasattr(dist, "median"):
+            try:
                 return dist.median
-            else:
+            except AttributeError:
                 raise NotImplementedError(
                     f"method {type(dist)}.median is not implemented"
                 )
