@@ -3191,8 +3191,7 @@ class TensorDict(TensorDictBase):
                     f"Failed to update '{subkey}' in tensordict {td}"
                 ) from err
         else:
-            if td._tensordict.get(subkey, None) is not value:
-                td._tensordict[subkey] = value
+            td._tensordict[subkey] = value
 
         return self
 
