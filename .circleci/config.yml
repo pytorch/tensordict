@@ -554,6 +554,57 @@ jobs:
       - store_test_results:
           path: test-results
 
+  unittest_rl_linux_optdeps_gpu:
+    # A hopefully temporary pipeline
+    <<: *binary_common
+    machine:
+      image: ubuntu-2004-cuda-11.4:202110-01
+    resource_class: gpu.nvidia.medium
+    environment:
+      image_name: "pytorch/manylinux-cuda117"
+      TAR_OPTIONS: --no-same-owner
+      PYTHON_VERSION: << parameters.python_version >>
+      CU_VERSION: << parameters.cu_version >>
+
+    steps:
+      - checkout
+      - designate_upload_channel
+      - run:
+          name: Generate cache key
+          # This will refresh cache on Sundays, nightly build should generate new cache.
+          command: echo "$(date +"%Y-%U")" > .circleci-weekly
+      - restore_cache:
+
+          keys:
+            - env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/rl_linux_optdeps/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+
+      - run:
+          name: Setup
+          command: .circleci/unittest/rl_linux_optdeps/scripts/setup_env.sh
+      - save_cache:
+
+          key: env-v3-linux-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/rl_linux_optdeps/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
+
+          paths:
+            - conda
+            - env
+      - run:
+          name: Install torchrl
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD -e UPLOAD_CHANNEL -e CU_VERSION "${image_name}" .circleci/unittest/rl_linux_optdeps/scripts/install.sh
+      - run:
+          name: Run tests
+          command: bash .circleci/unittest/rl_linux_optdeps/scripts/run_test.sh
+#          command: docker run --env-file ./env.list -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/linux/scripts/run_test.sh
+      - run:
+          name: Codecov upload
+          command: |
+            bash <(curl -s https://codecov.io/bash) -Z -F linux-outdeps-gpu
+      - run:
+          name: Post Process
+          command: docker run -t --gpus all -v $PWD:$PWD -w $PWD "${image_name}" .circleci/unittest/rl_linux_optdeps/scripts/post_process.sh
+      - store_test_results:
+          path: test-results
+
 workflows:
   lint:
     jobs:
@@ -708,3 +759,8 @@ workflows:
           cu_version: cu113
           name: unittest_linux_stable_gpu_py3.10
           python_version: '3.10'
+
+      - unittest_rl_linux_optdeps_gpu:
+          cu_version: cu117
+          name: unittest_rl_linux_optdeps_gpu_py3.9
+          python_version: '3.9'
