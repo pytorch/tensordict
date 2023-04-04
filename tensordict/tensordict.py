@@ -4897,8 +4897,9 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace: bool = False,
     ) -> TensorDictBase:
         key = self._validate_key(key)
-        if self.is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+        # we don't need this as locked lazy stacks have locked nested tds so the error will be captured in the loop
+        # if self.is_locked:
+        #     raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         tensor = self._validate_value(tensor)
         for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
@@ -4937,7 +4938,7 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
         # this generalizes across all types of indices
         item = self.get(key)
-        item[idx] = value
+        item[idx] = self._validate_value(value, check_shape=False)
         self.set(key, item, inplace=True)
         return self
 
