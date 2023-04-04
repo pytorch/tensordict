@@ -86,6 +86,8 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
     if (
         isinstance(items, (torch.Tensor, np.ndarray)) and len(items.shape) <= 1
     ) or isinstance(items, list):
+        if isinstance(items, torch.Tensor) and not items.shape:
+            return shape[1:]
         if len(items):
             return torch.Size([len(items), *shape[1:]])
         else:

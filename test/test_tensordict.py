@@ -1607,6 +1607,37 @@ class TestTensorDicts(TestTensorDictsBase):
         td_dict = td.to_dict()
         assert recursive_checker(td_dict)
 
+    @pytest.mark.parametrize(
+        "index", ["mask", "int", "range", "tensor1", "tensor2", "slice_tensor"]
+    )
+    def test_update_subtensordict(self, td_name, device, index):
+        td = getattr(self, td_name)(device)
+        if index == "mask":
+            index = torch.zeros(td.shape[0], dtype=torch.bool, device=device)
+            index[-1] = 1
+        elif index == "int":
+            index = td.shape[0] - 1
+        elif index == "range":
+            index = range(td.shape[0] - 1, td.shape[0])
+        elif index == "tensor1":
+            index = torch.tensor(td.shape[0] - 1, device=device)
+        elif index == "tensor2":
+            index = torch.tensor([td.shape[0] - 2, td.shape[0] - 1], device=device)
+        elif index == "slice_tensor":
+            index = (
+                slice(None),
+                torch.tensor([td.shape[1] - 2, td.shape[1] - 1], device=device),
+            )
+
+        sub_td = td.get_sub_tensordict(index)
+        assert sub_td.shape == td.to_tensordict()[index].shape
+        assert sub_td.shape == td[index].shape
+        td0 = td[index].to_tensordict().apply(lambda x: x * 0 + 2)
+        assert sub_td.shape == td0.shape
+        sub_td.update(td0)
+        assert (sub_td == 2).all()
+        assert (td[index] == 2).all()
+
     @pytest.mark.filterwarnings("error")
     def test_stack_tds_on_subclass(self, td_name, device):
         torch.manual_seed(1)

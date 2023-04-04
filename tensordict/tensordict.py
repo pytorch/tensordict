@@ -2017,7 +2017,10 @@ class TensorDictBase(MutableMapping):
             value_select = value[mask_expand]
             d[key] = value_select
         dim = int(mask.sum().item())
-        return TensorDict(device=self.device, source=d, batch_size=torch.Size([dim]))
+        other_dim = self.shape[mask.ndim :]
+        return TensorDict(
+            device=self.device, source=d, batch_size=torch.Size([dim, *other_dim])
+        )
 
     @abc.abstractmethod
     def is_contiguous(self) -> bool:
@@ -2577,6 +2580,8 @@ class TensorDictBase(MutableMapping):
             >>> print(td.get("a"))  # values have not changed
 
         """
+        if isinstance(idx, tuple) and len(idx) == 1:
+            idx = idx[0]
         if isinstance(idx, str) or (
             isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
         ):
@@ -4892,8 +4897,9 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace: bool = False,
     ) -> TensorDictBase:
         key = self._validate_key(key)
-        if self.is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+        # we don't need this as locked lazy stacks have locked nested tds so the error will be captured in the loop
+        # if self.is_locked:
+        #     raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         tensor = self._validate_value(tensor)
         for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
@@ -4930,8 +4936,10 @@ class LazyStackedTensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: dict | CompatibleType, idx: IndexType
     ) -> TensorDictBase:
-        sub_td = self[idx]
-        sub_td.set_(key, value)
+        # this generalizes across all types of indices
+        item = self.get(key)
+        item[idx] = self._validate_value(value, check_shape=False)
+        self.set(key, item, inplace=True)
         return self
 
     def _stack_onto_(
@@ -4993,6 +5001,15 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             else:
                 raise err
+
+    def get_at(self, key, index, default=NO_DEFAULT):
+        item = self.get(key, default=default)
+        if item is default and default is not NO_DEFAULT:
+            return item
+        if isinstance(item, TensorDictBase):
+            return SubTensorDict(item, index)
+        else:
+            return item[index]
 
     def get_nestedtensor(
         self,
@@ -5186,6 +5203,8 @@ class LazyStackedTensorDict(TensorDictBase):
         return super().__contains__(item)
 
     def __getitem__(self, item: IndexType) -> TensorDictBase:
+        if isinstance(item, tuple) and len(item) == 1:
+            item = item[0]
         if item is Ellipsis or (isinstance(item, tuple) and Ellipsis in item):
             item = convert_ellipsis_to_idx(item, self.batch_size)
         if isinstance(item, tuple) and sum(
@@ -5234,9 +5253,11 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             return out
         elif isinstance(item, (Tensor, list)) and self.stack_dim != 0:
+            tds = [tensordict[item] for tensordict in self.tensordicts]
+            dim_drop = self.tensordicts[0].ndim - tds[0].ndim
             out = LazyStackedTensorDict(
-                *[tensordict[item] for tensordict in self.tensordicts],
-                stack_dim=self.stack_dim,
+                *tds,
+                stack_dim=self.stack_dim - dim_drop,
             )
             return out
         elif isinstance(item, slice) and self.stack_dim == 0:
