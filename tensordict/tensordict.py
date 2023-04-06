@@ -2905,6 +2905,15 @@ class TensorDict(TensorDictBase):
 
     """
 
+    __slots__ = (
+        "_tensordict",
+        "_batch_size",
+        "_is_shared",
+        "_is_memmap",
+        "_device",
+        "_is_locked",
+    )
+
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
         cls._is_shared = False
         cls._is_memmap = False
@@ -3613,6 +3622,13 @@ class TensorDict(TensorDictBase):
         return _TensorDictKeysView(
             self, include_nested=include_nested, leaves_only=leaves_only
         )
+
+    def __getstate__(self):
+        return {slot: getattr(self, slot) for slot in self.__slots__}
+
+    def __setstate__(self, state):
+        for slot, value in state.items():
+            setattr(self, slot, value)
 
 
 class _ErrorInteceptor:
