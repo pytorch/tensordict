@@ -1,7 +1,11 @@
-name: Continuous Benchmarks
+name: Continuous Benchmark
 
 on:
   pull_request:
+
+permissions:
+  deployments: write
+  contents: write
 
 jobs:
   benchmark_cpu:
