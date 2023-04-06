@@ -3,7 +3,7 @@ on:
   workflow_run:
     workflows: ["Generate documentation"]
     types:
-      - completed
+      - created
 
 permissions:
   deployments: write
