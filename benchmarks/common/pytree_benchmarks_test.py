@@ -15,7 +15,7 @@ def nested_dict():
 
 @pytest.fixture
 def nested_td(nested_dict):
-    return TensorDict(nested_dict, [3, 4])
+    return TensorDict(nested_dict, [3, 4], _run_checks=False)
 
 
 # reshape
