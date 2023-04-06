@@ -3,8 +3,7 @@ name: Continuous Benchmark
 on:
   pull_request:
 
-permissions:
-  issues: write
+permissions: write-all
 
 jobs:
   benchmark_cpu:
