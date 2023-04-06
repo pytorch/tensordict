@@ -81,7 +81,7 @@ jobs:
           pip install pytest pytest-benchmark
       - name: Run benchmarks
         run: |
-          pytest ./benchmarks --rank 0 --columns ops --benchmark-json test.json
+          pytest ./benchmarks --rank 0 --benchmark-columns ops --benchmark-json test.json
       - name: Publish results
         uses: nils-braun/pytest-benchmark-commenter@v2
         with:
