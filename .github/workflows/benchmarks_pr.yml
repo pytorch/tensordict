@@ -82,6 +82,6 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
-          pytest benchmark.py --benchmark-only --benchmark-json output.json
+          python -m pytest --rank 0 --benchmark-only --benchmark-json output.json
       - name: Publish results
         uses: nils-braun/pytest-benchmark-commenter@v2
