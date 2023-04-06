@@ -263,11 +263,11 @@ def _init_wrapper(init: Callable) -> Callable:
             )
 
         self._tensordict = TensorDict(
-            {}, batch_size=batch_size, device=device, _run_checks=False
+            {}, batch_size=torch.Size(batch_size), device=device, _run_checks=False
         )
         # To save non tensor data (Nested tensor classes also go here)
         self._non_tensordict = {}
-        init(self, **{key: value for key, value in kwargs.items()})
+        init(self, **kwargs)
 
     new_params = [
         inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY),
