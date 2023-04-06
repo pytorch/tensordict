@@ -35,7 +35,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
-          RUN_BENCHMARK="python -m pytest --rank 0 --benchmark-json "
+          RUN_BENCHMARK="pytest --rank 0 --benchmark-columns ops --benchmark-json "
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
@@ -81,10 +81,10 @@ jobs:
           pip install pytest pytest-benchmark
       - name: Run benchmarks
         run: |
-          python -m pytest ./benchmarks --rank 0 --benchmark-only --benchmark-json output.json
+          pytest ./benchmarks --rank 0 --columns iterations --benchmark-json test.json
       - name: Publish results
         uses: nils-braun/pytest-benchmark-commenter@v2
-        # with:
-        #   token: ${{ secrets.GITHUB_TOKEN }}
-        #   benchmark-file: "output.json"
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          benchmark-file: test.json
         #   comparison-benchmark-file: "old_benchmark/output.json"
