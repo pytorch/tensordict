@@ -54,6 +54,48 @@ def test_clone(benchmark, td):
     benchmark.pedantic(td.clone, iterations=100, rounds=100)
 
 
+@pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple"])
+def test_getitem(benchmark, td, c, index):
+    if index == "int":
+        index = 1
+    elif index == "slice_int":
+        index = (slice(None), 1)
+    elif index == "range":
+        index = range(2)
+    elif index == "tuple":
+        index = (2, 1)
+    else:
+        raise NotImplementedError
+
+    def exec_getitem():
+        _ = td[index]
+
+    benchmark.pedantic(exec_getitem, iterations=100, rounds=100)
+
+
+@pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple"])
+def test_setitem_dim(benchmark, td, c, index):
+    if index == "int":
+        index = 1
+    elif index == "slice_int":
+        index = (slice(None), 1)
+    elif index == "range":
+        index = range(2)
+    elif index == "tuple":
+        index = (2, 1)
+    else:
+        raise NotImplementedError
+
+    def setup():
+        td_index = td[index].clone().zero_()
+        return ((td, td_index), {})
+
+    def exec_setitem(td, td_index):
+        td[index] = td_index
+
+    benchmark.pedantic(exec_setitem, setup=setup, iterations=1, rounds=10000)
+
+
 def test_setitem(benchmark, td, c):
     def exec_setitem():
         tdc = td.clone()
