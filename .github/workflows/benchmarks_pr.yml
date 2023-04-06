@@ -4,8 +4,7 @@ on:
   pull_request:
 
 permissions:
-  deployments: write
-  contents: write
+  issues: write
 
 jobs:
   benchmark_cpu:
