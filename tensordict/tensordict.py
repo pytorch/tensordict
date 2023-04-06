@@ -1108,7 +1108,7 @@ class TensorDictBase(MutableMapping):
         elif batch_size is not None:
             out = TensorDict(
                 {},
-                batch_size=batch_size,
+                batch_size=torch.Size(batch_size),
                 device=self.device,
                 _run_checks=False,
                 **constructor_kwargs,
@@ -1432,7 +1432,7 @@ class TensorDictBase(MutableMapping):
                 d[key] = value.expand(shape)
         return TensorDict(
             source=d,
-            batch_size=shape,
+            batch_size=torch.Size(shape),
             device=self.device,
             _run_checks=False,
         )
@@ -2137,7 +2137,7 @@ class TensorDictBase(MutableMapping):
                 raise RuntimeError(
                     "Implicit reshaping is not permitted with empty " "tensordicts"
                 )
-            batch_size = shape
+            batch_size = torch.Size(shape)
         return TensorDict(d, batch_size, device=self.device, _run_checks=False)
 
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
@@ -2166,17 +2166,21 @@ class TensorDictBase(MutableMapping):
             dim += self.batch_dims
         if isinstance(split_size, int):
             rep, remainder = divmod(self.batch_size[dim], split_size)
-            rep_shape = [
-                split_size if idx == dim else size
-                for (idx, size) in enumerate(self.batch_size)
-            ]
+            rep_shape = torch.Size(
+                [
+                    split_size if idx == dim else size
+                    for (idx, size) in enumerate(self.batch_size)
+                ]
+            )
             batch_sizes = [rep_shape for _ in range(rep)]
             if remainder:
                 batch_sizes.append(
-                    [
-                        remainder if dim_idx == dim else dim_size
-                        for (dim_idx, dim_size) in enumerate(self.batch_size)
-                    ]
+                    torch.Size(
+                        [
+                            remainder if dim_idx == dim else dim_size
+                            for (dim_idx, dim_size) in enumerate(self.batch_size)
+                        ]
+                    )
                 )
         elif isinstance(split_size, list) and all(
             isinstance(element, int) for element in split_size
@@ -2187,10 +2191,12 @@ class TensorDictBase(MutableMapping):
                 )
             for i in split_size:
                 batch_sizes.append(
-                    [
-                        i if dim_idx == dim else dim_size
-                        for (dim_idx, dim_size) in enumerate(self.batch_size)
-                    ]
+                    torch.Size(
+                        [
+                            i if dim_idx == dim else dim_size
+                            for (dim_idx, dim_size) in enumerate(self.batch_size)
+                        ]
+                    )
                 )
         else:
             raise TypeError(
@@ -2930,7 +2936,7 @@ class TensorDict(TensorDictBase):
 
         if not _run_checks:
             self._tensordict: dict = dict(source)
-            self._batch_size = torch.Size(batch_size)
+            self._batch_size = batch_size
             upd_dict = {}
             for key, value in self._tensordict.items():
                 if isinstance(value, dict):
@@ -3037,16 +3043,17 @@ class TensorDict(TensorDictBase):
         source: TensorDictBase | dict,
         batch_size: Sequence[int] | torch.Size | int | None = None,
     ) -> torch.Size:
-        if isinstance(batch_size, Sequence):
+        try:
             return torch.Size(batch_size)
-        elif isinstance(batch_size, Number):
-            return torch.Size([batch_size])
-        elif isinstance(source, TensorDictBase):
-            return source.batch_size
-        raise ValueError(
-            "batch size was not specified when creating the TensorDict "
-            "instance and it could not be retrieved from source."
-        )
+        except Exception as err:
+            if isinstance(batch_size, Number):
+                return torch.Size([batch_size])
+            elif isinstance(source, TensorDictBase):
+                return source.batch_size
+            raise ValueError(
+                "batch size was not specified when creating the TensorDict "
+                "instance and it could not be retrieved from source."
+            ) from err
 
     @property
     def batch_dims(self) -> int:
@@ -3130,6 +3137,7 @@ class TensorDict(TensorDictBase):
 
     def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
         self_copy = copy(self)
+        # self_copy = self.clone(False)
         self_copy._tensordict = {
             key: _get_item(item, idx) for key, item in self.items()
         }
@@ -3183,7 +3191,7 @@ class TensorDict(TensorDictBase):
                 d[key] = value.expand(*shape)
         return TensorDict(
             source=d,
-            batch_size=[*shape],
+            batch_size=torch.Size(shape),
             device=self.device,
             _run_checks=False,
         )
@@ -4113,7 +4121,9 @@ def pad(
     for i in range(0, len(reverse_pad), 2):
         reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
 
-    out = TensorDict({}, new_batch_size, device=tensordict.device, _run_checks=False)
+    out = TensorDict(
+        {}, torch.Size(new_batch_size), device=tensordict.device, _run_checks=False
+    )
     for key, tensor in tensordict.items():
         cur_pad = reverse_pad
         if len(pad_size) < len(_shape(tensor)) * 2:
@@ -4183,7 +4193,9 @@ def pad_sequence(
     else:
         shape = [shape, len(list_of_tensordicts)]
     if out is None:
-        out = TensorDict({}, shape, device=device, _run_checks=False)
+        out = TensorDict(
+            {}, batch_size=torch.Size(shape), device=device, _run_checks=False
+        )
         for key in keys:
             try:
                 out.set(
