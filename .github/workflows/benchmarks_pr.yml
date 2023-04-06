@@ -85,3 +85,7 @@ jobs:
           python -m pytest --rank 0 --benchmark-only --benchmark-json output.json
       - name: Publish results
         uses: nils-braun/pytest-benchmark-commenter@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          benchmark-file: "benchmarks/output.json"
+          # comparison-benchmark-file: "old_benchmark/output.json"
