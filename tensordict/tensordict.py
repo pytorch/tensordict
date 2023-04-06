@@ -3127,7 +3127,8 @@ class TensorDict(TensorDictBase):
             )
 
     def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
-        self_copy = self.clone(False)
+        self_copy = copy(self)
+        # self_copy = self.clone(False)
         self_copy._tensordict = {
             key: _get_item(item, idx) for key, item in self.items()
         }
