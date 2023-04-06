@@ -22,6 +22,7 @@ from tensordict.nn.probabilistic import (
 )
 from tensordict.nn.sequence import TensorDictSequential
 from tensordict.nn.utils import biased_softplus, inv_softplus
+from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
 
 __all__ = [
     "dispatch",
