@@ -5,6 +5,7 @@
 
 from tensordict.memmap import MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
+from tensordict.tensorclass import is_tensorclass, tensorclass
 from tensordict.tensordict import (
     is_batchedtensor,
     is_memmap,
@@ -40,5 +41,6 @@ __all__ = [
     "is_tensor_collection",
     "pad",
     "PersistentTensorDict",
-    "is_functional",
+    "is_tensorclass",
+    "tensorclass",
 ]

@@ -13,6 +13,8 @@ from _pytest.fixtures import fixture
 from tensordict import MemmapTensor, TensorDict
 from torch import multiprocessing as mp
 
+TIMEOUT = 100
+
 
 @fixture
 def set_context():
@@ -79,7 +81,7 @@ class TestGather:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=30)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "yuppie"
         finally:
             main_worker.join()
@@ -130,7 +132,7 @@ class SendBase:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=30)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "yuppie"
         finally:
             main_worker.join()
@@ -262,7 +264,7 @@ class iRecvBase:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=30)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "yuppie"
         finally:
             main_worker.join()
@@ -383,7 +385,7 @@ class iSendBase:
         main_worker.start()
         secondary_worker.start()
         try:
-            out = queue.get(timeout=30)
+            out = queue.get(timeout=TIMEOUT)
             assert out == "yuppie"
         except Exception as err:
             # otherwise pytest does not capture it

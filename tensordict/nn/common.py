@@ -70,6 +70,10 @@ class dispatch:
             will contain the keys used as output to the module.
             Defaults to ``"out_keys"`` which is the attribute name of
             :class:`~.TensorDictModule` list of output keys.
+        auto_batch_size (bool, optional): if ``True``, the batch-size of the
+            input tensordict is determined automatically as the maximum number
+            of common dimensions across all the input tensors.
+            Defaults to ``True``.
 
     Examples:
         >>> class MyModule(nn.Module):
@@ -185,7 +189,11 @@ class dispatch:
     DEFAULT_DEST = "out_keys"
 
     def __new__(
-        cls, separator=DEFAULT_SEPARATOR, source=DEFAULT_SOURCE, dest=DEFAULT_DEST
+        cls,
+        separator=DEFAULT_SEPARATOR,
+        source=DEFAULT_SOURCE,
+        dest=DEFAULT_DEST,
+        auto_batch_size: bool = True,
     ):
         if callable(separator):
             func = separator
@@ -196,11 +204,16 @@ class dispatch:
         return super().__new__(cls)
 
     def __init__(
-        self, separator=DEFAULT_SEPARATOR, source=DEFAULT_SOURCE, dest=DEFAULT_DEST
+        self,
+        separator=DEFAULT_SEPARATOR,
+        source=DEFAULT_SOURCE,
+        dest=DEFAULT_DEST,
+        auto_batch_size: bool = True,
     ):
         self.separator = separator
         self.source = source
         self.dest = dest
+        self.auto_batch_size = auto_batch_size
 
     def __call__(self, func: Callable) -> Callable:
         # sanity check
@@ -217,7 +230,7 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
-            from tensordict.prototype import is_tensorclass
+            from tensordict.tensorclass import is_tensorclass
 
             source = self.source
             if isinstance(source, str):
@@ -250,7 +263,10 @@ class dispatch:
                                 f"The key {expected_key} wasn't found in the keyword arguments "
                                 f"but is expected to execute that function."
                             )
-                tensordict = make_tensordict(tensordict_values)
+                tensordict = make_tensordict(
+                    tensordict_values,
+                    batch_size=torch.Size([]) if not self.auto_batch_size else None,
+                )
                 out = func(_self, tensordict, *args, **kwargs)
                 out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
@@ -390,7 +406,7 @@ class TensorDictModule(nn.Module):
         out = self.module(*tensors, **kwargs)
         return out
 
-    @dispatch
+    @dispatch(auto_batch_size=False)
     def forward(
         self,
         tensordict: TensorDictBase,

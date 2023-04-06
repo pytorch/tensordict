@@ -130,7 +130,7 @@ def is_tensor_collection(datatype: type | Any) -> bool:
         >>> is_tensor_collection(MyClass(batch_size=[]))  # True
 
     """
-    from tensordict.prototype import is_tensorclass
+    from tensordict.tensorclass import is_tensorclass
 
     return (
         issubclass(datatype, TensorDictBase)
@@ -230,7 +230,7 @@ class _TensorDictKeysView:
     def _items(
         self, tensordict: TensorDict | None = None
     ) -> Iterable[tuple[NestedKey, CompatibleType]]:
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if tensordict is None:
             tensordict = self.tensordict
@@ -1454,7 +1454,7 @@ class TensorDictBase(MutableMapping):
 
         """
         # avoiding circular imports
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if is_tensorclass(other):
             return other != self
@@ -1486,7 +1486,7 @@ class TensorDictBase(MutableMapping):
 
         """
         # avoiding circular imports
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if is_tensorclass(other):
             return other == self
@@ -2017,7 +2017,10 @@ class TensorDictBase(MutableMapping):
             value_select = value[mask_expand]
             d[key] = value_select
         dim = int(mask.sum().item())
-        return TensorDict(device=self.device, source=d, batch_size=torch.Size([dim]))
+        other_dim = self.shape[mask.ndim :]
+        return TensorDict(
+            device=self.device, source=d, batch_size=torch.Size([dim, *other_dim])
+        )
 
     @abc.abstractmethod
     def is_contiguous(self) -> bool:
@@ -2577,6 +2580,8 @@ class TensorDictBase(MutableMapping):
             >>> print(td.get("a"))  # values have not changed
 
         """
+        if isinstance(idx, tuple) and len(idx) == 1:
+            idx = idx[0]
         if isinstance(idx, str) or (
             isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
         ):
@@ -2680,11 +2685,15 @@ class TensorDictBase(MutableMapping):
                     value, batch_size=indexed_bs, device=self.device, _run_checks=False
                 )
             if value.batch_size != indexed_bs:
-                raise RuntimeError(
-                    f"indexed destination TensorDict batch size is {indexed_bs} "
-                    f"(batch_size = {self.batch_size}, index={index}), "
-                    f"which differs from the source batch size {value.batch_size}"
-                )
+                # try to expand
+                try:
+                    value = value.expand(indexed_bs)
+                except RuntimeError as err:
+                    raise RuntimeError(
+                        f"indexed destination TensorDict batch size is {indexed_bs} "
+                        f"(batch_size = {self.batch_size}, index={index}), "
+                        f"which differs from the source batch size {value.batch_size}"
+                    ) from err
 
             keys = set(self.keys())
             if not all(key in keys for key in value.keys()):
@@ -3190,8 +3199,7 @@ class TensorDict(TensorDictBase):
                     f"Failed to update '{subkey}' in tensordict {td}"
                 ) from err
         else:
-            if td._tensordict.get(subkey, None) is not value:
-                td._tensordict[subkey] = value
+            td._tensordict[subkey] = value
 
         return self
 
@@ -4627,7 +4635,7 @@ torch.Size([3, 2])
         return SubTensorDict(source=self._source, idx=self.idx)
 
     def is_contiguous(self) -> bool:
-        return all([value.is_contiguous() for _, value in self.items()])
+        return all(value.is_contiguous() for value in self.values())
 
     def contiguous(self) -> TensorDictBase:
         if self.is_contiguous():
@@ -4650,61 +4658,9 @@ torch.Size([3, 2])
     def expand(self, *shape: int, inplace: bool = False) -> TensorDictBase:
         if len(shape) == 1 and isinstance(shape[0], Sequence):
             shape = tuple(shape[0])
-
-        idx = self.idx
-        if isinstance(idx, Tensor) and idx.dtype is torch.double:
-            # check that idx is not a mask, otherwise throw an error
-            raise ValueError("Cannot expand a TensorDict masked using SubTensorDict")
-        elif not isinstance(idx, tuple):
-            # create an tuple idx with length equal to this TensorDict's number of dims
-            idx = (idx,) + (slice(None),) * (self._source.ndimension() - 1)
-        elif isinstance(idx, tuple) and len(idx) < self._source.ndimension():
-            # create an tuple idx with length equal to this TensorDict's number of dims
-            idx = idx + (slice(None),) * (self._source.ndimension() - len(idx))
-        # now that idx has the same length as the source's number of dims, we can work with it
-
-        source_shape = self._source.shape
-        num_integer_types = 0
-        for i in idx:
-            if isinstance(i, (int, np.integer)) or (
-                isinstance(i, Tensor) and i.ndimension() == 0
-            ):
-                num_integer_types += 1
-        number_of_extra_dim = len(source_shape) - len(shape) + num_integer_types
-        if number_of_extra_dim > 0:
-            new_source_shape = [shape[i] for i in range(number_of_extra_dim)]
-            shape = shape[len(new_source_shape) :]
-        else:
-            new_source_shape = []
-        new_idx = [slice(None) for _ in range(len(new_source_shape))]
-        for _idx, _s in zip(idx, source_shape):
-            # we're iterating through the source shape and the index
-            # we want to get the new index and the new source shape
-
-            if isinstance(_idx, (int, np.integer)) or (
-                isinstance(_idx, Tensor) and _idx.ndimension() == 0
-            ):
-                # if the index is an integer, do nothing, i.e. keep the index and the shape
-                new_source_shape.append(_s)
-                new_idx.append(_idx)
-            elif _s == 1:
-                # if the source shape at this dim is 1, expand that source dim to the size that is required
-                new_idx.append(slice(None))
-                new_source_shape.append(shape[0])
-                shape = shape[1:]
-            else:
-                # in this case, the source shape must be different than 1. The index is going to be identical.
-                new_idx.append(_idx)
-                new_source_shape.append(shape[0])
-                shape = shape[1:]
-        assert not len(shape)
-        new_source = self._source.expand(*new_source_shape)
-        new_idx = tuple(new_idx)
-        if inplace:
-            self._source = new_source
-            self.idx = new_idx
-            self.batch_size = _getitem_batch_size(new_source_shape, new_idx)
-        return new_source[new_idx]
+        return self.apply(
+            lambda x: x.expand((*shape, *x.shape[self.ndim :])), batch_size=shape
+        )
 
     def is_shared(self) -> bool:
         return self._source.is_shared()
@@ -4944,8 +4900,9 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace: bool = False,
     ) -> TensorDictBase:
         key = self._validate_key(key)
-        if self.is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+        # we don't need this as locked lazy stacks have locked nested tds so the error will be captured in the loop
+        # if self.is_locked:
+        #     raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         tensor = self._validate_value(tensor)
         for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
@@ -4982,8 +4939,10 @@ class LazyStackedTensorDict(TensorDictBase):
     def set_at_(
         self, key: str, value: dict | CompatibleType, idx: IndexType
     ) -> TensorDictBase:
-        sub_td = self[idx]
-        sub_td.set_(key, value)
+        # this generalizes across all types of indices
+        item = self.get(key)
+        item[idx] = self._validate_value(value, check_shape=False)
+        self.set(key, item, inplace=True)
         return self
 
     def _stack_onto_(
@@ -5045,6 +5004,15 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             else:
                 raise err
+
+    def get_at(self, key, index, default=NO_DEFAULT):
+        item = self.get(key, default=default)
+        if item is default and default is not NO_DEFAULT:
+            return item
+        if isinstance(item, TensorDictBase):
+            return SubTensorDict(item, index)
+        else:
+            return item[index]
 
     def get_nestedtensor(
         self,
@@ -5238,6 +5206,8 @@ class LazyStackedTensorDict(TensorDictBase):
         return super().__contains__(item)
 
     def __getitem__(self, item: IndexType) -> TensorDictBase:
+        if isinstance(item, tuple) and len(item) == 1:
+            item = item[0]
         if item is Ellipsis or (isinstance(item, tuple) and Ellipsis in item):
             item = convert_ellipsis_to_idx(item, self.batch_size)
         if isinstance(item, tuple) and sum(
@@ -5286,9 +5256,11 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             return out
         elif isinstance(item, (Tensor, list)) and self.stack_dim != 0:
+            tds = [tensordict[item] for tensordict in self.tensordicts]
+            dim_drop = self.tensordicts[0].ndim - tds[0].ndim
             out = LazyStackedTensorDict(
-                *[tensordict[item] for tensordict in self.tensordicts],
-                stack_dim=self.stack_dim,
+                *tds,
+                stack_dim=self.stack_dim - dim_drop,
             )
             return out
         elif isinstance(item, slice) and self.stack_dim == 0:
@@ -5346,7 +5318,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def __eq__(self, other):
         # avoiding circular imports
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if is_tensorclass(other):
             return other == self
@@ -5384,7 +5356,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def __ne__(self, other):
         # avoiding circular imports
-        from tensordict.prototype import is_tensorclass
+        from tensordict.tensorclass import is_tensorclass
 
         if is_tensorclass(other):
             return other != self
