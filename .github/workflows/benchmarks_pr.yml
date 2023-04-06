@@ -1,0 +1,123 @@
+name: Benchmarks
+
+on:
+  pull_request:
+
+jobs:
+  benchmark_cpu:
+    name: CPU Pytest benchmark
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Who triggered this?
+        run: |
+          echo "Action triggered by ${{ github.event.pull_request.html_url }}"
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 50 # this is to make sure we obtain the target base commit
+      - name: Python Setup
+        - uses: actions/setup-python@v4
+        with:
+          python-version: 3.8
+      - name: Setup Environment
+        run: |
+          pip install -e .
+          pip install pytest pytest-benchmark
+      - name: Setup benchmarks
+        run: |
+          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
+      - name: Run benchmarks
+        run: |
+          cd benchmarks/
+          RUN_BENCHMARK="python -m pytest --rank 0 --benchmark-json "
+          git checkout ${{ github.event.pull_request.base.sha }}
+          $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
+          git checkout ${{ github.event.pull_request.head.sha }}
+          $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}          
+      - name: Compare results
+        run: |
+          pytest-benchmark compare ${{ env.BASELINE_JSON }} ${{ env.CONTENDER_JSON }} | tee cmp_results
+          echo 'Benchmark comparison for [`${{ env.BASE_SHA }}`](${{ github.event.repository.html_url }}/commit/${{ github.event.pull_request.base.sha }}) (base) vs [`${{ env.HEAD_SHA }}`](${{ github.event.repository.html_url }}/commit/${{ github.event.pull_request.head.sha }}) (PR)' >> pr_comment
+          echo '```' >> pr_comment
+          tail -n +2 cmp_results >> pr_comment  # Skip the first line saying "Comparing XX to YY"
+          echo '```' >> pr_comment
+          cat pr_comment > ${{ env.PR_COMMENT }}
+      - name: 'Comment PR'
+        uses: actions/github-script@v4.0.2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: require('fs').readFileSync('${{ env.PR_COMMENT }}').toString()
+            });
+
+
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: CPU Benchmark Results
+          tool: 'pytest'
+          output-file-path: benchmarks/output.json
+          fail-on-alert: true
+          alert-threshold: '200%'
+          alert-comment-cc-users: '@vmoens,@tcbegley'
+          comment-on-alert: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: gh-pages
+          auto-push: true
+
+
+
+
+  benchmarks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup benchmarks
+        run: |
+          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
+      - name: Run benchmarks
+        run: |
+          RUN_BENCHMARK="bazel run -c opt lldb-eval:eval_benchmark -- --benchmark_format=json --benchmark_min_time=10"
+          git checkout ${{ github.event.pull_request.base.sha }}
+          $RUN_BENCHMARK > ${{ env.BASELINE_JSON }}
+          git checkout ${{ github.event.pull_request.head.sha }}
+          $RUN_BENCHMARK > ${{ env.CONTENDER_JSON }}
+      - name: Compare results
+        run: |
+          git clone --depth 1 --branch "v1.5.3" https://github.com/google/benchmark google_benchmark
+          cd google_benchmark
+          # Use python3 to run the compare script, because numpy already dropped
+          # support for python2. The compare script fails with the current
+          # version of numpy because of the non-ASCII symbol in the source code:
+          # https://github.com/numpy/numpy/blob/6d7b8aaed5ae9f0435764675ebac8c9ada06738f/numpy/__init__.py#L292
+          sed -i 's/PY2/PY3/g' tools/BUILD.bazel
+          bazel run //tools:compare -- --no-color benchmarks ${{ env.BASELINE_JSON }} ${{ env.CONTENDER_JSON }} | tee cmp_results
+          echo 'Benchmark comparison for [`${{ env.BASE_SHA }}`](${{ github.event.repository.html_url }}/commit/${{ github.event.pull_request.base.sha }}) (base) vs [`${{ env.HEAD_SHA }}`](${{ github.event.repository.html_url }}/commit/${{ github.event.pull_request.head.sha }}) (PR)' >> pr_comment
+          echo '```' >> pr_comment
+          tail -n +2 cmp_results >> pr_comment  # Skip the first line saying "Comparing XX to YY"  ?? check if needed
+          echo '```' >> pr_comment
+          cat pr_comment > ${{ env.PR_COMMENT }}
+      - name: 'Comment PR'
+        uses: actions/github-script@v4.0.2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: require('fs').readFileSync('${{ env.PR_COMMENT }}').toString()
+            });
