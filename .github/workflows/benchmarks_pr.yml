@@ -6,62 +6,8 @@ on:
 permissions: write-all
 
 jobs:
-  # benchmark_cpu:
-  #   name: CPU Pytest benchmark
-  #   runs-on: ubuntu-20.04
-  #   steps:
-  #     - name: Who triggered this?
-  #       run: |
-  #         echo "Action triggered by ${{ github.event.pull_request.html_url }}"
-  #     - name: Checkout
-  #       uses: actions/checkout@v3
-  #       with:
-  #         fetch-depth: 50 # this is to make sure we obtain the target base commit
-  #     - name: Python Setup
-  #       uses: actions/setup-python@v4
-  #       with:
-  #         python-version: 3.8
-  #     - name: Setup Environment
-  #       run: |
-  #         pip install -e .
-  #         pip install pytest pytest-benchmark
-  #     - name: Setup benchmarks
-  #       run: |
-  #         echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
-  #         echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
-  #         echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
-  #         echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
-  #         echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
-  #     - name: Run benchmarks
-  #       run: |
-  #         cd benchmarks/
-  #         RUN_BENCHMARK="pytest --rank 0 --benchmark-columns ops --benchmark-json "
-  #         git checkout ${{ github.event.pull_request.base.sha }}
-  #         $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
-  #         git checkout ${{ github.event.pull_request.head.sha }}
-  #         $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}          
-  #     - name: Compare results
-  #       run: |
-  #         pytest-benchmark compare ${{ env.BASELINE_JSON }} ${{ env.CONTENDER_JSON }} | tee cmp_results
-  #         echo 'Benchmark comparison for [`${{ env.BASE_SHA }}`](${{ github.event.repository.html_url }}/commit/${{ github.event.pull_request.base.sha }}) (base) vs [`${{ env.HEAD_SHA }}`](${{ github.event.repository.html_url }}/commit/${{ github.event.pull_request.head.sha }}) (PR)' >> pr_comment
-  #         echo '```' >> pr_comment
-  #         tail -n +2 cmp_results >> pr_comment  # Skip the first line saying "Comparing XX to YY"
-  #         echo '```' >> pr_comment
-  #         cat pr_comment > ${{ env.PR_COMMENT }}
-  #     - name: 'Comment PR'
-  #       uses: actions/github-script@v6
-  #       with:
-  #         github-token: ${{ secrets.GITHUB_TOKEN }}
-  #         script: |
-  #           github.rest.issues.createComment({
-  #             issue_number: context.issue.number,
-  #             owner: context.repo.owner,
-  #             repo: context.repo.repo,
-  #             body: require('fs').readFileSync('${{ env.PR_COMMENT }}').toString()
-  #           });
-
-  benchmark_cpu_NEW:
-    name: CPU Pytest benchmark NEW
+  benchmark_cpu:
+    name: CPU Pytest benchmark
     runs-on: ubuntu-20.04
     steps:
       - name: Who triggered this?
@@ -79,12 +25,29 @@ jobs:
         run: |
           pip install -e .
           pip install pytest pytest-benchmark
+      - name: Setup benchmarks
+        run: |
+          echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
+          echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
+          echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
       - name: Run benchmarks
         run: |
-          pytest ./benchmarks --rank 0 --benchmark-columns ops --benchmark-json test.json
+          cd benchmarks/
+          RUN_BENCHMARK="pytest --rank 0 --benchmark-columns ops --benchmark-json "
+          git checkout ${{ github.event.pull_request.base.sha }}
+          $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
+          git checkout ${{ github.event.pull_request.head.sha }}
+          $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}          
       - name: Publish results
         uses: apbard/pytest-benchmark-commenter@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          benchmark-file: test.json
-        #   comparison-benchmark-file: "old_benchmark/output.json"
+          benchmark-file: ${{ env.BASELINE_JSON }}
+          comparison-benchmark-file: ${{ env.CONTENDER_JSON }}
+          benchmark-metrics: 'name,max,mean,ops'
+          comparison-benchmark-metric: 'ops'
+          comparison-higher-is-better: true
+          comparison-threshold: 5
+          benchmark-title: 'Result of CPU Benchmark Tests'
