@@ -86,10 +86,6 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.8
-      - name: Update pip
-        run: |
-          apt-get install python3.8 python3-pip -y
-          pip3 install --upgrade pip
       - name: Setup conda
         run: |
           rm -rf $HOME/miniconda
