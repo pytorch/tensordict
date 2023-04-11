@@ -1,13 +1,30 @@
+<!--- BADGES: START --->
+<!---
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat)](https://pytorch-labs.github.io/tensordict/)
-[![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)](https://pytorch-labs.github.io/tensordict/dev/bench/)
+--->
+[![Docs - GitHub.io](https://img.shields.io/static/v1?logo=github&style=flat&color=pink&label=docs&message=tensordict)][#docs-package]
+[![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)][#docs-package-benchmark]
 [![Python version](https://img.shields.io/pypi/pyversions/tensordict.svg)](https://www.python.org/downloads/)
-[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/pytorch-labs/tensordict/blob/main/LICENSE)
+[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)][#github-license]
 <a href="https://pypi.org/project/tensordict"><img src="https://img.shields.io/pypi/v/tensordict" alt="pypi version"></a>
 <a href="https://pypi.org/project/tensordict-nightly"><img src="https://img.shields.io/pypi/v/tensordict-nightly?label=nightly" alt="pypi nightly version"></a>
-[![Downloads](https://static.pepy.tech/personalized-badge/tensordict?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)](https://pepy.tech/project/tensordict)
-[![Downloads](https://static.pepy.tech/personalized-badge/tensordict-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))](https://pepy.tech/project/tensordict-nightly)
-[![codecov](https://codecov.io/gh/pytorch-labs/tensordict/branch/main/graph/badge.svg?token=9QTUG6NAGQ)](https://codecov.io/gh/pytorch-labs/tensordict)
-[![pytorch](https://circleci.com/gh/pytorch-labs/tensordict.svg?style=shield)](https://circleci.com/gh/pytorch-labs/tensordict)
+[![Downloads](https://static.pepy.tech/personalized-badge/tensordict?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads)][#pepy-package]
+[![Downloads](https://static.pepy.tech/personalized-badge/tensordict-nightly?period=total&units=international_system&left_color=blue&right_color=orange&left_text=Downloads%20(nightly))][#pepy-package-nightly]
+[![codecov](https://codecov.io/gh/pytorch-labs/tensordict/branch/main/graph/badge.svg?token=9QTUG6NAGQ)][#codecov-package]
+[![circleci](https://circleci.com/gh/pytorch-labs/tensordict.svg?style=shield)][#circleci-package]
+[![Conda - Platform](https://img.shields.io/conda/pn/conda-forge/tensordict?logo=anaconda&style=flat)][#conda-forge-package]
+[![Conda (channel only)](https://img.shields.io/conda/vn/conda-forge/tensordict?logo=anaconda&style=flat&color=orange)][#conda-forge-package]
+
+[#docs-package]: https://pytorch-labs.github.io/tensordict/
+[#docs-package-benchmark]: https://pytorch-labs.github.io/tensordict/dev/bench/
+[#github-license]: https://github.com/pytorch-labs/tensordict/blob/main/LICENSE
+[#pepy-package]: https://pepy.tech/project/tensordict
+[#pepy-package-nightly]: https://pepy.tech/project/tensordict-nightly
+[#codecov-package]: https://codecov.io/gh/pytorch-labs/tensordict
+[#circleci-package]: https://circleci.com/gh/pytorch-labs/tensordict
+[#conda-forge-package]: https://anaconda.org/conda-forge/tensordict
+
+<!--- BADGES: END --->
 
 # TensorDict
 
@@ -284,16 +301,30 @@ Tensorclasses support nesting and, in fact, all the TensorDict features.
 
 ## Installation
 
+**With Pip**:
+
 To install the latest stable version of tensordict, simply run
+
 ```bash
 pip install tensordict
 ```
+
 This will work with Python 3.7 and upward as well as PyTorch 1.12 and upward.
 
 To enjoy the latest features, one can use
+
 ```bash
 pip install tensordict-nightly
 ```
+
+**With Conda**:
+
+Install `tensordict` from `conda-forge` channel.
+
+```sh
+conda install -c conda-forge tensordict
+```
+
 
 ## Citation
 
