@@ -446,7 +446,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         **kwargs,
     ) -> tuple[D.Distribution, TensorDictBase]:
         tds = self.det_part
-        if type := interaction_type() is None:
+        type = interaction_type()
+        if type is None:
             type = self.module[-1].default_interaction_type
         with set_interaction_type(type):
             return tds(tensordict, tensordict_out, **kwargs)
