@@ -19,7 +19,7 @@ from tensordict.nn import (
 )
 from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import is_functional, make_functional
-from tensordict.nn.probabilistic import set_interaction_mode
+from tensordict.nn.probabilistic import set_interaction_type
 from torch import nn
 from torch.distributions import Normal
 
@@ -81,8 +81,8 @@ class TestTDModule:
 
     @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
     @pytest.mark.parametrize("lazy", [True, False])
-    @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
-    def test_stateful_probabilistic_deprec(self, lazy, interaction_mode, out_keys):
+    @pytest.mark.parametrize("interaction_type", ["mode", "random", None])
+    def test_stateful_probabilistic_deprec(self, lazy, interaction_type, out_keys):
         torch.manual_seed(0)
         param_multiplier = 2
         if lazy:
@@ -110,7 +110,7 @@ class TestTDModule:
         tensordict_module = ProbabilisticTensorDictSequential(net, prob_module)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with set_interaction_mode(interaction_mode):
+        with set_interaction_type(interaction_type):
             tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
@@ -118,9 +118,9 @@ class TestTDModule:
     @pytest.mark.parametrize("out_keys", [["low"], ["low1"], [("stuff", "low1")]])
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize("max_dist", [1.0, 2.0])
-    @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
+    @pytest.mark.parametrize("interaction_type", ["mode", "random", None])
     def test_stateful_probabilistic_kwargs(
-        self, lazy, interaction_mode, out_keys, max_dist
+        self, lazy, interaction_type, out_keys, max_dist
     ):
         torch.manual_seed(0)
         if lazy:
@@ -147,7 +147,7 @@ class TestTDModule:
         tensordict_module = ProbabilisticTensorDictSequential(net, prob_module)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with set_interaction_mode(interaction_mode):
+        with set_interaction_type(interaction_type):
             tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
@@ -161,8 +161,8 @@ class TestTDModule:
         ],
     )
     @pytest.mark.parametrize("lazy", [True, False])
-    @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
-    def test_stateful_probabilistic(self, lazy, interaction_mode, out_keys):
+    @pytest.mark.parametrize("interaction_type", ["mode", "random", None])
+    def test_stateful_probabilistic(self, lazy, interaction_type, out_keys):
         torch.manual_seed(0)
         param_multiplier = 2
         if lazy:
@@ -191,7 +191,7 @@ class TestTDModule:
         )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with set_interaction_mode(interaction_mode):
+        with set_interaction_type(interaction_type):
             tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
@@ -1521,16 +1521,16 @@ class TestTDSequence:
         assert torch.allclose(td_module[0].module.weight, sub_seq_1[0].module.weight)
 
 
-@pytest.mark.parametrize("mode", ["random", "mode"])
+@pytest.mark.parametrize("interaction_type", ["random", "mode"])
 class TestSIM:
-    def test_cm(self, mode):
-        with set_interaction_mode(mode):
-            assert nn_probabilistic._INTERACTION_MODE == mode
+    def test_cm(self, interaction_type):
+        with set_interaction_type(interaction_type):
+            assert nn_probabilistic._INTERACTION_TYPE == interaction_type
 
-    def test_dec(self, mode):
-        @set_interaction_mode(mode)
+    def test_dec(self, interaction_type):
+        @set_interaction_type(interaction_type)
         def dummy():
-            assert nn_probabilistic._INTERACTION_MODE == mode
+            assert nn_probabilistic._INTERACTION_TYPE == interaction_type
 
         dummy()
 

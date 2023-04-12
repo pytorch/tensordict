@@ -167,7 +167,7 @@ assert split_and_merge_linear(tensordict)["output"].shape == torch.Size([5, 13])
 # ``ProbabilisticTensorDictModule`` is a non-parametric module representing a
 # probability distribution. Distribution parameters are read from tensordict
 # input, and the output is written to an output tensordict. The output is
-# sampled given some rule, specified by the input ``default_interaction_mode``
+# sampled given some rule, specified by the input ``default_interaction_type``
 # argument and the ``exploration_mode()`` global function. If they conflict,
 # the context manager precedes.
 #

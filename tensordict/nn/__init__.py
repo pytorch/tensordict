@@ -19,6 +19,7 @@ from tensordict.nn.probabilistic import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     set_interaction_mode,
+    set_interaction_type,
 )
 from tensordict.nn.sequence import TensorDictSequential
 from tensordict.nn.utils import biased_softplus, inv_softplus
@@ -33,6 +34,7 @@ __all__ = [
     "ProbabilisticTensorDictModule",
     "ProbabilisticTensorDictSequential",
     "set_interaction_mode",
+    "set_interaction_type",
     "TensorDictSequential",
     "make_tensordict",
     "biased_softplus",
