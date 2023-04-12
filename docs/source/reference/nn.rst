@@ -296,6 +296,6 @@ Utils
 
     make_tensordict
     dispatch_kwargs
-    set_interaction_mode
+    set_interaction_type
     inv_softplus
     biased_softplus

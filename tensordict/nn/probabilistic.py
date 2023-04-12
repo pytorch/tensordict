@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import re
 from textwrap import indent
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
+from warnings import warn
 
 import torch.nn as nn
 from tensordict.nn.common import TensorDictModule
@@ -21,22 +22,39 @@ from torch.autograd.grad_mode import _DecoratorContextManager
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
 
-_INTERACTION_MODE = None
+_INTERACTION_TYPE = None
+
+
+def _insert_interaction_mode_deprecation_warning(
+    prefix: str = "",
+) -> Callable[[str, Warning, int], None]:
+    return warn(
+        f"{prefix}interaction_mode is deprecated for naming clarity. Please use {prefix}interaction_type instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+
+def interaction_type() -> str | None:
+    """Returns the current sampling type."""
+    return _INTERACTION_TYPE
 
 
 def interaction_mode() -> str | None:
-    """Returns the current sampling mode."""
-    return _INTERACTION_MODE
+    """*Deprecated* Returns the current sampling mode."""
+    _insert_interaction_mode_deprecation_warning()
+    return interaction_type()
 
 
 class set_interaction_mode(_DecoratorContextManager):
-    """Sets the sampling mode of all ProbabilisticTDModules to the desired mode.
+    """*Deprecated* Sets the sampling mode of all ProbabilisticTDModules to the desired mode.
 
     Args:
         mode (str): mode to use when the policy is being called.
     """
 
     def __init__(self, mode: str = "mode") -> None:
+        _insert_interaction_mode_deprecation_warning("set_")
         super().__init__()
         self.mode = mode
 
@@ -45,13 +63,38 @@ class set_interaction_mode(_DecoratorContextManager):
         return self.__class__(self.mode)
 
     def __enter__(self) -> None:
-        global _INTERACTION_MODE
-        self.prev = _INTERACTION_MODE
-        _INTERACTION_MODE = self.mode
+        global _INTERACTION_TYPE
+        self.prev = _INTERACTION_TYPE
+        _INTERACTION_TYPE = self.mode
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        global _INTERACTION_MODE
-        _INTERACTION_MODE = self.prev
+        global _INTERACTION_TYPE
+        _INTERACTION_TYPE = self.prev
+
+
+class set_interaction_type(_DecoratorContextManager):
+    """Sets all ProbabilisticTDModules sampling to the desired type.
+
+    Args:
+        type (str): sampling type to use when the policy is being called.
+    """
+
+    def __init__(self, type: str = "mode") -> None:
+        super().__init__()
+        self.type = type
+
+    def clone(self) -> set_interaction_type:
+        # override this method if your children class takes __init__ parameters
+        return self.__class__(self.type)
+
+    def __enter__(self) -> None:
+        global _INTERACTION_TYPE
+        self.prev = _INTERACTION_TYPE
+        _INTERACTION_TYPE = self.type
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        global _INTERACTION_TYPE
+        _INTERACTION_TYPE = self.prev
 
 
 class ProbabilisticTensorDictModule(nn.Module):
@@ -60,8 +103,8 @@ class ProbabilisticTensorDictModule(nn.Module):
     `ProbabilisticTensorDictModule` is a non-parametric module representing a
     probability distribution. It reads the distribution parameters from an input
     TensorDict using the specified `in_keys`. The output is sampled given some rule,
-    specified by the input :obj:`default_interaction_mode` argument and the
-    :obj:`interaction_mode()` global function.
+    specified by the input :obj:`default_interaction_type` argument and the
+    :obj:`interaction_type()` global function.
 
     :obj:`ProbabilisticTensorDictModule` can be used to construct the distribution
     (through the :obj:`get_dist()` method) and/or sampling from this distribution
@@ -92,16 +135,18 @@ class ProbabilisticTensorDictModule(nn.Module):
         out_keys (str or iterable of str): keys where the sampled values will be
             written. Importantly, if these keys are found in the input TensorDict, the
             sampling step will be skipped.
-        default_interaction_mode (str, optional): keyword-only argument.
+        default_interaction_mode (str, optional): *Deprecated* keyword-only argument.
+            Please use default_interaction_type instead.
+        default_interaction_type (str, optional): keyword-only argument.
             Default method to be used to retrieve
             the output value. Should be one of: 'mode', 'median', 'mean' or 'random'
             (in which case the value is sampled randomly from the distribution). Default
             is 'mode'.
             Note: When a sample is drawn, the :obj:`ProbabilisticTDModule` instance will
-            first look for the interaction mode dictated by the `interaction_mode()`
+            first look for the interaction mode dictated by the `interaction_type()`
             global function. If this returns `None` (its default value), then the
-            `default_interaction_mode` of the `ProbabilisticTDModule` instance will be
-            used. Note that DataCollector instances will use `set_interaction_mode` to
+            `default_interaction_type` of the `ProbabilisticTDModule` instance will be
+            used. Note that DataCollector instances will use `set_interaction_type` to
             `"random"` by default.
         distribution_class (Type, optional): keyword-only argument.
             A :class:`torch.distributions.Distribution` class to
@@ -197,7 +242,8 @@ class ProbabilisticTensorDictModule(nn.Module):
         in_keys: str | Sequence[str] | dict,
         out_keys: str | Sequence[str] | None = None,
         *,
-        default_interaction_mode: str = "mode",
+        default_interaction_mode: str | None = None,
+        default_interaction_type: str = "mode",
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
@@ -226,7 +272,12 @@ class ProbabilisticTensorDictModule(nn.Module):
         self.out_keys = out_keys
         self.in_keys = in_keys
 
-        self.default_interaction_mode = default_interaction_mode
+        if default_interaction_mode:
+            _insert_interaction_mode_deprecation_warning("default_")
+            self.default_interaction_type = default_interaction_mode
+        else:
+            self.default_interaction_type = default_interaction_type
+
         if isinstance(distribution_class, str):
             distribution_class = distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
@@ -270,7 +321,7 @@ class ProbabilisticTensorDictModule(nn.Module):
 
         dist = self.get_dist(tensordict)
         if _requires_sample:
-            out_tensors = self._dist_sample(dist, interaction_mode=interaction_mode())
+            out_tensors = self._dist_sample(dist, interaction_type=interaction_type())
             if isinstance(out_tensors, Tensor):
                 out_tensors = (out_tensors,)
             tensordict_out.update(
@@ -294,12 +345,12 @@ class ProbabilisticTensorDictModule(nn.Module):
     def _dist_sample(
         self,
         dist: D.Distribution,
-        interaction_mode: bool = None,
+        interaction_type: str | None = None,
     ) -> tuple[Tensor, ...] | Tensor:
-        if interaction_mode is None or interaction_mode == "":
-            interaction_mode = self.default_interaction_mode
+        if interaction_type is None or interaction_type == "":
+            interaction_type = self.default_interaction_type
 
-        if interaction_mode == "mode":
+        if interaction_type == "mode":
             try:
                 return dist.mode
             except AttributeError:
@@ -307,7 +358,7 @@ class ProbabilisticTensorDictModule(nn.Module):
                     f"method {type(dist)}.mode is not implemented"
                 )
 
-        elif interaction_mode == "median":
+        elif interaction_type == "median":
             try:
                 return dist.median
             except AttributeError:
@@ -315,7 +366,7 @@ class ProbabilisticTensorDictModule(nn.Module):
                     f"method {type(dist)}.median is not implemented"
                 )
 
-        elif interaction_mode == "mean":
+        elif interaction_type == "mean":
             try:
                 return dist.mean
             except (AttributeError, NotImplementedError):
@@ -324,13 +375,13 @@ class ProbabilisticTensorDictModule(nn.Module):
                 else:
                     return dist.sample((self.n_empirical_estimate,)).mean(0)
 
-        elif interaction_mode == "random":
+        elif interaction_type == "random":
             if dist.has_rsample:
                 return dist.rsample()
             else:
                 return dist.sample()
         else:
-            raise NotImplementedError(f"unknown interaction_mode {interaction_mode}")
+            raise NotImplementedError(f"unknown interaction_type {interaction_type}")
 
 
 class ProbabilisticTensorDictSequential(TensorDictSequential):
@@ -395,10 +446,10 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         **kwargs,
     ) -> tuple[D.Distribution, TensorDictBase]:
         tds = self.det_part
-        mode = interaction_mode()
-        if mode is None:
-            mode = self.module[-1].default_interaction_mode
-        with set_interaction_mode(mode):
+        type = interaction_type()
+        if type is None:
+            type = self.module[-1].default_interaction_type
+        with set_interaction_type(type):
             return tds(tensordict, tensordict_out, **kwargs)
 
     def get_dist(
