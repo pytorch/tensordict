@@ -1286,6 +1286,8 @@ class TensorDictBase(MutableMapping):
         return self
 
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor | MemmapTensor:
+        if isinstance(array, np.bool_):
+            array = array.item()
         return torch.as_tensor(array, device=self.device)
 
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> TensorDictBase:
