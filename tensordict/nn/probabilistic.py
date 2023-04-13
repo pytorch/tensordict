@@ -73,10 +73,10 @@ class set_interaction_mode(_DecoratorContextManager):
         mode (str): mode to use when the policy is being called.
     """
 
-    def __init__(self, mode: str = "mode") -> None:
+    def __init__(self, mode: str | None = "mode") -> None:
         _insert_interaction_mode_deprecation_warning("set_")
         super().__init__()
-        self.mode = InteractionType.from_str(mode)
+        self.mode = InteractionType.from_str(mode) if mode else None
 
     def clone(self) -> set_interaction_mode:
         # override this method if your children class takes __init__ parameters
@@ -99,7 +99,7 @@ class set_interaction_type(_DecoratorContextManager):
         type (InteractionType): sampling type to use when the policy is being called.
     """
 
-    def __init__(self, type: InteractionType = InteractionType.MODE) -> None:
+    def __init__(self, type: InteractionType | None = InteractionType.MODE) -> None:
         super().__init__()
         self.type = type
 
