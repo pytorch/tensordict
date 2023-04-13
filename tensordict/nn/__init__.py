@@ -16,6 +16,7 @@ from tensordict.nn.functional_modules import (
     repopulate_module,
 )
 from tensordict.nn.probabilistic import (
+    InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     set_interaction_mode,
@@ -31,6 +32,7 @@ __all__ = [
     "get_functional",
     "make_functional",
     "repopulate_module",
+    "InteractionType",
     "ProbabilisticTensorDictModule",
     "ProbabilisticTensorDictSequential",
     "set_interaction_mode",
