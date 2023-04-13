@@ -19,7 +19,7 @@ from tensordict.nn import (
 )
 from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import is_functional, make_functional
-from tensordict.nn.probabilistic import set_interaction_type
+from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from torch import nn
 from torch.distributions import Normal
 
@@ -35,6 +35,27 @@ try:
 except ImportError as err:
     _has_functorch = False
     FUNCTORCH_ERR = str(err)
+
+
+class TestInteractionType:
+    @pytest.mark.parametrize(
+        "str_and_expected_type",
+        [
+            ("mode", InteractionType.MODE),
+            ("MEDIAN", InteractionType.MEDIAN),
+            ("Mean", InteractionType.MEAN),
+            ("RanDom", InteractionType.RANDOM),
+        ],
+    )
+    def test_from_str_correct_conversion(self, str_and_expected_type):
+        type_str, expected_type = str_and_expected_type
+        assert InteractionType.from_str(type_str) == expected_type
+
+    @pytest.mark.parametrize("unsupported_type_str", ["foo"])
+    def test_from_str_correct_raise(self, unsupported_type_str):
+        with pytest.raises(ValueError) as err:
+            InteractionType.from_str(unsupported_type_str)
+        assert unsupported_type_str in str(err) and "is unsupported" in str(err)
 
 
 class TestTDModule:
@@ -81,7 +102,9 @@ class TestTDModule:
 
     @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
     @pytest.mark.parametrize("lazy", [True, False])
-    @pytest.mark.parametrize("interaction_type", ["mode", "random", None])
+    @pytest.mark.parametrize(
+        "interaction_type", [InteractionType.MODE, InteractionType.RANDOM, None]
+    )
     def test_stateful_probabilistic_deprec(self, lazy, interaction_type, out_keys):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -118,7 +141,9 @@ class TestTDModule:
     @pytest.mark.parametrize("out_keys", [["low"], ["low1"], [("stuff", "low1")]])
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize("max_dist", [1.0, 2.0])
-    @pytest.mark.parametrize("interaction_type", ["mode", "random", None])
+    @pytest.mark.parametrize(
+        "interaction_type", [InteractionType.MODE, InteractionType.RANDOM, None]
+    )
     def test_stateful_probabilistic_kwargs(
         self, lazy, interaction_type, out_keys, max_dist
     ):
@@ -161,7 +186,9 @@ class TestTDModule:
         ],
     )
     @pytest.mark.parametrize("lazy", [True, False])
-    @pytest.mark.parametrize("interaction_type", ["mode", "random", None])
+    @pytest.mark.parametrize(
+        "interaction_type", [InteractionType.MODE, InteractionType.RANDOM, None]
+    )
     def test_stateful_probabilistic(self, lazy, interaction_type, out_keys):
         torch.manual_seed(0)
         param_multiplier = 2
@@ -1521,7 +1548,9 @@ class TestTDSequence:
         assert torch.allclose(td_module[0].module.weight, sub_seq_1[0].module.weight)
 
 
-@pytest.mark.parametrize("interaction_type", ["random", "mode"])
+@pytest.mark.parametrize(
+    "interaction_type", [InteractionType.RANDOM, InteractionType.MODE]
+)
 class TestSIM:
     def test_cm(self, interaction_type):
         with set_interaction_type(interaction_type):
