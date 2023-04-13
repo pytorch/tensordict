@@ -9,6 +9,7 @@ from tensordict.nn.common import (
     TensorDictModule,
     TensorDictModuleWrapper,
 )
+from tensordict.nn.distributions import NormalParamExtractor
 from tensordict.nn.functional_modules import (
     get_functional,
     is_functional,
