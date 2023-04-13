@@ -45,7 +45,10 @@ def _insert_interaction_mode_deprecation_warning(
     prefix: str = "",
 ) -> Callable[[str, Warning, int], None]:
     return warn(
-        f"{prefix}interaction_mode is deprecated for naming clarity. Please use {prefix}interaction_type instead.",
+        (
+            f"{prefix}interaction_mode is deprecated for naming clarity. "
+            f"Please use {prefix}interaction_type with InteractionType enum instead."
+        ),
         DeprecationWarning,
         stacklevel=2,
     )
@@ -60,7 +63,7 @@ def interaction_mode() -> str | None:
     """*Deprecated* Returns the current sampling mode."""
     _insert_interaction_mode_deprecation_warning()
     type = interaction_type()
-    return type.name if type else None
+    return type.name.lower() if type else None
 
 
 class set_interaction_mode(_DecoratorContextManager):
