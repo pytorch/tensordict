@@ -1373,6 +1373,53 @@ class TestTDSequence:
             assert "out" in td_2.keys()
             assert td_2.get("out").shape == torch.Size([5, 4])
 
+    @pytest.mark.parametrize(
+        "in_keys", [None, ("a",), ("b",), ("d",), ("b", "d"), ("a", "d")]
+    )
+    @pytest.mark.parametrize(
+        "out_keys",
+        [None, ("b",), ("c",), ("d",), ("e",), ("b", "c"), ("b", "d"), ("b", "e")],
+    )
+    def test_submodule_sequence_nested(self, in_keys, out_keys):
+        Seq = TensorDictSequential
+        Mod = TensorDictModule
+        idn = lambda x: x + 1
+        module_1 = Seq(
+            Mod(idn, in_keys=["a"], out_keys=["b"]),
+            Mod(idn, in_keys=["b"], out_keys=["c"]),
+            Mod(idn, in_keys=["b"], out_keys=["d"]),
+            Mod(idn, in_keys=["d"], out_keys=["e"]),
+        )
+        module_2 = Seq(
+            Seq(
+                Mod(idn, in_keys=["a"], out_keys=["b"]),
+                Mod(idn, in_keys=["b"], out_keys=["c"]),
+            ),
+            Seq(
+                Mod(idn, in_keys=["b"], out_keys=["d"]),
+                Mod(idn, in_keys=["d"], out_keys=["e"]),
+            ),
+        )
+        try:
+            sel_module_1 = module_1.select_subsequence(
+                in_keys=in_keys, out_keys=out_keys
+            )
+        except ValueError:
+            # incongruent keys
+            return
+        sel_module_2 = module_2.select_subsequence(in_keys=in_keys, out_keys=out_keys)
+        td = TensorDict(
+            {
+                "a": torch.zeros(()),
+                "b": torch.zeros(()),
+                "c": torch.zeros(()),
+                "d": torch.zeros(()),
+                "e": torch.zeros(()),
+            },
+            [],
+        )
+        assert (sel_module_1(td.clone()) == sel_module_2(td.clone())).all()
+
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )

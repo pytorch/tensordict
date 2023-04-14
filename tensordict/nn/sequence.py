@@ -182,11 +182,143 @@ class TensorDictSequential(TensorDictModule):
         """Returns a new TensorDictSequential with only the modules that are necessary to compute the given output keys with the given input keys.
 
         Args:
-            in_keys: input keys of the subsequence we want to select
-            out_keys: output keys of the subsequence we want to select
+            in_keys: input keys of the subsequence we want to select.
+                All the keys absent from ``in_keys`` will be considered as
+                non-relevant, and modules that *just* take these keys as inputs
+                will be discarded.
+                The resulting sequential module will follow the pattern "all
+                the modules which output will be affected by a different value
+                for any in <in_keys>".
+                If none is provided, the module's ``in_keys`` are assumed.
+            out_keys: output keys of the subsequence we want to select.
+                Only the modules that are necessary to get the ``out_keys``
+                will be found in the resulting sequence.
+                The resulting sequential module will follow the pattern "all
+                the modules that condition the value or <out_keys> entries."
+                If none is provided, the module's ``out_keys`` are assumed.
 
         Returns:
             A new TensorDictSequential with only the modules that are necessary acording to the given input and output keys.
+
+        Examples:
+            >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
+            >>> idn = lambda x: x
+            >>> module = Seq(
+            ...     Mod(idn, in_keys=["a"], out_keys=["b"]),
+            ...     Mod(idn, in_keys=["b"], out_keys=["c"]),
+            ...     Mod(idn, in_keys=["c"], out_keys=["d"]),
+            ...     Mod(idn, in_keys=["a"], out_keys=["e"]),
+            ... )
+            >>> # select all modules whose output depend on "a"
+            >>> module.select_subsequence(in_keys=["a"])
+            TensorDictSequential(
+                module=ModuleList(
+                  (0): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['a'],
+                      out_keys=['b'])
+                  (1): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['b'],
+                      out_keys=['c'])
+                  (2): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['c'],
+                      out_keys=['d'])
+                  (3): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['a'],
+                      out_keys=['e'])
+                ),
+                device=cpu,
+                in_keys=['a'],
+                out_keys=['b', 'c', 'd', 'e'])
+            >>> # select all modules whose output depend on "c"
+            >>> module.select_subsequence(in_keys=["c"])
+            TensorDictSequential(
+                module=ModuleList(
+                  (0): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['c'],
+                      out_keys=['d'])
+                ),
+                device=cpu,
+                in_keys=['c'],
+                out_keys=['d'])
+            >>> # select all modules that affect the value of "c"
+            >>> module.select_subsequence(out_keys=["c"])
+            TensorDictSequential(
+                module=ModuleList(
+                  (0): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['a'],
+                      out_keys=['b'])
+                  (1): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['b'],
+                      out_keys=['c'])
+                ),
+                device=cpu,
+                in_keys=['a'],
+                out_keys=['b', 'c'])
+            >>> # select all modules that affect the value of "e"
+            >>> module.select_subsequence(out_keys=["e"])
+            TensorDictSequential(
+                module=ModuleList(
+                  (0): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['a'],
+                      out_keys=['e'])
+                ),
+                device=cpu,
+                in_keys=['a'],
+                out_keys=['e'])
+
+        This method propagates to nested sequential:
+
+            >>> module = Seq(
+            ...     Seq(
+            ...         Mod(idn, in_keys=["a"], out_keys=["b"]),
+            ...         Mod(idn, in_keys=["b"], out_keys=["c"]),
+            ...     ),
+            ...     Seq(
+            ...         Mod(idn, in_keys=["b"], out_keys=["d"]),
+            ...         Mod(idn, in_keys=["d"], out_keys=["e"]),
+            ...     ),
+            ... )
+            >>> # select submodules whose output will be affected by a change in "b" or "d" AND which output is "e"
+            >>> module.select_subsequence(in_keys=["b", "d"], out_keys=["e"])
+            TensorDictSequential(
+                module=ModuleList(
+                  (0): TensorDictSequential(
+                      module=ModuleList(
+                        (0): TensorDictModule(
+                            module=<function <lambda> at 0x129efae50>,
+                            device=cpu,
+                            in_keys=['b'],
+                            out_keys=['d'])
+                        (1): TensorDictModule(
+                            module=<function <lambda> at 0x129efae50>,
+                            device=cpu,
+                            in_keys=['d'],
+                            out_keys=['e'])
+                      ),
+                      device=cpu,
+                      in_keys=['b'],
+                      out_keys=['d', 'e'])
+                ),
+                device=cpu,
+                in_keys=['b'],
+                out_keys=['d', 'e'])
+
         """
         if in_keys is None:
             in_keys = deepcopy(self.in_keys)
@@ -196,21 +328,38 @@ class TensorDictSequential(TensorDictModule):
             out_keys = deepcopy(self.out_keys)
         else:
             out_keys = [_normalize_key(key) for key in out_keys]
-        id_to_keep = set(range(len(self.module)))
-        for i, module in enumerate(self.module):
+        module_list = list(self.module)
+        id_to_keep = set(range(len(module_list)))
+        for i, module in enumerate(module_list):
+            if (
+                type(module) is TensorDictSequential
+            ):  # no isinstance because we don't want to mess up subclasses
+                try:
+                    module = module_list[i] = module.select_subsequence(in_keys=in_keys)
+                except ValueError:
+                    # then the module can be removed
+                    id_to_keep.remove(i)
+                    continue
+
             if all(key in in_keys for key in module.in_keys):
                 in_keys.extend(module.out_keys)
             else:
                 id_to_keep.remove(i)
-        for i, module in reversed(list(enumerate(self.module))):
+        for i, module in reversed(list(enumerate(module_list))):
             if i in id_to_keep:
                 if any(key in out_keys for key in module.out_keys):
+                    if (
+                        type(module) is TensorDictSequential
+                    ):  # no isinstance because we don't want to mess up subclasses
+                        module = module_list[i] = module.select_subsequence(
+                            out_keys=out_keys
+                        )
                     out_keys.extend(module.in_keys)
                 else:
                     id_to_keep.remove(i)
         id_to_keep = sorted(id_to_keep)
 
-        modules = [self.module[i] for i in id_to_keep]
+        modules = [module_list[i] for i in id_to_keep]
 
         if modules == []:
             raise ValueError(
