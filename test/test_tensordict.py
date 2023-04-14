@@ -707,6 +707,13 @@ class TestTensorDicts(TestTensorDictsBase):
         for item in td.values():
             assert (item[mask] == -10).all(), item[mask]
 
+    def test_set_nested_batch_size(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        batch_size = torch.Size([*td.batch_size, 3])
+        td.set("some_other_td", TensorDict({}, batch_size))
+        assert td["some_other_td"].batch_size == batch_size
+
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)
         is_locked = td.is_locked
