@@ -665,6 +665,7 @@ class PersistentTensorDict(TensorDictBase):
             if target_td is None:
                 self.file.create_group(key)
                 target_td = self.get(key)
+                target_td.batch_size = value.batch_size
             elif not is_tensor_collection(target_td):
                 raise RuntimeError(
                     f"cannot set a tensor collection in place of a non-tensor collection in {self.__class__.__name__}. "
