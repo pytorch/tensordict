@@ -308,54 +308,122 @@ class TensorDictModule(TensorDictModuleBase):
     be specified:
 
     Examples:
+        >>> from tensordict import TensorDict
+        >>> # one can wrap regular nn.Module
+        >>> module = TensorDictModule(nn.Transformer(128), in_keys=["input", "tgt"], out_keys=["out"])
+        >>> input = torch.ones(2, 3, 128)
+        >>> tgt = torch.zeros(2, 3, 128)
+        >>> data = TensorDict({"input": input, "tgt": tgt}, batch_size=[2, 3])
+        >>> data = module(data)
+        >>> print(data)
+        TensorDict(
+            fields={
+                input: Tensor(shape=torch.Size([2, 3, 128]), device=cpu, dtype=torch.float32, is_shared=False),
+                out: Tensor(shape=torch.Size([2, 3, 128]), device=cpu, dtype=torch.float32, is_shared=False),
+                tgt: Tensor(shape=torch.Size([2, 3, 128]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([2, 3]),
+            device=None,
+            is_shared=False)
+        >>> # we can also pass directly the tensors
+        >>> out = module(input, tgt)
+        >>> assert out.shape == input.shape
+        >>> # we can also wrap regular functions
+        >>> module = TensorDictModule(lambda x: (x-1, x+1), in_keys=[("input", "x")], out_keys=[("output", "x-1"), ("output", "x+1")])
+        >>> module(TensorDict({("input", "x"): torch.zeros(())}, batch_size=[]))
+        TensorDict(
+            fields={
+                input: TensorDict(
+                    fields={
+                        x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False),
+                output: TensorDict(
+                    fields={
+                        x+1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                        x-1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> # we can use TensorDictModule to populate a tensordict
+        >>> module = TensorDictModule(lambda: torch.randn(3), in_keys=[], out_keys=["x"])
+        >>> print(module(TensorDict({}, batch_size=[])))
+        TensorDict(
+            fields={
+                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+
+    Functional calls to a tensordict module is easy:
+    Examples:
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
         >>> from tensordict.nn.functional_modules import make_functional
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> module = torch.nn.GRUCell(4, 8)
-        >>> fmodule, params, buffers = functorch.make_functional_with_buffers(module)
-        >>> td_fmodule = TensorDictModule(
-        ...    module=torch.nn.GRUCell(4, 8), in_keys=["input", "hidden"], out_keys=["output"]
+        >>> td_module = TensorDictModule(
+        ...    module=module, in_keys=["input", "hidden"], out_keys=["output"]
         ... )
-        >>> params = make_functional(td_fmodule)
-        >>> td_functional = td_fmodule(td.clone(), params=params)
+        >>> params = make_functional(td_module)
+        >>> td_functional = td_module(td.clone(), params=params)
         >>> print(td_functional)
         TensorDict(
             fields={
-                hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
-                input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                output: Tensor(torch.Size([3, 8]), dtype=torch.float32)},
-            shared=False,
+                hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                output: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
 
     In the stateful case:
+        >>> module = torch.nn.GRUCell(4, 8)
         >>> td_module = TensorDictModule(
-        ...    module=torch.nn.GRUCell(4, 8), in_keys=["input", "hidden"], out_keys=["output"]
+        ...    module=module, in_keys=["input", "hidden"], out_keys=["output"]
         ... )
         >>> td_stateful = td_module(td.clone())
         >>> print(td_stateful)
         TensorDict(
             fields={
-                hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
-                input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
-                output: Tensor(torch.Size([3, 8]), dtype=torch.float32)},
+                hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                output: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
 
     One can use a vmap operator to call the functional module.
         >>> from functorch import vmap
+        >>> from tensordict.nn.functional_modules import extract_weights_and_buffers
+        >>> params = extract_weights_and_buffers(td_module)
         >>> params_repeat = params.expand(4)
-        >>> td_vmap = vmap(td_fmodule, (None, 0))(td.clone(), params_repeat)
+        >>> print(params_repeat)
+        TensorDict(
+            fields={
+                module: TensorDict(
+                    fields={
+                        bias_hh: Tensor(shape=torch.Size([4, 24]), device=cpu, dtype=torch.float32, is_shared=False),
+                        bias_ih: Tensor(shape=torch.Size([4, 24]), device=cpu, dtype=torch.float32, is_shared=False),
+                        weight_hh: Tensor(shape=torch.Size([4, 24, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                        weight_ih: Tensor(shape=torch.Size([4, 24, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([4]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([4]),
+            device=None,
+            is_shared=False)
+        >>> td_vmap = vmap(td_module, (None, 0))(td.clone(), params_repeat)
         >>> print(td_vmap)
         TensorDict(
             fields={
-                hidden: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
-                input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
-                output: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32)},
+                hidden: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                output: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False)},
             batch_size=torch.Size([4, 3]),
             device=None,
             is_shared=False)
@@ -423,10 +491,28 @@ class TensorDictModule(TensorDictModuleBase):
     def forward(
         self,
         tensordict: TensorDictBase,
+        *args,
         tensordict_out: TensorDictBase | None = None,
         **kwargs: Any,
     ) -> TensorDictBase:
         """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
+        if len(args):
+            tensordict_out = args[0]
+            args = args[1:]
+            # we will get rid of tensordict_out as a regular arg, because it
+            # blocks us when using vmap
+            # with stateful but functional modules: the functional module checks if
+            # it still contains parameters. If so it considers that only a "params" kwarg
+            # is indicative of what the params are, when we could potentially make a
+            # special rule for TensorDictModule that states that the second arg is
+            # likely to be the module params.
+            warnings.warn(
+                "tensordict_out will be deprecated soon.", category=DeprecationWarning
+            )
+        if len(args):
+            raise ValueError(
+                "Got a non-empty list of extra agruments, when none was expected."
+            )
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         try:
             tensors = self._call_module(tensors, **kwargs)

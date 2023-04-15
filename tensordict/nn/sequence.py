@@ -51,6 +51,31 @@ class TensorDictSequential(TensorDictModule):
             stack does not have the required keys, then TensorDictSequential will scan through the sub-tensordicts
             looking for those that have the required keys, if any.
 
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule, TensorDictSequential
+        >>> torch.manual_seed(0)
+        >>> module = TensorDictSequential(
+        ...     TensorDictModule(lambda x: x+1, in_keys=["x"], out_keys=["x+1"]),
+        ...     TensorDictModule(nn.Linear(3, 4), in_keys=["x+1"], out_keys=["w*(x+1)+b"]),
+        ... )
+        >>> # with tensordict input
+        >>> print(module(TensorDict({"x": torch.zeros(3)}, [])))
+        TensorDict(
+            fields={
+                w*(x+1)+b: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
+                x+1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False)
+        >>> # with tensor input: returns all the output keys in the order of the modules, ie "x+1" and "w*(x+1)+b"
+        >>> module(x=torch.zeros(3))
+        (tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=<AddBackward0>))
+        >>> module(torch.zeros(3))
+        (tensor([1., 1., 1.]), tensor([-0.7214, -0.8748,  0.1571, -0.1138], grad_fn=<AddBackward0>))
+
     TensorDictSequence supports functional, modular and vmap coding:
     Examples:
         >>> import torch
@@ -399,7 +424,7 @@ class TensorDictSequential(TensorDictModule):
                 tensordict = self._run_module(module, tensordict, **kwargs)
         else:
             raise RuntimeError(
-                "TensorDictSequential does not support keyword arguments other than 'tensordict_out', 'in_keys' and 'out_keys'"
+                f"TensorDictSequential does not support keyword arguments other than 'tensordict_out' or in_keys: {self.in_keys}. Got {kwargs.keys()} instead."
             )
         if tensordict_out is not None:
             tensordict_out.update(tensordict, inplace=True)

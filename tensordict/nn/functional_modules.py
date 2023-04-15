@@ -260,7 +260,7 @@ def extract_weights_and_buffers(
         module_tensordict = extract_weights_and_buffers(module)
         if module_tensordict is not None:
             tensordict[name] = module_tensordict
-
+    model.__dict__["_is_stateless"] = True
     return TensorDict(tensordict, batch_size=torch.Size([]), _run_checks=False)
 
 

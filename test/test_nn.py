@@ -1661,7 +1661,7 @@ def test_input():
             TensorDictModule(wrong_model, in_keys=["in"], out_keys=["out"])
 
     # missing or wrong keys
-    for wrong_keys in (None, (), 123, [123], [(("too", "much", "nesting"),)]):
+    for wrong_keys in (None, 123, [123], [(("too", "much", "nesting"),)]):
         with pytest.raises(ValueError, match="seq should be a Sequence"):
             TensorDictModule(MyModule(), in_keys=["in"], out_keys=wrong_keys)
 
