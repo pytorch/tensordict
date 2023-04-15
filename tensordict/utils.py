@@ -413,6 +413,9 @@ def is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
     """Returns True if seq is a Sequence[NestedKey]."""
     if seq and isinstance(seq, Sequence):
         return all(is_nested_key(k) for k in seq)
+    elif isinstance(seq, Sequence):
+        # we allow empty inputs
+        return True
     return False
 
 
