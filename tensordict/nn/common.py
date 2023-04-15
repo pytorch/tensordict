@@ -509,8 +509,20 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
 
     @property
     def in_keys(self):
+        if hasattr(self, "_in_keys"):
+            return self._in_keys
         return self.td_module.in_keys
 
     @property
     def out_keys(self):
+        if hasattr(self, "_out_keys"):
+            return self._out_keys
         return self.td_module.out_keys
+
+    @in_keys.setter
+    def in_keys(self, value):
+        self._in_keys = value
+
+    @out_keys.setter
+    def out_keys(self, value):
+        self._out_keys = value
