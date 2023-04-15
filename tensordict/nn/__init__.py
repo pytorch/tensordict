@@ -7,6 +7,7 @@ from tensordict.nn.common import (
     dispatch,
     make_tensordict,
     TensorDictModule,
+    TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
 from tensordict.nn.distributions import NormalParamExtractor

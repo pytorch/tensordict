@@ -9,7 +9,7 @@ import functools
 import inspect
 import warnings
 from textwrap import indent
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, List, Sequence, Tuple
 
 import torch
 
@@ -275,7 +275,20 @@ class dispatch:
         return wrapper
 
 
-class TensorDictModule(nn.Module):
+class TensorDictModuleBase(nn.Module):
+    """Base class to TensorDict modules.
+
+    TensorDictModule subclasses are characterized by ``in_keys`` and ``out_keys``
+    key-lists that indicate what input entries are to be read and what output
+    entries should be expected to be written.
+
+    """
+
+    in_keys: List[str | Tuple[str]]
+    out_keys: List[str | Tuple[str]]
+
+
+class TensorDictModule(TensorDictModuleBase):
     """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
 
     By default, :class:`TensorDictModule` subclasses are always functional,
@@ -461,10 +474,11 @@ class TensorDictModule(nn.Module):
                 raise err2 from err1
 
 
-class TensorDictModuleWrapper(nn.Module):
+class TensorDictModuleWrapper(TensorDictModuleBase):
     """Wrapper class for TensorDictModule objects.
 
-    Once created, a TensorDictModuleWrapper will behave exactly as the TensorDictModule it contains except for the methods that are
+    Once created, a TensorDictModuleWrapper will behave exactly as the
+    TensorDictModule it contains except for the methods that are
     overwritten.
 
     Args:
@@ -492,3 +506,11 @@ class TensorDictModuleWrapper(nn.Module):
 
     def forward(self, *args: Any, **kwargs: Any) -> TensorDictBase:
         return self.td_module.forward(*args, **kwargs)
+
+    @property
+    def in_keys(self):
+        return self.td_module.in_keys
+
+    @property
+    def out_keys(self):
+        return self.td_module.out_keys
