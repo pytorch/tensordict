@@ -510,7 +510,9 @@ class TensorDictModule(TensorDictModuleBase):
                 "tensordict_out will be deprecated soon.", category=DeprecationWarning
             )
         if len(args):
-            raise ValueError("Got a non-empty list of extra agruments, when none was expected.")
+            raise ValueError(
+                "Got a non-empty list of extra agruments, when none was expected."
+            )
         tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         try:
             tensors = self._call_module(tensors, **kwargs)
