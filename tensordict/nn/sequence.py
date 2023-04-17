@@ -399,15 +399,15 @@ class TensorDictSequential(TensorDictModule):
         tensordict: TensorDictBase,
         **kwargs: Any,
     ) -> Any:
-        tensordict_keys = set(tensordict.keys(include_nested=True))
         if not self.partial_tolerant or all(
-            key in tensordict_keys for key in module.in_keys
+            key in tensordict.keys(include_nested=True) for key in module.in_keys
         ):
             tensordict = module(tensordict, **kwargs)
         elif self.partial_tolerant and isinstance(tensordict, LazyStackedTensorDict):
             for sub_td in tensordict.tensordicts:
-                tensordict_keys = set(sub_td.keys(include_nested=True))
-                if all(key in tensordict_keys for key in module.in_keys):
+                if all(
+                    key in sub_td.keys(include_nested=True) for key in module.in_keys
+                ):
                     module(sub_td, **kwargs)
             tensordict._update_valid_keys()
         return tensordict
