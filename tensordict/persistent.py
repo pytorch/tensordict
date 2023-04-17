@@ -201,6 +201,9 @@ class PersistentTensorDict(TensorDictBase):
             _set_max_batch_size(out)
         return out
 
+    def close(self):
+        self.file.close()
+
     def _process_key(self, key):
         if isinstance(key, str):
             return key
