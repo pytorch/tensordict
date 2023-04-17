@@ -106,6 +106,17 @@ class PersistentTensorDict(TensorDictBase):
             Defaults to ``None`` (ie. default PyTorch device).
         **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
 
+    .. note::
+      Currently, PersistentTensorDict instances are not closed when getting out-of-scope.
+      This means that it is the responsibility of the user to close them if necessary.
+
+    Examples:
+        >>> import tempfile
+        >>> with tempfile.NamedTemporaryFile() as f:
+        ...     data = PersistentTensorDict(file=f, batch_size=[3], mode="w")
+        ...     data["a", "b"] = torch.randn(3, 4)
+        ...     print(data)
+
     """
 
     def __init__(
@@ -202,6 +213,7 @@ class PersistentTensorDict(TensorDictBase):
         return out
 
     def close(self):
+        """Closes the persistent tensordict."""
         self.file.close()
 
     def _process_key(self, key):
