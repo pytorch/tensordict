@@ -1841,7 +1841,6 @@ class TestSkipExisting:
         assert (td["out"] == 1).all()
 
     def test_tdseq(self):
-
         class MyModule(TensorDictModuleBase):
             in_keys = ["in"]
             out_keys = ["out"]
