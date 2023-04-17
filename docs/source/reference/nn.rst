@@ -301,3 +301,5 @@ Utils
     set_interaction_type
     inv_softplus
     biased_softplus
+    set_skip_existing
+    skip_existing
