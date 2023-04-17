@@ -15,7 +15,7 @@ from torch import nn
 __all__ = ["mappings", "inv_softplus", "biased_softplus"]
 _SKIP_EXISTING = False
 
-from torch.utils._contextlib import _DecoratorContextManager
+from torch.autograd.grad_mode import _DecoratorContextManager
 
 
 def inv_softplus(bias: float | torch.Tensor) -> float | torch.Tensor:
