@@ -293,7 +293,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self.out_keys = out_keys
         self.in_keys = in_keys
 
-        if default_interaction_mode:
+        if default_interaction_mode is not None:
             _insert_interaction_mode_deprecation_warning("default_")
             self.default_interaction_type = InteractionType.from_str(
                 default_interaction_mode
