@@ -14,12 +14,14 @@ from tensordict.nn import (
     probabilistic as nn_probabilistic,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
-    TensorDictModule,
+    TensorDictModuleBase,
     TensorDictSequential,
 )
+from tensordict.nn.common import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
+from tensordict.nn.utils import set_skip_existing, skip_existing
 from torch import nn
 from torch.distributions import Normal
 
@@ -1766,6 +1768,107 @@ class TestMakeFunctional:
         assert not model._is_stateless
         make_functional(model)
         assert model._is_stateless
+
+
+class TestSkipExisting:
+    @pytest.mark.parametrize("mode", [True, False, None])
+    def test_global(self, mode):
+        assert skip_existing() is False
+        if mode is None:
+            with pytest.raises(RuntimeError, match="It seems"):
+                with set_skip_existing(mode):
+                    pass
+            assert skip_existing() is False
+            return
+
+        with set_skip_existing(mode):
+            assert skip_existing() is mode
+        assert skip_existing() is False
+
+    def test_global_with_module(self):
+        class MyModule(TensorDictModuleBase):
+            in_keys = []
+            out_keys = ["out"]
+
+            @set_skip_existing(None)
+            def forward(self, tensordict):
+                tensordict.set("out", torch.ones(()))
+                return tensordict
+
+        module = MyModule()
+        td = module(TensorDict({"out": torch.zeros(())}, []))
+        assert (td["out"] == 1).all()
+        with set_skip_existing(True):
+            td = module(TensorDict({"out": torch.zeros(())}, []))  # no print
+        assert (td["out"] == 0).all()
+        td = module(TensorDict({"out": torch.zeros(())}, []))
+        assert (td["out"] == 1).all()
+
+    def test_module(self):
+        class MyModule(TensorDictModuleBase):
+            in_keys = []
+            out_keys = ["out"]
+
+            @set_skip_existing()
+            def forward(self, tensordict):
+                tensordict.set("out", torch.ones(()))
+                return tensordict
+
+        module = MyModule()
+        td = module(TensorDict({"out": torch.zeros(())}, []))
+        assert (td["out"] == 0).all()
+        td = module(TensorDict({}, []))  # prints hello
+        assert (td["out"] == 1).all()
+
+    def test_tdmodule(self):
+        module = TensorDictModule(lambda x: x + 1, in_keys=["in"], out_keys=["out"])
+        td = TensorDict({"in": torch.zeros(())}, [])
+        module(td)
+        assert (td["out"] == 1).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        module(td)
+        assert (td["out"] == 1).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        with set_skip_existing(True):
+            module(td)
+        assert (td["out"] == 0).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        with set_skip_existing(False):
+            module(td)
+        assert (td["out"] == 1).all()
+
+    def test_tdseq(self):
+
+        class MyModule(TensorDictModuleBase):
+            in_keys = ["in"]
+            out_keys = ["out"]
+
+            def forward(self, tensordict):
+                tensordict["out"] = tensordict["in"] + 1
+                return tensordict
+
+        module = TensorDictSequential(MyModule())
+
+        td = TensorDict({"in": torch.zeros(())}, [])
+        module(td)
+        assert (td["out"] == 1).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        module(td)
+        assert (td["out"] == 1).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        with set_skip_existing(True):
+            module(td)
+        assert (td["out"] == 0).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        with set_skip_existing(False):
+            module(td)
+        assert (td["out"] == 1).all()
 
 
 if __name__ == "__main__":

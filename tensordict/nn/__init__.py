@@ -25,7 +25,12 @@ from tensordict.nn.probabilistic import (
     set_interaction_type,
 )
 from tensordict.nn.sequence import TensorDictSequential
-from tensordict.nn.utils import biased_softplus, inv_softplus
+from tensordict.nn.utils import (
+    biased_softplus,
+    inv_softplus,
+    set_skip_existing,
+    skip_existing,
+)
 
 __all__ = [
     "dispatch",
