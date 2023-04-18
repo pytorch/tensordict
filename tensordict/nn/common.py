@@ -12,8 +12,9 @@ from textwrap import indent
 from typing import Any, Callable, Iterable, List, Sequence, Tuple
 
 import torch
-
 from tensordict.nn.functional_modules import make_functional
+
+from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import make_tensordict, TensorDictBase
 from tensordict.utils import _normalize_key, _seq_of_nested_key_check, NestedKey
 from torch import nn, Tensor
@@ -488,6 +489,7 @@ class TensorDictModule(TensorDictModuleBase):
         return out
 
     @dispatch(auto_batch_size=False)
+    @set_skip_existing(None)
     def forward(
         self,
         tensordict: TensorDictBase,

@@ -8,6 +8,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Iterable
 
+from tensordict.nn.utils import set_skip_existing
+
 _has_functorch = False
 try:
     import functorch
@@ -413,6 +415,7 @@ class TensorDictSequential(TensorDictModule):
         return tensordict
 
     @dispatch(auto_batch_size=False)
+    @set_skip_existing(None)
     def forward(
         self,
         tensordict: TensorDictBase,

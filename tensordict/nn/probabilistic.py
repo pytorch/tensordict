@@ -11,10 +11,11 @@ from textwrap import indent
 from typing import Any, Callable, Sequence
 from warnings import warn
 
-import torch.nn as nn
-from tensordict.nn.common import TensorDictModule
+from tensordict.nn.common import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.nn.sequence import TensorDictSequential
+
+from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _seq_of_nested_key_check
 from torch import distributions as D, Tensor
@@ -117,7 +118,7 @@ class set_interaction_type(_DecoratorContextManager):
         _INTERACTION_TYPE = self.prev
 
 
-class ProbabilisticTensorDictModule(nn.Module):
+class ProbabilisticTensorDictModule(TensorDictModuleBase):
     """A probabilistic TD Module.
 
     `ProbabilisticTensorDictModule` is a non-parametric module representing a
@@ -332,6 +333,7 @@ class ProbabilisticTensorDictModule(nn.Module):
                 raise err
         return dist
 
+    @set_skip_existing(None)
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -488,6 +490,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         """Construct a distribution from the input parameters. Other modules in the sequence are not evaluated."""
         return self.module[-1].get_dist(tensordict)
 
+    @set_skip_existing(None)
     def forward(
         self,
         tensordict: TensorDictBase,
