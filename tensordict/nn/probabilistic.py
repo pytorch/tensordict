@@ -312,6 +312,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self._dist = None
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
+        if self.return_log_prob:
+            self.out_keys.append("sample_log_prob")
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         try:
