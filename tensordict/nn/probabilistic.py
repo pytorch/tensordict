@@ -259,6 +259,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     """
 
+    SAMPLE_LOG_PROB_KEY = "sample_log_prob"
+
     def __init__(
         self,
         in_keys: str | Sequence[str] | dict,
@@ -313,7 +315,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
         if self.return_log_prob:
-            self.out_keys.append("sample_log_prob")
+            self.out_keys.append(self.SAMPLE_LOG_PROB_KEY)
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         try:
@@ -357,11 +359,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             )
             if self.return_log_prob:
                 log_prob = dist.log_prob(*out_tensors)
-                tensordict_out.set("sample_log_prob", log_prob)
+                tensordict_out.set(self.SAMPLE_LOG_PROB_KEY, log_prob)
         elif self.return_log_prob:
-            out_tensors = [tensordict.get(key) for key in self.out_keys]
+            out_tensors = [
+                tensordict.get(key)
+                for key in self.out_keys
+                if key != self.SAMPLE_LOG_PROB_KEY
+            ]
             log_prob = dist.log_prob(*out_tensors)
-            tensordict_out.set("sample_log_prob", log_prob)
+            tensordict_out.set(self.SAMPLE_LOG_PROB_KEY, log_prob)
             # raise RuntimeError(
             #     "ProbabilisticTensorDictModule.return_log_prob = True is incompatible with settings in which "
             #     "the submodule is responsible for sampling. To manually gather the log-probability, call first "
