@@ -11,6 +11,8 @@ from textwrap import indent
 from typing import Any, Callable, Sequence
 from warnings import warn
 
+from tensordict._contextlib import _DecoratorContextManager
+
 from tensordict.nn.common import TensorDictModule, TensorDictModuleBase
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.nn.sequence import TensorDictSequential
@@ -19,7 +21,6 @@ from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import _seq_of_nested_key_check
 from torch import distributions as D, Tensor
-from torch.autograd.grad_mode import _DecoratorContextManager
 
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
