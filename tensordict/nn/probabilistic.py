@@ -13,7 +13,7 @@ from warnings import warn
 
 from tensordict._contextlib import _DecoratorContextManager
 
-from tensordict.nn.common import TensorDictModule, TensorDictModuleBase
+from tensordict.nn.common import dispatch, TensorDictModule, TensorDictModuleBase
 from tensordict.nn.distributions import Delta, distributions_maps
 from tensordict.nn.sequence import TensorDictSequential
 
@@ -334,6 +334,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 raise err
         return dist
 
+    @dispatch(auto_batch_size=False)
     @set_skip_existing(None)
     def forward(
         self,
@@ -491,6 +492,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         """Construct a distribution from the input parameters. Other modules in the sequence are not evaluated."""
         return self.module[-1].get_dist(tensordict)
 
+    @dispatch(auto_batch_size=False)
     @set_skip_existing(None)
     def forward(
         self,
