@@ -4,7 +4,7 @@
    contain the root `toctree` directive.
 
 Welcome to the TensorDict Documentation!
-=====================================
+========================================
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.
 
