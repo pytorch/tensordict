@@ -7,13 +7,13 @@ on:
   workflow_dispatch:
 jobs:
   build-docs:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     defaults:
       run:
         shell: bash -l {0}
     steps:
       - name: Checkout tensordict
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v2
         with:
