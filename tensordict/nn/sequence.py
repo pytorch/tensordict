@@ -30,6 +30,55 @@ from torch import nn
 __all__ = ["TensorDictSequential"]
 
 
+def _get_subsequence(module_list, in_keys, out_keys):
+    """ Selects the minimal sequence of modules that take at least in_keys as input and out_keys as output"""
+    in_keys = deepcopy(in_keys)
+    out_keys = deepcopy(out_keys)
+    id_to_keep = set(range(len(module_list)))
+    for i, module in enumerate(module_list):
+        # check if the modules uses some of the in_keys needed so far
+        if (type(module) is TensorDictSequential):  
+            # no isinstance because we don't want to mess up subclasses
+            try:
+                module = module_list[i] = module.select_subsequence(in_keys=in_keys)
+                in_keys.extend(module.out_keys)
+            except ValueError as e:
+                # then the module can be removed
+                id_to_keep.remove(i)
+                continue
+        elif set(in_keys) & set(module.in_keys):
+            in_keys.extend(module.out_keys)
+        else:
+            # then the module can be removed
+            id_to_keep.remove(i)
+
+    for i, module in reversed(list(enumerate(module_list))):
+        if i in id_to_keep:
+            # if the model is producing some of the out_keys needed so far
+            if (type(module) is TensorDictSequential):  
+                # no isinstance because we don't want to mess up subclasses
+                try:
+                    module = module_list[i] = module.select_subsequence(out_keys=out_keys)
+                    out_keys.extend(module.in_keys)
+                except ValueError as e:
+                    # then the module can be removed
+                    id_to_keep.remove(i)
+                    continue
+            elif set(out_keys) & set(module.out_keys):
+                out_keys.extend(module.in_keys)
+            else:
+                id_to_keep.remove(i)
+    id_to_keep = sorted(id_to_keep)
+
+    modules = [module_list[i] for i in id_to_keep]
+
+    if modules == []:
+        raise ValueError(
+            "No modules left after selection. Make sure that in_keys and out_keys are coherent."
+        )
+    return modules
+
+
 class TensorDictSequential(TensorDictModule):
     """A sequence of TensorDictModules.
 
@@ -147,19 +196,36 @@ class TensorDictSequential(TensorDictModule):
     """
 
     module: nn.ModuleList
+    intermediate_keys = None
 
     def __init__(
         self,
         *modules: TensorDictModule,
         partial_tolerant: bool = False,
+        in_keys=None, 
+        out_keys=None
     ) -> None:
-        in_keys, out_keys = self._compute_in_and_out_keys(modules)
+        in_keys = deepcopy(in_keys)
+        out_keys = deepcopy(out_keys)
+        if in_keys or out_keys:
+            modules = _get_subsequence(list(modules), in_keys, out_keys)
+
+        temp_in_keys, temp_out_keys = self._compute_in_and_out_keys(modules)
 
         super().__init__(
-            module=nn.ModuleList(list(modules)), in_keys=in_keys, out_keys=out_keys
+            module=nn.ModuleList(list(modules)), in_keys=temp_in_keys, out_keys=temp_out_keys
         )
 
         self.partial_tolerant = partial_tolerant
+        if in_keys:
+            if self.in_keys != in_keys:
+                # TODO: interaction with partial_tolerant is TBD
+                print(f"WARNING: Minimal subsequence requires more input than specified. Requested {in_keys}, Needed {self.in_keys}")
+        if out_keys:
+            # hide from output all not required keys
+            self.intermediate_keys = list(set(self.out_keys) - set(out_keys))
+            # this is to prevent out_keys ["b", "b"]. if allowed can be replaced with just out_keys
+            self.out_keys = list(dict.fromkeys(out_keys))  
 
     def _compute_in_and_out_keys(
         self, modules: list[TensorDictModule]
@@ -223,7 +289,7 @@ class TensorDictSequential(TensorDictModule):
                 If none is provided, the module's ``out_keys`` are assumed.
 
         Returns:
-            A new TensorDictSequential with only the modules that are necessary acording to the given input and output keys.
+            A new TensorDictSequential with only the modules that are necessary according to the given input and output keys.
 
         Examples:
             >>> from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod
@@ -275,7 +341,7 @@ class TensorDictSequential(TensorDictModule):
                 device=cpu,
                 in_keys=['c'],
                 out_keys=['d'])
-            >>> # select all modules that affect the value of "c"
+            >>> # select all modules that are needed to produce "c"
             >>> module.select_subsequence(out_keys=["c"])
             TensorDictSequential(
                 module=ModuleList(
@@ -292,8 +358,26 @@ class TensorDictSequential(TensorDictModule):
                 ),
                 device=cpu,
                 in_keys=['a'],
+                out_keys=['c'])
+            >>> # select all modules that are needed to produce "b" and "c"
+            >>> module.select_subsequence(out_keys=["b", "c"])
+            TensorDictSequential(
+                module=ModuleList(
+                  (0): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['a'],
+                      out_keys=['b'])
+                  (1): TensorDictModule(
+                      module=<function <lambda> at 0x126ed1ca0>,
+                      device=cpu,
+                      in_keys=['b'],
+                      out_keys=['c'])
+                ),
+                device=cpu,
+                in_keys=['a'],
                 out_keys=['b', 'c'])
-            >>> # select all modules that affect the value of "e"
+            >>> # select all modules that are needed to produce "e"
             >>> module.select_subsequence(out_keys=["e"])
             TensorDictSequential(
                 module=ModuleList(
@@ -338,11 +422,11 @@ class TensorDictSequential(TensorDictModule):
                       ),
                       device=cpu,
                       in_keys=['b'],
-                      out_keys=['d', 'e'])
+                      out_keys=['e'])
                 ),
                 device=cpu,
                 in_keys=['b'],
-                out_keys=['d', 'e'])
+                out_keys=['e'])
 
         """
         if in_keys is None:
@@ -353,45 +437,17 @@ class TensorDictSequential(TensorDictModule):
             out_keys = deepcopy(self.out_keys)
         else:
             out_keys = [_normalize_key(key) for key in out_keys]
-        module_list = list(self.module)
-        id_to_keep = set(range(len(module_list)))
-        for i, module in enumerate(module_list):
-            if (
-                type(module) is TensorDictSequential
-            ):  # no isinstance because we don't want to mess up subclasses
-                try:
-                    module = module_list[i] = module.select_subsequence(in_keys=in_keys)
-                except ValueError:
-                    # then the module can be removed
-                    id_to_keep.remove(i)
-                    continue
 
-            if all(key in in_keys for key in module.in_keys):
-                in_keys.extend(module.out_keys)
-            else:
-                id_to_keep.remove(i)
-        for i, module in reversed(list(enumerate(module_list))):
-            if i in id_to_keep:
-                if any(key in out_keys for key in module.out_keys):
-                    if (
-                        type(module) is TensorDictSequential
-                    ):  # no isinstance because we don't want to mess up subclasses
-                        module = module_list[i] = module.select_subsequence(
-                            out_keys=out_keys
-                        )
-                    out_keys.extend(module.in_keys)
-                else:
-                    id_to_keep.remove(i)
-        id_to_keep = sorted(id_to_keep)
+        modules = _get_subsequence(list(self.module), in_keys, out_keys)
 
-        modules = [module_list[i] for i in id_to_keep]
-
-        if modules == []:
-            raise ValueError(
-                "No modules left after selection. Make sure that in_keys and out_keys are coherent."
-            )
-
-        return self.__class__(*modules)
+        res = self.__class__(*modules)
+        if res.in_keys != in_keys:
+            # TODO: interaction with partial_tolerant is TBD
+            print(f"WARNING: Minimal subsequence requires more input than specified. Requested {in_keys}, Needed {res.in_keys}")
+        res.intermediate_keys = list(set(res.out_keys) - set(out_keys))
+        # this is to prevent out_keys ["b", "b"]. if allowed can be replaced with just out_keys
+        res.out_keys = list(dict.fromkeys(out_keys))
+        return res
 
     def _run_module(
         self,
