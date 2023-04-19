@@ -530,7 +530,10 @@ class TensorDictModule(TensorDictModuleBase):
                 ) from err
             else:
                 raise err
-        if not isinstance(tensors, tuple):
+        if isinstance(tensors, (TensorDictBase, dict)):
+            # unpack
+            tensors = tuple(tensors[key] for key in self.out_keys)
+        elif not isinstance(tensors, tuple):
             tensors = (tensors,)
         tensordict_out = self._write_to_tensordict(tensordict, tensors, tensordict_out)
         return tensordict_out
