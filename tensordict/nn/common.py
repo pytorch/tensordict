@@ -372,6 +372,10 @@ class TensorDictModuleBase(nn.Module):
     def select_out_keys(self, out_keys):
         self.register_forward_hook(_OutKeysSelect(out_keys))
 
+    def reset_out_keys(self):
+        for i, hook in list(self._forward_hooks.items()):
+            if isinstance(hook, _OutKeysSelect):
+                del self._forward_hooks[i]
 
 class TensorDictModule(TensorDictModuleBase):
     """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
