@@ -17,7 +17,7 @@ from tensordict.nn import (
     TensorDictModuleBase,
     TensorDictSequential,
 )
-from tensordict.nn.common import TensorDictModule
+from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
 from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
@@ -1868,6 +1868,182 @@ class TestSkipExisting:
         with set_skip_existing(False):
             module(td)
         assert (td["out"] == 1).all()
+
+
+class TestSelectOutKeys:
+    def test_tdmodule(self):
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+        )
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert "c" not in td.keys()
+        assert all(key in td.keys() for key in ["a", "b", "d"])
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+
+    def test_tdmodule_dispatch(self):
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+        )
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        d = mod(torch.zeros(()), torch.ones(()))
+        assert (d == 3).all()
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+
+    def test_tdmodule_dispatch_firstcall(self):
+        # calling the dispatch first or not may mess up the init
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+        )
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        # ignore result but make sure we call _init
+        mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        d = mod(torch.zeros(()), torch.ones(()))
+        assert (d == 3).all()
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+
+    def test_tdseq(self):
+        mod = TensorDictSequential(
+            TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
+            TensorDictModule(lambda x: x + 2, in_keys=["b"], out_keys=["d"]),
+        )
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert "c" not in td.keys()
+        assert all(key in td.keys() for key in ["a", "b", "d"])
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+
+    def test_tdseq_dispatch(self):
+        mod = TensorDictSequential(
+            TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
+            TensorDictModule(lambda x: x + 2, in_keys=["b"], out_keys=["d"]),
+        )
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        d = mod(torch.zeros(()), torch.ones(()))
+        assert (d == 3).all()
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_tdbase(self, inplace):
+        class MyModule(TensorDictModuleBase):
+            in_keys = ["a", "b"]
+            out_keys = ["c", "d"]
+
+            def forward(self, tensordict):
+                c = tensordict["a"] + 2
+                d = tensordict["b"] + 2
+                if not inplace:
+                    tensordict = tensordict.select()
+                tensordict["c"] = c
+                tensordict["d"] = d
+                return tensordict
+
+        mod = MyModule()
+        # some magic happened and in_keys and out_keys are not class attributes anymore!
+        assert mod.out_keys is mod._out_keys
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        if inplace:
+            assert set(td.keys()) == {"a", "b", "c", "d"}
+        else:
+            assert set(td.keys()) == {"c", "d"}
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert "c" not in td.keys()
+        if inplace:
+            assert set(td.keys()) == {"a", "b", "d"}
+        else:
+            assert set(td.keys()) == {
+                "d",
+            }
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        if inplace:
+            assert set(td.keys()) == {"a", "b", "c", "d"}
+        else:
+            assert set(td.keys()) == {"c", "d"}
+
+    def test_tdmodule_wrap(self):
+        mod = TensorDictModuleWrapper(
+            TensorDictModule(
+                lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+            )
+        )
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert "c" not in td.keys()
+        assert all(key in td.keys() for key in ["a", "b", "d"])
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+
+    def test_tdmodule_wrap_dispatch(self):
+        mod = TensorDictModuleWrapper(
+            TensorDictModule(
+                lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+            )
+        )
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        d = mod(torch.zeros(()), torch.ones(()))
+        assert (d == 3).all()
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
 
 
 if __name__ == "__main__":
