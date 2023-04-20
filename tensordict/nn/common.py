@@ -396,10 +396,6 @@ class TensorDictModuleBase(nn.Module):
             out.out_keys = out_keys
         return out
 
-    def __init__(self):
-
-        super().__init__()
-
     @property
     def in_keys(self):
         return self._in_keys
