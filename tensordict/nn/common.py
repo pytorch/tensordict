@@ -9,7 +9,7 @@ import functools
 import inspect
 import warnings
 from textwrap import indent
-from typing import Any, Callable, Iterable, List, Sequence, Tuple
+from typing import Any, Callable, Iterable, List, Sequence, Tuple, Union
 
 import torch
 from tensordict.nn.functional_modules import make_functional
@@ -276,6 +276,66 @@ class dispatch:
         return wrapper
 
 
+class _OutKeysSelect:
+    def __init__(self, out_keys):
+        self.out_keys = out_keys
+        self._initialized = False
+
+    def _init(self, module):
+        if self._initialized:
+            return
+        self._initialized = True
+        self.module = module
+        module.out_keys = self.out_keys
+
+    def __call__(
+        self,
+        module: TensorDictModuleBase,
+        tensordict_in: TensorDictBase,
+        tensordict_out: TensorDictBase,
+    ):
+        # detect dispatch calls
+        in_keys = module.in_keys
+        is_dispatched = self._detech_dispatch(tensordict_in, in_keys)
+        out_keys = self.out_keys
+        if is_dispatched:
+            # if dispatch filtered the out keys as they should we're happy
+            if (not isinstance(tensordict_out, tuple) and len(out_keys) == 1) or (
+                len(out_keys) == len(tensordict_out)
+            ):
+                return tensordict_out
+        self._init(module)
+        if is_dispatched:
+            # it might be the case that dispatch was not aware of what the out-keys were.
+            return (
+                item
+                for i, item in tensordict_out
+                if module._out_keys[i] in module.out_keys
+            )
+        return tensordict_out.select(
+            *in_keys, *out_keys, inplace=tensordict_out is tensordict_in
+        )
+
+    def _detech_dispatch(self, tensordict_in, in_keys):
+        if isinstance(tensordict_in, TensorDictBase) and all(
+            key in tensordict_in.keys() for key in in_keys
+        ):
+            return False
+        elif isinstance(tensordict_in, tuple):
+            if len(tensordict_in):
+                if isinstance(tensordict_in[0], TensorDictBase):
+                    return self._detech_dispatch(tensordict_in[0], in_keys)
+                return True
+            return not len(in_keys)
+
+    def remove(self):
+        # reset ground truth
+        self.module.out_keys = self.module._out_keys
+
+    def __del__(self):
+        self.remove()
+
+
 class TensorDictModuleBase(nn.Module):
     """Base class to TensorDict modules.
 
@@ -283,10 +343,34 @@ class TensorDictModuleBase(nn.Module):
     key-lists that indicate what input entries are to be read and what output
     entries should be expected to be written.
 
+    The forward method input/output signature should always follow the
+    convention:
+
+        >>> tensordict_out = module.forward(tensordict_in)
+
     """
 
-    in_keys: List[str | Tuple[str]]
-    out_keys: List[str | Tuple[str]]
+    @property
+    def in_keys(self):
+        return self._in_keys
+
+    @in_keys.setter
+    def in_keys(self, value: List[Union[str, Tuple[str]]]):
+        self._in_keys = value
+
+    @property
+    def out_keys(self):
+        return self._out_keys_apparent
+
+    @out_keys.setter
+    def out_keys(self, value: List[Union[str, Tuple[str]]]):
+        # the first time out_keys are set, they are marked as ground truth
+        if not hasattr(self, "_out_keys"):
+            self._out_keys = value
+        self._out_keys_apparent = value
+
+    def select_out_keys(self, out_keys):
+        self.register_forward_hook(_OutKeysSelect(out_keys))
 
 
 class TensorDictModule(TensorDictModuleBase):
