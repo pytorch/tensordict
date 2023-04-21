@@ -379,21 +379,24 @@ class TensorDictModuleBase(nn.Module):
 
     def __new__(cls, *args, **kwargs):
         # check the out_keys and in_keys in the dict
-        in_keys = None
-        if "in_keys" in cls.__dict__:
+        if "in_keys" in cls.__dict__ and not isinstance(
+            cls.__dict__.get("in_keys"), property
+        ):
             in_keys = cls.__dict__.get("in_keys")
             # now let's remove it
             delattr(cls, "in_keys")
-        out_keys = None
-        if "out_keys" in cls.__dict__:
+            cls._in_keys = in_keys
+            cls.in_keys = TensorDictModuleBase.in_keys
+        if "out_keys" in cls.__dict__ and not isinstance(
+            cls.__dict__.get("out_keys"), property
+        ):
             out_keys = cls.__dict__.get("out_keys")
             # now let's remove it
             delattr(cls, "out_keys")
+            cls._out_keys = out_keys
+            cls._out_keys_apparent = out_keys
+            cls.out_keys = TensorDictModuleBase.out_keys
         out = super().__new__(cls)
-        if in_keys is not None:
-            out.in_keys = in_keys
-        if out_keys is not None:
-            out.out_keys = out_keys
         return out
 
     @property
