@@ -1439,6 +1439,99 @@ class TensorDictBase(MutableMapping):
             _run_checks=False,
         )
 
+    def flatten(self, start_dim=0, end_dim=-1):
+        """Flattens all the tensors of a tensordict.
+
+        Args:
+            start_dim (int) – the first dim to flatten
+            end_dim (int) – the last dim to flatten
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(60).view(3, 4, 5), "b": torch.arange(12).view(3, 4)}, [3, 4])
+            >>> td_flat = td.flatten(0, 1)
+            >>> td_flat.batch_size
+            torch.Size([12])
+            >>> td_flat["a"]
+            tensor([[ 0,  1,  2,  3,  4],
+                    [ 5,  6,  7,  8,  9],
+                    [10, 11, 12, 13, 14],
+                    [15, 16, 17, 18, 19],
+                    [20, 21, 22, 23, 24],
+                    [25, 26, 27, 28, 29],
+                    [30, 31, 32, 33, 34],
+                    [35, 36, 37, 38, 39],
+                    [40, 41, 42, 43, 44],
+                    [45, 46, 47, 48, 49],
+                    [50, 51, 52, 53, 54],
+                    [55, 56, 57, 58, 59]])
+            >>> td_flat["b"]
+            tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])
+
+        """
+        if end_dim < 0:
+            end_dim = self.ndim + end_dim
+            if end_dim < 0:
+                raise ValueError(
+                    f"Incompatible end_dim {end_dim} for tensordict with shape {self.shape}."
+                )
+        if end_dim <= start_dim:
+            raise ValueError(
+                "The end dimension must be strictly greater than the start dim."
+            )
+
+        def flatten(tensor):
+            return torch.flatten(tensor, start_dim, end_dim)
+
+        nelt = prod(self.batch_size[start_dim : end_dim + 1])
+        if start_dim > 0:
+            batch_size = (
+                list(self.batch_size)[:start_dim]
+                + [nelt]
+                + list(self.batch_size[end_dim + 1 :])
+            )
+        else:
+            batch_size = [nelt] + list(self.batch_size[end_dim + 1 :])
+        out = self.apply(flatten, batch_size=batch_size)
+        return out
+
+    def unflatten(self, dim, unflattened_size):
+        """Unflattens a tensordict dim expanding it to a desired shape.
+
+        Args:
+            dim (int): specifies the dimension of the input tensor to be unflattened.
+            unflattened_size (shape): is the new shape of the unflattened dimension of the tensordict.
+
+        Examples:
+            >>> td = TensorDict({"a": torch.arange(60).view(3, 4, 5), "b": torch.arange(12).view(3, 4)}, [3, 4])
+            >>> td_flat = td.flatten(0, 1)
+            >>> td_unflat = td_flat.unflatten(0, [3, 4])
+            >>> assert (td == td_unflat).all()
+        """
+        if dim < 0:
+            dim = self.ndim + dim
+            if dim < 0:
+                raise ValueError(
+                    f"Incompatible dim {dim} for tensordict with shape {self.shape}."
+                )
+
+        def unflatten(tensor):
+            return torch.unflatten(
+                tensor,
+                dim,
+                unflattened_size,
+            )
+
+        if dim > 0:
+            batch_size = (
+                list(self.batch_size)[:dim]
+                + list(unflattened_size)
+                + list(self.batch_size[dim + 1 :])
+            )
+        else:
+            batch_size = list(unflattened_size) + list(self.batch_size[1:])
+        out = self.apply(unflatten, batch_size=batch_size)
+        return out
+
     def __bool__(self) -> bool:
         raise ValueError("Converting a tensordict to boolean value is not permitted")
 

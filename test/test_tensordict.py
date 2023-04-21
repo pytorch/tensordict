@@ -698,6 +698,22 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td.get("a") == 0.1).all()
         assert new_td is td
 
+    def test_flatten_unflatten(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        shape = td.shape[:3]
+        td_flat = td.flatten(0, 2)
+        td_unflat = td_flat.unflatten(0, shape)
+        assert (td.to_tensordict() == td_unflat).all()
+        assert td.batch_size == td_unflat.batch_size
+
+    def test_flatten_unflatten_bis(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        shape = td.shape[1:4]
+        td_flat = td.flatten(1, 3)
+        td_unflat = td_flat.unflatten(1, shape)
+        assert (td.to_tensordict() == td_unflat).all()
+        assert td.batch_size == td_unflat.batch_size
+
     def test_masked_fill_(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
