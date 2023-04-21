@@ -155,6 +155,21 @@ def test_exec_td(benchmark, net):
     )
 
 
+import pytest
+@pytest.fixture(scope='function')
+def print1():
+    print("here!")
+    return 1
+
+def test_stuff(benchmark, print1):
+    benchmark.pedantic(
+        lambda x: x+1,
+        args=(print1,),
+        iterations=5,
+        rounds=3
+        )
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
