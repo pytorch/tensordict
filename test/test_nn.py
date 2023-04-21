@@ -1979,32 +1979,34 @@ class TestSelectOutKeys:
                 tensordict["d"] = d
                 return tensordict
 
-        mod = MyModule()
-        # some magic happened and in_keys and out_keys are not class attributes anymore!
-        assert mod.out_keys is mod._out_keys
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        if inplace:
-            assert set(td.keys()) == {"a", "b", "c", "d"}
-        else:
-            assert set(td.keys()) == {"c", "d"}
-        mod2 = mod.select_out_keys("d")
-        assert mod2 is mod
-        assert mod.out_keys == ["d"]
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        assert "c" not in td.keys()
-        if inplace:
-            assert set(td.keys()) == {"a", "b", "d"}
-        else:
-            assert set(td.keys()) == {
-                "d",
-            }
-        mod2 = mod.reset_out_keys()
-        assert mod2 is mod
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        if inplace:
-            assert set(td.keys()) == {"a", "b", "c", "d"}
-        else:
-            assert set(td.keys()) == {"c", "d"}
+        # since we play with the __new__ and class attributes, let's check that everything's ok for a second instance
+        for i in range(2):
+            mod = MyModule()
+            # some magic happened and in_keys and out_keys are not class attributes anymore!
+            assert mod.out_keys is mod._out_keys, i
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            if inplace:
+                assert set(td.keys()) == {"a", "b", "c", "d"}
+            else:
+                assert set(td.keys()) == {"c", "d"}
+            mod2 = mod.select_out_keys("d")
+            assert mod2 is mod
+            assert mod.out_keys == ["d"]
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            assert "c" not in td.keys()
+            if inplace:
+                assert set(td.keys()) == {"a", "b", "d"}
+            else:
+                assert set(td.keys()) == {
+                    "d",
+                }
+            mod2 = mod.reset_out_keys()
+            assert mod2 is mod
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            if inplace:
+                assert set(td.keys()) == {"a", "b", "c", "d"}
+            else:
+                assert set(td.keys()) == {"c", "d"}
 
     def test_tdmodule_wrap(self):
         mod = TensorDictModuleWrapper(
