@@ -329,6 +329,7 @@ class TensorDictBase(MutableMapping):
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
         cls._sorted_keys = None
+        cls._names = []
         return super().__new__(cls)
 
     def __getstate__(self) -> dict[str, Any]:
@@ -359,6 +360,115 @@ class TensorDictBase(MutableMapping):
 
         """
         raise NotImplementedError
+
+    @property
+    def names(self):
+        names = self._names
+        if names is None:
+            return [None for _ in range(self.batch_dims)]
+        return names
+
+    @names.setter
+    def names(self, value):
+        # we don't run checks on types for efficiency purposes
+        if value is None:
+            self._names = None
+        if len(value) != self.batch_dims:
+            raise ValueError("the length of the dimension names must equate the tensordict batch_dims attribute. "
+                             f"Got {value} for batch_dims {self.batch_dims}.")
+        self._rename_subtds(value)
+        self._names = value
+
+    @abc.abstractmethod
+    def _rename_subtds(self, value):
+        # renames all the sub-tensordicts dimension according to value.
+        # If value has less dimensions than the TD, the rest is just assumed to be None
+        raise NotImplementedError
+
+    def refine_names(self, *names):
+        """Refines the dimension names of self according to names.
+
+        Refining is a special case of renaming that “lifts” unnamed dimensions.
+        A None dim can be refined to have any name; a named dim can only be
+        refined to have the same name.
+
+        Because named tensors can coexist with unnamed tensors, refining names
+        gives a nice way to write named-tensor-aware code that works with both
+        named and unnamed tensors.
+
+        names may contain up to one Ellipsis (...). The Ellipsis is expanded
+        greedily; it is expanded in-place to fill names to the same length as
+        self.dim() using names from the corresponding indices of self.names.
+
+        Returns: the tensordict with dimensions named accordingly.
+
+        """
+        # replace ellipsis if any
+        names_copy = copy(names)
+        if any(name is Ellipsis for name in names):
+            ellipsis_name = [NO_DEFAULT for _ in self.ndim - len(names)]
+            names = []
+            for name in names_copy:
+                if name is Ellipsis:
+                    names += ellipsis_name
+                else:
+                    names.append(name)
+        # check that the names that are set are either None or identical
+        for i, name in enumerate(names):
+            if self.names[i] is None:
+                # whatever value is ok
+                if name is NO_DEFAULT:
+                    names[i] = None
+                continue
+            elif name is not NO_DEFAULT:
+                if self.names[i] == name:
+                    continue
+                else:
+                    raise RuntimeError(f"refine_names: cannot coerce TensorDict names {self.names} with {names_copy}.")
+        # we also need to rename the sub-tensordicts
+        self._rename_subtds(self.names)
+        return self
+
+    def rename(self, *names, **rename_map):
+        clone = self.clone(recurse=False)
+        if len(names) == 1 and names[0] is None:
+            clone.names = None
+        if rename_map and names:
+            raise ValueError("Passed both a name map and a name list. "
+                             "Only one is accepted.")
+        elif not rename_map and not names:
+            raise ValueError("Neither a name map nor a name list was passed. "
+                             "Only one is accepted.")
+        elif rename_map:
+            for i, name in enumerate(clone.names):
+                new_name = rename_map.pop(name, NO_DEFAULT)
+                if new_name is not NO_DEFAULT:
+                    clone._names[i] = new_name
+            if rename_map:
+                raise ValueError(f"Some names to be renamed were not part of the tensordict names: {rename_map.keys()} vs {self.names}.")
+        else:
+            clone.names = names
+
+    def rename_(self, *names, **rename_map):
+        if len(names) == 1 and names[0] is None:
+            self.names = None
+        if rename_map and names:
+            raise ValueError("Passed both a name map and a name list. "
+                             "Only one is accepted.")
+        elif not rename_map and not names:
+            raise ValueError("Neither a name map nor a name list was passed. "
+                             "Only one is accepted.")
+        elif rename_map:
+            _names = copy(self.names)
+            for i, name in enumerate(_names):
+                new_name = rename_map.pop(name, NO_DEFAULT)
+                if new_name is not NO_DEFAULT:
+                    _names[i] = new_name
+            if rename_map:
+                raise ValueError(f"Some names to be renamed were not part of the tensordict names: {rename_map.keys()} vs {self.names}.")
+            self._names = _names
+        else:
+            self.names = names
 
     def size(self, dim: int | None = None) -> torch.Size | int:
         """Returns the size of the dimension indicated by :obj:`dim`.
@@ -2978,6 +3088,10 @@ class TensorDict(TensorDictBase):
             provided as it won't be inferred from the data.
         device (torch.device or compatible type, optional): a device for the
             TensorDict.
+        names (lsit of str, optional): the names of the dimensions of the
+            tensordict. If provided, its length must match the one of the
+            ``batch_size``. Defaults to ``None`` (no dimension name, or ``None``
+            for every dimension).
 
     Examples:
         >>> import torch
@@ -3007,6 +3121,7 @@ class TensorDict(TensorDictBase):
         "_is_memmap",
         "_device",
         "_is_locked",
+        "_names",
     )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
@@ -3019,6 +3134,7 @@ class TensorDict(TensorDictBase):
         source: TensorDictBase | dict[str, CompatibleType],
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
+        names: Sequence[str] | None=None,
         _run_checks: bool = True,
         _is_shared: bool | None = False,
         _is_memmap: bool | None = False,
@@ -3046,6 +3162,7 @@ class TensorDict(TensorDictBase):
                     upd_dict[key] = value
             if upd_dict:
                 self._tensordict.update(upd_dict)
+            self._names = names
         else:
             self._tensordict = {}
             if not isinstance(source, (TensorDictBase, dict)):
@@ -3054,6 +3171,8 @@ class TensorDict(TensorDictBase):
                     f"sub-type or a dictionary, found type(source)={type(source)}."
                 )
             self._batch_size = self._parse_batch_size(source, batch_size)
+
+            self.names = names
 
             if source is not None:
                 for key, value in source.items():
