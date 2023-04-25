@@ -4165,6 +4165,66 @@ def test_pad_sequence(batch_first, make_mask):
         assert "mask" not in padded_td.keys()
 
 
+class TestNamedDims(TestTensorDictsBase):
+    def test_noname(self):
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        assert td.names == [None] * 4
+
+    def test_fullname(self):
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+        assert td.names == ["a", "b", "c", "d"]
+
+    def test_partial_name(self):
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", None, None, "d"])
+        assert td.names == ["a", None, None, "d"]
+
+    def test_partial_set(self):
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        td.names = ["a", None, None, "d"]
+        assert td.names == ["a", None, None, "d"]
+        td.names = ["a", "b", "c", "d"]
+        assert td.names == ["a", "b", "c", "d"]
+        with pytest.raises(
+            ValueError,
+            match="the length of the dimension names must equate the tensordict batch_dims",
+        ):
+            td.names = ["a", "b", "c"]
+
+    def test_rename(self):
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        td.names = ["a", None, None, "d"]
+        td.rename_(a="c")
+        assert td.names == ["c", None, None, "d"]
+        td.rename_(d="c")
+        assert td.names == ["c", None, None, "c"]
+        td.rename_(*list("mnop"))
+        assert td.names == ["m", "n", "o", "p"]
+        td2 = td.rename(p="q")
+        assert td.names == ["m", "n", "o", "p"]
+        assert td2.names == ["m", "n", "o", "q"]
+        td2 = td.rename(*list("wxyz"))
+        assert td.names == ["m", "n", "o", "p"]
+        assert td2.names == ["w", "x", "y", "z"]
+
+    def test_stack(self):
+        raise NotImplementedError
+
+    def test_cat(self):
+        raise NotImplementedError
+
+    def test_unsqueeze(self):
+        raise NotImplementedError
+
+    def test_squeeze(self):
+        raise NotImplementedError
+
+    def test_clone(self):
+        raise NotImplementedError
+
+    def test_subtd(self):
+        raise NotImplementedError
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

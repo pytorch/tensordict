@@ -373,11 +373,14 @@ class TensorDictBase(MutableMapping):
         # we don't run checks on types for efficiency purposes
         if value is None:
             self._names = None
+            return
         if len(value) != self.batch_dims:
-            raise ValueError("the length of the dimension names must equate the tensordict batch_dims attribute. "
-                             f"Got {value} for batch_dims {self.batch_dims}.")
+            raise ValueError(
+                "the length of the dimension names must equate the tensordict batch_dims attribute. "
+                f"Got {value} for batch_dims {self.batch_dims}."
+            )
         self._rename_subtds(value)
-        self._names = value
+        self._names = list(value)
 
     @abc.abstractmethod
     def _rename_subtds(self, value):
@@ -424,7 +427,9 @@ class TensorDictBase(MutableMapping):
                 if self.names[i] == name:
                     continue
                 else:
-                    raise RuntimeError(f"refine_names: cannot coerce TensorDict names {self.names} with {names_copy}.")
+                    raise RuntimeError(
+                        f"refine_names: cannot coerce TensorDict names {self.names} with {names_copy}."
+                    )
         # we also need to rename the sub-tensordicts
         self._rename_subtds(self.names)
         return self
@@ -434,30 +439,39 @@ class TensorDictBase(MutableMapping):
         if len(names) == 1 and names[0] is None:
             clone.names = None
         if rename_map and names:
-            raise ValueError("Passed both a name map and a name list. "
-                             "Only one is accepted.")
+            raise ValueError(
+                "Passed both a name map and a name list. " "Only one is accepted."
+            )
         elif not rename_map and not names:
-            raise ValueError("Neither a name map nor a name list was passed. "
-                             "Only one is accepted.")
+            raise ValueError(
+                "Neither a name map nor a name list was passed. "
+                "Only one is accepted."
+            )
         elif rename_map:
             for i, name in enumerate(clone.names):
                 new_name = rename_map.pop(name, NO_DEFAULT)
                 if new_name is not NO_DEFAULT:
                     clone._names[i] = new_name
             if rename_map:
-                raise ValueError(f"Some names to be renamed were not part of the tensordict names: {rename_map.keys()} vs {self.names}.")
+                raise ValueError(
+                    f"Some names to be renamed were not part of the tensordict names: {rename_map.keys()} vs {self.names}."
+                )
         else:
             clone.names = names
+        return clone
 
     def rename_(self, *names, **rename_map):
         if len(names) == 1 and names[0] is None:
             self.names = None
         if rename_map and names:
-            raise ValueError("Passed both a name map and a name list. "
-                             "Only one is accepted.")
+            raise ValueError(
+                "Passed both a name map and a name list. " "Only one is accepted."
+            )
         elif not rename_map and not names:
-            raise ValueError("Neither a name map nor a name list was passed. "
-                             "Only one is accepted.")
+            raise ValueError(
+                "Neither a name map nor a name list was passed. "
+                "Only one is accepted."
+            )
         elif rename_map:
             _names = copy(self.names)
             for i, name in enumerate(_names):
@@ -465,10 +479,13 @@ class TensorDictBase(MutableMapping):
                 if new_name is not NO_DEFAULT:
                     _names[i] = new_name
             if rename_map:
-                raise ValueError(f"Some names to be renamed were not part of the tensordict names: {rename_map.keys()} vs {self.names}.")
-            self._names = _names
+                raise ValueError(
+                    f"Some names to be renamed were not part of the tensordict names: {rename_map.keys()} vs {self.names}."
+                )
+            self.names = _names
         else:
             self.names = names
+        return self
 
     def size(self, dim: int | None = None) -> torch.Size | int:
         """Returns the size of the dimension indicated by :obj:`dim`.
@@ -2088,7 +2105,7 @@ class TensorDictBase(MutableMapping):
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
-            names=self._names,
+            names=copy(self._names),
             _run_checks=False,
             _is_shared=self.is_shared() if not recurse else False,
             _is_memmap=self.is_memmap() if not recurse else False,
@@ -3136,7 +3153,7 @@ class TensorDict(TensorDictBase):
         source: TensorDictBase | dict[str, CompatibleType],
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
-        names: Sequence[str] | None=None,
+        names: Sequence[str] | None = None,
         _run_checks: bool = True,
         _is_shared: bool | None = False,
         _is_memmap: bool | None = False,
@@ -4589,7 +4606,7 @@ torch.Size([3, 2])
 
     def _rename_subtds(self, names):
         for key in self.keys():
-            if is_tensor_collection(self.entry_class(key))
+            if is_tensor_collection(self.entry_class(key)):
                 raise RuntimeError("Cannot rename nested sub-tensordict dimensions.")
 
     @property
@@ -6117,9 +6134,11 @@ class _CustomOpTensorDict(TensorDictBase):
     def _rename_subtds(self, names):
         for key in self.keys():
             if is_tensor_collection(self.entry_class(key)):
-                raise RuntimeError("Cannot rename dimensions of a lazy TensorDict with "
-                                   "nested collections. Convert the instance to a regular "
-                                   "tensordict by using the `to_tensordict()` method first.")
+                raise RuntimeError(
+                    "Cannot rename dimensions of a lazy TensorDict with "
+                    "nested collections. Convert the instance to a regular "
+                    "tensordict by using the `to_tensordict()` method first."
+                )
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         if not hasattr(self, "_orig_batch_size"):
