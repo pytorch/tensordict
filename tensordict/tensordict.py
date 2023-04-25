@@ -2011,6 +2011,7 @@ class TensorDictBase(MutableMapping):
             },
             device=self.device,
             batch_size=self.batch_size,
+            names=self._names,
         )
 
     def zero_(self) -> TensorDictBase:
@@ -2087,6 +2088,7 @@ class TensorDictBase(MutableMapping):
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
+            names=self._names,
             _run_checks=False,
             _is_shared=self.is_shared() if not recurse else False,
             _is_memmap=self.is_memmap() if not recurse else False,
@@ -3279,6 +3281,14 @@ class TensorDict(TensorDictBase):
             f"Setting batch dims on {self.__class__.__name__} instances is "
             f"not allowed."
         )
+
+    def _rename_subtds(self, names):
+        if names is None:
+            names = [None] * self.ndim
+        for key, item in self._tensordict.items():
+            if is_tensor_collection(item):
+                td_names = list(names) + [None] * (item.ndim - self.ndim)
+                item.rename_(*td_names)
 
     @property
     def device(self) -> torch.device | None:
@@ -4577,6 +4587,11 @@ torch.Size([3, 2])
     def batch_size(self, new_size: torch.Size) -> None:
         self._batch_size_setter(new_size)
 
+    def _rename_subtds(self, names):
+        for key in self.keys():
+            if is_tensor_collection(self.entry_class(key))
+                raise RuntimeError("Cannot rename nested sub-tensordict dimensions.")
+
     @property
     def device(self) -> None | torch.device:
         return self._source.device
@@ -5073,6 +5088,13 @@ class LazyStackedTensorDict(TensorDictBase):
     @batch_size.setter
     def batch_size(self, new_size: torch.Size) -> None:
         return self._batch_size_setter(new_size)
+
+    def _rename_subtds(self, names):
+        # remove the name of the stack dim
+        names = copy(names)
+        del names[self.stack_dim]
+        for td in self.tensordicts:
+            td.names = names
 
     def is_shared(self) -> bool:
         are_shared = [td.is_shared() for td in self.tensordicts]
@@ -6092,6 +6114,13 @@ class _CustomOpTensorDict(TensorDictBase):
     def batch_size(self, new_size: torch.Size) -> None:
         self._batch_size_setter(new_size)
 
+    def _rename_subtds(self, names):
+        for key in self.keys():
+            if is_tensor_collection(self.entry_class(key)):
+                raise RuntimeError("Cannot rename dimensions of a lazy TensorDict with "
+                                   "nested collections. Convert the instance to a regular "
+                                   "tensordict by using the `to_tensordict()` method first.")
+
     def _change_batch_size(self, new_size: torch.Size) -> None:
         if not hasattr(self, "_orig_batch_size"):
             self._orig_batch_size = self.batch_size
@@ -6242,6 +6271,7 @@ class _CustomOpTensorDict(TensorDictBase):
             source=self.to_dict(),
             batch_size=self.batch_size,
             device=self.device,
+            names=self._names,
             _run_checks=False,
         )
 
