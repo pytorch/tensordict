@@ -4207,22 +4207,102 @@ class TestNamedDims(TestTensorDictsBase):
         assert td2.names == ["w", "x", "y", "z"]
 
     def test_stack(self):
-        raise NotImplementedError
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+        tds = torch.stack([td, td], 0)
+        assert tds.names == [None, "a", "b", "c", "d"]
+        tds = torch.stack([td, td], -1)
+        assert tds.names == ["a", "b", "c", "d", None]
+        tds = torch.stack([td, td], 2)
+        tds.names = list("mnopq")
+        assert tds.names == list("mnopq")
+        assert td.names == ["m", "n", "p", "q"]
 
     def test_cat(self):
-        raise NotImplementedError
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        tdc = torch.cat([td, td], -1)
+        assert tdc.names == [None] * 4
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+        tdc = torch.cat([td, td], -1)
+        assert tdc.names == ["a", "b", "c", "d"]
 
     def test_unsqueeze(self):
-        raise NotImplementedError
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        td.names = ["a", "b", "c", "d"]
+        tdu = td.unsqueeze(0)
+        assert tdu.names == [None, "a", "b", "c", "d"]
+        tdu = td.unsqueeze(-1)
+        assert tdu.names == ["a", "b", "c", "d", None]
+        tdu = td.unsqueeze(2)
+        assert tdu.names == ["a", "b", None, "c", "d"]
 
     def test_squeeze(self):
-        raise NotImplementedError
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        td.names = ["a", "b", "c", "d"]
+        tds = td.squeeze(0)
+        assert tds.names == ["a", "b", "c", "d"]
+        td = TensorDict({}, batch_size=[3, 1, 5, 6], names=None)
+        td.names = ["a", "b", "c", "d"]
+        tds = td.squeeze(1)
+        assert tds.names == ["a", "c", "d"]
 
     def test_clone(self):
-        raise NotImplementedError
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        td.names = ["a", "b", "c", "d"]
+        tdc = td.clone()
+        assert tdc.names == ["a", "b", "c", "d"]
+        tdc = td.clone(False)
+        assert tdc.names == ["a", "b", "c", "d"]
+
+    def test_permute(self):
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        td.names = ["a", "b", "c", "d"]
+        tdp = td.permute(-1, -2, -3, -4)
+        assert tdp.names == list("dcba")
+        tdp = td.permute(-1, 1, 2, -4)
+        assert tdp.names == list("dbca")
+
+    def test_index(self):
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+        assert td[0].names == ["b", "c", "d"]
+        assert td[:, 0].names == ["a", "c", "d"]
+        assert td[0, :].names == ["b", "c", "d"]
+        assert td[0, :1].names == ["b", "c", "d"]
+        assert td[..., -1].names == ["a", "b", "c"]
+        assert td[0, ..., -1].names == ["b", "c"]
+        assert td[0, ..., [-1]].names == ["b", "c", "d"]
+        assert td[0, ..., torch.tensor([-1])].names == ["b", "c", "d"]
+        assert td[0, ..., torch.tensor(-1)].names == ["b", "c"]
+        assert td[0, ..., :-1].names == ["b", "c", "d"]
+        assert td[:1, ..., :-1].names == ["a", "b", "c", "d"]
+        tdbool = td[torch.ones(3, dtype=torch.bool)]
+        assert tdbool.names == [None, "b", "c", "d"]
+        assert tdbool.ndim == 4
+        tdbool = td[torch.ones(3, 4, dtype=torch.bool)]
+        assert tdbool.names == [None, "c", "d"]
+        assert tdbool.ndim == 3
+
 
     def test_subtd(self):
-        raise NotImplementedError
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+        assert td.get_sub_tensordict(0).names == ["b", "c", "d"]
+        assert td.get_sub_tensordict((slice(None), 0)).names == ["a", "c", "d"]
+        assert td.get_sub_tensordict((0, slice(None))).names == ["b", "c", "d"]
+        assert td.get_sub_tensordict((0, slice(None, 1))).names == ["b", "c", "d"]
+        assert td.get_sub_tensordict((..., -1)).names == ["a", "b", "c"]
+        assert td.get_sub_tensordict((0, ..., -1)).names == ["b", "c"]
+        assert td.get_sub_tensordict((0, ..., [-1])).names == ["b", "c", "d"]
+        assert td.get_sub_tensordict((0, ..., torch.tensor([-1]))).names == ["b", "c", "d"]
+        assert td.get_sub_tensordict((0, ..., torch.tensor(-1))).names == ["b", "c"]
+        assert td.get_sub_tensordict((0, ..., slice(None, -1))).names == ["b", "c", "d"]
+        assert td.get_sub_tensordict((slice(None, 1), ..., slice(None, -1))).names == ["a", "b", "c", "d"]
+        tdbool = td.get_sub_tensordict(torch.ones(3, dtype=torch.bool))
+        assert tdbool.names == [None, "b", "c", "d"]
+        assert tdbool.ndim == 4
+        tdbool = td.get_sub_tensordict(torch.ones(3, 4, dtype=torch.bool))
+        assert tdbool.names == [None, "c", "d"]
+        assert tdbool.ndim == 3
+        with pytest.raises(RuntimeError, match="Names of a subtensordict cannot be modified"):
+            tdbool.names = 'All work and no play makes Jack a dull boy'
 
 
 if __name__ == "__main__":

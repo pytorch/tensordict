@@ -232,7 +232,10 @@ def convert_ellipsis_to_idx(
             after_ellipsis_length += 1
 
     before_ellipsis_length = start_pos
-    ellipsis_length = num_dims - after_ellipsis_length - before_ellipsis_length
+    if start_pos is None:
+        return idx
+    else:
+        ellipsis_length = num_dims - after_ellipsis_length - before_ellipsis_length
 
     new_index += idx[:start_pos]
 

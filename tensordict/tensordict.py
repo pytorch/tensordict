@@ -329,7 +329,7 @@ class TensorDictBase(MutableMapping):
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
         cls._sorted_keys = None
-        cls._names = []
+        cls._names = None
         return super().__new__(cls)
 
     def __getstate__(self) -> dict[str, Any]:
@@ -2780,11 +2780,46 @@ class TensorDictBase(MutableMapping):
             "`key in tensordict.keys()` instead."
         )
 
+    def _get_names_idx(self, idx):
+        if self._names is None:
+            names = None
+        else:
+
+            def is_boolean(idx):
+                if isinstance(idx, tuple) and len(idx) == 1:
+                    return is_boolean(idx[0])
+                if hasattr(idx, "dtype") and idx.dtype is torch.bool:
+                    return idx.ndim
+                return None
+
+            num_boolean_dim = is_boolean(idx)
+            if num_boolean_dim:
+                names = [None] + self._names[num_boolean_dim:]
+            else:
+
+                def is_int(subidx):
+                    if isinstance(subidx, Number):
+                        return True
+                    if isinstance(subidx, Tensor) and len(subidx.shape) == 0:
+                        return True
+                    return False
+
+                if not isinstance(idx, tuple):
+                    idx = (idx,)
+                if len(idx) < self.ndim:
+                    idx = (*idx, Ellipsis)
+                idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
+                idx_names = [i for i, _idx in enumerate(idx_names) if not is_int(_idx)]
+                names = [self._names[i] for i in idx_names]
+        return names
+
     def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
+        names = self._get_names_idx(idx)
         return TensorDict(
             source={key: _get_item(item, idx) for key, item in self.items()},
             batch_size=_getitem_batch_size(self.batch_size, idx),
             device=self.device,
+            names=names,
             _run_checks=False,
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
@@ -3302,7 +3337,7 @@ class TensorDict(TensorDictBase):
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim
-        for key, item in self._tensordict.items():
+        for item in self._tensordict.values():
             if is_tensor_collection(item):
                 td_names = list(names) + [None] * (item.ndim - self.ndim)
                 item.rename_(*td_names)
@@ -3377,6 +3412,7 @@ class TensorDict(TensorDictBase):
             )
 
     def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
+        names = self._get_names_idx(idx)
         self_copy = copy(self)
         # self_copy = self.clone(False)
         self_copy._tensordict = {
@@ -3384,6 +3420,7 @@ class TensorDict(TensorDictBase):
         }
         self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
         self_copy._device = self.device
+        self_copy.names = names
         return self_copy
 
     def pin_memory(self) -> TensorDictBase:
@@ -4146,13 +4183,10 @@ def _cat(
 ) -> TensorDictBase:
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
-    if dim < 0:
-        raise RuntimeError(
-            f"negative dim in torch.dim(list_of_tensordicts, dim=dim) not "
-            f"allowed, got dim={dim}"
-        )
 
     batch_size = list(list_of_tensordicts[0].batch_size)
+    if dim < 0:
+        dim = len(batch_size) + dim
     if dim >= len(batch_size):
         raise RuntimeError(
             f"dim must be in the range 0 <= dim < len(batch_size), got dim"
@@ -4178,7 +4212,10 @@ def _cat(
                 else:
                     device = None
                     break
-        return TensorDict(out, device=device, batch_size=batch_size, _run_checks=False)
+        names = list_of_tensordicts[0]._names
+        return TensorDict(
+            out, device=device, batch_size=batch_size, _run_checks=False, names=names
+        )
     else:
         if out.batch_size != batch_size:
             raise RuntimeError(
@@ -4603,6 +4640,17 @@ torch.Size([3, 2])
     @batch_size.setter
     def batch_size(self, new_size: torch.Size) -> None:
         self._batch_size_setter(new_size)
+
+    @property
+    def names(self):
+        names = self._source._get_names_idx(self.idx)
+        return names
+
+    @names.setter
+    def names(self, value):
+        raise RuntimeError(
+            "Names of a subtensordict cannot be modified. Instantiate the tensordict first."
+        )
 
     def _rename_subtds(self, names):
         for key in self.keys():
@@ -5105,6 +5153,27 @@ class LazyStackedTensorDict(TensorDictBase):
     @batch_size.setter
     def batch_size(self, new_size: torch.Size) -> None:
         return self._batch_size_setter(new_size)
+
+    @property
+    def names(self):
+        if self._names is None:
+            names = copy(self.tensordicts[0].names)
+            names.insert(self.stack_dim, None)
+            self._names = names
+        return self._names
+
+    @names.setter
+    def names(self, value):
+        names_c = copy(value)
+        if value is None:
+            for td in self.tensordicts:
+                td.names = None
+            self._names = None
+        else:
+            self._names = copy(names_c)
+            del names_c[self.stack_dim]
+            for td in self.tensordicts:
+                td.names = names_c
 
     def _rename_subtds(self, names):
         # remove the name of the stack dim
@@ -6434,6 +6503,13 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
         ]
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
+    @property
+    def names(self):
+        names = copy(self._source.names)
+        dim = self.custom_op_kwargs.get("dim")
+        names.insert(dim, None)
+        return names
+
 
 class _SqueezedTensorDict(_CustomOpTensorDict):
     """A lazy view on a squeezed TensorDict.
@@ -6468,6 +6544,14 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
         ]
         return self._source._stack_onto_(key, list_item_unsqueeze, dim)
 
+    @property
+    def names(self):
+        names = copy(self._source.names)
+        dim = self.custom_op_kwargs["dim"]
+        if self._source.batch_size[dim] == 1:
+            del names[dim]
+        return names
+
 
 class _ViewedTensorDict(_CustomOpTensorDict):
     def _update_custom_op_kwargs(self, source_tensor: Tensor) -> dict[str, Any]:
@@ -6499,6 +6583,10 @@ class _ViewedTensorDict(_CustomOpTensorDict):
         if shape == self._source.batch_size:
             return self._source
         return super().view(*shape)
+
+    @property
+    def names(self):
+        return [None] * self.ndim
 
 
 class _PermutedTensorDict(_CustomOpTensorDict):
@@ -6591,6 +6679,11 @@ class _PermutedTensorDict(_CustomOpTensorDict):
             list_permuted_items.append(item.permute(*perm))
         self._source._stack_onto_(key, list_permuted_items, new_dim)
         return self
+
+    @property
+    def names(self):
+        names = copy(self._source.names)
+        return [names[i] for i in self.custom_op_kwargs["dims"]]
 
 
 def _get_repr(tensor: Tensor) -> str:
