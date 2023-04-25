@@ -417,19 +417,22 @@ class TensorDictBase(MutableMapping):
                 else:
                     names.append(name)
         # check that the names that are set are either None or identical
+        curr_names = self.names
         for i, name in enumerate(names):
-            if self.names[i] is None:
+            if name is NO_DEFAULT:
                 # whatever value is ok
-                if name is NO_DEFAULT:
-                    names[i] = None
+                names[i] = curr_names[i]
                 continue
-            elif name is not NO_DEFAULT:
+            else:
+                if curr_names[i] is None:
+                    continue
                 if self.names[i] == name:
                     continue
                 else:
                     raise RuntimeError(
                         f"refine_names: cannot coerce TensorDict names {self.names} with {names_copy}."
                     )
+        self.names = names
         # we also need to rename the sub-tensordicts
         self._rename_subtds(self.names)
         return self

@@ -4262,8 +4262,19 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdp.names == list("dbca")
 
     def test_refine_names(self):
-        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
-
+        td = TensorDict({}, batch_size=[3, 4, 5, 6])
+        tdr = td.refine_names(None, None, None, "d")
+        assert tdr.names == [None, None, None, "d"]
+        tdr = tdr.refine_names(None, None, "c", "d")
+        assert tdr.names == [None, None, "c", "d"]
+        with pytest.raises(
+            RuntimeError, match="refine_names: cannot coerce TensorDict"
+        ):
+            tdr.refine_names(None, None, "d", "d")
+        tdr = td.refine_names(..., "d")
+        assert tdr.names == [None, None, "c", "d"]
+        tdr = td.refine_names("a", ..., "d")
+        assert tdr.names == ["a", None, "c", "d"]
 
     def test_index(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
