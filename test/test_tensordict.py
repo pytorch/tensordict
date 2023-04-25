@@ -4261,6 +4261,10 @@ class TestNamedDims(TestTensorDictsBase):
         tdp = td.permute(-1, 1, 2, -4)
         assert tdp.names == list("dbca")
 
+    def test_refine_names(self):
+        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
+
+
     def test_index(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
         assert td[0].names == ["b", "c", "d"]

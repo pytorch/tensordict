@@ -409,7 +409,7 @@ class TensorDictBase(MutableMapping):
         # replace ellipsis if any
         names_copy = copy(names)
         if any(name is Ellipsis for name in names):
-            ellipsis_name = [NO_DEFAULT for _ in self.ndim - len(names)]
+            ellipsis_name = [NO_DEFAULT for _ in range(self.ndim - len(names) + 1)]
             names = []
             for name in names_copy:
                 if name is Ellipsis:
