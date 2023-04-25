@@ -440,7 +440,7 @@ class TensorDictBase(MutableMapping):
             clone.names = None
         if rename_map and names:
             raise ValueError(
-                "Passed both a name map and a name list. " "Only one is accepted."
+                "Passed both a name map and a name list. Only one is accepted."
             )
         elif not rename_map and not names:
             raise ValueError(
