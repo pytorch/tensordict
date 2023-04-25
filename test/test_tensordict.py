@@ -4281,7 +4281,6 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdbool.names == [None, "c", "d"]
         assert tdbool.ndim == 3
 
-
     def test_subtd(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
         assert td.get_sub_tensordict(0).names == ["b", "c", "d"]
@@ -4291,18 +4290,29 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.get_sub_tensordict((..., -1)).names == ["a", "b", "c"]
         assert td.get_sub_tensordict((0, ..., -1)).names == ["b", "c"]
         assert td.get_sub_tensordict((0, ..., [-1])).names == ["b", "c", "d"]
-        assert td.get_sub_tensordict((0, ..., torch.tensor([-1]))).names == ["b", "c", "d"]
+        assert td.get_sub_tensordict((0, ..., torch.tensor([-1]))).names == [
+            "b",
+            "c",
+            "d",
+        ]
         assert td.get_sub_tensordict((0, ..., torch.tensor(-1))).names == ["b", "c"]
         assert td.get_sub_tensordict((0, ..., slice(None, -1))).names == ["b", "c", "d"]
-        assert td.get_sub_tensordict((slice(None, 1), ..., slice(None, -1))).names == ["a", "b", "c", "d"]
+        assert td.get_sub_tensordict((slice(None, 1), ..., slice(None, -1))).names == [
+            "a",
+            "b",
+            "c",
+            "d",
+        ]
         tdbool = td.get_sub_tensordict(torch.ones(3, dtype=torch.bool))
         assert tdbool.names == [None, "b", "c", "d"]
         assert tdbool.ndim == 4
         tdbool = td.get_sub_tensordict(torch.ones(3, 4, dtype=torch.bool))
         assert tdbool.names == [None, "c", "d"]
         assert tdbool.ndim == 3
-        with pytest.raises(RuntimeError, match="Names of a subtensordict cannot be modified"):
-            tdbool.names = 'All work and no play makes Jack a dull boy'
+        with pytest.raises(
+            RuntimeError, match="Names of a subtensordict cannot be modified"
+        ):
+            tdbool.names = "All work and no play makes Jack a dull boy"
 
 
 if __name__ == "__main__":
