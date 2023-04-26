@@ -1011,6 +1011,34 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_index.is_shared() is td.is_shared()
         assert td_index.device == td.device
 
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            (..., None),
+            (None, ...),
+            (None,),
+            None,
+            (slice(None), None),
+            (0, None),
+            (None, slice(None), slice(None)),
+            (None, ..., None),
+            (None, 1, ..., None),
+            (1, ..., None),
+            (..., None, 0),
+            ([1], ..., None),
+        ],
+    )
+    def test_index_none(self, td_name, device, idx):
+        td = getattr(self, td_name)(device)
+        tdnone = td[idx]
+        tensor = torch.zeros(td.shape)
+        assert tdnone.shape == tensor[idx].shape, idx
+        if td_name == "td_h5":
+            with pytest.raises(TypeError, match="Selection can't process None"):
+                assert (tdnone.to_tensordict() == td.to_tensordict()[idx]).all()
+            return
+        assert (tdnone.to_tensordict() == td.to_tensordict()[idx]).all()
+
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
