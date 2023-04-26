@@ -4528,6 +4528,12 @@ class TestNamedDims(TestTensorDictsBase):
         td.batch_size = [3]
         assert td.names == ["a"]
 
+    def test_set_item_populate_names(self):
+        td = TensorDict({}, [3])
+        td["a"] = TensorDict({}, [3, 4], names=["a", "b"])
+        assert td.names == ["a"]
+        assert td["a"].names == ["a", "b"]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
