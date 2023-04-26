@@ -374,6 +374,11 @@ class TensorDictBase(MutableMapping):
         if value is None:
             self._names = None
             return
+        num_none = sum(v is None for v in value)
+        if num_none:
+            num_none -= 1
+        if len(set(value)) != len(value) - num_none:
+            raise ValueError(f"Some dimension names are non-unique: {value}.")
         if len(value) != self.batch_dims:
             raise ValueError(
                 "the length of the dimension names must equate the tensordict batch_dims attribute. "

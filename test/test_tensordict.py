@@ -4195,8 +4195,8 @@ class TestNamedDims(TestTensorDictsBase):
         td.names = ["a", None, None, "d"]
         td.rename_(a="c")
         assert td.names == ["c", None, None, "d"]
-        td.rename_(d="c")
-        assert td.names == ["c", None, None, "c"]
+        td.rename_(d="z")
+        assert td.names == ["c", None, None, "z"]
         td.rename_(*list("mnop"))
         assert td.names == ["m", "n", "o", "p"]
         td2 = td.rename(p="q")
@@ -4437,6 +4437,32 @@ class TestNamedDims(TestTensorDictsBase):
         td.set_("a", TensorDict({}, batch_size=[3, 4, 1, 6]))
         assert td["a"].names == td.names
 
+    def test_error_similar(self):
+        with pytest.raises(ValueError):
+            td = TensorDict(
+                {},
+                batch_size=[3, 4, 1, 6],
+                names=["a", "b", "c", "a"]
+                )
+        with pytest.raises(ValueError):
+            td = TensorDict(
+                {},
+                batch_size=[3, 4, 1, 6],
+            )
+            td.names = ["a", "b", "c", "a"]
+        with pytest.raises(ValueError):
+            td = TensorDict(
+                {},
+                batch_size=[3, 4, 1, 6],
+            )
+            td.refine_names("a", "a", ...)
+        with pytest.raises(ValueError):
+            td = TensorDict(
+                {},
+                batch_size=[3, 4, 1, 6],
+                names=["a", "b", "c", "z"]
+                )
+            td.rename_(a="z")
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
