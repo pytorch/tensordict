@@ -4550,6 +4550,23 @@ class TestNamedDims(TestTensorDictsBase):
         tdt = td.to(device)
         assert tdt.names == ["a", "b", "c", "d"]
 
+    def test_stack_assign(self):
+        td = TensorDict(
+            {"": TensorDict({}, [3, 4], names=["c", "d"])},
+            [3],
+            names=["c"]
+            )
+        tds = torch.stack([td, td], -1)
+        assert tds.names == ["c", None]
+        assert tds[""].names == ["c", None, "d"]
+        with pytest.raises(ValueError):
+            tds.names = ["c", "d"]
+        tds.names = ["c", "e"]
+        assert tds.names == ["c", "e"]
+        assert tds[""].names == ["c", "e", "d"]
+        assert tds[0].names == ["e"]
+        assert tds[0][""].names == tds[""][0].names == ["e", "d"]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
