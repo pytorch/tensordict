@@ -4434,6 +4434,8 @@ class TestNamedDims(TestTensorDictsBase):
         td["a"] = TensorDict({}, batch_size=[3, 4, 1, 6])
         td.names = ["a", "b", None, None]
         assert td["a"].names == td.names
+        td.set_("a", TensorDict({}, batch_size=[3, 4, 1, 6]))
+        assert td["a"].names == td.names
 
 
 if __name__ == "__main__":
