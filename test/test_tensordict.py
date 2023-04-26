@@ -4439,11 +4439,7 @@ class TestNamedDims(TestTensorDictsBase):
 
     def test_error_similar(self):
         with pytest.raises(ValueError):
-            td = TensorDict(
-                {},
-                batch_size=[3, 4, 1, 6],
-                names=["a", "b", "c", "a"]
-                )
+            td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "a"])
         with pytest.raises(ValueError):
             td = TensorDict(
                 {},
@@ -4457,12 +4453,9 @@ class TestNamedDims(TestTensorDictsBase):
             )
             td.refine_names("a", "a", ...)
         with pytest.raises(ValueError):
-            td = TensorDict(
-                {},
-                batch_size=[3, 4, 1, 6],
-                names=["a", "b", "c", "z"]
-                )
+            td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "z"])
             td.rename_(a="z")
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
