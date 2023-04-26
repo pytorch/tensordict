@@ -4487,6 +4487,16 @@ class TestNamedDims(TestTensorDictsBase):
             td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "z"])
             td.rename_(a="z")
 
+    def test_set_at(self):
+        td = TensorDict(
+            {"": TensorDict({}, [3, 4, 1, 6])},
+            batch_size=[3, 4, 1, 6],
+            names=["a", "b", "c", "d"],
+        )
+        td.set_at_("", TensorDict({}, [4, 1, 6]), 0)
+        assert td.names == ["a", "b", "c", "d"]
+        assert td[""].names == ["a", "b", "c", "d"]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
