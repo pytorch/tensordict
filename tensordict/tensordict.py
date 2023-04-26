@@ -1470,7 +1470,12 @@ class TensorDictBase(MutableMapping):
                     f"={self.batch_size} and value.shape[:self.batch_dims]"
                     f"={_shape(value)[: self.batch_dims]} with value {value}"
                 )
-
+        if (
+            self._names is not None
+            and is_tensor_collection(value)
+            and value.names[: self.ndim] != self.names
+        ):
+            value = value.clone(False).refine_names(*self.names)
         return value
 
     @abc.abstractmethod
@@ -1916,7 +1921,9 @@ class TensorDictBase(MutableMapping):
                 "memmap_like() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
-        tensordict = TensorDict({}, self.batch_size, device=self.device)
+        tensordict = TensorDict(
+            {}, self.batch_size, device=self.device, names=self._names
+        )
         for key, value in self.items():
             if is_tensor_collection(value):
                 if prefix is not None:
@@ -1973,6 +1980,7 @@ class TensorDictBase(MutableMapping):
             {key: item.detach() for key, item in self.items()},
             batch_size=self.batch_size,
             device=self.device,
+            names=self._names,
             _run_checks=False,
         )
 
@@ -2023,11 +2031,14 @@ class TensorDictBase(MutableMapping):
         """
         from .persistent import PersistentTensorDict
 
-        return PersistentTensorDict.from_dict(
+        out = PersistentTensorDict.from_dict(
             self,
             filename=filename,
             **kwargs,
         )
+        if self._names is not None:
+            out.names = self._names
+        return out
 
     def to_tensordict(self):
         """Returns a regular TensorDict instance from the TensorDictBase.
@@ -2067,6 +2078,10 @@ class TensorDictBase(MutableMapping):
         if dim < 0:
             dim = self.batch_dims + dim
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
+        names = self._names
+        if names is not None:
+            names = copy(names)
+            names = [name for i, name in enumerate(names) if i != dim]
         out = []
         for _idx in idx:
             out.append(
@@ -2075,6 +2090,9 @@ class TensorDictBase(MutableMapping):
                     batch_size=batch_size,
                 )
             )
+            if names is not None:
+                for item in out:
+                    item.names = names
             if self.is_shared():
                 out[-1].share_memory_()
             elif self.is_memmap():
@@ -2448,11 +2466,15 @@ class TensorDictBase(MutableMapping):
             split_tensors = torch.split(item, split_size, dim)
             for idx, split_tensor in enumerate(split_tensors):
                 dictionaries[idx][key] = split_tensor
+        names = self._names
+        if names is not None:
+            names = copy(names)
         return [
             TensorDict(
                 dictionaries[i],
                 batch_sizes[i],
                 device=self.device,
+                names=names,
                 _run_checks=False,
                 _is_shared=self.is_shared(),
                 _is_memmap=self.is_memmap(),
@@ -2495,6 +2517,13 @@ class TensorDictBase(MutableMapping):
                 device=None,
                 is_shared=False)
 
+        Gather keeps the dimension names.
+
+        Examples:
+            >>> td.names = ["a", "b"]
+            >>> td_gather = td.gather(dim=1, index=index)
+            >>> td_gather.names
+            ["a", "b"]
         """
         return torch.gather(self, dim, index, out=out)
 
@@ -2645,10 +2674,17 @@ class TensorDictBase(MutableMapping):
         if dim is not None:
             if dim < 0:
                 dim = self.batch_dims + dim
+
+            names = self._names
+            if names is not None:
+                names = copy(names)
+                names = [name for i, name in enumerate(names) if i != dim]
+
             return TensorDict(
                 source={key: value.all(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
+                names=names,
             )
         return all(value.all() for value in self.values())
 
@@ -2671,10 +2707,17 @@ class TensorDictBase(MutableMapping):
         if dim is not None:
             if dim < 0:
                 dim = self.batch_dims + dim
+
+            names = self._names
+            if names is not None:
+                names = copy(names)
+                names = [name for i, name in enumerate(names) if i != dim]
+
             return TensorDict(
                 source={key: value.any(dim=dim) for key, value in self.items()},
                 batch_size=[b for i, b in enumerate(self.batch_size) if i != dim],
                 device=self.device,
+                names=names,
             )
         return any([value.any() for value in self.values()])
 
@@ -3905,6 +3948,7 @@ class TensorDict(TensorDictBase):
             device=self.device,
             batch_size=self.batch_size,
             source=source,
+            names=self._names,
             _run_checks=False,
             _is_memmap=self._is_memmap,
             _is_shared=self._is_shared,
@@ -4109,9 +4153,13 @@ def _gather(
         return out
 
     if out is None:
+
+        names = input._names
+
         return TensorDict(
             {key: _gather_tensor(value) for key, value in input.items()},
             batch_size=index.shape,
+            names=names,
         )
     TensorDict(
         {key: _gather_tensor(value, out[key]) for key, value in input.items()},
@@ -4648,6 +4696,7 @@ torch.Size([3, 2])
             {key: value for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
+            names=self._names,
             _run_checks=False,
             _is_memmap=self.is_memmap(),
             _is_shared=self.is_shared(),
