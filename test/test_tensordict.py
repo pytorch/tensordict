@@ -1485,9 +1485,12 @@ class TestTensorDicts(TestTensorDictsBase):
 
         actual_td = td[actual_index]
         expected_td = td[expected_index]
+        other_expected_td = td.to_tensordict()[expected_index]
         assert expected_td.shape == _getitem_batch_size(
             td.batch_size, convert_ellipsis_to_idx(actual_index, td.batch_size)
         )
+        assert other_expected_td.shape == actual_td.shape
+        assert_allclose_td(actual_td, other_expected_td)
         assert_allclose_td(actual_td, expected_td)
 
     @pytest.mark.parametrize("actual_index", [..., (..., 0), (0, ...), (0, ..., 0)])

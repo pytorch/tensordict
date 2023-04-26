@@ -4407,8 +4407,11 @@ torch.Size([3, 2])
             )
             else tuple(idx)
         )
+        self._batch_size = _getitem_batch_size(self._source.batch_size, idx)
+        if any(item is Ellipsis for item in idx):
+            idx = convert_ellipsis_to_idx(idx, self._source.batch_size)
         self.idx = idx
-        self._batch_size = _getitem_batch_size(self._source.batch_size, self.idx)
+
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
