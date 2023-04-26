@@ -92,6 +92,19 @@ To reshape the batch dimensions one can do
 
 The class supports many other operations, including squeeze, unsqueeze, view, permute, unbind, stack, cat and many more. If an operation is not present, the TensorDict.apply method will usually provide the solution that was needed.
 
+Named dimensions
+----------------
+
+TensorDict and related classes also support dimension names.
+The names can be given at construction time or refined later. The semantic is
+similar to the torch.Tensor dimension name feature:
+
+>>> tensordict = TensorDict({}, batch_size=[3, 4], names=["a", None])
+>>> tensordict.refine_names(..., "b")
+>>> tensordict.names = ["z", "y"]
+>>> tensordict.rename("m", "n")
+>>> tensordict.rename(m="h")
+
 Nested TensorDicts
 ------------------
 
