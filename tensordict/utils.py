@@ -75,6 +75,13 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
 
     Returns:
         Size of the resulting object (tensor or tensordict)
+
+    Examples:
+        >>> idx = (None, ..., None)
+        >>> torch.zeros(4, 3, 2, 1)[idx].shape
+        torch.Size([1, 4, 3, 2, 1, 1])
+        >>> _getitem_batch_size([4, 3, 2, 1], idx)
+        torch.Size([1, 4, 3, 2, 1, 1])
     """
     # let's start with simple cases
     if isinstance(items, tuple) and len(items) == 1:
@@ -95,6 +102,9 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
 
     if not isinstance(items, tuple):
         items = (items,)
+
+    if any(item is Ellipsis for item in items):
+        items = convert_ellipsis_to_idx(items, shape)
 
     sanitized_items = []
     for _item in items:
@@ -122,7 +132,6 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
     # https://numpy.org/doc/stable/user/basics.indexing.html#integer-array-indexing
     tensor_indices = []
     contiguous, prev = True, None
-
     for i, _item in enumerate(sanitized_items):
         if isinstance(_item, torch.Tensor):
             tensor_indices.append(_item)
@@ -217,8 +226,9 @@ def convert_ellipsis_to_idx(
 
     if idx is Ellipsis:
         idx = (...,)
+
     num_ellipsis = sum(_idx is Ellipsis for _idx in idx)
-    if num_dims < (len(idx) - num_ellipsis):
+    if num_dims < (len(idx) - num_ellipsis - sum(item is None for item in idx)):
         raise RuntimeError("Not enough dimensions in TensorDict for index provided.")
 
     start_pos, after_ellipsis_length = None, 0
@@ -230,6 +240,9 @@ def convert_ellipsis_to_idx(
                 start_pos = i
         if item is not Ellipsis and start_pos is not None:
             after_ellipsis_length += 1
+        if item is None:
+            # unsqueeze
+            num_dims += 1
 
     before_ellipsis_length = start_pos
     ellipsis_length = num_dims - after_ellipsis_length - before_ellipsis_length

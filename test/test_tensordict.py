@@ -1011,6 +1011,34 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_index.is_shared() is td.is_shared()
         assert td_index.device == td.device
 
+    @pytest.mark.parametrize(
+        "idx",
+        [
+            (..., None),
+            (None, ...),
+            (None,),
+            None,
+            (slice(None), None),
+            (0, None),
+            (None, slice(None), slice(None)),
+            (None, ..., None),
+            (None, 1, ..., None),
+            (1, ..., None),
+            (..., None, 0),
+            ([1], ..., None),
+        ],
+    )
+    def test_index_none(self, td_name, device, idx):
+        td = getattr(self, td_name)(device)
+        tdnone = td[idx]
+        tensor = torch.zeros(td.shape)
+        assert tdnone.shape == tensor[idx].shape, idx
+        if td_name == "td_h5":
+            with pytest.raises(TypeError, match="Selection can't process None"):
+                assert (tdnone.to_tensordict() == td.to_tensordict()[idx]).all()
+            return
+        assert (tdnone.to_tensordict() == td.to_tensordict()[idx]).all()
+
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
@@ -1457,9 +1485,12 @@ class TestTensorDicts(TestTensorDictsBase):
 
         actual_td = td[actual_index]
         expected_td = td[expected_index]
+        other_expected_td = td.to_tensordict()[expected_index]
         assert expected_td.shape == _getitem_batch_size(
             td.batch_size, convert_ellipsis_to_idx(actual_index, td.batch_size)
         )
+        assert other_expected_td.shape == actual_td.shape
+        assert_allclose_td(actual_td, other_expected_td)
         assert_allclose_td(actual_td, expected_td)
 
     @pytest.mark.parametrize("actual_index", [..., (..., 0), (0, ...), (0, ..., 0)])
