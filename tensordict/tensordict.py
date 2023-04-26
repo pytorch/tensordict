@@ -486,7 +486,7 @@ class TensorDictBase(MutableMapping):
             raise ValueError(
                 "Passed both a name map and a name list. " "Only one is accepted."
             )
-        elif not rename_map and not names:
+        elif not rename_map and not names and self.batch_dims:
             raise ValueError(
                 "Neither a name map nor a name list was passed. "
                 "Only one is accepted."
@@ -5301,7 +5301,7 @@ class LazyStackedTensorDict(TensorDictBase):
             for td in self.tensordicts:
                 if td._check_dim_name(name):
                     raise ValueError(f"The dimension name {name} is already taken.")
-                td.refine_names(*names_c)
+                td.rename_(*names_c)
 
     def _rename_subtds(self, names):
         # remove the name of the stack dim
