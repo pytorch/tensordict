@@ -1478,6 +1478,7 @@ class TensorDictBase(MutableMapping):
         if (
             self._names is not None
             and is_tensor_collection(value)
+            and check_shape
             and value.names[: self.ndim] != self.names
         ):
             value = value.clone(False).refine_names(*self.names)
