@@ -430,6 +430,14 @@ class PersistentTensorDict(TensorDictBase):
         except ValueError:
             self._batch_size = _batch_size
 
+    def _rename_subtds(self, names):
+        if names is None:
+            names = [None] * self.ndim
+        for item in self._nested_tensordicts.values():
+            if is_tensor_collection(item):
+                td_names = list(names) + [None] * (item.ndim - self.ndim)
+                item.rename_(*td_names)
+
     def contiguous(self):
         """Materializes a PersistentTensorDict on a regular TensorDict."""
         return self.to_tensordict()
