@@ -4540,6 +4540,15 @@ class TestNamedDims(TestTensorDictsBase):
         )
         assert td[0][""].names == td[""][0].names == ["d"]
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_to(self, device):
+        td = TensorDict(
+            {"": TensorDict({}, [3, 4, 1, 6])},
+            batch_size=[3, 4, 1, 6],
+            names=["a", "b", "c", "d"],
+        )
+        tdt = td.to(device)
+        assert tdt.names == ["a", "b", "c", "d"]
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

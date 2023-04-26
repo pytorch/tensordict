@@ -4745,6 +4745,8 @@ torch.Size([3, 2])
     @property
     def names(self):
         names = self._source._get_names_idx(self.idx)
+        if names is None:
+            return [None] * self.batch_dims
         return names
 
     @property
