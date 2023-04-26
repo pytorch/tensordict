@@ -822,6 +822,7 @@ class PersistentTensorDict(TensorDictBase):
             clone.file = f_src
             clone.filename = newfile
             clone._pin_mem = False
+            clone.names = self._names
             return clone
         else:
             # we need to keep the batch-size of nested tds, which we do manually
@@ -840,6 +841,7 @@ class PersistentTensorDict(TensorDictBase):
             )
             clone._nested_tensordicts = nested_tds
             clone._pin_mem = False
+            clone.names = self._names
             return clone
 
     def __getstate__(self):

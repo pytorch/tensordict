@@ -4619,6 +4619,14 @@ class TestNamedDims(TestTensorDictsBase):
         td.rename_(c="g")
         assert td.names == list("abgd")
 
+    def test_h5_td(self):
+        td = self.td_h5("cpu")
+        td.names = list("abcd")
+        assert td.rename(c="g").names == list("abgd")
+        assert td.names == list("abcd")
+        td.rename_(c="g")
+        assert td.names == list("abgd")
+
     def test_permute_td(self):
         td = self.unsqueezed_td("cpu")
         with pytest.raises(
