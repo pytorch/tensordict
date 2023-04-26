@@ -393,6 +393,8 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError
 
     def _check_dim_name(self, name):
+        if name is None:
+            return False
         if self._names is not None and name in self._names:
             return True
         for key in self.keys():
@@ -6644,6 +6646,8 @@ class _CustomOpTensorDict(TensorDictBase):
     @property
     def _names(self):
         # we also want for _names to be accurate
+        if self._source._names is None:
+            return None
         return self.names
 
 
@@ -6735,11 +6739,6 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
         if self._source.batch_size[dim] == 1:
             del names[dim]
         return names
-
-    @property
-    def _names(self):
-        # we also want for _names to be accurate
-        return self.names
 
 
 class _ViewedTensorDict(_CustomOpTensorDict):
