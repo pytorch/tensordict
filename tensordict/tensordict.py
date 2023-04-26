@@ -2862,6 +2862,7 @@ class TensorDictBase(MutableMapping):
         if self._names is None:
             names = None
         else:
+
             def is_boolean(idx):
                 if isinstance(idx, tuple) and len(idx) == 1:
                     return is_boolean(idx[0])
