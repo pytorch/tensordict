@@ -2862,7 +2862,6 @@ class TensorDictBase(MutableMapping):
         if self._names is None:
             names = None
         else:
-
             def is_boolean(idx):
                 if isinstance(idx, tuple) and len(idx) == 1:
                     return is_boolean(idx[0])
@@ -2887,8 +2886,18 @@ class TensorDictBase(MutableMapping):
                 if len(idx) < self.ndim:
                     idx = (*idx, Ellipsis)
                 idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
-                idx_names = [i for i, _idx in enumerate(idx_names) if not is_int(_idx)]
-                names = [self._names[i] for i in idx_names]
+                # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
+                count = 0
+                idx_to_take = []
+                for _idx in idx_names:
+                    if _idx is None:
+                        idx_to_take.append(None)
+                    elif _is_number(_idx):
+                        count += 1
+                    else:
+                        idx_to_take.append(count)
+                        count += 1
+                names = [self._names[i] if i is not None else None for i in idx_to_take]
         return names
 
     def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
