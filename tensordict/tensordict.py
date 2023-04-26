@@ -329,7 +329,6 @@ class TensorDictBase(MutableMapping):
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
         cls._sorted_keys = None
-        cls._names = None
         return super().__new__(cls)
 
     def __getstate__(self) -> dict[str, Any]:
@@ -519,8 +518,6 @@ class TensorDictBase(MutableMapping):
                 "tensordict first by calling `td = td.to_tensordict()` before "
                 "resetting the batch size."
             )
-        if self.batch_size == new_batch_size:
-            return
         if not isinstance(new_batch_size, torch.Size):
             new_batch_size = torch.Size(new_batch_size)
         for key in self.keys():
@@ -532,6 +529,13 @@ class TensorDictBase(MutableMapping):
                     self._set(key, tensordict)
         self._check_new_batch_size(new_batch_size)
         self._change_batch_size(new_batch_size)
+        if self._names is not None:
+            if len(self._names) < len(new_batch_size):
+                self.names = self._names + [None] * (
+                    len(new_batch_size) - len(self._names)
+                )
+            else:
+                self.names = self._names[: self.batch_dims]
 
     @property
     def batch_dims(self) -> int:
@@ -3247,6 +3251,7 @@ class TensorDict(TensorDictBase):
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
         cls._is_shared = False
         cls._is_memmap = False
+        cls._names = None
         return super().__new__(cls, *args, _safe=True, _lazy=False, **kwargs)
 
     def __init__(
@@ -4721,6 +4726,10 @@ torch.Size([3, 2])
         names = self._source._get_names_idx(self.idx)
         return names
 
+    @property
+    def _names(self):
+        return self.names
+
     @names.setter
     def names(self, value):
         raise RuntimeError(
@@ -5152,6 +5161,7 @@ class LazyStackedTensorDict(TensorDictBase):
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> LazyStackedTensorDict:
+        cls._names = None
         return super().__new__(cls, *args, _safe=False, _lazy=True, **kwargs)
 
     def __init__(
@@ -6552,6 +6562,11 @@ class _CustomOpTensorDict(TensorDictBase):
         self.lock_()
         return self
 
+    @property
+    def _names(self):
+        # we also want for _names to be accurate
+        return self.names
+
 
 class _UnsqueezedTensorDict(_CustomOpTensorDict):
     """A lazy view on an unsqueezed TensorDict.
@@ -6641,6 +6656,11 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
         if self._source.batch_size[dim] == 1:
             del names[dim]
         return names
+
+    @property
+    def _names(self):
+        # we also want for _names to be accurate
+        return self.names
 
 
 class _ViewedTensorDict(_CustomOpTensorDict):
