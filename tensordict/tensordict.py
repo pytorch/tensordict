@@ -3470,12 +3470,15 @@ class TensorDict(TensorDictBase):
                 d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
             else:
                 d[key] = value.expand(*shape)
-        return TensorDict(
+        out = TensorDict(
             source=d,
             batch_size=torch.Size(shape),
             device=self.device,
             _run_checks=False,
         )
+        if self._names is not None:
+            out.refine_names(..., *self.names)
+        return out
 
     def _set(self, key: str, value, inplace: bool = False) -> TensorDictBase:
         if isinstance(key, tuple):

@@ -4329,6 +4329,11 @@ class TestNamedDims(TestTensorDictsBase):
         ):
             tdbool.names = "All work and no play makes Jack a dull boy"
 
+    def test_expand(self):
+        td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
+        tde = td.expand(2, 3, 4, 5, 6)
+        assert tde.names == [None, "a", "b", "c", "d"]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
