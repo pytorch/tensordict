@@ -5465,7 +5465,7 @@ class LazyStackedTensorDict(TensorDictBase):
         try:
             out = torch.stack(tensors, self.stack_dim)
             if is_tensor_collection(out) and self._names is not None:
-                out.refine_names(*self.names, *out.names[self.ndim:])
+                out.refine_names(*self.names, *out.names[self.ndim :])
             return out
         except RuntimeError as err:
             if "stack expects each tensor to be equal size" in str(err):
@@ -5741,14 +5741,20 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack_dim=self.stack_dim - dim_drop,
             )
             if self._names is not None:
-                out.names = [name if i != out.stack_dim else self.names[self.stack_dim] for i, name in enumerate(out.names)]
+                out.names = [
+                    name if i != out.stack_dim else self.names[self.stack_dim]
+                    for i, name in enumerate(out.names)
+                ]
             return out
         elif isinstance(index, slice) and self.stack_dim == 0:
             out = LazyStackedTensorDict(
                 *self.tensordicts[index], stack_dim=self.stack_dim
             )
             if self._names is not None:
-                out.names = [name if i != out.stack_dim else self.names[self.stack_dim] for i, name in enumerate(out.names)]
+                out.names = [
+                    name if i != out.stack_dim else self.names[self.stack_dim]
+                    for i, name in enumerate(out.names)
+                ]
             return out
         elif isinstance(index, slice) and self.stack_dim != 0:
             out = LazyStackedTensorDict(
@@ -5756,7 +5762,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack_dim=self.stack_dim,
             )
             if self._names is not None:
-                out.names = [name if i != out.stack_dim else self.names[self.stack_dim] for i, name in enumerate(out.names)]
+                out.names = [
+                    name if i != out.stack_dim else self.names[self.stack_dim]
+                    for i, name in enumerate(out.names)
+                ]
             return out
         elif isinstance(index, (slice, Number)):
             new_stack_dim = (
@@ -5767,7 +5776,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack_dim=new_stack_dim,
             )
             if self._names is not None:
-                out.names = [name if i != out.stack_dim else self.names[self.stack_dim] for i, name in enumerate(out.names)]
+                out.names = [
+                    name if i != out.stack_dim else self.names[self.stack_dim]
+                    for i, name in enumerate(out.names)
+                ]
             return out
         elif isinstance(index, tuple):
             for i, item in enumerate(index):
@@ -5816,7 +5828,10 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             out = torch.stack(list(tensordicts), dim=new_stack_dim)
             if self._names is not None:
-                out.names = [name if i != out.stack_dim else self.names[self.stack_dim] for i, name in enumerate(out.names)]
+                out.names = [
+                    name if i != out.stack_dim else self.names[self.stack_dim]
+                    for i, name in enumerate(out.names)
+                ]
             return out
         else:
             raise NotImplementedError(

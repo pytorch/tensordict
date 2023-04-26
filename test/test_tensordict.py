@@ -4552,10 +4552,8 @@ class TestNamedDims(TestTensorDictsBase):
 
     def test_stack_assign(self):
         td = TensorDict(
-            {"": TensorDict({}, [3, 4], names=["c", "d"])},
-            [3],
-            names=["c"]
-            )
+            {"": TensorDict({}, [3, 4], names=["c", "d"])}, [3], names=["c"]
+        )
         tds = torch.stack([td, td], -1)
         assert tds.names == ["c", None]
         assert tds[""].names == ["c", None, "d"]
