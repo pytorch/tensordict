@@ -5548,14 +5548,18 @@ class LazyStackedTensorDict(TensorDictBase):
         if recurse:
             # This could be optimized using copy but we must be careful with
             # metadata (_is_shared etc)
-            return LazyStackedTensorDict(
+            out = LazyStackedTensorDict(
                 *[td.clone() for td in self.tensordicts],
                 stack_dim=self.stack_dim,
             )
-        return LazyStackedTensorDict(
-            *[td.clone(recurse=False) for td in self.tensordicts],
-            stack_dim=self.stack_dim,
-        )
+        else:
+            out = LazyStackedTensorDict(
+                *[td.clone(recurse=False) for td in self.tensordicts],
+                stack_dim=self.stack_dim,
+            )
+        if self._names is not None:
+            out.names = self.names
+        return out
 
     def pin_memory(self) -> TensorDictBase:
         for td in self.tensordicts:
@@ -6698,6 +6702,12 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
         names.insert(dim, None)
         return names
 
+    @names.setter
+    def names(self, value):
+        raise RuntimeError(
+            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
+        )
+
 
 class _SqueezedTensorDict(_CustomOpTensorDict):
     """A lazy view on a squeezed TensorDict.
@@ -6740,6 +6750,12 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
             del names[dim]
         return names
 
+    @names.setter
+    def names(self, value):
+        raise RuntimeError(
+            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
+        )
+
 
 class _ViewedTensorDict(_CustomOpTensorDict):
     def _update_custom_op_kwargs(self, source_tensor: Tensor) -> dict[str, Any]:
@@ -6775,6 +6791,12 @@ class _ViewedTensorDict(_CustomOpTensorDict):
     @property
     def names(self):
         return [None] * self.ndim
+
+    @names.setter
+    def names(self, value):
+        raise RuntimeError(
+            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
+        )
 
 
 class _PermutedTensorDict(_CustomOpTensorDict):
@@ -6872,6 +6894,12 @@ class _PermutedTensorDict(_CustomOpTensorDict):
     def names(self):
         names = copy(self._source.names)
         return [names[i] for i in self.custom_op_kwargs["dims"]]
+
+    @names.setter
+    def names(self, value):
+        raise RuntimeError(
+            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
+        )
 
 
 def _get_repr(tensor: Tensor) -> str:
