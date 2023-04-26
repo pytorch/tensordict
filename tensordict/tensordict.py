@@ -1486,6 +1486,14 @@ class TensorDictBase(MutableMapping):
             and value.names[: self.ndim] != self.names
         ):
             value = value.clone(False).refine_names(*self.names)
+        elif (
+            self._names is None
+            and check_shape
+            and is_tensor_collection(value)
+            and value._names is not None
+        ):
+            self.names = value.names[: self.batch_dims]
+
         return value
 
     @abc.abstractmethod
