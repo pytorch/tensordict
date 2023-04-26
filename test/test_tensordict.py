@@ -4534,6 +4534,12 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == ["a"]
         assert td["a"].names == ["a", "b"]
 
+    def test_nested_indexing(self):
+        td = TensorDict(
+            {"": TensorDict({}, [3, 4], names=["c", "d"])}, [3], names=["c"]
+        )
+        assert td[0][""].names == td[""][0].names == ["d"]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

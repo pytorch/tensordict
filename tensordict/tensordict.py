@@ -3418,7 +3418,8 @@ class TensorDict(TensorDictBase):
             names = [None] * self.ndim
         for item in self._tensordict.values():
             if is_tensor_collection(item):
-                td_names = list(names) + [None] * (item.ndim - self.ndim)
+                item_names = item.names
+                td_names = list(names) + item_names[len(names) :]
                 item.rename_(*td_names)
 
     @property
@@ -3894,6 +3895,8 @@ class TensorDict(TensorDictBase):
             if isinstance(self, dest):
                 return self
             td = dest(source=self, **kwargs)
+            if self._names is not None:
+                td.names = self._names
             return td
         elif isinstance(dest, (torch.device, str, int)):
             # must be device
@@ -3905,6 +3908,7 @@ class TensorDict(TensorDictBase):
                 {key: value.to(dest, **kwargs) for key, value in self.items()},
                 batch_size=self.batch_size,
                 device=dest,
+                names=self._names,
             )
             return self_copy
         elif isinstance(dest, torch.Size):
@@ -4881,9 +4885,12 @@ torch.Size([3, 2])
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
                 return self
-            return dest(
+            out = dest(
                 source=self.clone(),
             )
+            if self._names is not None:
+                out.names = self._names
+            return out
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
             # try:
@@ -5529,7 +5536,10 @@ class LazyStackedTensorDict(TensorDictBase):
             if isinstance(self, dest):
                 return self
             kwargs.update({"batch_size": self.batch_size})
-            return dest(source=self, **kwargs)
+            out = dest(source=self, **kwargs)
+            if self._names is not None:
+                out.names = self._names
+            return out
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
             if self.device is not None and dest == self.device:
@@ -6495,7 +6505,10 @@ class _CustomOpTensorDict(TensorDictBase):
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
                 return self
-            return dest(source=self)
+            out = dest(source=self)
+            if self._names is not None:
+                out.names = self._names
+            return out
         elif isinstance(dest, (torch.device, str, int)):
             if self.device is not None and torch.device(dest) == self.device:
                 return self
