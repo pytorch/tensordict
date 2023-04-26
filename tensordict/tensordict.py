@@ -1248,6 +1248,7 @@ class TensorDictBase(MutableMapping):
                 {},
                 batch_size=self.batch_size,
                 device=self.device,
+                names=self._names,
                 _run_checks=False,
                 **constructor_kwargs,
             )
@@ -1622,6 +1623,14 @@ class TensorDictBase(MutableMapping):
         else:
             batch_size = [nelt] + list(self.batch_size[end_dim + 1 :])
         out = self.apply(flatten, batch_size=batch_size)
+        if self._names is not None:
+            names = [
+                name
+                for i, name in enumerate(self._names)
+                if (i < start_dim or i > end_dim)
+            ]
+            names.insert(start_dim, None)
+            out.names = names
         return out
 
     def unflatten(self, dim, unflattened_size):
@@ -1660,6 +1669,11 @@ class TensorDictBase(MutableMapping):
         else:
             batch_size = list(unflattened_size) + list(self.batch_size[1:])
         out = self.apply(unflatten, batch_size=batch_size)
+        if self._names is not None:
+            names = copy(self._names)
+            for _ in range(len(unflattened_size) - 1):
+                names.insert(dim, None)
+            out.names = names
         return out
 
     def __bool__(self) -> bool:

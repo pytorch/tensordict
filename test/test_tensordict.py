@@ -4334,6 +4334,29 @@ class TestNamedDims(TestTensorDictsBase):
         tde = td.expand(2, 3, 4, 5, 6)
         assert tde.names == [None, "a", "b", "c", "d"]
 
+    def test_apply(self):
+        td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
+        tda = td.apply(lambda x: x + 1)
+        assert tda.names == ["a", "b", "c", "d"]
+        tda = td.apply(lambda x: x.squeeze(2), batch_size=[3, 4, 6])
+        # no way to tell what the names have become, in general
+        assert tda.names == [None] * 3
+
+    def test_flatten(self):
+        td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
+        tdf = td.flatten(1, 3)
+        assert tdf.names == ["a", None]
+        tdu = tdf.unflatten(1, (4, 1, 6))
+        assert tdu.names == ["a", None, None, None]
+        tdf = td.flatten(1, 2)
+        assert tdf.names == ["a", None, "d"]
+        tdu = tdf.unflatten(1, (4, 1))
+        assert tdu.names == ["a", None, None, "d"]
+        tdf = td.flatten(0, 2)
+        assert tdf.names == [None, "d"]
+        tdu = tdf.unflatten(0, (3, 4, 1))
+        assert tdu.names == [None, None, None, "d"]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
