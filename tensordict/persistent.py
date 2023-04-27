@@ -295,7 +295,7 @@ class PersistentTensorDict(TensorDictBase):
                         "tensordict will cast the entire array in memory and index it using the mask. "
                         "This is suboptimal and may lead to performance issue."
                     )
-                    out = torch.as_tensor(array, device=device)[idx]
+                    out = torch.as_tensor(np.asarray(array), device=device)[idx]
                 else:
                     raise err
             if self._pin_mem:
@@ -747,7 +747,8 @@ class PersistentTensorDict(TensorDictBase):
             except (ValueError, OSError) as err:
                 if "name already exists" in str(err):
                     warnings.warn(
-                        "Replacing an array with another one is inefficient. Consider using different names or populating in-place using `inplace=True`."
+                        "Replacing an array with another one is inefficient. "
+                        "Consider using different names or populating in-place using `inplace=True`."
                     )
                     del self.file[key]
                     self.file.create_dataset(key, data=value, **self.kwargs)

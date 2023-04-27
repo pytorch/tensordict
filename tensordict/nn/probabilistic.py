@@ -240,7 +240,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         >>> print(dist)
         Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4]))
         >>> # we can also apply the module to the TensorDict with vmap
-        >>> from functorch import vmap
+        >>> from torch import vmap
         >>> params = params.expand(4)
         >>> td_vmap = vmap(td_module, (None, 0))(td, params)
         >>> print(td_vmap)
