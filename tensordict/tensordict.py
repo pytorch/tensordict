@@ -1315,7 +1315,7 @@ class TensorDictBase(MutableMapping):
             raise AttributeError(
                 f"{self.__class__.__name__} does not have an 'as_tensor' method "
                 f"because at least one of its tensors does not support this method."
-            )
+            ) from err
 
     def update(
         self,
