@@ -1302,6 +1302,21 @@ class TensorDictBase(MutableMapping):
             out.lock_()
         return out
 
+    def as_tensor(self):
+        """Calls as_tensor on all the tensors contained in the object.
+
+        This is reserved to classes that contain exclusively MemmapTensors,
+        and will raise an exception in all other cases.
+
+        """
+        try:
+            self.apply(lambda x: x.as_tensor())
+        except AttributeError as err:
+            raise AttributeError(
+                f"{self.__class__.__name__} does not have an 'as_tensor' method "
+                f"because at least one of its tensors does not support this method."
+            ) from err
+
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
