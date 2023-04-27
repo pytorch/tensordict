@@ -1303,6 +1303,12 @@ class TensorDictBase(MutableMapping):
         return out
 
     def as_tensor(self):
+        """Calls as_tensor on all the tensors contained in the object.
+
+        This is reserved to classes that contain exclusively MemmapTensors,
+        and will raise an exception in all other cases.
+
+        """
         try:
             self.apply(lambda x: x.as_tensor())
         except AttributeError as err:
