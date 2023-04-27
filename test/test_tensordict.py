@@ -4534,6 +4534,120 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == ["a"]
         assert td["a"].names == ["a", "b"]
 
+    def test_nested_indexing(self):
+        td = TensorDict(
+            {"": TensorDict({}, [3, 4], names=["c", "d"])}, [3], names=["c"]
+        )
+        assert td[0][""].names == td[""][0].names == ["d"]
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_to(self, device):
+        td = TensorDict(
+            {"": TensorDict({}, [3, 4, 1, 6])},
+            batch_size=[3, 4, 1, 6],
+            names=["a", "b", "c", "d"],
+        )
+        tdt = td.to(device)
+        assert tdt.names == ["a", "b", "c", "d"]
+
+    def test_stack_assign(self):
+        td = TensorDict(
+            {"": TensorDict({}, [3, 4], names=["c", "d"])}, [3], names=["c"]
+        )
+        tds = torch.stack([td, td], -1)
+        assert tds.names == ["c", None]
+        assert tds[""].names == ["c", None, "d"]
+        with pytest.raises(ValueError):
+            tds.names = ["c", "d"]
+        tds.names = ["c", "e"]
+        assert tds.names == ["c", "e"]
+        assert tds[""].names == ["c", "e", "d"]
+        assert tds[0].names == ["e"]
+        assert tds[0][""].names == tds[""][0].names == ["e", "d"]
+
+    def test_nested_td(self):
+        nested_td = self.nested_td("cpu")
+        nested_td.names = list("abcd")
+        assert nested_td.rename(c="g").names == list("abgd")
+        assert nested_td.names == list("abcd")
+        nested_td.rename_(c="g")
+        assert nested_td.names == list("abgd")
+        assert nested_td["my_nested_td"].names == list("abgd")
+
+    def test_nested_tc(self):
+        nested_td = self.nested_tensorclass("cpu")
+        nested_td.names = list("abcd")
+        assert nested_td.rename(c="g").names == list("abgd")
+        assert nested_td.names == list("abcd")
+        nested_td.rename_(c="g")
+        assert nested_td.names == list("abgd")
+        assert nested_td.get("my_nested_tc").names == list("abgd")
+
+    def test_nested_stacked_td(self):
+        td = self.nested_stacked_td("cpu")
+        td.names = list("abcd")
+        assert td.names == list("abcd")
+        assert td[:, 1].names == list("acd")
+        assert td["my_nested_td"][:, 1].names == list("acd")
+        assert td[:, 1]["my_nested_td"].names == list("acd")
+        tdr = td.rename(c="z")
+        assert td.names == list("abcd")
+        assert tdr.names == list("abzd")
+        td.rename_(c="z")
+        assert td.names == list("abzd")
+        assert td[:, 1].names == list("azd")
+        assert td["my_nested_td"][:, 1].names == list("azd")
+        assert td[:, 1]["my_nested_td"].names == list("azd")
+
+    def test_sub_td(self):
+        td = self.sub_td("cpu")
+        with pytest.raises(
+            RuntimeError, match="Names of a subtensordict cannot be modified"
+        ):
+            td.names = list("abcd")
+        td = self.sub_td2("cpu")
+        with pytest.raises(
+            RuntimeError, match="Names of a subtensordict cannot be modified"
+        ):
+            td.names = list("abcd")
+
+    def test_memmap_td(self):
+        td = self.memmap_td("cpu")
+        td.names = list("abcd")
+        assert td.rename(c="g").names == list("abgd")
+        assert td.names == list("abcd")
+        td.rename_(c="g")
+        assert td.names == list("abgd")
+
+    def test_h5_td(self):
+        td = self.td_h5("cpu")
+        td.names = list("abcd")
+        assert td.rename(c="g").names == list("abgd")
+        assert td.names == list("abcd")
+        td.rename_(c="g")
+        assert td.names == list("abgd")
+
+    def test_permute_td(self):
+        td = self.unsqueezed_td("cpu")
+        with pytest.raises(
+            RuntimeError, match="Names of a lazy tensordict cannot be modified"
+        ):
+            td.names = list("abcd")
+
+    def test_squeeze_td(self):
+        td = self.squeezed_td("cpu")
+        with pytest.raises(
+            RuntimeError, match="Names of a lazy tensordict cannot be modified"
+        ):
+            td.names = list("abcd")
+
+    def test_unsqueeze_td(self):
+        td = self.unsqueezed_td("cpu")
+        with pytest.raises(
+            RuntimeError, match="Names of a lazy tensordict cannot be modified"
+        ):
+            td.names = list("abcd")
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
