@@ -192,6 +192,7 @@ to build distributions from network outputs and get summary statistics or sample
     :toctree: generated/
     :template: td_template_noinherit.rst
 
+    TensorDictModuleBase
     TensorDictModule
     ProbabilisticTensorDictModule
     TensorDictSequential
@@ -267,6 +268,7 @@ distinguish on a high level parameters and buffers (they are all packed together
     :template: rl_template_noinherit.rst
 
     get_functional
+    is_functional
     make_functional
     repopulate_module
 
@@ -295,7 +297,9 @@ Utils
     :template: rl_template_noinherit.rst
 
     make_tensordict
-    dispatch_kwargs
-    set_interaction_mode
+    dispatch
+    set_interaction_type
     inv_softplus
     biased_softplus
+    set_skip_existing
+    skip_existing

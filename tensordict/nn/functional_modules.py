@@ -218,17 +218,23 @@ def _decorate_funs(
 ) -> None:
     if funs_to_decorate is None:
         funs_to_decorate = ["forward"]
+    _is_functional = model.__dict__.get("_functionalized", False)
+    if not _is_functional:
+        model.__dict__["_functionalized"] = True
+        model.__dict__["_decorated_funs"] = set()
 
     for fun_to_decorate in funs_to_decorate:
+        if fun_to_decorate in model.__dict__["_decorated_funs"]:
+            continue
         try:
             setattr(
                 model,
                 fun_to_decorate,
                 types.MethodType(_make_decorator(model, fun_to_decorate), model),
             )
+            model.__dict__["_decorated_funs"].add(fun_to_decorate)
         except AttributeError:
             continue
-    model.__dict__["_functionalized"] = True
     if not model.__dict__.get("_is_stateless", False):
         model.__dict__["_is_stateless"] = make_stateless
 
@@ -254,8 +260,8 @@ def extract_weights_and_buffers(
         module_tensordict = extract_weights_and_buffers(module)
         if module_tensordict is not None:
             tensordict[name] = module_tensordict
-
-    return TensorDict(tensordict, [], _run_checks=False)
+    model.__dict__["_is_stateless"] = True
+    return TensorDict(tensordict, batch_size=torch.Size([]), _run_checks=False)
 
 
 def _swap_state(

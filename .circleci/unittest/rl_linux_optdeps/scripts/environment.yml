@@ -3,17 +3,15 @@ channels:
   - defaults
 dependencies:
   - pip
-  - protobuf
   - pip:
     - hypothesis
     - future
     - cloudpickle
     - pytest
-    - pytest-benchmark
     - pytest-cov
     - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
     - expecttest
-    - coverage
-    - h5py
+    - pyyaml
+    - scipy

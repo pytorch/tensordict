@@ -7,8 +7,10 @@ from tensordict.nn.common import (
     dispatch,
     make_tensordict,
     TensorDictModule,
+    TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
+from tensordict.nn.distributions import NormalParamExtractor
 from tensordict.nn.functional_modules import (
     get_functional,
     is_functional,
@@ -16,12 +18,19 @@ from tensordict.nn.functional_modules import (
     repopulate_module,
 )
 from tensordict.nn.probabilistic import (
+    InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     set_interaction_mode,
+    set_interaction_type,
 )
 from tensordict.nn.sequence import TensorDictSequential
-from tensordict.nn.utils import biased_softplus, inv_softplus
+from tensordict.nn.utils import (
+    biased_softplus,
+    inv_softplus,
+    set_skip_existing,
+    skip_existing,
+)
 
 __all__ = [
     "dispatch",
@@ -30,9 +39,11 @@ __all__ = [
     "get_functional",
     "make_functional",
     "repopulate_module",
+    "InteractionType",
     "ProbabilisticTensorDictModule",
     "ProbabilisticTensorDictSequential",
     "set_interaction_mode",
+    "set_interaction_type",
     "TensorDictSequential",
     "make_tensordict",
     "biased_softplus",

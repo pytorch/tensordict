@@ -28,8 +28,13 @@ except ImportError as err:
 
 from _utils_internal import get_available_devices
 
-from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
-from tensordict.prototype import is_tensorclass, tensorclass
+from tensordict import (
+    is_tensorclass,
+    LazyStackedTensorDict,
+    MemmapTensor,
+    tensorclass,
+    TensorDict,
+)
 from tensordict.tensordict import (
     _PermutedTensorDict,
     _ViewedTensorDict,

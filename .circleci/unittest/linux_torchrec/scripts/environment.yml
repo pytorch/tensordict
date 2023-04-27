@@ -9,6 +9,7 @@ dependencies:
     - future
     - cloudpickle
     - pytest
+    - pytest-benchmark
     - pytest-cov
     - pytest-mock
     - pytest-instafail

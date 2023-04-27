@@ -8,19 +8,20 @@ import argparse
 import pytest
 import torch
 
-from tensordict import TensorDict
+from tensordict import tensorclass, TensorDict
 from tensordict.nn import (
     dispatch,
     probabilistic as nn_probabilistic,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
-    TensorDictModule,
+    TensorDictModuleBase,
     TensorDictSequential,
 )
+from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
 from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import is_functional, make_functional
-from tensordict.nn.probabilistic import set_interaction_mode
-from tensordict.prototype import tensorclass
+from tensordict.nn.probabilistic import InteractionType, set_interaction_type
+from tensordict.nn.utils import set_skip_existing, skip_existing
 from torch import nn
 from torch.distributions import Normal
 
@@ -34,6 +35,27 @@ try:
 except ImportError as err:
     _has_functorch = False
     FUNCTORCH_ERR = str(err)
+
+
+class TestInteractionType:
+    @pytest.mark.parametrize(
+        "str_and_expected_type",
+        [
+            ("mode", InteractionType.MODE),
+            ("MEDIAN", InteractionType.MEDIAN),
+            ("Mean", InteractionType.MEAN),
+            ("RanDom", InteractionType.RANDOM),
+        ],
+    )
+    def test_from_str_correct_conversion(self, str_and_expected_type):
+        type_str, expected_type = str_and_expected_type
+        assert InteractionType.from_str(type_str) == expected_type
+
+    @pytest.mark.parametrize("unsupported_type_str", ["foo"])
+    def test_from_str_correct_raise(self, unsupported_type_str):
+        with pytest.raises(ValueError) as err:
+            InteractionType.from_str(unsupported_type_str)
+        assert unsupported_type_str in str(err) and "is unsupported" in str(err)
 
 
 class TestTDModule:
@@ -80,8 +102,10 @@ class TestTDModule:
 
     @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
     @pytest.mark.parametrize("lazy", [True, False])
-    @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
-    def test_stateful_probabilistic_deprec(self, lazy, interaction_mode, out_keys):
+    @pytest.mark.parametrize(
+        "interaction_type", [InteractionType.MODE, InteractionType.RANDOM, None]
+    )
+    def test_stateful_probabilistic_deprec(self, lazy, interaction_type, out_keys):
         torch.manual_seed(0)
         param_multiplier = 2
         if lazy:
@@ -109,7 +133,7 @@ class TestTDModule:
         tensordict_module = ProbabilisticTensorDictSequential(net, prob_module)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with set_interaction_mode(interaction_mode):
+        with set_interaction_type(interaction_type):
             tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
@@ -117,9 +141,11 @@ class TestTDModule:
     @pytest.mark.parametrize("out_keys", [["low"], ["low1"], [("stuff", "low1")]])
     @pytest.mark.parametrize("lazy", [True, False])
     @pytest.mark.parametrize("max_dist", [1.0, 2.0])
-    @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
+    @pytest.mark.parametrize(
+        "interaction_type", [InteractionType.MODE, InteractionType.RANDOM, None]
+    )
     def test_stateful_probabilistic_kwargs(
-        self, lazy, interaction_mode, out_keys, max_dist
+        self, lazy, interaction_type, out_keys, max_dist
     ):
         torch.manual_seed(0)
         if lazy:
@@ -146,7 +172,7 @@ class TestTDModule:
         tensordict_module = ProbabilisticTensorDictSequential(net, prob_module)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with set_interaction_mode(interaction_mode):
+        with set_interaction_type(interaction_type):
             tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
@@ -160,8 +186,10 @@ class TestTDModule:
         ],
     )
     @pytest.mark.parametrize("lazy", [True, False])
-    @pytest.mark.parametrize("interaction_mode", ["mode", "random", None])
-    def test_stateful_probabilistic(self, lazy, interaction_mode, out_keys):
+    @pytest.mark.parametrize(
+        "interaction_type", [InteractionType.MODE, InteractionType.RANDOM, None]
+    )
+    def test_stateful_probabilistic(self, lazy, interaction_type, out_keys):
         torch.manual_seed(0)
         param_multiplier = 2
         if lazy:
@@ -190,7 +218,7 @@ class TestTDModule:
         )
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with set_interaction_mode(interaction_mode):
+        with set_interaction_type(interaction_type):
             tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
@@ -514,6 +542,14 @@ class TestTDModule:
 
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        td = TensorDict({"a": torch.zeros(1, 1)}, 1)
+        tdm(td)
+        out = tdm(a=torch.zeros(1, 1))
+        assert (out == td["b"]).all()
+
+    def test_dispatch_changing_size(self):
+        # regression test on non max batch-size for dispatch
+        tdm = TensorDictModule(nn.Linear(1, 2), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
         tdm(td)
         out = tdm(a=torch.zeros(1, 1))
@@ -1337,6 +1373,53 @@ class TestTDSequence:
             assert "out" in td_2.keys()
             assert td_2.get("out").shape == torch.Size([5, 4])
 
+    @pytest.mark.parametrize(
+        "in_keys", [None, ("a",), ("b",), ("d",), ("b", "d"), ("a", "d")]
+    )
+    @pytest.mark.parametrize(
+        "out_keys",
+        [None, ("b",), ("c",), ("d",), ("e",), ("b", "c"), ("b", "d"), ("b", "e")],
+    )
+    def test_submodule_sequence_nested(self, in_keys, out_keys):
+        Seq = TensorDictSequential
+        Mod = TensorDictModule
+        idn = lambda x: x + 1
+        module_1 = Seq(
+            Mod(idn, in_keys=["a"], out_keys=["b"]),
+            Mod(idn, in_keys=["b"], out_keys=["c"]),
+            Mod(idn, in_keys=["b"], out_keys=["d"]),
+            Mod(idn, in_keys=["d"], out_keys=["e"]),
+        )
+        module_2 = Seq(
+            Seq(
+                Mod(idn, in_keys=["a"], out_keys=["b"]),
+                Mod(idn, in_keys=["b"], out_keys=["c"]),
+            ),
+            Seq(
+                Mod(idn, in_keys=["b"], out_keys=["d"]),
+                Mod(idn, in_keys=["d"], out_keys=["e"]),
+            ),
+        )
+        try:
+            sel_module_1 = module_1.select_subsequence(
+                in_keys=in_keys, out_keys=out_keys
+            )
+        except ValueError:
+            # incongruent keys
+            return
+        sel_module_2 = module_2.select_subsequence(in_keys=in_keys, out_keys=out_keys)
+        td = TensorDict(
+            {
+                "a": torch.zeros(()),
+                "b": torch.zeros(()),
+                "c": torch.zeros(()),
+                "d": torch.zeros(()),
+                "e": torch.zeros(()),
+            },
+            [],
+        )
+        assert (sel_module_1(td.clone()) == sel_module_2(td.clone())).all()
+
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )
@@ -1512,16 +1595,18 @@ class TestTDSequence:
         assert torch.allclose(td_module[0].module.weight, sub_seq_1[0].module.weight)
 
 
-@pytest.mark.parametrize("mode", ["random", "mode"])
+@pytest.mark.parametrize(
+    "interaction_type", [InteractionType.RANDOM, InteractionType.MODE]
+)
 class TestSIM:
-    def test_cm(self, mode):
-        with set_interaction_mode(mode):
-            assert nn_probabilistic._INTERACTION_MODE == mode
+    def test_cm(self, interaction_type):
+        with set_interaction_type(interaction_type):
+            assert nn_probabilistic._INTERACTION_TYPE == interaction_type
 
-    def test_dec(self, mode):
-        @set_interaction_mode(mode)
+    def test_dec(self, interaction_type):
+        @set_interaction_type(interaction_type)
         def dummy():
-            assert nn_probabilistic._INTERACTION_MODE == mode
+            assert nn_probabilistic._INTERACTION_TYPE == interaction_type
 
         dummy()
 
@@ -1576,7 +1661,7 @@ def test_input():
             TensorDictModule(wrong_model, in_keys=["in"], out_keys=["out"])
 
     # missing or wrong keys
-    for wrong_keys in (None, (), 123, [123], [(("too", "much", "nesting"),)]):
+    for wrong_keys in (None, 123, [123], [(("too", "much", "nesting"),)]):
         with pytest.raises(ValueError, match="seq should be a Sequence"):
             TensorDictModule(MyModule(), in_keys=["in"], out_keys=wrong_keys)
 
@@ -1681,6 +1766,284 @@ class TestMakeFunctional:
         assert not model._is_stateless
         make_functional(model)
         assert model._is_stateless
+
+
+class TestSkipExisting:
+    @pytest.mark.parametrize("mode", [True, False, None])
+    def test_global(self, mode):
+        assert skip_existing() is False
+        if mode is None:
+            with pytest.raises(RuntimeError, match="It seems"):
+                with set_skip_existing(mode):
+                    pass
+            assert skip_existing() is False
+            return
+
+        with set_skip_existing(mode):
+            assert skip_existing() is mode
+        assert skip_existing() is False
+
+    def test_global_with_module(self):
+        class MyModule(TensorDictModuleBase):
+            in_keys = []
+            out_keys = ["out"]
+
+            @set_skip_existing(None)
+            def forward(self, tensordict):
+                tensordict.set("out", torch.ones(()))
+                return tensordict
+
+        module = MyModule()
+        td = module(TensorDict({"out": torch.zeros(())}, []))
+        assert (td["out"] == 1).all()
+        with set_skip_existing(True):
+            td = module(TensorDict({"out": torch.zeros(())}, []))  # no print
+        assert (td["out"] == 0).all()
+        td = module(TensorDict({"out": torch.zeros(())}, []))
+        assert (td["out"] == 1).all()
+
+    def test_module(self):
+        class MyModule(TensorDictModuleBase):
+            in_keys = []
+            out_keys = ["out"]
+
+            @set_skip_existing()
+            def forward(self, tensordict):
+                tensordict.set("out", torch.ones(()))
+                return tensordict
+
+        module = MyModule()
+        td = module(TensorDict({"out": torch.zeros(())}, []))
+        assert (td["out"] == 0).all()
+        td = module(TensorDict({}, []))  # prints hello
+        assert (td["out"] == 1).all()
+
+    def test_tdmodule(self):
+        module = TensorDictModule(lambda x: x + 1, in_keys=["in"], out_keys=["out"])
+        td = TensorDict({"in": torch.zeros(())}, [])
+        module(td)
+        assert (td["out"] == 1).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        module(td)
+        assert (td["out"] == 1).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        with set_skip_existing(True):
+            module(td)
+        assert (td["out"] == 0).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        with set_skip_existing(False):
+            module(td)
+        assert (td["out"] == 1).all()
+
+    def test_tdseq(self):
+        class MyModule(TensorDictModuleBase):
+            in_keys = ["in"]
+            out_keys = ["out"]
+
+            def forward(self, tensordict):
+                tensordict["out"] = tensordict["in"] + 1
+                return tensordict
+
+        module = TensorDictSequential(MyModule())
+
+        td = TensorDict({"in": torch.zeros(())}, [])
+        module(td)
+        assert (td["out"] == 1).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        module(td)
+        assert (td["out"] == 1).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        with set_skip_existing(True):
+            module(td)
+        assert (td["out"] == 0).all()
+
+        td = TensorDict({"in": torch.zeros(()), "out": torch.zeros(())}, [])
+        with set_skip_existing(False):
+            module(td)
+        assert (td["out"] == 1).all()
+
+
+class TestSelectOutKeys:
+    def test_tdmodule(self):
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+        )
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert "c" not in td.keys()
+        assert all(key in td.keys() for key in ["a", "b", "d"])
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+
+    def test_tdmodule_dispatch(self):
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+        )
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        d = mod(torch.zeros(()), torch.ones(()))
+        assert (d == 3).all()
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+
+    def test_tdmodule_dispatch_firstcall(self):
+        # calling the dispatch first or not may mess up the init
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+        )
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        # ignore result but make sure we call _init
+        mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        d = mod(torch.zeros(()), torch.ones(()))
+        assert (d == 3).all()
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+
+    def test_tdseq(self):
+        mod = TensorDictSequential(
+            TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
+            TensorDictModule(lambda x: x + 2, in_keys=["b"], out_keys=["d"]),
+        )
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert "c" not in td.keys()
+        assert all(key in td.keys() for key in ["a", "b", "d"])
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+
+    def test_tdseq_dispatch(self):
+        mod = TensorDictSequential(
+            TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
+            TensorDictModule(lambda x: x + 2, in_keys=["b"], out_keys=["d"]),
+        )
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        d = mod(torch.zeros(()), torch.ones(()))
+        assert (d == 3).all()
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_tdbase(self, inplace):
+        class MyModule(TensorDictModuleBase):
+            in_keys = ["a", "b"]
+            out_keys = ["c", "d"]
+
+            def forward(self, tensordict):
+                c = tensordict["a"] + 2
+                d = tensordict["b"] + 2
+                if not inplace:
+                    tensordict = tensordict.select()
+                tensordict["c"] = c
+                tensordict["d"] = d
+                return tensordict
+
+        # since we play with the __new__ and class attributes, let's check that everything's ok for a second instance
+        for i in range(2):
+            mod = MyModule()
+            # some magic happened and in_keys and out_keys are not class attributes anymore!
+            assert mod.out_keys is mod._out_keys, i
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            if inplace:
+                assert set(td.keys()) == {"a", "b", "c", "d"}
+            else:
+                assert set(td.keys()) == {"c", "d"}
+            mod2 = mod.select_out_keys("d")
+            assert mod2 is mod
+            assert mod.out_keys == ["d"]
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            assert "c" not in td.keys()
+            if inplace:
+                assert set(td.keys()) == {"a", "b", "d"}
+            else:
+                assert set(td.keys()) == {
+                    "d",
+                }
+            mod2 = mod.reset_out_keys()
+            assert mod2 is mod
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            if inplace:
+                assert set(td.keys()) == {"a", "b", "c", "d"}
+            else:
+                assert set(td.keys()) == {"c", "d"}
+
+    def test_tdmodule_wrap(self):
+        mod = TensorDictModuleWrapper(
+            TensorDictModule(
+                lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+            )
+        )
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert "c" not in td.keys()
+        assert all(key in td.keys() for key in ["a", "b", "d"])
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+
+    def test_tdmodule_wrap_dispatch(self):
+        mod = TensorDictModuleWrapper(
+            TensorDictModule(
+                lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+            )
+        )
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
+        mod2 = mod.select_out_keys("d")
+        assert mod2 is mod
+        assert mod.out_keys == ["d"]
+        d = mod(torch.zeros(()), torch.ones(()))
+        assert (d == 3).all()
+        mod2 = mod.reset_out_keys()
+        assert mod2 is mod
+        c, d = mod(torch.zeros(()), torch.ones(()))
+        assert (c == 2).all()
+        assert (d == 3).all()
 
 
 if __name__ == "__main__":

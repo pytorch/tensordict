@@ -8,8 +8,7 @@ import tempfile
 import numpy as np
 import torch
 
-from tensordict import PersistentTensorDict, TensorDict
-from tensordict.prototype import tensorclass
+from tensordict import PersistentTensorDict, tensorclass, TensorDict
 from tensordict.tensordict import _stack as stack_td
 
 
