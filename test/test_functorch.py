@@ -23,7 +23,11 @@ try:
     from functorch import (
         make_functional_with_buffers as functorch_make_functional_with_buffers,
     )
-    from torch import vmap
+
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     _has_functorch = True
     FUNCTORCH_ERR = ""

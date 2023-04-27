@@ -672,7 +672,7 @@ class TensorDictModule(TensorDictModuleBase):
             is_shared=False)
 
     One can use a vmap operator to call the functional module.
-        >>> from functorch import vmap
+        >>> from torch import vmap
         >>> from tensordict.nn.functional_modules import extract_weights_and_buffers
         >>> params = extract_weights_and_buffers(td_module)
         >>> params_repeat = params.expand(4)

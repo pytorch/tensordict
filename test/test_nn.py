@@ -28,7 +28,11 @@ from torch.distributions import Normal
 try:
     import functorch  # noqa
     from functorch import make_functional_with_buffers as make_functional_functorch
-    from torch import vmap
+
+    try:
+        from torch import vmap
+    except ImportError:
+        from functorch import vmap
 
     _has_functorch = True
     FUNCTORCH_ERR = ""
