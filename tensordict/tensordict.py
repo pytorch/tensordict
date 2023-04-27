@@ -1302,6 +1302,13 @@ class TensorDictBase(MutableMapping):
             out.lock_()
         return out
 
+    def as_tensor(self):
+        try:
+            self.apply(lambda x: x.as_tensor())
+        except AttributeError as err:
+            raise AttributeError(f"{self.__class__.__name__} does not have an 'as_tensor' method "
+                                 f"because at least one of its tensors does not support this method.")
+
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
