@@ -1312,8 +1312,10 @@ class TensorDictBase(MutableMapping):
         try:
             self.apply(lambda x: x.as_tensor())
         except AttributeError as err:
-            raise AttributeError(f"{self.__class__.__name__} does not have an 'as_tensor' method "
-                                 f"because at least one of its tensors does not support this method.")
+            raise AttributeError(
+                f"{self.__class__.__name__} does not have an 'as_tensor' method "
+                f"because at least one of its tensors does not support this method."
+            )
 
     def update(
         self,
