@@ -1310,7 +1310,7 @@ class TensorDictBase(MutableMapping):
 
         """
         try:
-            self.apply(lambda x: x.as_tensor())
+            return self.apply(lambda x: x.as_tensor())
         except AttributeError as err:
             raise AttributeError(
                 f"{self.__class__.__name__} does not have an 'as_tensor' method "
@@ -5101,6 +5101,7 @@ torch.Size([3, 2])
             batch_size=self.batch_size,
             source={key: value for key, value in self.items()},
             device=self.device,
+            names=self.names,
             _run_checks=False,
         )
 
@@ -5555,6 +5556,7 @@ class LazyStackedTensorDict(TensorDictBase):
             source=source,
             batch_size=batch_size,
             device=device,
+            names=self.names,
             _run_checks=False,
         )
         return out
