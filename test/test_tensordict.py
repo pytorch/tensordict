@@ -4581,6 +4581,8 @@ class TestNamedDims(TestTensorDictsBase):
         nested_td.rename_(c="g")
         assert nested_td.names == list("abgd")
         assert nested_td["my_nested_td"].names == list("abgd")
+        assert nested_td.contiguous().names == list("abgd")
+        assert nested_td.contiguous()["my_nested_td"].names == list("abgd")
 
     def test_nested_tc(self):
         nested_td = self.nested_tensorclass("cpu")
@@ -4590,6 +4592,8 @@ class TestNamedDims(TestTensorDictsBase):
         nested_td.rename_(c="g")
         assert nested_td.names == list("abgd")
         assert nested_td.get("my_nested_tc").names == list("abgd")
+        assert nested_td.contiguous().names == list("abgd")
+        assert nested_td.contiguous().get("my_nested_tc").names == list("abgd")
 
     def test_nested_stacked_td(self):
         td = self.nested_stacked_td("cpu")
@@ -4606,6 +4610,8 @@ class TestNamedDims(TestTensorDictsBase):
         assert td[:, 1].names == list("azd")
         assert td["my_nested_td"][:, 1].names == list("azd")
         assert td[:, 1]["my_nested_td"].names == list("azd")
+        assert td.contiguous().names == list("abzd")
+        assert td[:, 1].contiguous()["my_nested_td"].names == list("azd")
 
     def test_sub_td(self):
         td = self.sub_td("cpu")
@@ -4626,6 +4632,7 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == list("abcd")
         td.rename_(c="g")
         assert td.names == list("abgd")
+        assert td.as_tensor().names == list("abgd")
 
     def test_h5_td(self):
         td = self.td_h5("cpu")
