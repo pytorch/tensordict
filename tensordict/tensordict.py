@@ -1310,7 +1310,7 @@ class TensorDictBase(MutableMapping):
 
         """
         try:
-            self.apply(lambda x: x.as_tensor())
+            return self.apply(lambda x: x.as_tensor())
         except AttributeError as err:
             raise AttributeError(
                 f"{self.__class__.__name__} does not have an 'as_tensor' method "
