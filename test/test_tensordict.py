@@ -1745,7 +1745,13 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_as_tensor(self, td_name, device):
         td = getattr(self, td_name)(device)
         if "memmap" in td_name and device == torch.device("cpu"):
-            td.as_tensor()
+            tdt = td.as_tensor()
+            assert (tdt == td).all()
+        elif "memmap" in td_name:
+            with pytest.raises(
+                RuntimeError, match="can only be called with MemmapTensors stored"
+            ):
+                td.as_tensor()
         else:
             with pytest.raises(AttributeError):
                 td.as_tensor()
