@@ -1744,7 +1744,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_as_tensor(self, td_name, device):
         td = getattr(self, td_name)(device)
-        if "memmap" in td_name:
+        if "memmap" in td_name and device == torch.device("cpu"):
             td.as_tensor()
         else:
             with pytest.raises(AttributeError):
