@@ -1138,6 +1138,52 @@ class TensorDictBase(MutableMapping):
                 future.wait()
             return
 
+    def reduce(self, dst, op=dist.ReduceOp.SUM, async_op=False, return_premature=False):
+        """Reduces the tensordict across all machines.
+
+        Only the process with ``rank`` dst is going to receive the final result.
+
+        """
+        return self._reduce(dst, op, async_op, return_premature)
+
+    def _reduce(
+        self,
+        dst,
+        op=dist.ReduceOp.SUM,
+        async_op=False,
+        return_premature=False,
+        _future_list=None,
+    ):
+        root = False
+        if _future_list is None:
+            _future_list = []
+            root = True
+        for key in self.sorted_keys:
+            value = self.get(key)
+            if is_tensor_collection(value):
+                _future_list = value._reduce(
+                    dst=dst,
+                    op=op,
+                    async_op=async_op,
+                    _future_list=_future_list,
+                )
+                continue
+            elif isinstance(value, MemmapTensor):
+                value = value.as_tensor()
+            elif isinstance(value, Tensor):
+                pass
+            else:
+                raise NotImplementedError(f"Type {type(value)} is not supported.")
+            _future_list.append(dist.reduce(value, dst=dst, op=op, async_op=async_op))
+        if not root:
+            return _future_list
+        elif async_op and return_premature:
+            return _future_list
+        elif async_op:
+            for future in _future_list:
+                future.wait()
+            return
+
     def _stack_onto_at_(
         self,
         key: str,

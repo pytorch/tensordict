@@ -11,7 +11,7 @@ import torch
 from _pytest.fixtures import fixture
 
 from tensordict import MemmapTensor, TensorDict
-from torch import multiprocessing as mp
+from torch import distributed as dist, multiprocessing as mp
 
 TIMEOUT = 100
 
@@ -86,6 +86,94 @@ class TestGather:
         finally:
             main_worker.join()
             secondary_worker.join()
+
+
+class TestReduce:
+    @staticmethod
+    def client(memmap_filename, rank, op, async_op, return_premature):
+        torch.distributed.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=3,
+            init_method="tcp://localhost:10017",
+        )
+
+        td = TensorDict(
+            {
+                ("a", "b"): torch.ones(2),
+                "c": torch.ones(2),
+                ("d", "e", "f"): MemmapTensor.from_tensor(
+                    torch.ones(2, 2), filename=memmap_filename
+                ),
+            },
+            [2],
+        )
+        td.reduce(0, op=op, async_op=async_op, return_premature=return_premature)
+
+    @staticmethod
+    def server(queue, op, async_op, return_premature):
+        torch.distributed.init_process_group(
+            "gloo",
+            rank=0,
+            world_size=3,
+            init_method="tcp://localhost:10017",
+        )
+
+        td = (
+            TensorDict(
+                {
+                    ("a", "b"): torch.ones(2),
+                    "c": torch.ones(2),
+                    ("d", "e", "f"): MemmapTensor.from_tensor(torch.ones(2, 2)),
+                },
+                [2],
+            )
+            .expand(1, 2)
+            .contiguous()
+        )
+        out = td.reduce(0, op=op, async_op=async_op, return_premature=return_premature)
+        if not async_op:
+            assert out is None
+        elif return_premature:
+            for _out in out:
+                _out.wait()
+        else:
+            assert out is None
+        if op == dist.ReduceOp.SUM:
+            assert (td == 3).all()
+        elif op == dist.ReduceOp.PRODUCT:
+            assert (td == 1).all()
+
+        queue.put("yuppie")
+
+    @pytest.mark.parametrize("op", [dist.ReduceOp.SUM, dist.ReduceOp.PRODUCT])
+    @pytest.mark.parametrize(
+        "async_op,return_premature", [[False, False], [True, False], [True, True]]
+    )
+    def test_gather(self, set_context, tmp_path, op, async_op, return_premature):
+        queue = mp.Queue(1)
+        main_worker = mp.Process(
+            target=type(self).server, args=(queue, op, async_op, return_premature)
+        )
+        secondary_worker = mp.Process(
+            target=type(self).client,
+            args=(str(tmp_path / "sub1"), 1, op, async_op, return_premature),
+        )
+        tertiary_worker = mp.Process(
+            target=type(self).client,
+            args=(str(tmp_path / "sub"), 2, op, async_op, return_premature),
+        )
+
+        main_worker.start()
+        secondary_worker.start()
+        tertiary_worker.start()
+        try:
+            out = queue.get(timeout=TIMEOUT)
+            assert out == "yuppie"
+        finally:
+            main_worker.join()
+            secondary_worker.join()
+            tertiary_worker.join()
 
 
 # =========================================
