@@ -24,7 +24,7 @@ on:
 
 jobs:
   build-wheel:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     defaults:
       run:
         shell: bash -l {0}
@@ -66,7 +66,7 @@ jobs:
     needs: build-wheel
     strategy:
       matrix:
-        os: ["ubuntu-18.04", "macos-latest"]
+        os: ["ubuntu-20.04", "macos-latest"]
         python:
           - version: "3.7"
             tag: py37
@@ -123,7 +123,7 @@ jobs:
 
   upload-wheel:
     needs: test-wheel
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         python:
