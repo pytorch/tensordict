@@ -271,7 +271,9 @@ def _swap_state(
     return_old_tensordict: bool = False,
     old_tensordict: dict[str, torch.Tensor] | TensorDict | None = None,
 ) -> dict[str, torch.Tensor] | TensorDict | None:
-    was_stateless = model.__dict__["_is_stateless"]
+    was_stateless = model.__dict__.get("_is_stateless", None)
+    if was_stateless is None:
+        raise Exception(f"{model}\nhas no stateless attribute.")
     model.__dict__["_is_stateless"] = is_stateless
     # return_old_tensordict = return_old_tensordict and not was_stateless
     if old_tensordict is None:
