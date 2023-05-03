@@ -570,7 +570,13 @@ class TensorDictModule(TensorDictModuleBase):
     call signature.
 
     Args:
-        module (Callable): a callable, typically a :class:`torch.nn.Module`, used to map the input to the output parameter space.
+        module (Callable): a callable, typically a :class:`torch.nn.Module`,
+            used to map the input to the output parameter space. Its forward method
+            can return a single tensor, a tuple of tensors or even a dictionary.
+            In the latter case, the output keys of the :class:`TensorDictModule`
+            will be used to populate the output tensordict (ie. the keys present
+            in ``out_keys`` should be present in the dictionary returned by the
+            ``module`` forward method).
         in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
             contains more than one element, the values will be passed in the order given by the in_keys iterable.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
@@ -803,6 +809,8 @@ class TensorDictModule(TensorDictModuleBase):
                 ) from err
             else:
                 raise err
+        if isinstance(tensors, (dict, TensorDictBase)):
+            tensors = tuple(tensors.get(key, None) for key in self.out_keys)
         if not isinstance(tensors, tuple):
             tensors = (tensors,)
         tensordict_out = self._write_to_tensordict(tensordict, tensors, tensordict_out)

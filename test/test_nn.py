@@ -668,6 +668,19 @@ class TestTDModule:
         tdm = TensorDictModule(m, ["a"], ["b"])
         tdm(a=torch.zeros(1, 1), c=1)
 
+    @pytest.mark.parametrize("output_type", [dict, TensorDict])
+    def test_tdmodule_dict_output(self, output_type):
+        class MyModule(nn.Identity):
+            def forward(self, input):
+                if output_type is dict:
+                    return {"b": input}
+                else:
+                    return TensorDict({"b": input}, [])
+
+        module = TensorDictModule(MyModule(), in_keys=["a"], out_keys=["b"])
+        out = module(TensorDict({"a": torch.randn(3)}, []))
+        assert (out["b"] == out["a"]).all()
+
 
 class TestTDSequence:
     def test_key_exclusion(self):
