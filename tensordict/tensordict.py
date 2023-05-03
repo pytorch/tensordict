@@ -5350,12 +5350,12 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @names.setter
     def names(self, value):
-        names_c = list(value)
         if value is None:
             for td in self.tensordicts:
                 td.names = None
             self._names = None
         else:
+            names_c = list(value)
             self._names = copy(names_c)
             name = names_c[self.stack_dim]
             names_c = list(names_c)
