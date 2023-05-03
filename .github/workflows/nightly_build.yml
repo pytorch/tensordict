@@ -122,6 +122,7 @@ jobs:
           exit $EXIT_STATUS
 
   upload-wheel:
+    if: github.repository_owner == 'pytorch-labs'
     needs: test-wheel
     runs-on: ubuntu-20.04
     strategy:
