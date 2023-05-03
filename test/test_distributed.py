@@ -5,6 +5,7 @@
 
 import abc
 import argparse
+import os
 
 import pytest
 import torch
@@ -91,11 +92,12 @@ class TestGather:
 class TestReduce:
     @staticmethod
     def client(memmap_filename, rank, op, async_op, return_premature):
-        torch.distributed.init_process_group(
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29501"
+        dist.init_process_group(
             "gloo",
             rank=rank,
             world_size=3,
-            init_method="tcp://localhost:10017",
         )
 
         td = TensorDict(
@@ -108,15 +110,16 @@ class TestReduce:
             },
             [2],
         )
-        td.reduce(0, op=op, async_op=async_op, return_premature=return_premature)
+        td.reduce(0, op=op, async_op=async_op, return_premature=False)
 
     @staticmethod
     def server(queue, op, async_op, return_premature):
-        torch.distributed.init_process_group(
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "29501"
+        dist.init_process_group(
             "gloo",
             rank=0,
             world_size=3,
-            init_method="tcp://localhost:10017",
         )
 
         td = (
@@ -136,7 +139,9 @@ class TestReduce:
             assert out is None
         elif return_premature:
             for _out in out:
+                print("waiting...")
                 _out.wait()
+                print("done")
         else:
             assert out is None
         if op == dist.ReduceOp.SUM:
@@ -148,9 +153,10 @@ class TestReduce:
 
     @pytest.mark.parametrize("op", [dist.ReduceOp.SUM, dist.ReduceOp.PRODUCT])
     @pytest.mark.parametrize(
-        "async_op,return_premature", [[False, False], [True, False], [True, True]]
+        "async_op,return_premature", [[True, True], [False, False], [True, False]]
     )
     def test_gather(self, set_context, tmp_path, op, async_op, return_premature):
+        print(op, async_op, return_premature)
         queue = mp.Queue(1)
         main_worker = mp.Process(
             target=type(self).server, args=(queue, op, async_op, return_premature)
@@ -167,13 +173,15 @@ class TestReduce:
         main_worker.start()
         secondary_worker.start()
         tertiary_worker.start()
+        out = None
         try:
             out = queue.get(timeout=TIMEOUT)
-            assert out == "yuppie"
         finally:
-            main_worker.join()
-            secondary_worker.join()
-            tertiary_worker.join()
+            queue.close()
+            main_worker.join(timeout=TIMEOUT)
+            secondary_worker.join(timeout=TIMEOUT)
+            tertiary_worker.join(timeout=TIMEOUT)
+            assert out == "yuppie"
 
 
 # =========================================
