@@ -156,7 +156,6 @@ class TestReduce:
         "async_op,return_premature", [[True, True], [False, False], [True, False]]
     )
     def test_gather(self, set_context, tmp_path, op, async_op, return_premature):
-        print(op, async_op, return_premature)
         queue = mp.Queue(1)
         main_worker = mp.Process(
             target=type(self).server, args=(queue, op, async_op, return_premature)
