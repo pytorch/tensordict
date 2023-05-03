@@ -6,6 +6,7 @@
 import abc
 import argparse
 import os
+import sys
 
 import pytest
 import torch
@@ -89,6 +90,10 @@ class TestGather:
             secondary_worker.join()
 
 
+@pytest.mark.skipif(
+    sys.version_info.minor <= 7,
+    reason="reduce test is incompatible with python 3.7 or lower (cannot pickle the op Enum).",
+)
 class TestReduce:
     @staticmethod
     def client(memmap_filename, rank, op, async_op, return_premature):
