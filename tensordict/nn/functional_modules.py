@@ -8,13 +8,14 @@ from __future__ import annotations
 import inspect
 import re
 import types
+import warnings
 from copy import deepcopy
 from functools import wraps
 from typing import Any, Callable, Iterable
 
 import torch
 from tensordict import TensorDict
-from tensordict.tensordict import TensorDictBase
+from tensordict.tensordict import is_tensor_collection, TensorDictBase
 from torch import nn
 
 
@@ -385,6 +386,23 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
         # 3 use cases: (1) params is the last arg, (2) params is in kwargs, (3) no params
         _is_stateless = self.__dict__.get("_is_stateless", False)
         params = kwargs.pop("params", None)
+
+        from tensordict.nn.common import TensorDictModuleBase
+
+        if isinstance(self, TensorDictModuleBase):
+            if (
+                params is None
+                and len(args) == 2
+                and all(is_tensor_collection(item) for item in args)
+            ):
+                params = args[1]
+                args = args[:1]
+        elif is_tensor_collection(args[0]):
+            warnings.warn(
+                "You are passing a tensordict/tensorclass instance to a module that "
+                "does not inherit from TensorDictModuleBase. This may lead to unexpected "
+                "behaviours with functional calls."
+            )
         if _is_stateless or params is not None:
             if params is None:
                 params = args[-1]
@@ -405,13 +423,13 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
                 )
             return out
         else:
-            if params is not None:
-                kwargs["params"] = params
             try:
                 return getattr(type(self), fun_name)(self, *args, **kwargs)
             except TypeError as err:
-                pattern = r".*takes \d+ positional arguments but \d+ were given"
-                if re.match(pattern, str(err)) and isinstance(args[-1], TensorDictBase):
+                pattern = r".*takes \d+ positional arguments but \d+ were given|got multiple values for argument"
+                pattern = re.compile(pattern)
+                if pattern.search(str(err)) and isinstance(args[-1], TensorDictBase):
+                    # this is raised whenever the module is an nn.Module (not a TensorDictModuleBase)
                     raise TypeError(
                         "It seems you tried to provide the parameters as an argument to the module when the module was not stateless. "
                         "If this is the case, this error should vanish by providing the parameters using the ``module(..., params=params)`` "
