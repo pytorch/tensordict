@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import warnings
 
 import pytest
 import torch
@@ -1783,6 +1784,145 @@ class TestMakeFunctional:
         assert not model._is_stateless
         make_functional(model)
         assert model._is_stateless
+
+
+class TestMakeFunctionalVmap:
+    def TDMBase(self, extra_kwargs):
+        if not extra_kwargs:
+
+            def _forward(self, tensordict):
+                tensordict[self.out_keys[0]] = self.linear(tensordict[self.in_keys[0]])
+                return tensordict
+
+        else:
+
+            def _forward(self, tensordict, extra=None):
+                tensordict[self.out_keys[0]] = self.linear(tensordict[self.in_keys[0]])
+                return tensordict
+
+        class MyModule(TensorDictModuleBase):
+            in_keys = ["a"]
+            out_keys = ["b"]
+
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(4, 4)
+
+            forward = _forward
+
+        return MyModule()
+
+    def nnModule(self, extra_kwargs):
+        if not extra_kwargs:
+
+            def _forward(self, tensordict):
+                tensordict[self.out_keys[0]] = self.linear(tensordict[self.in_keys[0]])
+                return tensordict
+
+        else:
+
+            def _forward(self, tensordict, extra=None):
+                tensordict[self.out_keys[0]] = self.linear(tensordict[self.in_keys[0]])
+                return tensordict
+
+        class MyModule(nn.Module):
+            in_keys = ["a"]
+            out_keys = ["b"]
+
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(4, 4)
+
+            forward = _forward
+
+        return MyModule()
+
+    def TDM(self, extra_kwargs):
+        if extra_kwargs:
+
+            class MyLinear(nn.Linear):
+                def forward(self, x, extra=None):
+                    return super().forward(x)
+
+        else:
+            MyLinear = nn.Linear
+
+        class MyModule(TensorDictModule):
+            def __init__(self):
+                in_keys = ["a"]
+                out_keys = ["b"]
+                linear = MyLinear(4, 4)
+                super().__init__(linear, in_keys, out_keys)
+
+        return MyModule()
+
+    @property
+    def td(self):
+        return TensorDict({"a": torch.ones(3, 4)}, [3])
+
+    @property
+    def td_zero(self):
+        return TensorDict({"a": torch.ones(3, 4), "b": torch.zeros(3, 4)}, [3])
+
+    @pytest.mark.parametrize("module_type", ["TDMBase", "nnModule", "TDM"])
+    @pytest.mark.parametrize("stateless", [True, False])
+    @pytest.mark.parametrize("keyword", [True, False])
+    @pytest.mark.parametrize("extra_kwargs", [True, False])
+    def test_make_func(self, module_type, stateless, keyword, extra_kwargs):
+        module = getattr(self, module_type)(extra_kwargs)
+        params = make_functional(module, keep_params=not stateless)
+        if not stateless:
+            td = self.td
+            if module_type != "nnModule":
+                with warnings.catch_warnings():
+                    module(td)
+            else:
+                # users are told to use TensorDictModuleBase
+                with pytest.warns(UserWarning):
+                    module(td)
+            assert td.shape == torch.Size([3])
+        params = params.clone()
+        params.zero_()
+        td = self.td
+        if not keyword:
+            if not stateless and module_type == "nnModule":
+                with pytest.raises(TypeError, match="It seems you tried to provide"):
+                    if extra_kwargs:
+                        _ = module(td, params, extra=None)
+                    else:
+                        _ = module(td, params)
+                return
+            tdout = module(td, params)
+            assert (tdout == self.td_zero).all()
+        else:
+            tdout = module(td, params=params)
+            assert (tdout == self.td_zero).all(), tdout
+
+    @pytest.mark.parametrize("module_type", ["TDMBase", "nnModule", "TDM"])
+    @pytest.mark.parametrize("stateless", [True, False])
+    @pytest.mark.parametrize("keyword", [True, False])
+    @pytest.mark.parametrize("extra_kwargs", [True, False])
+    def test_make_func_vmap(self, module_type, stateless, keyword, extra_kwargs):
+        module = getattr(self, module_type)(extra_kwargs)
+        params = make_functional(module, keep_params=not stateless)
+        params = params.expand(5).to_tensordict()
+        params.zero_()
+        td = self.td.expand(5, 3).to_tensordict()
+        if not keyword:
+            if not stateless and module_type == "nnModule":
+                with pytest.raises(TypeError, match="It seems you tried to provide"):
+                    if extra_kwargs:
+                        _ = vmap(module)(td, params, extra=None)
+                    else:
+                        _ = vmap(module)(td, params)
+                return
+            tdout = vmap(module)(td, params)
+            assert (tdout == self.td_zero).all()
+        else:
+            # this isn't supposed to work: keyword arguments are not expanded with vmap
+            with pytest.raises(Exception):
+                tdout = vmap(module)(td, params=params)
+                assert (tdout == self.td_zero).all(), tdout
 
 
 class TestSkipExisting:

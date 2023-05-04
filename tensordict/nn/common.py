@@ -15,7 +15,7 @@ import torch
 from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
-from tensordict.tensordict import make_tensordict, TensorDictBase
+from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
 from tensordict.utils import _normalize_key, _seq_of_nested_key_check, NestedKey
 from torch import nn, Tensor
 
@@ -231,14 +231,13 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
-            from tensordict.tensorclass import is_tensorclass
 
             source = self.source
             if isinstance(source, str):
                 source = getattr(_self, source)
             tensordict = None
             if len(args):
-                if isinstance(args[0], TensorDictBase) or is_tensorclass(args[0]):
+                if is_tensor_collection(args[0]):
                     tensordict, args = args[0], args[1:]
             if tensordict is None:
                 tensordict_values = {}
