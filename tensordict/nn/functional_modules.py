@@ -397,7 +397,7 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
             ):
                 params = args[1]
                 args = args[:1]
-        elif is_tensor_collection(args[0]):
+        elif (len(args) and is_tensor_collection(args[0])) or "tensordict" in kwargs:
             warnings.warn(
                 "You are passing a tensordict/tensorclass instance to a module that "
                 "does not inherit from TensorDictModuleBase. This may lead to unexpected "
