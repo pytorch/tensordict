@@ -1234,13 +1234,13 @@ class TensorDictBase(MutableMapping):
             # this is faster that checkink if key in self keys
             out = self.get(key, default)
             self.del_(key)
-        except KeyError:
+        except KeyError as err:
             # if default provided, 'out' value will return, else raise error
             if default == NO_DEFAULT:
                 raise KeyError(
-                    f"You are trying to pop key `{key}` which is not in dict"
+                    f"You are trying to pop key `{key}` which is not in dict "
                     f"without providing default value."
-                )
+                ) from err
         return out
 
     def apply_(self, fn: Callable) -> TensorDictBase:
@@ -6083,6 +6083,25 @@ class LazyStackedTensorDict(TensorDictBase):
             td.del_(key, **kwargs)
         self._valid_keys.remove(key)
         return self
+
+    def pop(
+        self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
+    ) -> CompatibleType:
+
+        try:
+            # using try/except for get/del is suboptimal, but
+            # this is faster that checkink if key in self keys
+            out = self.get(key, default)
+            if key in self.valid_keys:
+                self._valid_keys.remove(key)
+        except KeyError as err:
+            # if default provided, 'out' value will return, else raise error
+            if default == NO_DEFAULT:
+                raise KeyError(
+                    f"You are trying to pop key `{key}` which is not in dict "
+                    f"without providing default value."
+                ) from err
+        return out
 
     def share_memory_(self) -> TensorDictBase:
         for td in self.tensordicts:

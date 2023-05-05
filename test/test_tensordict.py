@@ -2239,10 +2239,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
         with pytest.raises(
             KeyError,
-            match=re.escape(
-                "You are trying to pop key `z` which is not in dict"
-                "without providing default value"
-            ),
+            match=re.escape(r"You are trying to pop key"),
         ):
             td.pop("z")
 
