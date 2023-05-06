@@ -334,7 +334,7 @@ If you're using TensorDict, please refer to this BibTeX entry to cite this work:
   author = {Moens, Vincent},
   title = {{TensorDict: your PyTorch universal data carrier}},
   url = {https://github.com/pytorch-labs/tensordict},
-  version = {0.1.0},
+  version = {0.1.1},
   year = {2023}
 }
 ```

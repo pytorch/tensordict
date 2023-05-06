@@ -278,7 +278,7 @@ class TestVmap:
         a.names = ["0"]
         b.names = ["A", "B"]
 
-        c = torch.vmap(fun, (None, 1))(a, b)
+        c = vmap(fun, (None, 1))(a, b)
         assert c.names == [None, "A"]
 
         a = TensorDict({"a": torch.randn(5, 4)}, [5])
@@ -287,7 +287,7 @@ class TestVmap:
         a.names = ["0"]
         b.names = ["A", "B"]
 
-        c = torch.vmap(fun, (None, 0))(a, b)
+        c = vmap(fun, (None, 0))(a, b)
         assert c.names == [None, "B"]
 
 
