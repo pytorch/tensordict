@@ -1261,6 +1261,7 @@ class TensorDictBase(MutableMapping):
         fn: Callable,
         *others: TensorDictBase,
         batch_size: Sequence[int] | None = None,
+        names: Sequence[str] | None = None,
         inplace: bool = False,
         **constructor_kwargs,
     ) -> TensorDictBase:
@@ -1283,6 +1284,8 @@ class TensorDictBase(MutableMapping):
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
                 the transformation. This is a keyword only argument.
+            names (list of str, optional): the new dimension names, in case the
+                batch_size is modified.
             inplace (bool, optional): if True, changes are made in-place.
                 Default is False. This is a keyword only argument.
             **constructor_kwargs: additional keyword arguments to be passed to the
@@ -1306,6 +1309,7 @@ class TensorDictBase(MutableMapping):
             out = TensorDict(
                 {},
                 batch_size=torch.Size(batch_size),
+                names=names,
                 device=self.device,
                 _run_checks=False,
                 **constructor_kwargs,
