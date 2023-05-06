@@ -139,6 +139,7 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             else arg.apply(
                 lambda _arg, in_dim=in_dim: _add_batch_dim(_arg, in_dim, vmap_level),
                 batch_size=[b for i, b in enumerate(arg.batch_size) if i != in_dim],
+                names=[name for i, name in enumerate(arg.names) if i != in_dim],
             )
             if isinstance(arg, TensorDictBase)
             else _add_batch_dim(arg, in_dim, vmap_level)
@@ -197,12 +198,17 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             else:
                 new_batch_size = list(batched_output.batch_size)
                 new_batch_size.insert(out_dim, batch_size)
+                new_names = list(batched_output.names)
+                new_names.insert(out_dim, None)
+                print(batched_output.names)
                 out = batched_output.apply(
                     lambda x, out_dim=out_dim: _remove_batch_dim(
                         x, vmap_level, batch_size, out_dim
                     ),
                     batch_size=new_batch_size,
+                    names=new_names,
                 )
+                print(new_batch_size, out_dim, batch_size, flat_out_dims, out.names)
             flat_outputs.append(out)
         return tree_unflatten(flat_outputs, output_spec)
 

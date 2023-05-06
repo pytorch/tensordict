@@ -36,135 +36,259 @@ except ImportError as err:
     FUNCTORCH_ERR = str(err)
 
 
-@pytest.mark.skipif(
-    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-)
-@pytest.mark.parametrize(
-    "moduletype,batch_params",
-    [
-        ["linear", False],
-        ["bn1", True],
-        ["linear", True],
-    ],
-)
-def test_vmap_patch(moduletype, batch_params):
-    if moduletype == "linear":
-        module = nn.Linear(3, 4)
-    elif moduletype == "bn1":
-        module = nn.BatchNorm1d(3)
-    else:
-        raise NotImplementedError
-    if moduletype == "linear":
-        params = make_functional(module)
-        fmodule = module
-        x = torch.randn(10, 1, 3)
-        if batch_params:
-            params = params.expand(10, *params.batch_size)
-            y = vmap(fmodule, (0, 0))(x, params)
-        else:
-            y = vmap(fmodule, (0, None))(x, params)
-        assert y.shape == torch.Size([10, 1, 4])
-    elif moduletype == "bn1":
-        params = make_functional(module)
-        fmodule = module
-        x = torch.randn(10, 2, 3)
-        if batch_params:
-            params = params.expand(10, *params.batch_size).contiguous()
-            # buffers = buffers.expand(10, *buffers.batch_size).contiguous()
-            y = vmap(fmodule, (0, 0))(x, params)
+class TestVmap:
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    @pytest.mark.parametrize(
+        "moduletype,batch_params",
+        [
+            ["linear", False],
+            ["bn1", True],
+            ["linear", True],
+        ],
+    )
+    def test_vmap_patch(self, moduletype, batch_params):
+        if moduletype == "linear":
+            module = nn.Linear(3, 4)
+        elif moduletype == "bn1":
+            module = nn.BatchNorm1d(3)
         else:
             raise NotImplementedError
-        assert y.shape == torch.Size([10, 2, 3])
+        if moduletype == "linear":
+            params = make_functional(module)
+            fmodule = module
+            x = torch.randn(10, 1, 3)
+            if batch_params:
+                params = params.expand(10, *params.batch_size)
+                y = vmap(fmodule, (0, 0))(x, params)
+            else:
+                y = vmap(fmodule, (0, None))(x, params)
+            assert y.shape == torch.Size([10, 1, 4])
+        elif moduletype == "bn1":
+            params = make_functional(module)
+            fmodule = module
+            x = torch.randn(10, 2, 3)
+            if batch_params:
+                params = params.expand(10, *params.batch_size).contiguous()
+                # buffers = buffers.expand(10, *buffers.batch_size).contiguous()
+                y = vmap(fmodule, (0, 0))(x, params)
+            else:
+                raise NotImplementedError
+            assert y.shape == torch.Size([10, 2, 3])
 
-
-@pytest.mark.skipif(
-    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-)
-@pytest.mark.parametrize(
-    "moduletype,batch_params",
-    [
-        ["linear", False],
-        ["bn1", True],
-        ["linear", True],
-    ],
-)
-def test_vmap_tdmodule_functorch(moduletype, batch_params):
-    if moduletype == "linear":
-        module = nn.Linear(3, 4)
-    elif moduletype == "bn1":
-        module = nn.BatchNorm1d(3)
-    else:
-        raise NotImplementedError
-    if moduletype == "linear":
-        tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
-        tdmodule, params, buffers = functorch_make_functional_with_buffers(tdmodule)
-        x = torch.randn(10, 1, 3)
-        td = TensorDict({"x": x}, [10])
-        if batch_params:
-            params = expand_list(params, 10)
-            buffers = expand_list(buffers, 10)
-            td = vmap(tdmodule, (0, 0, 0))(params, buffers, td)
-        else:
-            td = vmap(tdmodule, (None, None, 0))(params, buffers, td)
-        y = td["y"]
-        assert y.shape == torch.Size([10, 1, 4])
-    elif moduletype == "bn1":
-        tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
-        tdmodule, params, buffers = functorch_make_functional_with_buffers(tdmodule)
-        x = torch.randn(10, 2, 3)
-        td = TensorDict({"x": x}, [10])
-        if batch_params:
-            params = expand_list(params, 10)
-            buffers = expand_list(buffers, 10)
-            td = vmap(tdmodule, (0, 0, 0))(params, buffers, td)
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    @pytest.mark.parametrize(
+        "moduletype,batch_params",
+        [
+            ["linear", False],
+            ["bn1", True],
+            ["linear", True],
+        ],
+    )
+    def test_vmap_tdmodule_functorch(self, moduletype, batch_params):
+        if moduletype == "linear":
+            module = nn.Linear(3, 4)
+        elif moduletype == "bn1":
+            module = nn.BatchNorm1d(3)
         else:
             raise NotImplementedError
-        y = td["y"]
-        assert y.shape == torch.Size([10, 2, 3])
+        if moduletype == "linear":
+            tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
+            tdmodule, params, buffers = functorch_make_functional_with_buffers(tdmodule)
+            x = torch.randn(10, 1, 3)
+            td = TensorDict({"x": x}, [10])
+            if batch_params:
+                params = expand_list(params, 10)
+                buffers = expand_list(buffers, 10)
+                td = vmap(tdmodule, (0, 0, 0))(params, buffers, td)
+            else:
+                td = vmap(tdmodule, (None, None, 0))(params, buffers, td)
+            y = td["y"]
+            assert y.shape == torch.Size([10, 1, 4])
+        elif moduletype == "bn1":
+            tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
+            tdmodule, params, buffers = functorch_make_functional_with_buffers(tdmodule)
+            x = torch.randn(10, 2, 3)
+            td = TensorDict({"x": x}, [10])
+            if batch_params:
+                params = expand_list(params, 10)
+                buffers = expand_list(buffers, 10)
+                td = vmap(tdmodule, (0, 0, 0))(params, buffers, td)
+            else:
+                raise NotImplementedError
+            y = td["y"]
+            assert y.shape == torch.Size([10, 2, 3])
 
-
-@pytest.mark.skipif(
-    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-)
-@pytest.mark.parametrize(
-    "moduletype,batch_params",
-    [
-        ["linear", False],
-        ["bn1", True],
-        ["linear", True],
-    ],
-)
-def test_vmap_tdmodule_nativebuilt(moduletype, batch_params):
-    if moduletype == "linear":
-        module = nn.Linear(3, 4)
-    elif moduletype == "bn1":
-        module = nn.BatchNorm1d(3)
-    else:
-        raise NotImplementedError
-    if moduletype == "linear":
-        tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
-        params = make_functional(tdmodule)
-        x = torch.randn(10, 1, 3)
-        td = TensorDict({"x": x}, [10])
-        if batch_params:
-            params = params.expand(10, *params.batch_size)
-            td = vmap(tdmodule, (0, 0))(td, params)
-        else:
-            td = vmap(tdmodule, (0, None))(td, params)
-        y = td["y"]
-        assert y.shape == torch.Size([10, 1, 4])
-    elif moduletype == "bn1":
-        tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
-        params = make_functional(tdmodule)
-        x = torch.randn(10, 2, 3)
-        td = TensorDict({"x": x}, [10])
-        if batch_params:
-            params = params.expand(10, *params.batch_size).contiguous()
-            td = vmap(tdmodule, (0, 0))(td, params)
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    @pytest.mark.parametrize(
+        "moduletype,batch_params",
+        [
+            ["linear", False],
+            ["bn1", True],
+            ["linear", True],
+        ],
+    )
+    def test_vmap_tdmodule_nativebuilt(self, moduletype, batch_params):
+        if moduletype == "linear":
+            module = nn.Linear(3, 4)
+        elif moduletype == "bn1":
+            module = nn.BatchNorm1d(3)
         else:
             raise NotImplementedError
-        y = td["y"]
-        assert y.shape == torch.Size([10, 2, 3])
+        if moduletype == "linear":
+            tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
+            params = make_functional(tdmodule)
+            x = torch.randn(10, 1, 3)
+            td = TensorDict({"x": x}, [10])
+            if batch_params:
+                params = params.expand(10, *params.batch_size)
+                td = vmap(tdmodule, (0, 0))(td, params)
+            else:
+                td = vmap(tdmodule, (0, None))(td, params)
+            y = td["y"]
+            assert y.shape == torch.Size([10, 1, 4])
+        elif moduletype == "bn1":
+            tdmodule = TensorDictModule(module, in_keys=["x"], out_keys=["y"])
+            params = make_functional(tdmodule)
+            x = torch.randn(10, 2, 3)
+            td = TensorDict({"x": x}, [10])
+            if batch_params:
+                params = params.expand(10, *params.batch_size).contiguous()
+                td = vmap(tdmodule, (0, 0))(td, params)
+            else:
+                raise NotImplementedError
+            y = td["y"]
+            assert y.shape == torch.Size([10, 2, 3])
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    @pytest.mark.parametrize(
+        "moduletype,batch_params",
+        [
+            ["linear", False],
+            ["bn1", True],
+            ["linear", True],
+        ],
+    )
+    def test_vmap_tdsequence_functorch(self, moduletype, batch_params):
+        if moduletype == "linear":
+            module1 = nn.Linear(3, 4)
+            module2 = nn.Linear(4, 5)
+        elif moduletype == "bn1":
+            module1 = nn.BatchNorm1d(3)
+            module2 = nn.BatchNorm1d(3)
+        else:
+            raise NotImplementedError
+        if moduletype == "linear":
+            tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
+            tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
+            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+            tdmodule, params, buffers = functorch_make_functional_with_buffers(tdmodule)
+            x = torch.randn(10, 1, 3)
+            td = TensorDict({"x": x}, [10])
+            if batch_params:
+                params = expand_list(params, 10)
+                buffers = expand_list(buffers, 10)
+                td = vmap(tdmodule, (0, 0, 0))(params, buffers, td)
+            else:
+                td = vmap(tdmodule, (None, None, 0))(params, buffers, td)
+            z = td["z"]
+            assert z.shape == torch.Size([10, 1, 5])
+        elif moduletype == "bn1":
+            tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
+            tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
+            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+            tdmodule, params, buffers = functorch_make_functional_with_buffers(tdmodule)
+            x = torch.randn(10, 2, 3)
+            td = TensorDict({"x": x}, [10])
+            if batch_params:
+                params = expand_list(params, 10)
+                buffers = expand_list(buffers, 10)
+                td = vmap(tdmodule, (0, 0, 0))(params, buffers, td)
+            else:
+                raise NotImplementedError
+            z = td["z"]
+            assert z.shape == torch.Size([10, 2, 3])
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    @pytest.mark.parametrize(
+        "moduletype,batch_params",
+        [
+            ["linear", False],
+            ["bn1", True],
+            ["linear", True],
+        ],
+    )
+    def test_vmap_tdsequence_nativebuilt(self, moduletype, batch_params):
+        if moduletype == "linear":
+            module1 = nn.Linear(3, 4)
+            module2 = nn.Linear(4, 5)
+        elif moduletype == "bn1":
+            module1 = nn.BatchNorm1d(3)
+            module2 = nn.BatchNorm1d(3)
+        else:
+            raise NotImplementedError
+        if moduletype == "linear":
+            tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
+            tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
+            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+            params = make_functional(tdmodule)
+            assert {"0", "1"} == set(params["module"].keys())
+            x = torch.randn(10, 1, 3)
+            td = TensorDict({"x": x}, [10])
+            if batch_params:
+                params = params.expand(10, *params.batch_size)
+                td = vmap(tdmodule, (0, 0))(td, params)
+            else:
+                td = vmap(tdmodule, (0, None))(td, params)
+            z = td["z"]
+            assert z.shape == torch.Size([10, 1, 5])
+        elif moduletype == "bn1":
+            tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
+            tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
+            tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
+            params = make_functional(tdmodule)
+            assert {"0", "1"} == set(params["module"].keys())
+            x = torch.randn(10, 2, 3)
+            td = TensorDict({"x": x}, [10])
+            if batch_params:
+                params = params.expand(10, *params.batch_size).contiguous()
+                td = vmap(tdmodule, (0, 0))(td, params)
+            else:
+                raise NotImplementedError
+            z = td["z"]
+            assert z.shape == torch.Size([10, 2, 3])
+
+    def test_vmap_names(self):
+        def fun(a, b):
+            b["c"] = a["a"] + b["b"]
+            return b
+
+        a = TensorDict({"a": torch.randn(3, 4)}, [3])
+        b = TensorDict({"b": torch.randn(3, 5, 4)}, [3, 5])
+
+        a.names = ["0"]
+        b.names = ["A", "B"]
+
+        c = torch.vmap(fun, (None, 1))(a, b)
+        assert c.names == [None, "A"]
+
+        a = TensorDict({"a": torch.randn(5, 4)}, [5])
+        b = TensorDict({"b": torch.randn(3, 5, 4)}, [3, 5])
+
+        a.names = ["0"]
+        b.names = ["A", "B"]
+
+        c = torch.vmap(fun, (None, 0))(a, b)
+        assert c.names == [None, "B"]
 
 
 def test_swap():
@@ -193,110 +317,6 @@ def test_swap():
         assert params.requires_grad
         params.apply_(zero_grad)
         assert params.requires_grad
-
-
-@pytest.mark.skipif(
-    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-)
-@pytest.mark.parametrize(
-    "moduletype,batch_params",
-    [
-        ["linear", False],
-        ["bn1", True],
-        ["linear", True],
-    ],
-)
-def test_vmap_tdsequence_functorch(moduletype, batch_params):
-    if moduletype == "linear":
-        module1 = nn.Linear(3, 4)
-        module2 = nn.Linear(4, 5)
-    elif moduletype == "bn1":
-        module1 = nn.BatchNorm1d(3)
-        module2 = nn.BatchNorm1d(3)
-    else:
-        raise NotImplementedError
-    if moduletype == "linear":
-        tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
-        tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
-        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
-        tdmodule, params, buffers = functorch_make_functional_with_buffers(tdmodule)
-        x = torch.randn(10, 1, 3)
-        td = TensorDict({"x": x}, [10])
-        if batch_params:
-            params = expand_list(params, 10)
-            buffers = expand_list(buffers, 10)
-            td = vmap(tdmodule, (0, 0, 0))(params, buffers, td)
-        else:
-            td = vmap(tdmodule, (None, None, 0))(params, buffers, td)
-        z = td["z"]
-        assert z.shape == torch.Size([10, 1, 5])
-    elif moduletype == "bn1":
-        tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
-        tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
-        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
-        tdmodule, params, buffers = functorch_make_functional_with_buffers(tdmodule)
-        x = torch.randn(10, 2, 3)
-        td = TensorDict({"x": x}, [10])
-        if batch_params:
-            params = expand_list(params, 10)
-            buffers = expand_list(buffers, 10)
-            td = vmap(tdmodule, (0, 0, 0))(params, buffers, td)
-        else:
-            raise NotImplementedError
-        z = td["z"]
-        assert z.shape == torch.Size([10, 2, 3])
-
-
-@pytest.mark.skipif(
-    not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
-)
-@pytest.mark.parametrize(
-    "moduletype,batch_params",
-    [
-        ["linear", False],
-        ["bn1", True],
-        ["linear", True],
-    ],
-)
-def test_vmap_tdsequence_nativebuilt(moduletype, batch_params):
-    if moduletype == "linear":
-        module1 = nn.Linear(3, 4)
-        module2 = nn.Linear(4, 5)
-    elif moduletype == "bn1":
-        module1 = nn.BatchNorm1d(3)
-        module2 = nn.BatchNorm1d(3)
-    else:
-        raise NotImplementedError
-    if moduletype == "linear":
-        tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
-        tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
-        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
-        params = make_functional(tdmodule)
-        assert {"0", "1"} == set(params["module"].keys())
-        x = torch.randn(10, 1, 3)
-        td = TensorDict({"x": x}, [10])
-        if batch_params:
-            params = params.expand(10, *params.batch_size)
-            td = vmap(tdmodule, (0, 0))(td, params)
-        else:
-            td = vmap(tdmodule, (0, None))(td, params)
-        z = td["z"]
-        assert z.shape == torch.Size([10, 1, 5])
-    elif moduletype == "bn1":
-        tdmodule1 = TensorDictModule(module1, in_keys=["x"], out_keys=["y"])
-        tdmodule2 = TensorDictModule(module2, in_keys=["y"], out_keys=["z"])
-        tdmodule = TensorDictSequential(tdmodule1, tdmodule2)
-        params = make_functional(tdmodule)
-        assert {"0", "1"} == set(params["module"].keys())
-        x = torch.randn(10, 2, 3)
-        td = TensorDict({"x": x}, [10])
-        if batch_params:
-            params = params.expand(10, *params.batch_size).contiguous()
-            td = vmap(tdmodule, (0, 0))(td, params)
-        else:
-            raise NotImplementedError
-        z = td["z"]
-        assert z.shape == torch.Size([10, 2, 3])
 
 
 def test_repopulate():
