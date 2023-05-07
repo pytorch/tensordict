@@ -31,8 +31,6 @@ jobs:
     strategy:
       matrix:
         python:
-          - version: "3.7"
-            tag: py37
           - version: "3.8"
             tag: py38
           - version: "3.9"
@@ -68,8 +66,6 @@ jobs:
       matrix:
         os: ["ubuntu-20.04", "macos-latest"]
         python:
-          - version: "3.7"
-            tag: py37
           - version: "3.8"
             tag: py38
           - version: "3.9"
@@ -128,8 +124,6 @@ jobs:
     strategy:
       matrix:
         python:
-          - version: "3.7"
-            tag: py37
           - version: "3.8"
             tag: py39
           - version: "3.9"
