@@ -183,7 +183,7 @@ jobs:
 
   type_check_python:
     docker:
-      - image: circleci/python:3.7
+      - image: circleci/python:3.8
     steps:
       - checkout
       - pip_install:
@@ -625,13 +625,6 @@ workflows:
       - binary_linux_wheel:
           conda_docker_image: pytorch/conda-builder:cpu
           cu_version: cpu
-          name: binary_linux_wheel_py3.7_cpu
-          python_version: '3.7'
-          wheel_docker_image: pytorch/manylinux-cuda102
-
-      - binary_linux_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
           name: binary_linux_wheel_py3.8_cpu
           python_version: '3.8'
           wheel_docker_image: pytorch/manylinux-cuda102
@@ -648,13 +641,6 @@ workflows:
           cu_version: cpu
           name: binary_linux_wheel_py3.10_cpu
           python_version: '3.10'
-          wheel_docker_image: pytorch/manylinux-cuda102
-
-      - binary_macos_wheel:
-          conda_docker_image: pytorch/conda-builder:cpu
-          cu_version: cpu
-          name: binary_macos_wheel_py3.7_cpu
-          python_version: '3.7'
           wheel_docker_image: pytorch/manylinux-cuda102
 
       - binary_macos_wheel:
@@ -680,27 +666,6 @@ workflows:
 
   unittest:
     jobs:
-      - unittest_macos_cpu:
-          cu_version: cpu
-          name: unittest_macos_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_cpu:
-          cu_version: cpu
-          name: unittest_linux_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_gpu:
-          cu_version: cu113
-          name: unittest_linux_gpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_stable_cpu:
-          cu_version: cpu
-          name: unittest_linux_stable_cpu_py3.7
-          python_version: '3.7'
-      - unittest_linux_stable_gpu:
-          cu_version: cu113
-          name: unittest_linux_stable_gpu_py3.7
-          python_version: '3.7'
-
       - unittest_macos_cpu:
           cu_version: cpu
           name: unittest_macos_cpu_py3.8
@@ -742,10 +707,6 @@ workflows:
           cu_version: cu113
           name: unittest_linux_stable_gpu_py3.9
           python_version: '3.9'
-      # - unittest_linux_torchrec_gpu:
-      #     cu_version: cu113
-      #     name: unittest_linux_torchrec_gpu_py3.9
-      #     python_version: '3.9'
       - unittest_macos_cpu:
           cu_version: cpu
           name: unittest_macos_cpu_py3.10
