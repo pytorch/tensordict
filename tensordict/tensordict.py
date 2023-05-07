@@ -2978,7 +2978,6 @@ class TensorDictBase(MutableMapping):
                 names = [self._names[i] if i is not None else None for i in idx_to_take]
         return names
 
-    # @profile
     def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
         names = self._get_names_idx(idx)
         return TensorDict(
@@ -2991,7 +2990,6 @@ class TensorDictBase(MutableMapping):
             _is_memmap=self.is_memmap(),
         )
 
-    # @profile
     def __getitem__(self, idx: IndexType) -> TensorDictBase:
         """Indexes all tensors according to the provided index.
 
@@ -3580,17 +3578,17 @@ class TensorDict(TensorDictBase):
                 "all elements must share that device."
             )
 
-    # def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
-    #     names = self._get_names_idx(idx)
-    #     self_copy = copy(self)
-    #     # self_copy = self.clone(False)
-    #     self_copy._tensordict = {
-    #         key: _get_item(item, idx) for key, item in self.items()
-    #     }
-    #     self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
-    #     self_copy._device = self.device
-    #     self_copy.names = names
-    #     return self_copy
+    def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
+        names = self._get_names_idx(idx)
+        self_copy = copy(self)
+        # self_copy = self.clone(False)
+        self_copy._tensordict = {
+            key: _get_item(item, idx) for key, item in self.items()
+        }
+        self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
+        self_copy._device = self.device
+        self_copy.names = names
+        return self_copy
 
     def pin_memory(self) -> TensorDictBase:
         def pin_mem(tensor):
