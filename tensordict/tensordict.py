@@ -3028,7 +3028,7 @@ class TensorDictBase(MutableMapping):
             return self._index_tensordict((idx,))
 
         if isinstance(idx, list):
-            idx = torch.tensor(idx, device=self.device)
+            # idx = torch.tensor(idx, device=self.device)
             return self._index_tensordict(idx)
 
         if isinstance(idx, np.ndarray):
