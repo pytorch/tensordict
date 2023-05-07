@@ -54,7 +54,7 @@ def test_clone(benchmark, td):
     benchmark.pedantic(td.clone, iterations=100, rounds=100)
 
 
-@pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple"])
+@pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple", "list"])
 def test_getitem(benchmark, td, c, index):
     if index == "int":
         index = 1
@@ -64,13 +64,15 @@ def test_getitem(benchmark, td, c, index):
         index = range(2)
     elif index == "tuple":
         index = (2, 1)
+    elif index == "list":
+        index = [0, 1]
     else:
         raise NotImplementedError
 
     def exec_getitem():
         _ = td[index]
 
-    benchmark.pedantic(exec_getitem, iterations=100, rounds=100)
+    benchmark.pedantic(exec_getitem, iterations=1000, rounds=1000)
 
 
 @pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple"])
