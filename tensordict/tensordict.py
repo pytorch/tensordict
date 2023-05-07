@@ -3026,7 +3026,7 @@ class TensorDictBase(MutableMapping):
             return self._index_tensordict((idx,))
 
         if isinstance(idx, list):
-            idx = torch.tensor(idx, device=self.device)
+            # idx = torch.tensor(idx, device=self.device)
             return self._index_tensordict(idx)
 
         if isinstance(idx, np.ndarray):
@@ -3578,17 +3578,17 @@ class TensorDict(TensorDictBase):
                 "all elements must share that device."
             )
 
-    def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
-        names = self._get_names_idx(idx)
-        self_copy = copy(self)
-        # self_copy = self.clone(False)
-        self_copy._tensordict = {
-            key: _get_item(item, idx) for key, item in self.items()
-        }
-        self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
-        self_copy._device = self.device
-        self_copy.names = names
-        return self_copy
+    # def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
+    #     names = self._get_names_idx(idx)
+    #     self_copy = copy(self)
+    #     # self_copy = self.clone(False)
+    #     self_copy._tensordict = {
+    #         key: _get_item(item, idx) for key, item in self.items()
+    #     }
+    #     self_copy._batch_size = _getitem_batch_size(self_copy.batch_size, idx)
+    #     self_copy._device = self.device
+    #     self_copy.names = names
+    #     return self_copy
 
     def pin_memory(self) -> TensorDictBase:
         def pin_mem(tensor):
