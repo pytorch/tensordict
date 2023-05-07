@@ -2749,6 +2749,8 @@ def test_batchsize_reset():
 
     # test index
     td[torch.tensor([1, 2])]
+    td[:]
+    td[[1, 2]]
     with pytest.raises(
         IndexError,
         match=re.escape("too many indices for tensor of dimension 1"),

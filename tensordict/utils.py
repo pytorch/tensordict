@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import math
 import time
+
+import warnings
 from functools import wraps
 from numbers import Number
 from typing import Any, List, Sequence, Tuple, TYPE_CHECKING, Union
@@ -96,6 +98,13 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
     ) or isinstance(items, list):
         if isinstance(items, torch.Tensor) and not items.shape:
             return shape[1:]
+        if _is_lis_of_list_of_bools(items):
+            warnings.warn(
+                "Got a list of list of bools: this indexing behaviour will be deprecated soon.",
+                category=DeprecationWarning,
+            )
+            items = torch.tensor(items)
+            return torch.Size([items.sum(), *shape[items.ndimension() :]])
         if len(items):
             return torch.Size([len(items), *shape[1:]])
         else:
@@ -694,7 +703,22 @@ def _dtype(tensor: torch.Tensor) -> torch.dtype:
 # @profile
 def _get_item(tensor: torch.Tensor, index: IndexType) -> torch.Tensor:
     if isinstance(tensor, torch.Tensor):
-        return tensor[index]
+        try:
+            return tensor[index]
+        except IndexError as err:
+            # try to map list index to tensor, and assess type. If bool, we
+            # likely have a nested list of booleans which is not supported by pytorch
+            if _is_lis_of_list_of_bools(index):
+                index = torch.tensor(index, device=tensor.device)
+                if index.dtype is torch.bool:
+                    warnings.warn(
+                        "Indexing a tensor with a nested list of boolean values is "
+                        "going to be deprecated as this functionality is not supported "
+                        f"by PyTorch. (follows error: {err})",
+                        category=DeprecationWarning,
+                    )
+                return tensor[index]
+            raise err
     elif isinstance(tensor, KeyedJaggedTensor):
         return index_keyedjaggedtensor(tensor, index)
     else:
@@ -792,3 +816,23 @@ def int_generator(seed):
     rng = np.random.default_rng(seed)
     seed = int.from_bytes(rng.bytes(8), "big")
     return seed % max_seed_val
+
+
+def _is_lis_of_list_of_bools(index, first_level=True):
+    # determines if an index is a list of list of bools.
+    # this is aimed at catching a deprecation feature where list of list
+    # of bools are valid indices
+    if first_level:
+        if not isinstance(index, list):
+            return False
+        if not len(index):
+            return False
+        if isinstance(index[0], list):
+            return _is_lis_of_list_of_bools(index[0], False)
+        return False
+    # then we know it is a list of lists
+    if isinstance(index[0], bool):
+        return True
+    if isinstance(index[0], list):
+        return _is_lis_of_list_of_bools(index[0], False)
+    return False
