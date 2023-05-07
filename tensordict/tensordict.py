@@ -2978,7 +2978,6 @@ class TensorDictBase(MutableMapping):
                 names = [self._names[i] if i is not None else None for i in idx_to_take]
         return names
 
-    # @profile
     def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
         names = self._get_names_idx(idx)
         return TensorDict(
@@ -2991,7 +2990,6 @@ class TensorDictBase(MutableMapping):
             _is_memmap=self.is_memmap(),
         )
 
-    # @profile
     def __getitem__(self, idx: IndexType) -> TensorDictBase:
         """Indexes all tensors according to the provided index.
 
