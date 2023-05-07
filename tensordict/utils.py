@@ -64,6 +64,7 @@ def _sub_index(tensor: torch.Tensor, idx: IndexType) -> torch.Tensor:
     return tensor[idx]
 
 
+# @profile
 def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
     """Given an input shape and an index, returns the size of the resulting indexed tensor.
 
@@ -690,6 +691,7 @@ def _dtype(tensor: torch.Tensor) -> torch.dtype:
         return tensor.dtype
 
 
+# @profile
 def _get_item(tensor: torch.Tensor, index: IndexType) -> torch.Tensor:
     if isinstance(tensor, torch.Tensor):
         return tensor[index]
