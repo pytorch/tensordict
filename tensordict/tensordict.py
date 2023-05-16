@@ -1338,6 +1338,7 @@ class TensorDictBase(MutableMapping):
                     *_others,
                     inplace=inplace,
                     batch_size=batch_size,
+                    device=device,
                     **constructor_kwargs,
                 )
             else:
@@ -4001,6 +4002,7 @@ class TensorDict(TensorDictBase):
             # )
             def to(tensor):
                 return tensor.to(dest, **kwargs)
+
             return self.apply(to)
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
