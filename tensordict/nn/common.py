@@ -517,6 +517,16 @@ class TensorDictModuleBase(nn.Module):
                 is_shared=False)
 
         """
+        if len(out_keys) == 1:
+            if out_keys[0] not in self.out_keys:
+                err_msg = f"Can't select non existent key: {out_keys[0]}. "
+                if (
+                    out_keys[0]
+                    and isinstance(out_keys[0], (tuple, list))
+                    and out_keys[0][0] in self.out_keys
+                ):
+                    err_msg += f"Are you passing the keys in a list? Try unpacking as: `{', '.join(out_keys[0])}`"
+                raise ValueError(err_msg)
         self.register_forward_hook(_OutKeysSelect(out_keys))
         for hook in self._forward_hooks.values():
             hook._init(self)

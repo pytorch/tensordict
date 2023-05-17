@@ -2025,105 +2025,147 @@ class TestSkipExisting:
         assert (td["out"] == 1).all()
 
 
+@pytest.mark.parametrize("out_d_key", [("d", "e"), ["d"], ["d", "e"]])
+@pytest.mark.parametrize("unpack", [True, False])
 class TestSelectOutKeys:
-    def test_tdmodule(self):
+    def test_tdmodule(self, out_d_key, unpack):
         mod = TensorDictModule(
-            lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+            lambda x, y: (x + 2, y + 2, x), in_keys=["a", "b"], out_keys=["c", "d", "e"]
         )
+        assert mod.out_keys == ["c", "d", "e"]
         td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
-        mod2 = mod.select_out_keys("d")
-        assert mod2 is mod
-        assert mod.out_keys == ["d"]
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        assert "c" not in td.keys()
-        assert all(key in td.keys() for key in ["a", "b", "d"])
-        mod2 = mod.reset_out_keys()
-        assert mod2 is mod
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+        assert all(key in td.keys() for key in ["a", "b", "c", "d", "e"])
+        if unpack:
+            mod2 = mod.select_out_keys(*out_d_key)
+            assert mod2 is mod
+            assert mod.out_keys == list(out_d_key)
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            assert "c" not in td.keys()
+            assert all(key in td.keys() for key in ["a", "b", "d"])
+            mod2 = mod.reset_out_keys()
+            assert mod2 is mod
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            assert all(key in td.keys() for key in ["a", "b", "c", "d", "e"])
+        else:
+            with pytest.raises(ValueError, match="Can't select non "):
+                mod2 = mod.select_out_keys(out_d_key)
 
-    def test_tdmodule_dispatch(self):
+    def test_tdmodule_dispatch(self, out_d_key, unpack):
         mod = TensorDictModule(
-            lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+            lambda x, y: (x + 2, y + 2, x), in_keys=["a", "b"], out_keys=["c", "d", "e"]
         )
-        c, d = mod(torch.zeros(()), torch.ones(()))
-        assert (c == 2).all()
-        assert (d == 3).all()
-        mod2 = mod.select_out_keys("d")
-        assert mod2 is mod
-        assert mod.out_keys == ["d"]
-        d = mod(torch.zeros(()), torch.ones(()))
-        assert (d == 3).all()
-        mod2 = mod.reset_out_keys()
-        assert mod2 is mod
-        c, d = mod(torch.zeros(()), torch.ones(()))
-        assert (c == 2).all()
-        assert (d == 3).all()
+        exp_res = {"c": 2, "d": 3, "e": 0}
+        res = mod(torch.zeros(()), torch.ones(()))
+        assert len(res) == 3
+        for i, v in enumerate(["c", "d", "e"]):
+            assert (res[i] == exp_res[v]).all()
+        if unpack:
+            mod2 = mod.select_out_keys(*out_d_key)
+            assert mod2 is mod
+            assert mod.out_keys == list(out_d_key)
+            res = mod(torch.zeros(()), torch.ones(()))
+            if len(list(out_d_key)) == 1:
+                res = [res]
+            for i, v in enumerate(list(out_d_key)):
+                assert (res[i] == exp_res[v]).all()
+            mod2 = mod.reset_out_keys()
+            assert mod2 is mod
+            res = mod(torch.zeros(()), torch.ones(()))
+            assert len(res) == 3
+            for i, v in enumerate(["c", "d", "e"]):
+                assert (res[i] == exp_res[v]).all()
+        else:
+            with pytest.raises(ValueError, match="Can't select non "):
+                mod2 = mod.select_out_keys(out_d_key)
 
-    def test_tdmodule_dispatch_firstcall(self):
+    def test_tdmodule_dispatch_firstcall(self, out_d_key, unpack):
         # calling the dispatch first or not may mess up the init
         mod = TensorDictModule(
-            lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+            lambda x, y: (x + 2, y + 2, x), in_keys=["a", "b"], out_keys=["c", "d", "e"]
         )
-        c, d = mod(torch.zeros(()), torch.ones(()))
-        assert (c == 2).all()
-        assert (d == 3).all()
-        mod2 = mod.select_out_keys("d")
-        assert mod2 is mod
-        assert mod.out_keys == ["d"]
-        # ignore result but make sure we call _init
-        mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        d = mod(torch.zeros(()), torch.ones(()))
-        assert (d == 3).all()
-        mod2 = mod.reset_out_keys()
-        assert mod2 is mod
-        c, d = mod(torch.zeros(()), torch.ones(()))
-        assert (c == 2).all()
-        assert (d == 3).all()
+        exp_res = {"c": 2, "d": 3, "e": 0}
+        res = mod(torch.zeros(()), torch.ones(()))
+        assert len(res) == 3
+        for i, v in enumerate(["c", "d", "e"]):
+            assert (res[i] == exp_res[v]).all()
+        if unpack:
+            mod2 = mod.select_out_keys(*out_d_key)
+            assert mod2 is mod
+            assert mod.out_keys == list(out_d_key)
+            # ignore result but make sure we call _init
+            mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            res = mod(torch.zeros(()), torch.ones(()))
+            if len(list(out_d_key)) == 1:
+                res = [res]
+            for i, v in enumerate(list(out_d_key)):
+                assert (res[i] == exp_res[v]).all()
+            mod2 = mod.reset_out_keys()
+            assert mod2 is mod
+            res = mod(torch.zeros(()), torch.ones(()))
+            assert len(res) == 3
+            for i, v in enumerate(["c", "d", "e"]):
+                assert (res[i] == exp_res[v]).all()
+        else:
+            with pytest.raises(ValueError, match="Can't select non "):
+                mod2 = mod.select_out_keys(out_d_key)
 
-    def test_tdseq(self):
+    def test_tdseq(self, out_d_key, unpack):
         mod = TensorDictSequential(
             TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
-            TensorDictModule(lambda x: x + 2, in_keys=["b"], out_keys=["d"]),
+            TensorDictModule(lambda x: (x + 2, x), in_keys=["b"], out_keys=["d", "e"]),
         )
         td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
         assert all(key in td.keys() for key in ["a", "b", "c", "d"])
-        mod2 = mod.select_out_keys("d")
-        assert mod2 is mod
-        assert mod.out_keys == ["d"]
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        assert "c" not in td.keys()
-        assert all(key in td.keys() for key in ["a", "b", "d"])
-        mod2 = mod.reset_out_keys()
-        assert mod2 is mod
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+        if unpack:
+            mod2 = mod.select_out_keys(*out_d_key)
+            assert mod2 is mod
+            assert mod.out_keys == list(out_d_key)
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            assert "c" not in td.keys()
+            assert all(key in td.keys() for key in ["a", "b", "d"])
+            mod2 = mod.reset_out_keys()
+            assert mod2 is mod
+            td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            assert all(key in td.keys() for key in ["a", "b", "c", "d"])
+        else:
+            with pytest.raises(ValueError, match="Can't select non "):
+                mod2 = mod.select_out_keys(out_d_key)
 
-    def test_tdseq_dispatch(self):
+    def test_tdseq_dispatch(self, out_d_key, unpack):
         mod = TensorDictSequential(
             TensorDictModule(lambda x: x + 2, in_keys=["a"], out_keys=["c"]),
-            TensorDictModule(lambda x: x + 2, in_keys=["b"], out_keys=["d"]),
+            TensorDictModule(lambda x: (x + 2, x), in_keys=["b"], out_keys=["d", "e"]),
         )
-        c, d = mod(torch.zeros(()), torch.ones(()))
-        assert (c == 2).all()
-        assert (d == 3).all()
-        mod2 = mod.select_out_keys("d")
-        assert mod2 is mod
-        assert mod.out_keys == ["d"]
-        d = mod(torch.zeros(()), torch.ones(()))
-        assert (d == 3).all()
-        mod2 = mod.reset_out_keys()
-        assert mod2 is mod
-        c, d = mod(torch.zeros(()), torch.ones(()))
-        assert (c == 2).all()
-        assert (d == 3).all()
+
+        exp_res = {"c": 2, "d": 3, "e": 1}
+        res = mod(torch.zeros(()), torch.ones(()))
+        assert len(res) == 3
+        for i, v in enumerate(["c", "d", "e"]):
+            assert (res[i] == exp_res[v]).all()
+        if unpack:
+            mod2 = mod.select_out_keys(*out_d_key)
+            assert mod2 is mod
+            assert mod.out_keys == list(out_d_key)
+            res = mod(torch.zeros(()), torch.ones(()))
+            if len(list(out_d_key)) == 1:
+                res = [res]
+            for i, v in enumerate(list(out_d_key)):
+                assert (res[i] == exp_res[v]).all()
+            mod2 = mod.reset_out_keys()
+            assert mod2 is mod
+            res = mod(torch.zeros(()), torch.ones(()))
+            assert len(res) == 3
+            for i, v in enumerate(["c", "d", "e"]):
+                assert (res[i] == exp_res[v]).all()
+        else:
+            with pytest.raises(ValueError, match="Can't select non "):
+                mod2 = mod.select_out_keys(out_d_key)
 
     @pytest.mark.parametrize("inplace", [True, False])
-    def test_tdbase(self, inplace):
+    def test_tdbase(self, inplace, out_d_key, unpack):
         class MyModule(TensorDictModuleBase):
             in_keys = ["a", "b"]
-            out_keys = ["c", "d"]
+            out_keys = ["c", "d", "e"]
 
             def forward(self, tensordict):
                 c = tensordict["a"] + 2
@@ -2132,6 +2174,7 @@ class TestSelectOutKeys:
                     tensordict = tensordict.select()
                 tensordict["c"] = c
                 tensordict["d"] = d
+                tensordict["e"] = d + 2
                 return tensordict
 
         # since we play with the __new__ and class attributes, let's check that everything's ok for a second instance
@@ -2141,66 +2184,86 @@ class TestSelectOutKeys:
             assert mod.out_keys is mod._out_keys, i
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             if inplace:
-                assert set(td.keys()) == {"a", "b", "c", "d"}
+                assert set(td.keys()) == {"a", "b", "c", "d", "e"}
             else:
-                assert set(td.keys()) == {"c", "d"}
-            mod2 = mod.select_out_keys("d")
+                assert set(td.keys()) == {"c", "d", "e"}
+            if unpack:
+                mod2 = mod.select_out_keys(*out_d_key)
+                assert mod2 is mod
+                assert mod.out_keys == list(out_d_key)
+                td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+                assert "c" not in td.keys()
+                if inplace:
+                    assert set(td.keys()) == {"a", "b", *out_d_key}
+                else:
+                    assert set(td.keys()) == {*out_d_key}
+                mod2 = mod.reset_out_keys()
+                assert mod2 is mod
+                td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+                if inplace:
+                    assert set(td.keys()) == {"a", "b", "c", "d", "e"}
+                else:
+                    assert set(td.keys()) == {"c", "d", "e"}
+            else:
+                with pytest.raises(ValueError, match="Can't select non "):
+                    mod2 = mod.select_out_keys(out_d_key)
+
+    def test_tdmodule_wrap(self, out_d_key, unpack):
+        mod = TensorDictModuleWrapper(
+            TensorDictModule(
+                lambda x, y: (x + 2, y + 2, x),
+                in_keys=["a", "b"],
+                out_keys=["c", "d", "e"],
+            )
+        )
+        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+        assert all(key in td.keys() for key in ["a", "b", "c", "d", "e"])
+        if unpack:
+            mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
-            assert mod.out_keys == ["d"]
+            assert mod.out_keys == list(out_d_key)
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-            assert "c" not in td.keys()
-            if inplace:
-                assert set(td.keys()) == {"a", "b", "d"}
-            else:
-                assert set(td.keys()) == {
-                    "d",
-                }
+            assert all(key not in td.keys() for key in {"c", "d", "e"} - {*out_d_key})
+            assert all(key in td.keys() for key in ["a", "b", *out_d_key])
             mod2 = mod.reset_out_keys()
             assert mod2 is mod
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-            if inplace:
-                assert set(td.keys()) == {"a", "b", "c", "d"}
-            else:
-                assert set(td.keys()) == {"c", "d"}
+            assert all(key in td.keys() for key in ["a", "b", "c", "d", "e"])
+        else:
+            with pytest.raises(ValueError, match="Can't select non "):
+                mod2 = mod.select_out_keys(out_d_key)
 
-    def test_tdmodule_wrap(self):
+    def test_tdmodule_wrap_dispatch(self, out_d_key, unpack):
         mod = TensorDictModuleWrapper(
             TensorDictModule(
-                lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
+                lambda x, y: (x + 2, y + 2, x),
+                in_keys=["a", "b"],
+                out_keys=["c", "d", "e"],
             )
         )
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
-        mod2 = mod.select_out_keys("d")
-        assert mod2 is mod
-        assert mod.out_keys == ["d"]
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        assert "c" not in td.keys()
-        assert all(key in td.keys() for key in ["a", "b", "d"])
-        mod2 = mod.reset_out_keys()
-        assert mod2 is mod
-        td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
-        assert all(key in td.keys() for key in ["a", "b", "c", "d"])
-
-    def test_tdmodule_wrap_dispatch(self):
-        mod = TensorDictModuleWrapper(
-            TensorDictModule(
-                lambda x, y: (x + 2, y + 2), in_keys=["a", "b"], out_keys=["c", "d"]
-            )
-        )
-        c, d = mod(torch.zeros(()), torch.ones(()))
-        assert (c == 2).all()
-        assert (d == 3).all()
-        mod2 = mod.select_out_keys("d")
-        assert mod2 is mod
-        assert mod.out_keys == ["d"]
-        d = mod(torch.zeros(()), torch.ones(()))
-        assert (d == 3).all()
-        mod2 = mod.reset_out_keys()
-        assert mod2 is mod
-        c, d = mod(torch.zeros(()), torch.ones(()))
-        assert (c == 2).all()
-        assert (d == 3).all()
+        exp_res = {"c": 2, "d": 3, "e": 0}
+        res = mod(torch.zeros(()), torch.ones(()))
+        assert len(res) == 3
+        for i, v in enumerate(["c", "d", "e"]):
+            assert (res[i] == exp_res[v]).all()
+        if unpack:
+            mod2 = mod.select_out_keys(*out_d_key)
+            assert mod2 is mod
+            assert mod.out_keys == list(out_d_key)
+            res = mod(torch.zeros(()), torch.ones(()))
+            if len(list(out_d_key)) == 1:
+                res = [res]
+            for i, v in enumerate(list(out_d_key)):
+                assert (res[i] == exp_res[v]).all()
+            mod2 = mod.reset_out_keys()
+            assert mod2 is mod
+            res = mod(torch.zeros(()), torch.ones(()))
+            assert len(res) == 3
+            for i, v in enumerate(["c", "d", "e"]):
+                assert (res[i] == exp_res[v]).all()
+        else:
+            with pytest.raises(ValueError, match="Can't select non "):
+                mod2 = mod.select_out_keys(out_d_key)
 
 
 if __name__ == "__main__":
