@@ -3993,17 +3993,9 @@ class TensorDict(TensorDictBase):
             dest = torch.device(dest)
             if self.device is not None and dest == self.device:
                 return self
-
-            # self_copy = TensorDict(
-            #     {key: value.to(dest, **kwargs) for key, value in self.items()},
-            #     batch_size=self.batch_size,
-            #     device=dest,
-            #     names=self._names,
-            # )
             def to(tensor):
                 return tensor.to(dest, **kwargs)
-
-            return self.apply(to)
+            return self.apply(to, device=dest)
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
             return self
