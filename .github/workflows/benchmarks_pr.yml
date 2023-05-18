@@ -97,7 +97,6 @@ jobs:
         python -c "import torch;assert torch.cuda.device_count()"
         echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
         echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
-#        echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
         echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
         echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
         cd benchmarks/
