@@ -97,15 +97,15 @@ jobs:
         python -c "import torch;assert torch.cuda.device_count()"
         echo "BASE_SHA=$(echo ${{ github.event.pull_request.base.sha }} | cut -c1-8)" >> $GITHUB_ENV
         echo "HEAD_SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-8)" >> $GITHUB_ENV
-        echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
+#        echo "BASELINE_JSON=$(mktemp)" >> $GITHUB_ENV
         echo "CONTENDER_JSON=$(mktemp)" >> $GITHUB_ENV
         echo "PR_COMMENT=$(mktemp)" >>  $GITHUB_ENV
         cd benchmarks/
         RUN_BENCHMARK="pytest --rank 0 --benchmark-json "
         git checkout ${{ github.event.pull_request.base.sha }}
-        $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
+        $RUN_BENCHMARK benchmarks/output.json
         git checkout ${{ github.event.pull_request.head.sha }}
-        $RUN_BENCHMARK ${{ env.CONTENDER_JSON }}          
+        $RUN_BENCHMARK benchmarks/output.json
 
   benchmark_gpu_upload:
     name: GPU Pytest benchmark -- Upload
@@ -116,8 +116,8 @@ jobs:
         uses: apbard/pytest-benchmark-commenter@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          benchmark-file: ${{ env.BASELINE_JSON }}
-          comparison-benchmark-file: ${{ env.CONTENDER_JSON }}
+          benchmark-file: benchmarks/output.json
+          comparison-benchmark-file: benchmarks/output.json
           benchmark-metrics: 'name,max,mean,ops'
           comparison-benchmark-metric: 'ops'
           comparison-higher-is-better: true
