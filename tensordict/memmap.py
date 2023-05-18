@@ -362,14 +362,27 @@ class MemmapTensor:
 
     def _get_item(self, idx: IndexType, memmap_array: np.ndarray) -> np.ndarray:
         if isinstance(idx, torch.Tensor):
-            idx = idx.cpu()
+            # indexing a numpy.memmap with a torch.Tensor doesn't behave as expected, we
+            # convert to numpy.ndarray for behaviour that is consistent with indexing
+            # a torch.Tensor with a torch.Tensor
+            idx = idx.cpu().numpy()
         elif isinstance(idx, tuple) and any(
             isinstance(sub_index, torch.Tensor) for sub_index in idx
         ):
             idx = tuple(
-                sub_index.cpu() if isinstance(sub_index, torch.Tensor) else sub_index
+                # see above comment about indexing numpy.memmap with torch.Tensor
+                sub_index.cpu().numpy()
+                if isinstance(sub_index, torch.Tensor)
+                else sub_index
                 for sub_index in idx
             )
+        elif isinstance(idx, list):
+            # wrapping list index in tuple to avoid following warning when indexing
+            # FutureWarning: Using a non-tuple sequence for multidimensional indexing
+            # is deprecated; use `arr[tuple(seq)]` instead of `arr[seq]`. In the future
+            # this will be interpreted as an array index, `arr[np.array(seq)]`, which
+            # will result either in an error or a different result.
+            idx = (idx,)
         memmap_array = memmap_array[idx]
         return memmap_array
 
