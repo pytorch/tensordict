@@ -9,6 +9,12 @@ permissions:
   deployments: write
   contents: write
 
+concurrency:
+  # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
+  # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
 jobs:
   benchmark_cpu:
     name: CPU Pytest benchmark
@@ -56,14 +62,10 @@ jobs:
     steps:
     - name: Install deps
       run: |
-        export TZ=Europe/London
-        export DEBIAN_FRONTEND=noninteractive  # tzdata bug
         apt-get update -y
-        apt-get install software-properties-common -y
-        add-apt-repository ppa:git-core/candidate -y
         apt-get update -y
         apt-get upgrade -y
-        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
+        apt-get -y install gcc curl g++ unzip wget sudo git cmake
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
