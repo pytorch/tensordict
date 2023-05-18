@@ -3993,8 +3993,10 @@ class TensorDict(TensorDictBase):
             dest = torch.device(dest)
             if self.device is not None and dest == self.device:
                 return self
+
             def to(tensor):
                 return tensor.to(dest, **kwargs)
+
             return self.apply(to, device=dest)
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
