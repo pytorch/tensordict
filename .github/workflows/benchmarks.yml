@@ -56,14 +56,10 @@ jobs:
     steps:
     - name: Install deps
       run: |
-        export TZ=Europe/London
-        export DEBIAN_FRONTEND=noninteractive  # tzdata bug
         apt-get update -y
-        apt-get install software-properties-common -y
-        add-apt-repository ppa:git-core/candidate -y
         apt-get update -y
         apt-get upgrade -y
-        apt-get -y install libglu1-mesa libgl1-mesa-glx libosmesa6 gcc curl g++ unzip wget libglfw3-dev libgles2-mesa-dev libglew-dev sudo git cmake libz-dev
+        apt-get -y install gcc curl g++ unzip wget sudo git cmake
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
