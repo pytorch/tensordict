@@ -1261,6 +1261,7 @@ class TensorDictBase(MutableMapping):
         fn: Callable,
         *others: TensorDictBase,
         batch_size: Sequence[int] | None = None,
+        device: torch.device | None = None,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         **constructor_kwargs,
@@ -1284,6 +1285,7 @@ class TensorDictBase(MutableMapping):
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
                 the transformation. This is a keyword only argument.
+            device (torch.device, optional): the resulting device, if any.
             names (list of str, optional): the new dimension names, in case the
                 batch_size is modified.
             inplace (bool, optional): if True, changes are made in-place.
@@ -1310,7 +1312,7 @@ class TensorDictBase(MutableMapping):
                 {},
                 batch_size=torch.Size(batch_size),
                 names=names,
-                device=self.device,
+                device=self.device if not device else device,
                 _run_checks=False,
                 **constructor_kwargs,
             )
@@ -1318,7 +1320,7 @@ class TensorDictBase(MutableMapping):
             out = TensorDict(
                 {},
                 batch_size=self.batch_size,
-                device=self.device,
+                device=self.device if not device else device,
                 names=self._names,
                 _run_checks=False,
                 **constructor_kwargs,
@@ -1336,6 +1338,7 @@ class TensorDictBase(MutableMapping):
                     *_others,
                     inplace=inplace,
                     batch_size=batch_size,
+                    device=device,
                     **constructor_kwargs,
                 )
             else:
@@ -3991,13 +3994,10 @@ class TensorDict(TensorDictBase):
             if self.device is not None and dest == self.device:
                 return self
 
-            self_copy = TensorDict(
-                {key: value.to(dest, **kwargs) for key, value in self.items()},
-                batch_size=self.batch_size,
-                device=dest,
-                names=self._names,
-            )
-            return self_copy
+            def to(tensor):
+                return tensor.to(dest, **kwargs)
+
+            return self.apply(to, device=dest)
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
             return self
