@@ -62,6 +62,8 @@ jobs:
     steps:
     - name: Install deps
       run: |
+        export TZ=Europe/London
+        export DEBIAN_FRONTEND=noninteractive  # tzdata bug
         apt-get update -y
         apt-get update -y
         apt-get upgrade -y
