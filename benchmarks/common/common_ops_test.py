@@ -168,6 +168,22 @@ def test_select(benchmark, td, c):
     benchmark.pedantic(exec_select, iterations=100, rounds=100)
 
 
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
+def test_to(benchmark, td):
+    benchmark.pedantic(td.to, args=("cuda:0",), iterations=100, rounds=1000)
+
+
+@pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
+def test_to_nonblocking(benchmark, td):
+    benchmark.pedantic(
+        td.to,
+        args=("cuda:0",),
+        kwargs={"non_blocking", True},
+        iterations=100,
+        rounds=1000,
+    )
+
+
 def main():
     # creation
     td = TensorDict({}, [3, 4])
