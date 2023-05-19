@@ -830,7 +830,7 @@ class TensorDictModule(TensorDictModuleBase):
                 except OSError:
                     # then we can't print the source code
                     pass
-            module = indent(module, 4 * " ")
+            module = indent(str(module), 4 * " ")
             in_keys = indent(f"in_keys={self.in_keys}", 4 * " ")
             out_keys = indent(f"out_keys={self.out_keys}", 4 * " ")
             raise RuntimeError(
