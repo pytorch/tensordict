@@ -776,44 +776,66 @@ class TensorDictModule(TensorDictModuleBase):
         **kwargs: Any,
     ) -> TensorDictBase:
         """When the tensordict parameter is not set, kwargs are used to create an instance of TensorDict."""
-        if len(args):
-            tensordict_out = args[0]
-            args = args[1:]
-            # we will get rid of tensordict_out as a regular arg, because it
-            # blocks us when using vmap
-            # with stateful but functional modules: the functional module checks if
-            # it still contains parameters. If so it considers that only a "params" kwarg
-            # is indicative of what the params are, when we could potentially make a
-            # special rule for TensorDictModule that states that the second arg is
-            # likely to be the module params.
-            warnings.warn(
-                "tensordict_out will be deprecated soon.", category=DeprecationWarning
-            )
-        if len(args):
-            raise ValueError(
-                "Got a non-empty list of extra agruments, when none was expected."
-            )
-        tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
         try:
-            tensors = self._call_module(tensors, **kwargs)
+            if len(args):
+                tensordict_out = args[0]
+                args = args[1:]
+                # we will get rid of tensordict_out as a regular arg, because it
+                # blocks us when using vmap
+                # with stateful but functional modules: the functional module checks if
+                # it still contains parameters. If so it considers that only a "params" kwarg
+                # is indicative of what the params are, when we could potentially make a
+                # special rule for TensorDictModule that states that the second arg is
+                # likely to be the module params.
+                warnings.warn(
+                    "tensordict_out will be deprecated soon.",
+                    category=DeprecationWarning,
+                )
+            if len(args):
+                raise ValueError(
+                    "Got a non-empty list of extra agruments, when none was expected."
+                )
+            tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
+            try:
+                tensors = self._call_module(tensors, **kwargs)
+            except Exception as err:
+                if any(tensor is None for tensor in tensors) and "None" in str(err):
+                    none_set = {
+                        key
+                        for key, tensor in zip(self.in_keys, tensors)
+                        if tensor is None
+                    }
+                    raise KeyError(
+                        "Some tensors that are necessary for the module call may "
+                        "not have not been found in the input tensordict: "
+                        f"the following inputs are None: {none_set}."
+                    ) from err
+                else:
+                    raise err
+            if isinstance(tensors, (dict, TensorDictBase)):
+                tensors = tuple(tensors.get(key, None) for key in self.out_keys)
+            if not isinstance(tensors, tuple):
+                tensors = (tensors,)
+            tensordict_out = self._write_to_tensordict(
+                tensordict, tensors, tensordict_out
+            )
+            return tensordict_out
         except Exception as err:
-            if any(tensor is None for tensor in tensors) and "None" in str(err):
-                none_set = {
-                    key for key, tensor in zip(self.in_keys, tensors) if tensor is None
-                }
-                raise KeyError(
-                    "Some tensors that are necessary for the module call may "
-                    "not have not been found in the input tensordict: "
-                    f"the following inputs are None: {none_set}."
-                ) from err
-            else:
-                raise err
-        if isinstance(tensors, (dict, TensorDictBase)):
-            tensors = tuple(tensors.get(key, None) for key in self.out_keys)
-        if not isinstance(tensors, tuple):
-            tensors = (tensors,)
-        tensordict_out = self._write_to_tensordict(tensordict, tensors, tensordict_out)
-        return tensordict_out
+            module = self.module
+            if not isinstance(module, nn.Module):
+                try:
+                    import inspect
+
+                    module = inspect.getsource(module)
+                except OSError:
+                    # then we can't print the source code
+                    pass
+            module = indent(str(module), 4 * " ")
+            in_keys = indent(f"in_keys={self.in_keys}", 4 * " ")
+            out_keys = indent(f"out_keys={self.out_keys}", 4 * " ")
+            raise RuntimeError(
+                f"TensorDictModule failed with operation\n{module}\n{in_keys}\n{out_keys}."
+            ) from err
 
     @property
     def device(self) -> torch.device:
