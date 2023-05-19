@@ -1893,10 +1893,8 @@ class TensorDictBase(MutableMapping):
         # else:
         #     tdkeys = self.keys(is_nested)
         for key in keys:
-            try:
+            if key in self.keys(True):
                 del target[key]
-            except KeyError:
-                continue
         return target
 
     @abc.abstractmethod
