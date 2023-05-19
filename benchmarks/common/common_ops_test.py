@@ -178,7 +178,7 @@ def test_to_nonblocking(benchmark, td):
     benchmark.pedantic(
         td.to,
         args=("cuda:0",),
-        kwargs={"non_blocking", True},
+        kwargs={"non_blocking": True},
         iterations=100,
         rounds=1000,
     )
