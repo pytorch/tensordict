@@ -1545,9 +1545,6 @@ class TensorDictBase(MutableMapping):
                     f" numeric scalars and tensors. Got {type(value)}"
                 )
 
-        if self.device is not None:
-            value = value.to(self.device)
-
         if check_shape and _shape(value)[: self.batch_dims] != self.batch_size:
             # if TensorDict, let's try to map it to the desired shape
             if is_tensor_collection(value):
@@ -1559,6 +1556,10 @@ class TensorDictBase(MutableMapping):
                     f"={self.batch_size} and value.shape[:self.batch_dims]"
                     f"={_shape(value)[: self.batch_dims]} with value {value}"
                 )
+
+        if self.device is not None:
+            value = value.to(self.device, non_blocking=True)
+
         if (
             self._names is not None
             and is_tensor_collection(value)
