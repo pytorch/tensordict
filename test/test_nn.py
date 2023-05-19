@@ -1644,9 +1644,12 @@ def test_probabilistic_sequential_type_checks():
 def test_keyerr_msg():
     module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
     with pytest.raises(
-        KeyError, match="Some tensors that are necessary for the module call"
-    ):
+        RuntimeError, match="TensorDictModule failed with operation"
+    ) as err:
         module(TensorDict({"c": torch.randn(())}, []))
+    assert "Some tensors that are necessary for the module call" in str(
+        err.value.__cause__
+    )
 
 
 def test_input():
