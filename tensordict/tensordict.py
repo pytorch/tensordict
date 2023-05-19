@@ -1557,7 +1557,9 @@ class TensorDictBase(MutableMapping):
                     f"={_shape(value)[: self.batch_dims]} with value {value}"
                 )
 
-        if self.device is not None:
+        if self.device is not None and self.device.type == "cuda" and value.device == torch.device("cpu"):
+            value = value.pin_memory().to(self.device, non_blocking=True)
+        else:
             value = value.to(self.device, non_blocking=True)
 
         if (
