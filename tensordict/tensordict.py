@@ -2360,7 +2360,7 @@ class TensorDictBase(MutableMapping):
             ...    batch_size=[3])
             >>> mask = torch.tensor([True, False, False])
             >>> td.masked_select_(mask)
-            >>> td_mask.get("a")
+            >>> td.get("a")
             tensor([[0., 0., 0., 0.]])
 
         """
