@@ -62,7 +62,7 @@ jobs:
     name: GPU Pytest benchmark
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
-      runner: linux.g5.4xlarge.nvidia.gpu
+      runner: linux.4xlarge.nvidia.gpu
       repository: pytorch-labs/tensordict
       upload-artifact: benchmarks/output.json
       timeout: 90
