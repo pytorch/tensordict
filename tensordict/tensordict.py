@@ -2365,13 +2365,14 @@ class TensorDictBase(MutableMapping):
 
         """
         d = {}
+        mask_expand = mask
+        while mask_expand.ndimension() > self.batch_dims:
+            mndim = mask_expand.ndimension()
+            mask_expand = mask_expand.squeeze(-1)
+            if mndim == mask_expand.ndimension():   # no more squeeze
+                break
         for key, value in self.items():
-            while mask.ndimension() > self.batch_dims:
-                mask_expand = mask.squeeze(-1)
-            else:
-                mask_expand = mask
-            value_select = value[mask_expand]
-            d[key] = value_select
+            d[key] = value[mask_expand]
         dim = int(mask.sum().item())
         other_dim = self.shape[mask.ndim :]
         return TensorDict(
