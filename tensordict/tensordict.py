@@ -2369,7 +2369,7 @@ class TensorDictBase(MutableMapping):
         while mask_expand.ndimension() > self.batch_dims:
             mndim = mask_expand.ndimension()
             mask_expand = mask_expand.squeeze(-1)
-            if mndim == mask_expand.ndimension():   # no more squeeze
+            if mndim == mask_expand.ndimension():  # no more squeeze
                 break
         for key, value in self.items():
             d[key] = value[mask_expand]
