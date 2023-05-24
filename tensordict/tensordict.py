@@ -2364,7 +2364,7 @@ class TensorDictBase(MutableMapping):
             tensor([[0., 0., 0., 0.]])
 
         """
-        raise NotImplementedError
+        raise NotImplementedError(f"class {type(self)} does not implement masked_select_. Convert to a `TensorDict` instance first. If this is needed, open an issue on tensordict's repository.")
 
     def masked_select(self, mask: Tensor) -> TensorDictBase:
         """Masks all tensors of the TensorDict and return a new TensorDict instance with similar keys pointing to masked values.
