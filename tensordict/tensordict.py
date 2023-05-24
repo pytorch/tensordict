@@ -4041,21 +4041,6 @@ class TensorDict(TensorDictBase):
         return self
     
     # def masked_select(self, mask: Tensor) -> TensorDictBase:
-    #     """Masks all tensors of the TensorDict and return a new TensorDict instance with similar keys pointing to masked values.
-
-    #     Args:
-    #         mask (torch.Tensor): boolean mask to be used for the tensors.
-    #             Shape must match the TensorDict batch_size.
-
-    #     Examples:
-    #         >>> td = TensorDict(source={'a': torch.zeros(3, 4)},
-    #         ...    batch_size=[3])
-    #         >>> mask = torch.tensor([True, False, False])
-    #         >>> td_mask = td.masked_select(mask)
-    #         >>> td_mask.get("a")
-    #         tensor([[0., 0., 0., 0.]])
-
-    #     """
     #     return self.clone().masked_select_(mask)
 
     def masked_fill_(self, mask: Tensor, value: float | int | bool) -> TensorDictBase:
