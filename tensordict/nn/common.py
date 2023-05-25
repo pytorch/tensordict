@@ -12,7 +12,7 @@ from textwrap import indent
 from typing import Any, Callable, Iterable, List, Sequence, Tuple, Union
 
 import torch
-from cloudpickle import cloudpickle
+from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
 
 from tensordict.nn.functional_modules import make_functional
 
@@ -878,12 +878,12 @@ class TensorDictModule(TensorDictModuleBase):
     def __getstate__(self):
         state = self.__dict__.copy()
         if not isinstance(self.module, nn.Module):
-            state["module"] = cloudpickle.dumps(state["module"])
+            state["module"] = cloudpickle_dumps(state["module"])
         return state
 
     def __setstate__(self, state):
         if "module" in state:
-            state["module"] = cloudpickle.loads(state["module"])
+            state["module"] = cloudpickle_loads(state["module"])
         self.__dict__ = state
 
 
