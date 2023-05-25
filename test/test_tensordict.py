@@ -31,6 +31,7 @@ from _utils_internal import get_available_devices, prod, TestTensorDictsBase
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
+    _CustomOpTensorDict,
     _stack as stack_td,
     assert_allclose_td,
     make_tensordict,
@@ -2273,6 +2274,37 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td[:1, :, 0] = td[0, :, 0].to_tensordict().zero_()
         assert (td[:1, :, 0] == 0).all()
+
+    def test_casts(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdfloat = td.float()
+        assert all(value.dtype is torch.float for value in tdfloat.values(True, True))
+        tddouble = td.double()
+        assert all(value.dtype is torch.double for value in tddouble.values(True, True))
+        tdbfloat16 = td.bfloat16()
+        assert all(
+            value.dtype is torch.bfloat16 for value in tdbfloat16.values(True, True)
+        )
+        tdhalf = td.half()
+        assert all(value.dtype is torch.half for value in tdhalf.values(True, True))
+        tdint = td.int()
+        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+        tdint = td.type(torch.int)
+        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+
+    def test_empty_like(self, td_name, device):
+        if "sub_td" in td_name:
+            # we do not call skip to avoid systematic skips in internal code base
+            return
+        td = getattr(self, td_name)(device)
+        if isinstance(td, _CustomOpTensorDict):
+            # we do not call skip to avoid systematic skips in internal code base
+            return
+        td_empty = torch.empty_like(td)
+        assert type(td) is type(td_empty)
+        assert all(val.any() for val in (td != td_empty).values(True, True)), tuple(
+            (key, val.any()) for key, val in (td != td_empty).items(True, True)
+        )
 
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])

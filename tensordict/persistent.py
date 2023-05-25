@@ -799,6 +799,17 @@ class PersistentTensorDict(TensorDictBase):
         # in-place and an error will be thrown anyway if shapes don't match
         return self._set(key, value, inplace=True, idx=idx, check_shape=False)
 
+    def _set_metadata(self, orig_metadata_container: PersistentTensorDict):
+        for key, td in orig_metadata_container._nested_tensordicts.items():
+            array = self._get_array(key)
+            self._nested_tensordicts[key] = PersistentTensorDict(
+                group=array,
+                batch_size=td.batch_size,
+                device=td.device,
+            )
+            self._nested_tensordicts[key].names = td._names
+            self._nested_tensordicts[key]._set_metadata(td)
+
     def clone(self, recurse: bool = True, newfile=None) -> PersistentTensorDict:
         if recurse:
             # this should clone the h5 to a new location indicated by newfile
@@ -820,10 +831,12 @@ class PersistentTensorDict(TensorDictBase):
             # create a non-recursive copy and update the file
             # this way, we can keep the batch-size of every nested tensordict
             clone = self.clone(False)
-            clone.file = f_src
+            clone.file = f_dest
             clone.filename = newfile
             clone._pin_mem = False
             clone.names = self._names
+            clone._nested_tensordicts = {}
+            clone._set_metadata(self)
             return clone
         else:
             # we need to keep the batch-size of nested tds, which we do manually

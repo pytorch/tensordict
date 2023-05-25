@@ -2269,6 +2269,30 @@ class TestSelectOutKeys:
                 mod2 = mod.select_out_keys(out_d_key)
 
 
+def test_module_buffer():
+    module = nn.ModuleList([])
+    td = TensorDict(
+        {
+            "a": torch.zeros(3),
+            ("b", "c"): torch.ones(3),
+        },
+        [],
+    )
+    # should we monkey-patch module.register_buffer to make this possible?
+    module._buffers["td"] = td
+    assert module.td is td
+    # test some functions that call _apply
+    module.double()
+    assert module.td["b", "c"].dtype is torch.float64
+    module.float()
+    assert module.td["b", "c"].dtype is torch.float
+    module.bfloat16()
+    assert module.td["b", "c"].dtype is torch.bfloat16
+    if torch.cuda.device_count():
+        module.cuda()
+        assert module.td.device.type == "cuda"
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

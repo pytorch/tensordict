@@ -3248,6 +3248,46 @@ class TensorDictBase(MutableMapping):
 
     unlock = _renamed_inplace_method(unlock_)
 
+    def is_floating_point(self):
+        for item in self.values(True, True):
+            if not item.is_floating_point():
+                return False
+        else:
+            return True
+
+    def double(self):
+        r"""Casts all tensors to ``torch.bool``."""
+        return self.apply(lambda x: x.double())
+
+    def float(self):
+        r"""Casts all tensors to ``torch.float``."""
+        return self.apply(lambda x: x.float())
+
+    def int(self):
+        r"""Casts all tensors to ``torch.int``."""
+        return self.apply(lambda x: x.int())
+
+    def bool(self):
+        r"""Casts all tensors to ``torch.bool``."""
+        return self.apply(lambda x: x.bool())
+
+    def half(self):
+        r"""Casts all tensors to ``torch.half``."""
+        return self.apply(lambda x: x.half())
+
+    def bfloat16(self):
+        r"""Casts all tensors to ``torch.bfloat16``."""
+        return self.apply(lambda x: x.bfloat16())
+
+    def type(self, dst_type):
+        r"""Casts all tensors to :attr:`dst_type`.
+
+        Args:
+            dst_type (type or string): the desired type
+
+        """
+        return self.apply(lambda x: x.type(dst_type))
+
 
 class TensorDict(TensorDictBase):
     """A batched dictionary of tensors.
@@ -4327,6 +4367,20 @@ def _ones_like(td: TensorDictBase, **kwargs: Any) -> TensorDictBase:
     return td_clone
 
 
+@implements_for_td(torch.empty_like)
+def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
+    try:
+        tdclone = td.clone()
+    except Exception as err:
+        raise RuntimeError(
+            "The tensordict passed to torch.empty_like cannot be "
+            "cloned, preventing empty_like to be called. "
+            "Consider calling tensordict.to_tensordict() first."
+        ) from err
+
+    return tdclone.apply_(lambda x: torch.empty_like(x, *args, **kwargs))
+
+
 @implements_for_td(torch.clone)
 def _clone(td: TensorDictBase, *args: Any, **kwargs: Any) -> TensorDictBase:
     return td.clone(*args, **kwargs)
@@ -5137,6 +5191,15 @@ torch.Size([3, 2])
         return self
 
     def clone(self, recurse: bool = True) -> SubTensorDict:
+        warnings.warn(
+            "A SubTensorDict cannot be cloned. Currently, this behaviour is allowed but "
+            "it will soon raise a RuntimeError as cloning a SubTensorDict would "
+            "result in another SubTensorDict with shared storage, following the "
+            "TensorDictBase.clone convention, but this may lead to edge cases and "
+            "unexpected/unintuitive behaviours. "
+            "Call sub_tensordict.to_tensordict() instead.",
+            category=DeprecationWarning,
+        )
         if not recurse:
             return copy(self)
         return SubTensorDict(source=self._source, idx=self.idx)
@@ -6621,6 +6684,15 @@ class _CustomOpTensorDict(TensorDictBase):
         ).exclude(*keys, inplace=True)
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
+        warnings.warn(
+            "A lazy TensorDict cannot be cloned. Currently, this behaviour is allowed but "
+            "it will soon raise a RuntimeError as cloning a lazy TensorDict would "
+            "result in another lazy object with shared storage, following the "
+            "TensorDictBase.clone convention, but this may lead to edge cases and "
+            "unexpected/unintuitive behaviours. "
+            "Call sub_tensordict.to_tensordict() instead.",
+            category=DeprecationWarning,
+        )
         if not recurse:
             return copy(self)
         return TensorDict(
