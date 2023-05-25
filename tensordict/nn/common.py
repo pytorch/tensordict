@@ -270,6 +270,7 @@ class dispatch:
                 out = func(_self, tensordict, *args, **kwargs)
                 out = tuple(out[key] for key in dest)
                 return out[0] if len(out) == 1 else out
+            print("calling with tensordict", id(tensordict))
             return func(_self, tensordict, *args, **kwargs)
 
         return wrapper

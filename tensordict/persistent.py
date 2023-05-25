@@ -227,7 +227,7 @@ class PersistentTensorDict(TensorDictBase):
             return "/".join(key)
 
     def _check_batch_size(self, batch_size) -> None:
-        for key in self.keys(True, True):
+        for key in self.keys(include_nested=True, leaves_only=True):
             key = self._process_key(key)
             size = self.file[key].shape
             if torch.Size(size[: len(batch_size)]) != batch_size:
@@ -472,7 +472,7 @@ class PersistentTensorDict(TensorDictBase):
         return self.to_tensordict().masked_fill(mask, value)
 
     def masked_fill_(self, mask, value):
-        for key in self.keys(True, True):
+        for key in self.keys(include_nested=True, leaves_only=True):
             array = self._get_array(key)
             array[expand_right(mask, array.shape).cpu().numpy()] = value
         return self
@@ -490,7 +490,7 @@ class PersistentTensorDict(TensorDictBase):
     ) -> TensorDict:
         """Converts the PersistentTensorDict to a memmap equivalent."""
         mm_like = self.memmap_like(prefix)
-        for key in self.keys(True, True):
+        for key in self.keys(include_nested=True, leaves_only=True):
             mm_val = mm_like[key]
             mm_val._memmap_array[:] = self._get_array(key)
         return mm_like
@@ -824,7 +824,7 @@ class PersistentTensorDict(TensorDictBase):
                 newfile = tmpfile.name
             f_dest = h5py.File(newfile, "w")
             f_src = self.file
-            for key in self.keys(True, True):
+            for key in self.keys(include_nested=True, leaves_only=True):
                 key = self._process_key(key)
                 f_dest.create_dataset(key, data=f_src[key], **self.kwargs)
                 # f_src.copy(f_src[key],  f_dest[key], "DataSet")

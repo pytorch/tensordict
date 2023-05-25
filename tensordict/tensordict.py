@@ -3249,7 +3249,7 @@ class TensorDictBase(MutableMapping):
     unlock = _renamed_inplace_method(unlock_)
 
     def is_floating_point(self):
-        for item in self.values(True, True):
+        for item in self.values(include_nested=True, leaves_only=True):
             if not item.is_floating_point():
                 return False
         else:
