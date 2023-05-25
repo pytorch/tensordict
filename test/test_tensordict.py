@@ -1687,7 +1687,9 @@ class TestTensorDicts(TestTensorDictsBase):
         sub_td = td.get_sub_tensordict(index)
         assert sub_td.shape == td.to_tensordict()[index].shape
         assert sub_td.shape == td[index].shape
-        td0 = td[index].to_tensordict().apply(lambda x: x * 0 + 2)
+        td0 = td[index]
+        td0 = td0.to_tensordict()
+        td0 = td0.apply(lambda x: x * 0 + 2)
         assert sub_td.shape == td0.shape
         sub_td.update(td0)
         assert (sub_td == 2).all()

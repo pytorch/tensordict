@@ -346,7 +346,7 @@ class PersistentTensorDict(TensorDictBase):
             #     print(idx.shape, array.shape, idx.sum())
             #     idx = expand_right(idx, array.shape)
             return idx.cpu().detach().numpy()
-        if isinstance(idx, list):
+        if isinstance(idx, (range, list)):
             return np.asarray(idx)
         return idx
 
