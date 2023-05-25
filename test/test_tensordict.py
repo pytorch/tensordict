@@ -2304,7 +2304,7 @@ class TestTensorDicts(TestTensorDictsBase):
             return
         td_empty = torch.empty_like(td)
         assert type(td) is type(td_empty)
-        assert all(val.any() for val in (td != td_empty).values(True, True)), tuple(
+        assert all(val.any() for val in (td is not td_empty).values(True, True)), tuple(
             (key, val.any()) for key, val in (td != td_empty).items(True, True)
         )
 
