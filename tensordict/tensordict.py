@@ -2364,7 +2364,9 @@ class TensorDictBase(MutableMapping):
             tensor([[0., 0., 0., 0.]])
 
         """
-        raise NotImplementedError(f"class {type(self)} does not implement masked_select_. Convert to a `TensorDict` instance first. If this is needed, open an issue on tensordict's repository.")
+        raise NotImplementedError(
+            f"class {type(self)} does not implement masked_select_. Convert to a `TensorDict` instance first. If this is needed, open an issue on tensordict's repository."
+        )
 
     def masked_select(self, mask: Tensor) -> TensorDictBase:
         """Masks all tensors of the TensorDict and return a new TensorDict instance with similar keys pointing to masked values.
@@ -4025,10 +4027,12 @@ class TensorDict(TensorDictBase):
             )
 
     def masked_select_(self, mask: Tensor) -> TensorDictBase:
-        d={}
+        d = {}
         for key, val in self.items():
-            if hasattr(val, "masked_select_"):      # modify inplace supported, or nested TensorDict
-                val_sel  = val.masked_select_(mask)     # val_sel should be val
+            if hasattr(
+                val, "masked_select_"
+            ):  # modify inplace supported, or nested TensorDict
+                val_sel = val.masked_select_(mask)  # val_sel should be val
             else:
                 val_sel = val[mask]
             d[key] = val_sel
@@ -4039,7 +4043,7 @@ class TensorDict(TensorDictBase):
             self._set(key, val)
         self.batch_size = new_batch_size
         return self
-    
+
     # def masked_select(self, mask: Tensor) -> TensorDictBase:
     #     return self.clone().masked_select_(mask)
 
