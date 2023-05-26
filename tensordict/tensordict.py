@@ -2296,8 +2296,10 @@ class TensorDictBase(MutableMapping):
         """Casts a tensordict to CPU."""
         return self.to("cpu")
 
-    def cuda(self, device: int = 0) -> TensorDictBase:
+    def cuda(self, device: int = None) -> TensorDictBase:
         """Casts a tensordict to a cuda device (if not already on it)."""
+        if device is None:
+            return self.to(torch.device("cuda"))
         return self.to(f"cuda:{device}")
 
     @abc.abstractmethod
