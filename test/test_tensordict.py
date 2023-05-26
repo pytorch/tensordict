@@ -1072,7 +1072,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_device = td.cuda()
         td_back = td_device.cpu()
-        assert td_device.device == torch.device("cuda:0")
+        assert td_device.device == torch.device("cuda")
         assert td_back.device == torch.device("cpu")
 
     def test_unbind(self, td_name, device):
