@@ -2305,10 +2305,12 @@ class TestTensorDicts(TestTensorDictsBase):
         td.apply_(lambda x: x + 1.0)
         td_empty = torch.empty_like(td)
         assert type(td) is type(td_empty)
-        assert all(val.any() for val in (td != td_empty).values(True, True)), tuple(
-            (key, val.any()) for key, val in (td != td_empty).items(True, True)
-        )
-
+        if not all(val.any() for val in (td != td_empty).values(True, True)):
+            for key, val in (td != td_empty).items(True, True):
+                if not val.all():
+                    print('orig', td.get(key))
+                    print('result', td_empty.get(key))
+            raise AssertionError
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])

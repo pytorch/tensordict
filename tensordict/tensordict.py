@@ -2226,22 +2226,23 @@ class TensorDictBase(MutableMapping):
         return tuple(self[(*[slice(None) for _ in range(dim)], idx)] for idx in indices)
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
-        """Clones a TensorDictBase subclass instance onto a new TensorDict.
+        """Clones a TensorDictBase subclass instance onto a new TensorDictBase subclass of the same type.
+
+        To create a TensorDict instance from any other TensorDictBase subtype, call the :meth:`~.to_tensordict` method
+        instead.
 
         Args:
             recurse (bool, optional): if True, each tensor contained in the
                 TensorDict will be copied too. Default is `True`.
 
+        .. note::
+          For some TensorDictBase subtypes, such as :class:`SubTensorDict`, cloning
+          recursively makes little sense (in this specific case it would involve
+          copying the parent tensordict too). We strongly encourage to use
+          :meth:`~.to_tensordict` in these cases instead.
+
         """
-        return TensorDict(
-            source={key: _clone_value(value, recurse) for key, value in self.items()},
-            batch_size=self.batch_size,
-            device=self.device,
-            names=copy(self._names),
-            _run_checks=False,
-            _is_shared=self.is_shared() if not recurse else False,
-            _is_memmap=self.is_memmap() if not recurse else False,
-        )
+        raise NotImplementedError
 
     @classmethod
     def __torch_function__(
@@ -4061,6 +4062,17 @@ class TensorDict(TensorDictBase):
 
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
+
+    def clone(self, recurse: bool = True) -> TensorDictBase:
+        return TensorDict(
+            source={key: _clone_value(value, recurse) for key, value in self.items()},
+            batch_size=self.batch_size,
+            device=self.device,
+            names=copy(self._names),
+            _run_checks=False,
+            _is_shared=self.is_shared() if not recurse else False,
+            _is_memmap=self.is_memmap() if not recurse else False,
+        )
 
     def contiguous(self) -> TensorDictBase:
         if not self.is_contiguous():
