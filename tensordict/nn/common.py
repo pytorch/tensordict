@@ -12,6 +12,8 @@ from textwrap import indent
 from typing import Any, Callable, Iterable, List, Sequence, Tuple, Union
 
 import torch
+from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
+
 from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
@@ -872,6 +874,17 @@ class TensorDictModule(TensorDictModuleBase):
                 return getattr(super().__getattr__("module"), name)
             except Exception as err2:
                 raise err2 from err1
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if not isinstance(self.module, nn.Module):
+            state["module"] = cloudpickle_dumps(state["module"])
+        return state
+
+    def __setstate__(self, state):
+        if "module" in state:
+            state["module"] = cloudpickle_loads(state["module"])
+        self.__dict__ = state
 
 
 class TensorDictModuleWrapper(TensorDictModuleBase):

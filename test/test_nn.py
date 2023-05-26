@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import pickle
 import warnings
 
 import pytest
@@ -2267,6 +2268,19 @@ class TestSelectOutKeys:
         else:
             with pytest.raises(ValueError, match="Can't select non "):
                 mod2 = mod.select_out_keys(out_d_key)
+
+
+@pytest.mark.parametrize("has_lambda", [False, True])
+def test_serialization(has_lambda):
+    if has_lambda:
+        mod = lambda x: x + 1
+    else:
+        mod = nn.Linear(3, 3)
+    mod = TensorDictModule(mod, in_keys=["x"], out_keys=["y"])
+    serialized = pickle.dumps(mod)
+    mod_unpickle = pickle.loads(serialized)
+    x = torch.randn(3)
+    assert (mod(x=x) == mod_unpickle(x=x)).all()
 
 
 def test_module_buffer():
