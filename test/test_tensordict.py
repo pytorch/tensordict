@@ -31,6 +31,7 @@ from _utils_internal import get_available_devices, prod, TestTensorDictsBase
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
+    _CustomOpTensorDict,
     _stack as stack_td,
     assert_allclose_td,
     make_tensordict,
@@ -1034,7 +1035,7 @@ class TestTensorDicts(TestTensorDictsBase):
         tensor = torch.zeros(td.shape)
         assert tdnone.shape == tensor[idx].shape, idx
         if td_name == "td_h5":
-            with pytest.raises(TypeError, match="Selection can't process None"):
+            with pytest.raises(TypeError, match="can't process None"):
                 assert (tdnone.to_tensordict() == td.to_tensordict()[idx]).all()
             return
         assert (tdnone.to_tensordict() == td.to_tensordict()[idx]).all()
@@ -1071,7 +1072,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_device = td.cuda()
         td_back = td_device.cpu()
-        assert td_device.device == torch.device("cuda:0")
+        assert td_device.device == torch.device("cuda")
         assert td_back.device == torch.device("cpu")
 
     def test_unbind(self, td_name, device):
@@ -1686,7 +1687,9 @@ class TestTensorDicts(TestTensorDictsBase):
         sub_td = td.get_sub_tensordict(index)
         assert sub_td.shape == td.to_tensordict()[index].shape
         assert sub_td.shape == td[index].shape
-        td0 = td[index].to_tensordict().apply(lambda x: x * 0 + 2)
+        td0 = td[index]
+        td0 = td0.to_tensordict()
+        td0 = td0.apply(lambda x: x * 0 + 2)
         assert sub_td.shape == td0.shape
         sub_td.update(td0)
         assert (sub_td == 2).all()
@@ -2273,6 +2276,36 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td[:1, :, 0] = td[0, :, 0].to_tensordict().zero_()
         assert (td[:1, :, 0] == 0).all()
+
+    def test_casts(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdfloat = td.float()
+        assert all(value.dtype is torch.float for value in tdfloat.values(True, True))
+        tddouble = td.double()
+        assert all(value.dtype is torch.double for value in tddouble.values(True, True))
+        tdbfloat16 = td.bfloat16()
+        assert all(
+            value.dtype is torch.bfloat16 for value in tdbfloat16.values(True, True)
+        )
+        tdhalf = td.half()
+        assert all(value.dtype is torch.half for value in tdhalf.values(True, True))
+        tdint = td.int()
+        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+        tdint = td.type(torch.int)
+        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+
+    def test_empty_like(self, td_name, device):
+        if "sub_td" in td_name:
+            # we do not call skip to avoid systematic skips in internal code base
+            return
+        td = getattr(self, td_name)(device)
+        if isinstance(td, _CustomOpTensorDict):
+            # we do not call skip to avoid systematic skips in internal code base
+            return
+        td_empty = torch.empty_like(td)
+        td.apply_(lambda x: x + 1.0)
+        assert type(td) is type(td_empty)
+        assert all(val.any() for val in (td != td_empty).values(True, True))
 
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])

@@ -227,7 +227,7 @@ class PersistentTensorDict(TensorDictBase):
             return "/".join(key)
 
     def _check_batch_size(self, batch_size) -> None:
-        for key in self.keys(True, True):
+        for key in self.keys(include_nested=True, leaves_only=True):
             key = self._process_key(key)
             size = self.file[key].shape
             if torch.Size(size[: len(batch_size)]) != batch_size:
@@ -346,7 +346,7 @@ class PersistentTensorDict(TensorDictBase):
             #     print(idx.shape, array.shape, idx.sum())
             #     idx = expand_right(idx, array.shape)
             return idx.cpu().detach().numpy()
-        if isinstance(idx, list):
+        if isinstance(idx, (range, list)):
             return np.asarray(idx)
         return idx
 
@@ -472,7 +472,7 @@ class PersistentTensorDict(TensorDictBase):
         return self.to_tensordict().masked_fill(mask, value)
 
     def masked_fill_(self, mask, value):
-        for key in self.keys(True, True):
+        for key in self.keys(include_nested=True, leaves_only=True):
             array = self._get_array(key)
             array[expand_right(mask, array.shape).cpu().numpy()] = value
         return self
@@ -490,7 +490,7 @@ class PersistentTensorDict(TensorDictBase):
     ) -> TensorDict:
         """Converts the PersistentTensorDict to a memmap equivalent."""
         mm_like = self.memmap_like(prefix)
-        for key in self.keys(True, True):
+        for key in self.keys(include_nested=True, leaves_only=True):
             mm_val = mm_like[key]
             mm_val._memmap_array[:] = self._get_array(key)
         return mm_like
@@ -799,6 +799,17 @@ class PersistentTensorDict(TensorDictBase):
         # in-place and an error will be thrown anyway if shapes don't match
         return self._set(key, value, inplace=True, idx=idx, check_shape=False)
 
+    def _set_metadata(self, orig_metadata_container: PersistentTensorDict):
+        for key, td in orig_metadata_container._nested_tensordicts.items():
+            array = self._get_array(key)
+            self._nested_tensordicts[key] = PersistentTensorDict(
+                group=array,
+                batch_size=td.batch_size,
+                device=td.device,
+            )
+            self._nested_tensordicts[key].names = td._names
+            self._nested_tensordicts[key]._set_metadata(td)
+
     def clone(self, recurse: bool = True, newfile=None) -> PersistentTensorDict:
         if recurse:
             # this should clone the h5 to a new location indicated by newfile
@@ -813,17 +824,19 @@ class PersistentTensorDict(TensorDictBase):
                 newfile = tmpfile.name
             f_dest = h5py.File(newfile, "w")
             f_src = self.file
-            for key in self.keys(True, True):
+            for key in self.keys(include_nested=True, leaves_only=True):
                 key = self._process_key(key)
                 f_dest.create_dataset(key, data=f_src[key], **self.kwargs)
                 # f_src.copy(f_src[key],  f_dest[key], "DataSet")
             # create a non-recursive copy and update the file
             # this way, we can keep the batch-size of every nested tensordict
             clone = self.clone(False)
-            clone.file = f_src
+            clone.file = f_dest
             clone.filename = newfile
             clone._pin_mem = False
             clone.names = self._names
+            clone._nested_tensordicts = {}
+            clone._set_metadata(self)
             return clone
         else:
             # we need to keep the batch-size of nested tds, which we do manually

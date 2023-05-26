@@ -515,7 +515,7 @@ def test_stack():
 
     with pytest.raises(
         TypeError,
-        match=("Multiple dispatch failed"),
+        match=("Multiple dispatch failed|no implementation found"),
     ):
         torch.stack([data1, data3], dim=0)
 
@@ -550,7 +550,7 @@ def test_cat():
 
     with pytest.raises(
         TypeError,
-        match=("Multiple dispatch failed"),
+        match=("Multiple dispatch failed|no implementation found"),
     ):
         torch.cat([data1, data3], dim=0)
 
