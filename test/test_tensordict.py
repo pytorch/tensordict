@@ -2532,6 +2532,27 @@ class TestTensorDictRepr:
     is_shared={is_shared})"""
         assert repr(stacked_td) == expected
 
+    def test_repr_stacked_het(self, device, dtype):
+        stacked_td = torch.stack(
+            [
+                TensorDict({"a": torch.rand(3), "b": torch.randn(2, 3, dtype=dtype)}, [], device=device),
+                TensorDict({"a": torch.rand(2), "b": torch.randn((), dtype=dtype)}, [], device=device)
+            ]
+        )
+        tensor_device = device if device else torch.device("cpu")
+        if device is not None and device.type == "cuda":
+            is_shared = True
+        else:
+            is_shared = False
+        expected = f"""LazyStackedTensorDict(
+    fields={{
+        a: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.float32, is_shared=torch.float32),
+        b: Tensor(shape=torch.Size([-1]), device=cpu, dtype=torch.float32, is_shared=torch.float32)}},
+    batch_size=torch.Size([2]),
+    device={str(device)},
+    is_shared={is_shared})"""
+        assert repr(stacked_td) == expected
+
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
     def test_repr_indexed_tensordict(self, device, dtype, index):
         tensordict = self.td(device, dtype)[index]

@@ -1229,6 +1229,7 @@ class TensorDictBase(MutableMapping):
     def get_item_shape(self, key: NestedKey):
         """Returns the shape of the entry."""
         return self.get(key).shape
+
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
@@ -5469,10 +5470,7 @@ class LazyStackedTensorDict(TensorDictBase):
             item = self.get(key)
             return item.shape
         except RuntimeError as err:
-            if re.match(
-                r"Found more than one unique shape in the tensors",
-                str(err)
-            ):
+            if re.match(r"Found more than one unique shape in the tensors", str(err)):
                 shape = None
                 for td in self.tensordicts:
                     if shape is None:
@@ -5482,7 +5480,9 @@ class LazyStackedTensorDict(TensorDictBase):
                         if len(shape) != len(_shape):
                             shape = [-1]
                             return torch.Size(shape)
-                        shape = [s1 if s1 == s2 else -1 for (s1, s2) in zip(shape, _shape)]
+                        shape = [
+                            s1 if s1 == s2 else -1 for (s1, s2) in zip(shape, _shape)
+                        ]
                 shape.insert(self.stack_dim, len(self.tensordicts))
                 return torch.Size(shape)
             else:
@@ -7120,6 +7120,7 @@ def _get_repr(tensor: Tensor) -> str:
     )
     return f"{tensor.__class__.__name__}({s})"
 
+
 def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
     s = ", ".join(
         [
@@ -7150,15 +7151,19 @@ def _td_fields(td: TensorDictBase) -> str:
                 # so we can get the shape and escape the error
                 shape = td.get_item_shape(key)
                 tensor = td.tensordicts[0].get(key)
-                strs.append(
-                    _get_repr_custom(tensor.__class__, shape=shape, device=tensor.device, dtype=tensor.dtype, is_shared=tensor.is_shared())
+                substr = _get_repr_custom(
+                    tensor.__class__,
+                    shape=shape,
+                    device=tensor.device,
+                    dtype=tensor.dtype,
+                    is_shared=tensor.is_shared(),
                 )
+                strs.append(f"{key}: {substr}")
             else:
                 raise err
 
     return indent(
-        "\n"
-        + ",\n".join(sorted(strs)),
+        "\n" + ",\n".join(sorted(strs)),
         4 * " ",
     )
 
