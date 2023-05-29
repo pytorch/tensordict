@@ -5805,6 +5805,41 @@ class LazyStackedTensorDict(TensorDictBase):
             return LazyStackedTensorDict
         return data_type
 
+    def apply_(self, fn: Callable, *others):
+        if len(others):
+            raise NotImplementedError(
+                "LazyStackedTensorDict.apply_(*other) is not implemented yet."
+            )
+        for td in self.tensordicts:
+            td.apply_(fn)
+        return self
+
+    def apply(
+        self,
+        fn: Callable,
+        *others: TensorDictBase,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = None,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        **constructor_kwargs,
+    ) -> TensorDictBase:
+        if inplace:
+            if any(arg for arg in (batch_size, device, names, constructor_kwargs)):
+                raise ValueError(
+                    "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
+                )
+            return self.apply_(fn, *others)
+        else:
+            return super().apply(
+                fn,
+                *others,
+                batch_size=batch_size,
+                device=device,
+                names=names,
+                **constructor_kwargs,
+            )
+
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = False
     ) -> LazyStackedTensorDict:
