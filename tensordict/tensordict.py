@@ -7127,7 +7127,7 @@ def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
             f"shape={shape}",
             f"device={device}",
             f"dtype={dtype}",
-            f"is_shared={dtype}",
+            f"is_shared={is_shared}",
         ]
     )
     return f"{cls.__name__}({s})"

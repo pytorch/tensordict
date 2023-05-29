@@ -2535,19 +2535,37 @@ class TestTensorDictRepr:
     def test_repr_stacked_het(self, device, dtype):
         stacked_td = torch.stack(
             [
-                TensorDict({"a": torch.rand(3), "b": torch.randn(2, 3, dtype=dtype)}, [], device=device),
-                TensorDict({"a": torch.rand(2), "b": torch.randn((), dtype=dtype)}, [], device=device)
+                TensorDict(
+                    {
+                        "a": torch.zeros(3, dtype=dtype),
+                        "b": torch.zeros(2, 3, dtype=dtype),
+                    },
+                    [],
+                    device=device,
+                ),
+                TensorDict(
+                    {
+                        "a": torch.zeros(2, dtype=dtype),
+                        "b": torch.zeros((), dtype=dtype),
+                    },
+                    [],
+                    device=device,
+                ),
             ]
         )
-        tensor_device = device if device else torch.device("cpu")
         if device is not None and device.type == "cuda":
             is_shared = True
         else:
             is_shared = False
+        tensor_device = device if device else torch.device("cpu")
+        if tensor_device.type == "cuda":
+            is_shared_tensor = True
+        else:
+            is_shared_tensor = is_shared
         expected = f"""LazyStackedTensorDict(
     fields={{
-        a: Tensor(shape=torch.Size([2, -1]), device=cpu, dtype=torch.float32, is_shared=torch.float32),
-        b: Tensor(shape=torch.Size([-1]), device=cpu, dtype=torch.float32, is_shared=torch.float32)}},
+        a: Tensor(shape=torch.Size([2, -1]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
+        b: Tensor(shape=torch.Size([-1]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
     batch_size=torch.Size([2]),
     device={str(device)},
     is_shared={is_shared})"""
