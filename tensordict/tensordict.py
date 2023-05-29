@@ -9,6 +9,7 @@ import abc
 import collections
 import functools
 import numbers
+import re
 import textwrap
 import warnings
 from collections import defaultdict
@@ -1224,6 +1225,10 @@ class TensorDictBase(MutableMapping):
 
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
+
+    def get_item_shape(self, key: NestedKey):
+        """Returns the shape of the entry."""
+        return self.get(key).shape
 
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
@@ -5453,6 +5458,36 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             td.names = names
 
+    def get_item_shape(self, key):
+        """Gets the shape of an item in the lazy stack.
+
+        Heterogeneous dimensions are returned as -1.
+
+        This implementation is inefficient as it will attempt to stack the items
+        to compute their shape, and should only be used for printing.
+        """
+        try:
+            item = self.get(key)
+            return item.shape
+        except RuntimeError as err:
+            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+                shape = None
+                for td in self.tensordicts:
+                    if shape is None:
+                        shape = list(td.get_item_shape(key))
+                    else:
+                        _shape = td.get_item_shape(key)
+                        if len(shape) != len(_shape):
+                            shape = [-1]
+                            return torch.Size(shape)
+                        shape = [
+                            s1 if s1 == s2 else -1 for (s1, s2) in zip(shape, _shape)
+                        ]
+                shape.insert(self.stack_dim, len(self.tensordicts))
+                return torch.Size(shape)
+            else:
+                raise err
+
     def is_shared(self) -> bool:
         are_shared = [td.is_shared() for td in self.tensordicts]
         are_shared = [value for value in are_shared if value is not None]
@@ -7086,6 +7121,18 @@ def _get_repr(tensor: Tensor) -> str:
     return f"{tensor.__class__.__name__}({s})"
 
 
+def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
+    s = ", ".join(
+        [
+            f"shape={shape}",
+            f"device={device}",
+            f"dtype={dtype}",
+            f"is_shared={is_shared}",
+        ]
+    )
+    return f"{cls.__name__}({s})"
+
+
 def _make_repr(key: str, item: CompatibleType, tensordict: TensorDictBase) -> str:
     if is_tensor_collection(type(item)):
         return f"{key}: {repr(tensordict.get(key))}"
@@ -7093,9 +7140,30 @@ def _make_repr(key: str, item: CompatibleType, tensordict: TensorDictBase) -> st
 
 
 def _td_fields(td: TensorDictBase) -> str:
+    strs = []
+    for key in td.keys():
+        try:
+            item = td.get(key)
+            strs.append(_make_repr(key, item, td))
+        except RuntimeError as err:
+            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+                # we know td is lazy stacked and the key is a leaf
+                # so we can get the shape and escape the error
+                shape = td.get_item_shape(key)
+                tensor = td.tensordicts[0].get(key)
+                substr = _get_repr_custom(
+                    tensor.__class__,
+                    shape=shape,
+                    device=tensor.device,
+                    dtype=tensor.dtype,
+                    is_shared=tensor.is_shared(),
+                )
+                strs.append(f"{key}: {substr}")
+            else:
+                raise err
+
     return indent(
-        "\n"
-        + ",\n".join(sorted([_make_repr(key, item, td) for key, item in td.items()])),
+        "\n" + ",\n".join(sorted(strs)),
         4 * " ",
     )
 
