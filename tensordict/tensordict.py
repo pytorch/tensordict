@@ -5210,8 +5210,11 @@ torch.Size([3, 2])
         return self
 
     def clone(self, recurse: bool = True) -> SubTensorDict:
+        if not recurse:
+            return SubTensorDict(source=self._source.clone(recurse=False), idx=self.idx)
         warnings.warn(
-            "A SubTensorDict cannot be cloned. Currently, this behaviour is allowed but "
+            "A SubTensorDict cannot be cloned unless recurse=False. "
+            "Currently, this behaviour is allowed but "
             "it will soon raise a RuntimeError as cloning a SubTensorDict would "
             "result in another SubTensorDict with shared storage, following the "
             "TensorDictBase.clone convention, but this may lead to edge cases and "
@@ -5219,9 +5222,7 @@ torch.Size([3, 2])
             "Call sub_tensordict.to_tensordict() instead.",
             category=DeprecationWarning,
         )
-        if not recurse:
-            return copy(self)
-        return SubTensorDict(source=self._source, idx=self.idx)
+        return SubTensorDict(source=self._source.clone(), idx=self.idx)
 
     def is_contiguous(self) -> bool:
         return all(value.is_contiguous() for value in self.values())
@@ -6733,17 +6734,18 @@ class _CustomOpTensorDict(TensorDictBase):
         ).exclude(*keys, inplace=True)
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
+        if not recurse:
+            return copy(self)
         warnings.warn(
-            "A lazy TensorDict cannot be cloned. Currently, this behaviour is allowed but "
+            f"A lazy TensorDict such as {type(self)} cannot be cloned unless recurse=False. "
+            "Currently, this behaviour is allowed but "
             "it will soon raise a RuntimeError as cloning a lazy TensorDict would "
             "result in another lazy object with shared storage, following the "
             "TensorDictBase.clone convention, but this may lead to edge cases and "
             "unexpected/unintuitive behaviours. "
-            "Call sub_tensordict.to_tensordict() instead.",
+            "Call lazy_tensordict.to_tensordict() instead.",
             category=DeprecationWarning,
         )
-        if not recurse:
-            return copy(self)
         return TensorDict(
             source=self.to_dict(),
             batch_size=self.batch_size,
