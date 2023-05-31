@@ -6775,7 +6775,14 @@ class _CustomOpTensorDict(TensorDictBase):
                 will be returned.
         """
         if not recurse:
-            return copy(self)
+            return type(self)(
+                source=self._source.clone(False),
+                custom_op=self.custom_op,
+                inv_op=self.inv_op,
+                custom_op_kwargs=self.custom_op_kwargs,
+                inv_op_kwargs=self.inv_op_kwargs,
+                batch_size=self.batch_size,
+            )
         return self.to_tensordict()
 
     def is_contiguous(self) -> bool:
