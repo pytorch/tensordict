@@ -4044,9 +4044,6 @@ class TensorDict(TensorDictBase):
         self.batch_size = new_batch_size
         return self
 
-    # def masked_select(self, mask: Tensor) -> TensorDictBase:
-    #     return self.clone().masked_select_(mask)
-
     def masked_fill_(self, mask: Tensor, value: float | int | bool) -> TensorDictBase:
         for item in self.values():
             mask_expand = expand_as_right(mask, item)
