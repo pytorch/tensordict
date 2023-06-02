@@ -840,6 +840,7 @@ def unravel_keys(key):
         return key
     if isinstance(key, tuple):
         key = tuple(unravel_keys(subkey) for subkey in key)
+        return key
     else:
         raise ValueError(f'Found a key of type {type(key)}'
                          f' when only tuples or strings are accepted.')

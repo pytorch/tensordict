@@ -51,7 +51,7 @@ from tensordict.utils import (
     IndexType,
     int_generator,
     NestedKey,
-    prod,
+    prod, unravel_keys,
 )
 from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
@@ -1525,6 +1525,7 @@ class TensorDictBase(MutableMapping):
         )
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
+        key = unravel_keys(key)
         _nested_key_check(key)
 
         if isinstance(key, tuple) and len(key) == 1:
