@@ -1249,18 +1249,20 @@ class TensorDictBase(MutableMapping):
                 ) from err
         return out
 
-    def apply_(self, fn: Callable) -> TensorDictBase:
+    def apply_(self, fn: Callable, *others) -> TensorDictBase:
         """Applies a callable to all values stored in the tensordict and re-writes them in-place.
 
         Args:
             fn (Callable): function to be applied to the tensors in the
                 tensordict.
+            *others (sequence of TensorDictBase, optional): the other
+                tensordicts to be used.
 
         Returns:
             self or a copy of self with the function applied
 
         """
-        return self.apply(fn, inplace=True)
+        return self.apply(fn, *others, inplace=True)
 
     def apply(
         self,
