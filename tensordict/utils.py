@@ -449,11 +449,6 @@ def _seq_of_nested_key_check(seq: Sequence[NestedKey]) -> None:
         raise ValueError(f"seq should be a Sequence[NestedKey]. Got {seq}")
 
 
-def _nested_key_check(key: NestedKey) -> None:
-    if not is_nested_key(key):
-        raise ValueError(f"key should be a Sequence[NestedKey]. Got {key}")
-
-
 def _normalize_key(key: NestedKey) -> NestedKey:
     # normalises tuples of length one to their string contents
     return key if not isinstance(key, tuple) or len(key) > 1 else key[0]
@@ -834,3 +829,40 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     if isinstance(index[0], list):
         return _is_lis_of_list_of_bools(index[0], False)
     return False
+
+
+def unravel_keys(key):
+    """Unravels keys when one can be sure that they are keys."""
+    if isinstance(key, tuple):
+        newkey = []
+        for subkey in key:
+            if isinstance(subkey, str):
+                newkey.append(subkey)
+            else:
+                _key = unravel_keys(subkey)
+                newkey += _key
+        key = tuple(newkey)
+    elif not isinstance(key, str):
+        raise ValueError(f"key should be a Sequence[NestedKey]. Got {key}")
+    return key
+
+
+def _maybe_unravel_keys_silent(index):
+    """Attemps to unravel keys.
+
+    If not possible (not keys) return the original index.
+    """
+    if isinstance(index, tuple):
+        newkey = []
+        for key in index:
+            if isinstance(key, str):
+                newkey.append(key)
+            else:
+                _key = _maybe_unravel_keys_silent(key)
+                if _key is key:
+                    return index
+                newkey += _key
+        newkey = tuple(newkey)
+    else:
+        return index
+    return newkey

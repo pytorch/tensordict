@@ -40,7 +40,7 @@ from tensordict.utils import (
     _get_item,
     _getitem_batch_size,
     _is_shared,
-    _nested_key_check,
+    _maybe_unravel_keys_silent,
     _set_item,
     _shape,
     _sub_index,
@@ -52,6 +52,7 @@ from tensordict.utils import (
     int_generator,
     NestedKey,
     prod,
+    unravel_keys,
 )
 from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
@@ -1233,7 +1234,7 @@ class TensorDictBase(MutableMapping):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        _nested_key_check(key)
+        key = unravel_keys(key)
         try:
             # using try/except for get/del is suboptimal, but
             # this is faster that checkink if key in self keys
@@ -1525,7 +1526,7 @@ class TensorDictBase(MutableMapping):
         )
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
-        _nested_key_check(key)
+        key = unravel_keys(key)
 
         if isinstance(key, tuple) and len(key) == 1:
             key = key[0]
@@ -3023,6 +3024,8 @@ class TensorDictBase(MutableMapping):
         """
         if isinstance(idx, tuple) and len(idx) == 1:
             idx = idx[0]
+        if isinstance(idx, tuple):
+            idx = _maybe_unravel_keys_silent(idx)
         if isinstance(idx, str) or (
             isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
         ):
@@ -3089,6 +3092,9 @@ class TensorDictBase(MutableMapping):
         elif isinstance(index, (list, range)):
             index = torch.tensor(index, device=self.device)
         elif isinstance(index, tuple):
+            if isinstance(index, tuple):
+                index = _maybe_unravel_keys_silent(index)
+
             if any(isinstance(sub_index, (list, range)) for sub_index in index):
                 index = tuple(
                     torch.tensor(sub_index, device=self.device)
@@ -3863,7 +3869,7 @@ class TensorDict(TensorDictBase):
     def get(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        _nested_key_check(key)
+        key = unravel_keys(key)
 
         try:
             if isinstance(key, tuple):
@@ -5905,6 +5911,8 @@ class LazyStackedTensorDict(TensorDictBase):
     def __getitem__(self, index: IndexType) -> TensorDictBase:
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
+        if isinstance(index, tuple):
+            index = _maybe_unravel_keys_silent(index)
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if index is None:
