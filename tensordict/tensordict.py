@@ -51,7 +51,7 @@ from tensordict.utils import (
     IndexType,
     int_generator,
     NestedKey,
-    prod, unravel_keys,
+    prod, unravel_keys, _unravel_keys_silent,
 )
 from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
@@ -1233,7 +1233,7 @@ class TensorDictBase(MutableMapping):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        _nested_key_check(key)
+        key = unravel_keys(key)
         try:
             # using try/except for get/del is suboptimal, but
             # this is faster that checkink if key in self keys
@@ -1526,7 +1526,6 @@ class TensorDictBase(MutableMapping):
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
         key = unravel_keys(key)
-        _nested_key_check(key)
 
         if isinstance(key, tuple) and len(key) == 1:
             key = key[0]
@@ -3098,18 +3097,19 @@ class TensorDictBase(MutableMapping):
                     for sub_index in index
                 )
 
-            if sum(isinstance(_index, str) for _index in index) not in [len(index), 0]:
+            # either they are all strings or none is
+            unravelled_index = _unravel_keys_silent(index)
+            if unravelled_index is None:
                 raise IndexError(_STR_MIXED_INDEX_ERROR)
-
-            if isinstance(index[0], str):
+            else:
                 # TODO: would be nicer to have set handle the nested set, but the logic to
                 # preserve the error handling below is complex and requires some thought
                 try:
-                    if len(index) == 1:
+                    if len(unravelled_index) == 1:
                         return self.set(
-                            index[0], value, inplace=isinstance(self, SubTensorDict)
+                            unravelled_index[0], value, inplace=isinstance(self, SubTensorDict)
                         )
-                    self.set(index, value, inplace=isinstance(self, SubTensorDict))
+                    self.set(unravelled_index, value, inplace=isinstance(self, SubTensorDict))
                 except AttributeError as err:
                     if "for populating tensordict with new key-value pair" in str(err):
                         raise RuntimeError(
@@ -3864,7 +3864,7 @@ class TensorDict(TensorDictBase):
     def get(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        _nested_key_check(key)
+        key = unravel_keys(key)
 
         try:
             if isinstance(key, tuple):

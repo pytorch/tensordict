@@ -836,11 +836,20 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     return False
 
 def unravel_keys(key):
-    if isinstance(key, str):
-        return key
     if isinstance(key, tuple):
-        key = tuple(unravel_keys(subkey) for subkey in key)
-        return key
+        key = tuple(item for subkey in key for item in unravel_keys(subkey))
+    elif isinstance(key, str):
+        key = (key,)
+    _nested_key_check(key)
+    return key
+
+def _unravel_keys_silent(key):
+    if isinstance(key, tuple):
+        newkey = tuple(item for subkey in key for item in unravel_keys(subkey))
+    elif isinstance(key, str):
+        newkey = (key,)
     else:
-        raise ValueError(f'Found a key of type {type(key)}'
-                         f' when only tuples or strings are accepted.')
+        newkey = key
+    if not is_nested_key(newkey):
+        return None
+    return newkey
