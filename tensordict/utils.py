@@ -863,8 +863,6 @@ def _maybe_unravel_keys_silent(index):
                     return index
                 newkey += _key
         newkey = tuple(newkey)
-    elif isinstance(index, str):
-        return index
     else:
         return index
     return newkey
