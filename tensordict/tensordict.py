@@ -5845,12 +5845,9 @@ class LazyStackedTensorDict(TensorDictBase):
         return data_type
 
     def apply_(self, fn: Callable, *others):
-        if len(others):
-            raise NotImplementedError(
-                "LazyStackedTensorDict.apply_(*other) is not implemented yet."
-            )
-        for td in self.tensordicts:
-            td.apply_(fn)
+        for i, td in enumerate(self.tensordicts):
+            idx = (slice(None),) * self.stack_dim + (i,)
+            td.apply_(fn, *[other[idx] for other in others])
         return self
 
     def apply(
