@@ -449,11 +449,6 @@ def _seq_of_nested_key_check(seq: Sequence[NestedKey]) -> None:
         raise ValueError(f"seq should be a Sequence[NestedKey]. Got {seq}")
 
 
-def _nested_key_check(key: NestedKey) -> None:
-    if not is_nested_key(key):
-        raise ValueError(f"key should be a Sequence[NestedKey]. Got {key}")
-
-
 def _normalize_key(key: NestedKey) -> NestedKey:
     # normalises tuples of length one to their string contents
     return key if not isinstance(key, tuple) or len(key) > 1 else key[0]
@@ -847,7 +842,8 @@ def unravel_keys(key):
                 _key = unravel_keys(subkey)
                 newkey += _key
         key = tuple(newkey)
-    _nested_key_check(key)
+    elif not isinstance(key, str):
+        raise ValueError(f"key should be a Sequence[NestedKey]. Got {key}")
     return key
 
 
