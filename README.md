@@ -330,12 +330,13 @@ conda install -c conda-forge tensordict
 
 If you're using TensorDict, please refer to this BibTeX entry to cite this work:
 ```
-@software{TensorDict,
-  author = {Moens, Vincent},
-  title = {{TensorDict: your PyTorch universal data carrier}},
-  url = {https://github.com/pytorch-labs/tensordict},
-  version = {0.1.2},
-  year = {2023}
+@misc{bou2023torchrl,
+      title={TorchRL: A data-driven decision-making library for PyTorch}, 
+      author={Albert Bou and Matteo Bettini and Sebastian Dittert and Vikash Kumar and Shagun Sodhani and Xiaomeng Yang and Gianni De Fabritiis and Vincent Moens},
+      year={2023},
+      eprint={2306.00577},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
 }
 ```
 

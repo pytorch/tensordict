@@ -40,7 +40,7 @@ from tensordict.utils import (
     _get_item,
     _getitem_batch_size,
     _is_shared,
-    _nested_key_check,
+    _maybe_unravel_keys_silent,
     _set_item,
     _shape,
     _sub_index,
@@ -52,6 +52,7 @@ from tensordict.utils import (
     int_generator,
     NestedKey,
     prod,
+    unravel_keys,
 )
 from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
@@ -1233,7 +1234,7 @@ class TensorDictBase(MutableMapping):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        _nested_key_check(key)
+        key = unravel_keys(key)
         try:
             # using try/except for get/del is suboptimal, but
             # this is faster that checkink if key in self keys
@@ -1525,7 +1526,7 @@ class TensorDictBase(MutableMapping):
         )
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
-        _nested_key_check(key)
+        key = unravel_keys(key)
 
         if isinstance(key, tuple) and len(key) == 1:
             key = key[0]
@@ -2243,8 +2244,8 @@ class TensorDictBase(MutableMapping):
         .. note::
           For some TensorDictBase subtypes, such as :class:`SubTensorDict`, cloning
           recursively makes little sense (in this specific case it would involve
-          copying the parent tensordict too). We strongly encourage to use
-          :meth:`~.to_tensordict` in these cases instead.
+          copying the parent tensordict too). In those cases, :meth:`~.clone` will
+          fall back onto :meth:`~.to_tensordict`.
 
         """
         raise NotImplementedError
@@ -3023,6 +3024,8 @@ class TensorDictBase(MutableMapping):
         """
         if isinstance(idx, tuple) and len(idx) == 1:
             idx = idx[0]
+        if isinstance(idx, tuple):
+            idx = _maybe_unravel_keys_silent(idx)
         if isinstance(idx, str) or (
             isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
         ):
@@ -3089,6 +3092,9 @@ class TensorDictBase(MutableMapping):
         elif isinstance(index, (list, range)):
             index = torch.tensor(index, device=self.device)
         elif isinstance(index, tuple):
+            if isinstance(index, tuple):
+                index = _maybe_unravel_keys_silent(index)
+
             if any(isinstance(sub_index, (list, range)) for sub_index in index):
                 index = tuple(
                     torch.tensor(sub_index, device=self.device)
@@ -3863,7 +3869,7 @@ class TensorDict(TensorDictBase):
     def get(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        _nested_key_check(key)
+        key = unravel_keys(key)
 
         try:
             if isinstance(key, tuple):
@@ -5210,18 +5216,51 @@ torch.Size([3, 2])
         return self
 
     def clone(self, recurse: bool = True) -> SubTensorDict:
-        warnings.warn(
-            "A SubTensorDict cannot be cloned. Currently, this behaviour is allowed but "
-            "it will soon raise a RuntimeError as cloning a SubTensorDict would "
-            "result in another SubTensorDict with shared storage, following the "
-            "TensorDictBase.clone convention, but this may lead to edge cases and "
-            "unexpected/unintuitive behaviours. "
-            "Call sub_tensordict.to_tensordict() instead.",
-            category=DeprecationWarning,
-        )
+        """Clones the SubTensorDict.
+
+        Args:
+            recurse (bool, optional): if ``True`` (default), a regular
+                :class:`TensorDict` instance will be created from the :class:`SubTensorDict`.
+                Otherwise, another :class:`SubTensorDict` with identical content
+                will be returned.
+
+        Examples:
+            >>> data = TensorDict({"a": torch.arange(4).reshape(2, 2,)}, batch_size=[2, 2])
+            >>> sub_data = data.get_sub_tensordict([0,])
+            >>> print(sub_data)
+            SubTensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)
+            >>> # the data of both subtensordict is the same
+            >>> print(data.get("a").data_ptr(), sub_data.get("a").data_ptr())
+            140183705558208 140183705558208
+            >>> sub_data_clone = sub_data.clone(recurse=True)
+            >>> print(sub_data_clone)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)
+            >>. print(sub_data.get("a").data_ptr())
+            140183705558208
+            >>> sub_data_clone = sub_data.clone(recurse=False)
+            >>> print(sub_data_clone)
+            SubTensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.int64, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)
+            >>> print(sub_data.get("a").data_ptr())
+            140183705558208
+        """
         if not recurse:
-            return copy(self)
-        return SubTensorDict(source=self._source, idx=self.idx)
+            return SubTensorDict(source=self._source.clone(recurse=False), idx=self.idx)
+        return self.to_tensordict()
 
     def is_contiguous(self) -> bool:
         return all(value.is_contiguous() for value in self.values())
@@ -5907,6 +5946,8 @@ class LazyStackedTensorDict(TensorDictBase):
     def __getitem__(self, index: IndexType) -> TensorDictBase:
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
+        if isinstance(index, tuple):
+            index = _maybe_unravel_keys_silent(index)
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if index is None:
@@ -6768,24 +6809,24 @@ class _CustomOpTensorDict(TensorDictBase):
         ).exclude(*keys, inplace=True)
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
-        warnings.warn(
-            "A lazy TensorDict cannot be cloned. Currently, this behaviour is allowed but "
-            "it will soon raise a RuntimeError as cloning a lazy TensorDict would "
-            "result in another lazy object with shared storage, following the "
-            "TensorDictBase.clone convention, but this may lead to edge cases and "
-            "unexpected/unintuitive behaviours. "
-            "Call sub_tensordict.to_tensordict() instead.",
-            category=DeprecationWarning,
-        )
+        """Clones the Lazy TensorDict.
+
+        Args:
+            recurse (bool, optional): if ``True`` (default), a regular
+                :class:`TensorDict` instance will be returned.
+                Otherwise, another :class:`SubTensorDict` with identical content
+                will be returned.
+        """
         if not recurse:
-            return copy(self)
-        return TensorDict(
-            source=self.to_dict(),
-            batch_size=self.batch_size,
-            device=self.device,
-            names=self._names,
-            _run_checks=False,
-        )
+            return type(self)(
+                source=self._source.clone(False),
+                custom_op=self.custom_op,
+                inv_op=self.inv_op,
+                custom_op_kwargs=self.custom_op_kwargs,
+                inv_op_kwargs=self.inv_op_kwargs,
+                batch_size=self.batch_size,
+            )
+        return self.to_tensordict()
 
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
