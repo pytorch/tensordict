@@ -834,3 +834,12 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     if isinstance(index[0], list):
         return _is_lis_of_list_of_bools(index[0], False)
     return False
+
+def unravel_keys(key):
+    if isinstance(key, str):
+        return key
+    if isinstance(key, tuple):
+        key = tuple(unravel_keys(subkey) for subkey in key)
+    else:
+        raise ValueError(f'Found a key of type {type(key)}'
+                         f' when only tuples or strings are accepted.')
