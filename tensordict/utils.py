@@ -835,21 +835,40 @@ def _is_lis_of_list_of_bools(index, first_level=True):
         return _is_lis_of_list_of_bools(index[0], False)
     return False
 
+
 def unravel_keys(key):
+    """Unravels keys when one can be sure that they are keys."""
     if isinstance(key, tuple):
-        key = tuple(item for subkey in key for item in unravel_keys(subkey))
-    elif isinstance(key, str):
-        key = (key,)
+        newkey = []
+        for subkey in key:
+            if isinstance(subkey, str):
+                newkey.append(subkey)
+            else:
+                _key = unravel_keys(subkey)
+                newkey += _key
+        key = tuple(newkey)
     _nested_key_check(key)
     return key
 
-def _unravel_keys_silent(key):
-    if isinstance(key, tuple):
-        newkey = tuple(item for subkey in key for item in unravel_keys(subkey))
-    elif isinstance(key, str):
-        newkey = (key,)
+
+def _maybe_unravel_keys_silent(index):
+    """Attemps to unravel keys.
+
+    If not possible (not keys) return the original index.
+    """
+    if isinstance(index, tuple):
+        newkey = []
+        for key in index:
+            if isinstance(key, str):
+                newkey.append(key)
+            else:
+                _key = _maybe_unravel_keys_silent(key)
+                if _key is key:
+                    return index
+                newkey += _key
+        newkey = tuple(newkey)
+    elif isinstance(index, str):
+        return index
     else:
-        newkey = key
-    if not is_nested_key(newkey):
-        return None
+        return index
     return newkey

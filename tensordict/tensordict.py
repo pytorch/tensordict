@@ -40,7 +40,7 @@ from tensordict.utils import (
     _get_item,
     _getitem_batch_size,
     _is_shared,
-    _nested_key_check,
+    _maybe_unravel_keys_silent,
     _set_item,
     _shape,
     _sub_index,
@@ -51,7 +51,8 @@ from tensordict.utils import (
     IndexType,
     int_generator,
     NestedKey,
-    prod, unravel_keys, _unravel_keys_silent,
+    prod,
+    unravel_keys,
 )
 from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
@@ -3023,6 +3024,8 @@ class TensorDictBase(MutableMapping):
         """
         if isinstance(idx, tuple) and len(idx) == 1:
             idx = idx[0]
+        if isinstance(idx, tuple):
+            idx = _maybe_unravel_keys_silent(idx)
         if isinstance(idx, str) or (
             isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
         ):
@@ -3089,6 +3092,9 @@ class TensorDictBase(MutableMapping):
         elif isinstance(index, (list, range)):
             index = torch.tensor(index, device=self.device)
         elif isinstance(index, tuple):
+            if isinstance(index, tuple):
+                index = _maybe_unravel_keys_silent(index)
+
             if any(isinstance(sub_index, (list, range)) for sub_index in index):
                 index = tuple(
                     torch.tensor(sub_index, device=self.device)
@@ -3097,19 +3103,18 @@ class TensorDictBase(MutableMapping):
                     for sub_index in index
                 )
 
-            # either they are all strings or none is
-            unravelled_index = _unravel_keys_silent(index)
-            if unravelled_index is None:
+            if sum(isinstance(_index, str) for _index in index) not in [len(index), 0]:
                 raise IndexError(_STR_MIXED_INDEX_ERROR)
-            else:
+
+            if isinstance(index[0], str):
                 # TODO: would be nicer to have set handle the nested set, but the logic to
                 # preserve the error handling below is complex and requires some thought
                 try:
-                    if len(unravelled_index) == 1:
+                    if len(index) == 1:
                         return self.set(
-                            unravelled_index[0], value, inplace=isinstance(self, SubTensorDict)
+                            index[0], value, inplace=isinstance(self, SubTensorDict)
                         )
-                    self.set(unravelled_index, value, inplace=isinstance(self, SubTensorDict))
+                    self.set(index, value, inplace=isinstance(self, SubTensorDict))
                 except AttributeError as err:
                     if "for populating tensordict with new key-value pair" in str(err):
                         raise RuntimeError(
@@ -5906,6 +5911,8 @@ class LazyStackedTensorDict(TensorDictBase):
     def __getitem__(self, index: IndexType) -> TensorDictBase:
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
+        if isinstance(index, tuple):
+            index = _maybe_unravel_keys_silent(index)
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if index is None:

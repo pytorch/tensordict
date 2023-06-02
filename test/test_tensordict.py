@@ -1551,8 +1551,10 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_setitem_nestedtuple(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td[' a ', (('little', 'story')), 'about', ('myself',)] = torch.zeros(td.shape)
-        assert (td[' a ', 'little', 'story', 'about', 'myself'] == 0).all()
+        if td.is_locked:
+            td.unlock_()
+        td[" a ", (("little", "story")), "about", ("myself",)] = torch.zeros(td.shape)
+        assert (td[" a ", "little", "story", "about", "myself"] == 0).all()
 
     def test_getitem_range(self, td_name, device):
         torch.manual_seed(1)
