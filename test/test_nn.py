@@ -65,6 +65,37 @@ class TestInteractionType:
 
 
 class TestTDModule:
+    @pytest.mark.parametrize("args", [True, False])
+    def test_input_keys(self, args):
+        if args:
+            args = ["a"]
+            kwargs = {}
+        else:
+            args = []
+            kwargs = {"1": "a", ("2", "smth"): "b", ("3", ("other", ("thing",))): "c"}
+
+        def fn(a, b=None, *, c=None):
+            if "c" in kwargs.values():
+                assert c is not None
+            if "b" in kwargs.values():
+                assert b is not None
+            return a + 1
+
+        if kwargs:
+            module = TensorDictModule(fn, in_keys=kwargs, out_keys=["a"])
+            td = TensorDict(
+                {
+                    "1": torch.ones(1),
+                    ("2", "smth"): torch.ones(2),
+                    ("3", ("other", ("thing",))): torch.ones(3),
+                },
+                [],
+            )
+        else:
+            module = TensorDictModule(fn, in_keys=args, out_keys=["a"])
+            td = TensorDict({"a": torch.ones(1)}, [])
+        assert (module(td)["a"] == 2).all()
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
         torch.manual_seed(0)

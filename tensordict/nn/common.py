@@ -18,12 +18,7 @@ from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
-from tensordict.utils import (
-    _normalize_key,
-    _seq_of_nested_key_check,
-    NestedKey,
-    unravel_keys,
-)
+from tensordict.utils import _normalize_key, NestedKey, unravel_keys
 from torch import nn, Tensor
 
 try:
