@@ -9,7 +9,7 @@ import functools
 import inspect
 import warnings
 from textwrap import indent
-from typing import Any, Callable, Iterable, List, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
@@ -18,7 +18,12 @@ from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
-from tensordict.utils import _normalize_key, _seq_of_nested_key_check, NestedKey
+from tensordict.utils import (
+    _normalize_key,
+    _seq_of_nested_key_check,
+    NestedKey,
+    unravel_keys,
+)
 from torch import nn, Tensor
 
 try:
@@ -724,13 +729,35 @@ class TensorDictModule(TensorDictModuleBase):
     def __init__(
         self,
         module: Callable,
-        in_keys: Sequence[NestedKey],
-        out_keys: Sequence[NestedKey],
+        in_keys: NestedKey | List[NestedKey] | Dict[NestedKey:str],
+        out_keys: NestedKey | List[NestedKey],
     ) -> None:
         super().__init__()
 
-        _seq_of_nested_key_check(out_keys)
-        _seq_of_nested_key_check(in_keys)
+        if isinstance(in_keys, dict):
+            # write the kwargs and create a list instead
+            _in_keys = []
+            self._kwargs = []
+            for key, value in in_keys.items():
+                self._kwargs.append(value)
+                _in_keys.append(key)
+            in_keys = _in_keys
+        else:
+            if isinstance(in_keys, (str, tuple)):
+                in_keys = [in_keys]
+            elif not isinstance(in_keys, list):
+                raise ValueError(
+                    "in_keys must be of type list, str or tuples of str, or dict."
+                )
+            self._kwargs = None
+
+        if isinstance(out_keys, (str, tuple)):
+            out_keys = [out_keys]
+        elif not isinstance(out_keys, list):
+            raise ValueError("out_keys must be of type list, str or tuples of str.")
+
+        in_keys = [unravel_keys(in_key) for in_key in in_keys]
+        out_keys = [unravel_keys(out_key) for out_key in out_keys]
 
         if type(module) is type or not callable(module):
             raise ValueError(
@@ -807,7 +834,16 @@ class TensorDictModule(TensorDictModuleBase):
                 raise ValueError(
                     "Got a non-empty list of extra agruments, when none was expected."
                 )
-            tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
+            if self._kwargs is not None:
+                kwargs.update(
+                    {
+                        kwarg: tensordict.get(in_key, None)
+                        for kwarg, in_key in zip(self._kwargs, self.in_keys)
+                    }
+                )
+                tensors = ()
+            else:
+                tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
             try:
                 tensors = self._call_module(tensors, **kwargs)
             except Exception as err:
