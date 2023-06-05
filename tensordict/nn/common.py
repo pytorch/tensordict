@@ -9,7 +9,7 @@ import functools
 import inspect
 import warnings
 from textwrap import indent
-from typing import Any, Callable, Iterable, List, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
@@ -18,7 +18,7 @@ from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
-from tensordict.utils import _normalize_key, _seq_of_nested_key_check, NestedKey
+from tensordict.utils import _normalize_key, NestedKey, unravel_keys
 from torch import nn, Tensor
 
 try:
@@ -588,8 +588,13 @@ class TensorDictModule(TensorDictModuleBase):
             will be used to populate the output tensordict (ie. the keys present
             in ``out_keys`` should be present in the dictionary returned by the
             ``module`` forward method).
-        in_keys (iterable of str): keys to be read from input tensordict and passed to the module. If it
-            contains more than one element, the values will be passed in the order given by the in_keys iterable.
+        in_keys (iterable of NestedKeys, Dict[NestedStr, str]): keys to be read
+            from input tensordict and passed to the module. If it
+            contains more than one element, the values will be passed in the
+            order given by the in_keys iterable.
+            If ``in_keys`` is a dictionary, its keys must correspond to the key
+            to be read in the tensordict and its values must match the name of
+            the keyword argument in the function signature.
         out_keys (iterable of str): keys to be written to the input tensordict. The length of out_keys must match the
             number of tensors returned by the embedded module. Using "_" as a key avoid writing tensor to output.
 
@@ -615,7 +620,10 @@ class TensorDictModule(TensorDictModuleBase):
             batch_size=torch.Size([2, 3]),
             device=None,
             is_shared=False)
-        >>> # we can also pass directly the tensors
+
+    We can also pass directly the tensors
+
+    Examples:
         >>> out = module(input, tgt)
         >>> assert out.shape == input.shape
         >>> # we can also wrap regular functions
@@ -639,7 +647,10 @@ class TensorDictModule(TensorDictModuleBase):
             batch_size=torch.Size([]),
             device=None,
             is_shared=False)
-        >>> # we can use TensorDictModule to populate a tensordict
+
+    We can use TensorDictModule to populate a tensordict:
+
+    Examples:
         >>> module = TensorDictModule(lambda: torch.randn(3), in_keys=[], out_keys=["x"])
         >>> print(module(TensorDict({}, batch_size=[])))
         TensorDict(
@@ -649,7 +660,19 @@ class TensorDictModule(TensorDictModuleBase):
             device=None,
             is_shared=False)
 
+    Another feature is passing a dictionary as input keys, to control the
+    dispatching of values to specific keyword arguments.
+
+    Examples:
+        >>> module = TensorDictModule(lambda x, *, y: x+y,
+        ...     in_keys={'1': 'x', '2': 'y'}, out_keys=['z'],
+        ...     )
+        >>> td = module(TensorDict({'1': torch.ones(()), '2': torch.ones(())*2}, []))
+        >>> td['z']
+        tensor(3.)
+
     Functional calls to a tensordict module is easy:
+
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
@@ -689,6 +712,8 @@ class TensorDictModule(TensorDictModuleBase):
             is_shared=False)
 
     One can use a vmap operator to call the functional module.
+
+    Examples:
         >>> from torch import vmap
         >>> from tensordict.nn.functional_modules import extract_weights_and_buffers
         >>> params = extract_weights_and_buffers(td_module)
@@ -721,16 +746,44 @@ class TensorDictModule(TensorDictModuleBase):
 
     """
 
+    _IN_KEY_ERR = "in_keys must be of type list, str or tuples of str, or dict."
+    _OUT_KEY_ERR = "out_keys must be of type list, str or tuples of str."
+
     def __init__(
         self,
         module: Callable,
-        in_keys: Sequence[NestedKey],
-        out_keys: Sequence[NestedKey],
+        in_keys: NestedKey | List[NestedKey] | Dict[NestedKey:str],
+        out_keys: NestedKey | List[NestedKey],
     ) -> None:
         super().__init__()
 
-        _seq_of_nested_key_check(out_keys)
-        _seq_of_nested_key_check(in_keys)
+        if isinstance(in_keys, dict):
+            # write the kwargs and create a list instead
+            _in_keys = []
+            self._kwargs = []
+            for key, value in in_keys.items():
+                self._kwargs.append(value)
+                _in_keys.append(key)
+            in_keys = _in_keys
+        else:
+            if isinstance(in_keys, (str, tuple)):
+                in_keys = [in_keys]
+            elif not isinstance(in_keys, list):
+                raise ValueError(self._IN_KEY_ERR)
+            self._kwargs = None
+
+        if isinstance(out_keys, (str, tuple)):
+            out_keys = [out_keys]
+        elif not isinstance(out_keys, list):
+            raise ValueError(self._OUT_KEY_ERR)
+        try:
+            in_keys = [unravel_keys(in_key) for in_key in in_keys]
+        except ValueError:
+            raise ValueError(self._IN_KEY_ERR)
+        try:
+            out_keys = [unravel_keys(out_key) for out_key in out_keys]
+        except ValueError:
+            raise ValueError(self._OUT_KEY_ERR)
 
         if type(module) is type or not callable(module):
             raise ValueError(
@@ -807,7 +860,16 @@ class TensorDictModule(TensorDictModuleBase):
                 raise ValueError(
                     "Got a non-empty list of extra agruments, when none was expected."
                 )
-            tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
+            if self._kwargs is not None:
+                kwargs.update(
+                    {
+                        kwarg: tensordict.get(in_key, None)
+                        for kwarg, in_key in zip(self._kwargs, self.in_keys)
+                    }
+                )
+                tensors = ()
+            else:
+                tensors = tuple(tensordict.get(in_key, None) for in_key in self.in_keys)
             try:
                 tensors = self._call_module(tensors, **kwargs)
             except Exception as err:
