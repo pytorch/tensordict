@@ -68,7 +68,7 @@ class TestTDModule:
     @pytest.mark.parametrize("args", [True, False])
     def test_input_keys(self, args):
         if args:
-            args = ["a"]
+            args = ["1"]
             kwargs = {}
         else:
             args = []
@@ -93,7 +93,7 @@ class TestTDModule:
             )
         else:
             module = TensorDictModule(fn, in_keys=args, out_keys=["a"])
-            td = TensorDict({"a": torch.ones(1)}, [])
+            td = TensorDict({"1": torch.ones(1)}, [])
         assert (module(td)["a"] == 2).all()
 
     @pytest.mark.parametrize("lazy", [True, False])
@@ -539,6 +539,17 @@ class TestTDModule:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
+    def test_vmap_kwargs(self):
+        module = TensorDictModule(
+            lambda x, *, y: x + y, in_keys={"1": "x", "2": "y"}, out_keys=["z"]
+        )
+        td = TensorDict(
+            {"1": torch.ones((10,)), "2": torch.ones((10,)) * 2}, batch_size=[10]
+        )
+        tdout = vmap(module)(td)
+        assert tdout is not td
+        assert (tdout["z"] == 3).all()
+
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )
@@ -716,6 +727,39 @@ class TestTDModule:
 
 
 class TestTDSequence:
+    @pytest.mark.parametrize("args", [True, False])
+    def test_input_keys(self, args):
+        module0 = TensorDictModule(lambda x: x + 0, in_keys=["input"], out_keys=["1"])
+        if args:
+            args = ["1"]
+            kwargs = {}
+        else:
+            args = []
+            kwargs = {"1": "a", ("2", "smth"): "b", ("3", ("other", ("thing",))): "c"}
+
+        def fn(a, b=None, *, c=None):
+            if "c" in kwargs.values():
+                assert c is not None
+            if "b" in kwargs.values():
+                assert b is not None
+            return a + 1
+
+        if kwargs:
+            module1 = TensorDictModule(fn, in_keys=kwargs, out_keys=["a"])
+            td = TensorDict(
+                {
+                    "input": torch.ones(1),
+                    ("2", "smth"): torch.ones(2),
+                    ("3", ("other", ("thing",))): torch.ones(3),
+                },
+                [],
+            )
+        else:
+            module1 = TensorDictModule(fn, in_keys=args, out_keys=["a"])
+            td = TensorDict({"input": torch.ones(1)}, [])
+        module = TensorDictSequential(module0, module1)
+        assert (module(td)["a"] == 2).all()
+
     def test_key_exclusion(self):
         module1 = TensorDictModule(
             nn.Linear(3, 4), in_keys=["key1", "key2"], out_keys=["foo1"]
@@ -1701,6 +1745,15 @@ def test_input():
         TensorDictModule(module, in_keys=[("i", "i2")], out_keys=[tuple("o")])
         TensorDictModule(module, in_keys=[tuple("i")], out_keys=[("o", "o2")])
         TensorDictModule(module, in_keys=[("i", "i2")], out_keys=[("o", "o2")])
+        TensorDictModule(
+            module, in_keys=[(("i", "i2"), ("i3",))], out_keys=[("o", "o2")]
+        )
+        TensorDictModule(
+            module, in_keys=[("i", "i2")], out_keys=[(("o", "o2"), ("o3",))]
+        )
+        TensorDictModule(
+            module, in_keys={"i": "i1", (("i2",),): "i3"}, out_keys=[("o", "o2")]
+        )
 
         # corner cases that should work
         TensorDictModule(module, in_keys=[("_", "")], out_keys=[("_", "")])
@@ -1714,11 +1767,15 @@ def test_input():
             TensorDictModule(wrong_model, in_keys=["in"], out_keys=["out"])
 
     # missing or wrong keys
-    for wrong_keys in (None, 123, [123], [(("too", "much", "nesting"),)]):
-        with pytest.raises(ValueError, match="seq should be a Sequence"):
+    for wrong_keys in (None, 123, [123]):
+        with pytest.raises(
+            ValueError, match="out_keys must be of type list, str or tuples of str"
+        ):
             TensorDictModule(MyModule(), in_keys=["in"], out_keys=wrong_keys)
 
-        with pytest.raises(ValueError, match="seq should be a Sequence"):
+        with pytest.raises(
+            ValueError, match="in_keys must be of type list, str or tuples of str"
+        ):
             TensorDictModule(MyModule(), in_keys=wrong_keys, out_keys=["out"])
 
 
