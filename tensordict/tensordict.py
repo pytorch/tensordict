@@ -5693,7 +5693,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 shapes = {_shape(tensor) for tensor in tensors}
                 raise RuntimeError(
                     f"Found more than one unique shape in the tensors to be "
-                    f"stacked ({shapes}). This is likely due to a modification "
+                    f"stacked ({shapes}) with key {key}. This is likely due to a modification "
                     f"of one of the stacked TensorDicts, where a key has been "
                     f"updated/created with an uncompatible shape. If the entries "
                     f"are intended to have a different shape, use the get_nestedtensor "
