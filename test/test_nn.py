@@ -2170,6 +2170,36 @@ class TestSelectOutKeys:
             with pytest.raises(ValueError, match="Can't select non "):
                 mod2 = mod.select_out_keys(out_d_key)
 
+    def test_tdmodule_dispatch_kwargs(self, out_d_key, unpack):
+        mod = TensorDictModule(
+            lambda x, y: (x + 2, y + 2, x),
+            in_keys=["a", ("b", ("1", ("2", ("3",))))],
+            out_keys=["c", "d", "e"],
+        )
+        exp_res = {"c": 2, "d": 3, "e": 0}
+        res = mod(a=torch.zeros(()), b_1_2_3=torch.ones(()))
+        assert len(res) == 3
+        for i, v in enumerate(["c", "d", "e"]):
+            assert (res[i] == exp_res[v]).all()
+        if unpack:
+            mod2 = mod.select_out_keys(*out_d_key)
+            assert mod2 is mod
+            assert mod.out_keys == list(out_d_key)
+            res = mod(torch.zeros(()), torch.ones(()))
+            if len(list(out_d_key)) == 1:
+                res = [res]
+            for i, v in enumerate(list(out_d_key)):
+                assert (res[i] == exp_res[v]).all()
+            mod2 = mod.reset_out_keys()
+            assert mod2 is mod
+            res = mod(torch.zeros(()), torch.ones(()))
+            assert len(res) == 3
+            for i, v in enumerate(["c", "d", "e"]):
+                assert (res[i] == exp_res[v]).all()
+        else:
+            with pytest.raises(ValueError, match="Can't select non "):
+                mod2 = mod.select_out_keys(out_d_key)
+
     def test_tdmodule_dispatch_firstcall(self, out_d_key, unpack):
         # calling the dispatch first or not may mess up the init
         mod = TensorDictModule(
