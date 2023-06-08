@@ -347,13 +347,13 @@ class _OutKeysSelect:
 
     def _detect_dispatch(self, tensordict_in, kwargs, in_keys):
         if isinstance(tensordict_in, TensorDictBase) and all(
-            key in tensordict_in.keys() for key in in_keys
+            key in tensordict_in.keys(include_nested=True) for key in in_keys
         ):
             return False
         elif isinstance(tensordict_in, tuple):
             if len(tensordict_in) or len(kwargs):
                 if len(tensordict_in) and isinstance(tensordict_in[0], TensorDictBase):
-                    return self._detect_dispatch(tensordict_in[0], in_keys)
+                    return self._detect_dispatch(tensordict_in[0], kwargs, in_keys)
                 elif (
                     not len(tensordict_in)
                     and len(kwargs)
