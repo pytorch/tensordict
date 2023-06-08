@@ -293,11 +293,14 @@ class _OutKeysSelect:
         self,
         module: TensorDictModuleBase,
         tensordict_in: TensorDictBase,
+        kwargs: Dict,
         tensordict_out: TensorDictBase,
     ):
         # detect dispatch calls
         in_keys = module.in_keys
-        is_dispatched = self._detect_dispatch(tensordict_in, in_keys)
+        if not tensordict_in and kwargs.get("tensordict", None) is not None:
+            tensordict_in = kwargs.pop("tensordict")
+        is_dispatched = self._detect_dispatch(tensordict_in, kwargs, in_keys)
         out_keys = self.out_keys
         # if dispatch filtered the out keys as they should we're happy
         if is_dispatched:
@@ -342,15 +345,21 @@ class _OutKeysSelect:
                 strict=False,
             )
 
-    def _detect_dispatch(self, tensordict_in, in_keys):
+    def _detect_dispatch(self, tensordict_in, kwargs, in_keys):
         if isinstance(tensordict_in, TensorDictBase) and all(
             key in tensordict_in.keys() for key in in_keys
         ):
             return False
         elif isinstance(tensordict_in, tuple):
-            if len(tensordict_in):
-                if isinstance(tensordict_in[0], TensorDictBase):
+            if len(tensordict_in) or len(kwargs):
+                if len(tensordict_in) and isinstance(tensordict_in[0], TensorDictBase):
                     return self._detect_dispatch(tensordict_in[0], in_keys)
+                elif (
+                    not len(tensordict_in)
+                    and len(kwargs)
+                    and isinstance(kwargs.get("tensordict", None), TensorDictBase)
+                ):
+                    return self._detect_dispatch(kwargs["tensordict"], in_keys)
                 return True
             return not len(in_keys)
         # not a TDBase: must be True
@@ -529,7 +538,7 @@ class TensorDictModuleBase(nn.Module):
                 ):
                     err_msg += f"Are you passing the keys in a list? Try unpacking as: `{', '.join(out_keys[0])}`"
                 raise ValueError(err_msg)
-        self.register_forward_hook(_OutKeysSelect(out_keys))
+        self.register_forward_hook(_OutKeysSelect(out_keys), with_kwargs=True)
         for hook in self._forward_hooks.values():
             hook._init(self)
         return self
