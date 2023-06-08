@@ -831,8 +831,14 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     return False
 
 
-def unravel_keys(key):
-    """Unravels keys when one can be sure that they are keys."""
+def unravel_keys(key, make_tuple: bool=False):
+    """Unravels keys when one can be sure that they are keys.
+
+    Args:
+        make_tuple (bool, optional): if ``True``, even strings will be nested
+            in a tuple. Defaults to ``False``.
+
+    """
     if isinstance(key, tuple):
         newkey = []
         for subkey in key:
@@ -844,6 +850,8 @@ def unravel_keys(key):
         key = tuple(newkey)
     elif not isinstance(key, str):
         raise ValueError(f"key should be a Sequence[NestedKey]. Got {key}")
+    elif make_tuple:
+        key = (key,)
     return key
 
 
