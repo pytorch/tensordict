@@ -20,7 +20,6 @@ from typing import Any, Callable, Sequence, TypeVar
 import tensordict as tensordict_lib
 
 import torch
-
 from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     _get_repr,
@@ -30,7 +29,8 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import DeviceType, IndexType, NestedKey
+
+from tensordict.utils import DeviceType, IndexType, is_tensorclass, NestedKey
 from torch import Tensor
 
 T = TypeVar("T", bound=TensorDictBase)
@@ -58,16 +58,6 @@ _TD_PASS_THROUGH = {
     torch.cat,
     torch.gather,
 }
-
-
-def is_tensorclass(obj: type | Any) -> bool:
-    """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
-    cls = obj if isinstance(obj, type) else type(obj)
-    return (
-        dataclasses.is_dataclass(cls)
-        and "to_tensordict" in cls.__dict__
-        and "_from_tensordict" in cls.__dict__
-    )
 
 
 def tensorclass(cls: T) -> T:
@@ -195,7 +185,10 @@ def tensorclass(cls: T) -> T:
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
-    tensordict_lib.tensordict._ACCEPTED_CLASSES += [cls]
+    tensordict_lib.tensordict._ACCEPTED_CLASSES = (
+        *tensordict_lib.tensordict._ACCEPTED_CLASSES,
+        cls,
+    )
     return cls
 
 

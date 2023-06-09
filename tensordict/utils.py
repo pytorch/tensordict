@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import math
 import time
 
@@ -651,7 +653,7 @@ def _ndimension(tensor: torch.Tensor) -> int:
 
 def _shape(tensor: torch.Tensor) -> torch.Size:
     try:
-        return torch.Size(tensor.shape)
+        return tensor.shape
     except AttributeError as err:
         if type(tensor) is KeyedJaggedTensor:
             return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
@@ -832,7 +834,13 @@ def _is_lis_of_list_of_bools(index, first_level=True):
 
 
 def unravel_keys(key):
-    """Unravels keys when one can be sure that they are keys."""
+    """Unravels keys when one can be sure that they are keys.
+
+    The c++ version under tensordict._tensordict should be preferred.
+
+    """
+    if isinstance(key, str):
+        return key
     if isinstance(key, tuple):
         newkey = []
         for subkey in key:
@@ -841,10 +849,9 @@ def unravel_keys(key):
             else:
                 _key = unravel_keys(subkey)
                 newkey += _key
-        key = tuple(newkey)
-    elif not isinstance(key, str):
+        return tuple(newkey)
+    else:
         raise ValueError(f"key should be a Sequence[NestedKey]. Got {key}")
-    return key
 
 
 def _maybe_unravel_keys_silent(index):
@@ -866,3 +873,17 @@ def _maybe_unravel_keys_silent(index):
     else:
         return index
     return newkey
+
+
+def is_tensorclass(obj: type | Any) -> bool:
+    """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
+    cls = obj if isinstance(obj, type) else type(obj)
+    return _is_tensorclass(cls)
+
+
+def _is_tensorclass(cls) -> bool:
+    return (
+        dataclasses.is_dataclass(cls)
+        and "to_tensordict" in cls.__dict__
+        and "_from_tensordict" in cls.__dict__
+    )

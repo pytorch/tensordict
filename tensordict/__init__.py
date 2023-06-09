@@ -5,7 +5,7 @@
 
 from tensordict.memmap import MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
-from tensordict.tensorclass import is_tensorclass, tensorclass
+from tensordict.tensorclass import tensorclass
 from tensordict.tensordict import (
     is_batchedtensor,
     is_memmap,
@@ -19,6 +19,7 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
+from tensordict.utils import is_tensorclass
 
 try:
     from tensordict.version import __version__
@@ -41,6 +42,5 @@ __all__ = [
     "is_tensor_collection",
     "pad",
     "PersistentTensorDict",
-    "is_tensorclass",
     "tensorclass",
 ]

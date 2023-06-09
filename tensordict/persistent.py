@@ -121,7 +121,7 @@ class PersistentTensorDict(TensorDictBase):
     """
 
     def __new__(cls, *args, **kwargs):
-        cls._names = None
+        cls._td_dim_names = None
         return super().__new__(cls, *args, **kwargs)
 
     def __init__(
@@ -809,7 +809,7 @@ class PersistentTensorDict(TensorDictBase):
                 batch_size=td.batch_size,
                 device=td.device,
             )
-            self._nested_tensordicts[key].names = td._names
+            self._nested_tensordicts[key].names = td._td_dim_names
             self._nested_tensordicts[key]._set_metadata(td)
 
     def clone(self, recurse: bool = True, newfile=None) -> PersistentTensorDict:
@@ -836,7 +836,7 @@ class PersistentTensorDict(TensorDictBase):
             clone.file = f_dest
             clone.filename = newfile
             clone._pin_mem = False
-            clone.names = self._names
+            clone.names = self._td_dim_names
             clone._nested_tensordicts = {}
             clone._set_metadata(self)
             return clone
@@ -857,7 +857,7 @@ class PersistentTensorDict(TensorDictBase):
             )
             clone._nested_tensordicts = nested_tds
             clone._pin_mem = False
-            clone.names = self._names
+            clone.names = self._td_dim_names
             return clone
 
     def __getstate__(self):
