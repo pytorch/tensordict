@@ -832,7 +832,7 @@ def _is_lis_of_list_of_bools(index, first_level=True):
         return _is_lis_of_list_of_bools(index[0], False)
     return False
 
-# #@profile
+#@profile
 def unravel_keys(key, make_tuple: bool=False):
     """Unravels keys when one can be sure that they are keys.
 
@@ -882,6 +882,9 @@ def _maybe_unravel_keys_silent(index):
 def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
     cls = obj if isinstance(obj, type) else type(obj)
+    return _is_tensorclass(cls)
+
+def _is_tensorclass(cls) -> bool:
     return (
         dataclasses.is_dataclass(cls)
         and "to_tensordict" in cls.__dict__

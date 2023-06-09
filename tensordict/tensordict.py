@@ -53,11 +53,12 @@ from tensordict.utils import (
     NestedKey,
     prod,
     is_tensorclass,
-    unravel_keys,
+    _is_tensorclass,
+    # unravel_keys,
 )
 from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
-
+from tensordict._tensordict import unravel_keys
 
 try:
     from torch.jit._shape_functions import infer_size_impl
@@ -116,6 +117,18 @@ _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-
 
 _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
+_TENSOR_COLLECTION_MEMO = {}
+
+def _is_tensor_collection(datatype):
+    # if issubclass(datatype, _HEURISTIC_EXCLUDED):
+    #     return False
+    if issubclass(datatype, TensorDictBase):
+        return True
+    if _is_tensorclass(datatype):
+        return True
+    return False
+
+
 #@profile
 def is_tensor_collection(datatype: type | Any) -> bool:
     """Checks if a data object or a type is a tensor container from the tensordict lib.
@@ -135,22 +148,13 @@ def is_tensor_collection(datatype: type | Any) -> bool:
         >>> is_tensor_collection(MyClass(batch_size=[]))  # True
 
     """
-    if isinstance(datatype, _HEURISTIC_EXCLUDED):
-        return False
-    if isinstance(datatype, TensorDictBase):
-        return True
-    if isinstance(datatype, type):
-        if issubclass(datatype, _HEURISTIC_EXCLUDED):
-            return False
-        if issubclass(datatype, TensorDictBase):
-            return True
-        if is_tensorclass(datatype):
-            return True
-        return False
-    if is_tensorclass(datatype):
-        return True
-    return False
-
+    # memoizing is 2x faster
+    if not isinstance(datatype, type):
+        datatype = type(datatype)
+    out = _TENSOR_COLLECTION_MEMO.get(datatype, None)
+    if out is None:
+        out = _TENSOR_COLLECTION_MEMO[datatype] = _is_tensor_collection(datatype)
+    return out
 
 def is_memmap(datatype: type | Any) -> bool:
     """Returns ``True`` if the class is a subclass of :class:`~.MemmapTensor` or the object an instance of it."""
