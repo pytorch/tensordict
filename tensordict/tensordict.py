@@ -213,37 +213,59 @@ class _TensorDictKeysView:
         else:
             yield from self._iter_helper(self.tensordict)
 
-    #@profile
     def _iter_helper(
         self, tensordict: TensorDictBase, prefix: str | None = None
     ) -> Iterable[str] | Iterable[tuple[str, ...]]:
-        subkeys = []
-        for key, value in self._items(tensordict):
-            full_key = self._combine_keys(prefix, key) if prefix else key
-            is_tc = None
-            cls = value.__class__
-            if not self.leaves_only:
-                yield full_key
-            else:
-                is_tc = _is_tensor_collection(cls)
-                if not is_tc:
-                    yield full_key
+        items_iter = self._items(tensordict)
 
-            if self.include_nested:
-                if issubclass(cls, KeyedJaggedTensor):
-                    include = True
-                elif is_tc is None:
-                    include = _is_tensor_collection(cls)
-                else:
-                    continue
-                if include:
-                    _subkeys = self._iter_helper(
+        for key, value in items_iter:
+            full_key = self._combine_keys(prefix, key)
+            cls = value.__class__
+            if self.include_nested and (
+                _is_tensor_collection(cls)
+                or issubclass(value, KeyedJaggedTensor)
+            ):
+                subkeys = tuple(
+                    self._iter_helper(
                         value,
                         full_key if isinstance(full_key, tuple) else (full_key,),
                     )
-                    subkeys.append(_subkeys)
-        for _subkeys in subkeys:
-            yield from _subkeys
+                )
+                yield from subkeys
+            if not self.leaves_only or not _is_tensor_collection(cls):
+                yield full_key
+
+    #@profile
+    # def _iter_helper(
+    #     self, tensordict: TensorDictBase, prefix: str | None = None
+    # ) -> Iterable[str] | Iterable[tuple[str, ...]]:
+    #     subkeys = []
+    #     for key, value in self._items(tensordict):
+    #         full_key = self._combine_keys(prefix, key) if prefix else key
+    #         is_tc = None
+    #         cls = value.__class__
+    #         if not self.leaves_only:
+    #             yield full_key
+    #         else:
+    #             is_tc = _is_tensor_collection(cls)
+    #             if not is_tc:
+    #                 yield full_key
+    #
+    #         if self.include_nested:
+    #             if issubclass(cls, KeyedJaggedTensor):
+    #                 include = True
+    #             elif is_tc is None:
+    #                 include = _is_tensor_collection(cls)
+    #             else:
+    #                 continue
+    #             if include:
+    #                 _subkeys = self._iter_helper(
+    #                     value,
+    #                     full_key if isinstance(full_key, tuple) else (full_key,),
+    #                 )
+    #                 subkeys.append(_subkeys)
+    #     for _subkeys in subkeys:
+    #         yield from _subkeys
 
     #@profile
     def _combine_keys(self, prefix: str | None, key: NestedKey) -> NestedKey:
@@ -256,7 +278,6 @@ class _TensorDictKeysView:
     def __len__(self) -> int:
         return sum(1 for _ in self)
 
-    #@profile
     def _items(
         self, tensordict: TensorDict | None = None
     ) -> Iterable[tuple[NestedKey, CompatibleType]]:
@@ -3434,7 +3455,6 @@ class TensorDict(TensorDictBase):
         "_device",
         "_is_locked",
         "_td_dim_names",
-        "_keys",
     )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
@@ -3455,7 +3475,6 @@ class TensorDict(TensorDictBase):
     ) -> None:
         self._is_shared = _is_shared
         self._is_memmap = _is_memmap
-        self._keys = None
         if device is not None:
             device = torch.device(device)
         self._device = device
@@ -3907,6 +3926,32 @@ class TensorDict(TensorDictBase):
 
         return self
 
+    # def get(
+    #     self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
+    # ) -> CompatibleType:
+    #     key = unravel_keys(key)
+    #
+    #     if isinstance(key, tuple):
+    #         if key[0] not in self._tensordict:
+    #             return self._default_get(key[0], default)
+    #
+    #         if len(key) > 1:
+    #             first_lev = self._tensordict[key[0]]
+    #             if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
+    #                 return first_lev[key[1]]
+    #             try:
+    #                 return first_lev.get(key[1:], default=default)
+    #             except AttributeError as err:
+    #                 if "has no attribute" in str(err):
+    #                     raise ValueError(
+    #                         f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
+    #                         f" for key '{key[0]}' and subkeys {key[1:]} in tensordict:\n{self}."
+    #                     )
+    #         return self._tensordict[key[0]]
+    #     if key not in self._tensordict:
+    #         return self._default_get(key, default)
+    #     return self._tensordict[key]
+    #@profile
     def get(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
@@ -4177,12 +4222,9 @@ class TensorDict(TensorDictBase):
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
-        keys = self._keys
-        if keys is None:
-            keys = self._keys = _TensorDictKeysView(
-                self, include_nested=include_nested, leaves_only=leaves_only
-            )
-        return keys
+        return _TensorDictKeysView(
+            self, include_nested=include_nested, leaves_only=leaves_only
+        )
 
     def __getstate__(self):
         return {slot: getattr(self, slot) for slot in self.__slots__}
