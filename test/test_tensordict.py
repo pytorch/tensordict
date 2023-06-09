@@ -1231,6 +1231,12 @@ class TestTensorDicts(TestTensorDictsBase):
         td0 = td.clone().zero_()
         td.update_(td0, non_blocking=True)
 
+    def test_set__nonblocking(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td0 = td.clone().zero_()
+        for key in td0.keys():
+            td.set_(key, td0.get(key), non_blocking=True)
+
     def test_update_at_(self, td_name, device):
         td = getattr(self, td_name)(device)
         td0 = td[1].clone().zero_()
