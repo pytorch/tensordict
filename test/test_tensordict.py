@@ -1226,6 +1226,11 @@ class TestTensorDicts(TestTensorDictsBase):
             td.update({"newnested": torch.zeros(td.shape)}, clone=clone)
             assert isinstance(td["newnested"], torch.Tensor)
 
+    def test_update__nonblocking(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td0 = td.clone().zero_()
+        td.update_(td0, non_blocking=True)
+
     def test_update_at_(self, td_name, device):
         td = getattr(self, td_name)(device)
         td0 = td[1].clone().zero_()

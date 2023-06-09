@@ -710,7 +710,12 @@ class TensorDictBase(MutableMapping):
 
     @abc.abstractmethod
     def set(
-        self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
+        self,
+        key: NestedKey,
+        item: CompatibleType,
+        inplace: bool = False,
+        non_blocking: bool = False,
+        **kwargs: Any,
     ) -> TensorDictBase:
         """Sets a new key-value pair.
 
@@ -721,6 +726,10 @@ class TensorDictBase(MutableMapping):
             inplace (bool, optional): if True and if a key matches an existing
                 key in the tensordict, then the update will occur in-place
                 for that key-value pair. Default is :obj:`False`.
+            non_blocking (bool, optional): if ``True`` and this copy is
+                between CPU and GPU and ``inplace=True``, the copy may occur asynchronously with
+                respect to the host. For other cases,
+                this argument has no effect. Defaults to ``False``.
 
         Returns:
             self
@@ -733,12 +742,17 @@ class TensorDictBase(MutableMapping):
         self,
         key: NestedKey,
         item: CompatibleType,
+        non_blocking: bool = False,
     ) -> TensorDictBase:
         """Sets a value to an existing key while keeping the original storage.
 
         Args:
             key (str): name of the value
             item (torch.Tensor): value to be stored in the tensordict
+            non_blocking (bool, optional): if ``True`` and this copy is
+                between CPU and GPU, the copy may occur asynchronously with
+                respect to the host. For other cases,
+                this argument has no effect. Defaults to ``False``.
 
         Returns:
             self
@@ -1455,6 +1469,7 @@ class TensorDictBase(MutableMapping):
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
         clone: bool = False,
+        non_blocking: bool = False,
     ) -> TensorDictBase:
         """Updates the TensorDict in-place with values from either a dictionary or another TensorDict.
 
@@ -1467,6 +1482,12 @@ class TensorDictBase(MutableMapping):
             clone (bool, optional): whether the tensors in the input (
                 tensor) dict should be cloned before being set. Default is
                 `False`.
+            non_blocking (bool, optional): if ``True`` and this copy is
+                between CPU and GPU, the copy may occur asynchronously with
+                respect to the host. For other cases,
+                this argument has no effect. Defaults to ``False``.
+
+
 
         Returns:
             self
@@ -1483,7 +1504,7 @@ class TensorDictBase(MutableMapping):
             #     )
             if clone:
                 value = value.clone()
-            self.set_(key, value)
+            self.set_(key, value, non_blocking=non_blocking)
         return self
 
     def update_at_(
@@ -1491,6 +1512,7 @@ class TensorDictBase(MutableMapping):
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
         idx: IndexType,
         clone: bool = False,
+        non_blocking: bool = False,
     ) -> TensorDictBase:
         """Updates the TensorDict in-place at the specified index with values from either a dictionary or another TensorDict.
 
@@ -1504,6 +1526,10 @@ class TensorDictBase(MutableMapping):
             clone (bool, optional): whether the tensors in the input (
                 tensor) dict should be cloned before being set. Default is
                 `False`.
+            non_blocking (bool, optional): if ``True`` and this copy is
+                between CPU and GPU, the copy may occur asynchronously with
+                respect to the host. For other cases,
+                this argument has no effect. Defaults to ``False``.
 
         Returns:
             self
@@ -1532,7 +1558,7 @@ class TensorDictBase(MutableMapping):
                 )
             if clone:
                 value = value.clone()
-            self.set_at_(key, value, idx)
+            self.set_at_(key, value, idx, non_blocking=non_blocking)
         return self
 
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor | MemmapTensor:
@@ -1925,7 +1951,11 @@ class TensorDictBase(MutableMapping):
 
     @abc.abstractmethod
     def set_at_(
-        self, key: NestedKey, value: CompatibleType, idx: IndexType
+        self,
+        key: NestedKey,
+        value: CompatibleType,
+        idx: IndexType,
+        non_blocking: bool = False,
     ) -> TensorDictBase:
         """Sets the values in-place at the index indicated by :obj:`idx`.
 
@@ -1933,6 +1963,10 @@ class TensorDictBase(MutableMapping):
             key (str, tuple of str): key to be modified.
             value (torch.Tensor): value to be set at the index `idx`
             idx (int, tensor or tuple): index where to write the values.
+            non_blocking (bool, optional) – if ``True`` and this copy is
+                between CPU and GPU, the copy may occur asynchronously with
+                respect to the host. For other cases, this argument has no
+                effect. Defaults to ``False``.
 
         Returns:
             self
@@ -1940,9 +1974,9 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def copy_(self, tensordict: TensorDictBase) -> TensorDictBase:
+    def copy_(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         """See :obj:`TensorDictBase.update_`."""
-        return self.update_(tensordict)
+        return self.update_(tensordict, **kwargs)
 
     def copy_at_(self, tensordict: TensorDictBase, idx: IndexType) -> TensorDictBase:
         """See :obj:`TensorDictBase.update_at_`."""
@@ -3726,7 +3760,9 @@ class TensorDict(TensorDictBase):
             out.refine_names(..., *self.names)
         return out
 
-    def _set(self, key: str, value, inplace: bool = False) -> TensorDictBase:
+    def _set(
+        self, key: str, value, inplace: bool = False, non_blocking: bool = False
+    ) -> TensorDictBase:
         if isinstance(key, tuple):
             td, subkey = _get_leaf_tensordict(
                 self, key, _default_hook if not inplace else None
@@ -3735,7 +3771,7 @@ class TensorDict(TensorDictBase):
             td, subkey = self, key
         if inplace:
             try:
-                td.get(subkey).copy_(value)
+                td.get(subkey).copy_(value, non_blocking=non_blocking)
             except KeyError as err:
                 raise err
             except Exception as err:
@@ -3773,7 +3809,10 @@ class TensorDict(TensorDictBase):
         return self._set(key, value, inplace=inplace)
 
     def set_(
-        self, key: str, value: dict[str, CompatibleType] | CompatibleType
+        self,
+        key: str,
+        value: dict[str, CompatibleType] | CompatibleType,
+        non_blocking: bool = False,
     ) -> TensorDictBase:
         # See TensorDictBase.set for doc
         key = self._validate_key(key)
@@ -3788,7 +3827,7 @@ class TensorDict(TensorDictBase):
             else:
                 td, subkey = self, key
             value = td._validate_value(value)
-            td._set(subkey, value, inplace=True)
+            td._set(subkey, value, inplace=True, non_blocking=non_blocking)
         except KeyError as e:
             raise KeyError(
                 f'key "{key}" not found in tensordict, '
@@ -3870,6 +3909,7 @@ class TensorDict(TensorDictBase):
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         idx: IndexType,
+        non_blocking: bool = False,
     ) -> TensorDictBase:
         key = self._validate_key(key)
         if key not in self.keys(include_nested=isinstance(key, tuple)):
@@ -3885,9 +3925,9 @@ class TensorDict(TensorDictBase):
                 "not write to the desired location if idx1 is a list/tensor."
             )
             tensor_in = _sub_index(tensor_in, idx)
-            tensor_in.copy_(value)
+            tensor_in.copy_(value, non_blocking=non_blocking)
         else:
-            _set_item(tensor_in, idx, value)
+            _set_item(tensor_in, idx, value, non_blocking=non_blocking)
 
         return self
 
@@ -4958,7 +4998,7 @@ torch.Size([3, 2])
     def _preallocate(self, key: str, value: CompatibleType) -> TensorDictBase:
         return self._source.set(key, value)
 
-    def _set(self, key, value, inplace: bool = False):
+    def _set(self, key, value, inplace: bool = False, non_blocking: bool = False):
         # it is assumed that if inplace=False then the key doesn't exist. This is
         # checked in set method, but not here. responsibility lies with the caller
         # so that this method can have minimal overhead from runtime checks
@@ -5002,7 +5042,7 @@ torch.Size([3, 2])
                 # seems better than duplicated overhead.
                 parent._valid_keys = sorted([*parent._valid_keys, subkey], key=str)
 
-        parent.set_at_(subkey, value, self.idx)
+        parent.set_at_(subkey, value, self.idx, non_blocking=non_blocking)
         return self
 
     def set(
@@ -5035,7 +5075,10 @@ torch.Size([3, 2])
         return self._set(key, tensor, inplace=inplace)
 
     def set_(
-        self, key: str, value: dict[str, CompatibleType] | CompatibleType
+        self,
+        key: str,
+        value: dict[str, CompatibleType] | CompatibleType,
+        non_blocking: bool = False,
     ) -> TensorDictBase:
         key = self._validate_key(key)
         try:
@@ -5049,7 +5092,7 @@ torch.Size([3, 2])
             else:
                 td, subkey = self, key
             value = td._validate_value(value)
-            td._set(subkey, value, inplace=True)
+            td._set(subkey, value, inplace=True, non_blocking=non_blocking)
         except KeyError as e:
             raise KeyError(
                 f'key "{key}" not found in tensordict, '
@@ -5123,17 +5166,18 @@ torch.Size([3, 2])
         value: dict[str, CompatibleType] | CompatibleType,
         idx: IndexType,
         discard_idx_attr: bool = False,
+        non_blocking: bool = False,
     ) -> SubTensorDict:
         if not isinstance(idx, tuple):
             idx = (idx,)
         key = self._validate_key(key)
         value = self._validate_value(value, check_shape=False)
         if discard_idx_attr:
-            self._source.set_at_(key, value, idx)
+            self._source.set_at_(key, value, idx, non_blocking=non_blocking)
         else:
             tensor = self._source.get_at(key, self.idx)
             tensor[idx] = value
-            self._source.set_at_(key, tensor, self.idx)
+            self._source.set_at_(key, tensor, self.idx, non_blocking=non_blocking)
         return self
 
     def get_at(
@@ -5200,9 +5244,14 @@ torch.Size([3, 2])
         self,
         input_dict: dict[str, CompatibleType] | TensorDictBase,
         clone: bool = False,
+        non_blocking: bool = False,
     ) -> SubTensorDict:
         return self.update_at_(
-            input_dict, idx=self.idx, discard_idx_attr=True, clone=clone
+            input_dict,
+            idx=self.idx,
+            discard_idx_attr=True,
+            clone=clone,
+            non_blocking=non_blocking,
         )
 
     def update_at_(
@@ -5211,6 +5260,7 @@ torch.Size([3, 2])
         idx: IndexType,
         discard_idx_attr: bool = False,
         clone: bool = False,
+        non_blocking: bool = False,
     ) -> SubTensorDict:
         for key, value in input_dict.items():
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
@@ -5225,6 +5275,7 @@ torch.Size([3, 2])
                 value,
                 idx,
                 discard_idx_attr=discard_idx_attr,
+                non_blocking=non_blocking,
             )
         return self
 
@@ -5598,12 +5649,12 @@ class LazyStackedTensorDict(TensorDictBase):
         s.insert(stack_dim, N)
         return torch.Size(s)
 
-    def _set(self, key, value, inplace: bool = False):
+    def _set(self, key, value, inplace: bool = False, non_blocking: bool = False):
         values = value.unbind(self.stack_dim)
         if len(values) != len(self.tensordicts):
             raise RuntimeError
         for tensordict, item in zip(self.tensordicts, values):
-            tensordict._set(key, item, inplace)
+            tensordict._set(key, item, inplace, non_blocking=non_blocking)
 
         first_key = key if (isinstance(key, str)) else key[0]
         if key not in self._valid_keys:
@@ -5633,12 +5684,15 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def set_(
-        self, key: str, tensor: dict[str, CompatibleType] | CompatibleType
+        self,
+        key: str,
+        tensor: dict[str, CompatibleType] | CompatibleType,
+        non_blocking: bool = False,
     ) -> TensorDictBase:
         key = self._validate_key(key)
         tensor = self._validate_value(tensor)
         try:
-            return self._set(key, tensor, inplace=True)
+            return self._set(key, tensor, inplace=True, non_blocking=non_blocking)
         except KeyError as e:
             raise KeyError(
                 "setting a value in-place on a stack of TensorDict is only "
@@ -5655,12 +5709,16 @@ class LazyStackedTensorDict(TensorDictBase):
             return super().unbind(dim)
 
     def set_at_(
-        self, key: str, value: dict | CompatibleType, idx: IndexType
+        self,
+        key: str,
+        value: dict | CompatibleType,
+        idx: IndexType,
+        non_blocking: bool = False,
     ) -> TensorDictBase:
         # this generalizes across all types of indices
         item = self.get(key)
         item[idx] = self._validate_value(value, check_shape=False)
-        self.set(key, item, inplace=True)
+        self.set(key, item, inplace=True, non_blocking=non_blocking)
         return self
 
     def _stack_onto_(
@@ -6446,6 +6504,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
         clone: bool = False,
+        non_blocking: bool = False,
         **kwargs: Any,
     ) -> TensorDictBase:
         if input_dict_or_td is self:
@@ -6462,7 +6521,7 @@ class LazyStackedTensorDict(TensorDictBase):
             for td_dest, td_source in zip(
                 self.tensordicts, input_dict_or_td.tensordicts
             ):
-                td_dest.update_(td_source)
+                td_dest.update_(td_source, non_blocking=non_blocking)
             return self
         for key, value in input_dict_or_td.items():
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
@@ -6472,7 +6531,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             if clone:
                 value = value.clone()
-            self.set_(key, value, **kwargs)
+            self.set_(key, value, non_blocking=non_blocking, **kwargs)
         return self
 
     def rename_key_(
@@ -6717,9 +6776,9 @@ class _CustomOpTensorDict(TensorDictBase):
                 )
             return self._default_get(key, default)
 
-    def _set(self, key, value, inplace: bool = False):
+    def _set(self, key, value, inplace: bool = False, non_blocking: bool = False):
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
-        self._source._set(key, value, inplace=inplace)
+        self._source._set(key, value, inplace=inplace, non_blocking=non_blocking)
         return self
 
     def set(
@@ -6751,7 +6810,9 @@ class _CustomOpTensorDict(TensorDictBase):
         value = self._validate_value(value)
         return self._set(key, value, inplace=inplace)
 
-    def set_(self, key: str, value: dict | CompatibleType) -> _CustomOpTensorDict:
+    def set_(
+        self, key: str, value: dict | CompatibleType, non_blocking: bool = False
+    ) -> _CustomOpTensorDict:
         if self.inv_op is None:
             raise Exception(
                 f"{self.__class__.__name__} does not support setting values. "
@@ -6760,11 +6821,16 @@ class _CustomOpTensorDict(TensorDictBase):
 
         key = self._validate_key(key)
         value = self._validate_value(value)
-        return self._set(key, value, inplace=True)
+        return self._set(key, value, inplace=True, non_blocking=non_blocking)
 
     def set_at_(
-        self, key: str, value: dict | CompatibleType, idx: IndexType
+        self,
+        key: str,
+        value: dict | CompatibleType,
+        idx: IndexType,
+        non_blocking: bool = False,
     ) -> _CustomOpTensorDict:
+        # TODO: currently, non_blocking has no effect
         transformed_tensor, original_tensor = self.get(
             key, _return_original_tensor=True
         )

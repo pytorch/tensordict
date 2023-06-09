@@ -676,7 +676,13 @@ class PersistentTensorDict(TensorDictBase):
         return out
 
     def _set(
-        self, key: str, value, inplace: bool = False, idx=None, check_shape=True
+        self,
+        key: str,
+        value,
+        inplace: bool = False,
+        idx=None,
+        check_shape=True,
+        non_blocking: bool = False,
     ) -> PersistentTensorDict:
         # although it is expected that _set will run as few tests as possible,
         # we must do the value transformation here as _set can be called by other
@@ -761,6 +767,7 @@ class PersistentTensorDict(TensorDictBase):
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         inplace: bool = False,
+        non_blocking: bool = False,
     ) -> PersistentTensorDict:
 
         key = self._process_key(key)
@@ -775,7 +782,10 @@ class PersistentTensorDict(TensorDictBase):
         return self._set(key, value, inplace=inplace)
 
     def set_(
-        self, key: str, value: dict[str, CompatibleType] | CompatibleType
+        self,
+        key: str,
+        value: dict[str, CompatibleType] | CompatibleType,
+        non_blocking: bool = False,
     ) -> PersistentTensorDict:
         visitor = _Visitor()
         self.file.visit(visitor)
@@ -784,7 +794,9 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f'key "{key}" not found in h5.')
         # we don't need to check shape as the modification will be done
         # in-place and an error will be thrown anyway if shapes don't match
-        return self._set(key, value, inplace=True, check_shape=False)
+        return self._set(
+            key, value, inplace=True, check_shape=False, non_blocking=non_blocking
+        )
 
     def set_at_(
         self,

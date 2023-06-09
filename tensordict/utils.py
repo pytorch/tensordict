@@ -721,8 +721,9 @@ def _get_item(tensor: torch.Tensor, index: IndexType) -> torch.Tensor:
 
 
 def _set_item(
-    tensor: torch.Tensor, index: IndexType, value: torch.Tensor
+    tensor: torch.Tensor, index: IndexType, value: torch.Tensor, non_blocking=False
 ) -> torch.Tensor:
+    # TODO: currently, non_blocking has not effect
     if isinstance(tensor, torch.Tensor):
         tensor[index] = value
         return tensor
