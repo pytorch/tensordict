@@ -222,7 +222,7 @@ class _TensorDictKeysView:
             full_key = self._combine_keys(prefix, key)
             cls = value.__class__
             if self.include_nested and (
-                _is_tensor_collection(cls) or issubclass(value, KeyedJaggedTensor)
+                _is_tensor_collection(cls) or issubclass(cls, KeyedJaggedTensor)
             ):
                 subkeys = tuple(
                     self._iter_helper(
