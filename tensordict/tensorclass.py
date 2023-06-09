@@ -185,7 +185,10 @@ def tensorclass(cls: T) -> T:
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
-    tensordict_lib.tensordict._ACCEPTED_CLASSES += [cls]
+    tensordict_lib.tensordict._ACCEPTED_CLASSES = (
+        *tensordict_lib.tensordict._ACCEPTED_CLASSES,
+        cls,
+    )
     return cls
 
 

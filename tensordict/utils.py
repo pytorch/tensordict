@@ -653,7 +653,7 @@ def _ndimension(tensor: torch.Tensor) -> int:
 
 def _shape(tensor: torch.Tensor) -> torch.Size:
     try:
-        return torch.Size(tensor.shape)
+        return tensor.shape
     except AttributeError as err:
         if type(tensor) is KeyedJaggedTensor:
             return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
