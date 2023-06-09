@@ -220,10 +220,9 @@ class _TensorDictKeysView:
 
         for key, value in items_iter:
             full_key = self._combine_keys(prefix, key)
-            if (
-                _is_tensor_collection(value.__class__)
-                or isinstance(value, (KeyedJaggedTensor,))
-                and self.include_nested
+            cls = value.__class__
+            if self.include_nested and (
+                _is_tensor_collection(cls) or issubclass(cls, KeyedJaggedTensor)
             ):
                 subkeys = tuple(
                     self._iter_helper(
@@ -232,14 +231,14 @@ class _TensorDictKeysView:
                     )
                 )
                 yield from subkeys
-            if not (_is_tensor_collection(value.__class__) and self.leaves_only):
+            if not self.leaves_only or not _is_tensor_collection(cls):
                 yield full_key
 
     def _combine_keys(self, prefix: str | None, key: NestedKey) -> NestedKey:
         if prefix is not None:
             if isinstance(key, tuple):
                 return prefix + key
-            return (*prefix, key)
+            return prefix + (key,)
         return key
 
     def __len__(self) -> int:
@@ -3896,12 +3895,14 @@ class TensorDict(TensorDictBase):
     ) -> CompatibleType:
         key = unravel_keys(key)
 
-        if isinstance(key, tuple):
-            if key[0] not in self._tensordict:
-                return self._default_get(key[0], default)
-
-            if len(key) > 1:
-                first_lev = self._tensordict[key[0]]
+        if isinstance(key, str):
+            first_key = key
+            out = self._tensordict.get(first_key, None)
+        else:
+            first_key = key[0]
+            out = self._tensordict.get(first_key, None)
+            if out is not None and len(key) > 1:
+                first_lev = out
                 if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
                     return first_lev[key[1]]
                 try:
@@ -3910,12 +3911,11 @@ class TensorDict(TensorDictBase):
                     if "has no attribute" in str(err):
                         raise ValueError(
                             f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
-                            f" for key '{key[0]}' and subkeys {key[1:]} in tensordict:\n{self}."
+                            f" for key '{first_key}' and subkeys {key[1:]} in tensordict:\n{self}."
                         )
-            return self._tensordict[key[0]]
-        if key not in self._tensordict:
-            return self._default_get(key, default)
-        return self._tensordict[key]
+        if out is None:
+            return self._default_get(first_key, default)
+        return out
 
     def share_memory_(self) -> TensorDictBase:
         if self.is_memmap():
@@ -4233,6 +4233,11 @@ def _dict_to_nested_keys(
 
 
 def _default_hook(td: TensorDictBase, k: tuple[str, ...]) -> None:
+    """Used to populate a tensordict.
+
+    For example, ``td.set(("a", "b"))`` may require to create ``"a"``.
+
+    """
     out = td.get(k[0], None)
     if out is None:
         out = td.select()
