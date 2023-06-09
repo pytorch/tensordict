@@ -6782,7 +6782,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def set(
-        self, key: NestedKey, value: dict | CompatibleType, inplace: bool = False
+        self, key: NestedKey, value: dict | CompatibleType, inplace: bool = False, non_blocking: bool=False,
     ) -> TensorDictBase:
         key = self._validate_key(key)
 
@@ -6803,12 +6803,12 @@ class _CustomOpTensorDict(TensorDictBase):
                 custom_op_kwargs=self._update_custom_op_kwargs(subsource),
                 inv_op_kwargs=self._update_inv_op_kwargs(subsource),
             )
-            td.set(subkey, value, inplace=inplace)
+            td.set(subkey, value, inplace=inplace, non_blocking=non_blocking)
             return self
 
         key = self._validate_key(key)
         value = self._validate_value(value)
-        return self._set(key, value, inplace=inplace)
+        return self._set(key, value, inplace=inplace, non_blocking=non_blocking)
 
     def set_(
         self, key: str, value: dict | CompatibleType, non_blocking: bool = False
