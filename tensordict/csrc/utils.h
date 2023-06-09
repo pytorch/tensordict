@@ -33,42 +33,42 @@ namespace py = pybind11;
 //    }
 //}
 
-//py::str unravel(const py::str& key) {
-////    return py::make_tuple(key);
-//    return key;
-//}
-//
-//py::tuple unravel(const py::tuple& key) {
-//    py::list newkey;
-//    for (const auto& subkey : key) {
-//        if (py::isinstance<py::str>(subkey)) {
-//            newkey.append(subkey);
-//        } else {
-////            auto _key = unravel_keys_tuple(subkey);
-//            auto _key = unravel(subkey.cast<py::tuple>());
-//            for (const auto& k : _key) {
-//                newkey.append(k);
-//            }
-//        }
-//    }
-//    return py::tuple(newkey);
-//}
+py::str unravel(const py::str& key) {
+//    return py::make_tuple(key);
+    return key;
+}
 
-py::object unravel_keys(const py::object& key) {
-    if (py::isinstance<py::tuple>(key)) {
-        py::list newkey;
-        for (const auto& subkey : key) {
-            if (py::isinstance<py::str>(subkey)) {
-                newkey.append(subkey);
-            } else {
-                auto _key = unravel_keys(subkey.cast<py::object>());
-                for (const auto& k : _key) {
-                    newkey.append(k);
-                }
+py::tuple unravel(const py::tuple& key) {
+    py::list newkey;
+    for (const auto& subkey : key) {
+        if (py::isinstance<py::str>(subkey)) {
+            newkey.append(subkey);
+        } else {
+//            auto _key = unravel_keys_tuple(subkey);
+            auto _key = unravel(subkey.cast<py::tuple>());
+            for (const auto& k : _key) {
+                newkey.append(k);
             }
         }
-        return py::tuple(newkey);
-    } else {
-        return key;
     }
+    return py::tuple(newkey);
 }
+
+//py::object unravel_keys(const py::object& key) {
+//    if (py::isinstance<py::tuple>(key)) {
+//        py::list newkey;
+//        for (const auto& subkey : key) {
+//            if (py::isinstance<py::str>(subkey)) {
+//                newkey.append(subkey);
+//            } else {
+//                auto _key = unravel_keys(subkey.cast<py::object>());
+//                for (const auto& k : _key) {
+//                    newkey.append(k);
+//                }
+//            }
+//        }
+//        return py::tuple(newkey);
+//    } else {
+//        return key;
+//    }
+//}
