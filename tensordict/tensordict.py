@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import collections
+import concurrent.futures
 import functools
 import numbers
 import re
@@ -1475,15 +1476,26 @@ class TensorDictBase(MutableMapping):
         if input_dict_or_td is self:
             # no op
             return self
-        for key, value in input_dict_or_td.items():
-            # if not isinstance(value, _accepted_classes):
-            #     raise TypeError(
-            #         f"Expected value to be one of types {_accepted_classes} "
-            #         f"but got {type(value)}"
-            #     )
+
+        def process_item(key, clone):
+            value = input_dict_or_td.get(key)
             if clone:
                 value = value.clone()
             self.set_(key, value)
+
+        # Create an instance of ThreadPoolExecutor
+        # Submit each task to the executor
+        futures = [self.executor.submit(process_item, key, clone) for
+                   key in input_dict_or_td.keys()]
+
+        # Retrieve the results as they complete
+        for future in concurrent.futures.as_completed(futures):
+            future.result()
+
+        # for key, value in input_dict_or_td.items():
+        #     if clone:
+        #         value = value.clone()
+        #     self.set_(key, value)
         return self
 
     def update_at_(
@@ -3443,6 +3455,7 @@ class TensorDict(TensorDictBase):
         if device is not None:
             device = torch.device(device)
         self._device = device
+        self.executor = concurrent.futures.ThreadPoolExecutor()
 
         if not _run_checks:
             self._tensordict: dict = dict(source)
