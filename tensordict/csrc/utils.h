@@ -33,12 +33,12 @@ namespace py = pybind11;
 //    }
 //}
 
-py::str unravel(const py::str& key) {
+py::object unravel(const py::str& key) {
 //    return py::make_tuple(key);
     return key;
 }
 
-py::tuple unravel(const py::tuple& key) {
+py::object unravel(const py::tuple& key) {
     py::list newkey;
     for (const auto& subkey : key) {
         if (py::isinstance<py::str>(subkey)) {
@@ -54,6 +54,7 @@ py::tuple unravel(const py::tuple& key) {
     return py::tuple(newkey);
 }
 
+//// This is the fastest implementation. Overaloading slows down str -> str
 //py::object unravel_keys(const py::object& key) {
 //    if (py::isinstance<py::tuple>(key)) {
 //        py::list newkey;
