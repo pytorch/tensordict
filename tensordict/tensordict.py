@@ -213,38 +213,50 @@ class _TensorDictKeysView:
         else:
             yield from self._iter_helper(self.tensordict)
 
+    #@profile
     def _iter_helper(
         self, tensordict: TensorDictBase, prefix: str | None = None
     ) -> Iterable[str] | Iterable[tuple[str, ...]]:
-        items_iter = self._items(tensordict)
+        subkeys = []
+        for key, value in self._items(tensordict):
+            full_key = self._combine_keys(prefix, key) if prefix else key
+            is_tc = None
+            cls = value.__class__
+            if not self.leaves_only:
+                yield full_key
+            else:
+                is_tc = _is_tensor_collection(cls)
+                if not is_tc:
+                    yield full_key
 
-        for key, value in items_iter:
-            full_key = self._combine_keys(prefix, key)
-            if (
-                _is_tensor_collection(value.__class__)
-                or isinstance(value, (KeyedJaggedTensor,))
-                and self.include_nested
-            ):
-                subkeys = tuple(
-                    self._iter_helper(
+            if self.include_nested:
+                if issubclass(cls, KeyedJaggedTensor):
+                    include = True
+                elif is_tc is None:
+                    include = _is_tensor_collection(cls)
+                else:
+                    continue
+                if include:
+                    _subkeys = self._iter_helper(
                         value,
                         full_key if isinstance(full_key, tuple) else (full_key,),
                     )
-                )
-                yield from subkeys
-            if not (_is_tensor_collection(value.__class__) and self.leaves_only):
-                yield full_key
+                    subkeys.append(_subkeys)
+        for _subkeys in subkeys:
+            yield from _subkeys
 
+    #@profile
     def _combine_keys(self, prefix: str | None, key: NestedKey) -> NestedKey:
         if prefix is not None:
             if isinstance(key, tuple):
                 return prefix + key
-            return (*prefix, key)
+            return prefix + (key,)
         return key
 
     def __len__(self) -> int:
         return sum(1 for _ in self)
 
+    #@profile
     def _items(
         self, tensordict: TensorDict | None = None
     ) -> Iterable[tuple[NestedKey, CompatibleType]]:
@@ -263,9 +275,11 @@ class _TensorDictKeysView:
             # be careful to not rely on tensordict._tensordict existing.
             return ((key, tensordict.get(key)) for key in tensordict._source.keys())
 
+    #@profile
     def _keys(self) -> _TensorDictKeysView:
         return self.tensordict._tensordict.keys()
 
+    #@profile
     def __contains__(self, key: NestedKey) -> bool:
         if isinstance(key, str):
             if key in self._keys():
@@ -4163,11 +4177,12 @@ class TensorDict(TensorDictBase):
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
-        if self._keys is None:
-            self._keys = _TensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
-        )
-        return self._keys
+        keys = self._keys
+        if keys is None:
+            keys = self._keys = _TensorDictKeysView(
+                self, include_nested=include_nested, leaves_only=leaves_only
+            )
+        return keys
 
     def __getstate__(self):
         return {slot: getattr(self, slot) for slot in self.__slots__}
@@ -4237,7 +4252,13 @@ def _dict_to_nested_keys(
             yield key
 
 
+#@profile
 def _default_hook(td: TensorDictBase, k: tuple[str, ...]) -> None:
+    """Used to populate a tensordict.
+
+    For example, ``td.set(("a", "b"))`` may require to create ``"a"``.
+
+    """
     out = td.get(k[0], None)
     if out is None:
         out = td.select()
@@ -4247,6 +4268,7 @@ def _default_hook(td: TensorDictBase, k: tuple[str, ...]) -> None:
     return out
 
 
+#@profile
 def _get_leaf_tensordict(
     tensordict: TensorDictBase, key: tuple[str, ...], hook: Callable = None
 ) -> tuple[TensorDictBase, str]:
