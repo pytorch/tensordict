@@ -21,6 +21,7 @@ import tensordict as tensordict_lib
 
 import torch
 
+from tensordict.utils import is_tensorclass
 from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     _get_repr,
@@ -58,16 +59,6 @@ _TD_PASS_THROUGH = {
     torch.cat,
     torch.gather,
 }
-
-
-def is_tensorclass(obj: type | Any) -> bool:
-    """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
-    cls = obj if isinstance(obj, type) else type(obj)
-    return (
-        dataclasses.is_dataclass(cls)
-        and "to_tensordict" in cls.__dict__
-        and "_from_tensordict" in cls.__dict__
-    )
 
 
 def tensorclass(cls: T) -> T:
@@ -204,7 +195,8 @@ def _arg_to_tensordict(arg):
     # tensordicts and return those instead
     if is_tensorclass(arg):
         return arg._tensordict
-    elif isinstance(arg, (tuple, list)) and all(is_tensorclass(item) for item in arg):
+    elif isinstance(arg, (tuple, list)) and all(
+        is_tensorclass(item) for item in arg):
         return arg.__class__(item._tensordict for item in arg)
     return arg
 

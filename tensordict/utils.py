@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import math
 import time
 
@@ -830,7 +832,7 @@ def _is_lis_of_list_of_bools(index, first_level=True):
         return _is_lis_of_list_of_bools(index[0], False)
     return False
 
-
+# #@profile
 def unravel_keys(key, make_tuple: bool=False):
     """Unravels keys when one can be sure that they are keys.
 
@@ -839,6 +841,10 @@ def unravel_keys(key, make_tuple: bool=False):
             in a tuple. Defaults to ``False``.
 
     """
+    if isinstance(key, str):
+        if make_tuple:
+            return (key,)
+        return key
     if isinstance(key, tuple):
         newkey = []
         for subkey in key:
@@ -847,12 +853,9 @@ def unravel_keys(key, make_tuple: bool=False):
             else:
                 _key = unravel_keys(subkey)
                 newkey += _key
-        key = tuple(newkey)
-    elif not isinstance(key, str):
+        return tuple(newkey)
+    else:
         raise ValueError(f"key should be a Sequence[NestedKey]. Got {key}")
-    elif make_tuple:
-        key = (key,)
-    return key
 
 
 def _maybe_unravel_keys_silent(index):
@@ -874,3 +877,13 @@ def _maybe_unravel_keys_silent(index):
     else:
         return index
     return newkey
+
+
+def is_tensorclass(obj: type | Any) -> bool:
+    """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
+    cls = obj if isinstance(obj, type) else type(obj)
+    return (
+        dataclasses.is_dataclass(cls)
+        and "to_tensordict" in cls.__dict__
+        and "_from_tensordict" in cls.__dict__
+    )
