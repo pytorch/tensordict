@@ -33,6 +33,7 @@ from warnings import warn
 import numpy as np
 
 import torch
+from tensordict._tensordict import unravel_keys
 from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
 from tensordict.utils import (
     _device,
@@ -40,6 +41,7 @@ from tensordict.utils import (
     _get_item,
     _getitem_batch_size,
     _is_shared,
+    _is_tensorclass,
     _maybe_unravel_keys_silent,
     _set_item,
     _shape,
@@ -50,15 +52,13 @@ from tensordict.utils import (
     expand_right,
     IndexType,
     int_generator,
+    is_tensorclass,
     NestedKey,
     prod,
-    is_tensorclass,
-    _is_tensorclass,
     # unravel_keys,
 )
 from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
-from tensordict._tensordict import unravel_keys
 
 try:
     from torch.jit._shape_functions import infer_size_impl
@@ -119,6 +119,7 @@ _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
 _TENSOR_COLLECTION_MEMO = {}
 
+
 def _is_tensor_collection(datatype):
     # if issubclass(datatype, _HEURISTIC_EXCLUDED):
     #     return False
@@ -129,7 +130,7 @@ def _is_tensor_collection(datatype):
     return False
 
 
-#@profile
+# @profile
 def is_tensor_collection(datatype: type | Any) -> bool:
     """Checks if a data object or a type is a tensor container from the tensordict lib.
 
@@ -155,6 +156,7 @@ def is_tensor_collection(datatype: type | Any) -> bool:
     if out is None:
         out = _TENSOR_COLLECTION_MEMO[datatype] = _is_tensor_collection(datatype)
     return out
+
 
 def is_memmap(datatype: type | Any) -> bool:
     """Returns ``True`` if the class is a subclass of :class:`~.MemmapTensor` or the object an instance of it."""
@@ -247,7 +249,6 @@ class _TensorDictKeysView:
     def _items(
         self, tensordict: TensorDict | None = None
     ) -> Iterable[tuple[NestedKey, CompatibleType]]:
-        from tensordict import is_tensorclass
 
         if tensordict is None:
             tensordict = self.tensordict
@@ -378,7 +379,7 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError
 
     @property
-    #@profile
+    # @profile
     def names(self):
         names = self._td_dim_names
         if names is None:
@@ -386,7 +387,7 @@ class TensorDictBase(MutableMapping):
         return names
 
     @names.setter
-    #@profile
+    # @profile
     def names(self, value):
         # we don't run checks on types for efficiency purposes
         if value is None:
@@ -422,7 +423,8 @@ class TensorDictBase(MutableMapping):
                     return True
         else:
             return False
-    #@profile
+
+    # @profile
     def refine_names(self, *names):
         """Refines the dimension names of self according to names.
 
@@ -1551,7 +1553,8 @@ class TensorDictBase(MutableMapping):
             key = key[0]
 
         return key
-    #@profile
+
+    # @profile
     def _validate_value(
         self,
         value: CompatibleType | dict[str, CompatibleType],
@@ -1820,8 +1823,6 @@ class TensorDictBase(MutableMapping):
             tensors of the same shape as the original tensors.
 
         """
-        # avoiding circular imports
-        from tensordict import is_tensorclass
 
         if is_tensorclass(other):
             return other != self
@@ -1852,8 +1853,6 @@ class TensorDictBase(MutableMapping):
             tensors of the same shape as the original tensors.
 
         """
-        # avoiding circular imports
-        from tensordict import is_tensorclass
 
         if is_tensorclass(other):
             return other == self
@@ -3005,7 +3004,10 @@ class TensorDictBase(MutableMapping):
                     else:
                         idx_to_take.append(count)
                         count += 1
-                names = [self._td_dim_names[i] if i is not None else None for i in idx_to_take]
+                names = [
+                    self._td_dim_names[i] if i is not None else None
+                    for i in idx_to_take
+                ]
         return names
 
     def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
@@ -3575,7 +3577,7 @@ class TensorDict(TensorDictBase):
             f"not allowed."
         )
 
-    #@profile
+    # @profile
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim
@@ -3884,7 +3886,8 @@ class TensorDict(TensorDictBase):
             _set_item(tensor_in, idx, value)
 
         return self
-    #@profile
+
+    # @profile
     def get(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
@@ -6117,8 +6120,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
 
     def __eq__(self, other):
-        # avoiding circular imports
-        from tensordict import is_tensorclass
 
         if is_tensorclass(other):
             return other == self
@@ -6155,8 +6156,6 @@ class LazyStackedTensorDict(TensorDictBase):
         return False
 
     def __ne__(self, other):
-        # avoiding circular imports
-        from tensordict import is_tensorclass
 
         if is_tensorclass(other):
             return other != self

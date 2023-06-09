@@ -5,6 +5,7 @@
 
 import argparse
 import distutils.command.clean
+import glob
 import os
 import shutil
 import subprocess
@@ -14,8 +15,6 @@ from pathlib import Path
 from typing import List
 
 from setuptools import find_packages, setup
-from torch.utils.cpp_extension import BuildExtension
-import glob
 from torch.utils.cpp_extension import BuildExtension, CppExtension
 
 ROOT_DIR = Path(__file__).parent.resolve()
@@ -140,6 +139,7 @@ def get_extensions():
     ]
 
     return ext_modules
+
 
 def _main(argv):
     args, unknown = parse_args(argv)

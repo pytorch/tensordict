@@ -832,18 +832,14 @@ def _is_lis_of_list_of_bools(index, first_level=True):
         return _is_lis_of_list_of_bools(index[0], False)
     return False
 
-#@profile
-def unravel_keys(key, make_tuple: bool=False):
+
+def unravel_keys(key):
     """Unravels keys when one can be sure that they are keys.
 
-    Args:
-        make_tuple (bool, optional): if ``True``, even strings will be nested
-            in a tuple. Defaults to ``False``.
+    The c++ version under tensordict._tensordict should be preferred.
 
     """
     if isinstance(key, str):
-        if make_tuple:
-            return (key,)
         return key
     if isinstance(key, tuple):
         newkey = []
@@ -883,6 +879,7 @@ def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
     cls = obj if isinstance(obj, type) else type(obj)
     return _is_tensorclass(cls)
+
 
 def _is_tensorclass(cls) -> bool:
     return (

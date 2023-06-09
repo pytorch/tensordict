@@ -20,8 +20,6 @@ from typing import Any, Callable, Sequence, TypeVar
 import tensordict as tensordict_lib
 
 import torch
-
-from tensordict.utils import is_tensorclass
 from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     _get_repr,
@@ -31,7 +29,8 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.utils import DeviceType, IndexType, NestedKey
+
+from tensordict.utils import DeviceType, IndexType, is_tensorclass, NestedKey
 from torch import Tensor
 
 T = TypeVar("T", bound=TensorDictBase)
@@ -195,8 +194,7 @@ def _arg_to_tensordict(arg):
     # tensordicts and return those instead
     if is_tensorclass(arg):
         return arg._tensordict
-    elif isinstance(arg, (tuple, list)) and all(
-        is_tensorclass(item) for item in arg):
+    elif isinstance(arg, (tuple, list)) and all(is_tensorclass(item) for item in arg):
         return arg.__class__(item._tensordict for item in arg)
     return arg
 
