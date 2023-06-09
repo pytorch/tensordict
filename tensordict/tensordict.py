@@ -3896,12 +3896,14 @@ class TensorDict(TensorDictBase):
     ) -> CompatibleType:
         key = unravel_keys(key)
 
-        if isinstance(key, tuple):
-            if key[0] not in self._tensordict:
-                return self._default_get(key[0], default)
-
-            if len(key) > 1:
-                first_lev = self._tensordict[key[0]]
+        if isinstance(key, str):
+            first_key = key
+            out = self._tensordict.get(first_key, None)
+        else:
+            first_key = key[0]
+            out = self._tensordict.get(first_key, None)
+            if out is not None and len(key) > 1:
+                first_lev = out
                 if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
                     return first_lev[key[1]]
                 try:
@@ -3910,12 +3912,11 @@ class TensorDict(TensorDictBase):
                     if "has no attribute" in str(err):
                         raise ValueError(
                             f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
-                            f" for key '{key[0]}' and subkeys {key[1:]} in tensordict:\n{self}."
+                            f" for key '{first_key}' and subkeys {key[1:]} in tensordict:\n{self}."
                         )
-            return self._tensordict[key[0]]
-        if key not in self._tensordict:
-            return self._default_get(key, default)
-        return self._tensordict[key]
+        if out is None:
+            return self._default_get(first_key, default)
+        return out
 
     def share_memory_(self) -> TensorDictBase:
         if self.is_memmap():
