@@ -3420,6 +3420,7 @@ class TensorDict(TensorDictBase):
         "_device",
         "_is_locked",
         "_td_dim_names",
+        "_keys",
     )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
@@ -3440,6 +3441,7 @@ class TensorDict(TensorDictBase):
     ) -> None:
         self._is_shared = _is_shared
         self._is_memmap = _is_memmap
+        self._keys = None
         if device is not None:
             device = torch.device(device)
         self._device = device
@@ -4161,9 +4163,11 @@ class TensorDict(TensorDictBase):
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
-        return _TensorDictKeysView(
+        if self._keys is None:
+            self._keys = _TensorDictKeysView(
             self, include_nested=include_nested, leaves_only=leaves_only
         )
+        return self._keys
 
     def __getstate__(self):
         return {slot: getattr(self, slot) for slot in self.__slots__}
