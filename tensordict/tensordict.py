@@ -4099,8 +4099,8 @@ class TensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
-        return TensorDict(
-            source={key: _clone_value(value, recurse) for key, value in self.items()},
+        out = TensorDict(
+            source={},  #
             batch_size=self.batch_size,
             device=self.device,
             names=copy(self._td_dim_names),
@@ -4108,6 +4108,9 @@ class TensorDict(TensorDictBase):
             _is_shared=self.is_shared() if not recurse else False,
             _is_memmap=self.is_memmap() if not recurse else False,
         )
+        for key in self._tensordict.keys():
+            out._set(key, _clone_value(self._tensordict.get(key), recurse))
+        return out
 
     def contiguous(self) -> TensorDictBase:
         if not self.is_contiguous():
