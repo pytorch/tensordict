@@ -12,6 +12,8 @@ import pytest
 import torch
 from _pytest.fixtures import fixture
 
+from packaging.version import parse
+
 from tensordict import MemmapTensor, TensorDict
 from torch import distributed as dist, multiprocessing as mp
 
@@ -90,6 +92,9 @@ class TestGather:
             secondary_worker.join()
 
 
+@pytest.mark.skipif(
+    parse(torch.__version__) < parse("2.0"), reason="Avoid pickle error"
+)
 @pytest.mark.skipif(
     sys.version_info.minor <= 7,
     reason="reduce test is incompatible with python 3.7 or lower (cannot pickle the op Enum).",

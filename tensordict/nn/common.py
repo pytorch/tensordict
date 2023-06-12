@@ -18,7 +18,7 @@ from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
-from tensordict.utils import _normalize_key, NestedKey, unravel_keys
+from tensordict.utils import _normalize_key, implement_for, NestedKey, unravel_keys
 from torch import nn, Tensor
 
 try:
@@ -289,7 +289,62 @@ class _OutKeysSelect:
         self.module = module
         module.out_keys = list(self.out_keys)
 
-    def __call__(
+    @implement_for("torch", None, "2.0")
+    def __call__(  # noqa: F811
+        self,
+        module: TensorDictModuleBase,
+        tensordict_in: TensorDictBase,
+        tensordict_out: TensorDictBase,
+    ):
+        # detect dispatch calls
+        in_keys = module.in_keys
+        is_dispatched = self._detect_dispatch(tensordict_in, in_keys)
+        out_keys = self.out_keys
+        # if dispatch filtered the out keys as they should we're happy
+        if is_dispatched:
+            if (not isinstance(tensordict_out, tuple) and len(out_keys) == 1) or (
+                len(out_keys) == len(tensordict_out)
+            ):
+                return tensordict_out
+        self._init(module)
+        if is_dispatched:
+            # it might be the case that dispatch was not aware of what the out-keys were.
+            if isinstance(tensordict_out, tuple):
+                out = tuple(
+                    item
+                    for i, item in enumerate(tensordict_out)
+                    if module._out_keys[i] in module.out_keys
+                )
+                if len(out) == 1:
+                    return out[0]
+                return out
+            elif module._out_keys[0] in module.out_keys and len(module._out_keys) == 1:
+                return tensordict_out
+            elif (
+                module._out_keys[0] not in module.out_keys
+                and len(module._out_keys) == 1
+            ):
+                return ()
+            else:
+                raise RuntimeError(
+                    f"Selecting out-keys failed. Original out_keys: {module._out_keys}, selected: {module.out_keys}."
+                )
+        if tensordict_out is tensordict_in:
+            return tensordict_out.select(
+                *in_keys,
+                *out_keys,
+                inplace=True,
+            )
+        else:
+            return tensordict_out.select(
+                *in_keys,
+                *out_keys,
+                inplace=True,
+                strict=False,
+            )
+
+    @implement_for("torch", "2.0", None)
+    def __call__(  # noqa: F811
         self,
         module: TensorDictModuleBase,
         tensordict_in: TensorDictBase,
@@ -345,7 +400,23 @@ class _OutKeysSelect:
                 strict=False,
             )
 
-    def _detect_dispatch(self, tensordict_in, kwargs, in_keys):
+    @implement_for("torch", None, "2.0")
+    def _detect_dispatch(self, tensordict_in, in_keys):  # noqa: F811
+        if isinstance(tensordict_in, TensorDictBase) and all(
+            key in tensordict_in.keys() for key in in_keys
+        ):
+            return False
+        elif isinstance(tensordict_in, tuple):
+            if len(tensordict_in):
+                if isinstance(tensordict_in[0], TensorDictBase):
+                    return self._detect_dispatch(tensordict_in[0], in_keys)
+                return True
+            return not len(in_keys)
+        # not a TDBase: must be True
+        return True
+
+    @implement_for("torch", "2.0", None)
+    def _detect_dispatch(self, tensordict_in, kwargs, in_keys):  # noqa: F811
         if isinstance(tensordict_in, TensorDictBase) and all(
             key in tensordict_in.keys(include_nested=True) for key in in_keys
         ):
@@ -432,7 +503,120 @@ class TensorDictModuleBase(nn.Module):
             self._out_keys = value
         self._out_keys_apparent = value
 
-    def select_out_keys(self, *out_keys):
+    @implement_for("torch", None, "2.0")
+    def select_out_keys(self, *out_keys):  # noqa: F811
+        """Selects the keys that will be found in the output tensordict.
+
+        This is useful whenever one wants to get rid of intermediate keys in a
+        complicated graph, or when the presence of these keys may trigger unexpected
+        behaviours.
+
+        The original ``out_keys`` can still be accessed via ``module.out_keys_source``.
+
+        Args:
+            *out_keys (a sequence of strings or tuples of strings): the
+                out_keys that should be found in the output tensordict.
+
+        Returns: the same module, modified in-place with updated ``out_keys``.
+
+        The simplest usage is with :class:`~.TensorDictModule`:
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import TensorDictModule, TensorDictSequential
+            >>> import torch
+            >>> mod = TensorDictModule(lambda x, y: (x+2, y+2), in_keys=["a", "b"], out_keys=["c", "d"])
+            >>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
+            >>> mod(td)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> mod.select_out_keys("d")
+            >>> td = TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, [])
+            >>> mod(td)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+
+        This feature will also work with dispatched arguments:
+        Examples:
+            >>> mod(torch.zeros(()), torch.ones(()))
+            tensor(2.)
+
+        This change will occur in-place (ie the same module will be returned
+        with an updated list of out_keys). It can be reverted using the
+        :meth:`TensorDictModuleBase.reset_out_keys` method.
+
+        Examples:
+            >>> mod.reset_out_keys()
+            >>> mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+
+        This will work with other classes too, such as Sequential:
+        Examples:
+            >>> from tensordict.nn import TensorDictSequential
+            >>> seq = TensorDictSequential(
+            ...     TensorDictModule(lambda x: x+1, in_keys=["x"], out_keys=["y"]),
+            ...     TensorDictModule(lambda x: x+1, in_keys=["y"], out_keys=["z"]),
+            ... )
+            >>> td = TensorDict({"x": torch.zeros(())}, [])
+            >>> seq(td)
+            TensorDict(
+                fields={
+                    x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    y: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    z: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> seq.select_out_keys("z")
+            >>> td = TensorDict({"x": torch.zeros(())}, [])
+            >>> seq(td)
+            TensorDict(
+                fields={
+                    x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    z: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+
+        """
+        if len(out_keys) == 1:
+            if out_keys[0] not in self.out_keys:
+                err_msg = f"Can't select non existent key: {out_keys[0]}. "
+                if (
+                    out_keys[0]
+                    and isinstance(out_keys[0], (tuple, list))
+                    and out_keys[0][0] in self.out_keys
+                ):
+                    err_msg += f"Are you passing the keys in a list? Try unpacking as: `{', '.join(out_keys[0])}`"
+                raise ValueError(err_msg)
+        self.register_forward_hook(_OutKeysSelect(out_keys))
+        for hook in self._forward_hooks.values():
+            hook._init(self)
+        return self
+
+    @implement_for("torch", "2.0", None)
+    def select_out_keys(self, *out_keys):  # noqa: F811
         """Selects the keys that will be found in the output tensordict.
 
         This is useful whenever one wants to get rid of intermediate keys in a
