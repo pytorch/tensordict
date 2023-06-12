@@ -6,17 +6,22 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 
 import math
 import time
 
 import warnings
+from copy import copy
 from functools import wraps
+from importlib import import_module
 from numbers import Number
-from typing import Any, List, Sequence, Tuple, TYPE_CHECKING, Union
+from typing import Any, Callable, List, Sequence, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
 import torch
+
+from packaging.version import parse
 from torch import Tensor
 
 if TYPE_CHECKING:
@@ -887,3 +892,141 @@ def _is_tensorclass(cls) -> bool:
         and "to_tensordict" in cls.__dict__
         and "_from_tensordict" in cls.__dict__
     )
+
+
+class implement_for:
+    """A version decorator that checks the version in the environment and implements a function with the fitting one.
+
+    If specified module is missing or there is no fitting implementation, call of the decorated function
+    will lead to the explicit error.
+    In case of intersected ranges, last fitting implementation is used.
+
+    Args:
+        module_name (str or callable): version is checked for the module with this
+            name (e.g. "gym"). If a callable is provided, it should return the
+            module.
+        from_version: version from which implementation is compatible. Can be open (None).
+        to_version: version from which implementation is no longer compatible. Can be open (None).
+
+    Examples:
+        >>> @implement_for("torch", None, "1.13")
+        >>> def fun(self, x):
+        ...     # Older torch versions will return x + 1
+        ...     return x + 1
+        ...
+        >>> @implement_for("torch", "0.13", "2.0")
+        >>> def fun(self, x):
+        ...     # More recent torch versions will return x + 2
+        ...     return x + 2
+        ...
+        >>> @implement_for(lambda: import_module("torch"), "0.", None)
+        >>> def fun(self, x):
+        ...     # More recent gym versions will return x + 2
+        ...     return x + 2
+        ...
+        >>> @implement_for("gymnasium", "0.27", None)
+        >>> def fun(self, x):
+        ...     # If gymnasium is to be used instead of gym, x+3 will be returned
+        ...     return x + 3
+        ...
+
+        This indicates that the function is compatible with gym 0.13+, but doesn't with gym 0.14+.
+    """
+
+    # Stores pointers to fitting implementations: dict[func_name] = func_pointer
+    _implementations = {}
+    _setters = []
+
+    def __init__(
+        self,
+        module_name: Union[str, Callable],
+        from_version: str = None,
+        to_version: str = None,
+    ):
+        self.module_name = module_name
+        self.from_version = from_version
+        self.to_version = to_version
+        implement_for._setters.append(self)
+
+    @staticmethod
+    def check_version(version, from_version, to_version):
+        return (from_version is None or parse(version) >= parse(from_version)) and (
+            to_version is None or parse(version) < parse(to_version)
+        )
+
+    @staticmethod
+    def get_class_that_defined_method(f):
+        """Returns the class of a method, if it is defined, and None otherwise."""
+        return f.__globals__.get(f.__qualname__.split(".")[0], None)
+
+    @property
+    def func_name(self):
+        return self.fn.__name__
+
+    def module_set(self):
+        """Sets the function in its module, if it exists already."""
+        cls = self.get_class_that_defined_method(self.fn)
+        if cls is None:
+            # class not yet defined
+            return
+        if cls.__class__.__name__ == "function":
+            cls = inspect.getmodule(self.fn)
+        setattr(cls, self.fn.__name__, self.fn)
+
+    @staticmethod
+    def import_module(module_name: Union[Callable, str]) -> str:
+        """Imports module and returns its version."""
+        if not callable(module_name):
+            module = import_module(module_name)
+        else:
+            module = module_name()
+        return module.__version__
+
+    def __call__(self, fn):
+        self.fn = fn
+
+        # If the module is missing replace the function with the mock.
+        func_name = self.func_name
+        implementations = implement_for._implementations
+
+        @wraps(fn)
+        def unsupported(*args, **kwargs):
+            raise ModuleNotFoundError(
+                f"Supported version of '{func_name}' has not been found."
+            )
+
+        do_set = False
+        # Return fitting implementation if it was encountered before.
+        if func_name in implementations:
+            try:
+                # check that backends don't conflict
+                version = self.import_module(self.module_name)
+                if self.check_version(version, self.from_version, self.to_version):
+                    do_set = True
+                if not do_set:
+                    return implementations[func_name]
+            except ModuleNotFoundError:
+                # then it's ok, there is no conflict
+                return implementations[func_name]
+        else:
+            try:
+                version = self.import_module(self.module_name)
+                if self.check_version(version, self.from_version, self.to_version):
+                    do_set = True
+            except ModuleNotFoundError:
+                return unsupported
+        if do_set:
+            implementations[func_name] = fn
+            self.module_set()
+            return fn
+        return unsupported
+
+    @classmethod
+    def reset(cls, setters=None):
+        if setters is None:
+            setters = copy(cls._setters)
+        cls._setters = []
+        cls._implementations = {}
+        for setter in setters:
+            setter(setter.fn)
+            cls._setters.append(setter)
