@@ -296,6 +296,12 @@ class _OutKeysSelect:
         tensordict_in: TensorDictBase,
         tensordict_out: TensorDictBase,
     ):
+        if not isinstance(tensordict_out, TensorDictBase):
+            raise RuntimeError(
+                "You are likely using tensordict.nn.dispatch with keyword arguments with an older (< 2.0) version of pytorch. "
+                "This is currently not supported. Please use unnamed arguments or upgrade pytorch."
+            )
+        print(tensordict_out)
         # detect dispatch calls
         in_keys = module.in_keys
         is_dispatched = self._detect_dispatch(tensordict_in, in_keys)
