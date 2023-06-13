@@ -5681,14 +5681,6 @@ class LazyStackedTensorDict(TensorDictBase):
             *(tensordict.unsqueeze(dim) for tensordict in self.tensordicts),
             stack_dim=stack_dim,
         )
-        #
-        # return _UnsqueezedTensorDict(
-        #     source=self,
-        #     custom_op="unsqueeze",
-        #     inv_op="squeeze",
-        #     custom_op_kwargs={"dim": dim},
-        #     inv_op_kwargs={"dim": dim},
-        # )
 
     def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         if dim < 0:
@@ -5951,14 +5943,6 @@ class LazyStackedTensorDict(TensorDictBase):
             if names is not None:
                 out.names = names
             return out
-            # return super().apply(
-            #     fn,
-            #     *others,
-            #     batch_size=batch_size,
-            #     device=device,
-            #     names=names,
-            #     **constructor_kwargs,
-            # )
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = False
