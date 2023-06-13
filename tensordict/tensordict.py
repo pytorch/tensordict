@@ -2097,13 +2097,7 @@ class TensorDictBase(MutableMapping):
             a new tensordict with no tensor requiring gradient.
 
         """
-        return TensorDict(
-            {key: item.detach() for key, item in self.items()},
-            batch_size=self.batch_size,
-            device=self.device,
-            names=self._td_dim_names,
-            _run_checks=False,
-        )
+        return self.apply(lambda x: x.detach())
 
     def to_h5(
         self,
