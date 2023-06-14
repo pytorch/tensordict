@@ -4,7 +4,7 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches:
-      - release/0.1.3
+      - release/0.1.2
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
@@ -13,142 +13,84 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
-  build-wheel-linux:
+  build-wheel:
     runs-on: ubuntu-20.04
+    defaults:
+      run:
+        shell: bash -l {0}
     strategy:
       matrix:
-        python_version: [["3.7", "cp37-cp37m"], ["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"]]
-        cuda_support: [["", "--extra-index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"]]
-    container: pytorch/manylinux-${{ matrix.cuda_support[3] }}
+        python:
+          - version: "3.8"
+            tag: py38
+          - version: "3.9"
+            tag: py39
+          - version: "3.10"
+            tag: py310
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v2
-      - name: Install PyTorch RC
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: build_binary
+          python-version: ${{ matrix.python.version }}
+      - name: Check Python version
         run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install torch ${{ matrix.cuda_support[1] }}
+          python --version
+      - name: Install PyTorch
+        run: |
+          python -m pip install torch
+          python -m pip install "git+https://github.com/pytorch/functorch.git@release/0.2"
       - name: Build wheel
         run: |
-          export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python3 -mpip install wheel
-          BUILD_VERSION=0.1.3 python3 setup.py bdist_wheel
-          # NB: wheels have the linux_x86_64 tag so we rename to manylinux1
-          # find . -name 'dist/*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
-      # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
-      # pretend that they're manylinux1 compliant so we do the same.
-      - name: Show auditwheel output; confirm 2-17
-        run: |
-          python3 -mpip install auditwheel
-          auditwheel show dist/*
+          python -m pip install wheel
+          BUILD_VERSION=0.1.2 python setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
         with:
-          name: tensordict-linux-${{ matrix.python_version[0] }}.whl
+          name: tensordict-${{ matrix.python.tag }}.whl
           path: dist/tensordict-*.whl
-      - name: Upload wheel for download
-        uses: actions/upload-artifact@v2
-        with:
-          name: tensordict-batch.whl
-          path: dist/*.whl
-
-  build-wheel-mac:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        python_version: [["3.7", "3.7"], ["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python_version[1] }}
-          architecture: x64
-      - name: Checkout tensordict
-        uses: actions/checkout@v2
-      - name: Install PyTorch RC
-        run: |
-          python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
-      - name: Build wheel
-        run: |
-          export CC=clang CXX=clang++
-          python3 -mpip install wheel
-          BUILD_VERSION=0.1.3 python3 setup.py bdist_wheel
-      - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v2
-        with:
-          name: tensordict-mac-${{ matrix.python_version[0] }}.whl
-          path: dist/tensordict-*.whl
-      - name: Upload wheel for download
-        uses: actions/upload-artifact@v2
-        with:
-          name: tensordict-batch.whl
-          path: dist/*.whl
-
-  build-wheel-windows:
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        python_version: [["3.7", "3.7"], ["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"]]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python_version[1] }}
-      - name: Checkout tensordict
-        uses: actions/checkout@v2
-      - name: Install PyTorch RC
-        shell: bash
-        run: |
-          python3 -mpip install torch --extra-index-url https://download.pytorch.org/whl/cpu
-      - name: Build wheel
-        shell: bash
-        run: |
-            python3 -mpip install wheel
-            BUILD_VERSION=0.1.3 python3 setup.py bdist_wheel
-      - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v2
-        with:
-          name: tensordict-win-${{ matrix.python_version[0] }}.whl
-          path: dist/tensordict-*.whl
-      - name: Upload wheel for download
-        uses: actions/upload-artifact@v2
-        with:
-          name: tensordict-batch.whl
-          path: dist/*.whl
-
 
   test-wheel:
-    needs: [build-wheel-linux, build-wheel-mac]
+    needs: build-wheel
     strategy:
       matrix:
-        os: [["linux", "ubuntu-20.04"], ["mac", "macos-latest"]]
-        python_version: [ "3.7", "3.8", "3.9", "3.10" ]
-    runs-on: ${{ matrix.os[1] }}
+        os: ["ubuntu-20.04", "macos-latest"]
+        python:
+          - version: "3.8"
+            tag: py38
+          - version: "3.9"
+            tag: py39
+          - version: "3.10"
+            tag: py310
+    runs-on: ${{ matrix.os }}
     steps:
+      - name: Checkout Tensordict
+        uses: actions/checkout@v2
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python_version }}
+          python-version: ${{ matrix.python.version }}
           architecture: x64
-      - name: Checkout tensordict
-        uses: actions/checkout@v2
-      - name: Install PyTorch RC
-        run: |
-          python3 -mpip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Upgrade pip
         run: |
-          python3 -mpip install --upgrade pip
+          python -m pip install --upgrade pip
+      - name: Install PyTorch
+        run: |
+          python -m pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "git+https://github.com/pytorch/functorch.git@release/0.2"
       - name: Install test dependencies
         run: |
-          python3 -mpip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml
+          python -m pip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml
       - name: Download built wheels
         uses: actions/download-artifact@v2
         with:
-          name: tensordict-${{ matrix.os[0] }}-${{ matrix.python_version }}.whl
+          name: tensordict-${{ matrix.python.tag }}.whl
           path: /tmp/wheels
       - name: Install built wheels
         run: |
-          python3 -mpip install /tmp/wheels/*
+          python -m pip install /tmp/wheels/*
       - name: Log version string
         run: |
           # Avoid ambiguity of "import tensordict" by deleting the source files.
@@ -162,57 +104,5 @@ jobs:
           python -m torch.utils.collect_env
           python -c "import tensordict; print(tensordict.__version__)"
           EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 200
-          exit $EXIT_STATUS
-
-  test-wheel-windows:
-    needs: build-wheel-windows
-    strategy:
-      matrix:
-        python_version: [ "3.7", "3.8", "3.9", "3.10" ]
-    runs-on: windows-latest
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python_version }}
-      - name: Checkout tensordict
-        uses: actions/checkout@v2
-      - name: Install PyTorch RC
-        shell: bash
-        run: |
-          python3 -mpip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
-      - name: Upgrade pip
-        shell: bash
-        run: |
-          python3 -mpip install --upgrade pip
-      - name: Install test dependencies
-        shell: bash
-        run: |
-          python3 -mpip install numpy pytest pytest-cov codecov unittest-xml-reporting pillow>=4.1.1 scipy av networkx expecttest pyyaml
-      - name: Download built wheels
-        uses: actions/download-artifact@v2
-        with:
-          name: tensordict-win-${{ matrix.python_version }}.whl
-          path: wheels
-      - name: Install built wheels
-        shell: bash
-        run: |
-          python3 -mpip install wheels/*
-      - name: Log version string
-        shell: bash
-        run: |
-          # Avoid ambiguity of "import tensordict" by deleting the source files.
-          rm -rf tensordict/
-          python -c "import tensordict; print(tensordict.__version__)"
-      - name: Run tests
-        shell: bash
-        run: |
-          set -e
-          export IN_CI=1
-          mkdir test-reports
-          python -m torch.utils.collect_env
-          python -c "import tensordict; print(tensordict.__version__)"
-          EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 200
+          pytest test/smoke_test.py -v --durations 20
           exit $EXIT_STATUS
