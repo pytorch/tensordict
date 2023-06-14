@@ -41,7 +41,7 @@ from tensordict.tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
-from torch import multiprocessing as mp
+from torch import multiprocessing as mp, nn
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -4846,6 +4846,15 @@ def _compare_tensors_identity(td0, td1):
                 return False
     else:
         return True
+
+
+@pytest.mark.parametrize("memmap", [True, False])
+def test_from_module(memmap):
+    net = nn.Transformer()
+    td = TensorDict.from_module(net)
+    if memmap:
+        td = td.memmap_()
+    net.load_state_dict(td.flatten_keys("."))
 
 
 if __name__ == "__main__":

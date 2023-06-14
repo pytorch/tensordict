@@ -354,6 +354,30 @@ class TensorDictBase(MutableMapping):
     def __setstate__(self, state: dict[str, Any]) -> dict[str, Any]:
         self.__dict__.update(state)
 
+    @staticmethod
+    def from_module(module):
+        """Copies the params and buffers of a module in a tensordict.
+
+        Examples:
+            >>> from torch import nn
+            >>> module = nn.TransformerDecoder(
+            ...     decoder_layer=nn.TransformerDecoderLayer(nhead=4, d_model=4),
+            ...     num_layers=1)
+            >>> params = TensorDict.from_module(module)
+            >>> print(params["layers", "0", "linear1"])
+            TensorDict(
+                fields={
+                    bias: Parameter(shape=torch.Size([2048]), device=cpu, dtype=torch.float32, is_shared=False),
+                    weight: Parameter(shape=torch.Size([2048, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+        """
+        td = TensorDict(dict(module.named_parameters()), [])
+        td.update(dict(module.named_buffers()))
+        td = td.detach().unflatten_keys(".")
+        return td
+
     @property
     def shape(self) -> torch.Size:
         """See :obj:`TensorDictBase.batch_size`."""
