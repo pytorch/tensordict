@@ -1424,7 +1424,7 @@ class TensorDictBase(MutableMapping):
             # no op
             return self
         keys = set(self.keys(False))
-        for key, value in input_dict_or_td.items():
+        for key, value in list(input_dict_or_td.items()):
             if clone and hasattr(value, "clone"):
                 value = value.clone()
             if isinstance(key, tuple):
@@ -1442,7 +1442,18 @@ class TensorDictBase(MutableMapping):
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
                         value.__class__
                     ):
-                        target.update(value)
+                        if isinstance(value, LazyStackedTensorDict) and not isinstance(
+                            target, LazyStackedTensorDict
+                        ):
+                            self.set(
+                                key,
+                                LazyStackedTensorDict(
+                                    *target.unbind(value.stack_dim),
+                                    stack_dim=value.stack_dim,
+                                ).update(value),
+                            )
+                        else:
+                            target.update(value)
                         continue
             if len(subkey):
                 self.set((key, *subkey), value, inplace=inplace)
@@ -5645,6 +5656,64 @@ class LazyStackedTensorDict(TensorDictBase):
                 "their register."
             ) from e
 
+    def unsqueeze(self, dim: int) -> TensorDictBase:
+        if dim < 0:
+            dim = self.batch_dims + dim + 1
+
+        if (dim > self.batch_dims) or (dim < 0):
+            raise RuntimeError(
+                f"unsqueezing is allowed for dims comprised between "
+                f"`-td.batch_dims` and `td.batch_dims` only. Got "
+                f"dim={dim} with a batch size of {self.batch_size}."
+            )
+        if dim <= self.stack_dim:
+            stack_dim = self.stack_dim + 1
+        else:
+            dim = dim - 1
+            stack_dim = self.stack_dim
+        return LazyStackedTensorDict(
+            *(tensordict.unsqueeze(dim) for tensordict in self.tensordicts),
+            stack_dim=stack_dim,
+        )
+
+    def squeeze(self, dim: int | None = None) -> TensorDictBase:
+        """Squeezes all tensors for a dimension comprised in between `-td.batch_dims+1` and `td.batch_dims-1` and returns them in a new tensordict.
+
+        Args:
+            dim (Optional[int]): dimension along which to squeeze. If dim is None, all singleton dimensions will be squeezed. dim is None by default.
+
+        """
+        if dim is None:
+            size = self.size()
+            if len(self.size()) == 1 or size.count(1) == 0:
+                return self
+            first_singleton_dim = size.index(1)
+            return self.squeeze(first_singleton_dim).squeeze()
+
+        if dim < 0:
+            dim = self.batch_dims + dim
+
+        if self.batch_dims and (dim >= self.batch_dims or dim < 0):
+            raise RuntimeError(
+                f"squeezing is allowed for dims comprised between 0 and "
+                f"td.batch_dims only. Got dim={dim} and batch_size"
+                f"={self.batch_size}."
+            )
+
+        if dim >= self.batch_dims or self.batch_size[dim] != 1:
+            return self
+        if dim == self.stack_dim:
+            return self.tensordicts[0]
+        elif dim < self.stack_dim:
+            stack_dim = self.stack_dim - 1
+        else:
+            dim = dim - 1
+            stack_dim = self.stack_dim
+        return LazyStackedTensorDict(
+            *(tensordict.squeeze(dim) for tensordict in self.tensordicts),
+            stack_dim=stack_dim,
+        )
+
     def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         if dim < 0:
             dim = self.batch_dims + dim
@@ -5892,14 +5961,26 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             return self.apply_(fn, *others)
         else:
-            return super().apply(
-                fn,
-                *others,
-                batch_size=batch_size,
-                device=device,
-                names=names,
-                **constructor_kwargs,
+            if batch_size is not None:
+                return super().apply(
+                    fn,
+                    *others,
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    **constructor_kwargs,
+                )
+            others = (other.unbind(self.stack_dim) for other in others)
+            out = LazyStackedTensorDict(
+                *(
+                    td.apply(fn, *oth, device=device)
+                    for td, *oth in zip(self.tensordicts, *others)
+                ),
+                stack_dim=self.stack_dim,
             )
+            if names is not None:
+                out.names = names
+            return out
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = False
@@ -7245,13 +7326,16 @@ def _td_fields(td: TensorDictBase) -> str:
                 # so we can get the shape and escape the error
                 shape = td.get_item_shape(key)
                 tensor = td.tensordicts[0].get(key)
-                substr = _get_repr_custom(
-                    tensor.__class__,
-                    shape=shape,
-                    device=tensor.device,
-                    dtype=tensor.dtype,
-                    is_shared=tensor.is_shared(),
-                )
+                if isinstance(tensor, TensorDictBase):
+                    substr = _td_fields(tensor)
+                else:
+                    substr = _get_repr_custom(
+                        tensor.__class__,
+                        shape=shape,
+                        device=tensor.device,
+                        dtype=tensor.dtype,
+                        is_shared=tensor.is_shared(),
+                    )
                 strs.append(f"{key}: {substr}")
             else:
                 raise err

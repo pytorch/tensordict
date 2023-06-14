@@ -34,6 +34,7 @@ from tensordict.tensordict import (
     _CustomOpTensorDict,
     _stack as stack_td,
     assert_allclose_td,
+    is_tensor_collection,
     make_tensordict,
     pad,
     pad_sequence,
@@ -1096,7 +1097,8 @@ class TestTensorDicts(TestTensorDictsBase):
             td_unsqueeze.set("a", tensor)
         assert (td_unsqueeze.get("a") == tensor).all()
         assert (td.get("a") == tensor.squeeze(squeeze_dim)).all()
-        assert td_unsqueeze.squeeze(squeeze_dim) is td
+        # the tensors should match
+        assert _compare_tensors_identity(td_unsqueeze.squeeze(squeeze_dim), td)
         assert (td_unsqueeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
@@ -1115,7 +1117,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_squeeze.get("a") == tensor).all()
         assert (td.get("a") == tensor.unsqueeze(tensor_squeeze_dim)).all()
         if td_name != "unsqueezed_td":
-            assert td_squeeze.unsqueeze(squeeze_dim) is td
+            assert _compare_tensors_identity(td_squeeze.unsqueeze(squeeze_dim), td)
         else:
             assert td_squeeze is td._source
         assert (td_squeeze.get("a") == 1).all()
@@ -3832,6 +3834,76 @@ def test_shared_inheritance():
 
 
 class TestLazyStackedTensorDict:
+    def test_update_with_lazy(self):
+        td0 = TensorDict(
+            {
+                ("a", "b", "c"): torch.ones(3, 4),
+                ("a", "b", "d"): torch.ones(3, 4),
+                "common": torch.ones(3),
+            },
+            [3],
+        )
+        td1 = TensorDict(
+            {
+                ("a", "b", "c"): torch.ones(3, 5) * 2,
+                "common": torch.ones(3) * 2,
+            },
+            [3],
+        )
+        td = TensorDict({"parent": torch.stack([td0, td1], 0)}, [2])
+
+        td_void = TensorDict(
+            {
+                ("parent", "a", "b", "c"): torch.zeros(2, 3, 4),
+                ("parent", "a", "b", "e"): torch.zeros(2, 3, 4),
+                ("parent", "a", "b", "d"): torch.zeros(2, 3, 5),
+            },
+            [2],
+        )
+        td_void.update(td)
+        assert type(td_void.get("parent")) is LazyStackedTensorDict
+        assert type(td_void.get(("parent", "a"))) is LazyStackedTensorDict
+        assert type(td_void.get(("parent", "a", "b"))) is LazyStackedTensorDict
+        assert (td_void.get(("parent", "a", "b"))[0].get("c") == 1).all()
+        assert (td_void.get(("parent", "a", "b"))[1].get("c") == 2).all()
+        assert (td_void.get(("parent", "a", "b"))[0].get("d") == 1).all()
+        assert (td_void.get(("parent", "a", "b"))[1].get("d") == 0).all()  # unaffected
+        assert (td_void.get(("parent", "a", "b")).get("e") == 0).all()  # unaffected
+
+    @pytest.mark.parametrize("unsqueeze_dim", [0, 1, -1, -2])
+    def test_stack_unsqueeze(self, unsqueeze_dim):
+        td = TensorDict({("a", "b"): torch.ones(3, 4, 5)}, [3, 4])
+        td_stack = torch.stack(td.unbind(1), 1)
+        td_unsqueeze = td.unsqueeze(unsqueeze_dim)
+        td_stack_unsqueeze = td_stack.unsqueeze(unsqueeze_dim)
+        assert isinstance(td_stack_unsqueeze, LazyStackedTensorDict)
+        for key in td_unsqueeze.keys(True, True):
+            assert td_unsqueeze.get(key).shape == td_stack_unsqueeze.get(key).shape
+
+    def test_stack_apply(self):
+        td0 = TensorDict(
+            {
+                ("a", "b", "c"): torch.ones(3, 4),
+                ("a", "b", "d"): torch.ones(3, 4),
+                "common": torch.ones(3),
+            },
+            [3],
+        )
+        td1 = TensorDict(
+            {
+                ("a", "b", "c"): torch.ones(3, 5) * 2,
+                "common": torch.ones(3) * 2,
+            },
+            [3],
+        )
+        td = TensorDict({"parent": torch.stack([td0, td1], 0)}, [2])
+        td2 = td.clone()
+        tdapply = td.apply(lambda x, y: x + y, td2)
+        assert isinstance(tdapply["parent", "a", "b"], LazyStackedTensorDict)
+        assert (tdapply["parent", "a", "b"][0]["c"] == 2).all()
+        assert (tdapply["parent", "a", "b"][1]["c"] == 4).all()
+        assert (tdapply["parent", "a", "b"][0]["d"] == 2).all()
+
     def test_stack_keys(self):
         td1 = TensorDict(source={"a": torch.randn(3)}, batch_size=[])
         td2 = TensorDict(
@@ -4753,6 +4825,27 @@ class TestNamedDims(TestTensorDictsBase):
             RuntimeError, match="Names of a lazy tensordict cannot be modified"
         ):
             td.names = list("abcd")
+
+
+def _compare_tensors_identity(td0, td1):
+    if isinstance(td0, LazyStackedTensorDict):
+        if not isinstance(td1, LazyStackedTensorDict):
+            return False
+        for _td0, _td1 in zip(td0.tensordicts, td1.tensordicts):
+            if not _compare_tensors_identity(_td0, _td1):
+                return False
+        return True
+    if td0 is td1:
+        return True
+    for key, val in td0.items():
+        if is_tensor_collection(val):
+            if not _compare_tensors_identity(val, td1.get(key)):
+                return False
+        else:
+            if val is not td1.get(key):
+                return False
+    else:
+        return True
 
 
 if __name__ == "__main__":
