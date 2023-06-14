@@ -4110,6 +4110,8 @@ class TensorDict(TensorDictBase):
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
             return self
+        elif dest is None:
+            return self
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
@@ -5133,6 +5135,8 @@ torch.Size([3, 2])
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
             return self
+        elif dest is None:
+            return self
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
@@ -5922,6 +5926,8 @@ class LazyStackedTensorDict(TensorDictBase):
 
         elif isinstance(dest, torch.Size):
             self.batch_size = dest
+        elif dest is None:
+            return self
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
@@ -6988,6 +6994,8 @@ class _CustomOpTensorDict(TensorDictBase):
             self_copy = copy(self)
             self_copy._source = td
             return self_copy
+        elif dest is None:
+            return self
         else:
             raise NotImplementedError(
                 f"dest must be a string, torch.device or a TensorDict "
