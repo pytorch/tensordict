@@ -18,6 +18,7 @@ from tensordict import TensorDict
 from tensordict.tensordict import is_tensor_collection, TensorDictBase
 from torch import nn
 
+
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     if name in module._parameters:
@@ -267,6 +268,7 @@ def extract_weights_and_buffers(
     model.__dict__["_is_stateless"] = True
     return TensorDict(tensordict, batch_size=torch.Size([]), _run_checks=False)
 
+
 def _swap_state(
     model: nn.Module,
     tensordict: TensorDict,
@@ -281,16 +283,16 @@ def _swap_state(
     # return_old_tensordict = return_old_tensordict and not was_stateless
     if old_tensordict is None:
         old_tensordict = {}
-    keys = set(tensordict.keys())
-    children = []
+    # keys = set(tensordict.keys())
+    children = set()
     for key, child in model.named_children():
-        try:
-            keys.remove(key)
-        except KeyError:
-            # if params are built externally, this could lead to a KeyError as some
-            # modules do not have params
-            pass
-        children.append(key)
+        # try:
+        #     keys.remove(key)
+        # except KeyError:
+        #     if params are built externally, this could lead to a KeyError as some
+        #     modules do not have params
+        # pass
+        children.add(key)
         value = tensordict.get(key, None)
         if value is None:
             # faster than get(key, Tensordict(...))
@@ -305,7 +307,9 @@ def _swap_state(
             is_stateless=is_stateless,
         )
         old_tensordict[key] = _old_value
-    for key in keys:
+    for key in tensordict.keys():
+        if key in children:
+            continue
         value = tensordict.get(key)
         is_param = key in model.__dict__.get("_parameters")
         if return_old_tensordict:
