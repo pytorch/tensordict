@@ -24,8 +24,12 @@ from tensordict.tensordict import is_tensor_collection, TensorDictBase
 
 from tensordict.utils import implement_for
 from torch import nn
-from torch.nn.modules.module import _global_parameter_registration_hooks
-from torch.nn.modules.module import _global_parameter_registration_hooks
+
+try:
+    from torch.nn.modules.module import _global_parameter_registration_hooks
+except ModuleNotFoundError:
+    # old torch version, passing
+    pass
 
 
 @implement_for("torch", "2.0", None)
