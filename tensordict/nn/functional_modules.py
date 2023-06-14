@@ -293,7 +293,9 @@ def _swap_state(
     model.__dict__["_is_stateless"] = is_stateless
     # return_old_tensordict = return_old_tensordict and not was_stateless
     if old_tensordict is None:
-        old_tensordict = {}
+        old_tensordict_dict = old_tensordict = {}
+    else:
+        old_tensordict_dict = {}
     # keys = set(tensordict.keys())
     children = set()
     for key, child in model.named_children():
@@ -311,20 +313,18 @@ def _swap_state(
             old_tensordict=_old_value,
             is_stateless=is_stateless,
         )
-        old_tensordict[key] = _old_value
+        old_tensordict_dict[key] = _old_value
     for key in tensordict.keys():
         if key in children:
             continue
         value = tensordict.get(key)
-        is_param = key in model.__dict__.get("_parameters")
         if return_old_tensordict:
             old_attr = getattr(model, key)
             if old_attr is None:
                 old_attr = torch.zeros(*value.shape, 0)
-            old_tensordict[key] = old_attr
-        if is_param:
-            delattr(model, key)
+            old_tensordict_dict[key] = old_attr
         set_tensor(model, key, value)
+    old_tensordict.update(old_tensordict_dict)
     if was_stateless or not return_old_tensordict:
         return old_tensordict
     else:
