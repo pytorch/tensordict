@@ -5682,6 +5682,44 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim=stack_dim,
         )
 
+    def squeeze(self, dim: int | None = None) -> TensorDictBase:
+        """Squeezes all tensors for a dimension comprised in between `-td.batch_dims+1` and `td.batch_dims-1` and returns them in a new tensordict.
+
+        Args:
+            dim (Optional[int]): dimension along which to squeeze. If dim is None, all singleton dimensions will be squeezed. dim is None by default.
+
+        """
+        if dim is None:
+            size = self.size()
+            if len(self.size()) == 1 or size.count(1) == 0:
+                return self
+            first_singleton_dim = size.index(1)
+            return self.squeeze(first_singleton_dim).squeeze()
+
+        if dim < 0:
+            dim = self.batch_dims + dim
+
+        if self.batch_dims and (dim >= self.batch_dims or dim < 0):
+            raise RuntimeError(
+                f"squeezing is allowed for dims comprised between 0 and "
+                f"td.batch_dims only. Got dim={dim} and batch_size"
+                f"={self.batch_size}."
+            )
+
+        if dim >= self.batch_dims or self.batch_size[dim] != 1:
+            return self
+        if dim == self.stack_dim:
+            return self.tensordicts[0]
+        elif dim < self.stack_dim:
+            stack_dim = self.stack_dim - 1
+        else:
+            dim = dim - 1
+            stack_dim = self.stack_dim
+        return LazyStackedTensorDict(
+            *(tensordict.squeeze(dim) for tensordict in self.tensordicts),
+            stack_dim=stack_dim,
+        )
+
     def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         if dim < 0:
             dim = self.batch_dims + dim
@@ -5929,6 +5967,15 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             return self.apply_(fn, *others)
         else:
+            if batch_size is not None:
+                return super().apply(
+                    fn,
+                    *others,
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    **constructor_kwargs,
+                )
             others = (other.unbind(self.stack_dim) for other in others)
             out = LazyStackedTensorDict(
                 *(
@@ -5937,9 +5984,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 ),
                 stack_dim=self.stack_dim,
             )
-            if batch_size is not None:
-                out = out.to_tensordict()
-                out.batch_size = batch_size
             if names is not None:
                 out.names = names
             return out

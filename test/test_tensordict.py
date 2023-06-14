@@ -34,6 +34,7 @@ from tensordict.tensordict import (
     _CustomOpTensorDict,
     _stack as stack_td,
     assert_allclose_td,
+    is_tensor_collection,
     make_tensordict,
     pad,
     pad_sequence,
@@ -1096,7 +1097,8 @@ class TestTensorDicts(TestTensorDictsBase):
             td_unsqueeze.set("a", tensor)
         assert (td_unsqueeze.get("a") == tensor).all()
         assert (td.get("a") == tensor.squeeze(squeeze_dim)).all()
-        assert td_unsqueeze.squeeze(squeeze_dim) is td
+        # the tensors should match
+        assert _compare_tensors_identity(td_unsqueeze.squeeze(squeeze_dim), td)
         assert (td_unsqueeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
 
@@ -1115,7 +1117,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_squeeze.get("a") == tensor).all()
         assert (td.get("a") == tensor.unsqueeze(tensor_squeeze_dim)).all()
         if td_name != "unsqueezed_td":
-            assert td_squeeze.unsqueeze(squeeze_dim) is td
+            assert _compare_tensors_identity(td_squeeze.unsqueeze(squeeze_dim), td)
         else:
             assert td_squeeze is td._source
         assert (td_squeeze.get("a") == 1).all()
@@ -4820,11 +4822,32 @@ class TestLazyStacked:
         )
         td = TensorDict({"parent": torch.stack([td0, td1], 0)}, [2])
         td2 = td.clone()
-        tdapply = td.apply(lambda x, y: x+y, td2)
-        assert isinstance(tdapply['parent', 'a', 'b'], LazyStackedTensorDict)
-        assert (tdapply['parent', 'a', 'b'][0]['c'] == 2).all()
-        assert (tdapply['parent', 'a', 'b'][1]['c'] == 4).all()
-        assert (tdapply['parent', 'a', 'b'][0]['d'] == 2).all()
+        tdapply = td.apply(lambda x, y: x + y, td2)
+        assert isinstance(tdapply["parent", "a", "b"], LazyStackedTensorDict)
+        assert (tdapply["parent", "a", "b"][0]["c"] == 2).all()
+        assert (tdapply["parent", "a", "b"][1]["c"] == 4).all()
+        assert (tdapply["parent", "a", "b"][0]["d"] == 2).all()
+
+
+def _compare_tensors_identity(td0, td1):
+    if isinstance(td0, LazyStackedTensorDict):
+        if not isinstance(td1, LazyStackedTensorDict):
+            return False
+        for _td0, _td1 in zip(td0.tensordicts, td1.tensordicts):
+            if not _compare_tensors_identity(_td0, _td1):
+                return False
+        return True
+    if td0 is td1:
+        return True
+    for key, val in td0.items():
+        if is_tensor_collection(val):
+            if not _compare_tensors_identity(val, td1.get(key)):
+                return False
+        else:
+            if val is not td1.get(key):
+                return False
+    else:
+        return True
 
 
 if __name__ == "__main__":
