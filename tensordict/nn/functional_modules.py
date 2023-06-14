@@ -17,7 +17,15 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import is_tensor_collection, TensorDictBase
 from torch import nn
+from torch.nn.modules.module import _global_parameter_registration_hooks
 
+def _register_params(self, name, param):
+    """A simplified version of register_param where checks are skipped."""
+    for hook in _global_parameter_registration_hooks.values():
+        output = hook(self, name, param)
+        if output is not None:
+            param = output
+    self._parameters[name] = param
 
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
@@ -26,7 +34,9 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
     elif name in module._buffers:
         module._buffers[name] = tensor
     elif isinstance(tensor, nn.Parameter):
-        setattr(module, name, tensor)
+        module.__dict__.pop(name, None)
+        # module.register_parameter(name, tensor)
+        _register_params(module, name, tensor)
     else:
         module.__dict__[name] = tensor
 
@@ -269,7 +279,6 @@ def extract_weights_and_buffers(
             tensordict[name] = module_tensordict
     model.__dict__["_is_stateless"] = True
     return TensorDict(tensordict, batch_size=torch.Size([]), _run_checks=False)
-
 
 def _swap_state(
     model: nn.Module,
