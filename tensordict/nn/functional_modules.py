@@ -18,7 +18,6 @@ from tensordict import TensorDict
 from tensordict.tensordict import is_tensor_collection, TensorDictBase
 from torch import nn
 
-
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     if name in module._parameters:
@@ -26,7 +25,7 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
     elif name in module._buffers:
         module._buffers[name] = tensor
     else:
-        setattr(module, name, tensor)
+        module.__dict__[name] = tensor
 
 
 _RESET_OLD_TENSORDICT = True
@@ -267,7 +266,6 @@ def extract_weights_and_buffers(
             tensordict[name] = module_tensordict
     model.__dict__["_is_stateless"] = True
     return TensorDict(tensordict, batch_size=torch.Size([]), _run_checks=False)
-
 
 def _swap_state(
     model: nn.Module,
