@@ -25,6 +25,8 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
         module._parameters[name] = tensor  # type: ignore[assignment]
     elif name in module._buffers:
         module._buffers[name] = tensor
+    elif isinstance(tensor, nn.Parameter):
+        setattr(module, name, tensor)
     else:
         module.__dict__[name] = tensor
 
@@ -286,12 +288,6 @@ def _swap_state(
     # keys = set(tensordict.keys())
     children = set()
     for key, child in model.named_children():
-        # try:
-        #     keys.remove(key)
-        # except KeyError:
-        #     if params are built externally, this could lead to a KeyError as some
-        #     modules do not have params
-        # pass
         children.add(key)
         value = tensordict.get(key, None)
         if value is None:
