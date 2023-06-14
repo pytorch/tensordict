@@ -12,9 +12,9 @@ on:
 #        required: true
       PYPI_TOKEN:
         required: false
-  # run every day at 13:40am
+  # run every day at 12:40am
   schedule:
-    - cron:  '40 13 * * *'
+    - cron:  '40 12 * * *'
   # or manually trigger it
   workflow_dispatch:
   push:
