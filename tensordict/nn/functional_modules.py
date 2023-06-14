@@ -22,7 +22,7 @@ from torch import nn
 
 try:
     from torch.nn.modules.module import _global_parameter_registration_hooks
-except ModuleNotFoundError:
+except ImportError:
     # old torch version, passing
     pass
 
