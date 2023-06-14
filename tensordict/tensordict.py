@@ -4069,7 +4069,9 @@ class TensorDict(TensorDictBase):
                 metadata = torch.load(path)
                 if key in out.keys(include_nested=True):
                     out[key].batch_size = metadata["batch_size"]
-                    out[key] = out[key].to(metadata["device"])
+                    device = metadata["device"]
+                    if device is not None:
+                        out[key] = out[key].to(device)
                 else:
                     out[key] = cls(
                         {}, batch_size=metadata["batch_size"], device=metadata["device"]
