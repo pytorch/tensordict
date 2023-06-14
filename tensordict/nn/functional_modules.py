@@ -16,10 +16,13 @@ from typing import Any, Callable, Iterable
 import torch
 from tensordict import TensorDict
 from tensordict.tensordict import is_tensor_collection, TensorDictBase
+
+from tensordict.utils import implement_for
 from torch import nn
 from torch.nn.modules.module import _global_parameter_registration_hooks
 
 
+@implement_for("torch", "2.0", None)
 def _register_params(self, name, param):
     """A simplified version of register_param where checks are skipped."""
     for hook in _global_parameter_registration_hooks.values():
@@ -27,6 +30,11 @@ def _register_params(self, name, param):
         if output is not None:
             param = output
     self._parameters[name] = param
+
+
+@implement_for("torch", None, "2.0")
+def _register_params(self, name, param):  # noqa: F811
+    self.register_parameter(name, param)
 
 
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
