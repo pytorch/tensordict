@@ -291,56 +291,71 @@ class TestVmap:
         assert c.names == [None, "B"]
 
 
-def test_swap():
-    def zero_grad(p):
-        p.grad = torch.zeros_like(p.grad)
+class TestFunctionalization:
+    def test_swap(self):
+        def zero_grad(p):
+            p.grad = torch.zeros_like(p.grad)
 
-    net = nn.Sequential(
-        nn.Linear(2, 2),
-        nn.Linear(2, 2),
-        nn.Linear(2, 2),
-        nn.Sequential(nn.Linear(2, 2), nn.Linear(2, 2), nn.Linear(2, 2)),
-    )
-    x = torch.randn(2, 2)
-    params = make_functional(net)
-    assert len(list(net.parameters())) == 0
-    assert len(list(net.buffers())) == 0
-    for _ in range(2):
-        y = net(x, params)
+        net = nn.Sequential(
+            nn.Linear(2, 2),
+            nn.Linear(2, 2),
+            nn.Linear(2, 2),
+            nn.Sequential(nn.Linear(2, 2), nn.Linear(2, 2), nn.Linear(2, 2)),
+        )
+        x = torch.randn(2, 2)
+        params = make_functional(net)
         assert len(list(net.parameters())) == 0
         assert len(list(net.buffers())) == 0
-        y.sum().backward()
-        assert all(
-            p.grad.pow(2).sum() > 0 if p.requires_grad else True
-            for p in params.flatten_keys().values()
+        for _ in range(2):
+            y = net(x, params)
+            assert len(list(net.parameters())) == 0
+            assert len(list(net.buffers())) == 0
+            y.sum().backward()
+            assert all(
+                p.grad.pow(2).sum() > 0 if p.requires_grad else True
+                for p in params.flatten_keys().values()
+            )
+            assert params.requires_grad
+            params.apply_(zero_grad)
+            assert params.requires_grad
+
+    def test_repopulate(self):
+        module = nn.ModuleList(
+            [
+                nn.Linear(3, 4),
+                nn.BatchNorm1d(10),
+                nn.Sequential(nn.GELU(), nn.Conv2d(2, 3, 4)),
+            ]
         )
-        assert params.requires_grad
-        params.apply_(zero_grad)
-        assert params.requires_grad
+        params = set(module.named_parameters())
+        buffers = set(module.named_buffers())
+        assert len(params)
+        assert len(buffers)
 
+        params_td = make_functional(module)
+        assert len(list(module.parameters())) == 0
+        assert len(list(module.buffers())) == 0
+        new_module = repopulate_module(module, params_td)
+        assert new_module is module
+        new_params = set(new_module.named_parameters())
+        new_buffers = set(new_module.named_buffers())
+        assert len(new_params)
+        assert len(new_buffers)
 
-def test_repopulate():
-    module = nn.ModuleList(
-        [
-            nn.Linear(3, 4),
-            nn.BatchNorm1d(10),
-            nn.Sequential(nn.GELU(), nn.Conv2d(2, 3, 4)),
-        ]
-    )
-    params = set(module.named_parameters())
-    buffers = set(module.named_buffers())
-    assert len(params)
-    assert len(buffers)
-
-    params_td = make_functional(module)
-    assert len(list(module.parameters())) == 0
-    assert len(list(module.buffers())) == 0
-    new_module = repopulate_module(module, params_td)
-    assert new_module is module
-    new_params = set(new_module.named_parameters())
-    new_buffers = set(new_module.named_buffers())
-    assert len(new_params)
-    assert len(new_buffers)
+    def test_functional_restitute(self):
+        module = nn.Transformer(32, nhead=4)
+        params = make_functional(module, keep_params=True)
+        params_clone = params.clone().zero_()
+        data = torch.ones(1, 1, 32)
+        y = module(data, data, params=params_clone)
+        assert (y == 0).all()
+        params_and_buffers = (
+            TensorDict(dict(module.named_parameters()), [])
+            .update(TensorDict(dict(module.named_buffers()), []))
+            .unflatten_keys(".")
+        )
+        params = TensorDict({key: value for key, value in params.items(True, True)}, [])
+        assert (params_and_buffers == params).all()
 
 
 @pytest.mark.skipif(

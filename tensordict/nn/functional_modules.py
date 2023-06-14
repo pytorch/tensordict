@@ -19,6 +19,7 @@ from tensordict.tensordict import is_tensor_collection, TensorDictBase
 from torch import nn
 from torch.nn.modules.module import _global_parameter_registration_hooks
 
+
 def _register_params(self, name, param):
     """A simplified version of register_param where checks are skipped."""
     for hook in _global_parameter_registration_hooks.values():
@@ -27,16 +28,20 @@ def _register_params(self, name, param):
             param = output
     self._parameters[name] = param
 
+
 def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     if name in module._parameters:
-        module._parameters[name] = tensor  # type: ignore[assignment]
-    elif name in module._buffers:
-        module._buffers[name] = tensor
-    elif isinstance(tensor, nn.Parameter):
+        del module._parameters[name]  # type: ignore[assignment]
+    was_buffer = name in module._buffers
+    if was_buffer:
+        del module._buffers[name]
+    if isinstance(tensor, nn.Parameter):
         module.__dict__.pop(name, None)
         # module.register_parameter(name, tensor)
         _register_params(module, name, tensor)
+    elif was_buffer and isinstance(tensor, Tensor):
+        module._buffers[name] = tensor
     else:
         module.__dict__[name] = tensor
 
@@ -280,6 +285,7 @@ def extract_weights_and_buffers(
     model.__dict__["_is_stateless"] = True
     return TensorDict(tensordict, batch_size=torch.Size([]), _run_checks=False)
 
+
 def _swap_state(
     model: nn.Module,
     tensordict: TensorDict,
@@ -323,6 +329,10 @@ def _swap_state(
             if old_attr is None:
                 old_attr = torch.zeros(*value.shape, 0)
             old_tensordict_dict[key] = old_attr
+        # is_param = key in model.__dict__.get("_parameters")
+        # if is_param:
+        #     delattr(model, key)
+        #     print(value)
         set_tensor(model, key, value)
     old_tensordict.update(old_tensordict_dict)
     if was_stateless or not return_old_tensordict:
