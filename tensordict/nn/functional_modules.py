@@ -15,10 +15,7 @@ from typing import Any, Callable, Iterable
 
 import torch
 from tensordict import TensorDict
-from tensordict.tensordict import (
-    _is_tensor_collection,
-    TensorDictBase,
-)
+from tensordict.tensordict import _is_tensor_collection, TensorDictBase
 
 from tensordict.utils import implement_for
 from torch import nn
@@ -513,7 +510,9 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
             ):
                 params = args[1]
                 args = args[:1]
-        elif (len(args) and _is_tensor_collection(args[0].__class__)) or "tensordict" in kwargs:
+        elif (
+            len(args) and _is_tensor_collection(args[0].__class__)
+        ) or "tensordict" in kwargs:
             warnings.warn(
                 "You are passing a tensordict/tensorclass instance to a module that "
                 "does not inherit from TensorDictModuleBase. This may lead to unexpected "
