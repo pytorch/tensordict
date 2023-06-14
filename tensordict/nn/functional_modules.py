@@ -15,7 +15,7 @@ from typing import Any, Callable, Iterable
 
 import torch
 from tensordict import TensorDict
-from tensordict.tensordict import is_tensor_collection, TensorDictBase
+from tensordict.tensordict import _is_tensor_collection, TensorDictBase
 
 from tensordict.utils import implement_for
 from torch import nn
@@ -57,6 +57,27 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
         module._buffers[name] = tensor
     else:
         module.__dict__[name] = tensor
+
+
+def set_tensor_dict(module_dict, module, name: str, tensor: torch.Tensor) -> None:
+    """Simplified version of torch.nn.utils._named_member_accessor."""
+    if name in module_dict["_parameters"]:
+        del module_dict["_parameters"][name]  # type: ignore[assignment]
+    was_buffer = name in module_dict["_buffers"]
+    if was_buffer:
+        del module_dict["_buffers"][name]
+    if isinstance(tensor, nn.Parameter):
+        module_dict.pop(name, None)
+        # module.register_parameter(name, tensor)
+        for hook in _global_parameter_registration_hooks.values():
+            output = hook(module, name, tensor)
+            if output is not None:
+                tensor = output
+        module_dict["_parameters"][name] = tensor
+    elif was_buffer and isinstance(tensor, Tensor):
+        module_dict["_buffers"][name] = tensor
+    else:
+        module_dict[name] = tensor
 
 
 _RESET_OLD_TENSORDICT = True
@@ -299,6 +320,58 @@ def extract_weights_and_buffers(
     return TensorDict(tensordict, batch_size=torch.Size([]), _run_checks=False)
 
 
+# For bookkeeping: this function seems to have the same runtime but will not access
+# modules that don't have parameters if they're not registered as empty tensordicts
+# in the input. Hence they won't be turned as stateful, which could cause some bugs.
+# def _swap_state(
+#     model: nn.Module,
+#     tensordict: TensorDict,
+#     is_stateless: bool,
+#     return_old_tensordict: bool = False,
+#     old_tensordict: dict[str, torch.Tensor] | TensorDict | None = None,
+# ) -> dict[str, torch.Tensor] | TensorDict | None:
+#     __dict__ = model.__dict__
+#     was_stateless = __dict__.get("_is_stateless", None)
+#     if was_stateless is None:
+#         raise Exception(f"{model}\nhas no stateless attribute.")
+#     __dict__["_is_stateless"] = is_stateless
+#     # return_old_tensordict = return_old_tensordict and not was_stateless
+#     if old_tensordict is None:
+#         old_tensordict_dict = old_tensordict = {}
+#     else:
+#         old_tensordict_dict = {}
+#     for key, value in tensordict.items():
+#         cls = value.__class__
+#         if _is_tensor_collection(cls) or issubclass(cls, dict):
+#             _old_value = old_tensordict.get(key, None)
+#             _old_value = _swap_state(
+#                 __dict__['_modules'][key],
+#                 value,
+#                 is_stateless=is_stateless,
+#                 old_tensordict=_old_value,
+#                 return_old_tensordict=return_old_tensordict
+#             )
+#             old_tensordict_dict[key] = _old_value
+#         else:
+#             _old_value = None
+#             if return_old_tensordict:
+#                 _old_value = __dict__['_parameters'].get(key, None)
+#                 if _old_value is None:
+#                     _old_value = __dict__['_buffers'].get(key, None)
+#                 if _old_value is None:
+#                     _old_value = __dict__.get(key, None)
+#                 if _old_value is None:
+#                     _old_value = torch.zeros(*value.shape, 0)
+#                 old_tensordict_dict[key] = _old_value
+#                 # old_tensordict_dict[key] = _old_value
+#             set_tensor_dict(__dict__, model, key, value)
+#     old_tensordict.update(old_tensordict_dict)
+#     if was_stateless or not return_old_tensordict:
+#         return old_tensordict
+#     else:
+#         return TensorDict(old_tensordict, [])
+
+
 def _swap_state(
     model: nn.Module,
     tensordict: TensorDict,
@@ -306,10 +379,11 @@ def _swap_state(
     return_old_tensordict: bool = False,
     old_tensordict: dict[str, torch.Tensor] | TensorDict | None = None,
 ) -> dict[str, torch.Tensor] | TensorDict | None:
-    was_stateless = model.__dict__.get("_is_stateless", None)
+    __dict__ = model.__dict__
+    was_stateless = __dict__.get("_is_stateless", None)
     if was_stateless is None:
         raise Exception(f"{model}\nhas no stateless attribute.")
-    model.__dict__["_is_stateless"] = is_stateless
+    __dict__["_is_stateless"] = is_stateless
     # return_old_tensordict = return_old_tensordict and not was_stateless
     if old_tensordict is None:
         old_tensordict_dict = old_tensordict = {}
@@ -317,7 +391,8 @@ def _swap_state(
         old_tensordict_dict = {}
     # keys = set(tensordict.keys())
     children = set()
-    for key, child in model.named_children():
+    # this loop ignores the memo from named children
+    for key, child in __dict__["_modules"].items():  # model.named_children():
         children.add(key)
         value = tensordict.get(key, None)
         if value is None:
@@ -338,7 +413,11 @@ def _swap_state(
             continue
         value = tensordict.get(key)
         if return_old_tensordict:
-            old_attr = getattr(model, key)
+            old_attr = __dict__["_parameters"].get(key, None)
+            if old_attr is None:
+                old_attr = __dict__["_buffers"].get(key, None)
+            if old_attr is None:
+                old_attr = __dict__.get(key, None)
             if old_attr is None:
                 old_attr = torch.zeros(*value.shape, 0)
             old_tensordict_dict[key] = old_attr
@@ -346,7 +425,7 @@ def _swap_state(
         # if is_param:
         #     delattr(model, key)
         #     print(value)
-        set_tensor(model, key, value)
+        set_tensor_dict(__dict__, model, key, value)
     old_tensordict.update(old_tensordict_dict)
     if was_stateless or not return_old_tensordict:
         return old_tensordict
@@ -427,11 +506,13 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
             if (
                 params is None
                 and len(args) == 2
-                and all(is_tensor_collection(item) for item in args)
+                and all(_is_tensor_collection(item.__class__) for item in args)
             ):
                 params = args[1]
                 args = args[:1]
-        elif (len(args) and is_tensor_collection(args[0])) or "tensordict" in kwargs:
+        elif (
+            len(args) and _is_tensor_collection(args[0].__class__)
+        ) or "tensordict" in kwargs:
             warnings.warn(
                 "You are passing a tensordict/tensorclass instance to a module that "
                 "does not inherit from TensorDictModuleBase. This may lead to unexpected "
