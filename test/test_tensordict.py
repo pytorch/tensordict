@@ -4802,6 +4802,30 @@ class TestLazyStacked:
         for key in td_unsqueeze.keys(True, True):
             assert td_unsqueeze.get(key).shape == td_stack_unsqueeze.get(key).shape
 
+    def test_stack_apply(self):
+        td0 = TensorDict(
+            {
+                ("a", "b", "c"): torch.ones(3, 4),
+                ("a", "b", "d"): torch.ones(3, 4),
+                "common": torch.ones(3),
+            },
+            [3],
+        )
+        td1 = TensorDict(
+            {
+                ("a", "b", "c"): torch.ones(3, 5) * 2,
+                "common": torch.ones(3) * 2,
+            },
+            [3],
+        )
+        td = TensorDict({"parent": torch.stack([td0, td1], 0)}, [2])
+        td2 = td.clone()
+        tdapply = td.apply(lambda x, y: x+y, td2)
+        assert isinstance(tdapply['parent', 'a', 'b'], LazyStackedTensorDict)
+        assert (tdapply['parent', 'a', 'b'][0]['c'] == 2).all()
+        assert (tdapply['parent', 'a', 'b'][1]['c'] == 4).all()
+        assert (tdapply['parent', 'a', 'b'][0]['d'] == 2).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
