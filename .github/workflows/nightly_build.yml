@@ -143,7 +143,7 @@ jobs:
           export IN_CI=1
           mkdir test-reports
           python -m torch.utils.collect_env
-          python -c "import tensordict; print(tensordict.__version__);from tensordict.data import ReplayBuffer"
+          python -c "import tensordict; print(tensordict.__version__);from tensordict.nn import TensorDictModule"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
@@ -262,7 +262,7 @@ jobs:
           mkdir test-reports
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -m torch.utils.collect_env
-          python3 -c "import tensordict; print(tensordict.__version__);from tensordict.data import ReplayBuffer"
+          python3 -c "import tensordict; print(tensordict.__version__);from tensordict.nn import TensorDictModule"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
@@ -348,7 +348,7 @@ jobs:
           export IN_CI=1
           mkdir test-reports
           python -m torch.utils.collect_env
-          python -c "import tensordict; print(tensordict.__version__);from tensordict.data import ReplayBuffer"
+          python -c "import tensordict; print(tensordict.__version__);from tensordict.nn import TensorDictModule"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
