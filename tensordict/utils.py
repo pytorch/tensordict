@@ -1072,3 +1072,12 @@ def erase_cache(fun):
         return fun(self, *args, **kwargs)
 
     return new_fun
+
+NON_STR_KEY = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
+class _StringOnlyDict(dict):
+    def __contains__(self, item):
+        if not isinstance(item, str):
+            raise TypeError(
+                NON_STR_KEY
+            )
+        return super().__contains__(item)

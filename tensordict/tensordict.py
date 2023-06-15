@@ -56,7 +56,7 @@ from tensordict.utils import (
     int_generator,
     is_tensorclass,
     NestedKey,
-    prod,
+    prod, NON_STR_KEY, _StringOnlyDict,
     # unravel_keys,
 )
 from torch import distributed as dist, Tensor
@@ -310,10 +310,7 @@ class _TensorDictKeysView:
 
                 return False
             if all(isinstance(subkey, str) for subkey in key):
-                raise TypeError(
-                    "Nested membership checks with tuples of strings is only supported "
-                    "when setting `include_nested=True`."
-                )
+                raise TypeError(NON_STR_KEY)
 
         raise TypeError(
             "TensorDict keys are always strings. Membership checks are only supported "
@@ -3509,7 +3506,7 @@ class TensorDict(TensorDictBase):
         self._device = device
 
         if not _run_checks:
-            _tensordict: dict = {}
+            _tensordict: dict = _StringOnlyDict()
             self._batch_size = batch_size
             for key, value in source.items():
                 if isinstance(value, dict):
@@ -3525,7 +3522,7 @@ class TensorDict(TensorDictBase):
             self._tensordict = _tensordict
             self._td_dim_names = names
         else:
-            self._tensordict = {}
+            self._tensordict = _StringOnlyDict()
             if not isinstance(source, (TensorDictBase, dict)):
                 raise ValueError(
                     "A TensorDict source is expected to be a TensorDictBase "
