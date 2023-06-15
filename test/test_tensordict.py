@@ -2323,25 +2323,6 @@ class TestTensorDicts(TestTensorDictsBase):
         assert type(td) is type(td_empty)
         assert all(val.any() for val in (td != td_empty).values(True, True))
 
-    def test_add_batch_dim_cache(self, td_name, device):
-        td = getattr(self, td_name)(device)
-        from tensordict.nn import TensorDictModule  # noqa
-        from torch import vmap
-
-        fun = vmap(lambda x: x)
-        if td_name == "td_h5":
-            with pytest.raises(
-                RuntimeError, match="Persistent tensordicts cannot be used with vmap"
-            ):
-                fun(td)
-            return
-        fun(td)
-        td.zero_()
-        # this value should be cached
-        std = fun(td)
-        for value in std.values(True, True):
-            assert (value == 0).all()
-
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
@@ -3853,22 +3834,6 @@ def test_shared_inheritance():
 
 
 class TestLazyStackedTensorDict:
-    def test_add_batch_dim_cache(self):
-        td = TensorDict(
-            {"a": torch.rand(3, 4, 5), ("b", "c"): torch.rand(3, 4, 5)}, [3, 4, 5]
-        )
-        td = torch.stack([td, td.clone()], 0)
-        from tensordict.nn import TensorDictModule  # noqa
-        from torch import vmap
-
-        fun = vmap(lambda x: x)
-        fun(td)
-        td.zero_()
-        # this value should be cached
-        std = fun(td)
-        for value in std.values(True, True):
-            assert (value == 0).all()
-
     def test_update_with_lazy(self):
         td0 = TensorDict(
             {

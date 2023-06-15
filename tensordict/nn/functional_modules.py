@@ -184,19 +184,18 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         # See NOTE [Ignored _remove_batch_dim, _add_batch_dim]
         # If tensordict, we remove the dim at batch_size[in_dim] such that the TensorDict can accept
         # the batched tensors. This will be added in _unwrap_batched
-
-        batched_inputs = []
-        for in_dim, arg in zip(flat_in_dims, flat_args):
-            if in_dim is None:
-                batched_input = arg
-            else:
-                if isinstance(arg, TensorDictBase):
-                    batched_input = arg._add_batch_dim(
-                        in_dim=in_dim, vmap_level=vmap_level
-                    )
-                else:
-                    batched_input = _add_batch_dim(arg, in_dim, vmap_level)
-            batched_inputs.append(batched_input)
+        batched_inputs = [
+            arg
+            if in_dim is None
+            else arg.apply(
+                lambda _arg, in_dim=in_dim: _add_batch_dim(_arg, in_dim, vmap_level),
+                batch_size=[b for i, b in enumerate(arg.batch_size) if i != in_dim],
+                names=[name for i, name in enumerate(arg.names) if i != in_dim],
+            )
+            if isinstance(arg, TensorDictBase)
+            else _add_batch_dim(arg, in_dim, vmap_level)
+            for in_dim, arg in zip(flat_in_dims, flat_args)
+        ]
         return tree_unflatten(batched_inputs, args_spec)
 
     vmap_src._create_batched_inputs = _create_batched_inputs
@@ -248,8 +247,16 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             if not isinstance(batched_output, TensorDictBase):
                 out = _remove_batch_dim(batched_output, vmap_level, batch_size, out_dim)
             else:
-                out = batched_output._remove_batch_dim(
-                    vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
+                new_batch_size = list(batched_output.batch_size)
+                new_batch_size.insert(out_dim, batch_size)
+                new_names = list(batched_output.names)
+                new_names.insert(out_dim, None)
+                out = batched_output.apply(
+                    lambda x, out_dim=out_dim: _remove_batch_dim(
+                        x, vmap_level, batch_size, out_dim
+                    ),
+                    batch_size=new_batch_size,
+                    names=new_names,
                 )
             flat_outputs.append(out)
         return tree_unflatten(flat_outputs, output_spec)

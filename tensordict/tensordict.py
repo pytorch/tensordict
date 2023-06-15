@@ -47,10 +47,8 @@ from tensordict.utils import (
     _shape,
     _StringOnlyDict,
     _sub_index,
-    cache,
     convert_ellipsis_to_idx,
     DeviceType,
-    erase_cache,
     expand_as_right,
     expand_right,
     IndexType,
@@ -78,11 +76,7 @@ try:
     try:
         from functorch._C import is_batchedtensor
     except ImportError:
-        from torch._C._functorch import (
-            _add_batch_dim,
-            _remove_batch_dim,
-            is_batchedtensor,
-        )
+        from torch._C._functorch import is_batchedtensor
 
     _has_functorch = True
 except ImportError:
@@ -348,7 +342,6 @@ class TensorDictBase(MutableMapping):
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
         cls._sorted_keys = None
-        cls._cache = None
         return super().__new__(cls)
 
     def __getstate__(self) -> dict[str, Any]:
@@ -404,9 +397,6 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError
 
-    def _erase_cache(self):
-        self._cache = None
-
     @property
     def names(self):
         names = self._td_dim_names
@@ -418,7 +408,6 @@ class TensorDictBase(MutableMapping):
         self._td_dim_names = None
 
     @names.setter
-    @erase_cache
     def names(self, value):
         # we don't run checks on types for efficiency purposes
         if value is None:
@@ -571,7 +560,6 @@ class TensorDictBase(MutableMapping):
     def requires_grad(self) -> bool:
         return any(v.requires_grad for v in self.values())
 
-    @erase_cache
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
             return
@@ -741,7 +729,6 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    @erase_cache
     def set(
         self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
     ) -> TensorDictBase:
@@ -1415,32 +1402,6 @@ class TensorDictBase(MutableMapping):
         if not inplace and is_locked:
             out.lock_()
         return out
-
-    @cache  # noqa: B019
-    def _add_batch_dim(self, *, in_dim, vmap_level):
-        if self.is_memmap():
-            td = self.as_tensor()
-        else:
-            td = self
-        return td.apply(
-            lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
-            batch_size=[b for i, b in enumerate(self.batch_size) if i != in_dim],
-            names=[name for i, name in enumerate(self.names) if i != in_dim],
-        )
-
-    @cache  # noqa: B019
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
-        new_batch_size = list(self.batch_size)
-        new_batch_size.insert(out_dim, batch_size)
-        new_names = list(self.names)
-        new_names.insert(out_dim, None)
-        return self.apply(
-            lambda x, out_dim=out_dim: _remove_batch_dim(
-                x, vmap_level, batch_size, out_dim
-            ),
-            batch_size=new_batch_size,
-            names=new_names,
-        )
 
     def as_tensor(self):
         """Calls as_tensor on all the tensors contained in the object.
@@ -3484,7 +3445,6 @@ class TensorDict(TensorDictBase):
         "_device",
         "_is_locked",
         "_td_dim_names",
-        "_cache",
     )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
@@ -3810,7 +3770,6 @@ class TensorDict(TensorDictBase):
 
         return self
 
-    @erase_cache
     def set(
         self,
         key: NestedKey,
@@ -4244,7 +4203,6 @@ class TensorDict(TensorDictBase):
     def __setstate__(self, state):
         for slot, value in state.items():
             setattr(self, slot, value)
-        self._cache = None
 
     # some custom methods for efficiency
     def items(
@@ -5104,7 +5062,6 @@ torch.Size([3, 2])
         parent.set_at_(subkey, value, self.idx)
         return self
 
-    @erase_cache
     def set(
         self,
         key: NestedKey,
@@ -5498,7 +5455,6 @@ class LazyStackedTensorDict(TensorDictBase):
             same batch size.
          stack_dim (int): a dimension (between `-td.ndimension()` and
             `td.ndimension()-1` along which the stack should be performed.
-         callback (callable, optional): a callable to execute after :meth:`~.get`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -5523,7 +5479,6 @@ class LazyStackedTensorDict(TensorDictBase):
         self,
         *tensordicts: TensorDictBase,
         stack_dim: int = 0,
-        callback: callable | None = None,
         batch_size: Sequence[int] | None = None,  # TODO: remove
     ) -> None:
         self._is_shared = False
@@ -5568,7 +5523,6 @@ class LazyStackedTensorDict(TensorDictBase):
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
         self._update_valid_keys()
-        self.callback = callback
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
@@ -5716,7 +5670,6 @@ class LazyStackedTensorDict(TensorDictBase):
 
         return self
 
-    @erase_cache
     def set(
         self,
         key: NestedKey,
@@ -5875,9 +5828,6 @@ class LazyStackedTensorDict(TensorDictBase):
             out = torch.stack(tensors, self.stack_dim)
             if _is_tensor_collection(out.__class__) and self._td_dim_names is not None:
                 out.refine_names(*self.names, *out.names[self.ndim :])
-                out.callback = self.callback
-            elif self.callback is not None:
-                out = self.callback(out)
             return out
         except RuntimeError as err:
             if "stack expects each tensor to be equal size" in str(err):
@@ -5892,57 +5842,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             else:
                 raise err
-
-    def _add_batch_dim(self, *, in_dim, vmap_level):
-        if self.is_memmap():
-            td = torch.stack([td.as_tensor() for td in self.tensordicts], 0)
-        else:
-            td = self
-        if in_dim < 0:
-            in_dim = self.ndim + in_dim
-        if in_dim == self.stack_dim:
-            return self._cached_add_batch_dims(td, in_dim=in_dim, vmap_level=vmap_level)
-        if in_dim < td.stack_dim:
-            # then we'll stack along a dim before
-            stack_dim = td.stack_dim - 1
-        else:
-            in_dim = in_dim - 1
-            stack_dim = td.stack_dim
-        tds = [
-            td.apply(
-                lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
-                batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
-                names=[name for i, name in enumerate(td.names) if i != in_dim],
-            )
-            for td in td.tensordicts
-        ]
-        return LazyStackedTensorDict(*tds, stack_dim=stack_dim)
-
-    @staticmethod
-    @cache
-    def _cached_add_batch_dims(td, in_dim, vmap_level):
-        # we return a stack with callback
-        out = td.clone(False)
-
-        def callback(tensor, in_dim=in_dim, vmap_level=vmap_level):
-            return _add_batch_dim(tensor, in_dim, vmap_level)
-
-        out.callback = callback
-        return out
-
-    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
-        # TODO: this can be cached
-        new_batch_size = list(self.batch_size)
-        new_batch_size.insert(out_dim, batch_size)
-        new_names = list(self.names)
-        new_names.insert(out_dim, None)
-        return self.apply(
-            lambda x, out_dim=out_dim: _remove_batch_dim(
-                x, vmap_level, batch_size, out_dim
-            ),
-            batch_size=new_batch_size,
-            names=new_names,
-        )
 
     def get_at(self, key, index, default=NO_DEFAULT):
         item = self.get(key, default=default)
@@ -6954,7 +6853,6 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source._set(key, value, inplace=inplace)
         return self
 
-    @erase_cache
     def set(
         self, key: NestedKey, value: dict | CompatibleType, inplace: bool = False
     ) -> TensorDictBase:
