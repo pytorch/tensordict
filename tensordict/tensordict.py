@@ -1369,7 +1369,6 @@ class TensorDictBase(MutableMapping):
             >>> assert (td_2["a"] == -2).all()
             >>> assert (td_2["b", "c"] == 2).all()
         """
-
         if inplace:
             out = self
         elif batch_size is not None:
