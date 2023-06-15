@@ -11,7 +11,6 @@ import functools
 import numbers
 import re
 import textwrap
-import traceback
 import warnings
 from collections import defaultdict
 from collections.abc import MutableMapping
@@ -1421,7 +1420,7 @@ class TensorDictBase(MutableMapping):
             out.lock_()
         return out
 
-    @cache
+    @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         return self.apply(
             lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
@@ -1429,7 +1428,7 @@ class TensorDictBase(MutableMapping):
             names=[name for i, name in enumerate(self.names) if i != in_dim],
         )
 
-    @cache
+    @cache  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
         new_batch_size = list(self.batch_size)
         new_batch_size.insert(out_dim, batch_size)
@@ -4233,7 +4232,7 @@ class TensorDict(TensorDictBase):
         if not include_nested and not leaves_only:
             yield from self._tensordict.keys()
         else:
-            return _TensorDictKeysView(
+            yield from _TensorDictKeysView(
                 self, include_nested=include_nested, leaves_only=leaves_only
             )
 
