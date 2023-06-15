@@ -45,6 +45,7 @@ from tensordict.utils import (
     _maybe_unravel_keys_silent,
     _set_item,
     _shape,
+    _StringOnlyDict,
     _sub_index,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -54,6 +55,8 @@ from tensordict.utils import (
     int_generator,
     is_tensorclass,
     NestedKey,
+    NON_STR_KEY,
+    NON_STR_KEY_TUPLE,
     prod,
     # unravel_keys,
 )
@@ -304,15 +307,9 @@ class _TensorDictKeysView:
 
                 return False
             if all(isinstance(subkey, str) for subkey in key):
-                raise TypeError(
-                    "Nested membership checks with tuples of strings is only supported "
-                    "when setting `include_nested=True`."
-                )
+                raise TypeError(NON_STR_KEY_TUPLE)
 
-        raise TypeError(
-            "TensorDict keys are always strings. Membership checks are only supported "
-            "for strings or non-empty tuples of strings (for nested TensorDicts)"
-        )
+        raise TypeError(NON_STR_KEY)
 
     def __repr__(self):
         include_nested = f"include_nested={self.include_nested}"
@@ -3473,10 +3470,9 @@ class TensorDict(TensorDictBase):
         self._device = device
 
         if not _run_checks:
-            self._tensordict: dict = dict(source)
+            _tensordict: dict = _StringOnlyDict()
             self._batch_size = batch_size
-            upd_dict = {}
-            for key, value in self._tensordict.items():
+            for key, value in source.items():
                 if isinstance(value, dict):
                     value = TensorDict(
                         value,
@@ -3486,12 +3482,11 @@ class TensorDict(TensorDictBase):
                         _is_shared=_is_shared,
                         _is_memmap=_is_memmap,
                     )
-                    upd_dict[key] = value
-            if upd_dict:
-                self._tensordict.update(upd_dict)
+                _tensordict[key] = value
+            self._tensordict = _tensordict
             self._td_dim_names = names
         else:
-            self._tensordict = {}
+            self._tensordict = _StringOnlyDict()
             if not isinstance(source, (TensorDictBase, dict)):
                 raise ValueError(
                     "A TensorDict source is expected to be a TensorDictBase "
@@ -4193,16 +4188,40 @@ class TensorDict(TensorDictBase):
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
-        return _TensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
-        )
+        if not include_nested and not leaves_only:
+            return self._tensordict.keys()
+        else:
+            return _TensorDictKeysView(
+                self, include_nested=include_nested, leaves_only=leaves_only
+            )
 
     def __getstate__(self):
-        return {slot: getattr(self, slot) for slot in self.__slots__}
+        return {
+            slot: getattr(self, slot) for slot in self.__slots__ if slot != "_cache"
+        }
 
     def __setstate__(self, state):
         for slot, value in state.items():
             setattr(self, slot, value)
+
+    # some custom methods for efficiency
+    def items(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> Iterator[tuple[str, CompatibleType]]:
+        if not include_nested and not leaves_only:
+            return self._tensordict.items()
+        else:
+            return super().items(include_nested=include_nested, leaves_only=leaves_only)
+
+    def values(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> Iterator[tuple[str, CompatibleType]]:
+        if not include_nested and not leaves_only:
+            return self._tensordict.values()
+        else:
+            return super().values(
+                include_nested=include_nested, leaves_only=leaves_only
+            )
 
 
 class _ErrorInteceptor:

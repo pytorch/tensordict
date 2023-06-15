@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
-
 import math
 import time
 
 import warnings
+from collections.abc import KeysView
 from copy import copy
 from functools import wraps
 from importlib import import_module
@@ -22,6 +22,7 @@ import numpy as np
 import torch
 
 from packaging.version import parse
+from tensordict._tensordict import unravel_keys
 from torch import Tensor
 
 if TYPE_CHECKING:
@@ -676,6 +677,8 @@ def _device(tensor: torch.Tensor) -> torch.device:
 
 def _is_shared(tensor: torch.Tensor) -> bool:
     if isinstance(tensor, torch.Tensor):
+        if torch._C._functorch.is_batchedtensor(tensor):
+            return None
         return tensor.is_shared()
     elif isinstance(tensor, KeyedJaggedTensor):
         return False
@@ -836,27 +839,6 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     if isinstance(index[0], list):
         return _is_lis_of_list_of_bools(index[0], False)
     return False
-
-
-def unravel_keys(key):
-    """Unravels keys when one can be sure that they are keys.
-
-    The c++ version under tensordict._tensordict should be preferred.
-
-    """
-    if isinstance(key, str):
-        return key
-    if isinstance(key, tuple):
-        newkey = []
-        for subkey in key:
-            if isinstance(subkey, str):
-                newkey.append(subkey)
-            else:
-                _key = unravel_keys(subkey)
-                newkey += _key
-        return tuple(newkey)
-    else:
-        raise ValueError(f"key should be a Sequence[NestedKey]. Got {key}")
 
 
 def _maybe_unravel_keys_silent(index):
@@ -1030,3 +1012,50 @@ class implement_for:
         for setter in setters:
             setter(setter.fn)
             cls._setters.append(setter)
+
+
+NON_STR_KEY_TUPLE = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
+NON_STR_KEY = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
+
+
+class _StringKeys(KeysView):
+    """A key view where contains is restricted to strings."""
+
+    def __contains__(self, item):
+        if not isinstance(item, str):
+            # at this point, we don't care about efficiency anymore
+            is_tuple = False
+            try:
+                if isinstance(item, tuple) and all(
+                    isinstance(key, str) for key in unravel_keys(item)
+                ):
+                    is_tuple = True
+            except Exception:  # catch errors during unravel
+                raise TypeError(NON_STR_KEY)
+            if is_tuple:
+                raise TypeError(NON_STR_KEY_TUPLE)
+            raise TypeError(NON_STR_KEY)
+        return super().__contains__(item)
+
+
+class _StringOnlyDict(dict):
+    """A dict class where contains is restricted to strings."""
+
+    def __contains__(self, item):
+        if not isinstance(item, str):
+            # at this point, we don't care about efficiency anymore
+            is_tuple = False
+            try:
+                if isinstance(item, tuple) and all(
+                    isinstance(key, str) for key in unravel_keys(item)
+                ):
+                    is_tuple = True
+            except Exception:  # catch errors during unravel
+                raise TypeError(NON_STR_KEY)
+            if is_tuple:
+                raise TypeError(NON_STR_KEY_TUPLE)
+            raise TypeError(NON_STR_KEY)
+        return super().__contains__(item)
+
+    def keys(self):
+        return _StringKeys(self)
