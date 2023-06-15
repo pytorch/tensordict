@@ -2323,8 +2323,11 @@ class TestTensorDicts(TestTensorDictsBase):
         assert type(td) is type(td_empty)
         assert all(val.any() for val in (td != td_empty).values(True, True))
 
-    def test_add_batch_dim_cache(self, td_name, device):
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_add_batch_dim_cache(self, td_name, device, nested):
         td = getattr(self, td_name)(device)
+        if nested:
+            td = TensorDict({"parent": td}, td.batch_size)
         from tensordict.nn import TensorDictModule  # noqa
         from torch import vmap
 
@@ -3858,6 +3861,22 @@ class TestLazyStackedTensorDict:
             {"a": torch.rand(3, 4, 5), ("b", "c"): torch.rand(3, 4, 5)}, [3, 4, 5]
         )
         td = torch.stack([td, td.clone()], 0)
+        from tensordict.nn import TensorDictModule  # noqa
+        from torch import vmap
+
+        fun = vmap(lambda x: x)
+        fun(td)
+        td.zero_()
+        # this value should be cached
+        std = fun(td)
+        for value in std.values(True, True):
+            assert (value == 0).all()
+
+    def test_add_batch_dim_cache_nested(self):
+        td = TensorDict(
+            {"a": torch.rand(3, 4, 5), ("b", "c"): torch.rand(3, 4, 5)}, [3, 4, 5]
+        )
+        td = TensorDict({"parent": torch.stack([td, td.clone()], 0)}, [2, 3, 4, 5])
         from tensordict.nn import TensorDictModule  # noqa
         from torch import vmap
 
