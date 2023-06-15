@@ -4229,9 +4229,9 @@ class TensorDict(TensorDictBase):
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
         if not include_nested and not leaves_only:
-            yield from self._tensordict.keys()
+            return self._tensordict.keys()
         else:
-            yield from _TensorDictKeysView(
+            return _TensorDictKeysView(
                 self, include_nested=include_nested, leaves_only=leaves_only
             )
 
@@ -4250,9 +4250,9 @@ class TensorDict(TensorDictBase):
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
-            yield from self._tensordict.items()
+            return self._tensordict.items()
         else:
-            yield from super().items(
+            return super().items(
                 include_nested=include_nested, leaves_only=leaves_only
             )
 
@@ -4260,9 +4260,9 @@ class TensorDict(TensorDictBase):
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
-            yield from self._tensordict.values()
+            return self._tensordict.values()
         else:
-            yield from super().values(
+            return super().values(
                 include_nested=include_nested, leaves_only=leaves_only
             )
 
