@@ -11,7 +11,8 @@ import math
 import time
 
 import warnings
-from collections import defaultdict, KeysView
+from collections import defaultdict
+from collections.abc import KeysView
 from copy import copy
 from functools import wraps
 from importlib import import_module
