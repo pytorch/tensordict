@@ -11,6 +11,7 @@ import functools
 import numbers
 import re
 import textwrap
+import traceback
 import warnings
 from collections import defaultdict
 from collections.abc import MutableMapping
@@ -46,8 +47,10 @@ from tensordict.utils import (
     _set_item,
     _shape,
     _sub_index,
+    cache,
     convert_ellipsis_to_idx,
     DeviceType,
+    erase_cache,
     expand_as_right,
     expand_right,
     IndexType,
@@ -73,7 +76,11 @@ try:
     try:
         from functorch._C import is_batchedtensor
     except ImportError:
-        from torch._C._functorch import is_batchedtensor
+        from torch._C._functorch import (
+            _add_batch_dim,
+            _remove_batch_dim,
+            is_batchedtensor,
+        )
 
     _has_functorch = True
 except ImportError:
@@ -345,6 +352,7 @@ class TensorDictBase(MutableMapping):
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
         cls._sorted_keys = None
+        cls._cache = None
         return super().__new__(cls)
 
     def __getstate__(self) -> dict[str, Any]:
@@ -400,6 +408,9 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError
 
+    def _erase_cache(self):
+        self._cache = None
+
     @property
     def names(self):
         names = self._td_dim_names
@@ -411,6 +422,7 @@ class TensorDictBase(MutableMapping):
         self._td_dim_names = None
 
     @names.setter
+    @erase_cache
     def names(self, value):
         # we don't run checks on types for efficiency purposes
         if value is None:
@@ -563,6 +575,7 @@ class TensorDictBase(MutableMapping):
     def requires_grad(self) -> bool:
         return any(v.requires_grad for v in self.values())
 
+    @erase_cache
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
             return
@@ -732,6 +745,7 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
+    @erase_cache
     def set(
         self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
     ) -> TensorDictBase:
@@ -1356,6 +1370,7 @@ class TensorDictBase(MutableMapping):
             >>> assert (td_2["a"] == -2).all()
             >>> assert (td_2["b", "c"] == 2).all()
         """
+
         if inplace:
             out = self
         elif batch_size is not None:
@@ -1405,6 +1420,28 @@ class TensorDictBase(MutableMapping):
         if not inplace and is_locked:
             out.lock_()
         return out
+
+    @cache
+    def _add_batch_dim(self, *, in_dim, vmap_level):
+        return self.apply(
+            lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
+            batch_size=[b for i, b in enumerate(self.batch_size) if i != in_dim],
+            names=[name for i, name in enumerate(self.names) if i != in_dim],
+        )
+
+    @cache
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+        new_batch_size = list(self.batch_size)
+        new_batch_size.insert(out_dim, batch_size)
+        new_names = list(self.names)
+        new_names.insert(out_dim, None)
+        return self.apply(
+            lambda x, out_dim=out_dim: _remove_batch_dim(
+                x, vmap_level, batch_size, out_dim
+            ),
+            batch_size=new_batch_size,
+            names=new_names,
+        )
 
     def as_tensor(self):
         """Calls as_tensor on all the tensors contained in the object.
@@ -3448,6 +3485,7 @@ class TensorDict(TensorDictBase):
         "_device",
         "_is_locked",
         "_td_dim_names",
+        "_cache",
     )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
@@ -3473,10 +3511,9 @@ class TensorDict(TensorDictBase):
         self._device = device
 
         if not _run_checks:
-            self._tensordict: dict = dict(source)
+            _tensordict: dict = {}
             self._batch_size = batch_size
-            upd_dict = {}
-            for key, value in self._tensordict.items():
+            for key, value in source.items():
                 if isinstance(value, dict):
                     value = TensorDict(
                         value,
@@ -3486,9 +3523,8 @@ class TensorDict(TensorDictBase):
                         _is_shared=_is_shared,
                         _is_memmap=_is_memmap,
                     )
-                    upd_dict[key] = value
-            if upd_dict:
-                self._tensordict.update(upd_dict)
+                _tensordict[key] = value
+            self._tensordict = _tensordict
             self._td_dim_names = names
         else:
             self._tensordict = {}
@@ -3775,6 +3811,7 @@ class TensorDict(TensorDictBase):
 
         return self
 
+    @erase_cache
     def set(
         self,
         key: NestedKey,
@@ -4193,16 +4230,43 @@ class TensorDict(TensorDictBase):
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
-        return _TensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
-        )
+        if not include_nested and not leaves_only:
+            yield from self._tensordict.keys()
+        else:
+            return _TensorDictKeysView(
+                self, include_nested=include_nested, leaves_only=leaves_only
+            )
 
     def __getstate__(self):
-        return {slot: getattr(self, slot) for slot in self.__slots__}
+        return {
+            slot: getattr(self, slot) for slot in self.__slots__ if slot != "_cache"
+        }
 
     def __setstate__(self, state):
         for slot, value in state.items():
             setattr(self, slot, value)
+        self._cache = None
+
+    # some custom methods for efficiency
+    def items(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> Iterator[tuple[str, CompatibleType]]:
+        if not include_nested and not leaves_only:
+            yield from self._tensordict.items()
+        else:
+            yield from super().items(
+                include_nested=include_nested, leaves_only=leaves_only
+            )
+
+    def values(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> Iterator[tuple[str, CompatibleType]]:
+        if not include_nested and not leaves_only:
+            yield from self._tensordict.values()
+        else:
+            yield from super().values(
+                include_nested=include_nested, leaves_only=leaves_only
+            )
 
 
 class _ErrorInteceptor:
@@ -5043,6 +5107,7 @@ torch.Size([3, 2])
         parent.set_at_(subkey, value, self.idx)
         return self
 
+    @erase_cache
     def set(
         self,
         key: NestedKey,
@@ -5651,6 +5716,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
         return self
 
+    @erase_cache
     def set(
         self,
         key: NestedKey,
@@ -6834,6 +6900,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source._set(key, value, inplace=inplace)
         return self
 
+    @erase_cache
     def set(
         self, key: NestedKey, value: dict | CompatibleType, inplace: bool = False
     ) -> TensorDictBase:

@@ -12,6 +12,7 @@ import math
 import time
 
 import warnings
+from collections import defaultdict
 from copy import copy
 from functools import wraps
 from importlib import import_module
@@ -676,6 +677,8 @@ def _device(tensor: torch.Tensor) -> torch.device:
 
 def _is_shared(tensor: torch.Tensor) -> bool:
     if isinstance(tensor, torch.Tensor):
+        if torch._C._functorch.is_batchedtensor(tensor):
+            return None
         return tensor.is_shared()
     elif isinstance(tensor, KeyedJaggedTensor):
         return False
@@ -1030,3 +1033,42 @@ class implement_for:
         for setter in setters:
             setter(setter.fn)
             cls._setters.append(setter)
+
+
+def cache(fun):
+    """A cache for TensorDictBase subclasses.
+
+    This decorator will cache the values returned by a method as long as the
+    input arguments match.
+    The cache is stored within the tensordict such that it can be erased at any
+    point in time.
+
+    """
+
+    @wraps(fun)
+    def newfun(self, *args, **kwargs):
+        if len(args):
+            raise ValueError("Cached methods only accept keyword arguments.")
+        cache = self._cache
+        if cache is None:
+            cache = self._cache = defaultdict(dict)
+        cache = cache[fun.__name__]
+        key = tuple(sorted(kwargs.items()))
+        if key not in cache:
+            out = cache[key] = fun(self, **kwargs)
+        else:
+            out = cache[key]
+        return out
+
+    return newfun
+
+
+def erase_cache(fun):
+    """A decorator to erase the cache at each call."""
+
+    @wraps(fun)
+    def new_fun(self, *args, **kwargs):
+        self._erase_cache()
+        return fun(self, *args, **kwargs)
+
+    return new_fun
