@@ -13,12 +13,13 @@ from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
+from tensordict._tensordict import unravel_keys
 
 from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
-from tensordict.utils import _normalize_key, implement_for, NestedKey, unravel_keys
+from tensordict.utils import _normalize_key, implement_for, NestedKey
 from torch import nn, Tensor
 
 try:
@@ -977,11 +978,11 @@ class TensorDictModule(TensorDictModuleBase):
             raise ValueError(self._OUT_KEY_ERR)
         try:
             in_keys = [unravel_keys(in_key) for in_key in in_keys]
-        except ValueError:
+        except Exception:
             raise ValueError(self._IN_KEY_ERR)
         try:
             out_keys = [unravel_keys(out_key) for out_key in out_keys]
-        except ValueError:
+        except Exception:
             raise ValueError(self._OUT_KEY_ERR)
 
         if type(module) is type or not callable(module):
