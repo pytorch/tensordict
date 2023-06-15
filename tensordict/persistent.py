@@ -876,6 +876,13 @@ class PersistentTensorDict(TensorDictBase):
         del state["group_name"]
         self.__dict__.update(state)
 
+    def _add_batch_dim(self, *, in_dim, vmap_level):
+        raise RuntimeError("Persistent tensordicts cannot be used with vmap.")
+
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+        # not accessible
+        ...
+
 
 def _set_max_batch_size(source: PersistentTensorDict):
     """Updates a tensordict with its maximium batch size."""
