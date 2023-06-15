@@ -5930,10 +5930,19 @@ class LazyStackedTensorDict(TensorDictBase):
         out.callback = callback
         return out
 
-    # @cache  # noqa: B019
-    # def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
-    #     # this will only be called when in_dim was = to self.stack_dim
-    #     raise RuntimeError
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+        # TODO: this can be cached
+        new_batch_size = list(self.batch_size)
+        new_batch_size.insert(out_dim, batch_size)
+        new_names = list(self.names)
+        new_names.insert(out_dim, None)
+        return self.apply(
+            lambda x, out_dim=out_dim: _remove_batch_dim(
+                x, vmap_level, batch_size, out_dim
+            ),
+            batch_size=new_batch_size,
+            names=new_names,
+        )
 
     def get_at(self, key, index, default=NO_DEFAULT):
         item = self.get(key, default=default)
