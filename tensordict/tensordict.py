@@ -45,6 +45,7 @@ from tensordict.utils import (
     _maybe_unravel_keys_silent,
     _set_item,
     _shape,
+    _StringOnlyDict,
     _sub_index,
     cache,
     convert_ellipsis_to_idx,
@@ -56,7 +57,9 @@ from tensordict.utils import (
     int_generator,
     is_tensorclass,
     NestedKey,
-    prod, NON_STR_KEY, _StringOnlyDict,
+    NON_STR_KEY,
+    NON_STR_KEY_TUPLE,
+    prod,
     # unravel_keys,
 )
 from torch import distributed as dist, Tensor
@@ -310,12 +313,9 @@ class _TensorDictKeysView:
 
                 return False
             if all(isinstance(subkey, str) for subkey in key):
-                raise TypeError(NON_STR_KEY)
+                raise TypeError(NON_STR_KEY_TUPLE)
 
-        raise TypeError(
-            "TensorDict keys are always strings. Membership checks are only supported "
-            "for strings or non-empty tuples of strings (for nested TensorDicts)"
-        )
+        raise TypeError(NON_STR_KEY)
 
     def __repr__(self):
         include_nested = f"include_nested={self.include_nested}"
@@ -4249,9 +4249,7 @@ class TensorDict(TensorDictBase):
         if not include_nested and not leaves_only:
             return self._tensordict.items()
         else:
-            return super().items(
-                include_nested=include_nested, leaves_only=leaves_only
-            )
+            return super().items(include_nested=include_nested, leaves_only=leaves_only)
 
     def values(
         self, include_nested: bool = False, leaves_only: bool = False
