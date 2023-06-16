@@ -61,8 +61,8 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
 
 @implement_for("torch", "2.0", None)
 def set_tensor_dict(
-    module_dict, module, name: str, tensor: torch.Tensor
-) -> None:  # noqa: F811
+    module_dict, module, name: str, tensor: torch.Tensor  # noqa: F811
+) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     if name in module_dict["_parameters"]:
         del module_dict["_parameters"][name]  # type: ignore[assignment]
@@ -85,8 +85,8 @@ def set_tensor_dict(
 
 @implement_for("torch", None, "2.0")
 def set_tensor_dict(
-    module_dict, module, name: str, tensor: torch.Tensor
-) -> None:  # noqa: F811
+    module_dict, module, name: str, tensor: torch.Tensor  # noqa: F811
+) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     if name in module_dict["_parameters"]:
         del module_dict["_parameters"][name]  # type: ignore[assignment]
