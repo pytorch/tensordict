@@ -11,6 +11,14 @@ from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequ
 from tensordict.nn.functional_modules import make_functional
 from torch import nn
 
+try:
+    from torch import vmap
+except ImportError:
+    try:
+        from functorch import vmap
+    except ImportError:
+        raise RuntimeError("vmap couldn't be found, check pytorch version.")
+
 
 def make_net():
     return nn.Sequential(
@@ -153,6 +161,81 @@ def test_exec_td(benchmark, net):
     benchmark.pedantic(
         fmodule, args=(x,), kwargs={"params": params}, iterations=100, rounds=100
     )
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("stack", [True, False])
+@pytest.mark.parametrize(
+    "tdmodule",
+    [True, False],
+)
+def test_vmap_mlp_speed(benchmark, stack, tdmodule):
+    # tests speed of vmapping over a transformer
+    device = "cuda" if torch.cuda.device_count() else "cpu"
+    t = nn.Sequential(
+        nn.Linear(64, 64, device=device),
+        nn.ReLU(),
+        nn.Linear(64, 64, device=device),
+        nn.ReLU(),
+        nn.Linear(64, 64, device=device),
+        nn.ReLU(),
+        nn.Linear(64, 64, device=device),
+        nn.ReLU(),
+    )
+    if tdmodule:
+        t = TensorDictModule(t, in_keys=["x"], out_keys=["y"])
+
+    x = torch.randn(1, 1, 64)
+    t.eval()
+    params = make_functional(t)
+    if not stack:
+        params = params.expand(2).to_tensordict()
+    else:
+        params = torch.stack([params, params.clone()], 0)
+    if tdmodule:
+        fun = vmap(t, (None, 0))
+        data = TensorDict({"x": x}, [])
+        fun(data, params)
+        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=100)
+    else:
+        fun = vmap(t, (None, 0))
+        fun(x, params)
+        benchmark.pedantic(fun, args=(x, params), rounds=100, iterations=100)
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("stack", [True, False])
+@pytest.mark.parametrize("tdmodule", [True, False])
+def test_vmap_transformer_speed(benchmark, stack, tdmodule):
+    # tests speed of vmapping over a transformer
+    device = "cuda" if torch.cuda.device_count() else "cpu"
+    t = torch.nn.Transformer(
+        64,
+        nhead=4,
+        num_decoder_layers=3,
+        num_encoder_layers=3,
+        dim_feedforward=64,
+        device=device,
+    )
+    if tdmodule:
+        t = TensorDictModule(t, in_keys=["x", "x"], out_keys=["y"])
+
+    x = torch.randn(1, 1, 64)
+    t.eval()
+    params = make_functional(t)
+    if not stack:
+        params = params.expand(2).to_tensordict()
+    else:
+        params = torch.stack([params, params.clone()], 0)
+    if tdmodule:
+        fun = vmap(t, (None, 0))
+        data = TensorDict({"x": x}, [])
+        fun(data, params)
+        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=100)
+    else:
+        fun = vmap(t, (None, None, 0))
+        fun(x, x, params)
+        benchmark.pedantic(fun, args=(x, x, params), rounds=100, iterations=100)
 
 
 if __name__ == "__main__":
