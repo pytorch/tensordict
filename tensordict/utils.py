@@ -13,7 +13,6 @@ import time
 import warnings
 from collections import defaultdict
 from collections.abc import KeysView
-from collections.abc import KeysView
 from copy import copy
 from functools import wraps
 from importlib import import_module
@@ -1053,7 +1052,6 @@ def erase_cache(fun):
         return fun(self, *args, **kwargs)
 
     return new_fun
-
 
 
 NON_STR_KEY_TUPLE = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."

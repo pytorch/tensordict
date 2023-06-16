@@ -1422,18 +1422,17 @@ class TensorDictBase(MutableMapping):
             td = self.as_tensor()
         else:
             td = self
-        # return TensorDict({
-        #     key: value._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level) if is_tensor_collection(value) else _add_batch_dim(value, in_dim, vmap_level)
-        #     for key, value in td.items()
-        # },
-        #     batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
-        #     names=[name for i, name in enumerate(td.names) if i != in_dim],
-        # )
-        return td.apply(
-            lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
-            batch_size=[b for i, b in enumerate(self.batch_size) if i != in_dim],
-            names=[name for i, name in enumerate(self.names) if i != in_dim],
+        out = TensorDict(
+            {
+                key: value._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
+                if is_tensor_collection(value)
+                else _add_batch_dim(value, in_dim, vmap_level)
+                for key, value in td.items()
+            },
+            batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
+            names=[name for i, name in enumerate(td.names) if i != in_dim],
         )
+        return out.lock_()
 
     @cache  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
@@ -1441,13 +1440,19 @@ class TensorDictBase(MutableMapping):
         new_batch_size.insert(out_dim, batch_size)
         new_names = list(self.names)
         new_names.insert(out_dim, None)
-        return self.apply(
-            lambda x, out_dim=out_dim: _remove_batch_dim(
-                x, vmap_level, batch_size, out_dim
-            ),
+        out = TensorDict(
+            {
+                key: value._remove_batch_dim(
+                    vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
+                )
+                if is_tensor_collection(value)
+                else _remove_batch_dim(value, vmap_level, batch_size, out_dim)
+                for key, value in self.items()
+            },
             batch_size=new_batch_size,
             names=new_names,
         )
+        return out
 
     def as_tensor(self):
         """Calls as_tensor on all the tensors contained in the object.
@@ -4272,25 +4277,6 @@ class TensorDict(TensorDictBase):
                 include_nested=include_nested, leaves_only=leaves_only
             )
 
-    # some custom methods for efficiency
-    def items(
-        self, include_nested: bool = False, leaves_only: bool = False
-    ) -> Iterator[tuple[str, CompatibleType]]:
-        if not include_nested and not leaves_only:
-            return self._tensordict.items()
-        else:
-            return super().items(include_nested=include_nested, leaves_only=leaves_only)
-
-    def values(
-        self, include_nested: bool = False, leaves_only: bool = False
-    ) -> Iterator[tuple[str, CompatibleType]]:
-        if not include_nested and not leaves_only:
-            return self._tensordict.values()
-        else:
-            return super().values(
-                include_nested=include_nested, leaves_only=leaves_only
-            )
-
 
 class _ErrorInteceptor:
     """Context manager for catching errors and modifying message.
@@ -5947,28 +5933,71 @@ class LazyStackedTensorDict(TensorDictBase):
     @staticmethod
     @cache
     def _cached_add_batch_dims(td, in_dim, vmap_level):
-        # we return a stack with callback
+        # we return a stack with callback, and hack the batch_size and names
+        # Per se it is still a LazyStack but the stacking dim is "hidden" from
+        # the outside
         out = td.clone(False)
 
         def callback(tensor, in_dim=in_dim, vmap_level=vmap_level):
             return _add_batch_dim(tensor, in_dim, vmap_level)
 
         out.callback = callback
+        out._batch_size = torch.Size(
+            [dim for i, dim in enumerate(out._batch_size) if i != out.stack_dim]
+        )
+        if out._td_dim_names is not None:
+            out._td_dim_names = [
+                name for i, name in enumerate(out._td_dim_names) if i != out.stack_dim
+            ]
+        else:
+            out._td_dim_names = [None] * out.ndim
+        return out.lock_()
+
+    @cache
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+        if self.callback is not None:
+            # this is the hacked version. We just need to remove the callback and
+            # reset a proper batch size
+            return LazyStackedTensorDict(
+                *self.tensordicts,
+                stack_dim=out_dim,
+            )
+            # return self._cache_remove_batch_dim(vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim)
+        else:
+            # we must call _remove_batch_dim on all tensordicts
+            # batch_size: size of the batch when we unhide it.
+            # out_dim: dimension where the output will be found
+            new_batch_size = list(self.batch_size)
+            new_batch_size.insert(out_dim, batch_size)
+            new_names = list(self.names)
+            new_names.insert(out_dim, None)
+            # rebuild the lazy stack
+            # the stack dim is the same if the out_dim is past it, but it
+            # must be incremented by one otherwise.
+            # In the first case, the out_dim must be decremented by one
+            if out_dim > self.stack_dim:
+                stack_sim = self.stack_dim
+                out_dim = out_dim - 1
+            else:
+                stack_dim = self.stack_dim + 1
+            out = LazyStackedTensorDict(
+                *[
+                    td._remove_batch_dim(
+                        vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
+                    )
+                    for td in self.tensordicts
+                ],
+                stack_dim=stack_dim,
+            )
         return out
 
-    # def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
-    #     # TODO: this can be cached
-    #     new_batch_size = list(self.batch_size)
-    #     new_batch_size.insert(out_dim, batch_size)
-    #     new_names = list(self.names)
-    #     new_names.insert(out_dim, None)
-    #     return self.apply(
-    #         lambda x, out_dim=out_dim: _remove_batch_dim(
-    #             x, vmap_level, batch_size, out_dim
-    #         ),
-    #         batch_size=new_batch_size,
-    #         names=new_names,
-    #     )
+    # @cache
+    # def _cache_remove_batch_dim(self, vmap_level, batch_size, out_dim):
+    #     # we keep the args to avoid a cache confusion
+    #     return LazyStackedTensorDict(
+    #         *self.tensordicts,
+    #         stack_dim=out_dim,
+    #         )
 
     def get_at(self, key, index, default=NO_DEFAULT):
         item = self.get(key, default=default)

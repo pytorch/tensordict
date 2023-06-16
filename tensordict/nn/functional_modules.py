@@ -17,7 +17,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import _is_tensor_collection, TensorDictBase
 
-from tensordict.utils import implement_for
+from tensordict.utils import implement_for, cache
 from torch import nn
 
 try:
@@ -188,6 +188,11 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
         batched_inputs = []
         for in_dim, arg in zip(flat_in_dims, flat_args):
             if in_dim is None:
+                if isinstance(arg, TensorDictBase):
+                    # this may be a perf bottleneck and could benefit from caching
+                    # arg = cache(arg.clone)(False)
+                    arg = arg.clone(False)
+
                 batched_input = arg
             else:
                 if isinstance(arg, TensorDictBase):
@@ -242,7 +247,6 @@ of dimensionality {arg.dim()} so expected in_dim to satisfy
             flat_out_dims = _broadcast_to_and_flatten(out_dims, output_spec)
             if flat_out_dims is None:
                 incompatible_error()
-
         flat_outputs = []
         for batched_output, out_dim in zip(flat_batched_outputs, flat_out_dims):
             if not isinstance(batched_output, TensorDictBase):
