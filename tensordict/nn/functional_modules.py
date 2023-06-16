@@ -17,7 +17,7 @@ import torch
 from tensordict import TensorDict
 from tensordict.tensordict import _is_tensor_collection, TensorDictBase
 
-from tensordict.utils import implement_for, cache
+from tensordict.utils import implement_for
 from torch import nn
 
 try:

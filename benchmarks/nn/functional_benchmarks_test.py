@@ -169,7 +169,14 @@ def test_exec_td(benchmark, net):
 def test_vmap_speed(benchmark, stack, tdmodule):
     # tests speed of vmapping over a transformer
     device = "cuda" if torch.cuda.device_count() else "cpu"
-    t = torch.nn.Transformer(64, device=device)
+    t = torch.nn.Transformer(
+        64,
+        nhead=4,
+        num_decoder_layers=3,
+        num_encoder_layers=3,
+        dim_feedforward=64,
+        device=device,
+    )
     if tdmodule:
         t = TensorDictModule(t, in_keys=["x", "x"], out_keys=["y"])
 
@@ -184,11 +191,11 @@ def test_vmap_speed(benchmark, stack, tdmodule):
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
         fun(data, params)
-        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=10)
+        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=100)
     else:
         fun = vmap(t, (None, None, 0))
         fun(x, x, params)
-        benchmark.pedantic(fun, args=(x, x, params), rounds=100, iterations=10)
+        benchmark.pedantic(fun, args=(x, x, params), rounds=100, iterations=100)
 
 
 if __name__ == "__main__":
