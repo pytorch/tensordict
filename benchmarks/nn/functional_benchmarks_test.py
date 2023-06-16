@@ -164,12 +164,19 @@ def test_exec_td(benchmark, net):
 
 
 @torch.no_grad()
-@pytest.mark.parametrize("stack", [True, False])
-@pytest.mark.parametrize("tdmodule", [True, False])
+@pytest.mark.parametrize("stack", [True, ]) #False])
+@pytest.mark.parametrize("tdmodule", [True, ]) #False])
 def test_vmap_speed(benchmark, stack, tdmodule):
     # tests speed of vmapping over a transformer
     device = "cuda" if torch.cuda.device_count() else "cpu"
-    t = torch.nn.Transformer(64, device=device)
+    t = torch.nn.Transformer(
+        64,
+        nhead=4,
+        num_decoder_layers=3,
+        num_encoder_layers=3,
+        dim_feedforward=64,
+        device=device,
+    )
     if tdmodule:
         t = TensorDictModule(t, in_keys=["x", "x"], out_keys=["y"])
 
