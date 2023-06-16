@@ -164,8 +164,16 @@ def test_exec_td(benchmark, net):
 
 
 @torch.no_grad()
-@pytest.mark.parametrize("stack", [True, ]) # False])
-@pytest.mark.parametrize("tdmodule", [True, ]) # False])
+@pytest.mark.parametrize(
+    "stack",
+    [
+        True, False])
+@pytest.mark.parametrize(
+    "tdmodule",
+    [
+        True, False
+    ],
+)
 def test_vmap_mlp_speed(benchmark, stack, tdmodule):
     # tests speed of vmapping over a transformer
     device = "cuda" if torch.cuda.device_count() else "cpu"
@@ -199,6 +207,7 @@ def test_vmap_mlp_speed(benchmark, stack, tdmodule):
         fun(x, params)
         benchmark.pedantic(fun, args=(x, params), rounds=100, iterations=100)
 
+
 @torch.no_grad()
 @pytest.mark.parametrize("stack", [True, False])
 @pytest.mark.parametrize("tdmodule", [True, False])
@@ -227,11 +236,11 @@ def test_vmap_transformer_speed(benchmark, stack, tdmodule):
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
         fun(data, params)
-        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=10)
+        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=100)
     else:
         fun = vmap(t, (None, None, 0))
         fun(x, x, params)
-        benchmark.pedantic(fun, args=(x, x, params), rounds=100, iterations=10)
+        benchmark.pedantic(fun, args=(x, x, params), rounds=100, iterations=100)
 
 
 if __name__ == "__main__":
