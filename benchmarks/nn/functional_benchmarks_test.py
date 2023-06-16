@@ -164,15 +164,10 @@ def test_exec_td(benchmark, net):
 
 
 @torch.no_grad()
-@pytest.mark.parametrize(
-    "stack",
-    [
-        True, False])
+@pytest.mark.parametrize("stack", [True, False])
 @pytest.mark.parametrize(
     "tdmodule",
-    [
-        True, False
-    ],
+    [True, False],
 )
 def test_vmap_mlp_speed(benchmark, stack, tdmodule):
     # tests speed of vmapping over a transformer
