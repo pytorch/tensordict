@@ -5853,6 +5853,7 @@ class LazyStackedTensorDict(TensorDictBase):
             self.set_(key, torch.stack(list_item, dim))
         return self
 
+    @cache
     def get(
         self,
         key: NestedKey,
@@ -5864,9 +5865,8 @@ class LazyStackedTensorDict(TensorDictBase):
         # fairly easy to add support if we could add nested keys to valid_keys.
 
         # we can handle the case where the key is a tuple of length 1
-        if (isinstance(key, tuple)) and len(key) == 1:
-            key = key[0]
-        elif isinstance(key, tuple):
+        key = unravel_keys(key)
+        if isinstance(key, tuple):
             try:
                 tensordict, key = _get_leaf_tensordict(self, key)
             except KeyError:

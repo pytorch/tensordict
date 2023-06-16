@@ -1027,15 +1027,19 @@ def cache(fun):
 
     @wraps(fun)
     def newfun(self, *args, **kwargs):
-        if len(args):
-            raise ValueError("Cached methods only accept keyword arguments.")
+        # if len(args):
+        #     raise ValueError("Cached methods only accept keyword arguments.")
         cache = self._cache
         if cache is None:
             cache = self._cache = defaultdict(dict)
         cache = cache[fun.__name__]
-        key = tuple(sorted(kwargs.items()))
+        key = tuple(args) + tuple(sorted(kwargs.items()))
         if key not in cache:
-            out = cache[key] = fun(self, **kwargs)
+            out = fun(self, *args, **kwargs)
+            if not isinstance(out, Tensor):
+                # we don't cache tensors to avoid filling the mem and / or
+                # stacking them from their origin
+                cache[key] = out
         else:
             out = cache[key]
         return out
