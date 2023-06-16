@@ -4272,6 +4272,25 @@ class TensorDict(TensorDictBase):
                 include_nested=include_nested, leaves_only=leaves_only
             )
 
+    # some custom methods for efficiency
+    def items(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> Iterator[tuple[str, CompatibleType]]:
+        if not include_nested and not leaves_only:
+            return self._tensordict.items()
+        else:
+            return super().items(include_nested=include_nested, leaves_only=leaves_only)
+
+    def values(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> Iterator[tuple[str, CompatibleType]]:
+        if not include_nested and not leaves_only:
+            return self._tensordict.values()
+        else:
+            return super().values(
+                include_nested=include_nested, leaves_only=leaves_only
+            )
+
 
 class _ErrorInteceptor:
     """Context manager for catching errors and modifying message.
