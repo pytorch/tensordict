@@ -58,7 +58,7 @@ def set_tensor(module: "torch.nn.Module", name: str, tensor: torch.Tensor) -> No
     else:
         module.__dict__[name] = tensor
 
-
+@implement_for("torch", "2.0", None)
 def set_tensor_dict(module_dict, module, name: str, tensor: torch.Tensor) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     if name in module_dict["_parameters"]:
@@ -79,6 +79,21 @@ def set_tensor_dict(module_dict, module, name: str, tensor: torch.Tensor) -> Non
     else:
         module_dict[name] = tensor
 
+@implement_for("torch", None, "2.0")
+def set_tensor_dict(module_dict, module, name: str, tensor: torch.Tensor) -> None:
+    """Simplified version of torch.nn.utils._named_member_accessor."""
+    if name in module_dict["_parameters"]:
+        del module_dict["_parameters"][name]  # type: ignore[assignment]
+    was_buffer = name in module_dict["_buffers"]
+    if was_buffer:
+        del module_dict["_buffers"][name]
+    if isinstance(tensor, nn.Parameter):
+        module_dict.pop(name, None)
+        module.register_parameter(name, tensor)
+    elif was_buffer and isinstance(tensor, Tensor):
+        module_dict["_buffers"][name] = tensor
+    else:
+        module_dict[name] = tensor
 
 _RESET_OLD_TENSORDICT = True
 try:
