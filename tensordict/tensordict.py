@@ -1469,6 +1469,7 @@ class TensorDictBase(MutableMapping):
                 f"because at least one of its tensors does not support this method."
             ) from err
 
+    @erase_cache
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
@@ -5048,6 +5049,7 @@ torch.Size([3, 2])
         return self.names
 
     @names.setter
+    @erase_cache
     def names(self, value):
         raise RuntimeError(
             "Names of a subtensordict cannot be modified. Instantiate the tensordict first."
@@ -5063,6 +5065,7 @@ torch.Size([3, 2])
         return self._source.device
 
     @device.setter
+    @erase_cache
     def device(self, value: DeviceType) -> None:
         self._source.device = value
 
@@ -5267,6 +5270,7 @@ torch.Size([3, 2])
                 return out
             return out[idx]
 
+    @erase_cache
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
@@ -5617,6 +5621,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return self._td_dim_names
 
     @names.setter
+    @erase_cache
     def names(self, value):
         if value is None:
             for td in self.tensordicts:
@@ -6674,6 +6679,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         return torch.stack(tensordicts, stack_dim)
 
+    @erase_cache
     def update(
         self, input_dict_or_td: TensorDictBase, clone: bool = False, **kwargs: Any
     ) -> TensorDictBase:
@@ -6844,11 +6850,15 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @property
     def is_locked(self) -> bool:
-        is_locked = self._is_locked
+        # is_locked = self._is_locked
         for td in self.tensordicts:
-            is_locked = is_locked or td.is_locked
-        self._is_locked = is_locked
-        return is_locked
+            if td.is_locked:
+                return True
+        else:
+            return False
+            # is_locked = is_locked or td.is_locked
+        # self._is_locked = is_locked
+        # return is_locked
 
     @is_locked.setter
     def is_locked(self, value: bool) -> None:
@@ -6858,7 +6868,7 @@ class LazyStackedTensorDict(TensorDictBase):
             self.unlock_()
 
     def lock_(self) -> LazyStackedTensorDict:
-        self._is_locked = True
+        # self._is_locked = True
         for td in self.tensordicts:
             td.lock_()
         return self
@@ -6866,7 +6876,7 @@ class LazyStackedTensorDict(TensorDictBase):
     lock = _renamed_inplace_method(lock_)
 
     def unlock_(self) -> LazyStackedTensorDict:
-        self._is_locked = False
+        # self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
@@ -6947,6 +6957,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return self._source.device
 
     @device.setter
+    @erase_cache
     def device(self, value: DeviceType) -> None:
         self._source.device = value
 
@@ -6959,6 +6970,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return self._batch_size
 
     @batch_size.setter
+    @erase_cache
     def batch_size(self, new_size: torch.Size) -> None:
         self._batch_size_setter(new_size)
 
