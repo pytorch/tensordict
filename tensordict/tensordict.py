@@ -4446,9 +4446,7 @@ def _full_like(td: TensorDictBase, fill_value: float, **kwargs: Any) -> TensorDi
 
 @implements_for_td(torch.zeros_like)
 def _zeros_like(td: TensorDictBase, **kwargs: Any) -> TensorDictBase:
-    td_clone = td.clone()
-    for key in td_clone.keys():
-        td_clone.fill_(key, 0.0)
+    td_clone = td.apply(torch.zeros_like)
     if "dtype" in kwargs:
         raise ValueError("Cannot pass dtype to full_like with TensorDict")
     if "device" in kwargs:
