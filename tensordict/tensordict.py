@@ -5858,7 +5858,7 @@ class LazyStackedTensorDict(TensorDictBase):
             self.set_(key, torch.stack(list_item, dim))
         return self
 
-    @cache
+    @cache  # noqa: B019
     def get(
         self,
         key: NestedKey,
@@ -5958,7 +5958,7 @@ class LazyStackedTensorDict(TensorDictBase):
             out._td_dim_names = [None] * out.ndim
         return out.lock_()
 
-    @cache
+    @cache  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
         if self.callback is not None:
             # this is the hacked version. We just need to remove the callback and
@@ -5981,7 +5981,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # must be incremented by one otherwise.
             # In the first case, the out_dim must be decremented by one
             if out_dim > self.stack_dim:
-                stack_sim = self.stack_dim
+                stack_dim = self.stack_dim
                 out_dim = out_dim - 1
             else:
                 stack_dim = self.stack_dim + 1
