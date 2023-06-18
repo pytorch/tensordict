@@ -69,27 +69,6 @@ def big_nested_stacked_td():
     )
 
 
-def big_nested_stacked_td():
-    return (
-        (
-            torch.stack(
-                TensorDict(
-                    {
-                        ".".join([str(j) for j in range(i)] + ["t"]): torch.zeros(3, 10)
-                        + i
-                        for i in range(1, 20)
-                    },
-                    [3, 10],
-                )
-                .unflatten_keys(".")
-                .unbind(1),
-                1,
-            ),
-        ),
-        {},
-    )
-
-
 def test_items(benchmark):
     benchmark.pedantic(
         lambda td: list(td.items()), setup=big_td, rounds=1000, iterations=1
@@ -106,24 +85,6 @@ def test_items_nested_leaf(benchmark):
     benchmark.pedantic(
         lambda td: list(td.items(True, True)),
         setup=big_nested_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
-def test_items_stack_nested(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.items(True)),
-        setup=big_nested_stacked_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
-def test_items_stack_nested_leaf(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.items(True, True)),
-        setup=big_nested_stacked_td,
         rounds=1000,
         iterations=1,
     )
@@ -186,24 +147,6 @@ def test_keys_stack_nested_leaf(benchmark):
     )
 
 
-def test_keys_stack_nested(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.keys(True)),
-        setup=big_nested_stacked_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
-def test_keys_stack_nested_leaf(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.keys(True, True)),
-        setup=big_nested_stacked_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
 def test_values(benchmark):
     benchmark.pedantic(
         lambda td: list(td.values()), setup=big_td, rounds=1000, iterations=1
@@ -220,24 +163,6 @@ def test_values_nested_leaf(benchmark):
     benchmark.pedantic(
         lambda td: list(td.values(True, True)),
         setup=big_nested_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
-def test_values_stack_nested(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.values(True)),
-        setup=big_nested_stacked_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
-def test_values_stack_nested_leaf(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.values(True, True)),
-        setup=big_nested_stacked_td,
         rounds=1000,
         iterations=1,
     )
@@ -280,44 +205,6 @@ def test_membership_nested_leaf(benchmark):
     benchmark.pedantic(
         lambda td: ("a",) in td.keys(True, True),
         setup=big_nested_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
-def test_membership_stacked_nested(benchmark):
-    benchmark.pedantic(
-        lambda td: ("a",) in td.keys(True),
-        setup=big_nested_stacked_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
-def test_membership_stacked_nested_leaf(benchmark):
-    benchmark.pedantic(
-        lambda td: ("a",) in td.keys(True, True),
-        setup=big_nested_stacked_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
-def test_stacked_getleaf(benchmark):
-    key = tuple(str(i) for i in range(19)) + ("t",)
-    benchmark.pedantic(
-        lambda td: td.get(key),
-        setup=big_nested_stacked_td,
-        rounds=1000,
-        iterations=1,
-    )
-
-
-def test_stacked_get(benchmark):
-    key = tuple(str(i) for i in range(19))
-    benchmark.pedantic(
-        lambda td: td.get(key),
-        setup=big_nested_stacked_td,
         rounds=1000,
         iterations=1,
     )
