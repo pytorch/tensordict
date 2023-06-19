@@ -20,6 +20,7 @@ from typing import Any, Callable, Sequence, TypeVar
 import tensordict as tensordict_lib
 
 import torch
+from tensordict._tensordict import unravel_keys
 from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     _get_repr,
@@ -361,7 +362,7 @@ def _getattribute_wrapper(getattribute: Callable) -> Callable:
                 "_tensordict" in self.__dict__
                 and item in self.__dict__["_tensordict"].keys()
             ):
-                out = self._tensordict[item]
+                out = self._tensordict.get(item)
                 return out
             elif (
                 "_non_tensordict" in self.__dict__
@@ -384,29 +385,20 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
             value (any): the value to set for the attribute
 
         """
+        __dict__ = self.__dict__
         if (
-            "_tensordict" not in self.__dict__
-            or "_non_tensordict" not in self.__dict__
+            "_tensordict" not in __dict__
+            or "_non_tensordict" not in __dict__
             or key in ("batch_size", "device")
         ):
             return setattr_(self, key, value)
-        if key not in expected_keys:
-            raise AttributeError(
-                f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
-            )
 
-        if isinstance(value, tuple(tensordict_lib.tensordict._ACCEPTED_CLASSES)):
-            # Avoiding key clash, honoring the user input to assign tensor type data to the key
-            if key in self._non_tensordict.keys():
-                del self._non_tensordict[key]
-            self._tensordict[key] = value
-        else:
-            # Avoiding key clash, honoring the user input to assign non-tensor data to the key
-            if key in self._tensordict.keys():
-                del self._tensordict[key]
-            # Saving all non-tensor attributes
-            self._non_tensordict[key] = value
-        return None
+        out = self.set(key, value)
+        if out is not self:
+            raise RuntimeError(
+                "Cannot set attribute on a locked tensorclass, even if "
+                "clone_on_set is set to True. Use my_obj.set(...) instead."
+            )
 
     return wrapper
 
@@ -582,7 +574,7 @@ def _device_setter(self, value: DeviceType) -> None:
     )
 
 
-def _set(self, key: NestedKey, value: Any):
+def _set(self, key: NestedKey, value: Any, inplace: bool = False):
     """Sets a new key-value pair.
 
     Args:
@@ -590,18 +582,51 @@ def _set(self, key: NestedKey, value: Any):
            If tuple of str it is equivalent to chained calls of getattr
            followed by a final setattr.
         value (Any): value to be stored in the tensorclass
+        inplace (bool, optional): if ``True``, set will tentatively try to
+            update the value in-place. If ``False`` or if the key isn't present,
+            the value will be simply written at its destination.
 
     Returns:
         self
 
     """
     if isinstance(key, str):
-        key = (key,)
+        __dict__ = self.__dict__
+        if __dict__["_tensordict"].is_locked:
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+        expected_keys = self.__dataclass_fields__
+        if key not in expected_keys:
+            raise AttributeError(
+                f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
+            )
 
-    if key and isinstance(key, tuple):
+        if isinstance(value, tuple(tensordict_lib.tensordict._ACCEPTED_CLASSES)):
+            # Avoiding key clash, honoring the user input to assign tensor type data to the key
+            if key in self._non_tensordict.keys():
+                if inplace:
+                    raise RuntimeError(
+                        f"Cannot update an existing entry of type {type(self._non_tensordict.get(key))} with a value of type {type(value)}."
+                    )
+                del self._non_tensordict[key]
+            self._tensordict.set(key, value, inplace=inplace)
+        else:
+            # Avoiding key clash, honoring the user input to assign non-tensor data to the key
+            if key in self._tensordict.keys():
+                if inplace:
+                    raise RuntimeError(
+                        f"Cannot update an existing entry of type {type(self._tensordict.get(key))} with a value of type {type(value)}."
+                    )
+                self._tensordict.del_(key)
+            # Saving all non-tensor attributes
+            self._non_tensordict[key] = value
+        return self
+
+    if isinstance(key, tuple) and len(key):
+        key = unravel_keys(key)
         if len(key) > 1:
-            return getattr(self, key[0]).set(key[1:], value)
-        return setattr(self, key[0], value)
+            return self.set(key[0], getattr(self, key[0]).set(key[1:], value))
+        out = self.set(key[0], value)
+        return out
     raise ValueError(
         f"Supported type for key are str and tuple, got {key} of type {type(key)}"
     )
