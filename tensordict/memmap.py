@@ -284,9 +284,9 @@ class MemmapTensor:
             # avoid extending someone else's index
             memmap_copy._index = deepcopy(memmap_copy._index)
         memmap_copy._index.append(index)
-        # memmap_copy.transfer_ownership = False
         memmap_copy._shape_indexed = None
         memmap_copy.file = memmap_tensor.file
+        memmap_copy._memmap_array = memmap_tensor._memmap_array
 
         return memmap_copy
 
