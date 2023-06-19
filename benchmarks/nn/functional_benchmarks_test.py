@@ -185,7 +185,7 @@ def test_vmap_mlp_speed(benchmark, stack, tdmodule):
     if tdmodule:
         t = TensorDictModule(t, in_keys=["x"], out_keys=["y"])
 
-    x = torch.randn(1, 1, 64)
+    x = torch.randn(1, 1, 64, device=device)
     t.eval()
     params = make_functional(t)
     if not stack:
@@ -216,11 +216,12 @@ def test_vmap_transformer_speed(benchmark, stack, tdmodule):
         num_encoder_layers=3,
         dim_feedforward=64,
         device=device,
+        batch_first=False,
     )
     if tdmodule:
         t = TensorDictModule(t, in_keys=["x", "x"], out_keys=["y"])
 
-    x = torch.randn(1, 1, 64)
+    x = torch.randn(1, 20, 64, device=device)
     t.eval()
     params = make_functional(t)
     if not stack:
