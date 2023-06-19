@@ -1031,6 +1031,9 @@ def test_set():
     data_nest.set("v", "test_nested")
     assert data_nest.v == data.y.v == "test_nested"
 
+    data.set(("y", ("v",)), "this time another string")
+    assert data.y.v == data_nest.v == "this time another string"
+
     # Testing if user can override the type of the attribute
     vorig = torch.ones(3, 4, 5)
     data.set("v", vorig)
