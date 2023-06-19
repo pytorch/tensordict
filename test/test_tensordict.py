@@ -754,9 +754,14 @@ class TestTensorDicts(TestTensorDictsBase):
             if isinstance(item, TensorDictBase):
                 assert not item.is_locked
 
-    def test_lock_write(self, td_name, device):
+    @pytest.mark.parametrize("clone_on_set", [True, False])
+    def test_lock_write(self, td_name, device, clone_on_set):
         td = getattr(self, td_name)(device)
-        td.lock_()
+        if td_name == "td_h5":
+            with pytest.raises(NotImplementedError, match="clone_on_set=True is not supported for persistent"):
+                td = td.lock_(clone_on_set=True)
+            return
+        td.lock_(clone_on_set=clone_on_set)
         td_clone = td.clone()
         assert not td_clone.is_locked
         td_clone = td.to_tensordict()
@@ -770,15 +775,25 @@ class TestTensorDicts(TestTensorDictsBase):
         else:
             td = td.select(inplace=True)
         for key, item in td_clone.items(True):
-            with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
-                td.set(key, item)
+            if not clone_on_set:
+                with pytest.raises(
+                    RuntimeError, match="Cannot modify locked TensorDict"
+                ):
+                    td.set(key, item)
+            else:
+                assert td.set(key, item) is not td
         td.unlock_()
         for key, item in td_clone.items(True):
             td.set(key, item)
-        td.lock_()
+        td.lock_(clone_on_set=clone_on_set)
         for key, item in td_clone.items(True):
-            with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
-                td.set(key, item)
+            if not clone_on_set:
+                with pytest.raises(
+                    RuntimeError, match="Cannot modify locked TensorDict"
+                ):
+                    td.set(key, item)
+            else:
+                assert td.set(key, item) is not td
             td.set_(key, item)
 
     def test_unlock(self, td_name, device):
@@ -1448,6 +1463,19 @@ class TestTensorDicts(TestTensorDictsBase):
         new_z = torch.randn_like(z)
         td.set_("z", new_z)
         torch.testing.assert_close(new_z, td.get("z"))
+
+    def test_rename_key_lock(self, td_name, device) -> None:
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        if td_name == "td_h5":
+            with pytest.raises(NotImplementedError, match="clone_on_set=True is not supported for persistent"):
+                td = td.lock_(clone_on_set=True)
+            return
+
+        td = td.lock_(clone_on_set=True)
+        other_td = td.rename_key_("a", "other")
+        assert "other" in other_td.keys()
+        assert other_td is not td
 
     def test_rename_key_nested(self, td_name, device) -> None:
         torch.manual_seed(1)

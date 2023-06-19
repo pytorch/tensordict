@@ -343,6 +343,7 @@ class TensorDictBase(MutableMapping):
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
         cls._sorted_keys = None
+        cls._clone_on_set = False
         return super().__new__(cls)
 
     def __getstate__(self) -> dict[str, Any]:
@@ -3289,8 +3290,9 @@ class TensorDictBase(MutableMapping):
         else:
             self.unlock_()
 
-    def lock_(self) -> TensorDictBase:
+    def lock_(self, clone_on_set=False) -> TensorDictBase:
         self._is_locked = True
+        self._clone_on_set = clone_on_set
         for key in self.keys():
             if _is_tensor_collection(self.entry_class(key)):
                 self.get(key).lock_()
@@ -3303,6 +3305,7 @@ class TensorDictBase(MutableMapping):
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
+        self._clone_on_set = False
         for key in self.keys():
             if _is_tensor_collection(self.entry_class(key)):
                 self.get(key).unlock_()
@@ -3446,6 +3449,7 @@ class TensorDict(TensorDictBase):
         "_device",
         "_is_locked",
         "_td_dim_names",
+        "_clone_on_set",
     )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
@@ -3790,7 +3794,10 @@ class TensorDict(TensorDictBase):
 
         inplace = inplace and key in self.keys()
         if self.is_locked and not inplace:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+            if not self._clone_on_set:
+                raise RuntimeError(TensorDictBase.LOCK_ERROR)
+            else:
+                return self.clone(False).set(key, value, inplace=inplace)
 
         value = self._validate_value(value)
         # not calling set_ to avoid re-validate key
@@ -3847,7 +3854,10 @@ class TensorDict(TensorDictBase):
         if safe and (new_key in self.keys(include_nested=True)):
             raise KeyError(f"key {new_key} already present in TensorDict.")
         if self.is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+            if not self._clone_on_set:
+                raise RuntimeError(TensorDictBase.LOCK_ERROR)
+            else:
+                return self.clone(False).rename_key_(old_key, new_key, safe=safe)
 
         if isinstance(new_key, tuple):
             td, subkey = _get_leaf_tensordict(self, new_key)
@@ -5079,7 +5089,10 @@ torch.Size([3, 2])
         inplace = inplace and key_present
         if not inplace:
             if self.is_locked:
-                raise RuntimeError(TensorDictBase.LOCK_ERROR)
+                if not self._clone_on_set:
+                    raise RuntimeError(TensorDictBase.LOCK_ERROR)
+                else:
+                    return self.clone(False).set(key, tensor, inplace=inplace)
             if key_present:
                 raise RuntimeError(
                     "Calling `SubTensorDict.set(key, value, inplace=False)` is "
@@ -5384,8 +5397,12 @@ torch.Size([3, 2])
     def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> SubTensorDict:
-        self._source.rename_key_(old_key, new_key, safe=safe)
-        return self
+        if not self.is_locked:
+            self._source.rename_key_(old_key, new_key, safe=safe)
+            return self
+        if self._clone_on_set:
+            return self.clone(False).rename_key_(old_key, new_key, safe=safe)
+        raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
     rename_key = _renamed_inplace_method(rename_key_)
 
@@ -5676,9 +5693,11 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace: bool = False,
     ) -> TensorDictBase:
         key = self._validate_key(key)
-        # we don't need this as locked lazy stacks have locked nested tds so the error will be captured in the loop
-        # if self.is_locked:
-        #     raise RuntimeError(TensorDictBase.LOCK_ERROR)
+        if self.is_locked:
+            if self._clone_on_set:
+                return self.clone(False).set(key, tensor, inplace=inplace)
+            else:
+                raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         tensor = self._validate_value(tensor)
         for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
@@ -6608,6 +6627,11 @@ class LazyStackedTensorDict(TensorDictBase):
     def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> TensorDictBase:
+        if self.is_locked:
+            if self._clone_on_set:
+                return self.clone(False).rename_key_(old_key, new_key, safe=safe)
+            else:
+                raise RuntimeError(TensorDictBase.LOCK_ERROR)
         def sort_keys(element):
             if isinstance(element, tuple):
                 return "_-|-_".join(element)
@@ -6687,11 +6711,11 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @property
     def is_locked(self) -> bool:
-        is_locked = self._is_locked
         for td in self.tensordicts:
-            is_locked = is_locked or td.is_locked
-        self._is_locked = is_locked
-        return is_locked
+            if td.is_locked:
+                return True
+        else:
+            return False
 
     @is_locked.setter
     def is_locked(self, value: bool) -> None:
@@ -6700,19 +6724,19 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             self.unlock_()
 
-    def lock_(self) -> LazyStackedTensorDict:
-        self._is_locked = True
+    def lock_(self, clone_on_set=False) -> LazyStackedTensorDict:
+        self._clone_on_set = clone_on_set
         for td in self.tensordicts:
-            td.lock_()
+            td.lock_(clone_on_set=clone_on_set)
         return self
 
     lock = _renamed_inplace_method(lock_)
 
     def unlock_(self) -> LazyStackedTensorDict:
-        self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
+        self._clone_on_set = False
         for td in self.tensordicts:
             td.unlock_()
         return self
@@ -6863,7 +6887,10 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"Consider calling .contiguous() before calling this method."
             )
         if self.is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+            if not self._clone_on_set:
+                raise RuntimeError(TensorDictBase.LOCK_ERROR)
+            else:
+                return self.clone(False).set(key, value, inplace=inplace)
 
         if isinstance(key, tuple):
             subsource, subkey = _get_leaf_tensordict(self._source, key, _default_hook)
@@ -6988,6 +7015,11 @@ class _CustomOpTensorDict(TensorDictBase):
     def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> _CustomOpTensorDict:
+        if self.is_locked:
+            if self._clone_on_set:
+                return self.clone(False).rename_key_(old_key, new_key, safe=safe)
+            else:
+                raise RuntimeError(TensorDictBase.LOCK_ERROR)
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
 
