@@ -9,6 +9,7 @@ import abc
 import collections
 import functools
 import numbers
+import os
 import re
 import textwrap
 import warnings
@@ -2064,7 +2065,7 @@ class TensorDictBase(MutableMapping):
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
-                prefix.mkdir(exist_ok=True)
+                os.makedirs(prefix, exist_ok=True)
             torch.save(
                 {"batch_size": self.batch_size, "device": self.device},
                 prefix / "meta.pt",
@@ -2081,7 +2082,7 @@ class TensorDictBase(MutableMapping):
             if _is_tensor_collection(value.__class__):
                 if prefix is not None:
                     # ensure subdirectory exists
-                    (prefix / key).mkdir(exist_ok=True)
+                    os.makedirs(prefix / key, exist_ok=True)
                     tensordict[key] = value.memmap_like(
                         prefix=prefix / key,
                     )
@@ -3974,7 +3975,7 @@ class TensorDict(TensorDictBase):
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
-                prefix.mkdir(exist_ok=True)
+                os.makedirs(prefix, exist_ok=True)
             torch.save(
                 {"batch_size": self.batch_size, "device": self.device},
                 prefix / "meta.pt",
@@ -3996,7 +3997,7 @@ class TensorDict(TensorDictBase):
             if _is_tensor_collection(value.__class__):
                 if prefix is not None:
                     # ensure subdirectory exists
-                    (prefix / key).mkdir(exist_ok=True)
+                    os.makedirs(prefix / key, exist_ok=True)
                     self._tensordict[key] = value.memmap_(
                         prefix=prefix / key, copy_existing=copy_existing
                     )
@@ -4445,9 +4446,7 @@ def _full_like(td: TensorDictBase, fill_value: float, **kwargs: Any) -> TensorDi
 
 @implements_for_td(torch.zeros_like)
 def _zeros_like(td: TensorDictBase, **kwargs: Any) -> TensorDictBase:
-    td_clone = td.clone()
-    for key in td_clone.keys():
-        td_clone.fill_(key, 0.0)
+    td_clone = td.apply(torch.zeros_like)
     if "dtype" in kwargs:
         raise ValueError("Cannot pass dtype to full_like with TensorDict")
     if "device" in kwargs:
@@ -6463,7 +6462,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
-                prefix.mkdir(exist_ok=True)
+                os.makedirs(prefix, exist_ok=True)
             torch.save({"stack_dim": self.stack_dim}, prefix / "meta.pt")
         for i, td in enumerate(self.tensordicts):
             td.memmap_(
@@ -6482,7 +6481,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
-                prefix.mkdir(exist_ok=True)
+                os.makedirs(prefix, exist_ok=True)
             torch.save({"stack_dim": self.stack_dim}, prefix / "meta.pt")
         for i, td in enumerate(self.tensordicts):
             td_like = td.memmap_like(
