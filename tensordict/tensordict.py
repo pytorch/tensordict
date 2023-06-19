@@ -5706,7 +5706,8 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace: bool = False,
     ) -> TensorDictBase:
         key = self._validate_key(key)
-        if self.is_locked:
+
+        if self.is_locked and not inplace:
             if self._clone_on_set:
                 return self.clone(False).set(key, tensor, inplace=inplace)
             else:
