@@ -757,8 +757,11 @@ class TestTensorDicts(TestTensorDictsBase):
     @pytest.mark.parametrize("clone_on_set", [True, False])
     def test_lock_write(self, td_name, device, clone_on_set):
         td = getattr(self, td_name)(device)
-        if td_name == "td_h5":
-            with pytest.raises(NotImplementedError, match="clone_on_set=True is not supported for persistent"):
+        if td_name == "td_h5" and clone_on_set:
+            with pytest.raises(
+                NotImplementedError,
+                match="clone_on_set=True is not supported for persistent",
+            ):
                 td = td.lock_(clone_on_set=True)
             return
         td.lock_(clone_on_set=clone_on_set)
@@ -793,7 +796,14 @@ class TestTensorDicts(TestTensorDictsBase):
                 ):
                     td.set(key, item)
             else:
-                assert td.set(key, item) is not td
+                if td_name in ("sub_td", "sub_td2"):
+                    with pytest.raises(
+                        RuntimeError,
+                        match="is prohibited for existing tensors. Consider calling SubTensorDict",
+                    ):
+                        td.set(key, item)
+                else:
+                    assert td.set(key, item) is not td
             td.set_(key, item)
 
     def test_unlock(self, td_name, device):
@@ -1468,7 +1478,10 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         if td_name == "td_h5":
-            with pytest.raises(NotImplementedError, match="clone_on_set=True is not supported for persistent"):
+            with pytest.raises(
+                NotImplementedError,
+                match="clone_on_set=True is not supported for persistent",
+            ):
                 td = td.lock_(clone_on_set=True)
             return
 

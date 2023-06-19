@@ -3295,7 +3295,7 @@ class TensorDictBase(MutableMapping):
         self._clone_on_set = clone_on_set
         for key in self.keys():
             if _is_tensor_collection(self.entry_class(key)):
-                self.get(key).lock_()
+                self.get(key).lock_(clone_on_set=clone_on_set)
         return self
 
     lock = _renamed_inplace_method(lock_)
@@ -3785,6 +3785,16 @@ class TensorDict(TensorDictBase):
         key = self._validate_key(key)
 
         if isinstance(key, tuple):
+            if self.is_locked:
+                # we may need to clone self if not inplace
+                # this key check is expensive and could be improved
+                # by relying on the value setting using _get_leaf_tensordict.
+                # I have a truly marvelous implementation, but it's too large to fit in this comment
+                inplace = inplace and key in self.keys(True)
+                if not inplace and not self._clone_on_set:
+                    raise RuntimeError(TensorDictBase.LOCK_ERROR)
+                elif not inplace:
+                    return self.clone(False).set(key, value)
             # get the leaf tensordict and call set from there, these means validation
             # of inputs is done in the context of the leaf (batch_size could be
             # different to root etc.)
@@ -4305,7 +4315,10 @@ def _default_hook(td: TensorDictBase, k: tuple[str, ...]) -> None:
     if out is None:
         out = td.select()
         if td.is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+            if td._clone_on_set:
+                td = td.clone(False)
+            else:
+                raise RuntimeError(TensorDictBase.LOCK_ERROR)
         td._set(k[0], out)
     return out
 
@@ -6632,6 +6645,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 return self.clone(False).rename_key_(old_key, new_key, safe=safe)
             else:
                 raise RuntimeError(TensorDictBase.LOCK_ERROR)
+
         def sort_keys(element):
             if isinstance(element, tuple):
                 return "_-|-_".join(element)

@@ -568,7 +568,9 @@ class PersistentTensorDict(TensorDictBase):
 
     def lock_(self, clone_on_set=False) -> TensorDictBase:
         if clone_on_set:
-            raise NotImplementedError("clone_on_set=True is not supported for persistent TensorDicts.")
+            raise NotImplementedError(
+                "clone_on_set=True is not supported for persistent TensorDicts."
+            )
         return super().lock_()
 
     def rename_key_(
