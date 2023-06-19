@@ -1,7 +1,9 @@
+import argparse
+
 import pytest
 import torch
 
-from tensordict import MemmapTensor
+from tensordict import MemmapTensor, TensorDict
 
 
 def get_available_devices():
@@ -21,6 +23,13 @@ def tensor():
 @pytest.fixture(params=get_available_devices())
 def memmap_tensor(request):
     return MemmapTensor(3, 4, 5, device=request.param)
+
+
+@pytest.fixture
+def td_memmap():
+    return TensorDict(
+        {str(i): torch.zeros(3, 40) + i for i in range(30)}, [3, 40]
+    ).memmap_()
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -48,3 +57,35 @@ def test_stack(benchmark, memmap_tensor):
     benchmark.pedantic(
         torch.stack, args=([memmap_tensor] * 2, 0), rounds=10, iterations=1
     )
+
+
+def test_memmaptd_index(benchmark, td_memmap):
+    benchmark.pedantic(
+        lambda td: td[0],
+        args=(td_memmap,),
+        iterations=1,
+        rounds=1000,
+    )
+
+
+def test_memmaptd_index_astensor(benchmark, td_memmap):
+    benchmark.pedantic(
+        lambda td: td[0].as_tensor(),
+        args=(td_memmap,),
+        iterations=1,
+        rounds=1000,
+    )
+
+
+def test_memmaptd_index_op(benchmark, td_memmap):
+    benchmark.pedantic(
+        lambda td: td[0].apply(lambda x: x + 1),
+        args=(td_memmap,),
+        iterations=1,
+        rounds=1000,
+    )
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
