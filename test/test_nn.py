@@ -489,7 +489,7 @@ class TestTDModule:
         params = make_functional(tdmodule)
 
         # vmap = True
-        params = params.expand(10)
+        params = params.expand(10).lock_()
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
@@ -524,7 +524,7 @@ class TestTDModule:
         params = make_functional(tdmodule)
 
         # vmap = True
-        params = params.expand(10)
+        params = params.expand(10).lock_()
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
@@ -573,7 +573,7 @@ class TestTDModule:
         params = make_functional(tdmodule)
 
         # vmap = True
-        params = params.expand(10)
+        params = params.expand(10).lock_()
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
@@ -952,7 +952,9 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
+        params.unlock_()
         params["module", "1"] = params["module", "2"]
+        params.lock_()
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1031,8 +1033,10 @@ class TestTDSequence:
         assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
+        params.unlock_()
         params["module", "1"] = params["module", "2"]
         params["module", "2"] = params["module", "3"]
+        params.lock_()
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1091,9 +1095,11 @@ class TestTDSequence:
         tdmodule[1] = tdmodule2
         tdmodule[2] = normal_params
         tdmodule[3] = prob_module
+        params.unlock_()
         params["module", "1"] = params["module", "2"]
         params["module", "2"] = params["module", "3"]
         params["module", "3"] = params["module", "4"]
+        params.lock_()
         assert len(tdmodule) == 5
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1141,7 +1147,9 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
+        params.unlock_()
         params["module", "1"] = params["module", "2"]
+        params.lock_()
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1199,8 +1207,10 @@ class TestTDSequence:
         assert len(tdmodule.module) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
+        params.unlock_()
         params["module", "1"] = params["module", "2"]
         params["module", "2"] = params["module", "3"]
+        params.lock_()
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule.module, "__delitem__")
@@ -1263,9 +1273,11 @@ class TestTDSequence:
         tdmodule[1] = tdmodule2
         tdmodule[2] = normal_params
         tdmodule[3] = prob_module
+        params.unlock_()
         params["module", "1"] = params["module", "2"]
         params["module", "2"] = params["module", "3"]
         params["module", "3"] = params["module", "4"]
+        params.lock_()
         assert len(tdmodule) == 5
 
         assert hasattr(tdmodule.module, "__delitem__")
@@ -1312,7 +1324,9 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
+        params.unlock_()
         params["module", "1"] = params["module", "2"]
+        params.lock_()
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
@@ -1371,7 +1385,7 @@ class TestTDSequence:
         params = make_functional(tdmodule)
 
         # vmap = True
-        params = params.expand(10)
+        params = params.expand(10).lock_()
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
@@ -1414,7 +1428,7 @@ class TestTDSequence:
         params = make_functional(tdmodule)
 
         # vmap = True
-        params = params.expand(10)
+        params = params.expand(10).lock_()
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         td_out = vmap(tdmodule, (None, 0))(td, params)
         assert td_out is not td
@@ -1997,7 +2011,7 @@ class TestMakeFunctionalVmap:
     def test_make_func_vmap(self, module_type, stateless, keyword, extra_kwargs):
         module = getattr(self, module_type)(extra_kwargs)
         params = make_functional(module, keep_params=not stateless)
-        params = params.expand(5).to_tensordict()
+        params = params.expand(5).to_tensordict().lock_()
         params.zero_()
         td = self.td.expand(5, 3).to_tensordict()
         if not keyword:

@@ -490,7 +490,7 @@ def make_functional(
         )
         if keep_params:
             repopulate_module(module, params)
-        return params
+        return params.lock_()
     elif return_params and _is_stateless:
         raise RuntimeError(
             "Calling make_functional with return_params=True on a functional, stateless module. "

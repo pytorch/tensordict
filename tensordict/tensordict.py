@@ -381,6 +381,7 @@ class TensorDictBase(MutableMapping):
         td = TensorDict(dict(module.named_parameters()), [])
         td.update(dict(module.named_buffers()))
         td = td.detach().unflatten_keys(".")
+        td.lock_()
         return td
 
     @property
@@ -1433,7 +1434,7 @@ class TensorDictBase(MutableMapping):
             batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
             names=[name for i, name in enumerate(td.names) if i != in_dim],
         )
-        return out.lock_()
+        return out
 
     @cache  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
@@ -3350,6 +3351,7 @@ class TensorDictBase(MutableMapping):
 
     lock = _renamed_inplace_method(lock_)
 
+    @erase_cache
     def unlock_(self) -> TensorDictBase:
         self._is_locked = False
         self._is_shared = False
@@ -3401,6 +3403,16 @@ class TensorDictBase(MutableMapping):
 
         """
         return self.apply(lambda x: x.type(dst_type))
+
+
+_ACCEPTED_CLASSES = [
+    Tensor,
+    MemmapTensor,
+    TensorDictBase,
+]
+if _has_torchrec:
+    _ACCEPTED_CLASSES += [KeyedJaggedTensor]
+_ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
 
 
 class TensorDict(TensorDictBase):
@@ -5857,7 +5869,6 @@ class LazyStackedTensorDict(TensorDictBase):
             self.set_(key, torch.stack(list_item, dim))
         return self
 
-    @cache  # noqa: B019
     def get(
         self,
         key: NestedKey,
@@ -5876,7 +5887,12 @@ class LazyStackedTensorDict(TensorDictBase):
             except KeyError:
                 return self._default_get(key, default)
             return tensordict.get(key, default=default)
+        return self._get_str_key(key, default=default)
 
+    @cache(True)  # noqa: B019
+    def _get_str_key(self, key:str,
+                     default: str | CompatibleType = NO_DEFAULT,
+                     ):
         keys = self.valid_keys
         if key not in keys:
             # first, let's try to update the valid keys
@@ -6835,6 +6851,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
         self._update_valid_keys()
 
+    @erase_cache
     def append(self, tensordict: TensorDictBase) -> None:
         """Append a TensorDict onto the stack.
 
@@ -6851,10 +6868,10 @@ class LazyStackedTensorDict(TensorDictBase):
     def is_locked(self) -> bool:
         # is_locked = self._is_locked
         for td in self.tensordicts:
-            if td.is_locked:
-                return True
+            if not td.is_locked:
+                return False
         else:
-            return False
+            return True
             # is_locked = is_locked or td.is_locked
         # self._is_locked = is_locked
         # return is_locked
@@ -6874,6 +6891,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     lock = _renamed_inplace_method(lock_)
 
+    @erase_cache
     def unlock_(self) -> LazyStackedTensorDict:
         # self._is_locked = False
         self._is_shared = False
@@ -7597,16 +7615,6 @@ def _check_keys(
                         f"incompatible"
                     )
     return keys
-
-
-_ACCEPTED_CLASSES = [
-    Tensor,
-    MemmapTensor,
-    TensorDictBase,
-]
-if _has_torchrec:
-    _ACCEPTED_CLASSES += [KeyedJaggedTensor]
-_ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
 
 
 def _expand_to_match_shape(
