@@ -403,6 +403,7 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError
 
     def _erase_cache(self):
+        delattr(self, "_cache")
         self._cache = None
 
     @property
@@ -416,7 +417,6 @@ class TensorDictBase(MutableMapping):
         self._td_dim_names = None
 
     @names.setter
-    @erase_cache
     def names(self, value):
         # we don't run checks on types for efficiency purposes
         if value is None:
@@ -3340,6 +3340,7 @@ class TensorDictBase(MutableMapping):
             self._lock_id.difference_update(lock_ids)
         else:
             lock_ids = set()
+        self._is_locked = False
 
         unlocked_tds = [self]
         lock_ids.add(id(self))
@@ -3349,7 +3350,6 @@ class TensorDictBase(MutableMapping):
                 unlocked_tds.extend(dest._propagate_unlock(lock_ids))
         self._locked_tensordicts = []
 
-        self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
@@ -5688,7 +5688,6 @@ class LazyStackedTensorDict(TensorDictBase):
         return self._td_dim_names
 
     @names.setter
-    @erase_cache
     def names(self, value):
         if value is None:
             for td in self.tensordicts:
@@ -6873,13 +6872,13 @@ class LazyStackedTensorDict(TensorDictBase):
     def _propagate_unlock(self, lock_ids=None):
         if lock_ids is None:
             lock_ids = set()
+        self._is_locked = False
 
         unlocked_tds = [self]
         lock_ids.add(id(self))
         for dest in self.tensordicts:
             unlocked_tds.extend(dest._propagate_unlock(lock_ids))
 
-        self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
@@ -7280,6 +7279,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.lock_()
         return self
 
+    @erase_cache
     def unlock_(self) -> TensorDictBase:
         self._source.unlock_()
         return self
@@ -7287,6 +7287,7 @@ class _CustomOpTensorDict(TensorDictBase):
     def _remove_lock(self, lock_id):
         return self._source._remove_lock(lock_id)
 
+    @erase_cache
     def _lock_propagate(self, lock_ids):
         return self._source._lock_propagate(lock_ids)
 

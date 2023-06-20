@@ -35,6 +35,7 @@ from tensordict.tensordict import (
 from tensordict.utils import (
     _maybe_unravel_keys_silent,
     _shape,
+    cache,
     DeviceType,
     expand_right,
     IndexType,
@@ -248,6 +249,7 @@ class PersistentTensorDict(TensorDictBase):
                 return default
             raise KeyError(f"key {key} not found in PersistentTensorDict {self}")
 
+    @cache  # noqa: B019
     def get(self, key, default=NO_DEFAULT):
         array = self._get_array(key, default)
         if isinstance(array, (h5py.Dataset,)):
@@ -396,6 +398,7 @@ class PersistentTensorDict(TensorDictBase):
                 ) from err
         sub_td.update(value, inplace=True)
 
+    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _PersistentTDKeysView:
