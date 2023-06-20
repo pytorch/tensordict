@@ -4311,16 +4311,23 @@ class TensorDict(TensorDictBase):
             return self
         return out
 
-    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
         if not include_nested and not leaves_only:
             return self._tensordict.keys()
         else:
-            return _TensorDictKeysView(
-                self, include_nested=include_nested, leaves_only=leaves_only
+            return self._nested_keys(
+                include_nested=include_nested, leaves_only=leaves_only
             )
+
+    # @cache  # noqa: B019
+    def _nested_keys(
+        self, include_nested: bool = False, leaves_only: bool = False
+    ) -> _TensorDictKeysView:
+        return _TensorDictKeysView(
+            self, include_nested=include_nested, leaves_only=leaves_only
+        )
 
     def __getstate__(self):
         return {
@@ -5241,7 +5248,7 @@ torch.Size([3, 2])
             ) from e
         return self
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
@@ -6246,7 +6253,7 @@ class LazyStackedTensorDict(TensorDictBase):
             del self._orig_batch_size
         self._batch_size = new_size
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _LazyStackedTensorDictKeysView:
@@ -7245,7 +7252,7 @@ class _CustomOpTensorDict(TensorDictBase):
             f"\n\top={self.custom_op}({custom_op_kwargs_str}))"
         )
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:

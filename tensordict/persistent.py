@@ -398,7 +398,7 @@ class PersistentTensorDict(TensorDictBase):
                 ) from err
         sub_td.update(value, inplace=True)
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _PersistentTDKeysView:
