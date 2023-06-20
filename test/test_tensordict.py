@@ -38,6 +38,7 @@ from tensordict.tensordict import (
     make_tensordict,
     pad,
     pad_sequence,
+    SubTensorDict,
     TensorDictBase,
 )
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
@@ -735,9 +736,13 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_lock(self, td_name, device):
         td = getattr(self, td_name)(device)
         is_locked = td.is_locked
-        for _, item in td.items():
+        for item in td.values():
             if isinstance(item, TensorDictBase):
                 assert item.is_locked == is_locked
+        if isinstance(td, SubTensorDict):
+            with pytest.raises(RuntimeError, match="the parent tensordict instead"):
+                td.is_locked = not is_locked
+            return
         td.is_locked = not is_locked
         assert td.is_locked != is_locked
         for _, item in td.items():
@@ -756,6 +761,11 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_lock_write(self, td_name, device):
         td = getattr(self, td_name)(device)
+        if isinstance(td, SubTensorDict):
+            with pytest.raises(RuntimeError, match="the parent tensordict instead"):
+                td.lock_()
+            return
+
         td.lock_()
         td_clone = td.clone()
         assert not td_clone.is_locked
@@ -792,6 +802,26 @@ class TestTensorDicts(TestTensorDictsBase):
             assert not td.is_shared()
         assert not td.is_memmap()
 
+    def test_lock_nested(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2") and td.is_locked:
+            with pytest.raises(RuntimeError, match="Cannot unlock"):
+                td.unlock_()
+        else:
+            td.unlock_()
+        td.set(("some", "nested"), torch.zeros(td.shape))
+        if td_name in ("sub_td", "sub_td2") and not td.is_locked:
+            with pytest.raises(RuntimeError, match="Cannot lock"):
+                td.lock_()
+            return
+        td.lock_()
+        some = td.get("some")
+        assert some.is_locked
+        with pytest.raises(RuntimeError):
+            some.unlock_()
+        # del td
+        # some.unlock_()
+
     def test_sorted_keys(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -804,13 +834,17 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td._sorted_keys is not None
             td.unlock_()
             assert td._sorted_keys is None
-        else:
-            assert td._sorted_keys is None
+        elif td_name not in ("sub_td", "sub_td2"):  # we cannot lock sub tensordicts
+            if isinstance(td, _CustomOpTensorDict):
+                target = td._source
+            else:
+                target = td
+            assert target._sorted_keys is None
             td.lock_()
             _ = td.sorted_keys
-            assert td._sorted_keys is not None
+            assert target._sorted_keys is not None
             td.unlock_()
-            assert td._sorted_keys is None
+            assert target._sorted_keys is None
 
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
@@ -4846,6 +4880,173 @@ def _compare_tensors_identity(td0, td1):
                 return False
     else:
         return True
+
+
+class TestLock:
+    def test_nested_lock(self):
+        td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+        td = td.lock_()
+        td._lock_id, id(td)
+        a = td["a"]
+        b = td["a", "b"]
+        c = td["a", "b", "c"]
+        assert len(a._lock_id) == 1
+        assert len(b._lock_id) == 2
+        assert len(c._lock_id) == 3
+        td = td.unlock_()
+        assert len(a._lock_id) == 0, a._lock_id
+        assert len(b._lock_id) == 0, b._lock_id
+        assert len(c._lock_id) == 0, c._lock_id
+        td = td.lock_()
+        del td
+        assert len(a._lock_id) == 0
+        assert len(b._lock_id) == 1
+        assert len(c._lock_id) == 2
+        a = a.lock_()
+        del a
+        assert len(b._lock_id) == 0
+        assert len(c._lock_id) == 1
+        b = b.lock_()
+        del b
+        assert len(c._lock_id) == 0
+
+    def test_nested_lock_erros(self):
+        td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+        td = td.lock_()
+        a = td["a"]
+        b = td["a", "b"]
+        c = td["a", "b", "c"]
+        # we cannot unlock a
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a tensordict that is part of a locked graph.",
+        ):
+            a.unlock_()
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a tensordict that is part of a locked graph.",
+        ):
+            b.unlock_()
+        assert len(a._lock_id) == 1
+        assert len(b._lock_id) == 2
+        assert len(c._lock_id) == 3
+        del td
+        a.unlock_()
+        a.lock_()
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a tensordict that is part of a locked graph.",
+        ):
+            b.unlock_()
+
+    def test_lock_two_roots(self):
+        td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+        td = td.lock_()
+        td._lock_id, id(td)
+        a = td["a"]
+        b = td["a", "b"]
+        c = td["a", "b", "c"]
+        other_td = TensorDict({"a": a}, [])
+        other_td.lock_()
+        # we cannot unlock anything anymore
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a tensordict that is part of a locked graph.",
+        ):
+            other_td.unlock_()
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot unlock a tensordict that is part of a locked graph.",
+        ):
+            td.unlock_()
+        # if we group them we can't unlock
+        supertd = TensorDict({"td": td, "other": other_td}, [])
+        supertd = supertd.lock_()
+        supertd = supertd.unlock_()
+        supertd = supertd.lock_()
+        idsuper = id(supertd)
+        idother = id(other_td)
+        del supertd, other_td
+        assert len(td._lock_id) == 0
+        assert idsuper not in a._lock_id
+        assert idother not in a._lock_id
+        assert len(a._lock_id) == 1
+        assert idsuper not in b._lock_id
+        assert idother not in b._lock_id
+        assert len(b._lock_id) == 2
+        assert len(c._lock_id) == 3
+        td.unlock_()
+
+    def test_lock_stack(self):
+        td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+        td1 = td0.clone()
+        td = torch.stack([td0, td1])
+        td = td.lock_()
+        a = td["a"]
+        b = td["a", "b"]
+        c = td["a", "b", "c"]
+        a0 = td0["a"]
+        b0 = td0["a", "b"]
+        c0 = td0["a", "b", "c"]
+        print(id(td), id(td0), id(td1), id(a), id(b), id(c), id(a0), id(b0), id(c0))
+        assert len(a._lock_id) == 3  # td, td0, td1
+        assert len(b._lock_id) == 5  # td, td0, td1, a0, a1
+        assert len(c._lock_id) == 7  # td, td0, td1, a0, a1, b0, b1
+        assert len(a0._lock_id) == 2  # td, td0
+        assert len(b0._lock_id) == 3  # td, td0, a0
+        assert len(c0._lock_id) == 4  # td, td0, a0, b0
+        td.unlock_()
+        td.lock_()
+        del td, td0, td1
+        a.unlock_()
+        a.lock_()
+        assert len(a._lock_id) == 0
+        assert len(b._lock_id) == 3  # a, a0, a1
+        assert len(c._lock_id) == 5  # a, a0, a1, b0, b1
+        assert len(a0._lock_id) == 1  # a
+        assert len(b0._lock_id) == 2  # a, a0
+        assert len(c0._lock_id) == 3  # a, a0, b0
+        del a, a0
+        b.unlock_()
+        b.lock_()
+        del b
+
+    def test_empty_tensordict_list(self):
+        td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+        a = td["a"]
+        b = td["a", "b"]
+        c = td["a", "b", "c"]
+        td = td.lock_()
+        assert len(td._locked_tensordicts)
+        assert len(a._locked_tensordicts)
+        assert len(b._locked_tensordicts)
+        td.unlock_()
+        assert not len(td._locked_tensordicts)
+        assert not len(a._locked_tensordicts)
+        assert not len(b._locked_tensordicts)
+        assert not len(c._locked_tensordicts)
+
+    def test_empty_tensordict_list_stack(self):
+        td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+        td1 = td0.clone()
+        td = torch.stack([td0, td1])
+        td = td.lock_()
+        a = td["a"]
+        b = td["a", "b"]
+        c = td["a", "b", "c"]
+        a0 = td0["a"]
+        b0 = td0["a", "b"]
+        c0 = td0["a", "b", "c"]
+        assert not hasattr(td, "_locked_tensordicts")
+        assert not hasattr(a, "_locked_tensordicts")
+        assert not hasattr(b, "_locked_tensordicts")
+        assert not hasattr(c, "_locked_tensordicts")
+        assert len(a0._locked_tensordicts)
+        assert len(b0._locked_tensordicts)
+        td.unlock_()
+        assert not len(a0._locked_tensordicts)
+        assert not len(b0._locked_tensordicts)
+        assert not len(c0._locked_tensordicts)
 
 
 @pytest.mark.parametrize("memmap", [True, False])
