@@ -1509,8 +1509,14 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_rename_key(self, td_name, device) -> None:
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        with pytest.raises(KeyError, match="already present in TensorDict"):
-            td.rename_key_("a", "b", safe=True)
+        if td.is_locked:
+            with pytest.raises(
+                RuntimeError, match=re.escape(TensorDictBase.LOCK_ERROR)
+            ):
+                td.rename_key_("a", "b", safe=True)
+        else:
+            with pytest.raises(KeyError, match="already present in TensorDict"):
+                td.rename_key_("a", "b", safe=True)
         a = td.get("a")
         if td.is_locked:
             with pytest.raises(RuntimeError, match="Cannot modify"):
