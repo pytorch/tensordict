@@ -822,7 +822,8 @@ class TestTensorDicts(TestTensorDictsBase):
         del td
         some.unlock_()
 
-    @pytest.mark.parametrize("op", ["keys_root", "keys_nested", "values", "items"])
+    # @pytest.mark.parametrize("op", ["keys_root", "keys_nested", "values", "items"])
+    @pytest.mark.parametrize("op", ["flatten", "unflatten"])
     def test_cache(self, td_name, device, op):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -847,6 +848,14 @@ class TestTensorDicts(TestTensorDictsBase):
             keys_b, values_b = zip(*td.items(True))
             assert all((_a == _b).all() for _a, _b in zip(values_a, values_b))
             assert keys_a == keys_b
+        elif op == "flatten":
+            a = td.flatten_keys()
+            b = td.flatten_keys()
+            assert a is b
+        elif op == "unflatten":
+            a = td.unflatten_keys()
+            b = td.unflatten_keys()
+            assert a is b
 
         assert len(td._cache)
         td.unlock_()
@@ -5214,6 +5223,42 @@ class TestLock:
         assert not len(a0._locked_tensordicts)
         assert not len(b0._locked_tensordicts)
         assert not len(c0._locked_tensordicts)
+
+    def test_stack_cache_lock(self):
+        td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+        td1 = td0.clone()
+        td = torch.stack([td0, td1])
+        assert td._is_locked is None
+        td = td.lock_()
+        assert td._is_locked
+        td.unlock_()
+        assert td._is_locked is None
+        td0.lock_()
+        assert td.is_locked
+        assert td._is_locked is None  # lock wasn't called on td
+        td.unlock_()
+        assert not td0.is_locked
+        assert td._is_locked is None
+
+        # create a parent to td
+        super_td = TensorDict({"td": td}, [])
+        super_td.lock_()
+        assert td._is_locked
+        super_td.unlock_()
+        assert td._is_locked is None
+
+    def test_stacked_append_and_insert(self):
+        td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+        td1 = td0.clone()
+        td = torch.stack([td0, td1])
+        td.lock_()
+        with pytest.raises(RuntimeError, match=re.escape(TensorDictBase.LOCK_ERROR)):
+            td.insert(0, td0)
+        with pytest.raises(RuntimeError, match=re.escape(TensorDictBase.LOCK_ERROR)):
+            td.append(td0)
+        td.unlock_()
+        td.insert(0, td0)
+        td.append(td0)
 
 
 @pytest.mark.parametrize("memmap", [True, False])

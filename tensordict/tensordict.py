@@ -57,6 +57,7 @@ from tensordict.utils import (
     IndexType,
     int_generator,
     is_tensorclass,
+    lock_blocked,
     NestedKey,
     NON_STR_KEY,
     NON_STR_KEY_TUPLE,
@@ -3352,14 +3353,12 @@ class TensorDictBase(MutableMapping):
         for key in self.keys():
             if _is_tensor_collection(self.entry_class(key)):
                 dest = self.get(key)
-                dest_locked, new_lock_ids = dest._lock_propagate(lock_ids)
-                dest._locked_tensordicts += dest_locked
+                dest._lock_propagate(lock_ids)
                 _locked_tensordicts.append(dest)
-                # we only keep the next level
-                # _locked_tensordicts += dest_locked
         if is_root:
             self._locked_tensordicts = _locked_tensordicts
-        return _locked_tensordicts, lock_ids
+        else:
+            self._locked_tensordicts += _locked_tensordicts
 
     def lock_(self) -> TensorDictBase:
         if self.is_locked:
@@ -3950,6 +3949,7 @@ class TensorDict(TensorDictBase):
         del self._tensordict[key]
         return self
 
+    @lock_blocked
     def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> TensorDictBase:
@@ -3966,8 +3966,6 @@ class TensorDict(TensorDictBase):
             )
         if safe and (new_key in self.keys(include_nested=True)):
             raise KeyError(f"key {new_key} already present in TensorDict.")
-        if self.is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         if isinstance(new_key, tuple):
             td, subkey = _get_leaf_tensordict(self, new_key)
@@ -5662,6 +5660,7 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> None:
         self._is_shared = False
         self._is_memmap = False
+        self._is_locked = None
 
         # sanity check
         N = len(tensordicts)
@@ -6919,6 +6918,7 @@ class LazyStackedTensorDict(TensorDictBase):
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
+    @lock_blocked
     def insert(self, index: int, tensordict: TensorDictBase) -> None:
         """Insert a TensorDict into the stack at the specified index.
 
@@ -6959,6 +6959,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
         self._update_valid_keys()
 
+    @lock_blocked
     def append(self, tensordict: TensorDictBase) -> None:
         """Append a TensorDict onto the stack.
 
@@ -6973,7 +6974,12 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @property
     def is_locked(self) -> bool:
-        # is_locked = self._is_locked
+        if self._is_locked is not None:
+            return self._is_locked
+
+        # we don't cache the value because we want that if any of the sub-tds is
+        # locked this object also results as locked.
+        # We can however cache it if the LazyStack is locked directly.
         for td in self.tensordicts:
             if td.is_locked:
                 return True
@@ -6998,18 +7004,15 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _lock_propagate(self, lock_ids=None):
         """Registers the parent tensordict that handles the lock."""
+        self._is_locked = True
         _locked_tensordicts = []
         is_root = lock_ids is None
         if is_root:
             lock_ids = set()
         lock_ids = lock_ids.union({id(self)})
         for dest in self.tensordicts:
-            dest_locked, new_lock_ids = dest._lock_propagate(lock_ids)
-            dest._locked_tensordicts += dest_locked
+            dest._lock_propagate(lock_ids)
             _locked_tensordicts.append(dest)
-            # we only keep the next level
-            # _locked_tensordicts += dest_locked
-        return _locked_tensordicts, lock_ids
 
     def _remove_lock(self, lock_id):
         for td in self.tensordicts:
@@ -7017,6 +7020,9 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @erase_cache
     def _propagate_unlock(self, lock_ids=None):
+        # we can't set _is_locked to False because after it's unlocked, anything
+        # can happen to a child tensordict.
+        self._is_locked = None
         if lock_ids is None:
             lock_ids = set()
         self._is_locked = False
