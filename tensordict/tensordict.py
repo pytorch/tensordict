@@ -4005,7 +4005,7 @@ class TensorDict(TensorDictBase):
             return self._default_get(first_key, default)
         return out
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def _get_nested(self, key, default):
         first_key = key[0]
         out = self._tensordict.get(first_key, None)
