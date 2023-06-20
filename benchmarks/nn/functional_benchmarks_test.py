@@ -186,9 +186,9 @@ def test_vmap_mlp_speed(benchmark, stack, tdmodule):
     t.eval()
     params = make_functional(t)
     if not stack:
-        params = params.expand(2).to_tensordict()
+        params = params.expand(2).to_tensordict().lock_()
     else:
-        params = torch.stack([params, params.clone()], 0)
+        params = torch.stack([params, params.clone()], 0).lock_()
     if tdmodule:
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
@@ -222,9 +222,9 @@ def test_vmap_transformer_speed(benchmark, stack, tdmodule):
     t.eval()
     params = make_functional(t)
     if not stack:
-        params = params.expand(2).to_tensordict()
+        params = params.expand(2).to_tensordict().lock_()
     else:
-        params = torch.stack([params, params.clone()], 0)
+        params = torch.stack([params, params.clone()], 0).lock_()
     if tdmodule:
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
