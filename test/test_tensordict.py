@@ -819,8 +819,66 @@ class TestTensorDicts(TestTensorDictsBase):
         assert some.is_locked
         with pytest.raises(RuntimeError):
             some.unlock_()
-        # del td
-        # some.unlock_()
+        del td
+        some.unlock_()
+
+    # @pytest.mark.parametrize("op", ["keys_root", "keys_nested", "values", "items"])
+    @pytest.mark.parametrize("op", ["flatten", "unflatten"])
+    def test_cache(self, td_name, device, op):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        try:
+            td.lock_()
+        except Exception:
+            return
+        if op == "keys_root":
+            a = list(td.keys())
+            b = list(td.keys())
+            assert a == b
+        elif op == "keys_nested":
+            a = list(td.keys(True))
+            b = list(td.keys(True))
+            assert a == b
+        elif op == "values":
+            a = list(td.values(True))
+            b = list(td.values(True))
+            assert all((_a == _b).all() for _a, _b in zip(a, b))
+        elif op == "items":
+            keys_a, values_a = zip(*td.items(True))
+            keys_b, values_b = zip(*td.items(True))
+            assert all((_a == _b).all() for _a, _b in zip(values_a, values_b))
+            assert keys_a == keys_b
+        elif op == "flatten":
+            a = td.flatten_keys()
+            b = td.flatten_keys()
+            assert a is b
+        elif op == "unflatten":
+            a = td.unflatten_keys()
+            b = td.unflatten_keys()
+            assert a is b
+
+        assert len(td._cache)
+        td.unlock_()
+        assert td._cache is None
+        for val in td.values(True):
+            if is_tensor_collection(val):
+                assert td._cache is None
+
+    def test_lock_change_names(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        try:
+            td.names = [str(i) for i in range(td.ndim)]
+            td.lock_()
+        except Exception:
+            return
+        # cache values
+        list(td.values(True))
+        td.names = [str(-i) for i in range(td.ndim)]
+        for val in td.values(True):
+            if not is_tensor_collection(val):
+                continue
+            assert val.names[: td.ndim] == [str(-i) for i in range(td.ndim)]
 
     def test_sorted_keys(self, td_name, device):
         torch.manual_seed(1)
