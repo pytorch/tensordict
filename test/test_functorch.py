@@ -70,7 +70,7 @@ class TestVmap:
             fmodule = module
             x = torch.randn(10, 2, 3)
             if batch_params:
-                params = params.expand(10, *params.batch_size).contiguous()
+                params = params.expand(10, *params.batch_size).contiguous().lock_()
                 # buffers = buffers.expand(10, *buffers.batch_size).contiguous()
                 y = vmap(fmodule, (0, 0))(x, params)
             else:
@@ -146,7 +146,7 @@ class TestVmap:
             x = torch.randn(10, 1, 3)
             td = TensorDict({"x": x}, [10])
             if batch_params:
-                params = params.expand(10, *params.batch_size)
+                params = params.expand(10, *params.batch_size).lock_()
                 td = vmap(tdmodule, (0, 0))(td, params)
             else:
                 td = vmap(tdmodule, (0, None))(td, params)
@@ -158,7 +158,7 @@ class TestVmap:
             x = torch.randn(10, 2, 3)
             td = TensorDict({"x": x}, [10])
             if batch_params:
-                params = params.expand(10, *params.batch_size).contiguous()
+                params = params.expand(10, *params.batch_size).contiguous().lock_()
                 td = vmap(tdmodule, (0, 0))(td, params)
             else:
                 raise NotImplementedError
@@ -260,7 +260,7 @@ class TestVmap:
             x = torch.randn(10, 2, 3)
             td = TensorDict({"x": x}, [10])
             if batch_params:
-                params = params.expand(10, *params.batch_size).contiguous()
+                params = params.expand(10, *params.batch_size).contiguous().lock_()
                 td = vmap(tdmodule, (0, 0))(td, params)
             else:
                 raise NotImplementedError
@@ -387,7 +387,7 @@ def test_nested_modules():
 
     y = vmap(net[0], (0, None))(x.expand(10, 3), params["0"])
     assert y.shape == torch.Size([10, 4])
-    y = vmap(net[0], (None, 0))(x, params["0"].expand(10))
+    y = vmap(net[0], (None, 0))(x, params["0"].expand(10).lock_())
     assert y.shape == torch.Size([10, 4])
 
 
@@ -492,7 +492,7 @@ def test_outputsize_vmap():
         batch_size=[3, 4],
     )
     params = make_functional(model)
-    params = params.expand(3, *params.shape)
+    params = params.expand(3, *params.shape).lock_()
     out = vmap(model, (0, 0))(a, params)
     assert out.shape == torch.Size([3, 4])
 

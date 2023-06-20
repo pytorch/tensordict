@@ -11,6 +11,7 @@ import math
 import time
 
 import warnings
+from collections import defaultdict
 from collections.abc import KeysView
 from copy import copy
 from functools import wraps
@@ -1012,6 +1013,64 @@ class implement_for:
         for setter in setters:
             setter(setter.fn)
             cls._setters.append(setter)
+
+
+def cache(fun):
+    """A cache for TensorDictBase subclasses.
+
+    This decorator will cache the values returned by a method as long as the
+    input arguments match.
+    Leaves (tensors and such) are not cached.
+    The cache is stored within the tensordict such that it can be erased at any
+    point in time.
+
+    Examples:
+        >>> import timeit
+        >>> from tensordict import TensorDict
+        >>> class SomeOtherTd(TensorDict):
+        ...     @cache
+        ...     def all_keys(self):
+        ...         return set(self.keys(include_nested=True))
+        >>> td = SomeOtherTd({("a", "b", "c", "d", "e", "f", "g"): 1.0}, [])
+        >>> td.lock_()
+        >>> print(timeit.timeit("set(td.keys(True))", globals={'td': td}))
+        11.057
+        >>> print(timeit.timeit("set(td.all_keys())", globals={'td': td}))
+        0.88
+    """
+    from tensordict.memmap import MemmapTensor
+
+    @wraps(fun)
+    def newfun(_self: "TensorDictBase", *args, **kwargs):
+        if not _self.is_locked:
+            return fun(_self, *args, **kwargs)
+        cache = _self._cache
+        if cache is None:
+            cache = _self._cache = defaultdict(dict)
+        cache = cache[fun.__name__]
+        key = tuple(args) + tuple(sorted(kwargs.items()))
+        if key not in cache:
+            out = fun(_self, *args, **kwargs)
+            if not isinstance(out, (Tensor, MemmapTensor, KeyedJaggedTensor)):
+                # we don't cache tensors to avoid filling the mem and / or
+                # stacking them from their origin
+                cache[key] = out
+        else:
+            out = cache[key]
+        return out
+
+    return newfun
+
+
+def erase_cache(fun):
+    """A decorator to erase the cache at each call."""
+
+    @wraps(fun)
+    def new_fun(self, *args, **kwargs):
+        self._erase_cache()
+        return fun(self, *args, **kwargs)
+
+    return new_fun
 
 
 NON_STR_KEY_TUPLE = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."

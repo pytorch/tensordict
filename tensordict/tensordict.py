@@ -48,8 +48,10 @@ from tensordict.utils import (
     _shape,
     _StringOnlyDict,
     _sub_index,
+    cache,
     convert_ellipsis_to_idx,
     DeviceType,
+    erase_cache,
     expand_as_right,
     expand_right,
     IndexType,
@@ -343,6 +345,7 @@ class TensorDictBase(MutableMapping):
         cls.is_meta = kwargs.get("is_meta", False)
         cls._is_locked = kwargs.get("_is_locked", False)
         cls._sorted_keys = None
+        cls._cache = None
         return super().__new__(cls)
 
     def __getstate__(self) -> dict[str, Any]:
@@ -374,6 +377,7 @@ class TensorDictBase(MutableMapping):
         td = TensorDict(dict(module.named_parameters()), [])
         td.update(dict(module.named_buffers()))
         td = td.detach().unflatten_keys(".")
+        td.lock_()
         return td
 
     @property
@@ -398,6 +402,9 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError
 
+    def _erase_cache(self):
+        self._cache = None
+
     @property
     def names(self):
         names = self._td_dim_names
@@ -409,6 +416,7 @@ class TensorDictBase(MutableMapping):
         self._td_dim_names = None
 
     @names.setter
+    @erase_cache
     def names(self, value):
         # we don't run checks on types for efficiency purposes
         if value is None:
@@ -2884,6 +2892,7 @@ class TensorDictBase(MutableMapping):
         for i in range(length):
             yield self[i]
 
+    @cache  # noqa: B019
     def flatten_keys(
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
@@ -2932,6 +2941,7 @@ class TensorDictBase(MutableMapping):
                     tensordict_out.set(key, value)
             return tensordict_out
 
+    @cache  # noqa: B019
     def unflatten_keys(
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
@@ -3324,6 +3334,7 @@ class TensorDictBase(MutableMapping):
             for td in self._locked_tensordicts:
                 td._remove_lock(lock_id)
 
+    @erase_cache
     def _propagate_unlock(self, lock_ids=None):
         if lock_ids is not None:
             self._lock_id.difference_update(lock_ids)
@@ -3401,6 +3412,16 @@ class TensorDictBase(MutableMapping):
 
         """
         return self.apply(lambda x: x.type(dst_type))
+
+
+_ACCEPTED_CLASSES = [
+    Tensor,
+    MemmapTensor,
+    TensorDictBase,
+]
+if _has_torchrec:
+    _ACCEPTED_CLASSES += [KeyedJaggedTensor]
+_ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
 
 
 class TensorDict(TensorDictBase):
@@ -3500,6 +3521,7 @@ class TensorDict(TensorDictBase):
         "_td_dim_names",
         "_lock_id",
         "_locked_tensordicts",
+        "_cache",
     )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
@@ -3981,23 +4003,28 @@ class TensorDict(TensorDictBase):
             first_key = key
             out = self._tensordict.get(first_key, None)
         else:
-            first_key = key[0]
-            out = self._tensordict.get(first_key, None)
-            if out is not None and len(key) > 1:
-                first_lev = out
-                if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
-                    return first_lev[key[1]]
-                try:
-                    return first_lev.get(key[1:], default=default)
-                except AttributeError as err:
-                    if "has no attribute" in str(err):
-                        raise ValueError(
-                            f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
-                            f" for key '{first_key}' and subkeys {key[1:]} in tensordict:\n{self}."
-                        )
+            out, first_key = self._get_nested(key, default)
         if out is None:
             return self._default_get(first_key, default)
         return out
+
+    @cache  # noqa: B019
+    def _get_nested(self, key, default):
+        first_key = key[0]
+        out = self._tensordict.get(first_key, None)
+        if out is not None and len(key) > 1:
+            first_lev = out
+            if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
+                return first_lev[key[1]], first_key
+            try:
+                return first_lev.get(key[1:], default=default), first_key
+            except AttributeError as err:
+                if "has no attribute" in str(err):
+                    raise ValueError(
+                        f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
+                        f" for key '{first_key}' and subkeys {key[1:]} in tensordict:\n{self}."
+                    )
+        return out, first_key
 
     def share_memory_(self) -> TensorDictBase:
         if self.is_memmap():
@@ -4243,6 +4270,7 @@ class TensorDict(TensorDictBase):
             return self
         return out
 
+    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
@@ -4261,6 +4289,7 @@ class TensorDict(TensorDictBase):
     def __setstate__(self, state):
         for slot, value in state.items():
             setattr(self, slot, value)
+        self._cache = None
 
     # some custom methods for efficiency
     def items(
@@ -5171,6 +5200,7 @@ torch.Size([3, 2])
             ) from e
         return self
 
+    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
@@ -5658,6 +5688,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return self._td_dim_names
 
     @names.setter
+    @erase_cache
     def names(self, value):
         if value is None:
             for td in self.tensordicts:
@@ -5893,6 +5924,7 @@ class LazyStackedTensorDict(TensorDictBase):
             self.set_(key, torch.stack(list_item, dim))
         return self
 
+    @cache  # noqa: B019
     def get(
         self,
         key: NestedKey,
@@ -5904,15 +5936,20 @@ class LazyStackedTensorDict(TensorDictBase):
         # fairly easy to add support if we could add nested keys to valid_keys.
 
         # we can handle the case where the key is a tuple of length 1
-        if (isinstance(key, tuple)) and len(key) == 1:
-            key = key[0]
-        elif isinstance(key, tuple):
+        key = unravel_keys(key)
+        if isinstance(key, tuple):
             try:
                 tensordict, key = _get_leaf_tensordict(self, key)
             except KeyError:
                 return self._default_get(key, default)
             return tensordict.get(key, default=default)
+        return self._get_str_key(key, default=default)
 
+    def _get_str_key(
+        self,
+        key: str,
+        default: str | CompatibleType = NO_DEFAULT,
+    ):
         keys = self.valid_keys
         if key not in keys:
             # first, let's try to update the valid keys
@@ -6070,6 +6107,7 @@ class LazyStackedTensorDict(TensorDictBase):
             del self._orig_batch_size
         self._batch_size = new_size
 
+    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _LazyStackedTensorDictKeysView:
@@ -6789,6 +6827,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @property
     def is_locked(self) -> bool:
+        # is_locked = self._is_locked
         for td in self.tensordicts:
             if td.is_locked:
                 return True
@@ -6830,6 +6869,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             td._remove_lock(lock_id)
 
+    @erase_cache
     def _propagate_unlock(self, lock_ids=None):
         if lock_ids is None:
             lock_ids = set()
@@ -7066,6 +7106,7 @@ class _CustomOpTensorDict(TensorDictBase):
             f"\n\top={self.custom_op}({custom_op_kwargs_str}))"
         )
 
+    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
@@ -7599,16 +7640,6 @@ def _check_keys(
                         f"incompatible"
                     )
     return keys
-
-
-_ACCEPTED_CLASSES = [
-    Tensor,
-    MemmapTensor,
-    TensorDictBase,
-]
-if _has_torchrec:
-    _ACCEPTED_CLASSES += [KeyedJaggedTensor]
-_ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
 
 
 def _expand_to_match_shape(
