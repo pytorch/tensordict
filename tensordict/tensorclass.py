@@ -373,6 +373,7 @@ def _getattribute_wrapper(getattribute: Callable) -> Callable:
 
     return wrapper
 
+SET_ATTRIBUTES = ("batch_size", "device", "_locked_tensordicts")
 
 def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     @functools.wraps(setattr_)
@@ -387,7 +388,7 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
         if (
             "_tensordict" not in self.__dict__
             or "_non_tensordict" not in self.__dict__
-            or key in ("batch_size", "device")
+            or key in SET_ATTRIBUTES
         ):
             return setattr_(self, key, value)
         if key not in expected_keys:

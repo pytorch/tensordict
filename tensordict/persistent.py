@@ -135,6 +135,8 @@ class PersistentTensorDict(TensorDictBase):
         device=None,
         **kwargs,
     ):
+        self._locked_tensordicts = []
+        self._lock_id = set()
         if not _has_h5:
             raise ModuleNotFoundError("Could not load h5py.") from H5_ERR
         super().__init__()

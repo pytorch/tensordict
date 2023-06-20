@@ -4964,8 +4964,6 @@ torch.Size([3, 2])
         idx: IndexType,
         batch_size: Sequence[int] | None = None,
     ) -> None:
-        self._lock_id = set()
-        self._locked_tensordicts = []
         if not isinstance(source, TensorDictBase):
             raise TypeError(
                 f"Expected source to be a subclass of TensorDictBase, "
@@ -5471,6 +5469,42 @@ torch.Size([3, 2])
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
 
+
+    @property
+    def is_locked(self) -> bool:
+        return self._source.is_locked
+
+    @is_locked.setter
+    def is_locked(self, value) -> bool:
+        if value:
+            self.lock_()
+        else:
+            self.unlock_()
+
+    def lock_(self) -> TensorDictBase:
+        # we can't lock sub-tensordicts because that would mean that the
+        # parent tensordict cannot be modified either.
+        if not self.is_locked:
+            raise RuntimeError(
+                "Cannot lock a SubTensorDict. Lock the parent tensordict instead."
+                )
+        return self
+    def unlock_(self) -> TensorDictBase:
+        if self.is_locked:
+            raise RuntimeError("Cannot unlock a SubTensorDict. Unlock the parent tensordict instead.")
+        return self
+    def _remove_lock(self, lock_id):
+        raise RuntimeError("Cannot unlock a SubTensorDict. Unlock the parent tensordict instead.")
+    def _lock_propagate(self, lock_ids):
+        raise RuntimeError(
+            "Cannot lock a SubTensorDict. Lock the parent tensordict instead."
+            )
+
+    lock = _renamed_inplace_method(lock_)
+    unlock = _renamed_inplace_method(unlock_)
+
+    def __del__(self):
+        pass
 
 def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
     """Merges tensordicts together."""
@@ -6767,7 +6801,6 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _lock_propagate(self, lock_ids):
         """Registers the parent tensordict that handles the lock."""
-        print("propagating with lock_ids", lock_ids)
         _locked_tensordicts = []
         lock_ids = lock_ids.union({id(self)})
         for dest in self.tensordicts:
@@ -6823,8 +6856,6 @@ class _CustomOpTensorDict(TensorDictBase):
         inv_op_kwargs: dict | None = None,
         batch_size: Sequence[int] | None = None,
     ) -> None:
-        self._lock_id = set()
-        self._locked_tensordicts = []
         self._is_shared = source.is_shared()
         self._is_memmap = source.is_memmap()
 
@@ -7178,6 +7209,33 @@ class _CustomOpTensorDict(TensorDictBase):
             return None
         return self.names
 
+    @property
+    def is_locked(self) -> bool:
+        return self._source.is_locked
+    @is_locked.setter
+    def is_locked(self, value) -> bool:
+        if value:
+            self.lock_()
+        else:
+            self.unlock_()
+
+    def lock_(self) -> TensorDictBase:
+        self._source.lock_()
+        return self
+    def unlock_(self) -> TensorDictBase:
+        self._source.unlock_()
+        return self
+    def _remove_lock(self, lock_id):
+        return self._source._remove_lock(lock_id)
+    def _lock_propagate(self, lock_ids):
+        return self._source._lock_propagate(lock_ids)
+    lock = _renamed_inplace_method(lock_)
+    unlock = _renamed_inplace_method(unlock_)
+    def __del__(self):
+        pass
+    @property
+    def sorted_keys(self):
+        return self._source.sorted_keys
 
 class _UnsqueezedTensorDict(_CustomOpTensorDict):
     """A lazy view on an unsqueezed TensorDict.
