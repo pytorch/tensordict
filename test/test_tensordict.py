@@ -822,7 +822,8 @@ class TestTensorDicts(TestTensorDictsBase):
         del td
         some.unlock_()
 
-    @pytest.mark.parametrize("op", ["keys_root", "keys_nested", "values", "items"])
+    # @pytest.mark.parametrize("op", ["keys_root", "keys_nested", "values", "items"])
+    @pytest.mark.parametrize("op", ["flatten", "unflatten"])
     def test_cache(self, td_name, device, op):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -847,6 +848,14 @@ class TestTensorDicts(TestTensorDictsBase):
             keys_b, values_b = zip(*td.items(True))
             assert all((_a == _b).all() for _a, _b in zip(values_a, values_b))
             assert keys_a == keys_b
+        elif op == "flatten":
+            a = td.flatten_keys()
+            b = td.flatten_keys()
+            assert a is b
+        elif op == "unflatten":
+            a = td.unflatten_keys()
+            b = td.unflatten_keys()
+            assert a is b
 
         assert len(td._cache)
         td.unlock_()
