@@ -38,7 +38,8 @@ from tensordict.tensordict import (
     make_tensordict,
     pad,
     pad_sequence,
-    TensorDictBase, SubTensorDict,
+    SubTensorDict,
+    TensorDictBase,
 )
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 from torch import multiprocessing as mp, nn
@@ -803,13 +804,13 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_lock_nested(self, td_name, device):
         td = getattr(self, td_name)(device)
-        if td_name in ("sub_td", "sub_td2"):
+        if td_name in ("sub_td", "sub_td2") and td.is_locked:
             with pytest.raises(RuntimeError, match="Cannot unlock"):
                 td.unlock_()
         else:
             td.unlock_()
         td.set(("some", "nested"), torch.zeros(td.shape))
-        if td_name in ("sub_td", "sub_td2"):
+        if td_name in ("sub_td", "sub_td2") and not td.is_locked:
             with pytest.raises(RuntimeError, match="Cannot lock"):
                 td.lock_()
             return
@@ -833,7 +834,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td._sorted_keys is not None
             td.unlock_()
             assert td._sorted_keys is None
-        elif td_name not in ("sub_td", "sub_td2"): # we cannot lock sub tensordicts
+        elif td_name not in ("sub_td", "sub_td2"):  # we cannot lock sub tensordicts
             if isinstance(td, _CustomOpTensorDict):
                 target = td._source
             else:
@@ -5024,6 +5025,7 @@ class TestLock:
         assert not len(a._locked_tensordicts)
         assert not len(b._locked_tensordicts)
         assert not len(c._locked_tensordicts)
+
 
 @pytest.mark.parametrize("memmap", [True, False])
 def test_from_module(memmap):
