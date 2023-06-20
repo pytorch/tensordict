@@ -78,179 +78,208 @@ def big_nested_stacked_td_locked():
 
 
 def test_items(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.items()), setup=big_td, rounds=1000, iterations=1
-    )
+    td = big_td()[0][0]
+    benchmark.pedantic(lambda: list(td.items()), rounds=1000, iterations=1)
 
 
 def test_items_nested(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.items(True)), setup=big_nested_td, rounds=1000, iterations=1
-    )
+    td = big_nested_td()[0][0]
+    benchmark.pedantic(lambda: list(td.items(True)), rounds=1000, iterations=1)
+
+
+def test_items_nested_locked(benchmark):
+    td = big_nested_td_locked()[0][0]
+    list(td.items(True))
+    benchmark.pedantic(lambda: list(td.items(True)), rounds=1000, iterations=1)
 
 
 def test_items_nested_leaf(benchmark):
+    td = big_nested_td()[0][0]
     benchmark.pedantic(
-        lambda td: list(td.items(True, True)),
-        setup=big_nested_td,
+        lambda: list(td.items(True, True)),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_items_stack_nested(benchmark):
+    td = big_nested_stacked_td()[0][0]
     benchmark.pedantic(
-        lambda td: list(td.items(True)),
-        setup=big_nested_stacked_td,
+        lambda: list(td.items(True)),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_items_stack_nested_leaf(benchmark):
+    td = big_nested_stacked_td()[0][0]
     benchmark.pedantic(
-        lambda td: list(td.items(True, True)),
-        setup=big_nested_stacked_td,
+        lambda: list(td.items(True, True)),
         rounds=1000,
         iterations=1,
     )
 
 
+def test_items_stack_nested_locked(benchmark):
+    td = big_nested_stacked_td_locked()[0][0]
+    list(td.items(True))
+    benchmark.pedantic(lambda: list(td.items(True)), rounds=1000, iterations=1)
+
+
 def test_keys(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.keys()), setup=big_td, rounds=1000, iterations=1
-    )
+    td = big_td()[0][0]
+    benchmark.pedantic(lambda: list(td.keys()), rounds=1000, iterations=1)
 
 
 def test_keys_nested(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.keys(True)), setup=big_nested_td, rounds=1000, iterations=1
-    )
+    td = big_nested_td()[0][0]
+    benchmark.pedantic(lambda: list(td.keys(True)), rounds=1000, iterations=1)
+
+
+def test_keys_nested_locked(benchmark):
+    td = big_nested_td_locked()[0][0]
+    list(td.keys(True))
+    benchmark.pedantic(lambda: list(td.keys(True)), rounds=1000, iterations=1)
 
 
 def test_keys_nested_leaf(benchmark):
+    td = big_nested_td()[0][0]
     benchmark.pedantic(
-        lambda td: list(td.keys(True, True)),
-        setup=big_nested_td,
+        lambda: list(td.keys(True, True)),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_keys_stack_nested(benchmark):
+    td = big_nested_stacked_td()[0][0]
     benchmark.pedantic(
-        lambda td: list(td.keys(True)),
-        setup=big_nested_stacked_td,
+        lambda: list(td.keys(True)),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_keys_stack_nested_leaf(benchmark):
+    td = big_nested_stacked_td()[0][0]
     benchmark.pedantic(
-        lambda td: list(td.keys(True, True)),
-        setup=big_nested_stacked_td,
+        lambda: list(td.keys(True, True)),
         rounds=1000,
         iterations=1,
     )
 
 
+def test_keys_stack_nested_locked(benchmark):
+    td = big_nested_stacked_td_locked()[0][0]
+    list(td.keys(True))
+    benchmark.pedantic(lambda: list(td.keys(True)), rounds=1000, iterations=1)
+
+
 def test_values(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.values()), setup=big_td, rounds=1000, iterations=1
-    )
+    td = big_td()[0][0]
+    benchmark.pedantic(lambda: list(td.values()), rounds=1000, iterations=1)
 
 
 def test_values_nested(benchmark):
-    benchmark.pedantic(
-        lambda td: list(td.values(True)), setup=big_nested_td, rounds=1000, iterations=1
-    )
+    td = big_nested_td()[0][0]
+    benchmark.pedantic(lambda: list(td.values(True)), rounds=1000, iterations=1)
+
+
+def test_values_nested_locked(benchmark):
+    td = big_nested_td_locked()[0][0]
+    list(td.values(True))
+    benchmark.pedantic(lambda: list(td.values(True)), rounds=1000, iterations=1)
 
 
 def test_values_nested_leaf(benchmark):
+    td = big_nested_td()[0][0]
     benchmark.pedantic(
-        lambda td: list(td.values(True, True)),
-        setup=big_nested_td,
+        lambda: list(td.values(True, True)),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_values_stack_nested(benchmark):
+    td = big_nested_stacked_td()[0][0]
     benchmark.pedantic(
-        lambda td: list(td.values(True)),
-        setup=big_nested_stacked_td,
+        lambda: list(td.values(True)),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_values_stack_nested_leaf(benchmark):
+    td = big_nested_stacked_td()[0][0]
     benchmark.pedantic(
-        lambda td: list(td.values(True, True)),
-        setup=big_nested_stacked_td,
+        lambda: list(td.values(True, True)),
         rounds=1000,
         iterations=1,
     )
 
 
+def test_values_stack_nested_locked(benchmark):
+    td = big_nested_stacked_td_locked()[0][0]
+    list(td.values(True))
+    benchmark.pedantic(lambda: list(td.values(True)), rounds=1000, iterations=1)
+
+
 def test_membership(benchmark):
-    benchmark.pedantic(
-        lambda td: "a" in td.keys(), setup=big_td, rounds=1000, iterations=1
-    )
+    td = big_td()[0][0]
+    benchmark.pedantic(lambda: "a" in td.keys(), rounds=1000, iterations=1)
 
 
 def test_membership_nested(benchmark):
+    td = big_nested_td()[0][0]
     benchmark.pedantic(
-        lambda td: ("a",) in td.keys(True),
-        setup=big_nested_td,
+        lambda: ("a",) in td.keys(True),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_membership_nested_leaf(benchmark):
+    td = big_nested_td()[0][0]
     benchmark.pedantic(
-        lambda td: ("a",) in td.keys(True, True),
-        setup=big_nested_td,
+        lambda: ("a",) in td.keys(True, True),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_membership_stacked_nested(benchmark):
+    td = big_nested_stacked_td()[0][0]
     benchmark.pedantic(
-        lambda td: ("a",) in td.keys(True),
-        setup=big_nested_stacked_td,
+        lambda: ("a",) in td.keys(True),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_membership_stacked_nested_leaf(benchmark):
+    td = big_nested_stacked_td()[0][0]
     benchmark.pedantic(
-        lambda td: ("a",) in td.keys(True, True),
-        setup=big_nested_stacked_td,
+        lambda: ("a",) in td.keys(True, True),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_stacked_getleaf(benchmark):
+    td = big_nested_stacked_td()[0][0]
     key = tuple(str(i) for i in range(19)) + ("t",)
     benchmark.pedantic(
-        lambda td: td.get(key),
-        setup=big_nested_stacked_td,
+        lambda: td.get(key),
         rounds=1000,
         iterations=1,
     )
 
 
 def test_stacked_get(benchmark):
+    td = big_nested_stacked_td()[0][0]
     key = tuple(str(i) for i in range(19))
     benchmark.pedantic(
-        lambda td: td.get(key),
-        setup=big_nested_stacked_td,
+        lambda: td.get(key),
         rounds=1000,
         iterations=1,
     )

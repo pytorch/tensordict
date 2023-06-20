@@ -420,7 +420,6 @@ class TensorDictBase(MutableMapping):
         self._td_dim_names = None
 
     @names.setter
-    @erase_cache
     def names(self, value):
         # we don't run checks on types for efficiency purposes
         if value is None:
@@ -573,7 +572,6 @@ class TensorDictBase(MutableMapping):
     def requires_grad(self) -> bool:
         return any(v.requires_grad for v in self.values())
 
-    @erase_cache
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
             return
@@ -743,7 +741,6 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    @erase_cache
     def set(
         self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
     ) -> TensorDictBase:
@@ -1471,7 +1468,6 @@ class TensorDictBase(MutableMapping):
                 f"because at least one of its tensors does not support this method."
             ) from err
 
-    @erase_cache
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
@@ -2937,6 +2933,7 @@ class TensorDictBase(MutableMapping):
         for i in range(length):
             yield self[i]
 
+    @cache  # noqa: B019
     def flatten_keys(
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
@@ -2985,6 +2982,7 @@ class TensorDictBase(MutableMapping):
                     tensordict_out.set(key, value)
             return tensordict_out
 
+    @cache  # noqa: B019
     def unflatten_keys(
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
@@ -3377,11 +3375,13 @@ class TensorDictBase(MutableMapping):
             for td in self._locked_tensordicts:
                 td._remove_lock(lock_id)
 
+    @erase_cache
     def _propagate_unlock(self, lock_ids=None):
         if lock_ids is not None:
             self._lock_id.difference_update(lock_ids)
         else:
             lock_ids = set()
+        self._is_locked = False
 
         unlocked_tds = [self]
         lock_ids.add(id(self))
@@ -3391,7 +3391,6 @@ class TensorDictBase(MutableMapping):
                 unlocked_tds.extend(dest._propagate_unlock(lock_ids))
         self._locked_tensordicts = []
 
-        self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
@@ -3892,7 +3891,6 @@ class TensorDict(TensorDictBase):
 
         return self
 
-    @erase_cache
     def set(
         self,
         key: NestedKey,
@@ -4046,23 +4044,28 @@ class TensorDict(TensorDictBase):
             first_key = key
             out = self._tensordict.get(first_key, None)
         else:
-            first_key = key[0]
-            out = self._tensordict.get(first_key, None)
-            if out is not None and len(key) > 1:
-                first_lev = out
-                if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
-                    return first_lev[key[1]]
-                try:
-                    return first_lev.get(key[1:], default=default)
-                except AttributeError as err:
-                    if "has no attribute" in str(err):
-                        raise ValueError(
-                            f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
-                            f" for key '{first_key}' and subkeys {key[1:]} in tensordict:\n{self}."
-                        )
+            out, first_key = self._get_nested(key, default)
         if out is None:
             return self._default_get(first_key, default)
         return out
+
+    @cache  # noqa: B019
+    def _get_nested(self, key, default):
+        first_key = key[0]
+        out = self._tensordict.get(first_key, None)
+        if out is not None and len(key) > 1:
+            first_lev = out
+            if len(key) == 2 and isinstance(first_lev, KeyedJaggedTensor):
+                return first_lev[key[1]], first_key
+            try:
+                return first_lev.get(key[1:], default=default), first_key
+            except AttributeError as err:
+                if "has no attribute" in str(err):
+                    raise ValueError(
+                        f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
+                        f" for key '{first_key}' and subkeys {key[1:]} in tensordict:\n{self}."
+                    )
+        return out, first_key
 
     def share_memory_(self) -> TensorDictBase:
         if self.is_memmap():
@@ -4308,6 +4311,7 @@ class TensorDict(TensorDictBase):
             return self
         return out
 
+    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
@@ -5116,7 +5120,6 @@ torch.Size([3, 2])
         return self.names
 
     @names.setter
-    @erase_cache
     def names(self, value):
         raise RuntimeError(
             "Names of a subtensordict cannot be modified. Instantiate the tensordict first."
@@ -5132,7 +5135,6 @@ torch.Size([3, 2])
         return self._source.device
 
     @device.setter
-    @erase_cache
     def device(self, value: DeviceType) -> None:
         self._source.device = value
 
@@ -5186,7 +5188,6 @@ torch.Size([3, 2])
         parent.set_at_(subkey, value, self.idx)
         return self
 
-    @erase_cache
     def set(
         self,
         key: NestedKey,
@@ -5240,6 +5241,7 @@ torch.Size([3, 2])
             ) from e
         return self
 
+    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
@@ -5337,7 +5339,6 @@ torch.Size([3, 2])
                 return out
             return out[idx]
 
-    @erase_cache
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
@@ -5731,7 +5732,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return self._td_dim_names
 
     @names.setter
-    @erase_cache
+    @erase_cache  # a nested lazy stacked tensordict is not apparent to the root
     def names(self, value):
         if value is None:
             for td in self.tensordicts:
@@ -5843,7 +5844,6 @@ class LazyStackedTensorDict(TensorDictBase):
 
         return self
 
-    @erase_cache
     def set(
         self,
         key: NestedKey,
@@ -5968,6 +5968,7 @@ class LazyStackedTensorDict(TensorDictBase):
             self.set_(key, torch.stack(list_item, dim))
         return self
 
+    @cache  # noqa: B019
     def get(
         self,
         key: NestedKey,
@@ -5988,10 +5989,11 @@ class LazyStackedTensorDict(TensorDictBase):
             return tensordict.get(key, default=default)
         return self._get_str_key(key, default=default)
 
-    @cache(True)  # noqa: B019
-    def _get_str_key(self, key:str,
-                     default: str | CompatibleType = NO_DEFAULT,
-                     ):
+    def _get_str_key(
+        self,
+        key: str,
+        default: str | CompatibleType = NO_DEFAULT,
+    ):
         keys = self.valid_keys
         if key not in keys:
             # first, let's try to update the valid keys
@@ -6244,6 +6246,7 @@ class LazyStackedTensorDict(TensorDictBase):
             del self._orig_batch_size
         self._batch_size = new_size
 
+    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _LazyStackedTensorDictKeysView:
@@ -6793,7 +6796,6 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         return torch.stack(tensordicts, stack_dim)
 
-    @erase_cache
     def update(
         self, input_dict_or_td: TensorDictBase, clone: bool = False, **kwargs: Any
     ) -> TensorDictBase:
@@ -6950,7 +6952,6 @@ class LazyStackedTensorDict(TensorDictBase):
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
         self._update_valid_keys()
 
-    @erase_cache
     def append(self, tensordict: TensorDictBase) -> None:
         """Append a TensorDict onto the stack.
 
@@ -7007,16 +7008,17 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             td._remove_lock(lock_id)
 
+    @erase_cache
     def _propagate_unlock(self, lock_ids=None):
         if lock_ids is None:
             lock_ids = set()
+        self._is_locked = False
 
         unlocked_tds = [self]
         lock_ids.add(id(self))
         for dest in self.tensordicts:
             unlocked_tds.extend(dest._propagate_unlock(lock_ids))
 
-        self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
@@ -7103,7 +7105,6 @@ class _CustomOpTensorDict(TensorDictBase):
         return self._source.device
 
     @device.setter
-    @erase_cache
     def device(self, value: DeviceType) -> None:
         self._source.device = value
 
@@ -7116,7 +7117,6 @@ class _CustomOpTensorDict(TensorDictBase):
         return self._batch_size
 
     @batch_size.setter
-    @erase_cache
     def batch_size(self, new_size: torch.Size) -> None:
         self._batch_size_setter(new_size)
 
@@ -7167,7 +7167,6 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source._set(key, value, inplace=inplace)
         return self
 
-    @erase_cache
     def set(
         self, key: NestedKey, value: dict | CompatibleType, inplace: bool = False
     ) -> TensorDictBase:
@@ -7246,6 +7245,7 @@ class _CustomOpTensorDict(TensorDictBase):
             f"\n\top={self.custom_op}({custom_op_kwargs_str}))"
         )
 
+    @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
@@ -7419,6 +7419,7 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.lock_()
         return self
 
+    @erase_cache
     def unlock_(self) -> TensorDictBase:
         self._source.unlock_()
         return self
@@ -7426,6 +7427,7 @@ class _CustomOpTensorDict(TensorDictBase):
     def _remove_lock(self, lock_id):
         return self._source._remove_lock(lock_id)
 
+    @erase_cache
     def _lock_propagate(self, lock_ids):
         return self._source._lock_propagate(lock_ids)
 

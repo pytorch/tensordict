@@ -1015,7 +1015,7 @@ class implement_for:
             cls._setters.append(setter)
 
 
-class cache:
+def cache(fun):
     """A cache for TensorDictBase subclasses.
 
     This decorator will cache the values returned by a method as long as the
@@ -1024,16 +1024,11 @@ class cache:
     The cache is stored within the tensordict such that it can be erased at any
     point in time.
 
-    Args:
-        locked_only (bool, optional): if ``True``, only locked tensordicts will
-            be cached. This is aimed at preventing that changing the entries of a tensordict
-            will unsync its entries with the cached transforms.
-
     Examples:
         >>> import timeit
         >>> from tensordict import TensorDict
         >>> class SomeOtherTd(TensorDict):
-        ...     @cache(locked_only=True)
+        ...     @cache
         ...     def all_keys(self):
         ...         return set(self.keys(include_nested=True))
         >>> td = SomeOtherTd({("a", "b", "c", "d", "e", "f", "g"): 1.0}, [])
@@ -1043,38 +1038,28 @@ class cache:
         >>> print(timeit.timeit("set(td.all_keys())", globals={'td': td}))
         0.88
     """
+    from tensordict.memmap import MemmapTensor
 
-    def __new__(cls, locked_only=True):
-        if callable(locked_only):
-            return cache()(locked_only)
-        return super().__new__(cls)
+    @wraps(fun)
+    def newfun(_self: "TensorDictBase", *args, **kwargs):
+        if not _self.is_locked:
+            return fun(_self, *args, **kwargs)
+        cache = _self._cache
+        if cache is None:
+            cache = _self._cache = defaultdict(dict)
+        cache = cache[fun.__name__]
+        key = tuple(args) + tuple(sorted(kwargs.items()))
+        if key not in cache:
+            out = fun(_self, *args, **kwargs)
+            if not isinstance(out, (Tensor, MemmapTensor, KeyedJaggedTensor)):
+                # we don't cache tensors to avoid filling the mem and / or
+                # stacking them from their origin
+                cache[key] = out
+        else:
+            out = cache[key]
+        return out
 
-    def __init__(self, locked_only=True):
-        self.locked_only = locked_only
-
-    def __call__(self, fun):
-        from tensordict.memmap import MemmapTensor
-
-        @wraps(fun)
-        def newfun(_self: "TensorDictBase", *args, **kwargs):
-            if self.locked_only and not _self.is_locked:
-                return fun(_self, *args, **kwargs)
-            cache = _self._cache
-            if cache is None:
-                cache = _self._cache = defaultdict(dict)
-            cache = cache[fun.__name__]
-            key = tuple(args) + tuple(sorted(kwargs.items()))
-            if key not in cache:
-                out = fun(_self, *args, **kwargs)
-                if not isinstance(out, (Tensor, MemmapTensor, KeyedJaggedTensor)):
-                    # we don't cache tensors to avoid filling the mem and / or
-                    # stacking them from their origin
-                    cache[key] = out
-            else:
-                out = cache[key]
-            return out
-
-        return newfun
+    return newfun
 
 
 def erase_cache(fun):
