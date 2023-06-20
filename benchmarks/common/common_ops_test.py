@@ -318,6 +318,24 @@ def test_unlock_stack_nested(benchmark):
     )
 
 
+def test_flatten_speed(benchmark):
+    td = big_nested_td()[0][0]
+    benchmark.pedantic(
+        lambda: td.flatten_keys(),
+        rounds=1000,
+        iterations=1,
+    )
+
+
+def test_unflatten_speed(benchmark):
+    td = big_nested_td()[0][0].flatten_keys()
+    benchmark.pedantic(
+        lambda: td.unflatten_keys(),
+        rounds=1000,
+        iterations=1,
+    )
+
+
 def test_common_ops(benchmark):
     benchmark.pedantic(main, iterations=100, rounds=100)
 
