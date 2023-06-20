@@ -1059,3 +1059,14 @@ class _StringOnlyDict(dict):
 
     def keys(self):
         return _StringKeys(self)
+
+
+def lock_blocked(func):
+    """Checks that the tensordict is unlocked before executing a function."""
+    @wraps(func)
+    def new_func(self, *args, **kwargs):
+        if self.is_locked:
+            raise RuntimeError(self.LOCK_ERROR)
+        return func(self, *args, **kwargs)
+
+    return new_func
