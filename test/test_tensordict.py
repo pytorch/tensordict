@@ -4369,6 +4369,7 @@ class TestLazyStackedTensorDict:
     #     orig['c'] = 1.0
     #     print(std['a', 'b', 'c', 'd'])
 
+
 @pytest.mark.skipif(
     not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
 )
