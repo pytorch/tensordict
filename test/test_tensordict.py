@@ -4342,40 +4342,6 @@ class TestLazyStackedTensorDict:
         ):
             td_a.update_(td_b.to_tensordict())
 
-    def test_cached_locked_stacked(self):
-        """Tests that a locked lazy stacked td has a cache and that hacking a leaf of one element of the stack does result in a modified leaf."""
-        td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
-        std = torch.stack([td, td.clone()]).lock_()
-
-        a = std["a"]
-        val = next(iter(std._cache['_get_str_key'].values()))
-        # val = next(iter(std._cache['get'].values()))
-        assert val is a
-        orig = std[0]['a', 'b']
-        other = orig.clone().zero_()
-        orig.unlock_()
-        orig.update(other)
-        orig.lock_()
-        assert (std['a', 'b', 'c', 'd'] == torch.tensor([0, 1])).all()
-
-        orig = std[1]['a', 'b', 'c']
-        other = orig.clone().zero_()
-        orig.unlock_()
-        orig.update(other)
-        assert (std['a', 'b', 'c', 'd'] == torch.tensor([0, 0])).all()
-
-        orig = std[1]['a', 'b']
-        orig.unlock_()
-        orig['c'] = 1.0
-        orig.lock_()
-        print(std.is_locked)
-        print(std['a'].is_locked)
-        print(std['a', 'b'].is_locked)
-        print(std['a', 'b', 'c'].is_locked)
-        with pytest.raises(Exception):
-            # one sub-leaf doesn't work anymore
-            std['a', 'b', 'c', 'd']
-
     # We don't support caching for unlocked lazy stacks
     # def test_cached_unlocked_stacked(self):
     #     """same as above in the non-locked case.

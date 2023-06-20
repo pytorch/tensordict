@@ -1419,7 +1419,7 @@ class TensorDictBase(MutableMapping):
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
-            td = self.as_tensor()
+            td = self.cpu().as_tensor()
         else:
             td = self
         out = TensorDict(
@@ -6034,7 +6034,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
-            td = torch.stack([td.as_tensor() for td in self.tensordicts], 0)
+            td = torch.stack([td.cpu().as_tensor() for td in self.tensordicts], 0)
         else:
             td = self
         if in_dim < 0:
@@ -7025,7 +7025,6 @@ class LazyStackedTensorDict(TensorDictBase):
         self._is_locked = None
         if lock_ids is None:
             lock_ids = set()
-        self._is_locked = False
 
         unlocked_tds = [self]
         lock_ids.add(id(self))
