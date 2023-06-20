@@ -3289,9 +3289,12 @@ class TensorDictBase(MutableMapping):
         else:
             self.unlock_()
 
-    def _lock_propagate(self, lock_ids):
+    def _lock_propagate(self, lock_ids=None):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
+        is_root = lock_ids is None
+        if is_root:
+            lock_ids = set()
         self._lock_id = self._lock_id.union(lock_ids)
         lock_ids = lock_ids.union({id(self)})
         _locked_tensordicts = []
@@ -3303,12 +3306,14 @@ class TensorDictBase(MutableMapping):
                 _locked_tensordicts.append(dest)
                 # we only keep the next level
                 # _locked_tensordicts += dest_locked
+        if is_root:
+            self._locked_tensordicts = _locked_tensordicts
         return _locked_tensordicts, lock_ids
 
     def lock_(self) -> TensorDictBase:
         if self.is_locked:
             return self
-        self._locked_tensordicts, _ = self._lock_propagate(set())
+        self._lock_propagate()
         return self
 
     lock = _renamed_inplace_method(lock_)
@@ -5469,7 +5474,6 @@ torch.Size([3, 2])
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
 
-
     @property
     def is_locked(self) -> bool:
         return self._source.is_locked
@@ -5487,24 +5491,32 @@ torch.Size([3, 2])
         if not self.is_locked:
             raise RuntimeError(
                 "Cannot lock a SubTensorDict. Lock the parent tensordict instead."
-                )
+            )
         return self
+
     def unlock_(self) -> TensorDictBase:
         if self.is_locked:
-            raise RuntimeError("Cannot unlock a SubTensorDict. Unlock the parent tensordict instead.")
+            raise RuntimeError(
+                "Cannot unlock a SubTensorDict. Unlock the parent tensordict instead."
+            )
         return self
+
     def _remove_lock(self, lock_id):
-        raise RuntimeError("Cannot unlock a SubTensorDict. Unlock the parent tensordict instead.")
-    def _lock_propagate(self, lock_ids):
+        raise RuntimeError(
+            "Cannot unlock a SubTensorDict. Unlock the parent tensordict instead."
+        )
+
+    def _lock_propagate(self, lock_ids=None):
         raise RuntimeError(
             "Cannot lock a SubTensorDict. Lock the parent tensordict instead."
-            )
+        )
 
     lock = _renamed_inplace_method(lock_)
     unlock = _renamed_inplace_method(unlock_)
 
     def __del__(self):
         pass
+
 
 def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
     """Merges tensordicts together."""
@@ -6799,9 +6811,12 @@ class LazyStackedTensorDict(TensorDictBase):
         _lock_id = _lock_id - {id(self)}
         return _lock_id
 
-    def _lock_propagate(self, lock_ids):
+    def _lock_propagate(self, lock_ids=None):
         """Registers the parent tensordict that handles the lock."""
         _locked_tensordicts = []
+        is_root = lock_ids is None
+        if is_root:
+            lock_ids = set()
         lock_ids = lock_ids.union({id(self)})
         for dest in self.tensordicts:
             dest_locked, new_lock_ids = dest._lock_propagate(lock_ids)
@@ -7212,6 +7227,7 @@ class _CustomOpTensorDict(TensorDictBase):
     @property
     def is_locked(self) -> bool:
         return self._source.is_locked
+
     @is_locked.setter
     def is_locked(self, value) -> bool:
         if value:
@@ -7222,20 +7238,27 @@ class _CustomOpTensorDict(TensorDictBase):
     def lock_(self) -> TensorDictBase:
         self._source.lock_()
         return self
+
     def unlock_(self) -> TensorDictBase:
         self._source.unlock_()
         return self
+
     def _remove_lock(self, lock_id):
         return self._source._remove_lock(lock_id)
+
     def _lock_propagate(self, lock_ids):
         return self._source._lock_propagate(lock_ids)
+
     lock = _renamed_inplace_method(lock_)
     unlock = _renamed_inplace_method(unlock_)
+
     def __del__(self):
         pass
+
     @property
     def sorted_keys(self):
         return self._source.sorted_keys
+
 
 class _UnsqueezedTensorDict(_CustomOpTensorDict):
     """A lazy view on an unsqueezed TensorDict.

@@ -373,7 +373,9 @@ def _getattribute_wrapper(getattribute: Callable) -> Callable:
 
     return wrapper
 
+
 SET_ATTRIBUTES = ("batch_size", "device", "_locked_tensordicts")
+
 
 def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     @functools.wraps(setattr_)

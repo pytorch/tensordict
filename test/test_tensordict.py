@@ -5026,6 +5026,28 @@ class TestLock:
         assert not len(b._locked_tensordicts)
         assert not len(c._locked_tensordicts)
 
+    def test_empty_tensordict_list_stack(self):
+        td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+        td1 = td0.clone()
+        td = torch.stack([td0, td1])
+        td = td.lock_()
+        a = td["a"]
+        b = td["a", "b"]
+        c = td["a", "b", "c"]
+        a0 = td0["a"]
+        b0 = td0["a", "b"]
+        c0 = td0["a", "b", "c"]
+        assert not hasattr(td, "_locked_tensordicts")
+        assert not hasattr(a, "_locked_tensordicts")
+        assert not hasattr(b, "_locked_tensordicts")
+        assert not hasattr(c, "_locked_tensordicts")
+        assert len(a0._locked_tensordicts)
+        assert len(b0._locked_tensordicts)
+        td.unlock_()
+        assert not len(a0._locked_tensordicts)
+        assert not len(b0._locked_tensordicts)
+        assert not len(c0._locked_tensordicts)
+
 
 @pytest.mark.parametrize("memmap", [True, False])
 def test_from_module(memmap):
