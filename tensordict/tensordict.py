@@ -6885,7 +6885,6 @@ class LazyStackedTensorDict(TensorDictBase):
         self._is_locked = None
         if lock_ids is None:
             lock_ids = set()
-        self._is_locked = False
 
         unlocked_tds = [self]
         lock_ids.add(id(self))
