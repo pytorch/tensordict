@@ -1031,16 +1031,28 @@ def test_set():
     data_nest.set("v", "test_nested")
     assert data_nest.v == data.y.v == "test_nested"
 
+    data.set(("y", ("v",)), "this time another string")
+    assert data.y.v == data_nest.v == "this time another string"
+
     # Testing if user can override the type of the attribute
-    data.set("v", torch.ones(3, 4, 5))
+    vorig = torch.ones(3, 4, 5)
+    data.set("v", vorig)
     assert (data.v == torch.ones(3, 4, 5)).all()
     assert "v" in data._tensordict.keys()
     assert "v" not in data._non_tensordict.keys()
+
+    data.set("v", torch.zeros(3, 4, 5), inplace=True)
+    assert (vorig == 0).all()
+    with pytest.raises(RuntimeError, match="Cannot update an existing"):
+        data.set("v", "les chaussettes", inplace=True)
 
     data.set("v", "test")
     assert data.v == "test"
     assert "v" not in data._tensordict.keys()
     assert "v" in data._non_tensordict.keys()
+
+    with pytest.raises(RuntimeError, match="Cannot update an existing"):
+        data.set("v", vorig, inplace=True)
 
     # ensure optional fields are writable
     data.set("k", torch.zeros(3, 4, 5))
