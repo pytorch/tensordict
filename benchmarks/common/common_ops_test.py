@@ -48,6 +48,10 @@ def big_nested_td():
     )
 
 
+def big_nested_td_locked():
+    return ((big_nested_td()[0][0].lock_(),), {})
+
+
 def big_nested_stacked_td():
     return (
         (
@@ -67,6 +71,10 @@ def big_nested_stacked_td():
         ),
         {},
     )
+
+
+def big_nested_stacked_td_locked():
+    return ((big_nested_stacked_td()[0][0].lock_(),), {})
 
 
 def test_items(benchmark):
@@ -243,6 +251,39 @@ def test_stacked_get(benchmark):
     benchmark.pedantic(
         lambda td: td.get(key),
         setup=big_nested_stacked_td,
+        rounds=1000,
+        iterations=1,
+    )
+
+
+def test_lock_nested(benchmark):
+    benchmark.pedantic(
+        lambda td: list(td.lock_()), setup=big_nested_td, rounds=1000, iterations=1
+    )
+
+
+def test_lock_stack_nested(benchmark):
+    benchmark.pedantic(
+        lambda td: list(td.lock_()),
+        setup=big_nested_stacked_td,
+        rounds=1000,
+        iterations=1,
+    )
+
+
+def test_unlock_nested(benchmark):
+    benchmark.pedantic(
+        lambda td: list(td.unlock_()),
+        setup=big_nested_td_locked,
+        rounds=1000,
+        iterations=1,
+    )
+
+
+def test_unlock_stack_nested(benchmark):
+    benchmark.pedantic(
+        lambda td: list(td.unlock_()),
+        setup=big_nested_stacked_td_locked,
         rounds=1000,
         iterations=1,
     )
