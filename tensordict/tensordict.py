@@ -3342,27 +3342,78 @@ class TensorDictBase(MutableMapping):
         else:
             self.unlock_()
 
-    def lock_(self) -> TensorDictBase:
+    def _lock_propagate(self, lock_ids=None):
+        """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
+        is_root = lock_ids is None
+        if is_root:
+            lock_ids = set()
+        self._lock_id = self._lock_id.union(lock_ids)
+        lock_ids = lock_ids.union({id(self)})
+        _locked_tensordicts = []
         for key in self.keys():
             if _is_tensor_collection(self.entry_class(key)):
-                self.get(key).lock_()
+                dest = self.get(key)
+                dest_locked, new_lock_ids = dest._lock_propagate(lock_ids)
+                dest._locked_tensordicts += dest_locked
+                _locked_tensordicts.append(dest)
+                # we only keep the next level
+                # _locked_tensordicts += dest_locked
+        if is_root:
+            self._locked_tensordicts = _locked_tensordicts
+        return _locked_tensordicts, lock_ids
+
+    def lock_(self) -> TensorDictBase:
+        if self.is_locked:
+            return self
+        self._lock_propagate()
         return self
 
     lock = _renamed_inplace_method(lock_)
 
-    @erase_cache
-    def unlock_(self) -> TensorDictBase:
+    def _remove_lock(self, lock_id):
+        self._lock_id = self._lock_id - {lock_id}
+        if self._locked_tensordicts:
+            for td in self._locked_tensordicts:
+                td._remove_lock(lock_id)
+
+    def _propagate_unlock(self, lock_ids=None):
+        if lock_ids is not None:
+            self._lock_id.difference_update(lock_ids)
+        else:
+            lock_ids = set()
+
+        unlocked_tds = [self]
+        lock_ids.add(id(self))
+        for key in self.keys():
+            if _is_tensor_collection(self.entry_class(key)):
+                dest = self.get(key)
+                unlocked_tds.extend(dest._propagate_unlock(lock_ids))
+        self._locked_tensordicts = []
+
         self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
-        for key in self.keys():
-            if _is_tensor_collection(self.entry_class(key)):
-                self.get(key).unlock_()
+        return unlocked_tds
+
+    def unlock_(self) -> TensorDictBase:
+        unlock_tds = self._propagate_unlock()
+        for td in unlock_tds:
+            if len(td._lock_id):
+                self.lock_()
+                raise RuntimeError(
+                    "Cannot unlock a tensordict that is part of a locked graph. "
+                    "Unlock the root tensordict first. If the tensordict is part of multiple graphs, "
+                    "group the graphs under a common tensordict an unlock this root. "
+                )
         return self
 
     unlock = _renamed_inplace_method(unlock_)
+
+    def __del__(self):
+        for td in self._locked_tensordicts:
+            td._remove_lock(id(self))
 
     def is_floating_point(self):
         for item in self.values(include_nested=True, leaves_only=True):
@@ -3510,6 +3561,8 @@ class TensorDict(TensorDictBase):
         "_device",
         "_is_locked",
         "_td_dim_names",
+        "_lock_id",
+        "_locked_tensordicts",
         "_cache",
     )
 
@@ -3529,6 +3582,9 @@ class TensorDict(TensorDictBase):
         _is_shared: bool | None = False,
         _is_memmap: bool | None = False,
     ) -> None:
+        self._lock_id = set()
+        self._locked_tensordicts = []
+
         self._is_shared = _is_shared
         self._is_memmap = _is_memmap
         if device is not None:
@@ -5488,6 +5544,49 @@ torch.Size([3, 2])
             "Casting a sub-tensordict values to shared memory cannot be done."
         )
 
+    @property
+    def is_locked(self) -> bool:
+        return self._source.is_locked
+
+    @is_locked.setter
+    def is_locked(self, value) -> bool:
+        if value:
+            self.lock_()
+        else:
+            self.unlock_()
+
+    def lock_(self) -> TensorDictBase:
+        # we can't lock sub-tensordicts because that would mean that the
+        # parent tensordict cannot be modified either.
+        if not self.is_locked:
+            raise RuntimeError(
+                "Cannot lock a SubTensorDict. Lock the parent tensordict instead."
+            )
+        return self
+
+    def unlock_(self) -> TensorDictBase:
+        if self.is_locked:
+            raise RuntimeError(
+                "Cannot unlock a SubTensorDict. Unlock the parent tensordict instead."
+            )
+        return self
+
+    def _remove_lock(self, lock_id):
+        raise RuntimeError(
+            "Cannot unlock a SubTensorDict. Unlock the parent tensordict instead."
+        )
+
+    def _lock_propagate(self, lock_ids=None):
+        raise RuntimeError(
+            "Cannot lock a SubTensorDict. Lock the parent tensordict instead."
+        )
+
+    lock = _renamed_inplace_method(lock_)
+    unlock = _renamed_inplace_method(unlock_)
+
+    def __del__(self):
+        pass
+
 
 def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
     """Merges tensordicts together."""
@@ -6868,13 +6967,10 @@ class LazyStackedTensorDict(TensorDictBase):
     def is_locked(self) -> bool:
         # is_locked = self._is_locked
         for td in self.tensordicts:
-            if not td.is_locked:
-                return False
+            if td.is_locked:
+                return True
         else:
-            return True
-            # is_locked = is_locked or td.is_locked
-        # self._is_locked = is_locked
-        # return is_locked
+            return False
 
     @is_locked.setter
     def is_locked(self, value: bool) -> None:
@@ -6883,24 +6979,57 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             self.unlock_()
 
-    def lock_(self) -> LazyStackedTensorDict:
-        # self._is_locked = True
+    @property
+    def _lock_id(self):
+        """Ids of all tensordicts that need to be unlocked for this to be unlocked."""
+        _lock_id = set()
+        for tensordict in self.tensordicts:
+            _lock_id = _lock_id.union(tensordict._lock_id)
+        _lock_id = _lock_id - {id(self)}
+        return _lock_id
+
+    def _lock_propagate(self, lock_ids=None):
+        """Registers the parent tensordict that handles the lock."""
+        _locked_tensordicts = []
+        is_root = lock_ids is None
+        if is_root:
+            lock_ids = set()
+        lock_ids = lock_ids.union({id(self)})
+        for dest in self.tensordicts:
+            dest_locked, new_lock_ids = dest._lock_propagate(lock_ids)
+            dest._locked_tensordicts += dest_locked
+            _locked_tensordicts.append(dest)
+            # we only keep the next level
+            # _locked_tensordicts += dest_locked
+        return _locked_tensordicts, lock_ids
+
+    def _remove_lock(self, lock_id):
         for td in self.tensordicts:
-            td.lock_()
-        return self
+            td._remove_lock(lock_id)
 
-    lock = _renamed_inplace_method(lock_)
+    def _propagate_unlock(self, lock_ids=None):
+        if lock_ids is None:
+            lock_ids = set()
 
-    @erase_cache
-    def unlock_(self) -> LazyStackedTensorDict:
-        # self._is_locked = False
+        unlocked_tds = [self]
+        lock_ids.add(id(self))
+        for dest in self.tensordicts:
+            unlocked_tds.extend(dest._propagate_unlock(lock_ids))
+
+        self._is_locked = False
         self._is_shared = False
         self._is_memmap = False
         self._sorted_keys = None
-        for td in self.tensordicts:
-            td.unlock_()
-        return self
+        return unlocked_tds
 
+    def __del__(self):
+        for td in self.tensordicts:
+            td._remove_lock(id(self))
+
+    lock_ = TensorDictBase.lock_
+    lock = _renamed_inplace_method(lock_)
+
+    unlock_ = TensorDictBase.unlock_
     unlock = _renamed_inplace_method(unlock_)
 
 
@@ -7274,6 +7403,41 @@ class _CustomOpTensorDict(TensorDictBase):
         if self._source._td_dim_names is None:
             return None
         return self.names
+
+    @property
+    def is_locked(self) -> bool:
+        return self._source.is_locked
+
+    @is_locked.setter
+    def is_locked(self, value) -> bool:
+        if value:
+            self.lock_()
+        else:
+            self.unlock_()
+
+    def lock_(self) -> TensorDictBase:
+        self._source.lock_()
+        return self
+
+    def unlock_(self) -> TensorDictBase:
+        self._source.unlock_()
+        return self
+
+    def _remove_lock(self, lock_id):
+        return self._source._remove_lock(lock_id)
+
+    def _lock_propagate(self, lock_ids):
+        return self._source._lock_propagate(lock_ids)
+
+    lock = _renamed_inplace_method(lock_)
+    unlock = _renamed_inplace_method(unlock_)
+
+    def __del__(self):
+        pass
+
+    @property
+    def sorted_keys(self):
+        return self._source.sorted_keys
 
 
 class _UnsqueezedTensorDict(_CustomOpTensorDict):
