@@ -6833,7 +6833,6 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @property
     def is_locked(self) -> bool:
-        # is_locked = self._is_locked
         for td in self.tensordicts:
             if td.is_locked:
                 return True
