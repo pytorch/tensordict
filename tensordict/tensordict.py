@@ -5688,6 +5688,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return self._td_dim_names
 
     @names.setter
+    @erase_cache  # a nested lazy stacked tensordict is not apparent to the root
     def names(self, value):
         if value is None:
             for td in self.tensordicts:

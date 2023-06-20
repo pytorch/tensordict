@@ -855,6 +855,22 @@ class TestTensorDicts(TestTensorDictsBase):
             if is_tensor_collection(val):
                 assert td._cache is None
 
+    def test_lock_change_names(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        try:
+            td.names = [str(i) for i in range(td.ndim)]
+            td.lock_()
+        except Exception:
+            return
+        # cache values
+        list(td.values(True))
+        td.names = [str(-i) for i in range(td.ndim)]
+        for val in td.values(True):
+            if not is_tensor_collection(val):
+                continue
+            assert val.names[: td.ndim] == [str(-i) for i in range(td.ndim)]
+
     def test_sorted_keys(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
