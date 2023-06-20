@@ -403,7 +403,6 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError
 
     def _erase_cache(self):
-        delattr(self, "_cache")
         self._cache = None
 
     @property
