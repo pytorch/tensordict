@@ -440,7 +440,6 @@ def _wrap_func(self, attr, func):
 def _wrap_method(cls, func):
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
-        print(cls, args, func.__get__(cls))
         res = func.__get__(cls)(*args, **kwargs)
         # res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
