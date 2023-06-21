@@ -1633,6 +1633,34 @@ def test_memmap_like():
     assert isinstance(cmemmap.y.x, MemmapTensor)
     assert cmemmap.z == "foo"
 
+def test_from_memmap(tmpdir):
+    td = TensorDict({
+        ("a", "b", "c"): 1,
+        ("a", "d"): 2,
+    }, []).expand(10)
+    td.memmap_(tmpdir)
+
+    @tensorclass
+    class MyClass:
+        a: TensorDictBase
+
+    tc = MyClass.load_memmap(tmpdir)
+    assert isinstance(tc.a, TensorDict)
+    assert tc.batch_size == torch.Size([10])
+
+def test_from_dict():
+    td = TensorDict({
+        ("a", "b", "c"): 1,
+        ("a", "d"): 2,
+    }, []).expand(10)
+    d = td.to_dict()
+    @tensorclass
+    class MyClass:
+        a: TensorDictBase
+
+    tc = MyClass.from_dict(d)
+    assert isinstance(tc.a, TensorDict)
+    assert tc.batch_size == torch.Size([10])
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

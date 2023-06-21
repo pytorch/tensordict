@@ -160,6 +160,7 @@ def tensorclass(cls: T) -> T:
 
     cls.__init__ = _init_wrapper(cls.__init__)
     cls._from_tensordict = classmethod(_from_tensordict_wrapper(expected_keys))
+    cls.from_tensordict = cls._from_tensordict
     cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
@@ -180,9 +181,11 @@ def tensorclass(cls: T) -> T:
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
 
-    for attr, func in TensorDict.__dict__.items():
-        if inspect.ismethod(func) and func.__self__ is cls: # detects classmethods
-            setattr(cls, attr, _wrap_func(cls, attr, func))
+    for attr in TensorDict.__dict__.keys():
+        func = getattr(TensorDict, attr)
+        if inspect.ismethod(func) and func.__self__ is TensorDict: # detects classmethods
+            # cls.__dict__[attr] = _wrap_method(cls, attr, TensorDict.__dict__[attr])
+            setattr(cls, attr, _wrap_method(cls, TensorDict.__dict__[attr]))
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -428,6 +431,18 @@ def _wrap_func(self, attr, func):
                 )
             # create a new tensorclass from res and copy the metadata from self
             return self._from_tensordict(res, copy(self._non_tensordict))
+        return res
+    return wrapped_func
+
+def _wrap_method(cls, func):
+    @functools.wraps(func)
+    def wrapped_func(*args, **kwargs):
+        print(cls, args)
+        res = func.__get__(cls)(*args, **kwargs)
+        # res = func(*args, **kwargs)
+        if isinstance(res, TensorDictBase):
+            # create a new tensorclass from res and copy the metadata from self
+            return cls._from_tensordict(res)
         return res
     return wrapped_func
 
