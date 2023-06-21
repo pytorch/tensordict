@@ -6006,8 +6006,8 @@ class LazyStackedTensorDict(TensorDictBase):
         try:
             out = torch.stack(tensors, self.stack_dim)
             if _is_tensor_collection(out.__class__):
-                    if self._td_dim_names is not None:
-                        out.refine_names(*self.names, *out.names[self.ndim :])
+                if self._td_dim_names is not None:
+                    out.refine_names(*self.names, *out.names[self.ndim :])
                 out.callback = self.callback
             elif self.callback is not None:
                 out = self.callback(out)
