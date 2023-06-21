@@ -184,8 +184,7 @@ def tensorclass(cls: T) -> T:
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
         if inspect.ismethod(func) and func.__self__ is TensorDict: # detects classmethods
-            # cls.__dict__[attr] = _wrap_method(cls, attr, TensorDict.__dict__[attr])
-            setattr(cls, attr, _wrap_method(cls, TensorDict.__dict__[attr]))
+            setattr(cls, attr, _wrap_method(cls, func))
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -437,7 +436,7 @@ def _wrap_func(self, attr, func):
 def _wrap_method(cls, func):
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
-        print(cls, args)
+        print(cls, args, func.__get__(cls))
         res = func.__get__(cls)(*args, **kwargs)
         # res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
