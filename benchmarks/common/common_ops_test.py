@@ -182,7 +182,7 @@ def test_values(benchmark):
 
 def test_values_nested(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(lambda: list(td.values(True)), rounds=1000, iterations=1)
+    benchmark.pedantic(lambda: list(td.values(True)), rounds=1000, iterations=100)
 
 
 def test_values_nested_locked(benchmark):
