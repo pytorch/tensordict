@@ -80,7 +80,11 @@ try:
     try:
         from functorch._C import is_batchedtensor
     except ImportError:
-        from torch._C._functorch import is_batchedtensor
+        from torch._C._functorch import (
+            _add_batch_dim,
+            _remove_batch_dim,
+            is_batchedtensor,
+        )
 
     _has_functorch = True
 except ImportError:
@@ -1421,6 +1425,44 @@ class TensorDictBase(MutableMapping):
 
         if not inplace and is_locked:
             out.lock_()
+        return out
+
+    @cache  # noqa: B019
+    def _add_batch_dim(self, *, in_dim, vmap_level):
+        if self.is_memmap():
+            td = self.cpu().as_tensor()
+        else:
+            td = self
+        out = TensorDict(
+            {
+                key: value._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
+                if is_tensor_collection(value)
+                else _add_batch_dim(value, in_dim, vmap_level)
+                for key, value in td.items()
+            },
+            batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
+            names=[name for i, name in enumerate(td.names) if i != in_dim],
+        )
+        return out
+
+    @cache  # noqa: B019
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+        new_batch_size = list(self.batch_size)
+        new_batch_size.insert(out_dim, batch_size)
+        new_names = list(self.names)
+        new_names.insert(out_dim, None)
+        out = TensorDict(
+            {
+                key: value._remove_batch_dim(
+                    vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
+                )
+                if is_tensor_collection(value)
+                else _remove_batch_dim(value, vmap_level, batch_size, out_dim)
+                for key, value in self.items()
+            },
+            batch_size=new_batch_size,
+            names=new_names,
+        )
         return out
 
     def as_tensor(self):
@@ -5595,6 +5637,7 @@ class LazyStackedTensorDict(TensorDictBase):
             same batch size.
          stack_dim (int): a dimension (between `-td.ndimension()` and
             `td.ndimension()-1` along which the stack should be performed.
+         callback (callable, optional): a callable to execute after :meth:`~.get`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -5619,6 +5662,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self,
         *tensordicts: TensorDictBase,
         stack_dim: int = 0,
+        callback: callable | None = None,
         batch_size: Sequence[int] | None = None,  # TODO: remove
     ) -> None:
         self._is_shared = False
@@ -5664,6 +5708,7 @@ class LazyStackedTensorDict(TensorDictBase):
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
         self._update_valid_keys()
+        self.callback = callback
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
@@ -5963,7 +6008,13 @@ class LazyStackedTensorDict(TensorDictBase):
             if _is_tensor_collection(out.__class__):
                 if self._td_dim_names is not None:
                     out.refine_names(*self.names, *out.names[self.ndim :])
-
+                if isinstance(out, TensorDictBase):
+                    out.callback = self.callback
+                else:
+                    # then it's a tensorclass
+                    out._tensordict.callbacl = self.callback
+            elif self.callback is not None:
+                out = self.callback(out)
             return out
         except RuntimeError as err:
             if "stack expects each tensor to be equal size" in str(err):
@@ -5986,6 +6037,92 @@ class LazyStackedTensorDict(TensorDictBase):
         except KeyError:
             return self._default_get(key, default)
         return tensordict.get(key, default=default)
+
+    @cache  # noqa: B019
+    def _add_batch_dim(self, *, in_dim, vmap_level):
+        if self.is_memmap():
+            td = torch.stack([td.cpu().as_tensor() for td in self.tensordicts], 0)
+        else:
+            td = self
+        if in_dim < 0:
+            in_dim = self.ndim + in_dim
+        if in_dim == self.stack_dim:
+            return self._cached_add_batch_dims(td, in_dim=in_dim, vmap_level=vmap_level)
+        if in_dim < td.stack_dim:
+            # then we'll stack along a dim before
+            stack_dim = td.stack_dim - 1
+        else:
+            in_dim = in_dim - 1
+            stack_dim = td.stack_dim
+        tds = [
+            td.apply(
+                lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
+                batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
+                names=[name for i, name in enumerate(td.names) if i != in_dim],
+            )
+            for td in td.tensordicts
+        ]
+        return LazyStackedTensorDict(*tds, stack_dim=stack_dim)
+
+    @staticmethod
+    def _cached_add_batch_dims(td, in_dim, vmap_level):
+        # we return a stack with callback, and hack the batch_size and names
+        # Per se it is still a LazyStack but the stacking dim is "hidden" from
+        # the outside
+        out = td.clone(False)
+
+        def callback(tensor, in_dim=in_dim, vmap_level=vmap_level):
+            return _add_batch_dim(tensor, in_dim, vmap_level)
+
+        out.callback = callback
+        out._batch_size = torch.Size(
+            [dim for i, dim in enumerate(out._batch_size) if i != out.stack_dim]
+        )
+        if out._td_dim_names is not None:
+            out._td_dim_names = [
+                name for i, name in enumerate(out._td_dim_names) if i != out.stack_dim
+            ]
+        else:
+            out._td_dim_names = [None] * out.ndim
+        return out.lock_()
+
+    @cache  # noqa: B019
+    def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
+        if self.callback is not None:
+            # this is the hacked version. We just need to remove the callback and
+            # reset a proper batch size
+            return LazyStackedTensorDict(
+                *self.tensordicts,
+                stack_dim=out_dim,
+            )
+            # return self._cache_remove_batch_dim(vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim)
+        else:
+            # we must call _remove_batch_dim on all tensordicts
+            # batch_size: size of the batch when we unhide it.
+            # out_dim: dimension where the output will be found
+            new_batch_size = list(self.batch_size)
+            new_batch_size.insert(out_dim, batch_size)
+            new_names = list(self.names)
+            new_names.insert(out_dim, None)
+            # rebuild the lazy stack
+            # the stack dim is the same if the out_dim is past it, but it
+            # must be incremented by one otherwise.
+            # In the first case, the out_dim must be decremented by one
+            if out_dim > self.stack_dim:
+                stack_dim = self.stack_dim
+                out_dim = out_dim - 1
+            else:
+                stack_dim = self.stack_dim + 1
+            out = LazyStackedTensorDict(
+                *[
+                    td._remove_batch_dim(
+                        vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
+                    )
+                    for td in self.tensordicts
+                ],
+                stack_dim=stack_dim,
+            )
+        return out
 
     def get_nestedtensor(
         self,
@@ -7004,14 +7141,12 @@ class _CustomOpTensorDict(TensorDictBase):
         tensor = self._source._get_str(key, default)
         if tensor is default:
             return tensor
-        print("tensor", tensor, key, default, self._source)
         return self._transform_value(tensor)
 
     def _get_tuple(self, key, default):
         tensor = self._source._get_tuple(key, default)
         if tensor is default:
             return tensor
-        print("tensor", tensor, key, default, self._source)
         return self._transform_value(tensor)
 
     def _transform_value(self, item):
