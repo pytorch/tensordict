@@ -6038,6 +6038,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key, default)
         return tensordict.get(key, default=default)
 
+    @cache
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             td = torch.stack([td.cpu().as_tensor() for td in self.tensordicts], 0)
@@ -6064,7 +6065,6 @@ class LazyStackedTensorDict(TensorDictBase):
         return LazyStackedTensorDict(*tds, stack_dim=stack_dim)
 
     @staticmethod
-    @cache
     def _cached_add_batch_dims(td, in_dim, vmap_level):
         # we return a stack with callback, and hack the batch_size and names
         # Per se it is still a LazyStack but the stacking dim is "hidden" from
@@ -6123,23 +6123,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 stack_dim=stack_dim,
             )
         return out
-
-    # @cache
-    # def _cache_remove_batch_dim(self, vmap_level, batch_size, out_dim):
-    #     # we keep the args to avoid a cache confusion
-    #     return LazyStackedTensorDict(
-    #         *self.tensordicts,
-    #         stack_dim=out_dim,
-    #         )
-
-    def get_at(self, key, index, default=NO_DEFAULT):
-        item = self.get(key, default=default)
-        if item is default and default is not NO_DEFAULT:
-            return item
-        if isinstance(item, TensorDictBase):
-            return SubTensorDict(item, index)
-        else:
-            return item[index]
 
     def get_nestedtensor(
         self,
