@@ -180,6 +180,10 @@ def tensorclass(cls: T) -> T:
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
 
+    for attr, func in TensorDict.__dict__.items():
+        if inspect.ismethod(func) and func.__self__ is cls: # detects classmethods
+            setattr(cls, attr, _wrap_func(cls, attr, func))
+
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
@@ -406,21 +410,7 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     return wrapper
 
 
-def _getattr(self, attr: str) -> Any:
-    """Retrieve the value of an object's attribute, or a method output if attr is callable.
-
-    Args:
-        attr: name of the attribute to retrieve or function to compute
-
-    Returns:
-        value of the attribute, or a method output applied on the instance
-
-    """
-    res = getattr(self._tensordict, attr)
-    if not callable(res):
-        return res
-    func = res
-
+def _wrap_func(self, attr, func):
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
         args = tuple(_arg_to_tensordict(arg) for arg in args)
@@ -439,8 +429,23 @@ def _getattr(self, attr: str) -> Any:
             # create a new tensorclass from res and copy the metadata from self
             return self._from_tensordict(res, copy(self._non_tensordict))
         return res
-
     return wrapped_func
+
+def _getattr(self, attr: str) -> Any:
+    """Retrieve the value of an object's attribute, or a method output if attr is callable.
+
+    Args:
+        attr: name of the attribute to retrieve or function to compute
+
+    Returns:
+        value of the attribute, or a method output applied on the instance
+
+    """
+    res = getattr(self._tensordict, attr)
+    if not callable(res):
+        return res
+    func = res
+    return _wrap_func(self, attr, func)
 
 
 def _getitem(self, item: NestedKey) -> Any:
