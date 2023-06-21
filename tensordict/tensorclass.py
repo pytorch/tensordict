@@ -186,7 +186,7 @@ def tensorclass(cls: T) -> T:
         if (
             inspect.ismethod(func) and func.__self__ is TensorDict
         ):  # detects classmethods
-            setattr(cls, attr, _wrap_method(cls, func))
+            setattr(cls, attr, _wrap_classmethod(cls, func))
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -414,7 +414,7 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     return wrapper
 
 
-def _wrap_func(self, attr, func):
+def _wrap_method(self, attr, func):
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
         args = tuple(_arg_to_tensordict(arg) for arg in args)
@@ -437,7 +437,7 @@ def _wrap_func(self, attr, func):
     return wrapped_func
 
 
-def _wrap_method(cls, func):
+def _wrap_classmethod(cls, func):
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
         res = func.__get__(cls)(*args, **kwargs)
@@ -464,7 +464,7 @@ def _getattr(self, attr: str) -> Any:
     if not callable(res):
         return res
     func = res
-    return _wrap_func(self, attr, func)
+    return _wrap_method(self, attr, func)
 
 
 def _getitem(self, item: NestedKey) -> Any:
