@@ -6008,7 +6008,11 @@ class LazyStackedTensorDict(TensorDictBase):
             if _is_tensor_collection(out.__class__):
                 if self._td_dim_names is not None:
                     out.refine_names(*self.names, *out.names[self.ndim :])
-                out.callback = self.callback
+                if isinstance(out, TensorDictBase):
+                    out.callback = self.callback
+                else:
+                    # then it's a tensorclass
+                    out._tensordict.callbacl = self.callback
             elif self.callback is not None:
                 out = self.callback(out)
             return out
@@ -7154,14 +7158,12 @@ class _CustomOpTensorDict(TensorDictBase):
         tensor = self._source._get_str(key, default)
         if tensor is default:
             return tensor
-        print("tensor", tensor, key, default, self._source)
         return self._transform_value(tensor)
 
     def _get_tuple(self, key, default):
         tensor = self._source._get_tuple(key, default)
         if tensor is default:
             return tensor
-        print("tensor", tensor, key, default, self._source)
         return self._transform_value(tensor)
 
     def _transform_value(self, item):
