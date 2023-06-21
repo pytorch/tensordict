@@ -1427,7 +1427,7 @@ class TensorDictBase(MutableMapping):
             out.lock_()
         return out
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             td = self.cpu().as_tensor()
@@ -1445,7 +1445,7 @@ class TensorDictBase(MutableMapping):
         )
         return out
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
         new_batch_size = list(self.batch_size)
         new_batch_size.insert(out_dim, batch_size)
@@ -2956,7 +2956,7 @@ class TensorDictBase(MutableMapping):
         for i in range(length):
             yield self[i]
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def flatten_keys(
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
@@ -3005,7 +3005,7 @@ class TensorDictBase(MutableMapping):
                     tensordict_out.set(key, value)
             return tensordict_out
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def unflatten_keys(
         self, separator: str = ".", inplace: bool = False
     ) -> TensorDictBase:
@@ -4062,7 +4062,7 @@ class TensorDict(TensorDictBase):
             return self._default_get(first_key, default)
         return out
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def _get_tuple(self, key, default):
         if len(key) == 1:
             return self._get_str(key[0], default)
@@ -4337,7 +4337,7 @@ class TensorDict(TensorDictBase):
                 include_nested=include_nested, leaves_only=leaves_only
             )
 
-    # @cache  # noqa: B019
+    # # @cache  # noqa: B019
     def _nested_keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
@@ -5264,7 +5264,7 @@ torch.Size([3, 2])
             ) from e
         return self
 
-    # @cache  # noqa: B019
+    # # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
@@ -5981,7 +5981,7 @@ class LazyStackedTensorDict(TensorDictBase):
             self.set_(key, torch.stack(list_item, dim))
         return self
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def _get_str(
         self,
         key: NestedKey,
@@ -6030,7 +6030,7 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 raise err
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def _get_tuple(self, key, default):
         try:
             tensordict, key = _get_leaf_tensordict(self, key)
@@ -6038,7 +6038,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key, default)
         return tensordict.get(key, default=default)
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             td = torch.stack([td.cpu().as_tensor() for td in self.tensordicts], 0)
@@ -6086,7 +6086,7 @@ class LazyStackedTensorDict(TensorDictBase):
             out._td_dim_names = [None] * out.ndim
         return out.lock_()
 
-    @cache  # noqa: B019
+    # @cache  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
         if self.callback is not None:
             # this is the hacked version. We just need to remove the callback and
@@ -6241,7 +6241,7 @@ class LazyStackedTensorDict(TensorDictBase):
             del self._orig_batch_size
         self._batch_size = new_size
 
-    # @cache  # noqa: B019
+    # # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _LazyStackedTensorDictKeysView:
@@ -7233,7 +7233,7 @@ class _CustomOpTensorDict(TensorDictBase):
             f"\n\top={self.custom_op}({custom_op_kwargs_str}))"
         )
 
-    # @cache  # noqa: B019
+    # # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _TensorDictKeysView:
