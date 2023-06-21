@@ -6038,7 +6038,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key, default)
         return tensordict.get(key, default=default)
 
-    @cache
+    @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             td = torch.stack([td.cpu().as_tensor() for td in self.tensordicts], 0)
