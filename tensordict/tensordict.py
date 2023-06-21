@@ -4022,26 +4022,24 @@ class TensorDict(TensorDictBase):
 
     @cache  # noqa: B019
     def _get_tuple(self, key, default):
-        first_key = key[0]
-        out = self._tensordict.get(first_key, None)
-        if out is not None and len(key) > 1:
-            first_lev = out
+        if len(key) == 1:
+            return self._get_str(key[0], default)
+        leaf = self._get_tuple(key[:-1], None)
+        # first_key = key[0]
+        # out = self._tensordict.get(first_key, None)
+        if leaf is not None:
             try:
-                if len(key) == 2:
-                    if isinstance(first_lev, KeyedJaggedTensor):
-                        return first_lev[key[1]]
-                    else:
-                        return first_lev._get_str(key[1], default=default)
-                return first_lev._get_tuple(key[1:], default=default)
+                if isinstance(leaf, KeyedJaggedTensor):
+                    return leaf[key[-1]]
+                else:
+                    return leaf._get_str(key[-1], default=default)
             except AttributeError as err:
                 if "has no attribute" in str(err):
                     raise ValueError(
-                        f"Expected a TensorDictBase instance but got {type(first_lev)} instead"
-                        f" for key '{first_key}' and subkeys {key[1:]} in tensordict:\n{self}."
+                        f"Expected a TensorDictBase instance but got {type(leaf)} instead"
+                        f" for key '{key[:-1]}' in tensordict:\n{self}."
                     )
-        elif out is None:
-            return self._default_get(first_key, default)
-        return out
+        return self._default_get(key[0], default)
 
     def share_memory_(self) -> TensorDictBase:
         if self.is_memmap():
@@ -5989,15 +5987,6 @@ class LazyStackedTensorDict(TensorDictBase):
             return self._default_get(key, default)
         return tensordict.get(key, default=default)
 
-    # def get_at(self, key, index, default=NO_DEFAULT):
-    #     item = self.get(key, default=default)
-    #     if item is default and default is not NO_DEFAULT:
-    #         return item
-    #     if isinstance(item, TensorDictBase):
-    #         return SubTensorDict(item, index)
-    #     else:
-    #         return item[index]
-
     def get_nestedtensor(
         self,
         key: NestedKey,
@@ -7010,32 +6999,6 @@ class _CustomOpTensorDict(TensorDictBase):
         elif self._orig_batch_size == new_size:
             del self._orig_batch_size
         self._batch_size = new_size
-
-    # def get(
-    #     self,
-    #     key: NestedKey,
-    #     default: str | CompatibleType = NO_DEFAULT,
-    #     *,
-    #     _return_original_tensor: bool = False,
-    # ) -> CompatibleType:
-    #     # TODO: temporary hack while SavedTensorDict and LazyStackedTensorDict don't
-    #     # support nested iteration
-    #     # include_nested = not isinstance(self._source, (LazyStackedTensorDict,))
-    #     key = unravel_keys(key)
-    #     if isinstance(key, str):
-    #         item = self._get_str(key, default)
-    #     else:
-    #         item = self._get_tuple(key, default)
-    #     if item is default:
-    #         if _return_original_tensor:
-    #             raise RuntimeError(
-    #                 "_return_original_tensor not compatible with get(..., "
-    #                 "default=smth)"
-    #             )
-    #         return default
-    #     if not _return_original_tensor:
-    #         return transformed_tensor
-    #     return transformed_tensor, item
 
     def _get_str(self, key, default):
         tensor = self._source._get_str(key, default)
