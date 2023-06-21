@@ -183,7 +183,9 @@ def tensorclass(cls: T) -> T:
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
-        if inspect.ismethod(func) and func.__self__ is TensorDict: # detects classmethods
+        if (
+            inspect.ismethod(func) and func.__self__ is TensorDict
+        ):  # detects classmethods
             setattr(cls, attr, _wrap_method(cls, func))
 
     cls.to_tensordict = _to_tensordict
@@ -431,7 +433,9 @@ def _wrap_func(self, attr, func):
             # create a new tensorclass from res and copy the metadata from self
             return self._from_tensordict(res, copy(self._non_tensordict))
         return res
+
     return wrapped_func
+
 
 def _wrap_method(cls, func):
     @functools.wraps(func)
@@ -443,7 +447,9 @@ def _wrap_method(cls, func):
             # create a new tensorclass from res and copy the metadata from self
             return cls._from_tensordict(res)
         return res
+
     return wrapped_func
+
 
 def _getattr(self, attr: str) -> Any:
     """Retrieve the value of an object's attribute, or a method output if attr is callable.
