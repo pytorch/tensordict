@@ -11,6 +11,8 @@ import warnings
 from pathlib import Path
 from typing import Any
 
+from tensordict._tensordict import unravel_keys
+
 H5_ERR = None
 try:
     import h5py
@@ -225,6 +227,7 @@ class PersistentTensorDict(TensorDictBase):
         self.file.close()
 
     def _process_key(self, key):
+        key = unravel_keys(key)
         if isinstance(key, str):
             return key
         else:
@@ -249,9 +252,7 @@ class PersistentTensorDict(TensorDictBase):
                 return default
             raise KeyError(f"key {key} not found in PersistentTensorDict {self}")
 
-    @cache  # noqa: B019
-    def get(self, key, default=NO_DEFAULT):
-        array = self._get_array(key, default)
+    def _process_array(self, key, array):
         if isinstance(array, (h5py.Dataset,)):
             if self.device is not None:
                 device = self.device
@@ -263,7 +264,7 @@ class PersistentTensorDict(TensorDictBase):
             if self._pin_mem:
                 return out.pin_memory()
             return out
-        elif array is not default:
+        else:
             out = self._nested_tensordicts.get(key, None)
             if out is None:
                 out = self._nested_tensordicts[key] = PersistentTensorDict(
@@ -272,8 +273,16 @@ class PersistentTensorDict(TensorDictBase):
                     device=self.device,
                 )
             return out
-        else:
-            return default
+
+    @cache  # noqa: B019
+    def get(self, key, default=NO_DEFAULT):
+        array = self._get_array(key, default)
+        if array is default:
+            return array
+        return self._process_array(key, array)
+
+    _get_str = get
+    _get_tuple = get
 
     def get_at(
         self, key: str, idx: IndexType, default: CompatibleType = NO_DEFAULT
@@ -695,10 +704,10 @@ class PersistentTensorDict(TensorDictBase):
                 key, subkey = key[0], key[1:]
             else:
                 key, subkey = key, []
-            target_td = self.get(key, default=None)
+            target_td = self._get_str(key, default=None)
             if target_td is None:
                 self.file.create_group(key)
-                target_td = self.get(key)
+                target_td = self._get_str(key)
                 target_td.batch_size = value.batch_size
             elif not is_tensor_collection(target_td):
                 raise RuntimeError(
