@@ -5981,7 +5981,7 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 raise err
 
-    @cache
+    @cache  # noqa: B019
     def _get_tuple(self, key, default):
         try:
             tensordict, key = _get_leaf_tensordict(self, key)
