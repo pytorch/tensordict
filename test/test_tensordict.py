@@ -2421,6 +2421,28 @@ class TestTensorDicts(TestTensorDictsBase):
         assert type(td) is type(td_empty)
         assert all(val.any() for val in (td != td_empty).values(True, True))
 
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_add_batch_dim_cache(self, td_name, device, nested):
+        td = getattr(self, td_name)(device)
+        if nested:
+            td = TensorDict({"parent": td}, td.batch_size)
+        from tensordict.nn import TensorDictModule  # noqa
+        from torch import vmap
+
+        fun = vmap(lambda x: x)
+        if td_name == "td_h5":
+            with pytest.raises(
+                RuntimeError, match="Persistent tensordicts cannot be used with vmap"
+            ):
+                fun(td)
+            return
+        fun(td)
+        td.zero_()
+        # this value should be cached
+        std = fun(td)
+        for value in std.values(True, True):
+            assert (value == 0).all()
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])
@@ -3932,6 +3954,42 @@ def test_shared_inheritance():
 
 
 class TestLazyStackedTensorDict:
+    def test_add_batch_dim_cache(self):
+        td = TensorDict(
+            {"a": torch.rand(3, 4, 5), ("b", "c"): torch.rand(3, 4, 5)}, [3, 4, 5]
+        )
+        td = torch.stack([td, td.clone()], 0)
+        from tensordict.nn import TensorDictModule  # noqa
+        from torch import vmap
+
+        print("first call to vmap")
+        fun = vmap(lambda x: x)
+        fun(td)
+        td.zero_()
+        # this value should be cached
+        print("second call to vmap")
+        std = fun(td)
+        for value in std.values(True, True):
+            assert (value == 0).all()
+
+    def test_add_batch_dim_cache_nested(self):
+        td = TensorDict(
+            {"a": torch.rand(3, 4, 5), ("b", "c"): torch.rand(3, 4, 5)}, [3, 4, 5]
+        )
+        td = TensorDict({"parent": torch.stack([td, td.clone()], 0)}, [2, 3, 4, 5])
+        from tensordict.nn import TensorDictModule  # noqa
+        from torch import vmap
+
+        fun = vmap(lambda x: x)
+        print("first call to vmap")
+        fun(td)
+        td.zero_()
+        # this value should be cached
+        print("second call to vmap")
+        std = fun(td)
+        for value in std.values(True, True):
+            assert (value == 0).all()
+
     def test_update_with_lazy(self):
         td0 = TensorDict(
             {
@@ -4283,6 +4341,33 @@ class TestLazyStackedTensorDict:
             match="Found more than one unique shape in the tensors to be stacked",
         ):
             td_a.update_(td_b.to_tensordict())
+
+    # We don't support caching for unlocked lazy stacks
+    # def test_cached_unlocked_stacked(self):
+    #     """same as above in the non-locked case.
+    #
+    #     Additionally tests that deleting the key in one tensordict raises an error."""
+    #     td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
+    #     std = torch.stack([td, td.clone()])
+    #
+    #     a = std["a"]
+    #     val = next(iter(std._cache['_get_str_key'].values()))
+    #     assert val is a
+    #     orig = std[0]['a', 'b']
+    #     other = orig.clone().zero_()
+    #     orig.unlock_()
+    #     orig.update(other)
+    #     assert (std['a', 'b', 'c', 'd'] == torch.tensor([0, 1])).all()
+    #
+    #     orig = std[1]['a', 'b', 'c']
+    #     other = orig.clone().zero_()
+    #     orig.unlock_()
+    #     orig.update(other)
+    #     assert (std['a', 'b', 'c', 'd'] == torch.tensor([0, 0])).all()
+    #
+    #     orig = std[1]['a', 'b']
+    #     orig['c'] = 1.0
+    #     print(std['a', 'b', 'c', 'd'])
 
 
 @pytest.mark.skipif(

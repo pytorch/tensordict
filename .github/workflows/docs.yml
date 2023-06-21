@@ -31,6 +31,8 @@ jobs:
           python --version
       - name: Install PyTorch
         run: |
+          pip3 install pip --upgrade
+          pip3 install packaging
           pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Install TensorDict
         run: |

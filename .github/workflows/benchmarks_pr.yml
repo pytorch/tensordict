@@ -50,8 +50,8 @@ jobs:
         uses: apbard/pytest-benchmark-commenter@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          benchmark-file: ${{ env.BASELINE_JSON }}
-          comparison-benchmark-file: ${{ env.CONTENDER_JSON }}
+          benchmark-file: ${{ env.CONTENDER_JSON }}
+          comparison-benchmark-file: ${{ env.BASELINE_JSON }}
           benchmark-metrics: 'name,max,mean,ops'
           comparison-benchmark-metric: 'ops'
           comparison-higher-is-better: true
