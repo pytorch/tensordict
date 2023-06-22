@@ -6031,7 +6031,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     out.callback = self.callback
                 else:
                     # then it's a tensorclass
-                    out._tensordict.callbacl = self.callback
+                    out._tensordict.callback = self.callback
             elif self.callback is not None:
                 out = self.callback(out)
             return out
