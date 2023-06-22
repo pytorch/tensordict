@@ -112,14 +112,7 @@ def test_make_cache_key():
     kwargs = {"a": V, "b": "c", "d": ("e", "f")}
     print(_make_cache_key(args, kwargs))
     assert _make_cache_key(args, kwargs) == (
-        (
-            1,
-            (
-                2,
-                3,
-            ),
-            id(Q),
-        ),
+        (1, (2, 3), id(Q)),
         (("a", id(V)), ("b", "c"), ("d", ("e", "f"))),
     )
 

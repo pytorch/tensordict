@@ -464,8 +464,7 @@ def _normalize_key(key: NestedKey) -> NestedKey:
 
 
 def index_keyedjaggedtensor(
-    kjt: KeyedJaggedTensor,
-    index: slice | range | list | torch.Tensor | np.ndarray,
+    kjt: KeyedJaggedTensor, index: slice | range | list | torch.Tensor | np.ndarray
 ) -> KeyedJaggedTensor:
     """Indexes a KeyedJaggedTensor along the batch dimension.
 
@@ -517,10 +516,7 @@ def index_keyedjaggedtensor(
     values = kjt._values[full_index]
     weights = kjt._weights[full_index]
     return KeyedJaggedTensor(
-        values=values,
-        keys=kjt.keys(),
-        weights=weights,
-        lengths=lengths,
+        values=values, keys=kjt.keys(), weights=weights, lengths=lengths
     )
 
 
@@ -1020,17 +1016,7 @@ def _unfold_sequence(seq):
         if isinstance(item, (list, tuple)):
             yield tuple(_unfold_sequence(item))
         else:
-            if (
-                isinstance(
-                    item,
-                    (
-                        str,
-                        int,
-                        slice,
-                    ),
-                )
-                or item is Ellipsis
-            ):
+            if isinstance(item, (str, int, slice)) or item is Ellipsis:
                 yield item
             else:
                 yield id(item)
