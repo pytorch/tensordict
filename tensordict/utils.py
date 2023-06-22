@@ -1018,7 +1018,7 @@ class implement_for:
 def _unfold_sequence(seq):
     for item in seq:
         if isinstance(item, (list, tuple)):
-            yield from _unfold_sequence(item)
+            yield tuple(_unfold_sequence(item))
         else:
             if (
                 isinstance(
@@ -1038,7 +1038,10 @@ def _unfold_sequence(seq):
 
 def _make_cache_key(args, kwargs):
     """Creats a key for the cache such that memory footprint is minimized."""
-    return (*_unfold_sequence(args), *_unfold_sequence(sorted(kwargs.items())))
+    return (
+        tuple(_unfold_sequence(args)),
+        tuple(_unfold_sequence(sorted(kwargs.items()))),
+    )
 
 
 def cache(fun):
