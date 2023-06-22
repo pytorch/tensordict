@@ -4085,14 +4085,16 @@ class TensorDict(TensorDictBase):
 
     @cache  # noqa: B019
     def _get_tuple(self, key, default):
-        first = self._get_str(key[0], default)
+        first = self._get_str(key[0], None)
+        if first is None:
+            return self._default_get(first, default)
         if len(key) == 1:
             return first
         try:
             if isinstance(first, KeyedJaggedTensor):
                 if len(key) != 2:
                     raise ValueError(f"Got too many keys for a KJT: {key}.")
-                return first[key[-1]]
+                return first[key[1]]
             else:
                 return first._get_tuple(key[1:], default=default)
         except AttributeError as err:
@@ -6052,6 +6054,8 @@ class LazyStackedTensorDict(TensorDictBase):
     @cache  # noqa: B019
     def _get_tuple(self, key, default):
         first = self._get_str(key[0], default)
+        if first is None:
+            return self._default_get(first, default)
         if len(key) == 1:
             return first
         try:
