@@ -6053,7 +6053,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @cache  # noqa: B019
     def _get_tuple(self, key, default):
-        first = self._get_str(key[0], default)
+        first = self._get_str(key[0], None)
         if first is None:
             return self._default_get(first, default)
         if len(key) == 1:
