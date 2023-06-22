@@ -295,14 +295,15 @@ class TestVmap:
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("lock_x", [True, False])
     @pytest.mark.parametrize("lock_y", [True, False])
-    def test_vmap_write_lazystack(self, in_dim, out_dim, stack_dim, lock_x, lock_y):
+    @pytest.mark.parametrize("key", ["a", ("a", "b")])
+    def test_vmap_write_lazystack(self, in_dim, out_dim, stack_dim, lock_x, lock_y, key):
         fun = vmap(
-            lambda x, y: x.set("a", y.get("a") + x.get("a")),
+            lambda x, y: x.set(key, y.get(key) + x.get(key)),
             (in_dim, in_dim),
             (out_dim,),
         )
-        td0 = TensorDict({"a": [1.0]}, [1])
-        td1 = TensorDict({"a": [2.0]}, [1])
+        td0 = TensorDict({key: [1.0]}, [1])
+        td1 = TensorDict({key: [2.0]}, [1])
         x = torch.stack([td0, td0.clone()], stack_dim)
         y = torch.stack([td1, td1.clone()], stack_dim)
         if lock_x:

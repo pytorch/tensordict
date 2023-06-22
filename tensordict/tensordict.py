@@ -5718,6 +5718,7 @@ class LazyStackedTensorDict(TensorDictBase):
          stack_dim (int): a dimension (between `-td.ndimension()` and
             `td.ndimension()-1` along which the stack should be performed.
          hook_out (callable, optional): a callable to execute after :meth:`~.get`.
+         hook_in (callable, optional): a callable to execute before :meth:`~.set`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -6099,7 +6100,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     # then it's a tensorclass
                     out._tensordict.hook_out = self.hook_out
                     out._tensordict.hook_in = self.hook_in
-            if self.hook_out is not None:
+            elif self.hook_out is not None:
                 out = self.hook_out(out)
             return out
         except RuntimeError as err:
