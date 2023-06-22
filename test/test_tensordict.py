@@ -864,6 +864,21 @@ class TestTensorDicts(TestTensorDictsBase):
             if is_tensor_collection(val):
                 assert td._cache is None
 
+    def test_enter_exit(self, td_name, device):
+        torch.manual_seed(1)
+        if td_name in ("sub_td", "sub_td2"):
+            return
+        td = getattr(self, td_name)(device)
+        is_locked = td.is_locked
+        with td.lock_() as other:
+            assert other is td
+            assert td.is_locked
+            with td.unlock_() as other:
+                assert other is td
+                assert not td.is_locked
+            assert td.is_locked
+        assert td.is_locked is is_locked
+
     def test_lock_change_names(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
