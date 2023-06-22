@@ -18,7 +18,8 @@ from tensordict._tensordict import unravel_keys
 from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
-from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
+from tensordict.tensordict import is_tensor_collection, make_tensordict, \
+    TensorDictBase, _is_tensor_collection
 from tensordict.utils import _normalize_key, implement_for, NestedKey
 from torch import nn, Tensor
 
@@ -40,6 +41,68 @@ __all__ = [
     "TensorDictModule",
     "TensorDictModuleWrapper",
 ]
+
+_CLONE_INPUT: bool = False
+class clone_input_when_vmap:
+    """A decorator to clone TensorDictModuleBase method first input during calls to vmap."""
+
+    def __init__(self, tensordict_args=None):
+        if tensordict_args is None:
+            tensordict_args = ((0, "tensordict"),)
+        self.tensordict_args = tensordict_args
+
+    def __call__(self, fun):
+        @functools.wraps(fun)
+        def wrapped(self, *args, **kwargs):
+            if not _CLONE_INPUT:
+                return fun(self, *args, **kwargs)
+            found = set()
+            current_len = 0
+            needed_cloning = False
+            for expected_td in self.tensordict_args:
+                tensordict, pointer = self.find_tensordict(args, kwargs, expected_td)
+                if ten
+                found.add(tensordict)
+                next_current_len = len(found)
+                if next_current_len == current_len:
+                    raise RuntimeError(f"Two pointers lead to the same tensordict in {self.tensordict_args}.")
+                current_len = next_current_len
+                args, kwargs = self.replace_tensordict(args, kwargs, pointer, tensordict)
+
+            if len(args):
+                tensordict = args[0]
+                args = args[1:]
+            else:
+                tensordict = kwargs.pop('tensordict', None)
+            if tensordict is None or not _is_tensor_collection(tensordict.__class__):
+                raise TypeError("Expected the first argument to be a tensordict or equivalent. "
+                                "Alternatively, a 'tensordict' keyword argument can be passed.")
+            return fun(self, tensordict.clone(False), *args, **kwargs)
+        return wrapped
+
+    @classmethod
+    def find_tensordict(cls, args, kwargs, expected_td):
+        if isinstance(expected_td, int):
+            if len(args):
+                return args[0], expected_td
+            else:
+                return None
+        if isinstance(expected_td, str):
+            out = kwargs.get(expected_td, None)
+            if out is not None:
+                return out, expected_td
+            else:
+                return None
+        if isinstance(expected_td, tuple) and len(expected_td) == 2:
+            attempt1 = cls.find_tensordict(args, kwargs, expected_td[0])
+            if attempt1 is not None:
+                return attempt1
+            return cls.find_tensordict(args, kwargs, expected_td[1])
+        else:
+            raise TypeError(f"Expected the tensordict_arg to be either a string, an integer or a tuple of integer and string, but got {expected_td}.")
+
+    @classmethod
+    def replace_tensordict(cls, args, kwargs, pointer, tensordict):
 
 
 class dispatch:
@@ -484,6 +547,7 @@ class TensorDictModuleBase(nn.Module):
             cls._out_keys = out_keys
             cls._out_keys_apparent = out_keys
             cls.out_keys = TensorDictModuleBase.out_keys
+        cls.forward = clone_input_when_vmap(cls.forward)
         out = super().__new__(cls)
         return out
 
@@ -1033,6 +1097,7 @@ class TensorDictModule(TensorDictModuleBase):
 
     @dispatch(auto_batch_size=False)
     @set_skip_existing(None)
+    @clone_input_when_vmap
     def forward(
         self,
         tensordict: TensorDictBase,
