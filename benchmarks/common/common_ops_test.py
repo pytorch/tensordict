@@ -42,7 +42,7 @@ def big_nested_td():
                     for i in range(1, 20)
                 },
                 [3, 4],
-            ).unflatten_keys("."),
+            ).unflatten_keys(".")
         ),
         {},
     )
@@ -67,7 +67,7 @@ def big_nested_stacked_td():
                 .unflatten_keys(".")
                 .unbind(1),
                 1,
-            ),
+            )
         ),
         {},
     )
@@ -79,215 +79,159 @@ def big_nested_stacked_td_locked():
 
 def test_items(benchmark):
     td = big_td()[0][0]
-    benchmark.pedantic(lambda: list(td.items()), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.items()))
 
 
 def test_items_nested(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(lambda: list(td.items(True)), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.items(True)))
 
 
 def test_items_nested_locked(benchmark):
     td = big_nested_td_locked()[0][0]
     list(td.items(True))
-    benchmark.pedantic(lambda: list(td.items(True)), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.items(True)))
 
 
 def test_items_nested_leaf(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(
-        lambda: list(td.items(True, True)),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: list(td.items(True, True)))
 
 
 def test_items_stack_nested(benchmark):
     td = big_nested_stacked_td()[0][0]
-    benchmark.pedantic(
-        lambda: list(td.items(True)),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: list(td.items(True)))
 
 
 def test_items_stack_nested_leaf(benchmark):
     td = big_nested_stacked_td()[0][0]
-    benchmark.pedantic(
-        lambda: list(td.items(True, True)),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: list(td.items(True, True)))
 
 
 def test_items_stack_nested_locked(benchmark):
     td = big_nested_stacked_td_locked()[0][0]
     list(td.items(True))
-    benchmark.pedantic(lambda: list(td.items(True)), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.items(True)))
 
 
 def test_keys(benchmark):
     td = big_td()[0][0]
-    benchmark.pedantic(lambda: list(td.keys()), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.keys()))
 
 
 def test_keys_nested(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(lambda: list(td.keys(True)), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.keys(True)))
 
 
 def test_keys_nested_locked(benchmark):
     td = big_nested_td_locked()[0][0]
     list(td.keys(True))
-    benchmark.pedantic(lambda: list(td.keys(True)), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.keys(True)))
 
 
 def test_keys_nested_leaf(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(
-        lambda: list(td.keys(True, True)),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: list(td.keys(True, True)))
 
 
 def test_keys_stack_nested(benchmark):
     td = big_nested_stacked_td()[0][0]
-    benchmark.pedantic(
-        lambda: list(td.keys(True)),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: list(td.keys(True)))
 
 
 def test_keys_stack_nested_leaf(benchmark):
     td = big_nested_stacked_td()[0][0]
-    benchmark.pedantic(
-        lambda: list(td.keys(True, True)),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: list(td.keys(True, True)))
 
 
 def test_keys_stack_nested_locked(benchmark):
     td = big_nested_stacked_td_locked()[0][0]
     list(td.keys(True))
-    benchmark.pedantic(lambda: list(td.keys(True)), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.keys(True)))
 
 
 def test_values(benchmark):
     td = big_td()[0][0]
-    benchmark.pedantic(lambda: list(td.values()), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.values()))
 
 
 def test_values_nested(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(lambda: list(td.values(True)), rounds=1000, iterations=100)
+    benchmark(lambda: list(td.values(True)))
 
 
 def test_values_nested_locked(benchmark):
     td = big_nested_td_locked()[0][0]
     list(td.values(True))
-    benchmark.pedantic(lambda: list(td.values(True)), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.values(True)))
 
 
 def test_values_nested_leaf(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(
-        lambda: list(td.values(True, True)),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: list(td.values(True, True)))
 
 
 def test_values_stack_nested(benchmark):
     td = big_nested_stacked_td()[0][0]
-    benchmark.pedantic(
-        lambda: list(td.values(True)),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: list(td.values(True)))
 
 
 def test_values_stack_nested_leaf(benchmark):
     td = big_nested_stacked_td()[0][0]
-    benchmark.pedantic(
-        lambda: list(td.values(True, True)),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: list(td.values(True, True)))
 
 
 def test_values_stack_nested_locked(benchmark):
     td = big_nested_stacked_td_locked()[0][0]
     list(td.values(True))
-    benchmark.pedantic(lambda: list(td.values(True)), rounds=1000, iterations=1)
+    benchmark(lambda: list(td.values(True)))
 
 
 def test_membership(benchmark):
     td = big_td()[0][0]
-    benchmark.pedantic(lambda: "a" in td.keys(), rounds=1000, iterations=1)
+    benchmark(lambda: "a" in td.keys())
 
 
 def test_membership_nested(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(
-        lambda: ("a",) in td.keys(True),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: ("a",) in td.keys(True))
 
 
 def test_membership_nested_leaf(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(
-        lambda: ("a",) in td.keys(True, True),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: ("a",) in td.keys(True, True))
 
 
 def test_membership_stacked_nested(benchmark):
     td = big_nested_stacked_td()[0][0]
-    benchmark.pedantic(
-        lambda: ("a",) in td.keys(True),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: ("a",) in td.keys(True))
 
 
 def test_membership_stacked_nested_leaf(benchmark):
     td = big_nested_stacked_td()[0][0]
-    benchmark.pedantic(
-        lambda: ("a",) in td.keys(True, True),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: ("a",) in td.keys(True, True))
 
 
 def test_stacked_getleaf(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(i) for i in range(19)) + ("t",)
-    benchmark.pedantic(
-        lambda: td.get(key),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: td.get(key))
 
 
 def test_stacked_get(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(i) for i in range(19))
-    benchmark.pedantic(
-        lambda: td.get(key),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: td.get(key))
 
 
 def test_lock_nested(benchmark):
     benchmark.pedantic(
-        lambda td: list(td.lock_()), setup=big_nested_td, rounds=1000, iterations=1
+        lambda td: list(td.lock_()),
+        setup=big_nested_td,
+        warmup_rounds=10,
+        rounds=1000,
+        iterations=1,
     )
 
 
@@ -295,6 +239,7 @@ def test_lock_stack_nested(benchmark):
     benchmark.pedantic(
         lambda td: list(td.lock_()),
         setup=big_nested_stacked_td,
+        warmup_rounds=10,
         rounds=1000,
         iterations=1,
     )
@@ -304,6 +249,7 @@ def test_unlock_nested(benchmark):
     benchmark.pedantic(
         lambda td: list(td.unlock_()),
         setup=big_nested_td_locked,
+        warmup_rounds=10,
         rounds=1000,
         iterations=1,
     )
@@ -313,6 +259,7 @@ def test_unlock_stack_nested(benchmark):
     benchmark.pedantic(
         lambda td: list(td.unlock_()),
         setup=big_nested_stacked_td_locked,
+        warmup_rounds=10,
         rounds=1000,
         iterations=1,
     )
@@ -320,50 +267,36 @@ def test_unlock_stack_nested(benchmark):
 
 def test_flatten_speed(benchmark):
     td = big_nested_td()[0][0]
-    benchmark.pedantic(
-        lambda: td.flatten_keys(),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: td.flatten_keys())
 
 
 def test_unflatten_speed(benchmark):
     td = big_nested_td()[0][0].flatten_keys()
-    benchmark.pedantic(
-        lambda: td.unflatten_keys(),
-        rounds=1000,
-        iterations=1,
-    )
+    benchmark(lambda: td.unflatten_keys())
 
 
 def test_common_ops(benchmark):
-    benchmark.pedantic(main, iterations=100, rounds=100)
+    benchmark(main)
 
 
 def test_creation(benchmark):
-    benchmark.pedantic(TensorDict, args=({}, [3, 4]), iterations=100, rounds=100)
+    benchmark(TensorDict, {}, [3, 4])
 
 
 def test_creation_empty(benchmark, a, b):
-    benchmark.pedantic(
-        TensorDict, args=({"a": a, "b": b}, [3, 4]), iterations=100, rounds=100
-    )
+    benchmark(TensorDict, {"a": a, "b": b}, [3, 4])
 
 
 def test_creation_nested_1(benchmark, a, b):
-    benchmark.pedantic(
-        TensorDict, args=({"a": a, ("b", "b1"): b}, [3, 4]), iterations=100, rounds=100
-    )
+    benchmark(TensorDict, {"a": a, ("b", "b1"): b}, [3, 4])
 
 
 def test_creation_nested_2(benchmark, a, b):
-    benchmark.pedantic(
-        TensorDict, args=({"a": a, "b": {"b1": b}}, [3, 4]), iterations=100, rounds=100
-    )
+    benchmark(TensorDict, {"a": a, "b": {"b1": b}}, [3, 4])
 
 
 def test_clone(benchmark, td):
-    benchmark.pedantic(td.clone, iterations=100, rounds=100)
+    benchmark(td.clone)
 
 
 @pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple", "list"])
@@ -384,7 +317,7 @@ def test_getitem(benchmark, td, c, index):
     def exec_getitem():
         _ = td[index]
 
-    benchmark.pedantic(exec_getitem, iterations=1000, rounds=1000)
+    benchmark(exec_getitem)
 
 
 @pytest.mark.parametrize("index", ["int", "slice_int", "range", "tuple"])
@@ -407,7 +340,7 @@ def test_setitem_dim(benchmark, td, c, index):
     def exec_setitem(td, td_index):
         td[index] = td_index
 
-    benchmark.pedantic(exec_setitem, setup=setup, iterations=1, rounds=10000)
+    benchmark.pedantic(exec_setitem, setup=setup, warmup_rounds=10, rounds=1000)
 
 
 def test_setitem(benchmark, td, c):
@@ -415,7 +348,7 @@ def test_setitem(benchmark, td, c):
         tdc = td.clone()
         tdc["c"] = c
 
-    benchmark.pedantic(exec_setitem, iterations=100, rounds=100)
+    benchmark(exec_setitem)
 
 
 def test_set(benchmark, td, c):
@@ -423,7 +356,7 @@ def test_set(benchmark, td, c):
         tdc = td.clone()
         tdc.set("c", c)
 
-    benchmark.pedantic(exec_set, iterations=100, rounds=100)
+    benchmark(exec_set)
 
 
 def test_set_shared(benchmark, td):
@@ -431,7 +364,7 @@ def test_set_shared(benchmark, td):
         tdc = td.clone()
         tdc.share_memory_()
 
-    benchmark.pedantic(exec_set_shared, iterations=100, rounds=100)
+    benchmark(exec_set_shared)
 
 
 def test_update(benchmark, a, b):
@@ -442,7 +375,7 @@ def test_update(benchmark, a, b):
         tdc = td.clone()
         tdc.update(td2)
 
-    benchmark.pedantic(exec_update, iterations=100, rounds=100)
+    benchmark(exec_update)
 
 
 def test_update_nested(benchmark, td):
@@ -452,7 +385,7 @@ def test_update_nested(benchmark, td):
         tdc = td.clone()
         tdc.update(td2)
 
-    benchmark.pedantic(exec_update_nested, iterations=100, rounds=100)
+    benchmark(exec_update_nested)
 
 
 def test_set_nested(benchmark, td, b):
@@ -460,7 +393,7 @@ def test_set_nested(benchmark, td, b):
         tdc = td.clone()
         tdc["b", "b1"] = b
 
-    benchmark.pedantic(exec_set_nested, iterations=100, rounds=100)
+    benchmark(exec_set_nested)
 
 
 def test_set_nested_new(benchmark, td, c):
@@ -468,7 +401,7 @@ def test_set_nested_new(benchmark, td, c):
         tdc = td.clone()
         tdc["c", "c", "c"] = c
 
-    benchmark.pedantic(exec_set_nested_new, iterations=100, rounds=100)
+    benchmark(exec_set_nested_new)
 
 
 def test_select(benchmark, td, c):
@@ -477,23 +410,17 @@ def test_select(benchmark, td, c):
         tdc["c", "c", "c"] = c
         tdc.select("a", "z", ("c", "c", "c"), strict=False)
 
-    benchmark.pedantic(exec_select, iterations=100, rounds=100)
+    benchmark(exec_select)
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 def test_to(benchmark, td):
-    benchmark.pedantic(td.to, args=("cuda:0",), iterations=100, rounds=1000)
+    benchmark(td.to, "cuda:0")
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")
 def test_to_nonblocking(benchmark, td):
-    benchmark.pedantic(
-        td.to,
-        args=("cuda:0",),
-        kwargs={"non_blocking": True},
-        iterations=100,
-        rounds=1000,
-    )
+    benchmark(td.to, "cuda:0", non_blocking=True)
 
 
 def main():
