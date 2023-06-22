@@ -42,7 +42,7 @@ def big_nested_td():
                     for i in range(1, 20)
                 },
                 [3, 4],
-            ).unflatten_keys(".")
+            ).unflatten_keys("."),
         ),
         {},
     )
@@ -67,7 +67,7 @@ def big_nested_stacked_td():
                 .unflatten_keys(".")
                 .unbind(1),
                 1,
-            )
+            ),
         ),
         {},
     )
