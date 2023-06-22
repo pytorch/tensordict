@@ -189,11 +189,11 @@ def test_vmap_mlp_speed(benchmark, stack, tdmodule):
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
         fun(data, params)
-        benchmark(fun, args=(data, params))
+        benchmark.pedantic(fun, args=(data, params))
     else:
         fun = vmap(t, (None, 0))
         fun(x, params)
-        benchmark(fun, args=(x, params))
+        benchmark.pedantic(fun, args=(x, params))
 
 
 @torch.no_grad()
@@ -225,11 +225,11 @@ def test_vmap_transformer_speed(benchmark, stack, tdmodule):
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
         fun(data, params)
-        benchmark(fun, args=(data, params))
+        benchmark.pedantic(fun, args=(data, params))
     else:
         fun = vmap(t, (None, None, 0))
         fun(x, x, params)
-        benchmark(fun, args=(x, x, params))
+        benchmark.pedantic(fun, args=(x, x, params))
 
 
 if __name__ == "__main__":
