@@ -48,6 +48,7 @@ from tensordict.utils import (
     _shape,
     _StringOnlyDict,
     _sub_index,
+    as_decorator,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -352,7 +353,9 @@ class TensorDictBase(MutableMapping):
         self._is_locked = kwargs.get("_is_locked", False)
         self._sorted_keys = None
         self._cache = None
-        self._last_op = collections.deque()
+        self._last_op = None
+        self._last_op_queue = collections.deque()
+        return self
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
@@ -1906,14 +1909,16 @@ class TensorDictBase(MutableMapping):
         return out
 
     def __enter__(self):
+        self._last_op_queue.append(self._last_op)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if len(self._last_op):
-            last_op, (args, kwargs) = self._last_op.pop()
-            if last_op is self.lock_:
+        _last_op = self._last_op_queue.pop()
+        if _last_op is not None:
+            last_op, (args, kwargs) = _last_op
+            if last_op is self.__class__.lock_.__name__:
                 return self.unlock_()
-            elif last_op is self.unlock_:
+            elif last_op is self.__class__.unlock_.__name__:
                 return self.lock_()
             else:
                 raise NotImplementedError(f"Unrecognised function {last_op}.")
@@ -3367,8 +3372,6 @@ class TensorDictBase(MutableMapping):
 
     @property
     def is_locked(self) -> bool:
-        if "_is_locked" not in self.__dict__:
-            self._is_locked = False
         return self._is_locked
 
     @is_locked.setter
@@ -3396,7 +3399,8 @@ class TensorDictBase(MutableMapping):
             self._locked_tensordicts = _locked_tensordicts
         else:
             self._locked_tensordicts += _locked_tensordicts
-    @as_decorator
+
+    @as_decorator("is_locked")
     def lock_(self) -> TensorDictBase:
         if self.is_locked:
             return self
@@ -3432,7 +3436,7 @@ class TensorDictBase(MutableMapping):
         self._sorted_keys = None
         return unlocked_tds
 
-    @as_decorator
+    @as_decorator("is_locked")
     def unlock_(self) -> TensorDictBase:
         unlock_tds = self._propagate_unlock()
         for td in unlock_tds:
@@ -3601,6 +3605,7 @@ class TensorDict(TensorDictBase):
         "_locked_tensordicts",
         "_cache",
         "_last_op",
+        "_last_op_queue",
     )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
@@ -4364,7 +4369,9 @@ class TensorDict(TensorDictBase):
 
     def __getstate__(self):
         return {
-            slot: getattr(self, slot) for slot in self.__slots__ if slot not in ("_last_op", "_cache")
+            slot: getattr(self, slot)
+            for slot in self.__slots__
+            if slot not in ("_last_op", "_cache", "_last_op_queue")
         }
 
     def __setstate__(self, state):
@@ -5586,7 +5593,7 @@ torch.Size([3, 2])
         else:
             self.unlock_()
 
-    @as_decorator
+    @as_decorator("is_locked")
     def lock_(self) -> TensorDictBase:
         # we can't lock sub-tensordicts because that would mean that the
         # parent tensordict cannot be modified either.
@@ -5596,7 +5603,7 @@ torch.Size([3, 2])
             )
         return self
 
-    @as_decorator
+    @as_decorator("is_locked")
     def unlock_(self) -> TensorDictBase:
         if self.is_locked:
             raise RuntimeError(
@@ -7423,13 +7430,13 @@ class _CustomOpTensorDict(TensorDictBase):
         else:
             self.unlock_()
 
-    @as_decorator
+    @as_decorator("is_locked")
     def lock_(self) -> TensorDictBase:
         self._source.lock_()
         return self
 
     @erase_cache
-    @as_decorator
+    @as_decorator("is_locked")
     def unlock_(self) -> TensorDictBase:
         self._source.unlock_()
         return self

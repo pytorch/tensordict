@@ -1131,7 +1131,8 @@ def lock_blocked(func):
 
     return new_func
 
-def as_decorator(func):
+
+class as_decorator:
     """Converts a method to a decorator.
 
     Examples:
@@ -1141,8 +1142,20 @@ def as_decorator(func):
         ...     assert data.is_locked
         >>> assert not data.is_locked
     """
-    @wraps(func)
-    def new_func(self, *args, **kwargs):
-        self._last_op.append(new_func, (args, kwargs))
-        return func(self, *args, kwargs)
-    return new_func
+
+    def __init__(self, attr):
+        self.attr = attr
+
+    def __call__(self, func):
+        @wraps(func)
+        def new_func(_self, *args, **kwargs):
+            _attr_pre = getattr(_self, self.attr)
+            out = func(_self, *args, **kwargs)
+            _attr_post = getattr(_self, self.attr)
+            if _attr_post is not _attr_pre:
+                _self._last_op = (new_func.__name__, (args, kwargs))
+            else:
+                _self._last_op = None
+            return out
+
+        return new_func
