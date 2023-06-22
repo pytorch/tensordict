@@ -4083,7 +4083,6 @@ class TensorDict(TensorDictBase):
     #                 )
     #     return self._default_get(key[0], default)
 
-    @cache  # noqa: B019
     def _get_tuple(self, key, default):
         first = self._get_str(key[0], None)
         if first is None:
@@ -6051,7 +6050,6 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 raise err
 
-    @cache  # noqa: B019
     def _get_tuple(self, key, default):
         first = self._get_str(key[0], None)
         if first is None:
