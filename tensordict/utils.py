@@ -1026,7 +1026,7 @@ def _unfold_sequence(seq):
 
 def _make_cache_key(args, kwargs):
     """Creats a key for the cache such that memory footprint is minimized."""
-    return (*_unfold_sequence(args), *_unfold_sequence(kwargs.items()))
+    return (*_unfold_sequence(args), *_unfold_sequence(sorted(kwargs.items())))
 
 def cache(fun):
     """A cache for TensorDictBase subclasses.
@@ -1061,7 +1061,7 @@ def cache(fun):
         if cache is None:
             cache = _self._cache = defaultdict(dict)
         cache = cache[fun.__name__]
-        key = tuple(args) + tuple(sorted(kwargs.items()))
+        key = _make_cache_key(args, kwargs)
         if key not in cache:
             out = fun(_self, *args, **kwargs)
             if not isinstance(out, (Tensor, MemmapTensor, KeyedJaggedTensor)):
