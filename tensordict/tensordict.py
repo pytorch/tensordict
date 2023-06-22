@@ -6964,16 +6964,23 @@ class LazyStackedTensorDict(TensorDictBase):
     @property
     def is_locked(self) -> bool:
         if self._is_locked is not None:
+            # if tensordicts have been locked through this Lazy stack, then we can
+            # trust this lazy stack to contain the info.
+            # In all other cases we must check
             return self._is_locked
-
-        # we don't cache the value because we want that if any of the sub-tds is
-        # locked this object also results as locked.
-        # We can however cache it if the LazyStack is locked directly.
+        # If any of the tensordicts is not locked, we assume that the lazy stack
+        # is not locked either. Caching is then disabled and
         for td in self.tensordicts:
-            if td.is_locked:
-                return True
+            if not td.is_locked:
+                return False
         else:
-            return False
+            # In this case, all tensordicts were locked before the lazy stack
+            # was created and they were not locked through the lazy stack.
+            # This means we cannot cache the value because this lazy stack
+            # if not part of the graph. We don't want it to be part of the graph
+            # because this object being locked is only a side-effect.
+            # Calling self.lock_() here could however speed things up.
+            return True
 
     @is_locked.setter
     def is_locked(self, value: bool) -> None:
@@ -7026,6 +7033,11 @@ class LazyStackedTensorDict(TensorDictBase):
         return unlocked_tds
 
     def __del__(self):
+        if self._is_locked is None:
+            # then we can reliably say that this lazy stack is not part of
+            # the tensordicts graphs
+            return
+        # this can be a perf bottleneck
         for td in self.tensordicts:
             td._remove_lock(id(self))
 
