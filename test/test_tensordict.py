@@ -5207,11 +5207,24 @@ class TestLock:
         td.unlock_()
         assert td._is_locked is None
         td0.lock_()
+        # all tds must be locked
+        assert not td.is_locked
+        # lock td1
+        td1.lock_()
+        # we can unlock td0, even though td is locked
         assert td.is_locked
         assert td._is_locked is None  # lock wasn't called on td
+        td0.unlock_()
         td.unlock_()
         assert not td0.is_locked
         assert td._is_locked is None
+
+        td.lock_()
+        assert td1.is_locked
+        assert td0.is_locked
+        with pytest.raises(RuntimeError):
+            td1.unlock_()
+        assert td1.is_locked
 
         # create a parent to td
         super_td = TensorDict({"td": td}, [])
