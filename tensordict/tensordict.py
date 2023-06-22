@@ -4062,26 +4062,45 @@ class TensorDict(TensorDictBase):
             return self._default_get(first_key, default)
         return out
 
+    # @cache  # noqa: B019
+    # def _get_tuple(self, key, default):
+    #     if len(key) == 1:
+    #         return self._get_str(key[0], default)
+    #     leaf = self._get_tuple(key[:-1], None)
+    #     # first_key = key[0]
+    #     # out = self._tensordict.get(first_key, None)
+    #     if leaf is not None:
+    #         try:
+    #             if isinstance(leaf, KeyedJaggedTensor):
+    #                 return leaf[key[-1]]
+    #             else:
+    #                 return leaf._get_str(key[-1], default=default)
+    #         except AttributeError as err:
+    #             if "has no attribute" in str(err):
+    #                 raise ValueError(
+    #                     f"Expected a TensorDictBase instance but got {type(leaf)} instead"
+    #                     f" for key '{key[:-1]}' in tensordict:\n{self}."
+    #                 )
+    #     return self._default_get(key[0], default)
+
     @cache  # noqa: B019
     def _get_tuple(self, key, default):
+        first = self._get_str(key[0], default)
         if len(key) == 1:
-            return self._get_str(key[0], default)
-        leaf = self._get_tuple(key[:-1], None)
-        # first_key = key[0]
-        # out = self._tensordict.get(first_key, None)
-        if leaf is not None:
-            try:
-                if isinstance(leaf, KeyedJaggedTensor):
-                    return leaf[key[-1]]
-                else:
-                    return leaf._get_str(key[-1], default=default)
-            except AttributeError as err:
-                if "has no attribute" in str(err):
-                    raise ValueError(
-                        f"Expected a TensorDictBase instance but got {type(leaf)} instead"
-                        f" for key '{key[:-1]}' in tensordict:\n{self}."
-                    )
-        return self._default_get(key[0], default)
+            return first
+        try:
+            if isinstance(first, KeyedJaggedTensor):
+                if len(key) != 2:
+                    raise ValueError(f"Got too many keys for a KJT: {key}.")
+                return first[key[-1]]
+            else:
+                return first._get_tuple(key[1:], default=default)
+        except AttributeError as err:
+            if "has no attribute" in str(err):
+                raise ValueError(
+                    f"Expected a TensorDictBase instance but got {type(first)} instead"
+                    f" for key '{key[1:]}' in tensordict:\n{self}."
+                )
 
     def share_memory_(self) -> TensorDictBase:
         if self.is_memmap():
@@ -6032,11 +6051,22 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @cache  # noqa: B019
     def _get_tuple(self, key, default):
+        first = self._get_str(key[0], default)
+        if len(key) == 1:
+            return first
         try:
-            tensordict, key = _get_leaf_tensordict(self, key)
-        except KeyError:
-            return self._default_get(key, default)
-        return tensordict.get(key, default=default)
+            if isinstance(first, KeyedJaggedTensor):
+                if len(key) != 2:
+                    raise ValueError(f"Got too many keys for a KJT: {key}.")
+                return first[key[-1]]
+            else:
+                return first._get_tuple(key[1:], default=default)
+        except AttributeError as err:
+            if "has no attribute" in str(err):
+                raise ValueError(
+                    f"Expected a TensorDictBase instance but got {type(first)} instead"
+                    f" for key '{key[1:]}' in tensordict:\n{self}."
+                )
 
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
