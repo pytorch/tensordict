@@ -61,7 +61,6 @@ class clone_input_when_vmap:
             needed_cloning = False
             for expected_td in self.tensordict_args:
                 tensordict, pointer = self.find_tensordict(args, kwargs, expected_td)
-                if ten
                 found.add(tensordict)
                 next_current_len = len(found)
                 if next_current_len == current_len:

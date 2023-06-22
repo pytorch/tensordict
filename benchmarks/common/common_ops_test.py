@@ -90,7 +90,7 @@ def test_items_nested(benchmark):
 def test_items_nested_locked(benchmark):
     td = big_nested_td_locked()[0][0]
     list(td.items(True))
-    benchmark(lambda: list(td.items(True)))
+    benchmark.pedantic(lambda: list(td.items(True)), rounds=10000, iterations=10)
 
 
 def test_items_nested_leaf(benchmark):
