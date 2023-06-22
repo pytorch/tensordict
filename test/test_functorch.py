@@ -9,7 +9,7 @@ import pytest
 import torch
 from _utils_internal import expand_list
 
-from tensordict import TensorDict
+from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.functional_modules import (
     get_functional,
@@ -289,6 +289,32 @@ class TestVmap:
 
         c = vmap(fun, (None, 0))(a, b)
         assert c.names == [None, "B"]
+
+    @pytest.mark.parametrize("out_dim", [0, 1])
+    @pytest.mark.parametrize("in_dim", [0, 1])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("lock_x", [True, False])
+    @pytest.mark.parametrize("lock_y", [True, False])
+    def test_vmap_write_lazystack(self, in_dim, out_dim, stack_dim, lock_x, lock_y):
+        fun = vmap(
+            lambda x, y: x.set("a", y.get("a") + x.get("a")),
+            (in_dim, in_dim),
+            (out_dim,),
+        )
+        td0 = TensorDict({"a": [1.0]}, [1])
+        td1 = TensorDict({"a": [2.0]}, [1])
+        x = torch.stack([td0, td0.clone()], stack_dim)
+        y = torch.stack([td1, td1.clone()], stack_dim)
+        if lock_x:
+            x.lock_()
+        if lock_y:
+            y.lock_()
+        out = fun(x, y)
+        assert isinstance(out, LazyStackedTensorDict)
+        if out_dim == 0:
+            assert out.shape[out_dim] == x.shape[in_dim]
+        else:
+            assert out.shape[out_dim] == x.shape[in_dim]
 
 
 class TestFunctionalization:
