@@ -464,8 +464,7 @@ def _normalize_key(key: NestedKey) -> NestedKey:
 
 
 def index_keyedjaggedtensor(
-    kjt: KeyedJaggedTensor,
-    index: slice | range | list | torch.Tensor | np.ndarray,
+    kjt: KeyedJaggedTensor, index: slice | range | list | torch.Tensor | np.ndarray
 ) -> KeyedJaggedTensor:
     """Indexes a KeyedJaggedTensor along the batch dimension.
 
@@ -517,10 +516,7 @@ def index_keyedjaggedtensor(
     values = kjt._values[full_index]
     weights = kjt._weights[full_index]
     return KeyedJaggedTensor(
-        values=values,
-        keys=kjt.keys(),
-        weights=weights,
-        lengths=lengths,
+        values=values, keys=kjt.keys(), weights=weights, lengths=lengths
     )
 
 
@@ -1015,6 +1011,25 @@ class implement_for:
             cls._setters.append(setter)
 
 
+def _unfold_sequence(seq):
+    for item in seq:
+        if isinstance(item, (list, tuple)):
+            yield tuple(_unfold_sequence(item))
+        else:
+            if isinstance(item, (str, int, slice)) or item is Ellipsis:
+                yield item
+            else:
+                yield id(item)
+
+
+def _make_cache_key(args, kwargs):
+    """Creats a key for the cache such that memory footprint is minimized."""
+    return (
+        tuple(_unfold_sequence(args)),
+        tuple(_unfold_sequence(sorted(kwargs.items()))),
+    )
+
+
 def cache(fun):
     """A cache for TensorDictBase subclasses.
 
@@ -1048,7 +1063,7 @@ def cache(fun):
         if cache is None:
             cache = _self._cache = defaultdict(dict)
         cache = cache[fun.__name__]
-        key = tuple(args) + tuple(sorted(kwargs.items()))
+        key = _make_cache_key(args, kwargs)
         if key not in cache:
             out = fun(_self, *args, **kwargs)
             if not isinstance(out, (Tensor, MemmapTensor, KeyedJaggedTensor)):
