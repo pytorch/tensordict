@@ -56,18 +56,15 @@ def test_tdmodule(benchmark):
     benchmark.pedantic(
         lambda net, td: net(td),
         setup=make_tdmodule,
+        warmup_rounds=10,
+        rounds=1000,
         iterations=1,
-        rounds=10_000,
-        warmup_rounds=1000,
     )
 
 
 def make_tdmodule_dispatch():
     return (
-        (
-            TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["y"]),
-            torch.zeros(()),
-        ),
+        (TensorDictModule(lambda x: x, in_keys=["x"], out_keys=["y"]), torch.zeros(())),
         {},
     )
 
@@ -76,9 +73,9 @@ def test_tdmodule_dispatch(benchmark):
     benchmark.pedantic(
         lambda net, x: net(x),
         setup=make_tdmodule_dispatch,
+        warmup_rounds=10,
+        rounds=1000,
         iterations=1,
-        rounds=10_000,
-        warmup_rounds=1000,
     )
 
 
@@ -91,21 +88,14 @@ def make_tdseq():
             return tensordict.set("y", tensordict.get("x"))
 
     return (
-        (
-            TensorDictSequential(MyModule()),
-            TensorDict({"x": torch.zeros(())}, []),
-        ),
+        (TensorDictSequential(MyModule()), TensorDict({"x": torch.zeros(())}, [])),
         {},
     )
 
 
 def test_tdseq(benchmark):
     benchmark.pedantic(
-        lambda net, td: net(td),
-        setup=make_tdseq,
-        iterations=1,
-        rounds=10_000,
-        warmup_rounds=1000,
+        lambda net, td: net(td), setup=make_tdseq, warmup_rounds=10, rounds=1000
     )
 
 
@@ -117,50 +107,36 @@ def make_tdseq_dispatch():
         def forward(self, tensordict):
             return tensordict.set("y", tensordict.get("x"))
 
-    return (
-        (
-            TensorDictSequential(MyModule()),
-            torch.zeros(()),
-        ),
-        {},
-    )
+    return ((TensorDictSequential(MyModule()), torch.zeros(())), {})
 
 
 def test_tdseq_dispatch(benchmark):
     benchmark.pedantic(
-        lambda net, x: net(x),
-        setup=make_tdseq_dispatch,
-        iterations=1,
-        rounds=10_000,
-        warmup_rounds=1000,
+        lambda net, x: net(x), setup=make_tdseq_dispatch, warmup_rounds=10, rounds=1000
     )
 
 
 # Creation
 def test_instantiation_functorch(benchmark, net):
-    benchmark.pedantic(
-        _functorch_make_functional, args=(net,), iterations=10, rounds=100
-    )
+    benchmark(_functorch_make_functional, net)
 
 
 def test_instantiation_td(benchmark, net):
-    benchmark.pedantic(_make_functional, args=(net,), iterations=10, rounds=100)
+    benchmark(_make_functional, net)
 
 
 # Execution
 def test_exec_functorch(benchmark, net):
     x = torch.randn(2, 2)
     fmodule, params, buffers = functorch_make_functional(net)
-    benchmark.pedantic(fmodule, args=(params, buffers, x), iterations=100, rounds=100)
+    benchmark(fmodule, params, buffers, x)
 
 
 def test_exec_td(benchmark, net):
     x = torch.randn(2, 2)
     fmodule = net
     params = make_functional(fmodule)
-    benchmark.pedantic(
-        fmodule, args=(x,), kwargs={"params": params}, iterations=100, rounds=100
-    )
+    benchmark(fmodule, x, params=params)
 
 
 @torch.no_grad()
@@ -193,11 +169,11 @@ def test_vmap_mlp_speed(benchmark, stack, tdmodule):
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
         fun(data, params)
-        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=100)
+        benchmark(fun, data, params)
     else:
         fun = vmap(t, (None, 0))
         fun(x, params)
-        benchmark.pedantic(fun, args=(x, params), rounds=100, iterations=100)
+        benchmark(fun, x, params)
 
 
 @torch.no_grad()
@@ -229,11 +205,11 @@ def test_vmap_transformer_speed(benchmark, stack, tdmodule):
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
         fun(data, params)
-        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=100)
+        benchmark(fun, data, params)
     else:
         fun = vmap(t, (None, None, 0))
         fun(x, x, params)
-        benchmark.pedantic(fun, args=(x, x, params), rounds=100, iterations=100)
+        benchmark(fun, x, x, params)
 
 
 if __name__ == "__main__":

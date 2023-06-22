@@ -36,44 +36,56 @@ def tc(a, b):
 
 
 def test_unbind(benchmark, tc):
-    benchmark.pedantic(torch.unbind, args=(tc, 0), iterations=10, rounds=10)
+    benchmark(torch.unbind, tc, 0)
 
 
 def test_full_like(benchmark, tc):
-    benchmark.pedantic(torch.full_like, args=(tc, 2.0), iterations=10, rounds=10)
+    benchmark(torch.full_like, tc, 2.0)
 
 
 def test_zeros_like(benchmark, tc):
-    benchmark.pedantic(torch.zeros_like, args=(tc,), iterations=10, rounds=10)
+    benchmark(
+        torch.zeros_like,
+        tc,
+    )
 
 
 def test_ones_like(benchmark, tc):
-    benchmark.pedantic(torch.ones_like, args=(tc,), iterations=10, rounds=10)
+    benchmark(
+        torch.ones_like,
+        tc,
+    )
 
 
 def test_clone(benchmark, tc):
-    benchmark.pedantic(torch.clone, args=(tc,), iterations=10, rounds=10)
+    benchmark(
+        torch.clone,
+        tc,
+    )
 
 
 def test_squeeze(benchmark, tc):
-    benchmark.pedantic(torch.squeeze, args=(tc,), iterations=10, rounds=10)
+    benchmark(
+        torch.squeeze,
+        tc,
+    )
 
 
 def test_unsqueeze(benchmark, tc):
-    benchmark.pedantic(torch.unsqueeze, args=(tc, 0), iterations=10, rounds=10)
+    benchmark(torch.unsqueeze, tc, 0)
 
 
 def test_split(benchmark, tc):
-    benchmark.pedantic(torch.split, args=(tc, [200, 100]), iterations=10, rounds=10)
+    benchmark(torch.split, tc, [200, 100])
 
 
 def test_permute(benchmark, tc):
-    benchmark.pedantic(torch.permute, args=(tc, [1, 0]), iterations=10, rounds=10)
+    benchmark(torch.permute, tc, [1, 0])
 
 
 def test_stack(benchmark, tc):
-    benchmark.pedantic(torch.stack, args=([tc] * 3, 0), iterations=10, rounds=10)
+    benchmark(torch.stack, [tc] * 3, 0)
 
 
 def test_cat(benchmark, tc):
-    benchmark.pedantic(torch.cat, args=([tc] * 3, 0), iterations=10, rounds=10)
+    benchmark(torch.cat, [tc] * 3, 0)

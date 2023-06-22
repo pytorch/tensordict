@@ -17,7 +17,7 @@ def rank(pytestconfig):
 
 
 def test_distributed(benchmark, rank):
-    benchmark.pedantic(exec_distributed_test, args=(rank,), iterations=1)
+    benchmark(exec_distributed_test, rank)
 
 
 class CloudpickleWrapper(object):
@@ -83,18 +83,10 @@ def exec_distributed_test(rank_node):
 
         fill_tensordict_cp = CloudpickleWrapper(fill_tensordict)
         idx = [0, 1, 2, 3, 999]
-        rpc.rpc_sync(
-            worker_info,
-            fill_tensordict_cp,
-            args=(tensordict, idx),
-        )
+        rpc.rpc_sync(worker_info, fill_tensordict_cp, args=(tensordict, idx))
 
         idx = [4, 5, 6, 7, 998]
-        rpc.rpc_sync(
-            worker_info,
-            fill_tensordict_cp,
-            args=(tensordict, idx),
-        )
+        rpc.rpc_sync(worker_info, fill_tensordict_cp, args=(tensordict, idx))
 
         rpc.shutdown()
     elif rank == 1:
