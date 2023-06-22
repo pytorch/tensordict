@@ -1714,15 +1714,69 @@ class TensorDictBase(MutableMapping):
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> Iterator[tuple[str, CompatibleType]]:
         """Returns a generator of key-value pairs for the tensordict."""
-        for k in self.keys(include_nested=include_nested, leaves_only=leaves_only):
-            yield k, self.get(k)
+        # check the conditions once only
+        if include_nested and leaves_only:
+            for k in self.keys():
+                val = self._get_str(k, NO_DEFAULT)
+                if _is_tensor_collection(val.__class__):
+                    yield from (
+                        (unravel_keys((k, _key)), _val)
+                        for _key, _val in val.items(
+                            include_nested=include_nested, leaves_only=leaves_only
+                        )
+                    )
+                else:
+                    yield k, val
+        elif include_nested:
+            for k in self.keys():
+                val = self._get_str(k, NO_DEFAULT)
+                yield k, val
+                if _is_tensor_collection(val.__class__):
+                    yield from (
+                        (unravel_keys((k, _key)), _val)
+                        for _key, _val in val.items(
+                            include_nested=include_nested, leaves_only=leaves_only
+                        )
+                    )
+        elif leaves_only:
+            for k in self.keys():
+                val = self._get_str(k, NO_DEFAULT)
+                if not _is_tensor_collection(val.__class__):
+                    yield k, val
+        else:
+            for k in self.keys():
+                yield k, self._get_str(k, NO_DEFAULT)
 
     def values(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> Iterator[CompatibleType]:
         """Returns a generator representing the values for the tensordict."""
-        for k in self.keys(include_nested=include_nested, leaves_only=leaves_only):
-            yield self.get(k)
+        # check the conditions once only
+        if include_nested and leaves_only:
+            for k in self.keys():
+                val = self._get_str(k, NO_DEFAULT)
+                if _is_tensor_collection(val.__class__):
+                    yield from val.values(
+                        include_nested=include_nested, leaves_only=leaves_only
+                    )
+                else:
+                    yield val
+        elif include_nested:
+            for k in self.keys():
+                val = self._get_str(k, NO_DEFAULT)
+                yield val
+                if _is_tensor_collection(val.__class__):
+                    yield from val.values(
+                        include_nested=include_nested, leaves_only=leaves_only
+                    )
+        elif leaves_only:
+            for k in self.keys():
+                val = self._get_str(k, NO_DEFAULT)
+                if not _is_tensor_collection(val.__class__):
+                    yield val
+        else:
+            for k in self.keys():
+                yield self._get_str(k, NO_DEFAULT)
 
     @abc.abstractmethod
     def keys(
@@ -4084,26 +4138,25 @@ class TensorDict(TensorDictBase):
             return self._default_get(first_key, default)
         return out
 
-    @cache  # noqa: B019
     def _get_tuple(self, key, default):
+        first = self._get_str(key[0], None)
+        if first is None:
+            return self._default_get(first, default)
         if len(key) == 1:
-            return self._get_str(key[0], default)
-        leaf = self._get_tuple(key[:-1], None)
-        # first_key = key[0]
-        # out = self._tensordict.get(first_key, None)
-        if leaf is not None:
-            try:
-                if isinstance(leaf, KeyedJaggedTensor):
-                    return leaf[key[-1]]
-                else:
-                    return leaf._get_str(key[-1], default=default)
-            except AttributeError as err:
-                if "has no attribute" in str(err):
-                    raise ValueError(
-                        f"Expected a TensorDictBase instance but got {type(leaf)} instead"
-                        f" for key '{key[:-1]}' in tensordict:\n{self}."
-                    )
-        return self._default_get(key[0], default)
+            return first
+        try:
+            if isinstance(first, KeyedJaggedTensor):
+                if len(key) != 2:
+                    raise ValueError(f"Got too many keys for a KJT: {key}.")
+                return first[key[1]]
+            else:
+                return first._get_tuple(key[1:], default=default)
+        except AttributeError as err:
+            if "has no attribute" in str(err):
+                raise ValueError(
+                    f"Expected a TensorDictBase instance but got {type(first)} instead"
+                    f" for key '{key[1:]}' in tensordict:\n{self}."
+                )
 
     def share_memory_(self) -> TensorDictBase:
         if self.is_memmap():
@@ -6039,7 +6092,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     out.callback = self.callback
                 else:
                     # then it's a tensorclass
-                    out._tensordict.callbacl = self.callback
+                    out._tensordict.callback = self.callback
             elif self.callback is not None:
                 out = self.callback(out)
             return out
@@ -6057,13 +6110,25 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 raise err
 
-    @cache  # noqa: B019
     def _get_tuple(self, key, default):
+        first = self._get_str(key[0], None)
+        if first is None:
+            return self._default_get(first, default)
+        if len(key) == 1:
+            return first
         try:
-            tensordict, key = _get_leaf_tensordict(self, key)
-        except KeyError:
-            return self._default_get(key, default)
-        return tensordict.get(key, default=default)
+            if isinstance(first, KeyedJaggedTensor):
+                if len(key) != 2:
+                    raise ValueError(f"Got too many keys for a KJT: {key}.")
+                return first[key[-1]]
+            else:
+                return first._get_tuple(key[1:], default=default)
+        except AttributeError as err:
+            if "has no attribute" in str(err):
+                raise ValueError(
+                    f"Expected a TensorDictBase instance but got {type(first)} instead"
+                    f" for key '{key[1:]}' in tensordict:\n{self}."
+                )
 
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
