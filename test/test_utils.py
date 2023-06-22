@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 import torch
 
-from tensordict.utils import _getitem_batch_size
+from tensordict.utils import _getitem_batch_size, _make_cache_key
 
 
 @pytest.mark.parametrize("tensor", [torch.rand(2, 3, 4, 5), torch.rand(2, 3, 4, 5, 6)])
@@ -104,6 +104,12 @@ def test_getitem_batch_size_mask(tensor, idx, ndim, slice_leading_dims):
         index = (0,) * idx + (mask,)
     assert tensor[index].shape == _getitem_batch_size(tensor.shape, index)
 
+def test_make_cache_key():
+    Q = torch.rand(3)
+    V = torch.zeros(2)
+    args = (1, 2, Q)
+    kwargs = {"a": V, "b": "c"}
+    assert _make_cache_key(args, kwargs) == (1, 2, id(Q), "a", id(V), "b", "c")
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
