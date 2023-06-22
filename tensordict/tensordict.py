@@ -6171,7 +6171,9 @@ class LazyStackedTensorDict(TensorDictBase):
 
         def hook_out(tensor, in_dim=in_dim, vmap_level=vmap_level):
             return _add_batch_dim(tensor, in_dim, vmap_level)
+
         n = len(td.tensordicts)
+
         def hook_in(
             tensor,
             out_dim=in_dim,
