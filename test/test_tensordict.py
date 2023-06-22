@@ -1127,7 +1127,7 @@ class TestTensorDicts(TestTensorDictsBase):
         tdnone = td[idx]
         tensor = torch.zeros(td.shape)
         assert tdnone.shape == tensor[idx].shape, idx
-         # Fixed by 451
+        # Fixed by 451
         # if td_name == "td_h5":
         #     with pytest.raises(TypeError, match="can't process None"):
         #         assert (tdnone.to_tensordict() == td.to_tensordict()[idx]).all()
