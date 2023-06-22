@@ -264,27 +264,27 @@ def test_stacked_get(benchmark):
 
 
 def test_lock_nested(benchmark):
-    benchmark(
+    benchmark.pedantic(
         lambda td: list(td.lock_()), setup=big_nested_td, rounds=1000, iterations=1
     )
 
 
 def test_lock_stack_nested(benchmark):
-    benchmark(
+    benchmark.pedantic(
         lambda td: list(td.lock_()),
         setup=big_nested_stacked_td,
     )
 
 
 def test_unlock_nested(benchmark):
-    benchmark(
+    benchmark.pedantic(
         lambda td: list(td.unlock_()),
         setup=big_nested_td_locked,
     )
 
 
 def test_unlock_stack_nested(benchmark):
-    benchmark(
+    benchmark.pedantic(
         lambda td: list(td.unlock_()),
         setup=big_nested_stacked_td_locked,
     )
@@ -311,22 +311,22 @@ def test_common_ops(benchmark):
 
 
 def test_creation(benchmark):
-    benchmark(
+    benchmark.pedantic(
         TensorDict,
         args=({}, [3, 4]),
     )
 
 
 def test_creation_empty(benchmark, a, b):
-    benchmark(TensorDict, args=({"a": a, "b": b}, [3, 4]))
+    benchmark.pedantic(TensorDict, args=({"a": a, "b": b}, [3, 4]))
 
 
 def test_creation_nested_1(benchmark, a, b):
-    benchmark(TensorDict, args=({"a": a, ("b", "b1"): b}, [3, 4]))
+    benchmark.pedantic(TensorDict, args=({"a": a, ("b", "b1"): b}, [3, 4]))
 
 
 def test_creation_nested_2(benchmark, a, b):
-    benchmark(TensorDict, args=({"a": a, "b": {"b1": b}}, [3, 4]))
+    benchmark.pedantic(TensorDict, args=({"a": a, "b": {"b1": b}}, [3, 4]))
 
 
 def test_clone(benchmark, td):

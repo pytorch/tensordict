@@ -34,7 +34,7 @@ def td_memmap():
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_creation(benchmark, device):
-    benchmark(
+    benchmark.pedantic(
         MemmapTensor,
         args=(3, 4, 5),
         kwargs={"device": device},
@@ -42,7 +42,7 @@ def test_creation(benchmark, device):
 
 
 def test_creation_from_tensor(benchmark, tensor):
-    benchmark(
+    benchmark.pedantic(
         MemmapTensor.from_tensor,
         args=(tensor,),
     )
@@ -61,28 +61,28 @@ def test_contiguous(benchmark, memmap_tensor):
 
 
 def test_stack(benchmark, memmap_tensor):
-    benchmark(
+    benchmark.pedantic(
         torch.stack,
         args=([memmap_tensor] * 2, 0),
     )
 
 
 def test_memmaptd_index(benchmark, td_memmap):
-    benchmark(
+    benchmark.pedantic(
         lambda td: td[0],
         args=(td_memmap,),
     )
 
 
 def test_memmaptd_index_astensor(benchmark, td_memmap):
-    benchmark(
+    benchmark.pedantic(
         lambda td: td[0].as_tensor(),
         args=(td_memmap,),
     )
 
 
 def test_memmaptd_index_op(benchmark, td_memmap):
-    benchmark(
+    benchmark.pedantic(
         lambda td: td[0].apply(lambda x: x + 1),
         args=(td_memmap,),
     )
