@@ -1015,9 +1015,10 @@ class implement_for:
             cls._setters.append(setter)
 
 
-def cache(fun):
+class cache:
     """A cache for TensorDictBase subclasses.
 
+    TODO: modify this
     This decorator will cache the values returned by a method as long as the
     input arguments match.
     Leaves (tensors and such) are not cached.
@@ -1038,19 +1039,27 @@ def cache(fun):
         >>> print(timeit.timeit("set(td.all_keys())", globals={'td': td}))
         0.88
     """
-    from tensordict.memmap import MemmapTensor
 
-    @wraps(fun)
-    def newfun(_self: "TensorDictBase", *args, **kwargs):
+    def __new__(cls, func):
+        self = super().__new__(cls)
+        return wraps(func)(self)
+
+    def __init__(self, func):
+        self.func = func
+        self._self = func.__self__
+
+    def __call__(self, *args, **kwargs):
+        _self = self._self
         if not _self.is_locked:
-            return fun(_self, *args, **kwargs)
+            raise RuntimeError("Only locked tensordict can be cached.")
         cache = _self._cache
         if cache is None:
             cache = _self._cache = defaultdict(dict)
-        cache = cache[fun.__name__]
+        cache = cache[self.func.__name__]
         key = tuple(args) + tuple(sorted(kwargs.items()))
         if key not in cache:
-            out = fun(_self, *args, **kwargs)
+            from tensordict.memmap import MemmapTensor
+            out = self.func(*args, **kwargs)
             if not isinstance(out, (Tensor, MemmapTensor, KeyedJaggedTensor)):
                 # we don't cache tensors to avoid filling the mem and / or
                 # stacking them from their origin
@@ -1059,8 +1068,8 @@ def cache(fun):
             out = cache[key]
         return out
 
-    return newfun
-
+    def pop(self):
+        return self.func
 
 def erase_cache(fun):
     """A decorator to erase the cache at each call."""
