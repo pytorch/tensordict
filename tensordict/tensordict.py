@@ -1715,8 +1715,11 @@ class TensorDictBase(MutableMapping):
             for k in self.keys():
                 val = self._get_str(k, NO_DEFAULT)
                 if _is_tensor_collection(val.__class__):
-                    yield from val.items(
-                        include_nested=include_nested, leaves_only=leaves_only
+                    yield from (
+                        (unravel_keys((k, _key)), _val)
+                        for _key, _val in val.items(
+                            include_nested=include_nested, leaves_only=leaves_only
+                        )
                     )
                 else:
                     yield k, val
@@ -1725,8 +1728,11 @@ class TensorDictBase(MutableMapping):
                 val = self._get_str(k, NO_DEFAULT)
                 yield k, val
                 if _is_tensor_collection(val.__class__):
-                    yield from val.items(
-                        include_nested=include_nested, leaves_only=leaves_only
+                    yield from (
+                        (unravel_keys((k, _key)), _val)
+                        for _key, _val in val.items(
+                            include_nested=include_nested, leaves_only=leaves_only
+                        )
                     )
         elif leaves_only:
             for k in self.keys():
