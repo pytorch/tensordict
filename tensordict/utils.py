@@ -1014,23 +1014,19 @@ class implement_for:
             setter(setter.fn)
             cls._setters.append(setter)
 
-def _unfold_sequence(seq, out):
+def _unfold_sequence(seq):
     for item in seq:
         if isinstance(item, (list, tuple)):
-            _unfold_sequence(item, out)
+            yield from _unfold_sequence(item)
         else:
             if isinstance(item, (str, int, slice, )) or item is Ellipsis:
-                out.append(item)
+                yield item
             else:
-                out.append(id(item))
-    return out
+                yield id(item)
 
 def _make_cache_key(args, kwargs):
     """Creats a key for the cache such that memory footprint is minimized."""
-    out = []
-    out = _unfold_sequence(args, out)
-    out = _unfold_sequence(kwargs.items(), out)
-    return out
+    return (*_unfold_sequence(args), *_unfold_sequence(kwargs.items()))
 
 def cache(fun):
     """A cache for TensorDictBase subclasses.
