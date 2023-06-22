@@ -5717,7 +5717,7 @@ class LazyStackedTensorDict(TensorDictBase):
             same batch size.
          stack_dim (int): a dimension (between `-td.ndimension()` and
             `td.ndimension()-1` along which the stack should be performed.
-         callback (callable, optional): a callable to execute after :meth:`~.get`.
+         hook_out (callable, optional): a callable to execute after :meth:`~.get`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -5742,7 +5742,8 @@ class LazyStackedTensorDict(TensorDictBase):
         self,
         *tensordicts: TensorDictBase,
         stack_dim: int = 0,
-        callback: callable | None = None,
+        hook_out: callable | None = None,
+        hook_in: callable | None = None,
         batch_size: Sequence[int] | None = None,  # TODO: remove
     ) -> None:
         self._is_shared = False
@@ -5788,7 +5789,8 @@ class LazyStackedTensorDict(TensorDictBase):
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
         self._update_valid_keys()
-        self.callback = callback
+        self.hook_out = hook_out
+        self.hook_in = hook_in
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
@@ -5949,6 +5951,8 @@ class LazyStackedTensorDict(TensorDictBase):
         #     raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
         tensor = self._validate_value(tensor)
+        if self.hook_in is not None:
+            tensor = self.hook_in(tensor)
         for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
             td.set(key, _item, inplace=inplace)
 
@@ -6089,12 +6093,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 if self._td_dim_names is not None:
                     out.refine_names(*self.names, *out.names[self.ndim :])
                 if isinstance(out, TensorDictBase):
-                    out.callback = self.callback
+                    out.hook_out = self.hook_out
+                    out.hook_in = self.hook_in
                 else:
                     # then it's a tensorclass
-                    out._tensordict.callback = self.callback
-            elif self.callback is not None:
-                out = self.callback(out)
+                    out._tensordict.hook_out = self.hook_out
+                    out._tensordict.hook_in = self.hook_in
+            if self.hook_out is not None:
+                out = self.hook_out(out)
             return out
         except RuntimeError as err:
             if "stack expects each tensor to be equal size" in str(err):
@@ -6156,17 +6162,28 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         return LazyStackedTensorDict(*tds, stack_dim=stack_dim)
 
-    @staticmethod
-    def _cached_add_batch_dims(td, in_dim, vmap_level):
-        # we return a stack with callback, and hack the batch_size and names
+    @classmethod
+    def _cached_add_batch_dims(cls, td, in_dim, vmap_level):
+        # we return a stack with hook_out, and hack the batch_size and names
         # Per se it is still a LazyStack but the stacking dim is "hidden" from
         # the outside
         out = td.clone(False)
 
-        def callback(tensor, in_dim=in_dim, vmap_level=vmap_level):
+        def hook_out(tensor, in_dim=in_dim, vmap_level=vmap_level):
             return _add_batch_dim(tensor, in_dim, vmap_level)
 
-        out.callback = callback
+        n = len(td.tensordicts)
+
+        def hook_in(
+            tensor,
+            out_dim=in_dim,
+            batch_size=n,
+            vmap_level=vmap_level,
+        ):
+            return _remove_batch_dim(tensor, vmap_level, batch_size, out_dim)
+
+        out.hook_out = hook_out
+        out.hook_in = hook_in
         out._batch_size = torch.Size(
             [dim for i, dim in enumerate(out._batch_size) if i != out.stack_dim]
         )
@@ -6176,12 +6193,12 @@ class LazyStackedTensorDict(TensorDictBase):
             ]
         else:
             out._td_dim_names = [None] * out.ndim
-        return out.lock_()
+        return out
 
     @cache  # noqa: B019
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
-        if self.callback is not None:
-            # this is the hacked version. We just need to remove the callback and
+        if self.hook_out is not None:
+            # this is the hacked version. We just need to remove the hook_out and
             # reset a proper batch size
             return LazyStackedTensorDict(
                 *self.tensordicts,
