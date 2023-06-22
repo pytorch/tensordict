@@ -864,6 +864,21 @@ class TestTensorDicts(TestTensorDictsBase):
             if is_tensor_collection(val):
                 assert td._cache is None
 
+    def test_enter_exit(self, td_name, device):
+        torch.manual_seed(1)
+        if td_name in ("sub_td", "sub_td2"):
+            return
+        td = getattr(self, td_name)(device)
+        is_locked = td.is_locked
+        with td.lock_() as other:
+            assert other is td
+            assert td.is_locked
+            with td.unlock_() as other:
+                assert other is td
+                assert not td.is_locked
+            assert td.is_locked
+        assert td.is_locked is is_locked
+
     def test_lock_change_names(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -5207,11 +5222,24 @@ class TestLock:
         td.unlock_()
         assert td._is_locked is None
         td0.lock_()
+        # all tds must be locked
+        assert not td.is_locked
+        # lock td1
+        td1.lock_()
+        # we can unlock td0, even though td is locked
         assert td.is_locked
         assert td._is_locked is None  # lock wasn't called on td
+        td0.unlock_()
         td.unlock_()
         assert not td0.is_locked
         assert td._is_locked is None
+
+        td.lock_()
+        assert td1.is_locked
+        assert td0.is_locked
+        with pytest.raises(RuntimeError):
+            td1.unlock_()
+        assert td1.is_locked
 
         # create a parent to td
         super_td = TensorDict({"td": td}, [])

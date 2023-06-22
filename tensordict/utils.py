@@ -1145,3 +1145,32 @@ def lock_blocked(func):
         return func(self, *args, **kwargs)
 
     return new_func
+
+
+class as_decorator:
+    """Converts a method to a decorator.
+
+    Examples:
+        >>> from tensordict import TensorDict
+        >>> data = TensorDict({}, [])
+        >>> with data.lock_(): # lock_ is decorated
+        ...     assert data.is_locked
+        >>> assert not data.is_locked
+    """
+
+    def __init__(self, attr):
+        self.attr = attr
+
+    def __call__(self, func):
+        @wraps(func)
+        def new_func(_self, *args, **kwargs):
+            _attr_pre = getattr(_self, self.attr)
+            out = func(_self, *args, **kwargs)
+            _attr_post = getattr(_self, self.attr)
+            if _attr_post is not _attr_pre:
+                _self._last_op = (new_func.__name__, (args, kwargs))
+            else:
+                _self._last_op = None
+            return out
+
+        return new_func
