@@ -4110,27 +4110,6 @@ class TensorDict(TensorDictBase):
             return self._default_get(first_key, default)
         return out
 
-    # @cache  # noqa: B019
-    # def _get_tuple(self, key, default):
-    #     if len(key) == 1:
-    #         return self._get_str(key[0], default)
-    #     leaf = self._get_tuple(key[:-1], None)
-    #     # first_key = key[0]
-    #     # out = self._tensordict.get(first_key, None)
-    #     if leaf is not None:
-    #         try:
-    #             if isinstance(leaf, KeyedJaggedTensor):
-    #                 return leaf[key[-1]]
-    #             else:
-    #                 return leaf._get_str(key[-1], default=default)
-    #         except AttributeError as err:
-    #             if "has no attribute" in str(err):
-    #                 raise ValueError(
-    #                     f"Expected a TensorDictBase instance but got {type(leaf)} instead"
-    #                     f" for key '{key[:-1]}' in tensordict:\n{self}."
-    #                 )
-    #     return self._default_get(key[0], default)
-
     def _get_tuple(self, key, default):
         first = self._get_str(key[0], None)
         if first is None:
