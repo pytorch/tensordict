@@ -138,29 +138,25 @@ def test_tdseq_dispatch(benchmark):
 
 # Creation
 def test_instantiation_functorch(benchmark, net):
-    benchmark.pedantic(
-        _functorch_make_functional, args=(net,), iterations=10, rounds=100
-    )
+    benchmark(_functorch_make_functional, args=(net,))
 
 
 def test_instantiation_td(benchmark, net):
-    benchmark.pedantic(_make_functional, args=(net,), iterations=10, rounds=100)
+    benchmark(_make_functional, args=(net,))
 
 
 # Execution
 def test_exec_functorch(benchmark, net):
     x = torch.randn(2, 2)
     fmodule, params, buffers = functorch_make_functional(net)
-    benchmark.pedantic(fmodule, args=(params, buffers, x), iterations=100, rounds=100)
+    benchmark(fmodule, args=(params, buffers, x))
 
 
 def test_exec_td(benchmark, net):
     x = torch.randn(2, 2)
     fmodule = net
     params = make_functional(fmodule)
-    benchmark.pedantic(
-        fmodule, args=(x,), kwargs={"params": params}, iterations=100, rounds=100
-    )
+    benchmark(fmodule, args=(x,), kwargs={"params": params})
 
 
 @torch.no_grad()
@@ -193,11 +189,11 @@ def test_vmap_mlp_speed(benchmark, stack, tdmodule):
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
         fun(data, params)
-        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=100)
+        benchmark(fun, args=(data, params))
     else:
         fun = vmap(t, (None, 0))
         fun(x, params)
-        benchmark.pedantic(fun, args=(x, params), rounds=100, iterations=100)
+        benchmark(fun, args=(x, params))
 
 
 @torch.no_grad()
@@ -229,11 +225,11 @@ def test_vmap_transformer_speed(benchmark, stack, tdmodule):
         fun = vmap(t, (None, 0))
         data = TensorDict({"x": x}, [])
         fun(data, params)
-        benchmark.pedantic(fun, args=(data, params), rounds=100, iterations=100)
+        benchmark(fun, args=(data, params))
     else:
         fun = vmap(t, (None, None, 0))
         fun(x, x, params)
-        benchmark.pedantic(fun, args=(x, x, params), rounds=100, iterations=100)
+        benchmark(fun, args=(x, x, params))
 
 
 if __name__ == "__main__":
