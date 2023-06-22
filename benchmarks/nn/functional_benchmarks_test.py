@@ -56,9 +56,7 @@ def test_tdmodule(benchmark):
     benchmark.pedantic(
         lambda net, td: net(td),
         setup=make_tdmodule,
-        iterations=1,
-        rounds=10_000,
-        warmup_rounds=1000,
+        warmup_rounds=100,
     )
 
 
@@ -138,25 +136,25 @@ def test_tdseq_dispatch(benchmark):
 
 # Creation
 def test_instantiation_functorch(benchmark, net):
-    benchmark(_functorch_make_functional, args=(net,))
+    benchmark.pedantic(_functorch_make_functional, args=(net,))
 
 
 def test_instantiation_td(benchmark, net):
-    benchmark(_make_functional, args=(net,))
+    benchmark.pedantic(_make_functional, args=(net,))
 
 
 # Execution
 def test_exec_functorch(benchmark, net):
     x = torch.randn(2, 2)
     fmodule, params, buffers = functorch_make_functional(net)
-    benchmark(fmodule, args=(params, buffers, x))
+    benchmark.pedantic(fmodule, args=(params, buffers, x))
 
 
 def test_exec_td(benchmark, net):
     x = torch.randn(2, 2)
     fmodule = net
     params = make_functional(fmodule)
-    benchmark(fmodule, args=(x,), kwargs={"params": params})
+    benchmark.pedantic(fmodule, args=(x,), kwargs={"params": params})
 
 
 @torch.no_grad()

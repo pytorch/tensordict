@@ -27,7 +27,7 @@ def test_reshape_pytree(benchmark, nested_dict):
 
 
 def test_reshape_td(benchmark, nested_td):
-    benchmark(
+    benchmark.pedantic(
         nested_td.reshape,
         args=(12,),
     )
