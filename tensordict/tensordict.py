@@ -5716,8 +5716,11 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         return self.tensordict.valid_keys
 
     def __contains__(self, item):
-        if isinstance(item, str) and item in self._keys():
-            return True
+        if isinstance(item, str):
+            if item in self._keys():
+                return True
+            if len(item) == 1:
+                return item[0] in self
         # otherwise take the long way
         return all(
             item in tensordict.keys(self.include_nested, self.leaves_only)
