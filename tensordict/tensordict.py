@@ -5719,9 +5719,16 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         item = unravel_keys(item)
         if isinstance(item, str):
             if item in self._keys():
+                if self.leaves_only:
+                    return not _is_tensor_collection(self.tensordict.entry_class(item))
                 return True
         elif len(item) == 1:
-            return item[0] in self._keys()
+            if item[0] in self._keys():
+                if self.leaves_only:
+                    return not _is_tensor_collection(
+                        self.tensordict.entry_class(item[0])
+                    )
+                return True
         # otherwise take the long way
         return all(
             item in tensordict.keys(self.include_nested, self.leaves_only)
