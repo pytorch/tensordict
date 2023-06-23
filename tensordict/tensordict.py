@@ -765,9 +765,9 @@ class TensorDictBase(MutableMapping):
         key = unravel_keys(key)
         value = self._validate_value(item, check_shape=True)
         if isinstance(key, str):
-            return self._set_str(key, item, inplace)
+            return self._set_str(key, value, inplace)
         else:
-            return self._set_tuple(key, item, inplace)
+            return self._set_tuple(key, value, inplace)
 
 
     @abc.abstractmethod
@@ -776,6 +776,36 @@ class TensorDictBase(MutableMapping):
 
     @abc.abstractmethod
     def _set_tuple(self, key, value, inplace):
+        ...
+
+    @abc.abstractmethod
+    def set_at_(
+        self, key: NestedKey, value: CompatibleType, idx: IndexType
+    ) -> TensorDictBase:
+        """Sets the values in-place at the index indicated by :obj:`idx`.
+
+        Args:
+            key (str, tuple of str): key to be modified.
+            value (torch.Tensor): value to be set at the index `idx`
+            idx (int, tensor or tuple): index where to write the values.
+
+        Returns:
+            self
+
+        """
+        key = unravel_keys(key)
+        value = self._validate_value(value, check_shape=True)
+        if isinstance(key, str):
+            return self._set_at_str(key, value, idx)
+        else:
+            return self._set_at_tuple(key, value, idx)
+
+    @abc.abstractmethod
+    def _set_at_str(self, key, value, idx):
+        ...
+
+    @abc.abstractmethod
+    def _set_at_tuple(self, key, value, idx):
         ...
 
     @abc.abstractmethod
@@ -2094,32 +2124,10 @@ class TensorDictBase(MutableMapping):
 
     def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
         target = self if inplace else self.clone(recurse=False)
-        # is_nested = any((type(key) is tuple) for key in keys)
-        # if len(keys) > 1:
-        #     tdkeys = set(self.keys(is_nested))
-        # else:
-        #     tdkeys = self.keys(is_nested)
         for key in keys:
             if key in self.keys(True):
                 del target[key]
         return target
-
-    @abc.abstractmethod
-    def set_at_(
-        self, key: NestedKey, value: CompatibleType, idx: IndexType
-    ) -> TensorDictBase:
-        """Sets the values in-place at the index indicated by :obj:`idx`.
-
-        Args:
-            key (str, tuple of str): key to be modified.
-            value (torch.Tensor): value to be set at the index `idx`
-            idx (int, tensor or tuple): index where to write the values.
-
-        Returns:
-            self
-
-        """
-        raise NotImplementedError(f"{self.__class__.__name__}")
 
     def copy_(self, tensordict: TensorDictBase) -> TensorDictBase:
         """See :obj:`TensorDictBase.update_`."""
@@ -3981,26 +3989,6 @@ class TensorDict(TensorDictBase):
             out.refine_names(..., *self.names)
         return out
 
-    def _set(self, key: str, value, inplace: bool = False) -> TensorDictBase:
-        if isinstance(key, tuple):
-            td, subkey = _get_leaf_tensordict(
-                self, key, _default_hook if not inplace else None
-            )
-        else:
-            td, subkey = self, key
-        if inplace:
-            try:
-                td.get(subkey).copy_(value)
-            except KeyError as err:
-                raise err
-            except Exception as err:
-                raise ValueError(
-                    f"Failed to update '{subkey}' in tensordict {td}"
-                ) from err
-        else:
-            td._tensordict[subkey] = value
-        return self
-
     def _set_str(
         self,
         key: NestedKey,
@@ -4034,11 +4022,38 @@ class TensorDict(TensorDictBase):
             return self._set_str(key[0], value, inplace)
         if key[0] not in self.keys():
             td = self.select()
-            td._set_tuple(key[1:], value, False) # cannot be inplace
             self._set_str(key[0], td, False)
+            inplace = False
         else:
-            first = self._get_str(key[0], NO_DEFAULT)
-            first._set_tuple(key[1:], value, NO_DEFAULT)
+            td = self._get_str(key[0], NO_DEFAULT)
+        td._set_tuple(key[1:], value, inplace)
+        return self
+
+    def _set_at_str(self, key, value, idx):
+        tensor_in = self._get_str(key, NO_DEFAULT)
+
+        if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
+            warn(
+                "Multiple indexing can lead to unexpected behaviours when "
+                "setting items, for instance `td[idx1][idx2] = other` may "
+                "not write to the desired location if idx1 is a list/tensor."
+            )
+            tensor_in = _sub_index(tensor_in, idx)
+            tensor_in.copy_(value)
+        else:
+            _set_item(tensor_in, idx, value)
+
+        return self
+
+    def _set_at_tuple(self, key, value, idx):
+        if len(key) == 1:
+            return self._set_at_str(key[0], value, idx)
+        if key[0] not in self.keys():
+            # this won't work
+            raise KeyError(f"key {key} not found in set_at_ with tensordict {self}.")
+        else:
+            td = self._get_str(key[0], NO_DEFAULT)
+        td._set_at_tuple(key[1:], value, idx)
         return self
 
     def set_(
@@ -4133,31 +4148,6 @@ class TensorDict(TensorDictBase):
             )
         return self
 
-    def set_at_(
-        self,
-        key: NestedKey,
-        value: dict[str, CompatibleType] | CompatibleType,
-        idx: IndexType,
-    ) -> TensorDictBase:
-        key = self._validate_key(key)
-        if key not in self.keys(include_nested=isinstance(key, tuple)):
-            raise KeyError(f"did not find key {key} in {self.__class__.__name__}")
-
-        value = self._validate_value(value, check_shape=False)
-        tensor_in = self.get(key)
-
-        if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
-            warn(
-                "Multiple indexing can lead to unexpected behaviours when "
-                "setting items, for instance `td[idx1][idx2] = other` may "
-                "not write to the desired location if idx1 is a list/tensor."
-            )
-            tensor_in = _sub_index(tensor_in, idx)
-            tensor_in.copy_(value)
-        else:
-            _set_item(tensor_in, idx, value)
-
-        return self
 
     def _get_str(self, key, default):
         first_key = key
@@ -5270,19 +5260,21 @@ torch.Size([3, 2])
     def _preallocate(self, key: str, value: CompatibleType) -> TensorDictBase:
         return self._source.set(key, value)
 
-    def _set(self, key, value, inplace: bool = False):
+    def _set_str(
+        self,
+        key: NestedKey,
+        value: dict[str, CompatibleType] | CompatibleType,
+        inplace: bool = False,
+    ) -> TensorDictBase:
+        inplace = inplace and key in self.keys()
+        if self.is_locked and not inplace:
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
         # it is assumed that if inplace=False then the key doesn't exist. This is
         # checked in set method, but not here. responsibility lies with the caller
         # so that this method can have minimal overhead from runtime checks
-        if isinstance(key, tuple):
-            parent, subkey = _get_leaf_tensordict(
-                self._source, key, _default_hook if not inplace else None
-            )
-        else:
-            parent, subkey = self._source, key
-
+        parent = self._source
         if not inplace:
-            if isinstance(value, TensorDictBase):
+            if _is_tensor_collection(value.__class__):
                 value_expand = _expand_to_match_shape(
                     parent.batch_size, value, self.batch_dims, self.device
                 )
@@ -5304,47 +5296,61 @@ torch.Size([3, 2])
                 elif self.is_memmap():
                     value_expand = MemmapTensor.from_tensor(value_expand)
 
-            parent._set(subkey, value_expand)
+            parent._set_str(key, value_expand)
             if (
                 isinstance(parent, LazyStackedTensorDict)
-                and subkey not in parent._valid_keys
+                and key not in parent._valid_keys
             ):
-                # there is some duplication here with LazyStackedTensorDict.set, but
-                # calling that duplicates runtime checks, and some code duplication
-                # seems better than duplicated overhead.
-                parent._valid_keys = sorted([*parent._valid_keys, subkey], key=str)
+                parent._valid_keys = None
 
-        parent.set_at_(subkey, value, self.idx)
+        parent._set_at_str(key, value, self.idx)
         return self
 
-    def set(
+    def _set_tuple(
         self,
         key: NestedKey,
-        tensor: dict[str, CompatibleType] | CompatibleType,
+        value: dict[str, CompatibleType] | CompatibleType,
         inplace: bool = False,
     ) -> TensorDictBase:
-        key = self._validate_key(key)
+        # TODO: figure out what is the fastest
+        if len(key) == 1:
+            return self._set_str(key[0], value, inplace)
+        parent = self._source
+        if key[0] not in parent.keys():
+            td = parent.select()
+            parent._set_str(key[0], td, False)
+        else:
+            td = self._get_str(key[0], NO_DEFAULT)
+        td._set_at_tuple(key[1:], value, self.idx)
+        return self
 
-        if isinstance(key, tuple):
-            parent = self.get_parent_tensordict()
-            subparent, subkey = _get_leaf_tensordict(parent, key, _default_hook)
-            subparent.get_sub_tensordict(self.idx).set(subkey, tensor, inplace=inplace)
-            return self
+    def _set_at_str(self, key, value, idx):
+        tensor_in = self._get_str(key, NO_DEFAULT)
 
-        key_present = key in self.keys()
-        inplace = inplace and key_present
-        if not inplace:
-            if self.is_locked:
-                raise RuntimeError(TensorDictBase.LOCK_ERROR)
-            if key_present:
-                raise RuntimeError(
-                    "Calling `SubTensorDict.set(key, value, inplace=False)` is "
-                    "prohibited for existing tensors. Consider calling "
-                    "SubTensorDict.set_(...) or cloning your tensordict first."
-                )
+        if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
+            warn(
+                "Multiple indexing can lead to unexpected behaviours when "
+                "setting items, for instance `td[idx1][idx2] = other` may "
+                "not write to the desired location if idx1 is a list/tensor."
+            )
+            tensor_in = _sub_index(tensor_in, idx)
+            tensor_in.copy_(value)
+        else:
+            _set_item(tensor_in, idx, value)
+        # make sure that the value is updated
+        self._source._set_at_str(key, tensor_in, self.idx)
+        return self
 
-        tensor = self._validate_value(tensor)
-        return self._set(key, tensor, inplace=inplace)
+    def _set_at_tuple(self, key, value, idx):
+        if len(key) == 1:
+            return self._set_at_str(key[0], value, idx)
+        if key[0] not in self.keys():
+            # this won't work
+            raise KeyError(f"key {key} not found in set_at_ with tensordict {self}.")
+        else:
+            td = self._get_str(key[0], NO_DEFAULT)
+        td._set_at_tuple(key[1:], value, idx)
+        return self
 
     def set_(
         self, key: str, value: dict[str, CompatibleType] | CompatibleType
@@ -5437,25 +5443,6 @@ torch.Size([3, 2])
 
     def _get_tuple(self, key, default):
         return self._source._get_tuple(key, self.idx, default=default)
-
-    def set_at_(
-        self,
-        key: NestedKey,
-        value: dict[str, CompatibleType] | CompatibleType,
-        idx: IndexType,
-        discard_idx_attr: bool = False,
-    ) -> SubTensorDict:
-        if not isinstance(idx, tuple):
-            idx = (idx,)
-        key = self._validate_key(key)
-        value = self._validate_value(value, check_shape=False)
-        if discard_idx_attr:
-            self._source.set_at_(key, value, idx)
-        else:
-            tensor = self._source.get_at(key, self.idx)
-            tensor[idx] = value
-            self._source.set_at_(key, tensor, self.idx)
-        return self
 
     def update(
         self,
@@ -5954,40 +5941,68 @@ class LazyStackedTensorDict(TensorDictBase):
         s.insert(stack_dim, N)
         return torch.Size(s)
 
-    def _set(self, key, value, inplace: bool = False):
-        values = value.unbind(self.stack_dim)
-        if len(values) != len(self.tensordicts):
-            raise RuntimeError
-        for tensordict, item in zip(self.tensordicts, values):
-            tensordict._set(key, item, inplace)
 
-        first_key = key if (isinstance(key, str)) else key[0]
-        if key not in self._valid_keys:
-            self._valid_keys = sorted([*self._valid_keys, first_key], key=str)
-
-        return self
-
-    def set(
+    def _set_str(
         self,
         key: NestedKey,
-        tensor: dict[str, CompatibleType] | CompatibleType,
+        value: dict[str, CompatibleType] | CompatibleType,
         inplace: bool = False,
     ) -> TensorDictBase:
-        key = self._validate_key(key)
-        # we don't need this as locked lazy stacks have locked nested tds so the error will be captured in the loop
-        # if self.is_locked:
-        #     raise RuntimeError(TensorDictBase.LOCK_ERROR)
+        inplace = inplace and key in self.keys()
+        if self.is_locked and not inplace:
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
-        tensor = self._validate_value(tensor)
-        if self.hook_in is not None:
-            tensor = self.hook_in(tensor)
-        for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
-            td.set(key, _item, inplace=inplace)
+        if inplace:
+            try:
+                self._get_str(key, default=NO_DEFAULT).copy_(value)
+            except KeyError as err:
+                raise err
+            except Exception as err:
+                raise ValueError(
+                    f"Failed to update '{key}' in tensordict {self}"
+                ) from err
+        else:
+            self._tensordict[key] = value
+        return self
 
-        first_key = key if (isinstance(key, str)) else key[0]
-        if key not in self._valid_keys:
-            self._valid_keys = sorted([*self._valid_keys, first_key], key=str)
+    def _set_tuple(
+        self,
+        key: NestedKey,
+        value: dict[str, CompatibleType] | CompatibleType,
+        inplace: bool = False,
+    ) -> TensorDictBase:
+        if len(key) == 1:
+            return self._set_str(key[0], value, inplace)
+        if key[0] not in self.keys():
+            td = self.select()
+            self._set_str(key[0], td, False)
+            inplace = False
+        else:
+            td = self._get_str(key[0], NO_DEFAULT)
+        td._set_tuple(key[1:], value, inplace)
+        return self
 
+    def _set_at_str(self, key, value, idx):
+        item = self._get_str(key, NO_DEFAULT)
+        item[idx] = value
+        self._set_str(key, item, inplace=True)
+        return self
+
+    def _set_at_tuple(self, key, value, idx):
+        if len(key) == 1:
+            return self._set_at_str(key[0], value, idx)
+        # get the "last" tds
+        tds = []
+        for td in self.tensordicts:
+            tds.append(td.get(key[:-1]))
+        # build only a single lazy stack from it
+        # (if the stack is a stack of stacks this won't be awesomely efficient
+        # but then we'd need to splut the value (which we can do) and recompute
+        # the sub-index for each td, which is a different story!
+        td = LazyStackedTensorDict(*tds, stack_dim=self.stack_dim, hook_out=self.hook_out, hook_in=self.hook_in)
+        item = td._get_str(key, NO_DEFAULT)
+        item[idx] = value
+        td._set_str(key, item, inplace=True)
         return self
 
     def set_(
@@ -6069,15 +6084,6 @@ class LazyStackedTensorDict(TensorDictBase):
             return tuple(self.tensordicts)
         else:
             return super().unbind(dim)
-
-    def set_at_(
-        self, key: str, value: dict | CompatibleType, idx: IndexType
-    ) -> TensorDictBase:
-        # this generalizes across all types of indices
-        item = self.get(key)
-        item[idx] = self._validate_value(value, check_shape=False)
-        self.set(key, item, inplace=True)
-        return self
 
     def _stack_onto_(
         self,
@@ -7301,39 +7307,39 @@ class _CustomOpTensorDict(TensorDictBase):
     def _transform_value(self, item):
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
 
-    def _set(self, key, value, inplace: bool = False):
-        value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
-        self._source._set(key, value, inplace=inplace)
-        return self
+    # def _set(self, key, value, inplace: bool = False):
+    #     value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
+    #     self._source._set(key, value, inplace=inplace)
+    #     return self
 
-    def set(
-        self, key: NestedKey, value: dict | CompatibleType, inplace: bool = False
-    ) -> TensorDictBase:
-        key = self._validate_key(key)
-
-        if self.inv_op is None:
-            raise Exception(
-                f"{self.__class__.__name__} does not support setting values. "
-                f"Consider calling .contiguous() before calling this method."
-            )
-        if self.is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
-
-        if isinstance(key, tuple):
-            subsource, subkey = _get_leaf_tensordict(self._source, key, _default_hook)
-            td = self.__class__(
-                source=subsource,
-                custom_op=self.custom_op,
-                inv_op=self.inv_op,
-                custom_op_kwargs=self._update_custom_op_kwargs(subsource),
-                inv_op_kwargs=self._update_inv_op_kwargs(subsource),
-            )
-            td.set(subkey, value, inplace=inplace)
-            return self
-
-        key = self._validate_key(key)
-        value = self._validate_value(value)
-        return self._set(key, value, inplace=inplace)
+    # def set(
+    #     self, key: NestedKey, value: dict | CompatibleType, inplace: bool = False
+    # ) -> TensorDictBase:
+    #     key = self._validate_key(key)
+    #
+    #     if self.inv_op is None:
+    #         raise Exception(
+    #             f"{self.__class__.__name__} does not support setting values. "
+    #             f"Consider calling .contiguous() before calling this method."
+    #         )
+    #     if self.is_locked:
+    #         raise RuntimeError(TensorDictBase.LOCK_ERROR)
+    #
+    #     if isinstance(key, tuple):
+    #         subsource, subkey = _get_leaf_tensordict(self._source, key, _default_hook)
+    #         td = self.__class__(
+    #             source=subsource,
+    #             custom_op=self.custom_op,
+    #             inv_op=self.inv_op,
+    #             custom_op_kwargs=self._update_custom_op_kwargs(subsource),
+    #             inv_op_kwargs=self._update_inv_op_kwargs(subsource),
+    #         )
+    #         td.set(subkey, value, inplace=inplace)
+    #         return self
+    #
+    #     key = self._validate_key(key)
+    #     value = self._validate_value(value)
+    #     return self._set(key, value, inplace=inplace)
 
     def set_(self, key: str, value: dict | CompatibleType) -> _CustomOpTensorDict:
         if self.inv_op is None:
