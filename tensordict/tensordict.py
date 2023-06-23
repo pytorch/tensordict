@@ -5719,7 +5719,8 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         if isinstance(item, str):
             if item in self._keys():
                 return True
-            if len(item) == 1:
+        item = unravel_keys(item)
+        if len(item) == 1:
                 return item[0] in self
         # otherwise take the long way
         return all(
