@@ -278,46 +278,47 @@ class _TensorDictKeysView:
         return self.tensordict._tensordict.keys()
 
     def __contains__(self, key: NestedKey) -> bool:
-        try:
-            key = unravel_keys(key)
-        except Exception as err:
-            raise TypeError(NON_STR_KEY) from err
-
         if isinstance(key, str):
             if key in self._keys():
                 if self.leaves_only:
                     return not _is_tensor_collection(self.tensordict.entry_class(key))
                 return True
             return False
-        else:
-            # thanks to unravel_keys we know the key is a tuple
+
+        elif isinstance(key, tuple):
             if len(key) == 1:
-                return key[0] in self._keys()
-            elif self.include_nested:
+                return key[0] in self
+            elif len(key) > 1 and self.include_nested:
                 if key[0] in self._keys():
                     entry_type = self.tensordict.entry_class(key[0])
-                    if entry_type in (Tensor, MemmapTensor):
-                        return False
-                    if entry_type is KeyedJaggedTensor:
-                        if len(key) > 2:
-                            return False
-                        return key[1] in self.tensordict.get(key[0]).keys()
-                    _is_tensordict = _is_tensor_collection(entry_type)
-                    if _is_tensordict:
-                        # # this will call unravel_keys many times
-                        # return key[1:] in self.tensordict._get_str(key[0], NO_DEFAULT).keys(include_nested=self.include_nested)
-                        # this won't call unravel_keys but requires to get the default which can be suboptimal
-                        leaf_td = self.tensordict._get_tuple(key[:-1], None)
-                        if leaf_td is None or (
-                            not _is_tensor_collection(leaf_td.__class__)
-                            and not isinstance(leaf_td, KeyedJaggedTensor)
-                        ):
-                            return False
-                        return key[-1] in leaf_td.keys()
+                    is_tensor = entry_type is Tensor
+                    is_kjt = not is_tensor and entry_type is KeyedJaggedTensor
+                    _is_tensordict = (
+                        not is_tensor
+                        and not is_kjt
+                        and _is_tensor_collection(entry_type)
+                    )
+
+                    # TODO: SavedTensorDict currently doesn't support nested membership checks
+                    _tensordict_nested = _is_tensordict and key[
+                        1:
+                    ] in self.tensordict.get(key[0]).keys(
+                        include_nested=self.include_nested
+                    )
+                    if _tensordict_nested:
+                        return True
+                    _kjt = (
+                        is_kjt
+                        and len(key) == 2
+                        and key[1] in self.tensordict.get(key[0]).keys()
+                    )
+                    return _kjt
+
                 return False
-            # this is reached whenever there is more than one key but include_nested is False
             if all(isinstance(subkey, str) for subkey in key):
                 raise TypeError(NON_STR_KEY_TUPLE)
+
+        raise TypeError(NON_STR_KEY)
 
     def __repr__(self):
         include_nested = f"include_nested={self.include_nested}"
@@ -5715,26 +5716,6 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     def _keys(self) -> list[str]:
         return self.tensordict.valid_keys
 
-    def __contains__(self, item):
-        item = unravel_keys(item)
-        if isinstance(item, str):
-            if item in self._keys():
-                if self.leaves_only:
-                    return not _is_tensor_collection(self.tensordict.entry_class(item))
-                return True
-        elif len(item) == 1:
-            if item[0] in self._keys():
-                if self.leaves_only:
-                    return not _is_tensor_collection(
-                        self.tensordict.entry_class(item[0])
-                    )
-                return True
-        # otherwise take the long way
-        return all(
-            item in tensordict.keys(self.include_nested, self.leaves_only)
-            for tensordict in self.tensordict.tensordicts
-        )
-
 
 class LazyStackedTensorDict(TensorDictBase):
     """A Lazy stack of TensorDicts.
@@ -6845,27 +6826,20 @@ class LazyStackedTensorDict(TensorDictBase):
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
 
-        # using try/except for get/del is suboptimal, but
-        # this is faster that checkink if key in self keys
-        key = unravel_keys(key)
-        present = False
-        if isinstance(key, tuple):
-            if key in self.keys(True):
-                present = True
-                value = self._get_tuple(key, NO_DEFAULT)
-        elif key in self.keys():
-            present = True
-            value = self._get_str(key, NO_DEFAULT)
-        if present:
-            self.del_(key)
-        elif default is not NO_DEFAULT:
-            value = default
-        else:
-            raise KeyError(
-                f"You are trying to pop key `{key}` which is not in dict "
-                f"without providing default value."
-            )
-        return value
+        try:
+            # using try/except for get/del is suboptimal, but
+            # this is faster that checkink if key in self keys
+            out = self.get(key, default)
+            if key in self.valid_keys:
+                self._valid_keys.remove(key)
+        except KeyError as err:
+            # if default provided, 'out' value will return, else raise error
+            if default == NO_DEFAULT:
+                raise KeyError(
+                    f"You are trying to pop key `{key}` which is not in dict "
+                    f"without providing default value."
+                ) from err
+        return out
 
     def share_memory_(self) -> TensorDictBase:
         for td in self.tensordicts:
