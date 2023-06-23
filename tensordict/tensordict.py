@@ -5721,7 +5721,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             if item in self._keys():
                 return True
         elif len(item) == 1:
-            return item[0] in self
+            return item[0] in self._keys()
         # otherwise take the long way
         return all(
             item in tensordict.keys(self.include_nested, self.leaves_only)
