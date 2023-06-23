@@ -77,6 +77,36 @@ def big_nested_stacked_td_locked():
     return ((big_nested_stacked_td()[0][0].lock_(),), {})
 
 
+def test_plain_set_nested(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(j) for j in range(20, 0, -1))
+    tensor = torch.zeros(3, 4)
+    benchmark(lambda: td.set(key, tensor))
+
+
+def test_plain_set_stack_nested(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    key = tuple(str(j) for j in range(20, 0, -1))
+    tensor = torch.zeros(td.shape)
+    benchmark(lambda: td.set(key, tensor))
+
+
+def test_plain_set_nested_inplace(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(j) for j in range(20, 0, -1))
+    tensor = torch.zeros(3, 4)
+    td.set(key, tensor)
+    benchmark(lambda: td.set(key, tensor, inplace=True))
+
+
+def test_plain_set_stack_nested_inplace(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    key = tuple(str(j) for j in range(20, 0, -1))
+    tensor = torch.zeros(td.shape)
+    td.set(key, tensor)
+    benchmark(lambda: td.set(key, tensor, inplace=True))
+
+
 def test_items(benchmark):
     td = big_td()[0][0]
     benchmark(lambda: list(td.items()))
