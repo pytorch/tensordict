@@ -3719,7 +3719,7 @@ class TensorDict(TensorDictBase):
                     self.set(key, value)
 
     @classmethod
-    def from_dict(cls, input_dict, batch_size=None, device=None):
+    def from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
         """Returns a TensorDict created from a dictionary or another :class:`TensorDict`.
 
         If ``batch_size`` is not specified, returns the maximum batch size possible.
@@ -3732,6 +3732,10 @@ class TensorDict(TensorDictBase):
                 (nested keys compatible).
             batch_size (iterable of int, optional): a batch size for the tensordict.
             device (torch.device or compatible type, optional): a device for the TensorDict.
+            batch_dims (int, optional): the ``batch_dims`` (ie number of leading dimensions
+                to be considered for ``batch_size``). Exclusinve with ``batch_size``.
+                Note that this is the __maximum__ number of batch dims of the tensordict,
+                a smaller number is tolerated.
 
         Examples:
             >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
@@ -3776,10 +3780,19 @@ class TensorDict(TensorDictBase):
                 is_shared=False)
 
         """
+        if batch_dims is not None and batch_size is not None:
+            raise ValueError(
+                "Cannot pass both batch_size and batch_dims to `from_dict`."
+            )
+
         batch_size_set = [] if batch_size is None else batch_size
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
-                input_dict[key] = TensorDict(value, batch_size_set, device=device)
+                # we don't know if another tensor of smaller size is coming
+                # so we can't be sure that the batch-size will still be valid later
+                input_dict[key] = TensorDict.from_dict(
+                    value, batch_size=[], device=device, batch_dims=None
+                )
         # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
         out = cls(
             input_dict,
@@ -3787,7 +3800,7 @@ class TensorDict(TensorDictBase):
             device=device,
         )
         if batch_size is None:
-            _set_max_batch_size(out)
+            _set_max_batch_size(out, batch_dims)
         else:
             out.batch_size = batch_size
         return out
@@ -7990,12 +8003,13 @@ def make_tensordict(
     return TensorDict.from_dict(kwargs, batch_size=batch_size, device=device)
 
 
-def _set_max_batch_size(source: TensorDictBase):
+def _set_max_batch_size(source: TensorDictBase, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
     tensor_data = list(source.values())
+
     for val in tensor_data:
         if _is_tensor_collection(val.__class__):
-            _set_max_batch_size(val)
+            _set_max_batch_size(val, batch_dims=batch_dims)
     batch_size = []
     if not tensor_data:  # when source is empty
         source.batch_size = batch_size
@@ -8011,7 +8025,8 @@ def _set_max_batch_size(source: TensorDictBase):
             if tensor.dim() <= curr_dim or tensor.size(curr_dim) != curr_dim_size:
                 source.batch_size = batch_size
                 return
-        batch_size.append(curr_dim_size)
+        if batch_dims is None or len(batch_size) < batch_dims:
+            batch_size.append(curr_dim_size)
         curr_dim += 1
 
 
