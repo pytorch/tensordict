@@ -4018,7 +4018,7 @@ class TensorDict(TensorDictBase):
                 raise err
             except Exception as err:
                 raise ValueError(
-                    f"Failed to update '{subkey}' in tensordict {td}"
+                    f"Failed to update '{key}' in tensordict {self}"
                 ) from err
         else:
             self._tensordict[key] = value
@@ -4032,22 +4032,14 @@ class TensorDict(TensorDictBase):
     ) -> TensorDictBase:
         if len(key) == 1:
             return self._set_str(key[0], value, inplace)
-        try:
-            first = self._get_str(key[0], default=NO_DEFAULT)
-            if isinstance(first, KeyedJaggedTensor):
-                if len(key) != 2:
-                    raise ValueError(
-                        f"Got too many keys for a KJT: {key}."
-                        )
-                return first[key[1]]
-            else:
-                return first._get_tuple(key[1:], default=default)
-        except AttributeError as err:
-            if "has no attribute" in str(err):
-                raise ValueError(
-                    f"Expected a TensorDictBase instance but got {type(first)} instead"
-                    f" for key '{key[1:]}' in tensordict:\n{self}."
-                )
+        if key[0] not in self.keys():
+            td = self.select()
+            td._set_tuple(key[1:], value, False) # cannot be inplace
+            self._set_str(key[0], td, False)
+        else:
+            first = self._get_str(key[0], NO_DEFAULT)
+            first._set_tuple(key[1:], value, NO_DEFAULT)
+        return self
 
     def set_(
         self, key: str, value: dict[str, CompatibleType] | CompatibleType
