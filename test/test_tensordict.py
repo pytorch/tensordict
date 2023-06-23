@@ -5279,17 +5279,9 @@ def test_from_dict(batch_size, batch_dims, device):
     data = {
         "a": torch.zeros(3, 4, 5),
         "b": {"c": torch.zeros(3, 4, 5, 6)},
-        ("d", "e"): torch.ones(
-            3,
-            4,
-            5
-        ),
+        ("d", "e"): torch.ones(3, 4, 5),
         ("b", "f"): torch.zeros(3, 4, 5, 5),
-        ("d", "g", "h"): torch.ones(
-            3,
-            4,
-            5
-        ),
+        ("d", "g", "h"): torch.ones(3, 4, 5),
     }
     if batch_dims and batch_size:
         with pytest.raises(ValueError, match="both"):
