@@ -6836,8 +6836,29 @@ class LazyStackedTensorDict(TensorDictBase):
             return
 
     def del_(self, key: str, **kwargs: Any) -> TensorDictBase:
+        ids = set()
+        cur_len = len(ids)
+        is_deleted = False
+        error = None
         for td in self.tensordicts:
-            td.del_(key, **kwargs)
+            # checking that the td has not been processed yet.
+            # It could be that not all sub-tensordicts have the appropriate
+            # entry but one must have it (or an error is thrown).
+            tdid = id(td)
+            ids.add(tdid)
+            new_cur_len = len(ids)
+            if new_cur_len == cur_len:
+                continue
+            cur_len = new_cur_len
+            try:
+                td.del_(key, **kwargs)
+                is_deleted = True
+            except KeyError as err:
+                error = err
+                continue
+        if not is_deleted:
+            # we know err is defined because LazyStackedTensorDict cannot be empty
+            raise error
         self._valid_keys.remove(key)
         return self
 
