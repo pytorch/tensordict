@@ -5272,6 +5272,52 @@ def test_from_module(memmap):
     net.load_state_dict(td.flatten_keys("."))
 
 
+@pytest.mark.parametrize("batch_size", [None, [3, 4]])
+@pytest.mark.parametrize("batch_dims", [None, 1, 2])
+@pytest.mark.parametrize("device", get_available_devices())
+def test_from_dict(batch_size, batch_dims, device):
+    data = {
+        "a": torch.zeros(3, 4, 5),
+        "b": {"c": torch.zeros(3, 4, 5, 6)},
+        ("d", "e"): torch.ones(
+            3,
+            4,
+            5
+        ),
+        ("b", "f"): torch.zeros(3, 4, 5, 5),
+        ("d", "g", "h"): torch.ones(
+            3,
+            4,
+            5
+        ),
+    }
+    if batch_dims and batch_size:
+        with pytest.raises(ValueError, match="both"):
+            TensorDict.from_dict(
+                data, batch_size=batch_size, batch_dims=batch_dims, device=device
+            )
+        return
+    data = TensorDict.from_dict(
+        data, batch_size=batch_size, batch_dims=batch_dims, device=device
+    )
+    assert data.device == device
+    assert "a" in data.keys()
+    assert ("b", "c") in data.keys(True)
+    assert ("b", "f") in data.keys(True)
+    assert ("d", "e") in data.keys(True)
+    assert data.device == device
+    if batch_dims:
+        assert data.ndim == batch_dims
+        assert data["b"].ndim == batch_dims
+        assert data["d"].ndim == batch_dims
+        assert data["d", "g"].ndim == batch_dims
+    elif batch_size:
+        assert data.batch_size == torch.Size(batch_size)
+        assert data["b"].batch_size == torch.Size(batch_size)
+        assert data["d"].batch_size == torch.Size(batch_size)
+        assert data["d", "g"].batch_size == torch.Size(batch_size)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
