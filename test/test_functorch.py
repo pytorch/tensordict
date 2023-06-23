@@ -296,7 +296,9 @@ class TestVmap:
     @pytest.mark.parametrize("lock_x", [True, False])
     @pytest.mark.parametrize("lock_y", [True, False])
     @pytest.mark.parametrize("key", ["a", ("a", "b")])
-    def test_vmap_write_lazystack(self, in_dim, out_dim, stack_dim, lock_x, lock_y, key):
+    def test_vmap_write_lazystack(
+        self, in_dim, out_dim, stack_dim, lock_x, lock_y, key
+    ):
         fun = vmap(
             lambda x, y: x.set(key, y.get(key) + x.get(key)),
             (in_dim, in_dim),
