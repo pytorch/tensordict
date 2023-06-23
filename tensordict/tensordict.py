@@ -745,7 +745,6 @@ class TensorDictBase(MutableMapping):
         """Returns the class of an entry, avoiding a call to `isinstance(td.get(key), type)`."""
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    @abc.abstractmethod
     def set(
         self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
     ) -> TensorDictBase:
@@ -763,7 +762,21 @@ class TensorDictBase(MutableMapping):
             self
 
         """
-        raise NotImplementedError(f"{self.__class__.__name__}")
+        key = unravel_keys(key)
+        value = self._validate_value(item, check_shape=True)
+        if isinstance(key, str):
+            return self._set_str(key, item, inplace)
+        else:
+            return self._set_tuple(key, item, inplace)
+
+
+    @abc.abstractmethod
+    def _set_str(self, key, value, inplace):
+        ...
+
+    @abc.abstractmethod
+    def _set_tuple(self, key, value, inplace):
+        ...
 
     @abc.abstractmethod
     def set_(
@@ -1657,6 +1670,7 @@ class TensorDictBase(MutableMapping):
     def _validate_value(
         self,
         value: CompatibleType | dict[str, CompatibleType],
+        *,
         check_shape: bool = True,
     ) -> CompatibleType | dict[str, CompatibleType]:
         cls = value.__class__
@@ -3985,33 +3999,55 @@ class TensorDict(TensorDictBase):
                 ) from err
         else:
             td._tensordict[subkey] = value
-
         return self
 
-    def set(
+    def _set_str(
         self,
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         inplace: bool = False,
     ) -> TensorDictBase:
-        # See TensorDictBase.set for doc
-        key = self._validate_key(key)
-
-        if isinstance(key, tuple):
-            # get the leaf tensordict and call set from there, these means validation
-            # of inputs is done in the context of the leaf (batch_size could be
-            # different to root etc.)
-            td, subkey = _get_leaf_tensordict(self, key, _default_hook)
-            td.set(subkey, value, inplace=inplace)
-            return self
-
         inplace = inplace and key in self.keys()
         if self.is_locked and not inplace:
             raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
-        value = self._validate_value(value)
-        # not calling set_ to avoid re-validate key
-        return self._set(key, value, inplace=inplace)
+        if inplace:
+            try:
+                self._get_str(key, default=NO_DEFAULT).copy_(value)
+            except KeyError as err:
+                raise err
+            except Exception as err:
+                raise ValueError(
+                    f"Failed to update '{subkey}' in tensordict {td}"
+                ) from err
+        else:
+            self._tensordict[key] = value
+        return self
+
+    def _set_tuple(
+        self,
+        key: NestedKey,
+        value: dict[str, CompatibleType] | CompatibleType,
+        inplace: bool = False,
+    ) -> TensorDictBase:
+        if len(key) == 1:
+            return self._set_str(key[0], value, inplace)
+        try:
+            first = self._get_str(key[0], default=NO_DEFAULT)
+            if isinstance(first, KeyedJaggedTensor):
+                if len(key) != 2:
+                    raise ValueError(
+                        f"Got too many keys for a KJT: {key}."
+                        )
+                return first[key[1]]
+            else:
+                return first._get_tuple(key[1:], default=default)
+        except AttributeError as err:
+            if "has no attribute" in str(err):
+                raise ValueError(
+                    f"Expected a TensorDictBase instance but got {type(first)} instead"
+                    f" for key '{key[1:]}' in tensordict:\n{self}."
+                )
 
     def set_(
         self, key: str, value: dict[str, CompatibleType] | CompatibleType
