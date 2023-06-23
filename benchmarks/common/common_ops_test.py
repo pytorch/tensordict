@@ -3,7 +3,7 @@ import argparse
 import pytest
 import torch
 
-from tensordict import TensorDict
+from tensordict import is_tensor_collection, TensorDict
 
 
 @pytest.fixture
@@ -241,6 +241,82 @@ def test_membership_stacked_nested(benchmark):
 def test_membership_stacked_nested_leaf(benchmark):
     td = big_nested_stacked_td()[0][0]
     benchmark(lambda: ("a",) in td.keys(True, True))
+
+
+def test_membership_nested_last(benchmark):
+    td = big_nested_td()[0][0]
+    subtd = td
+    key = []
+    while True:
+        for _key, value in subtd.items():
+            key += [_key]
+            if is_tensor_collection(value):
+                subtd = value
+                break
+            else:
+                subtd = None
+                break
+        if subtd is None:
+            break
+    key = tuple(key)
+    benchmark(lambda: key in td.keys(True))
+
+
+def test_membership_nested_leaf_last(benchmark):
+    td = big_nested_td()[0][0]
+    subtd = td
+    key = []
+    while True:
+        for _key, value in subtd.items():
+            key += [_key]
+            if is_tensor_collection(value):
+                subtd = value
+                break
+            else:
+                subtd = None
+                break
+        if subtd is None:
+            break
+    key = tuple(key)
+    benchmark(lambda: key in td.keys(True, True))
+
+
+def test_membership_stacked_nested_last(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    subtd = td
+    key = []
+    while True:
+        for _key, value in subtd.items():
+            key += [_key]
+            if is_tensor_collection(value):
+                subtd = value
+                break
+            else:
+                subtd = None
+                break
+        if subtd is None:
+            break
+    key = tuple(key)
+    benchmark(lambda: key in td.keys(True))
+
+
+def test_membership_stacked_nested_leaf_last(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    subtd = td
+    key = []
+    while True:
+        for _key, value in subtd.items():
+            key += [_key]
+            if is_tensor_collection(value):
+                subtd = value
+                break
+            else:
+                subtd = None
+                break
+        if subtd is None:
+            break
+    key = tuple(key)
+    benchmark(lambda: key in td.keys(True, True))
 
 
 def test_stacked_getleaf(benchmark):
