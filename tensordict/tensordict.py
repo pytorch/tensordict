@@ -5955,7 +5955,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if self.hook_in is not None:
             tensor = self.hook_in(tensor)
         for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
-            td.set(key, _item, inplace=inplace)
+            td._set(key, _item, inplace=inplace)
 
         first_key = key if (isinstance(key, str)) else key[0]
         if key not in self._valid_keys:
