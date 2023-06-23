@@ -5721,7 +5721,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             if item in self._keys():
                 return True
         elif len(item) == 1:
-                return item[0] in self
+            return item[0] in self
         # otherwise take the long way
         return all(
             item in tensordict.keys(self.include_nested, self.leaves_only)
@@ -6838,20 +6838,27 @@ class LazyStackedTensorDict(TensorDictBase):
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
 
-        try:
-            # using try/except for get/del is suboptimal, but
-            # this is faster that checkink if key in self keys
-            out = self.get(key, default)
-            if key in self.valid_keys:
-                self._valid_keys.remove(key)
-        except KeyError as err:
-            # if default provided, 'out' value will return, else raise error
-            if default == NO_DEFAULT:
-                raise KeyError(
-                    f"You are trying to pop key `{key}` which is not in dict "
-                    f"without providing default value."
-                ) from err
-        return out
+        # using try/except for get/del is suboptimal, but
+        # this is faster that checkink if key in self keys
+        key = unravel_keys(key)
+        present = False
+        if isinstance(key, tuple):
+            if key in self.keys(True):
+                present = True
+                value = self._get_tuple(key, NO_DEFAULT)
+        elif key in self.keys():
+            present = True
+            value = self._get_str(key, NO_DEFAULT)
+        if present:
+            self.del_(key)
+        elif default is not NO_DEFAULT:
+            value = default
+        else:
+            raise KeyError(
+                f"You are trying to pop key `{key}` which is not in dict "
+                f"without providing default value."
+            )
+        return value
 
     def share_memory_(self) -> TensorDictBase:
         for td in self.tensordicts:
