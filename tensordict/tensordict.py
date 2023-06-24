@@ -5953,6 +5953,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
         return self
 
+    @lock_blocked
     def set(
         self,
         key: NestedKey,
