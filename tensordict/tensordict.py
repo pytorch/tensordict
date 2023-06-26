@@ -1635,6 +1635,8 @@ class TensorDictBase(MutableMapping):
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor | MemmapTensor:
         if isinstance(array, np.bool_):
             array = array.item()
+        if isinstance(array, list):
+            array = np.asarray(array)
         return torch.as_tensor(array, device=self.device)
 
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> TensorDictBase:
@@ -1668,11 +1670,11 @@ class TensorDictBase(MutableMapping):
         else:
             try:
                 value = self._convert_to_tensor(value)
-            except ValueError:
+            except ValueError as err:
                 raise ValueError(
-                    f"we only supports tensorclasses, tensordicts,"
+                    f"TensorDict conversion only supports tensorclasses, tensordicts,"
                     f" numeric scalars and tensors. Got {type(value)}"
-                )
+                ) from err
         bs = self.batch_size
         if check_shape and _shape(value)[: len(bs)] != bs:
             # if TensorDict, let's try to map it to the desired shape
