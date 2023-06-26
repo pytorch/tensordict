@@ -692,10 +692,6 @@ class PersistentTensorDict(TensorDictBase):
     def _set(
         self, key: str, value, inplace: bool = False, idx=None, check_shape=True
     ) -> PersistentTensorDict:
-        # although it is expected that _set will run as few tests as possible,
-        # we must do the value transformation here as _set can be called by other
-        # methods from TensorDictBase.
-        value = self._validate_value(value, check_shape=check_shape)
         if not inplace and idx is not None:
             raise RuntimeError("Cannot pass an index to _set when inplace=False.")
         # shortcut set if we're placing a tensordict
@@ -770,50 +766,17 @@ class PersistentTensorDict(TensorDictBase):
                     self.file.create_dataset(key, data=value, **self.kwargs)
         return self
 
-    def set(
-        self,
-        key: NestedKey,
-        value: dict[str, CompatibleType] | CompatibleType,
-        inplace: bool = False,
-    ) -> PersistentTensorDict:
-
-        key = self._process_key(key)
-
-        visitor = _Visitor()
-        self.file.visit(visitor)
-        inplace = inplace and key in visitor
-        if self.is_locked and not inplace:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
-
-        # not calling set_ to avoid re-validate key
+    def _set_str(self, key, value, inplace):
         return self._set(key, value, inplace=inplace)
 
-    def set_(
-        self, key: str, value: dict[str, CompatibleType] | CompatibleType
-    ) -> PersistentTensorDict:
-        visitor = _Visitor()
-        self.file.visit(visitor)
-        key = self._process_key(key)
-        if key not in visitor:
-            raise KeyError(f'key "{key}" not found in h5.')
-        # we don't need to check shape as the modification will be done
-        # in-place and an error will be thrown anyway if shapes don't match
-        return self._set(key, value, inplace=True, check_shape=False)
+    def _set_tuple(self, key, value, inplace):
+        return self._set(key, value, inplace=inplace)
 
-    def set_at_(
-        self,
-        key: NestedKey,
-        value: dict[str, CompatibleType] | CompatibleType,
-        idx: IndexType,
-    ) -> PersistentTensorDict:
-        visitor = _Visitor()
-        self.file.visit(visitor)
-        key = self._process_key(key)
-        if key not in visitor:
-            raise KeyError(f'key "{key}" not found in h5.')
-        # we don't need to check shape as the modification will be done
-        # in-place and an error will be thrown anyway if shapes don't match
-        return self._set(key, value, inplace=True, idx=idx, check_shape=False)
+    def _set_at_str(self, key, value, idx):
+        return self._set(key, value, inplace=True, idx=idx)
+
+    def _set_at_tuple(self, key, value, idx):
+        return self._set(key, value, inplace=True, idx=idx)
 
     def _set_metadata(self, orig_metadata_container: PersistentTensorDict):
         for key, td in orig_metadata_container._nested_tensordicts.items():
