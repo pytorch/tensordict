@@ -385,7 +385,7 @@ class TensorDictBase(MutableMapping):
         """
         td = TensorDict(dict(module.named_parameters()), [])
         td.update(dict(module.named_buffers()))
-        td = td.detach().unflatten_keys(".")
+        td = td.unflatten_keys(".")
         td.lock_()
         return td
 
