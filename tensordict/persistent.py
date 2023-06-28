@@ -754,6 +754,7 @@ class PersistentTensorDict(TensorDictBase):
                     raise err
 
         else:
+            key = self._process_key(key)
             try:
                 self.file.create_dataset(key, data=value, **self.kwargs)
             except (ValueError, OSError) as err:
