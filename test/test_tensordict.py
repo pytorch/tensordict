@@ -5268,7 +5268,7 @@ def test_from_module(memmap):
     net = nn.Transformer()
     td = TensorDict.from_module(net)
     if memmap:
-        td = td.memmap_()
+        td = td.detach().memmap_()
     net.load_state_dict(td.flatten_keys("."))
 
 
