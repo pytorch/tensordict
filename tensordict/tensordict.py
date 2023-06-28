@@ -1676,7 +1676,7 @@ class TensorDictBase(MutableMapping):
                     f" numeric scalars and tensors. Got {type(value)}"
                 ) from err
         bs = self.batch_size
-        if check_shape and _shape(value)[: len(bs)] != bs:
+        if check_shape and bs and _shape(value)[: len(bs)] != bs:
             # if TensorDict, let's try to map it to the desired shape
             if is_tc:
                 value = value.clone(recurse=False)
