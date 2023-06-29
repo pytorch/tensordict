@@ -5217,7 +5217,7 @@ torch.Size([3, 2])
         idx: IndexType,
         batch_size: Sequence[int] | None = None,
     ) -> None:
-        if not isinstance(source, TensorDictBase):
+        if not _is_tensor_collection(source.__class__):
             raise TypeError(
                 f"Expected source to be a subclass of TensorDictBase, "
                 f"got {type(source)}"
@@ -5268,15 +5268,7 @@ torch.Size([3, 2])
     def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
         if inplace:
             return super().exclude(*keys, inplace=True)
-        return TensorDict(
-            {key: value for key, value in self.items()},
-            batch_size=self.batch_size,
-            device=self.device,
-            names=self._td_dim_names,
-            _run_checks=False,
-            _is_memmap=self.is_memmap(),
-            _is_shared=self.is_shared(),
-        ).exclude(*keys, inplace=True)
+        return self.to_tensordict().exclude(*keys, inplace=True)
 
     @property
     def batch_size(self) -> torch.Size:
@@ -5374,12 +5366,16 @@ torch.Size([3, 2])
     ) -> TensorDictBase:
         key = self._validate_key(key)
 
-        if isinstance(key, tuple):
-            parent = self.get_parent_tensordict()
-            subparent, subkey = _get_leaf_tensordict(parent, key, _default_hook)
-            subparent.get_sub_tensordict(self.idx).set(subkey, tensor, inplace=inplace)
+        if isinstance(key, tuple) and len(key) > 1:
+            source = self._source
+            td = source._get_str(key[0], None)
+            if td is None:
+                source.create_nested(key[0])
+            td = self._get_str(key[0], NO_DEFAULT)
+            td.set(key[1:], tensor, inplace)
             return self
-
+        elif isinstance(key, tuple):
+            key = key[0]
         key_present = key in self.keys()
         inplace = inplace and key_present
         if not inplace:
