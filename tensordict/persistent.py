@@ -612,6 +612,11 @@ class PersistentTensorDict(TensorDictBase):
                 nested.fill_(subkey, value)
         return self
 
+    def _create_nested_str(self, key):
+        self.file.create_group(key)
+        target_td = self._get_str(key)
+        return target_td
+
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = True
     ) -> PersistentTensorDict:
