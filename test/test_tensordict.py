@@ -1707,6 +1707,45 @@ class TestTensorDicts(TestTensorDictsBase):
         td_clone2["d"] = nested_tensordict_value
         assert (td_clone1 == td_clone2).all()
 
+    def test_transpose(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdt = td.transpose(0, 1)
+        assert tdt.shape == torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
+        for key, value in tdt.items(True):
+            assert value.shape == torch.Size(
+                [td.get(key).shape[1], td.get(key).shape[0], *td.get(key).shape[2:]]
+            )
+        tdt = td.transpose(-1, -2)
+        for key, value in tdt.items(True):
+            assert value.shape == td.get(key).transpose(2, 3).shape
+        assert tdt.transpose(-1, -2) is td
+        with td.unlock_():
+            tdt.set(("some", "transposed", "tensor"), torch.zeros(tdt.shape))
+        assert td.get(("some", "transposed", "tensor")).shape == td.shape
+        assert td.transpose(0, 0) is td
+        with pytest.raises(
+            ValueError, match="The provided dimensions are incompatible"
+        ):
+            td.transpose(-5, -6)
+        with pytest.raises(
+            ValueError, match="The provided dimensions are incompatible"
+        ):
+            tdt.transpose(-5, -6)
+
+    def test_create_nested(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            td.create_nested("root")
+            assert td.get("root").shape == td.shape
+            assert is_tensor_collection(td.get("root"))
+            td.create_nested(("some", "nested", "key"))
+            assert td.get(("some", "nested", "key")).shape == td.shape
+            assert is_tensor_collection(td.get(("some", "nested", "key")))
+        if td_name in ("sub_td", "sub_td2"):
+            return
+        with td.lock_(), pytest.raises(RuntimeError):
+            td.create_nested("root")
+
     def test_tensordict_set(self, td_name, device):
         torch.manual_seed(1)
         np.random.seed(1)
