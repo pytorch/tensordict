@@ -65,6 +65,16 @@ class TestInteractionType:
 
 
 class TestTDModule:
+    def test_auto_unravel(self):
+        tdm = TensorDictModule(
+            lambda x: x,
+            in_keys=["a", ("b",), ("c", ("d",))],
+            out_keys=["e", ("f",), ("g", ("h",))],
+        )
+
+        assert tdm.in_keys == [("a",), ("b",), ("c", "d")]
+        assert tdm.out_keys == [("e",), ("f",), ("g", "h")]
+
     @pytest.mark.parametrize("args", [True, False])
     def test_input_keys(self, args):
         if args:

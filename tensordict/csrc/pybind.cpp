@@ -17,4 +17,5 @@ PYBIND11_MODULE(_tensordict, m) {
 //  m.def("unravel_keys", py::overload_cast<const py::tuple&>(&unravel), py::arg("key"));
 //  m.def("unravel_keys", &unravel_keys, py::arg("key"), py::arg("make_tuple") = false);
   m.def("unravel_keys", &unravel_keys, py::arg("key"));
+  m.def("unravel_key_list", &unravel_key_list, py::arg("keys"));
 }

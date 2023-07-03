@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
-from tensordict._tensordict import unravel_keys
+from tensordict._tensordict import unravel_key_list, unravel_keys
 
 from tensordict.nn.functional_modules import make_functional
 
@@ -473,7 +473,7 @@ class TensorDictModuleBase(nn.Module):
             in_keys = cls.__dict__.get("in_keys")
             # now let's remove it
             delattr(cls, "in_keys")
-            cls._in_keys = in_keys
+            cls._in_keys = unravel_key_list(in_keys)
             cls.in_keys = TensorDictModuleBase.in_keys
         if "out_keys" in cls.__dict__ and not isinstance(
             cls.__dict__.get("out_keys"), property
@@ -481,7 +481,7 @@ class TensorDictModuleBase(nn.Module):
             out_keys = cls.__dict__.get("out_keys")
             # now let's remove it
             delattr(cls, "out_keys")
-            cls._out_keys = out_keys
+            cls._out_keys = unravel_key_list(out_keys)
             cls._out_keys_apparent = out_keys
             cls.out_keys = TensorDictModuleBase.out_keys
         out = super().__new__(cls)
@@ -493,7 +493,7 @@ class TensorDictModuleBase(nn.Module):
 
     @in_keys.setter
     def in_keys(self, value: List[Union[str, Tuple[str]]]):
-        self._in_keys = value
+        self._in_keys = unravel_key_list(value)
 
     @property
     def out_keys(self):
@@ -506,6 +506,7 @@ class TensorDictModuleBase(nn.Module):
     @out_keys.setter
     def out_keys(self, value: List[Union[str, Tuple[str]]]):
         # the first time out_keys are set, they are marked as ground truth
+        value = unravel_key_list(value)
         if not hasattr(self, "_out_keys"):
             self._out_keys = value
         self._out_keys_apparent = value
