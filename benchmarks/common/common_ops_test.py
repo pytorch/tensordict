@@ -619,13 +619,16 @@ def test_unbind_speed(benchmark):
     (td,), _ = big_nested_td()
     benchmark(lambda td: td.unbind(0), td)
 
+
 def test_unbind_speed_stack0(benchmark):
     (td,), _ = big_nested_stacked_td()
     benchmark(lambda td: td.unbind(0), td)
 
+
 def test_unbind_speed_stack1(benchmark):
     (td,), _ = big_nested_stacked_td()
     benchmark(lambda td: td.unbind(1), td)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
