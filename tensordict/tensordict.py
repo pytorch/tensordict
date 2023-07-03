@@ -3165,6 +3165,7 @@ class TensorDictBase(MutableMapping):
                 _run_checks=False,
                 _is_shared=self.is_shared(),
                 _is_memmap=self.is_memmap(),
+                names=self.names,
             )
         else:
             out = self
@@ -3176,7 +3177,7 @@ class TensorDictBase(MutableMapping):
                     "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
 
-            tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
+            tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device, names=self.names)
             if key in self.keys():
                 tensordict.update(self[key])
             for old_key, new_key in list_of_keys:
