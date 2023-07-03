@@ -2366,10 +2366,6 @@ class TensorDictBase(MutableMapping):
         Resulting tensordicts will share the storage of the initial tensordict.
 
         """
-        idx = [
-            ((*tuple(slice(None) for _ in range(dim)), i))
-            for i in range(self.shape[dim])
-        ]
         if dim < 0:
             dim = self.batch_dims + dim
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
@@ -2378,16 +2374,18 @@ class TensorDictBase(MutableMapping):
             names = copy(names)
             names = [name for i, name in enumerate(names) if i != dim]
         out = []
-        for _idx in idx:
-            out.append(
-                self.apply(
-                    lambda tensor, idx=_idx: tensor[idx],
-                    batch_size=batch_size,
-                )
+        unbind_self_dict = {key: tensor.unbind(dim) for key, tensor in self.items()}
+        for _idx in range(self.batch_size[dim]):
+            td = TensorDict(
+                {key: tensor[_idx] for key, tensor in unbind_self_dict.items()},
+                batch_size=batch_size,
+                _run_checks=False,
+                device=self.device,
+                _is_memmap=False,
+                _is_shared=False,
+                names=names,
             )
-            if names is not None:
-                for item in out:
-                    item.names = names
+            out.append(td)
             if self.is_shared():
                 out[-1].share_memory_()
             elif self.is_memmap():
@@ -3177,7 +3175,9 @@ class TensorDictBase(MutableMapping):
                     "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
 
-            tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device, names=self.names)
+            tensordict = TensorDict(
+                {}, batch_size=self.batch_size, device=self.device, names=self.names
+            )
             if key in self.keys():
                 tensordict.update(self[key])
             for old_key, new_key in list_of_keys:
