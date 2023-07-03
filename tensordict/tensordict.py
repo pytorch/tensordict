@@ -1281,10 +1281,7 @@ class TensorDictBase(MutableMapping):
 
         """
         key = unravel_keys(key)
-        if isinstance(key, str):
-            return self._get_str(key, default=default)
-        else:
-            return self._get_tuple(key, default=default)
+        return self._get_tuple(key, default=default)
 
     @abc.abstractmethod
     def _get_str(self, key, default):
@@ -1650,7 +1647,7 @@ class TensorDictBase(MutableMapping):
     def _validate_key(self, key: NestedKey) -> NestedKey:
         key = unravel_keys(key)
 
-        if isinstance(key, tuple) and len(key) == 1:
+        if len(key) == 1:
             key = key[0]
 
         return key
@@ -2132,11 +2129,8 @@ class TensorDictBase(MutableMapping):
 
         """
         key = unravel_keys(key)
-        if isinstance(key, str):
-            return self._get_at_str(key, idx, default)
-        else:
-            # must be a tuple
-            return self._get_at_tuple(key, idx, default)
+        # must be a tuple
+        return self._get_at_tuple(key, idx, default)
 
     def _get_at_str(self, key, idx, default):
         out = self._get_str(key, default)
@@ -2522,10 +2516,7 @@ class TensorDictBase(MutableMapping):
             >>> nested = data.get(("some", "nested", "value"))
         """
         key = unravel_keys(key)
-        if isinstance(key, str):
-            self._create_nested_str(key)
-        else:
-            self._create_nested_tuple(key)
+        self._create_nested_tuple(key)
         return self
 
     @abc.abstractmethod
@@ -5488,7 +5479,7 @@ torch.Size([3, 2])
         return self._source._get_at_str(key, self.idx, default=default)
 
     def _get_tuple(self, key, default):
-        return self._source._get_tuple(key, self.idx, default=default)
+        return self._source._get_at_tuple(key, self.idx, default=default)
 
     def set_at_(
         self,
@@ -5785,12 +5776,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
 
     def __contains__(self, item):
         item = unravel_keys(item)
-        if isinstance(item, str):
-            if item in self._keys():
-                if self.leaves_only:
-                    return not _is_tensor_collection(self.tensordict.entry_class(item))
-                return True
-        elif len(item) == 1:
+        if len(item) == 1:
             if item[0] in self._keys():
                 if self.leaves_only:
                     return not _is_tensor_collection(
@@ -6937,6 +6923,8 @@ class LazyStackedTensorDict(TensorDictBase):
         # using try/except for get/del is suboptimal, but
         # this is faster that checkink if key in self keys
         key = unravel_keys(key)
+        if len(key) == 1:
+            key = key[0]
         present = False
         if isinstance(key, tuple):
             if key in self.keys(True):

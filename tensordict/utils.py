@@ -1098,17 +1098,14 @@ class _StringKeys(KeysView):
     def __contains__(self, item):
         if not isinstance(item, str):
             # at this point, we don't care about efficiency anymore
-            is_tuple = False
             try:
-                if isinstance(item, tuple) and all(
-                    isinstance(key, str) for key in unravel_keys(item)
-                ):
-                    is_tuple = True
+                unravel_item = unravel_keys(item)
             except Exception:  # catch errors during unravel
                 raise TypeError(NON_STR_KEY)
-            if is_tuple:
+            if len(unravel_item) > 1:
                 raise TypeError(NON_STR_KEY_TUPLE)
-            raise TypeError(NON_STR_KEY)
+            else:
+                item = unravel_item[0]
         return super().__contains__(item)
 
 
@@ -1118,17 +1115,14 @@ class _StringOnlyDict(dict):
     def __contains__(self, item):
         if not isinstance(item, str):
             # at this point, we don't care about efficiency anymore
-            is_tuple = False
             try:
-                if isinstance(item, tuple) and all(
-                    isinstance(key, str) for key in unravel_keys(item)
-                ):
-                    is_tuple = True
+                unravel_item = unravel_keys(item)
             except Exception:  # catch errors during unravel
                 raise TypeError(NON_STR_KEY)
-            if is_tuple:
+            if len(unravel_item) > 1:
                 raise TypeError(NON_STR_KEY_TUPLE)
-            raise TypeError(NON_STR_KEY)
+            else:
+                item = unravel_item[0]
         return super().__contains__(item)
 
     def keys(self):

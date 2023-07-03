@@ -228,10 +228,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def _process_key(self, key):
         key = unravel_keys(key)
-        if isinstance(key, str):
-            return key
-        else:
-            return "/".join(key)
+        return "/".join(key)
 
     def _check_batch_size(self, batch_size) -> None:
         for key in self.keys(include_nested=True, leaves_only=True):
@@ -463,6 +460,7 @@ class PersistentTensorDict(TensorDictBase):
         return self.to_tensordict()
 
     def del_(self, key):
+        key = self._process_key(key)
         del self.file[key]
         return self
 
