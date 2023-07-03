@@ -178,6 +178,7 @@ def tensorclass(cls: T) -> T:
     cls.set_at_ = _set_at_
     cls.get = _get
     cls.get_at = _get_at
+    cls.unbind = _unbind
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
 
@@ -935,3 +936,15 @@ def _all_non_td_fields_as_str(src_dict) -> list:
             result.append(f"{key}={repr(val)}")
 
     return result
+
+
+def _unbind(self, dim: int):
+    """Returns a tuple of indexed tensorclass instances unbound along the indicated dimension.
+
+    Resulting tensorclass instances will share the storage of the initial tensorclass instance.
+
+    """
+    return tuple(
+        self._from_tensordict(td, non_tensordict=copy(self._non_tensordict))
+        for td in self._tensordict.unbind(dim)
+    )
