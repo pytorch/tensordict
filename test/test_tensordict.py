@@ -5349,6 +5349,14 @@ def test_from_dict(batch_size, batch_dims, device):
         assert data["d", "g"].batch_size == torch.Size(batch_size)
 
 
+def test_unbind_batchsize():
+    td = TensorDict({"a": TensorDict({"b": torch.zeros(2, 3)}, [2, 3])}, [2])
+    td["a"].batch_size
+    tds = td.unbind(0)
+    assert tds[0].batch_size == torch.Size([])
+    assert tds[0]["a"].batch_size == torch.Size([3])
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
