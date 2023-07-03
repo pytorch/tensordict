@@ -3179,7 +3179,10 @@ class TensorDictBase(MutableMapping):
                 )
 
             tensordict = TensorDict(
-                {}, batch_size=self.batch_size, device=self.device, names=self.names
+                {},
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self.names,
             )
             if key in self.keys():
                 tensordict.update(self[key])
@@ -7735,6 +7738,8 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
 
     @names.setter
     def names(self, value):
+        if value[: self.batch_dims] == self.names:
+            return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
         )
@@ -7783,6 +7788,8 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
 
     @names.setter
     def names(self, value):
+        if value[: self.batch_dims] == self.names:
+            return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
         )
@@ -8010,6 +8017,8 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     @names.setter
     def names(self, value):
+        if value[: self.batch_dims] == self.names:
+            return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
         )
