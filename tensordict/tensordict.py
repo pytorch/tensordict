@@ -4212,10 +4212,8 @@ class TensorDict(TensorDictBase):
         return out
 
     def _get_tuple(self, key, default):
-        first = self._get_str(key[0], None)
-        if first is None:
-            return self._default_get(key[0], default)
-        if len(key) == 1:
+        first = self._get_str(key[0], default)
+        if len(key) == 1 or first is default:
             return first
         try:
             if isinstance(first, KeyedJaggedTensor):
@@ -5875,7 +5873,6 @@ class LazyStackedTensorDict(TensorDictBase):
         self.tensordicts: list[TensorDictBase] = list(tensordicts)
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
-        self._update_valid_keys()
         self.hook_out = hook_out
         self.hook_in = hook_in
         if batch_size is not None and batch_size != self.batch_size:
@@ -5992,8 +5989,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return all(are_memmap)
 
     def get_valid_keys(self) -> list[str]:
-        if self._valid_keys is None:
-            self._update_valid_keys()
+        self._update_valid_keys()
         return self._valid_keys
 
     def set_valid_keys(self, keys: Sequence[str]) -> None:
@@ -6019,11 +6015,6 @@ class LazyStackedTensorDict(TensorDictBase):
             raise RuntimeError
         for tensordict, item in zip(self.tensordicts, values):
             tensordict._set(key, item, inplace)
-
-        first_key = key if (isinstance(key, str)) else key[0]
-        if key not in self._valid_keys:
-            self._valid_keys = sorted([*self._valid_keys, first_key], key=str)
-
         return self
 
     def set(
@@ -6042,11 +6033,6 @@ class LazyStackedTensorDict(TensorDictBase):
             tensor = self.hook_in(tensor)
         for td, _item in zip(self.tensordicts, tensor.unbind(self.stack_dim)):
             td.set(key, _item, inplace=inplace)
-
-        first_key = key if (isinstance(key, str)) else key[0]
-        if key not in self._valid_keys:
-            self._valid_keys = sorted([*self._valid_keys, first_key], key=str)
-
         return self
 
     def set_(
@@ -6168,12 +6154,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if key not in keys:
             # first, let's try to update the valid keys
             self._update_valid_keys()
-            keys = self.valid_keys
+            keys = self._valid_keys
 
         if key not in keys:
             return self._default_get(key, default)
-
-        tensors = [td.get(key, default=default) for td in self.tensordicts]
+        tensors = [td.get(key, default=None) for td in self.tensordicts]
         try:
             out = torch.stack(tensors, self.stack_dim)
             if _is_tensor_collection(out.__class__):
@@ -6349,7 +6334,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if key not in keys:
             # first, let's try to update the valid keys
             self._update_valid_keys()
-            keys = self.valid_keys
+            keys = self._valid_keys
 
         if key not in keys:
             return self._default_get(key, default)
@@ -6451,6 +6436,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts[1:]:
             valid_keys = valid_keys.intersection(td.keys())
         self._valid_keys = sorted(valid_keys)
+        return self._valid_keys
 
     def entry_class(self, key: NestedKey) -> type:
         data_type = type(self.tensordicts[0].get(key))
@@ -6520,7 +6506,6 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         if inplace:
             self.tensordicts = tensordicts
-            self._update_valid_keys()
             return self
         return torch.stack(tensordicts, dim=self.stack_dim)
 
@@ -6913,7 +6898,6 @@ class LazyStackedTensorDict(TensorDictBase):
         if not is_deleted:
             # we know err is defined because LazyStackedTensorDict cannot be empty
             raise error
-        self._valid_keys.remove(key)
         return self
 
     def pop(
@@ -7036,7 +7020,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.tensordicts, input_dict_or_td.tensordicts
             ):
                 td_dest.update(td_source)
-            self._update_valid_keys()
             return self
 
         keys = self.keys(False)
