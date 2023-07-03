@@ -3131,6 +3131,7 @@ class TensorDictBase(MutableMapping):
                 _run_checks=False,
                 _is_shared=self.is_shared(),
                 _is_memmap=self.is_memmap(),
+                names=self.names,
             )
             for key, value in self.items():
                 if key in to_flatten:
