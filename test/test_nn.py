@@ -75,6 +75,33 @@ class TestTDModule:
         assert tdm.in_keys == [("a",), ("b",), ("c", "d")]
         assert tdm.out_keys == [("e",), ("f",), ("g", "h")]
 
+        class MyClass(TensorDictModuleBase):
+            def __init__(self):
+                self.in_keys = ["a", ("b",), ("c", ("d",))]
+                self.out_keys = ["e", ("f",), ("g", ("h",))]
+                super().__init__()
+
+        c = MyClass()
+        assert c.in_keys == [("a",), ("b",), ("c", "d")]
+        c.in_keys = ["a1", ("b1",), ("c1", ("d1",))]
+        assert c.in_keys == [("a1",), ("b1",), ("c1", "d1")]
+        assert c.out_keys == [("e",), ("f",), ("g", "h")]
+        c.out_keys = [("e1",), ("f1",), ("g1", "h1")]
+        assert c.out_keys == [("e1",), ("f1",), ("g1", "h1")]
+
+        class MyClass2(TensorDictModuleBase):
+            in_keys = ["a", ("b",), ("c", ("d",))]
+            out_keys = ["e", ("f",), ("g", ("h",))]
+
+        c = MyClass2()
+        assert c.in_keys == [("a",), ("b",), ("c", "d")]
+        c.in_keys = ["a1", ("b1",), ("c1", ("d1",))]
+        assert c.in_keys == [("a1",), ("b1",), ("c1", "d1")]
+
+        assert c.out_keys == [("e",), ("f",), ("g", "h")]
+        c.out_keys = [("e1",), ("f1",), ("g1", "h1")]
+        assert c.out_keys == [("e1",), ("f1",), ("g1", "h1")]
+
     @pytest.mark.parametrize("args", [True, False])
     def test_input_keys(self, args):
         if args:

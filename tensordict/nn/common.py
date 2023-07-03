@@ -481,7 +481,8 @@ class TensorDictModuleBase(nn.Module):
             out_keys = cls.__dict__.get("out_keys")
             # now let's remove it
             delattr(cls, "out_keys")
-            cls._out_keys = unravel_key_list(out_keys)
+            out_keys = unravel_key_list(out_keys)
+            cls._out_keys = out_keys
             cls._out_keys_apparent = out_keys
             cls.out_keys = TensorDictModuleBase.out_keys
         out = super().__new__(cls)
