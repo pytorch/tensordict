@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
-from tensordict._tensordict import unravel_key, unravel_key_list
+from tensordict._tensordict import unravel_key_list
 
 from tensordict.nn.functional_modules import make_functional
 
