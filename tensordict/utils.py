@@ -23,7 +23,7 @@ import numpy as np
 import torch
 
 from packaging.version import parse
-from tensordict._tensordict import unravel_keys
+from tensordict._tensordict import unravel_key
 from torch import Tensor
 
 if TYPE_CHECKING:
@@ -833,7 +833,7 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     return False
 
 
-def _maybe_unravel_keys_silent(index):
+def _maybe_unravel_key_silent(index):
     """Attemps to unravel keys.
 
     If not possible (not keys) return the original index.
@@ -844,7 +844,7 @@ def _maybe_unravel_keys_silent(index):
             if isinstance(key, str):
                 newkey.append(key)
             else:
-                _key = _maybe_unravel_keys_silent(key)
+                _key = _maybe_unravel_key_silent(key)
                 if _key is key:
                     return index
                 newkey += _key
@@ -1094,7 +1094,7 @@ class _StringKeys(KeysView):
         if not isinstance(item, str):
             # at this point, we don't care about efficiency anymore
             try:
-                unravel_item = unravel_keys(item)
+                unravel_item = unravel_key(item)
             except Exception:  # catch errors during unravel
                 raise TypeError(NON_STR_KEY)
             if len(unravel_item) > 1:
@@ -1116,7 +1116,7 @@ class _StringOnlyDict(dict):
         if not isinstance(item, str):
             # at this point, we don't care about efficiency anymore
             try:
-                unravel_item = unravel_keys(item)
+                unravel_item = unravel_key(item)
             except Exception:  # catch errors during unravel
                 raise TypeError(NON_STR_KEY)
             if len(unravel_item) > 1:
