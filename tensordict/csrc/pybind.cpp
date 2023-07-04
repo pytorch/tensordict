@@ -13,8 +13,8 @@
 namespace py = pybind11;
 
 PYBIND11_MODULE(_tensordict, m) {
-//  m.def("unravel_keys", py::overload_cast<const py::str&>(&unravel), py::arg("key"));
-//  m.def("unravel_keys", py::overload_cast<const py::tuple&>(&unravel), py::arg("key"));
-//  m.def("unravel_keys", &unravel_keys, py::arg("key"), py::arg("make_tuple") = false);
-  m.def("unravel_keys", &unravel_keys, py::arg("key"));
+  m.def("unravel_keys", &unravel_keys, py::arg("key")); // for bc compat
+  m.def("unravel_key", &unravel_key, py::arg("key"));
+  m.def("unravel_key_list", py::overload_cast<const py::list&>(&unravel_key_list), py::arg("keys"));
+  m.def("unravel_key_list", py::overload_cast<const py::tuple&>(&unravel_key_list), py::arg("keys"));
 }
