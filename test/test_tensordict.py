@@ -1266,7 +1266,6 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "stacked_td":
             for _td in td.tensordicts:
                 _td["newnested", "first"] = torch.randn(_td.shape)
-            td._update_valid_keys()
         else:
             td["newnested", "first"] = torch.randn(td.shape)
         if nested:

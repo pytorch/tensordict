@@ -87,3 +87,7 @@ py::list unravel_key_list(const py::list& keys) {
     }
     return newkeys;
 }
+
+py::list unravel_key_list(const py::tuple& keys) {
+    return unravel_key_list(py::list(keys));
+}

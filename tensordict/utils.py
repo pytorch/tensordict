@@ -453,11 +453,6 @@ def is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
     return False
 
 
-def _seq_of_nested_key_check(seq: Sequence[NestedKey]) -> None:
-    if not is_seq_of_nested_key(seq):
-        raise ValueError(f"seq should be a Sequence[NestedKey]. Got {seq}")
-
-
 def _normalize_key(key: NestedKey) -> NestedKey:
     # normalises tuples of length one to their string contents
     return key if not isinstance(key, tuple) or len(key) > 1 else key[0]

@@ -5340,14 +5340,6 @@ torch.Size([3, 2])
                     value_expand = MemmapTensor.from_tensor(value_expand)
 
             parent._set(subkey, value_expand)
-            if (
-                isinstance(parent, LazyStackedTensorDict)
-                and subkey not in parent._valid_keys
-            ):
-                # there is some duplication here with LazyStackedTensorDict.set, but
-                # calling that duplicates runtime checks, and some code duplication
-                # seems better than duplicated overhead.
-                parent._valid_keys = sorted([*parent._valid_keys, subkey], key=str)
 
         parent.set_at_(subkey, value, self.idx)
         return self
@@ -5767,15 +5759,18 @@ def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
 
 class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     def __len__(self) -> int:
-        return len(self.tensordict.valid_keys)
+        i = -1
+        for i, _ in enumerate(self._keys()):  # noqa: B007
+            continue
+        return i + 1
 
     def _keys(self) -> list[str]:
-        return self.tensordict.valid_keys
+        return self.tensordict._key_list()
 
     def __contains__(self, item):
         item = unravel_keys(item)
         if len(item) == 1:
-            if item[0] in self._keys():
+            if item[0] in self.tensordict._iterate_over_keys():
                 if self.leaves_only:
                     return not _is_tensor_collection(
                         self.tensordict.entry_class(item[0])
@@ -5988,19 +5983,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return all(are_memmap)
 
-    def get_valid_keys(self) -> list[str]:
-        self._update_valid_keys()
-        return self._valid_keys
-
-    def set_valid_keys(self, keys: Sequence[str]) -> None:
-        raise RuntimeError(
-            "setting valid keys is not permitted. valid keys are defined as "
-            "the intersection of all the key sets from the TensorDicts in a "
-            "stack and cannot be defined explicitely."
-        )
-
-    valid_keys = property(get_valid_keys, set_valid_keys)
-
     @staticmethod
     def _compute_batch_size(
         batch_size: torch.Size, stack_dim: int, N: int
@@ -6144,19 +6126,9 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         default: str | CompatibleType = NO_DEFAULT,
     ) -> CompatibleType:
-        # TODO: the stacking logic below works for nested keys, but the key in
-        # self.valid_keys check will fail and we'll return the default instead.
-        # For now we'll advise user that nested keys aren't supported, but it should be
-        # fairly easy to add support if we could add nested keys to valid_keys.
 
         # we can handle the case where the key is a tuple of length 1
-        keys = self.valid_keys
-        if key not in keys:
-            # first, let's try to update the valid keys
-            self._update_valid_keys()
-            keys = self._valid_keys
-
-        if key not in keys:
+        if key not in self.keys():
             return self._default_get(key, default)
         tensors = [td.get(key, default=None) for td in self.tensordicts]
         try:
@@ -6310,6 +6282,30 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         default: str | CompatibleType = NO_DEFAULT,
     ) -> CompatibleType:
+        """Returns a nested tensor when stacking cannot be achieved.
+
+        Args:
+            key (NestedKey): the entry to nest.
+            default (Any, optiona): the default value to return in case the key
+                isn't in all sub-tensordicts.
+
+                .. note:: In case the default is a tensor, this method will attempt
+                  the construction of a nestedtensor with it. Otherwise, the default
+                  value will be returned.
+
+        Examples:
+            >>> td0 = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4)}, [])
+            >>> td1 = TensorDict({"a": torch.ones(5)}, [])
+            >>> td = torch.stack([td0, td1], 0)
+            >>> a = td.get_nestedtensor("a")
+            >>> # using a tensor as default uses this default to build the nested tensor
+            >>> b = td.get_nestedtensor("b", default=torch.ones(4))
+            >>> assert (a == b).all()
+            >>> # using anything else as default returns the default
+            >>> b2 = td.get_nestedtensor("b", None)
+            >>> assert b2 is None
+
+        """
         # disallow getting nested tensor if the stacking dimension is not 0
         if self.stack_dim != 0:
             raise RuntimeError(
@@ -6318,28 +6314,20 @@ class LazyStackedTensorDict(TensorDictBase):
                 "when the stack_dim is 0."
             )
 
-        # TODO: the stacking logic below works for nested keys, but the key in
-        # self.valid_keys check will fail and we'll return the default instead.
-        # For now we'll advise user that nested keys aren't supported, but it should be
-        # fairly easy to add support if we could add nested keys to valid_keys.
-
         # we can handle the case where the key is a tuple of length 1
-        if (isinstance(key, tuple)) and len(key) == 1:
-            key = key[0]
-        elif isinstance(key, tuple):
-            tensordict, key = _get_leaf_tensordict(self, key)
-            return tensordict.get_nestedtensor(key, default=default)
-
-        keys = self.valid_keys
-        if key not in keys:
-            # first, let's try to update the valid keys
-            self._update_valid_keys()
-            keys = self._valid_keys
-
-        if key not in keys:
-            return self._default_get(key, default)
-
-        tensors = [td.get(key, default=default) for td in self.tensordicts]
+        key = unravel_keys(key)
+        subkey = key[0]
+        if len(key) > 1:
+            tensordict = self.get(subkey, default)
+            if tensordict is default:
+                return default
+            return tensordict.get_nestedtensor(key[1:], default=default)
+        tensors = [td.get(subkey, default=default) for td in self.tensordicts]
+        if not isinstance(default, torch.Tensor) and any(
+            tensor is default for tensor in tensors
+        ):
+            # we don't stack but return the default
+            return default
         return torch.nested.nested_tensor(tensors)
 
     def is_contiguous(self) -> bool:
@@ -6422,7 +6410,6 @@ class LazyStackedTensorDict(TensorDictBase):
             del self._orig_batch_size
         self._batch_size = new_size
 
-    # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _LazyStackedTensorDictKeysView:
@@ -6431,12 +6418,16 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return keys
 
-    def _update_valid_keys(self) -> None:
-        valid_keys = set(self.tensordicts[0].keys())
-        for td in self.tensordicts[1:]:
-            valid_keys = valid_keys.intersection(td.keys())
-        self._valid_keys = sorted(valid_keys)
-        return self._valid_keys
+    valid_keys = keys
+
+    def _iterate_over_keys(self) -> None:
+        for key in self.tensordicts[0].keys():
+            if all(key in td.keys() for td in self.tensordicts):
+                yield key
+
+    @cache  # noqa: B019
+    def _key_list(self):
+        return list(self._iterate_over_keys())
 
     def entry_class(self, key: NestedKey) -> type:
         data_type = type(self.tensordicts[0].get(key))
@@ -7052,7 +7043,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.set((key, *subkey), value, **kwargs)
             else:
                 self.set(key, value, **kwargs)
-        self._update_valid_keys()
         return self
 
     def update_(
@@ -7151,7 +7141,6 @@ class LazyStackedTensorDict(TensorDictBase):
 
         N = len(self.tensordicts)
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
-        self._update_valid_keys()
 
     @lock_blocked
     def append(self, tensordict: TensorDictBase) -> None:
@@ -8208,12 +8197,8 @@ def _set_max_batch_size(source: TensorDictBase, batch_dims=None):
 def _iter_items_lazystack(
     tensordict: LazyStackedTensorDict,
 ) -> Iterator[tuple[str, CompatibleType]]:
-    for key in tensordict.valid_keys:
-        try:
-            yield key, tensordict.get(key)
-        except KeyError:
-            tensordict._update_valid_keys()
-            continue
+    for key in tensordict.keys():
+        yield key, tensordict.get(key)
 
 
 def _clone_value(value: CompatibleType, recurse: bool) -> CompatibleType:

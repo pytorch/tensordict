@@ -302,7 +302,6 @@ class _OutKeysSelect:
                 "You are likely using tensordict.nn.dispatch with keyword arguments with an older (< 2.0) version of pytorch. "
                 "This is currently not supported. Please use unnamed arguments or upgrade pytorch."
             )
-        print(tensordict_out)
         # detect dispatch calls
         in_keys = module.in_keys
         is_dispatched = self._detect_dispatch(tensordict_in, in_keys)
@@ -609,6 +608,7 @@ class TensorDictModuleBase(nn.Module):
                 is_shared=False)
 
         """
+        out_keys = unravel_key_list(list(out_keys))
         if len(out_keys) == 1:
             if out_keys[0] not in self.out_keys:
                 err_msg = f"Can't select non existent key: {out_keys[0]}. "
@@ -721,6 +721,7 @@ class TensorDictModuleBase(nn.Module):
                 is_shared=False)
 
         """
+        out_keys = unravel_key_list(out_keys)
         if len(out_keys) == 1:
             if out_keys[0] not in self.out_keys:
                 err_msg = f"Can't select non existent key: {out_keys[0]}. "
@@ -1023,7 +1024,7 @@ class TensorDictModule(TensorDictModuleBase):
         if tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
-            if _out_key != "_":
+            if _out_key != ("_",):
                 tensordict_out.set(_out_key, _tensor)
         return tensordict_out
 
@@ -1089,6 +1090,10 @@ class TensorDictModule(TensorDictModuleBase):
                 else:
                     raise err
             if isinstance(tensors, (dict, TensorDictBase)):
+                if isinstance(tensors, dict):
+                    keys = unravel_key_list(list(tensors.keys()))
+                    values = tensors.values()
+                    tensors = dict(zip(keys, values))
                 tensors = tuple(tensors.get(key, None) for key in self.out_keys)
             if not isinstance(tensors, tuple):
                 tensors = (tensors,)
