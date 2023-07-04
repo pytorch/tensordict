@@ -26,6 +26,7 @@ except ImportError:
     # old torch version, passing
     pass
 
+__base__setattr__ = nn.Module.__setattr__
 
 @implement_for("torch", "2.0", None)
 def _register_params(self, name, param):
@@ -380,10 +381,14 @@ def _swap_state(
                 if _old_value is None:
                     _old_value = __dict__.get(key, None)
                 if _old_value is None:
-                    _old_value = torch.zeros(*value.shape, 0)
+                    pass
+                    # _old_value = torch.zeros(*value.shape, 0)
                 old_tensordict_dict[key] = _old_value
                 # old_tensordict_dict[key] = _old_value
-            set_tensor_dict(__dict__, model, key, value)
+            if model.__class__.__setattr__ is __base__setattr__:
+                set_tensor_dict(__dict__, model, key, value)
+            else:
+                setattr(model, key, value)
     old_tensordict.update(old_tensordict_dict)
     if was_stateless or not return_old_tensordict:
         return old_tensordict
