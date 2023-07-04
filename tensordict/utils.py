@@ -23,8 +23,8 @@ import numpy as np
 import torch
 
 from packaging.version import parse
-from tensordict._tensordict import (
-    unravel_key,  # noqa: F401
+from tensordict._tensordict import (  # noqa: F401
+    unravel_key,
     unravel_key_list,  # noqa: F401
     unravel_keys,  # noqa: F401
 )
