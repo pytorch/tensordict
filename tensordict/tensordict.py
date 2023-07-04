@@ -6426,10 +6426,7 @@ class LazyStackedTensorDict(TensorDictBase):
     #             yield key
     def _iterate_over_keys(self) -> None:
         # this is about 20x faster than the version above
-        keys = set(self.tensordicts[0].keys())
-        for td in self.tensordicts[1:]:
-            keys = keys.intersection(td.keys())
-        yield from keys
+        yield from self._key_list()
 
     @cache  # noqa: B019
     def _key_list(self):
