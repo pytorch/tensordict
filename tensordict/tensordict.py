@@ -6420,14 +6420,23 @@ class LazyStackedTensorDict(TensorDictBase):
 
     valid_keys = keys
 
+    # def _iterate_over_keys(self) -> None:
+    #     for key in self.tensordicts[0].keys():
+    #         if all(key in td.keys() for td in self.tensordicts):
+    #             yield key
     def _iterate_over_keys(self) -> None:
-        for key in self.tensordicts[0].keys():
-            if all(key in td.keys() for td in self.tensordicts):
-                yield key
+        # this is about 20x faster than the version above
+        keys = set(self.tensordicts[0].keys())
+        for td in self.tensordicts[1:]:
+            keys = keys.intersection(td.keys())
+        yield from keys
 
     @cache  # noqa: B019
     def _key_list(self):
-        return list(self._iterate_over_keys())
+        keys = set(self.tensordicts[0].keys())
+        for td in self.tensordicts[1:]:
+            keys = keys.intersection(td.keys())
+        return list(keys)
 
     def entry_class(self, key: NestedKey) -> type:
         data_type = type(self.tensordicts[0].get(key))
