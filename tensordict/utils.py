@@ -1111,6 +1111,7 @@ class _StringKeys(KeysView):
 class _StringOnlyDict(dict):
     """A dict class where contains is restricted to strings."""
 
+    # kept here for debugging
     # def __setitem__(self, key, value):
     #     if not isinstance(key, str):
     #         raise RuntimeError
