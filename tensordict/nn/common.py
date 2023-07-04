@@ -19,7 +19,7 @@ from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
-from tensordict.utils import _normalize_key, implement_for, NestedKey
+from tensordict.utils import implement_for, NestedKey
 from torch import nn, Tensor
 
 try:
@@ -980,11 +980,11 @@ class TensorDictModule(TensorDictModuleBase):
         elif not isinstance(out_keys, list):
             raise ValueError(self._OUT_KEY_ERR)
         try:
-            in_keys = [unravel_key(in_key) for in_key in in_keys]
+            in_keys = unravel_key_list(in_keys)
         except Exception:
             raise ValueError(self._IN_KEY_ERR)
         try:
-            out_keys = [unravel_key(out_key) for out_key in out_keys]
+            out_keys = unravel_key_list(out_keys)
         except Exception:
             raise ValueError(self._OUT_KEY_ERR)
 
@@ -993,10 +993,10 @@ class TensorDictModule(TensorDictModuleBase):
                 f"Module {module} if type {type(module)} is not callable. "
                 f"Typical accepted types are nn.Module or TensorDictModule."
             )
-        self.out_keys = [_normalize_key(key) for key in out_keys]
-        self.in_keys = [_normalize_key(key) for key in in_keys]
+        self.out_keys = out_keys
+        self.in_keys = in_keys
 
-        if "_" in in_keys:
+        if ("_",) in self.in_keys:
             warnings.warn(
                 'key "_" is for ignoring output, it should not be used in input keys',
                 stacklevel=2,

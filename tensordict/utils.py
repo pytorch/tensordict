@@ -457,11 +457,6 @@ def is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
     return False
 
 
-def _normalize_key(key: NestedKey) -> NestedKey:
-    # normalises tuples of length one to their string contents
-    return key if not isinstance(key, tuple) or len(key) > 1 else key[0]
-
-
 def index_keyedjaggedtensor(
     kjt: KeyedJaggedTensor, index: slice | range | list | torch.Tensor | np.ndarray
 ) -> KeyedJaggedTensor:
