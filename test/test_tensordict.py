@@ -584,7 +584,6 @@ class TestTensorDicts(TestTensorDictsBase):
                 "a" in td2.clone().keys()
             )
         else:
-            print(list(td2.keys(True, True)))
             assert (len(list(td2.keys(True, True))) == len(keys)) and (
                 "a" in td2.keys()
             )
@@ -1266,6 +1265,7 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "stacked_td":
             for _td in td.tensordicts:
                 _td["newnested", "first"] = torch.randn(_td.shape)
+            td._update_valid_keys()
         else:
             td["newnested", "first"] = torch.randn(td.shape)
         if nested:

@@ -11,7 +11,7 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-from tensordict._tensordict import unravel_key
+from tensordict._tensordict import unravel_keys
 
 H5_ERR = None
 try:
@@ -35,7 +35,7 @@ from tensordict.tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import (
-    _maybe_unravel_key_silent,
+    _maybe_unravel_keys_silent,
     _shape,
     cache,
     DeviceType,
@@ -227,8 +227,11 @@ class PersistentTensorDict(TensorDictBase):
         self.file.close()
 
     def _process_key(self, key):
-        key = unravel_key(key)
-        return "/".join(key)
+        key = unravel_keys(key)
+        if isinstance(key, str):
+            return key
+        else:
+            return "/".join(key)
 
     def _check_batch_size(self, batch_size) -> None:
         for key in self.keys(include_nested=True, leaves_only=True):
@@ -374,7 +377,7 @@ class PersistentTensorDict(TensorDictBase):
     __getitems__ = __getitem__
 
     def __setitem__(self, index, value):
-        index = _maybe_unravel_key_silent(index)
+        index = _maybe_unravel_keys_silent(index)
         if isinstance(index, str) or (
             isinstance(index, tuple) and all(isinstance(val, str) for val in index)
         ):
@@ -460,7 +463,6 @@ class PersistentTensorDict(TensorDictBase):
         return self.to_tensordict()
 
     def del_(self, key):
-        key = self._process_key(key)
         del self.file[key]
         return self
 

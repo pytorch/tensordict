@@ -837,7 +837,7 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     return False
 
 
-def _maybe_unravel_key_silent(index):
+def _maybe_unravel_keys_silent(index):
     """Attemps to unravel keys.
 
     If not possible (not keys) return the original index.
@@ -848,7 +848,7 @@ def _maybe_unravel_key_silent(index):
             if isinstance(key, str):
                 newkey.append(key)
             else:
-                _key = _maybe_unravel_key_silent(key)
+                _key = _maybe_unravel_keys_silent(key)
                 if _key is key:
                     return index
                 newkey += _key
@@ -1097,36 +1097,37 @@ class _StringKeys(KeysView):
     def __contains__(self, item):
         if not isinstance(item, str):
             # at this point, we don't care about efficiency anymore
+            is_tuple = False
             try:
-                unravel_item = unravel_key(item)
+                if isinstance(item, tuple) and all(
+                    isinstance(key, str) for key in unravel_keys(item)
+                ):
+                    is_tuple = True
             except Exception:  # catch errors during unravel
                 raise TypeError(NON_STR_KEY)
-            if len(unravel_item) > 1:
+            if is_tuple:
                 raise TypeError(NON_STR_KEY_TUPLE)
-            else:
-                item = unravel_item[0]
+            raise TypeError(NON_STR_KEY)
         return super().__contains__(item)
 
 
 class _StringOnlyDict(dict):
     """A dict class where contains is restricted to strings."""
 
-    # def __setitem__(self, key, value):
-    #     if not isinstance(key, str):
-    #         raise RuntimeError
-    #     return super().__setitem__(key, value)
-
     def __contains__(self, item):
         if not isinstance(item, str):
             # at this point, we don't care about efficiency anymore
+            is_tuple = False
             try:
-                unravel_item = unravel_key(item)
+                if isinstance(item, tuple) and all(
+                    isinstance(key, str) for key in unravel_keys(item)
+                ):
+                    is_tuple = True
             except Exception:  # catch errors during unravel
                 raise TypeError(NON_STR_KEY)
-            if len(unravel_item) > 1:
+            if is_tuple:
                 raise TypeError(NON_STR_KEY_TUPLE)
-            else:
-                item = unravel_item[0]
+            raise TypeError(NON_STR_KEY)
         return super().__contains__(item)
 
     def keys(self):
