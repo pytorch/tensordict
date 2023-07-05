@@ -319,6 +319,18 @@ def test_membership_stacked_nested_leaf_last(benchmark):
     benchmark(lambda: key in td.keys(True, True))
 
 
+def test_nested_getleaf(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(i) for i in range(19)) + ("t",)
+    benchmark(lambda: td.get(key))
+
+
+def test_nested_get(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(i) for i in range(19))
+    benchmark(lambda: td.get(key))
+
+
 def test_stacked_getleaf(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(i) for i in range(19)) + ("t",)
@@ -329,6 +341,30 @@ def test_stacked_get(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(i) for i in range(19))
     benchmark(lambda: td.get(key))
+
+
+def test_nested_getitemleaf(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(i) for i in range(19)) + ("t",)
+    benchmark(lambda: td[key])
+
+
+def test_nested_getitem(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(i) for i in range(19))
+    benchmark(lambda: td[key])
+
+
+def test_stacked_getitemleaf(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    key = tuple(str(i) for i in range(19)) + ("t",)
+    benchmark(lambda: td[key])
+
+
+def test_stacked_getitem(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    key = tuple(str(i) for i in range(19))
+    benchmark(lambda: td[key])
 
 
 def test_lock_nested(benchmark):
