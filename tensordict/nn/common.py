@@ -773,7 +773,7 @@ class TensorDictModuleBase(nn.Module):
 
     def reset_parameters(self):
         """Recursively reset the parameters of the module and its children.
-
+        
         Examples:
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
@@ -784,16 +784,14 @@ class TensorDictModuleBase(nn.Module):
         >>> (old_param == net[0].weight).all()
         tensor(False)
         """
-        for m in self.children():
-            self._reset_parameters(m)
+        [self._reset_parameters(m) for m in self.children()]
 
     def _reset_parameters(self, module: Union[nn.Module, TensorDictModuleBase]):
-        if isinstance(module, nn.Module):
+        if isinstance(module, Union[TensorDictModuleBase, nn.Module]):
             if hasattr(module, "reset_parameters"):
                 module.reset_parameters()
             else:
-                for m in module.children():
-                    self._reset_parameters(m)
+                [self._reset_parameters(m) for m in module.children()]
 
 
 class TensorDictModule(TensorDictModuleBase):
