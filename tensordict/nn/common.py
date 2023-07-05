@@ -996,7 +996,7 @@ class TensorDictModule(TensorDictModuleBase):
         self.out_keys = out_keys
         self.in_keys = in_keys
 
-        if ("_",) in self.in_keys:
+        if "_" in self.in_keys:
             warnings.warn(
                 'key "_" is for ignoring output, it should not be used in input keys',
                 stacklevel=2,
@@ -1024,7 +1024,7 @@ class TensorDictModule(TensorDictModuleBase):
         if tensordict_out is None:
             tensordict_out = tensordict
         for _out_key, _tensor in zip(out_keys, tensors):
-            if _out_key != ("_",):
+            if _out_key != "_":
                 tensordict_out.set(_out_key, _tensor)
         return tensordict_out
 

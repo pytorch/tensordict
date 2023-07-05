@@ -8,8 +8,8 @@
 
 namespace py = pybind11;
 
-// This is the fastest implementation. Overaloading slows down str -> str
-py::tuple unravel_key(const py::object& key) {
+
+py::tuple _unravel_key_to_tuple(const py::object& key) {
     bool is_tuple = py::isinstance<py::tuple>(key);
     bool is_str = py::isinstance<py::str>(key);
 
@@ -19,7 +19,7 @@ py::tuple unravel_key(const py::object& key) {
             if (py::isinstance<py::str>(subkey)) {
                 newkey.append(subkey);
             } else {
-                auto _key = unravel_key(subkey.cast<py::object>());
+                auto _key = _unravel_key_to_tuple(subkey.cast<py::object>());
                 newkey += _key;
             }
         }
@@ -27,6 +27,35 @@ py::tuple unravel_key(const py::object& key) {
     }
     if (is_str) {
         return py::make_tuple(key);
+    } else {
+        throw std::runtime_error("key should be a Sequence<NestedKey>");
+    }
+}
+
+py::object unravel_key(const py::object& key) {
+    bool is_tuple = py::isinstance<py::tuple>(key);
+    bool is_str = py::isinstance<py::str>(key);
+
+    if (is_tuple) {
+        py::list newkey;
+        int count = 0;
+        for (const auto& subkey : key) {
+            if (py::isinstance<py::str>(subkey)) {
+                newkey.append(subkey);
+                count++;
+            } else {
+                auto _key = _unravel_key_to_tuple(subkey.cast<py::object>());
+                count += _key.size();
+                newkey += _key;
+            }
+        }
+        if (count == 1) {
+            return newkey[0];
+        }
+        return py::tuple(newkey);
+    }
+    if (is_str) {
+        return key;
     } else {
         throw std::runtime_error("key should be a Sequence<NestedKey>");
     }

@@ -11,7 +11,7 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-from tensordict._tensordict import unravel_key
+from tensordict._tensordict import _unravel_key_to_tuple
 
 H5_ERR = None
 try:
@@ -227,7 +227,7 @@ class PersistentTensorDict(TensorDictBase):
         self.file.close()
 
     def _process_key(self, key):
-        key = unravel_key(key)
+        key = _unravel_key_to_tuple(key)
         return "/".join(key)
 
     def _check_batch_size(self, batch_size) -> None:

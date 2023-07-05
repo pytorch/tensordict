@@ -24,7 +24,8 @@ import torch
 
 from packaging.version import parse
 from tensordict._tensordict import (  # noqa: F401
-    unravel_key,
+    unravel_key,  # noqa: F401
+    _unravel_key_to_tuple,  # noqa: F401
     unravel_key_list,  # noqa: F401
     unravel_keys,  # noqa: F401
 )
@@ -1093,7 +1094,7 @@ class _StringKeys(KeysView):
         if not isinstance(item, str):
             # at this point, we don't care about efficiency anymore
             try:
-                unravel_item = unravel_key(item)
+                unravel_item = _unravel_key_to_tuple(item)
             except Exception:  # catch errors during unravel
                 raise TypeError(NON_STR_KEY)
             if len(unravel_item) > 1:
@@ -1116,7 +1117,7 @@ class _StringOnlyDict(dict):
         if not isinstance(item, str):
             # at this point, we don't care about efficiency anymore
             try:
-                unravel_item = unravel_key(item)
+                unravel_item = _unravel_key_to_tuple(item)
             except Exception:  # catch errors during unravel
                 raise TypeError(NON_STR_KEY)
             if len(unravel_item) > 1:

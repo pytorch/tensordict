@@ -284,11 +284,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             dist_keys, in_keys = zip(*in_keys.items())
         else:
             dist_keys = in_keys
-        # if not isinstance(in_keys, dict):
-        #     in_keys = {param_key: param_key for param_key in in_keys}
-        # else:
 
-        # keys must be strings
+        # keys in kwargs must be strings
         _dist_keys = []
         for key in dist_keys:
             if isinstance(key, str):

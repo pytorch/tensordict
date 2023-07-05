@@ -34,7 +34,7 @@ from warnings import warn
 import numpy as np
 
 import torch
-from tensordict._tensordict import unravel_key
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
 from tensordict.utils import (
     _device,
@@ -278,7 +278,7 @@ class _TensorDictKeysView:
 
     def __contains__(self, key: NestedKey) -> bool:
         try:
-            key = unravel_key(key)
+            key = _unravel_key_to_tuple(key)
         except Exception as err:
             raise TypeError(NON_STR_KEY) from err
 
@@ -289,7 +289,7 @@ class _TensorDictKeysView:
                 return True
             return False
         else:
-            # thanks to unravel_key we know the key is a tuple
+            # thanks to _unravel_key_to_tuple we know the key is a tuple
             if len(key) == 1:
                 return key[0] in self._keys()
             elif self.include_nested:
@@ -303,9 +303,9 @@ class _TensorDictKeysView:
                         return key[1] in self.tensordict.get(key[0]).keys()
                     _is_tensordict = _is_tensor_collection(entry_type)
                     if _is_tensordict:
-                        # # this will call unravel_key many times
+                        # # this will call _unravel_key_to_tuple many times
                         # return key[1:] in self.tensordict._get_str(key[0], NO_DEFAULT).keys(include_nested=self.include_nested)
-                        # this won't call unravel_key but requires to get the default which can be suboptimal
+                        # this won't call _unravel_key_to_tuple but requires to get the default which can be suboptimal
                         leaf_td = self.tensordict._get_tuple(key[:-1], None)
                         if leaf_td is None or (
                             not _is_tensor_collection(leaf_td.__class__)
@@ -1279,7 +1279,7 @@ class TensorDictBase(MutableMapping):
             default: default value if the key is not found in the tensordict.
 
         """
-        key = unravel_key(key)
+        key = _unravel_key_to_tuple(key)
         return self._get_tuple(key, default=default)
 
     @abc.abstractmethod
@@ -1297,7 +1297,7 @@ class TensorDictBase(MutableMapping):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        key = unravel_key(key)
+        key = _unravel_key_to_tuple(key)
         try:
             # using try/except for get/del is suboptimal, but
             # this is faster that checkink if key in self keys
@@ -1644,7 +1644,7 @@ class TensorDictBase(MutableMapping):
         )
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
-        key = unravel_key(key)
+        key = _unravel_key_to_tuple(key)
 
         if len(key) == 1:
             key = key[0]
@@ -1717,7 +1717,7 @@ class TensorDictBase(MutableMapping):
                 val = self._get_str(k, NO_DEFAULT)
                 if _is_tensor_collection(val.__class__):
                     yield from (
-                        (unravel_key((k, _key)), _val)
+                        (_unravel_key_to_tuple((k, _key)), _val)
                         for _key, _val in val.items(
                             include_nested=include_nested, leaves_only=leaves_only
                         )
@@ -1730,7 +1730,7 @@ class TensorDictBase(MutableMapping):
                 yield k, val
                 if _is_tensor_collection(val.__class__):
                     yield from (
-                        (unravel_key((k, _key)), _val)
+                        (_unravel_key_to_tuple((k, _key)), _val)
                         for _key, _val in val.items(
                             include_nested=include_nested, leaves_only=leaves_only
                         )
@@ -2127,7 +2127,7 @@ class TensorDictBase(MutableMapping):
             indexed tensor.
 
         """
-        key = unravel_key(key)
+        key = _unravel_key_to_tuple(key)
         # must be a tuple
         return self._get_at_tuple(key, idx, default)
 
@@ -2514,7 +2514,7 @@ class TensorDictBase(MutableMapping):
             >>> data.create_nested(("some", "nested", "value"))
             >>> nested = data.get(("some", "nested", "value"))
         """
-        key = unravel_key(key)
+        key = _unravel_key_to_tuple(key)
         self._create_nested_tuple(key)
         return self
 
@@ -5767,7 +5767,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         return self.tensordict._key_list()
 
     def __contains__(self, item):
-        item = unravel_key(item)
+        item = _unravel_key_to_tuple(item)
         if len(item) == 1:
             if item[0] in self.tensordict._iterate_over_keys():
                 if self.leaves_only:
@@ -6314,7 +6314,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
 
         # we can handle the case where the key is a tuple of length 1
-        key = unravel_key(key)
+        key = _unravel_key_to_tuple(key)
         subkey = key[0]
         if len(key) > 1:
             tensordict = self.get(subkey, default)
@@ -6902,7 +6902,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
         # using try/except for get/del is suboptimal, but
         # this is faster that checkink if key in self keys
-        key = unravel_key(key)
+        key = _unravel_key_to_tuple(key)
         if len(key) == 1:
             key = key[0]
         present = False
