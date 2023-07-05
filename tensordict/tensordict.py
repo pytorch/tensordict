@@ -227,9 +227,8 @@ class _TensorDictKeysView:
     def _iter_helper(
         self, tensordict: TensorDictBase, prefix: str | None = None
     ) -> Iterable[str] | Iterable[tuple[str, ...]]:
-        items_iter = self._items(tensordict)
 
-        for key, value in items_iter:
+        for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
             cls = value.__class__
             if self.include_nested and (
@@ -245,11 +244,9 @@ class _TensorDictKeysView:
             if not self.leaves_only or not _is_tensor_collection(cls):
                 yield full_key
 
-    def _combine_keys(self, prefix: str | None, key: NestedKey) -> NestedKey:
+    def _combine_keys(self, prefix: tuple | None, key: NestedKey) -> NestedKey:
         if prefix is not None:
-            if isinstance(key, tuple):
-                return prefix + key
-            return prefix + (key,)
+            return prefix + key
         return key
 
     def __len__(self) -> int:
@@ -262,16 +259,17 @@ class _TensorDictKeysView:
         if tensordict is None:
             tensordict = self.tensordict
         if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
-            return tensordict._tensordict.items()
+            for key, item in tensordict._tensordict.items():
+                yield (key,), item
         elif isinstance(tensordict, LazyStackedTensorDict):
             return _iter_items_lazystack(tensordict)
         elif isinstance(tensordict, KeyedJaggedTensor):
-            return tuple((key, tensordict[key]) for key in tensordict.keys())
+            return tuple(((key,), tensordict[key]) for key in tensordict.keys())
         elif isinstance(tensordict, _CustomOpTensorDict):
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to
             # be careful to not rely on tensordict._tensordict existing.
-            return ((key, tensordict.get(key)) for key in tensordict._source.keys())
+            return (((key,), tensordict._get_str(key, NO_DEFAULT)) for key in tensordict._source.keys())
 
     def _keys(self) -> _TensorDictKeysView:
         return self.tensordict._tensordict.keys()
@@ -8209,8 +8207,8 @@ def _set_max_batch_size(source: TensorDictBase, batch_dims=None):
 def _iter_items_lazystack(
     tensordict: LazyStackedTensorDict,
 ) -> Iterator[tuple[str, CompatibleType]]:
-    for key in tensordict.keys():
-        yield key, tensordict.get(key)
+    for key, item in tensordict.items():
+        yield (key,), item
 
 
 def _clone_value(value: CompatibleType, recurse: bool) -> CompatibleType:
