@@ -809,12 +809,10 @@ class TensorDictModuleBase(nn.Module):
             )
             repopulate_module(self, sanitized_parameters)
 
-        for child in list(self.children()):
-            child.apply(
-                lambda m: m.reset_parameters()
-                if hasattr(m, "reset_parameters")
-                else None
-            )
+        def _reset(module):
+            if hasattr(module, 'reset_parameters'):
+                module.reset_parameters()
+        self.apply(reset_parameters)
 
 
 class TensorDictModule(TensorDictModuleBase):
