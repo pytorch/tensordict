@@ -3276,11 +3276,9 @@ class TensorDictBase(MutableMapping):
         if isinstance(idx, tuple) and len(idx) == 1:
             idx = idx[0]
         if isinstance(idx, (tuple, str)):
-            try:
-                idx = _unravel_key_to_tuple(idx)
+            idx_unravel = _unravel_key_to_tuple(idx)
+            if idx_unravel:
                 return self._get_tuple(idx, NO_DEFAULT)
-            except RuntimeError:
-                pass
 
         if not self.batch_size:
             raise RuntimeError(
@@ -3338,13 +3336,12 @@ class TensorDictBase(MutableMapping):
             self.set(index, value, inplace=self._inplace_set)
             return
 
-        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
-            index = convert_ellipsis_to_idx(index, self.batch_size)
-        elif isinstance(index, (list, range)):
-            index = torch.tensor(index, device=self.device)
-        elif isinstance(index, tuple):
-            if isinstance(index, tuple):
-                index = _maybe_unravel_key_silent(index)
+        if isinstance(index, tuple):
+            # try:
+            index_unravel = _unravel_key_to_tuple(index)
+            if index_unravel:
+                self.set(index_unravel, value, inplace=isinstance(self, SubTensorDict))
+                return
 
             if any(isinstance(sub_index, (list, range)) for sub_index in index):
                 index = tuple(
@@ -3354,27 +3351,31 @@ class TensorDictBase(MutableMapping):
                     for sub_index in index
                 )
 
-            if sum(isinstance(_index, str) for _index in index) not in [len(index), 0]:
-                raise IndexError(_STR_MIXED_INDEX_ERROR)
+            # if sum(isinstance(_index, str) for _index in index) not in [len(index), 0]:
+            #     raise IndexError(_STR_MIXED_INDEX_ERROR)
+            # if isinstance(index[0], str):
+            #     # TODO: would be nicer to have set handle the nested set, but the logic to
+            #     # preserve the error handling below is complex and requires some thought
+            #     try:
+            #         if len(index) == 1:
+            #             return self.set(
+            #                 index[0], value, inplace=isinstance(self, SubTensorDict)
+            #             )
+            #         self.set(index, value, inplace=isinstance(self, SubTensorDict))
+            #     except AttributeError as err:
+            #         if "for populating tensordict with new key-value pair" in str(err):
+            #             raise RuntimeError(
+            #                 "Trying to replace an existing nested tensordict with "
+            #                 "another one with non-matching keys. This leads to "
+            #                 "unspecified behaviours and is prohibited."
+            #             )
+            #         raise err
+            #     return
 
-            if isinstance(index[0], str):
-                # TODO: would be nicer to have set handle the nested set, but the logic to
-                # preserve the error handling below is complex and requires some thought
-                try:
-                    if len(index) == 1:
-                        return self.set(
-                            index[0], value, inplace=isinstance(self, SubTensorDict)
-                        )
-                    self.set(index, value, inplace=isinstance(self, SubTensorDict))
-                except AttributeError as err:
-                    if "for populating tensordict with new key-value pair" in str(err):
-                        raise RuntimeError(
-                            "Trying to replace an existing nested tensordict with "
-                            "another one with non-matching keys. This leads to "
-                            "unspecified behaviours and is prohibited."
-                        )
-                    raise err
-                return
+        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
+            index = convert_ellipsis_to_idx(index, self.batch_size)
+        elif isinstance(index, (list, range)):
+            index = torch.tensor(index, device=self.device)
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)

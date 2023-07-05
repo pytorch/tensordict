@@ -28,7 +28,7 @@ py::tuple _unravel_key_to_tuple(const py::object& key) {
     if (is_str) {
         return py::make_tuple(key);
     } else {
-        throw std::runtime_error("key should be a Sequence<NestedKey>");
+        return py::make_tuple();
     }
 }
 
