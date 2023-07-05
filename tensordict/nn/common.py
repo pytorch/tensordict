@@ -788,7 +788,7 @@ class TensorDictModuleBase(nn.Module):
             self._reset_parameters(m)
 
     def _reset_parameters(self, module: Union[nn.Module, TensorDictModuleBase]):
-        if isinstance(module, Union[TensorDictModuleBase, nn.Module]):
+        if isinstance(module, nn.Module):
             if hasattr(module, "reset_parameters"):
                 module.reset_parameters()
             else:
