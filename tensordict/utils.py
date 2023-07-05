@@ -838,21 +838,10 @@ def _maybe_unravel_key_silent(index):
 
     If not possible (not keys) return the original index.
     """
-    if isinstance(index, tuple):
-        newkey = []
-        for key in index:
-            if isinstance(key, str):
-                newkey.append(key)
-            else:
-                _key = _maybe_unravel_key_silent(key)
-                if _key is key:
-                    return index
-                newkey += _key
-        newkey = tuple(newkey)
-    else:
-        return index
-    return newkey
-
+    try:
+        return _unravel_key_to_tuple(idx)
+    except RuntimeError:
+        return idx
 
 def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""

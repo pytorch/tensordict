@@ -3279,12 +3279,12 @@ class TensorDictBase(MutableMapping):
         """
         if isinstance(idx, tuple) and len(idx) == 1:
             idx = idx[0]
-        if isinstance(idx, tuple):
-            idx = _maybe_unravel_key_silent(idx)
-        if isinstance(idx, str) or (
-            isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
-        ):
-            return self.get(idx)
+        if isinstance(idx, str) or isinstance(idx, tuple):
+            try:
+                idx = _unravel_key_to_tuple(idx)
+                return self._get_tuple(idx, NO_DEFAULT)
+            except RuntimeError:
+                pass
 
         if not self.batch_size:
             raise RuntimeError(
