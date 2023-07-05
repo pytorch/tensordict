@@ -96,6 +96,17 @@ class TestTDModule:
             td = TensorDict({"1": torch.ones(1)}, [])
         assert (module(td)["a"] == 2).all()
 
+    def test_reset(self):
+        torch.manual_seed(0)
+        net = nn.ModuleList([nn.Sequential(nn.Linear(1, 1), nn.ReLU())])
+        old_param = net[0][0].weight.data.clone()
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        another_module = TensorDictModule(nn.Conv2d(1, 1, 1, 1), in_keys=["in"], out_keys=["out"])
+        seq = TensorDictSequential(module, another_module)
+        
+        seq.reset_parameters()
+        assert torch.all(old_param != net[0][0].weight.data)
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
         torch.manual_seed(0)

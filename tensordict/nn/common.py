@@ -771,6 +771,28 @@ class TensorDictModuleBase(nn.Module):
                 del self._forward_hooks[i]
         return self
 
+    def reset_parameters(self):
+        """Recursively reset the parameters of the module and its children.
+        
+        Examples:
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torch import nn
+        >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
+        >>> old_param = net[0].weight.clone()
+        >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
+        >>> module.reset_parameters()
+        >>> (old_param == net[0].weight).all()
+        tensor(False)
+        """
+        [self._reset_parameters(m) for m in self.children()]
+
+    def _reset_parameters(self, module: Union[nn.Module, TensorDictModuleBase]):
+        if isinstance(module, Union[TensorDictModuleBase, nn.Module]):
+            if hasattr(module, "reset_parameters"):
+                module.reset_parameters()
+            else:
+                [self._reset_parameters(m) for m in module.children()]
+
 
 class TensorDictModule(TensorDictModuleBase):
     """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
