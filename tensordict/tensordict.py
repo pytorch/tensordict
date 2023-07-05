@@ -3279,7 +3279,7 @@ class TensorDictBase(MutableMapping):
         """
         if isinstance(idx, tuple) and len(idx) == 1:
             idx = idx[0]
-        if isinstance(idx, str) or isinstance(idx, tuple):
+        if isinstance(idx, (tuple, str)):
             try:
                 idx = _unravel_key_to_tuple(idx)
                 return self._get_tuple(idx, NO_DEFAULT)
@@ -6552,8 +6552,13 @@ class LazyStackedTensorDict(TensorDictBase):
     def __getitem__(self, index: IndexType) -> TensorDictBase:
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
-        if isinstance(index, tuple):
-            index = _maybe_unravel_key_silent(index)
+        if isinstance(index, (tuple, str)):
+            try:
+                index = _unravel_key_to_tuple(index)
+                return self._get_tuple(index, NO_DEFAULT)
+            except RuntimeError:
+                pass
+
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if index is None:

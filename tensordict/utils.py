@@ -839,9 +839,10 @@ def _maybe_unravel_key_silent(index):
     If not possible (not keys) return the original index.
     """
     try:
-        return _unravel_key_to_tuple(idx)
+        return _unravel_key_to_tuple(index)
     except RuntimeError:
-        return idx
+        return index
+
 
 def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
