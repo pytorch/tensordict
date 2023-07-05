@@ -789,16 +789,19 @@ class TensorDictModuleBase(nn.Module):
         >>> (old_param == net[0].weight).any()
         tensor(False)
 
-        >>> from tensordict import TensorDict
-        >>> from tensordict.nn import TensorDictModule
-        >>> from torch import nn
-        >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
-        >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
-        >>> params = TensorDict.from_module(module)
-        >>> old_params = params.clone(recurse=True)
-        >>> module.reset_parameters(params)
-        >>> (old_params == params).any()
-        False
+        This method also supports functional parameter sampling:
+        
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import TensorDictModule
+            >>> from torch import nn
+            >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
+            >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
+            >>> params = TensorDict.from_module(module)
+            >>> old_params = params.clone(recurse=True)
+            >>> module.reset_parameters(params)
+            >>> (old_params == params).any()
+            False
         """
         if parameters is not None:
             sanitized_parameters = parameters.apply(
