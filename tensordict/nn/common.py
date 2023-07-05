@@ -784,7 +784,8 @@ class TensorDictModuleBase(nn.Module):
         >>> (old_param == net[0].weight).all()
         tensor(False)
         """
-        [self._reset_parameters(m) for m in self.children()]
+        for m in self.children():
+            self._reset_parameters(m)
 
     def _reset_parameters(self, module: Union[nn.Module, TensorDictModuleBase]):
         if isinstance(module, Union[TensorDictModuleBase, nn.Module]):
