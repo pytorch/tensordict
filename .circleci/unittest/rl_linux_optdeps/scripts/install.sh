@@ -46,7 +46,7 @@ python -c "import functorch"
 printf "* Installing torchrl\n"
 git clone https://github.com/pytorch/rl
 cd rl
-git checkout more_unravel_fixes
+#git checkout more_unravel_fixes
 python setup.py develop
 cd ..
 
