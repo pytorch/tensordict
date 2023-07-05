@@ -823,7 +823,8 @@ class TensorDictModuleBase(nn.Module):
 
         if not is_functional(self):
             make_functional(self, keep_params=True)
-        if self._is_stateless:
+        is_stateless = self._is_stateless
+        if is_stateless:
             repopulate_module(self, sanitized_parameters)
         else:
             old_params = _swap_state(
@@ -835,12 +836,12 @@ class TensorDictModuleBase(nn.Module):
 
         self._reset_parameters()
 
-        if not self._is_stateless:
+        if is_stateless:
+            new_parameters = extract_weights_and_buffers(self)
+        else:
             new_parameters = _swap_state(
                 self, old_params, is_stateless=False, return_old_tensordict=True
             )
-        else:
-            new_parameters = extract_weights_and_buffers(self)
 
         return new_parameters
 
