@@ -1645,7 +1645,7 @@ class TensorDictBase(MutableMapping):
         key = _unravel_key_to_tuple(key)
         if len(key) == 1:
             key = key[0]
-        if not key:
+        elif not key:
             raise KeyError(_GENERIC_NESTED_ERR)
         return key
 
