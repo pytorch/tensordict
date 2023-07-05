@@ -120,7 +120,7 @@ class TestTDModule:
 
         params = TensorDict.from_module(seq)
         old_params = params.clone(recurse=True)
-        new_params = params.clone()
+        new_params = params.clone(recurse=True)
         returned_params = seq.reset_parameters(new_params)
 
         weights_changed = new_params != old_params
