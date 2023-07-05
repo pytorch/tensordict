@@ -135,6 +135,8 @@ def test_unravel_key_to_tuple():
     keys_in = ["a", ("b",), ("c", ("d",))]
     keys_out = [_unravel_key_to_tuple(key_in) for key_in in keys_in]
     assert keys_out == [("a",), ("b",), ("c", "d")]
+    assert not _unravel_key_to_tuple(("a", (1,), ("b",)))
+    assert not _unravel_key_to_tuple(("a", (slice(None),), ("b",)))
 
 
 if __name__ == "__main__":

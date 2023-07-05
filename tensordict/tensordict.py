@@ -40,10 +40,9 @@ from tensordict.utils import (
     _device,
     _dtype,
     _get_item,
-    _getitem_batch_size,
+    _getitem_batch_size,_GENERIC_NESTED_ERR,
     _is_shared,
     _is_tensorclass,
-    _maybe_unravel_key_silent,
     _set_item,
     _shape,
     _StringOnlyDict,
@@ -60,8 +59,8 @@ from tensordict.utils import (
     is_tensorclass,
     lock_blocked,
     NestedKey,
-    NON_STR_KEY,
-    NON_STR_KEY_TUPLE,
+    _NON_STR_KEY_ERR,
+    _NON_STR_KEY_TUPLE_ERR,
     prod,
 )
 from torch import distributed as dist, Tensor
@@ -273,10 +272,9 @@ class _TensorDictKeysView:
         return self.tensordict._tensordict.keys()
 
     def __contains__(self, key: NestedKey) -> bool:
-        try:
-            key = _unravel_key_to_tuple(key)
-        except Exception as err:
-            raise TypeError(NON_STR_KEY) from err
+        key = _unravel_key_to_tuple(key)
+        if not key:
+            raise TypeError(_NON_STR_KEY_ERR)
 
         if isinstance(key, str):
             if key in self._keys():
@@ -312,7 +310,7 @@ class _TensorDictKeysView:
                 return False
             # this is reached whenever there is more than one key but include_nested is False
             if all(isinstance(subkey, str) for subkey in key):
-                raise TypeError(NON_STR_KEY_TUPLE)
+                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
 
     def __repr__(self):
         include_nested = f"include_nested={self.include_nested}"
@@ -1276,6 +1274,8 @@ class TensorDictBase(MutableMapping):
 
         """
         key = _unravel_key_to_tuple(key)
+        if not key:
+            raise KeyError(_GENERIC_NESTED_ERR)
         return self._get_tuple(key, default=default)
 
     @abc.abstractmethod
@@ -1294,6 +1294,8 @@ class TensorDictBase(MutableMapping):
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
         key = _unravel_key_to_tuple(key)
+        if not key:
+            raise KeyError(_GENERIC_NESTED_ERR)
         try:
             # using try/except for get/del is suboptimal, but
             # this is faster that checkink if key in self keys
@@ -1641,10 +1643,10 @@ class TensorDictBase(MutableMapping):
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
         key = _unravel_key_to_tuple(key)
-
         if len(key) == 1:
             key = key[0]
-
+        if not key:
+            raise KeyError(_GENERIC_NESTED_ERR)
         return key
 
     def _validate_value(
@@ -2124,6 +2126,8 @@ class TensorDictBase(MutableMapping):
 
         """
         key = _unravel_key_to_tuple(key)
+        if not key:
+            raise KeyError(_GENERIC_NESTED_ERR)
         # must be a tuple
         return self._get_at_tuple(key, idx, default)
 
@@ -3171,7 +3175,7 @@ class TensorDictBase(MutableMapping):
             if key in self.keys():
                 tensordict.update(self[key])
             for old_key, new_key in list_of_keys:
-                value = self[old_key]
+                value = self.get(old_key)
                 tensordict[new_key] = value
                 if inplace:
                     del self[old_key]
@@ -3278,7 +3282,7 @@ class TensorDictBase(MutableMapping):
         if isinstance(idx, (tuple, str)):
             idx_unravel = _unravel_key_to_tuple(idx)
             if idx_unravel:
-                return self._get_tuple(idx, NO_DEFAULT)
+                return self._get_tuple(idx_unravel, NO_DEFAULT)
 
         if not self.batch_size:
             raise RuntimeError(
@@ -6549,11 +6553,9 @@ class LazyStackedTensorDict(TensorDictBase):
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
         if isinstance(index, (tuple, str)):
-            try:
-                index = _unravel_key_to_tuple(index)
-                return self._get_tuple(index, NO_DEFAULT)
-            except RuntimeError:
-                pass
+            index_key = _unravel_key_to_tuple(index)
+            if index_key:
+                return self._get_tuple(index_key, NO_DEFAULT)
 
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)

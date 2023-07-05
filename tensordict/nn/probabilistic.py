@@ -328,7 +328,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         try:
             dist_kwargs = {
-                dist_key: tensordict[td_key]
+                dist_key: tensordict.get(td_key)
                 for dist_key, td_key in zip(self.dist_keys, self.in_keys)
             }
             dist = self.distribution_class(**dist_kwargs, **self.distribution_kwargs)

@@ -833,16 +833,6 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     return False
 
 
-def _maybe_unravel_key_silent(index):
-    """Attemps to unravel keys.
-
-    If not possible (not keys) return the original index.
-    """
-    try:
-        return _unravel_key_to_tuple(index)
-    except RuntimeError:
-        return index
-
 
 def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
@@ -1073,8 +1063,9 @@ def erase_cache(fun):
     return new_fun
 
 
-NON_STR_KEY_TUPLE = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
-NON_STR_KEY = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
+_NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
+_NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
+_GENERIC_NESTED_ERR = "Only NestedKeys are supported."
 
 
 class _StringKeys(KeysView):
@@ -1086,9 +1077,9 @@ class _StringKeys(KeysView):
             try:
                 unravel_item = _unravel_key_to_tuple(item)
             except Exception:  # catch errors during unravel
-                raise TypeError(NON_STR_KEY)
+                raise TypeError(_NON_STR_KEY_ERR)
             if len(unravel_item) > 1:
-                raise TypeError(NON_STR_KEY_TUPLE)
+                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
             else:
                 item = unravel_item[0]
         return super().__contains__(item)
@@ -1109,9 +1100,9 @@ class _StringOnlyDict(dict):
             try:
                 unravel_item = _unravel_key_to_tuple(item)
             except Exception:  # catch errors during unravel
-                raise TypeError(NON_STR_KEY)
+                raise TypeError(_NON_STR_KEY_ERR)
             if len(unravel_item) > 1:
-                raise TypeError(NON_STR_KEY_TUPLE)
+                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
             else:
                 item = unravel_item[0]
         return super().__contains__(item)

@@ -35,7 +35,6 @@ from tensordict.tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import (
-    _maybe_unravel_key_silent,
     _shape,
     cache,
     DeviceType,
@@ -374,11 +373,9 @@ class PersistentTensorDict(TensorDictBase):
     __getitems__ = __getitem__
 
     def __setitem__(self, index, value):
-        index = _maybe_unravel_key_silent(index)
-        if isinstance(index, str) or (
-            isinstance(index, tuple) and all(isinstance(val, str) for val in index)
-        ):
-            return self.set(index, value, inplace=True)
+        index_unravel = _unravel_key_to_tuple(index)
+        if index_unravel:
+            return self.set(index_unravel, value, inplace=True)
 
         if isinstance(index, list):
             # convert to tensor

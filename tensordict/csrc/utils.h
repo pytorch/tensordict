@@ -20,6 +20,9 @@ py::tuple _unravel_key_to_tuple(const py::object& key) {
                 newkey.append(subkey);
             } else {
                 auto _key = _unravel_key_to_tuple(subkey.cast<py::object>());
+                if (_key.size() == 0) {
+                    return py::make_tuple();
+                }
                 newkey += _key;
             }
         }
