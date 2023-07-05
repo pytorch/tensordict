@@ -15,7 +15,13 @@ import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
 from tensordict._tensordict import unravel_keys
 
-from tensordict.nn.functional_modules import _swap_state, extract_weights_and_buffers, is_functional, make_functional, repopulate_module
+from tensordict.nn.functional_modules import (
+    _swap_state,
+    extract_weights_and_buffers,
+    is_functional,
+    make_functional,
+    repopulate_module,
+)
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
@@ -771,7 +777,9 @@ class TensorDictModuleBase(nn.Module):
                 del self._forward_hooks[i]
         return self
 
-    def reset_parameters(self, parameters: Optional[TensorDictBase] = None) -> Optional[TensorDictBase]:
+    def reset_parameters(
+        self, parameters: Optional[TensorDictBase] = None
+    ) -> Optional[TensorDictBase]:
         """Recursively reset the parameters of the module and its children.
 
         Args:
@@ -793,7 +801,7 @@ class TensorDictModuleBase(nn.Module):
             tensor(False)
 
             This method also supports functional parameter sampling:
-        
+
             >>> from tensordict import TensorDict
             >>> from tensordict.nn import TensorDictModule
             >>> from torch import nn
@@ -818,12 +826,19 @@ class TensorDictModuleBase(nn.Module):
         if self._is_stateless:
             repopulate_module(self, sanitized_parameters)
         else:
-            old_params = _swap_state(self, sanitized_parameters, is_stateless=False, return_old_tensordict=True)
+            old_params = _swap_state(
+                self,
+                sanitized_parameters,
+                is_stateless=False,
+                return_old_tensordict=True,
+            )
 
         self._reset_parameters()
 
         if not self._is_stateless:
-            new_parameters = _swap_state(self, old_params, is_stateless=False, return_old_tensordict=True)
+            new_parameters = _swap_state(
+                self, old_params, is_stateless=False, return_old_tensordict=True
+            )
         else:
             new_parameters = extract_weights_and_buffers(self)
 
