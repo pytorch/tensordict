@@ -773,7 +773,7 @@ class TensorDictModuleBase(nn.Module):
 
     def reset_parameters(self):
         """Recursively reset the parameters of the module and its children.
-        
+
         Examples:
         >>> from tensordict.nn import TensorDictModule
         >>> from torch import nn
