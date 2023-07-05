@@ -109,12 +109,13 @@ class TestTDModule:
         seq.reset_parameters()
         assert torch.all(old_param != net[0][0].weight.data)
 
-    @pytest.mark.parametrize("net", 
+    @pytest.mark.parametrize(
+        "net",
         [
             nn.ModuleList([nn.Sequential(nn.Linear(1, 1), nn.ReLU())]),
             nn.Linear(2, 1),
             nn.Sequential(nn.Tanh(), nn.Linear(1, 1), nn.Linear(2, 1)),
-        ]
+        ],
     )
     def test_reset_functional(self, net):
         torch.manual_seed(0)
