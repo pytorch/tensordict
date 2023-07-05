@@ -24,8 +24,8 @@ import torch
 
 from packaging.version import parse
 from tensordict._tensordict import (  # noqa: F401
-    unravel_key,  # noqa: F401
     _unravel_key_to_tuple,  # noqa: F401
+    unravel_key,  # noqa: F401
     unravel_key_list,  # noqa: F401
     unravel_keys,  # noqa: F401
 )

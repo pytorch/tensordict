@@ -5768,16 +5768,18 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
 
     def __contains__(self, item):
         item = _unravel_key_to_tuple(item)
-        if len(item) == 1:
-            if item[0] in self.tensordict._iterate_over_keys():
-                if self.leaves_only:
-                    return not _is_tensor_collection(
-                        self.tensordict.entry_class(item[0])
-                    )
-                return True
+        if item[0] in self.tensordict._iterate_over_keys():
+            if self.leaves_only:
+                return not _is_tensor_collection(self.tensordict.entry_class(item[0]))
+            has_first_key = True
+        else:
+            has_first_key = False
+        if not has_first_key or len(item) == 1:
+            return has_first_key
         # otherwise take the long way
         return all(
-            item in tensordict.keys(self.include_nested, self.leaves_only)
+            item[1:]
+            in tensordict.get(item[0]).keys(self.include_nested, self.leaves_only)
             for tensordict in self.tensordict.tensordicts
         )
 
