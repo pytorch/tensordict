@@ -775,7 +775,7 @@ class TensorDictModuleBase(nn.Module):
         """Recursively reset the parameters of the module and its children.
 
         Args:
-            parameters: If set to None, the module will reset using self.parameters().
+            parameters (TensorDict of parameters, optional): If set to None, the module will reset using self.parameters().
                 Otherwise, we will reset the parameters in the tensordict in-place. This is
                 useful for functional modules where the parameters are not stored in the module itself.
 
