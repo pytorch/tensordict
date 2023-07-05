@@ -833,7 +833,6 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     return False
 
 
-
 def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
     cls = obj if isinstance(obj, type) else type(obj)

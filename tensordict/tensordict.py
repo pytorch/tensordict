@@ -39,10 +39,13 @@ from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
 from tensordict.utils import (
     _device,
     _dtype,
+    _GENERIC_NESTED_ERR,
     _get_item,
-    _getitem_batch_size,_GENERIC_NESTED_ERR,
+    _getitem_batch_size,
     _is_shared,
     _is_tensorclass,
+    _NON_STR_KEY_ERR,
+    _NON_STR_KEY_TUPLE_ERR,
     _set_item,
     _shape,
     _StringOnlyDict,
@@ -59,8 +62,6 @@ from tensordict.utils import (
     is_tensorclass,
     lock_blocked,
     NestedKey,
-    _NON_STR_KEY_ERR,
-    _NON_STR_KEY_TUPLE_ERR,
     prod,
 )
 from torch import distributed as dist, Tensor
