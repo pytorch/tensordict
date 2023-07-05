@@ -783,18 +783,17 @@ class TensorDictModuleBase(nn.Module):
             A tensordict of the new parameters, only if parameters was not None.
 
         Examples:
-        >>> from tensordict.nn import TensorDictModule
-        >>> from torch import nn
-        >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
-        >>> old_param = net[0].weight.clone()
-        >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
-        >>> module.reset_parameters()
-        >>> (old_param == net[0].weight).any()
-        tensor(False)
+            >>> from tensordict.nn import TensorDictModule
+            >>> from torch import nn
+            >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
+            >>> old_param = net[0].weight.clone()
+            >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
+            >>> module.reset_parameters()
+            >>> (old_param == net[0].weight).any()
+            tensor(False)
 
-        This method also supports functional parameter sampling:
+            This method also supports functional parameter sampling:
         
-        Examples:
             >>> from tensordict import TensorDict
             >>> from tensordict.nn import TensorDictModule
             >>> from torch import nn
