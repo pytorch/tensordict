@@ -792,7 +792,8 @@ class TensorDictModuleBase(nn.Module):
             if hasattr(module, "reset_parameters"):
                 module.reset_parameters()
             else:
-                [self._reset_parameters(m) for m in module.children()]
+                for m in module.children():
+                    self._reset_parameters(m)
 
 
 class TensorDictModule(TensorDictModuleBase):
