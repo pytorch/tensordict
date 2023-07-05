@@ -121,11 +121,22 @@ class TestTDModule:
         params = TensorDict.from_module(seq)
         old_params = params.clone(recurse=True)
         new_params = params.clone()
-        seq.reset_parameters(new_params)
+        returned_params = seq.reset_parameters(new_params)
 
         weights_changed = new_params != old_params
         for w in weights_changed.values(include_nested=True, leaves_only=True):
             assert w.all(), f"Weights should have changed but did not for {w}"
+
+        module_params = TensorDict.from_module(seq)
+        overwrote_stateful_params = module_params != old_params
+        for p in overwrote_stateful_params.values(include_nested=True, leaves_only=True):
+            assert not p.any(), f"Overwrote stateful weights from the module {p}"
+
+        returned_params_eq_inplace_updated_params = returned_params == new_params
+        for p in returned_params_eq_inplace_updated_params.values(include_nested=True, leaves_only=True):
+            assert p.all(), f"Discrepancy between returned weights and those in-place updated {p}"
+
+
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
