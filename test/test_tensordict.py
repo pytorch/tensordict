@@ -584,6 +584,9 @@ class TestTensorDicts(TestTensorDictsBase):
                 "a" in td2.clone().keys()
             )
         else:
+
+            print(list(td2.keys(True, True)))
+            print(list(keys))
             assert (len(list(td2.keys(True, True))) == len(keys)) and (
                 "a" in td2.keys()
             )

@@ -222,29 +222,26 @@ class _TensorDictKeysView:
             else:
                 yield from self._keys()
         else:
-            yield from (key if len(key) > 1 else key[0] for key in self._iter_helper(self.tensordict))
+            yield from (
+                key if len(key) > 1 else key[0]
+                for key in self._iter_helper(self.tensordict)
+            )
 
     def _iter_helper(
         self, tensordict: TensorDictBase, prefix: str | None = None
     ) -> Iterable[str] | Iterable[tuple[str, ...]]:
-
         for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
             cls = value.__class__
             if self.include_nested and (
                 _is_tensor_collection(cls) or issubclass(cls, KeyedJaggedTensor)
             ):
-                subkeys = tuple(
-                    self._iter_helper(
-                        value,
-                        prefix=full_key
-                    )
-                )
+                subkeys = tuple(self._iter_helper(value, prefix=full_key))
                 yield from subkeys
             if not self.leaves_only or not _is_tensor_collection(cls):
                 yield full_key
 
-    def _combine_keys(self, prefix: tuple | None, key: NestedKey) -> Tuple:
+    def _combine_keys(self, prefix: tuple | None, key: str) -> tuple:
         if prefix is not None:
             return prefix + (key,)
         return (key,)
@@ -255,12 +252,10 @@ class _TensorDictKeysView:
     def _items(
         self, tensordict: TensorDict | None = None
     ) -> Iterable[tuple[NestedKey, CompatibleType]]:
-
         if tensordict is None:
             tensordict = self.tensordict
         if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
-            for key, item in tensordict._tensordict.items():
-                yield key, item
+            return tensordict._tensordict.items()
         elif isinstance(tensordict, LazyStackedTensorDict):
             return _iter_items_lazystack(tensordict)
         elif isinstance(tensordict, KeyedJaggedTensor):
@@ -269,7 +264,10 @@ class _TensorDictKeysView:
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to
             # be careful to not rely on tensordict._tensordict existing.
-            return ((key, tensordict._get_str(key, NO_DEFAULT)) for key in tensordict._source.keys())
+            return (
+                (key, tensordict._get_str(key, NO_DEFAULT))
+                for key in tensordict._source.keys()
+            )
 
     def _keys(self) -> _TensorDictKeysView:
         return self.tensordict._tensordict.keys()
@@ -5755,11 +5753,10 @@ def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
 
 
 class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
+    tensordict: LazyStackedTensorDict
+
     def __len__(self) -> int:
-        i = -1
-        for i, _ in enumerate(self._keys()):  # noqa: B007
-            continue
-        return i + 1
+        return len(self._keys())
 
     def _keys(self) -> list[str]:
         return self.tensordict._key_list()
@@ -8207,8 +8204,7 @@ def _set_max_batch_size(source: TensorDictBase, batch_dims=None):
 def _iter_items_lazystack(
     tensordict: LazyStackedTensorDict,
 ) -> Iterator[tuple[str, CompatibleType]]:
-    for key, item in tensordict.items():
-        yield key, item
+    return tensordict.items()
 
 
 def _clone_value(value: CompatibleType, recurse: bool) -> CompatibleType:
