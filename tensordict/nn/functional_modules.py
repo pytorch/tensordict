@@ -28,6 +28,7 @@ except ImportError:
 
 __base__setattr__ = nn.Module.__setattr__
 
+
 @implement_for("torch", "2.0", None)
 def _register_params(self, name, param):
     """A simplified version of register_param where checks are skipped."""

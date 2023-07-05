@@ -321,6 +321,21 @@ class TestVmap:
 
 
 class TestFunctionalization:
+    @torch.no_grad()
+    def test_setattr(self):
+        # some modules (LSTM) rewrite __setattr__ which may break the logic
+        # these are tested here
+        x = torch.randn(2, 3, 10)
+        lstm = nn.LSTM(10, 11)
+        y0, (h0, c0) = lstm(x)
+        params = make_functional(lstm)
+        y1, (h1, c1) = lstm(x, params=params)
+        y2, (h2, c2) = lstm(x, (h1, c1), params=params)
+        torch.testing.assert_close(y1, y0)
+        params.apply_(lambda p: p.data.zero_())
+        y1, (h1, c1) = lstm(x, params=params)
+        assert not torch.isclose(y0, y1).all()
+
     def test_swap(self):
         def zero_grad(p):
             p.grad = torch.zeros_like(p.grad)
