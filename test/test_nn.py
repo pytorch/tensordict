@@ -109,6 +109,24 @@ class TestTDModule:
         seq.reset_parameters()
         assert torch.all(old_param != net[0][0].weight.data)
 
+    def test_reset_functional(self):
+        torch.manual_seed(0)
+        net = nn.ModuleList([nn.Sequential(nn.Linear(1, 1), nn.ReLU())])
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        another_module = TensorDictModule(
+            nn.Conv2d(1, 1, 1, 1), in_keys=["in"], out_keys=["out"]
+        )
+        seq = TensorDictSequential(module, another_module)
+
+        params = TensorDict.from_module(seq)
+        old_params = params.clone(recurse=True)
+        new_params = params.clone()
+        seq.reset_parameters(new_params)
+
+        weights_changed = new_params != old_params
+        for w in weights_changed.values(include_nested=True, leaves_only=True):
+            assert w.all(), f"Weights should have changed but did not for {w}"
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
         torch.manual_seed(0)
