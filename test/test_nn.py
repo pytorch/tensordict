@@ -2527,11 +2527,13 @@ def test_module_buffer():
         ("data", "sample_log_prob"),
     ],
 )
-def test_nested_keys_probabilistic(log_prob_key):
+def test_nested_keys_probabilistic_delta(log_prob_key):
 
     policy_module = TensorDictModule(
         nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
     )
+    td = TensorDict({"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3])
+
     module = ProbabilisticTensorDictModule(
         in_keys=[("data", "param")],
         out_keys=[("data", "action")],
@@ -2539,9 +2541,65 @@ def test_nested_keys_probabilistic(log_prob_key):
         return_log_prob=True,
         log_prob_key=log_prob_key,
     )
+    td_out = module(policy_module(td))
+    assert td_out["data", "action"].shape == (3, 4, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (3, 4)
+    else:
+        assert td_out["sample_log_prob"].shape == (3, 4)
 
+    module = ProbabilisticTensorDictModule(
+        in_keys={"param": ("data", "param")},
+        out_keys=[("data", "action")],
+        distribution_class=Delta,
+        return_log_prob=True,
+        log_prob_key=log_prob_key,
+    )
+    td_out = module(policy_module(td))
+    assert td_out["data", "action"].shape == (3, 4, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (3, 4)
+    else:
+        assert td_out["sample_log_prob"].shape == (3, 4)
+
+
+@pytest.mark.parametrize(
+    "log_prob_key",
+    [
+        None,
+        "sample_log_prob",
+        ("nested", "sample_log_prob"),
+        ("data", "sample_log_prob"),
+    ],
+)
+def test_nested_keys_probabilistic_normal(log_prob_key):
+
+    policy_module = TensorDictModule(
+        nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
+    )
     td = TensorDict({"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3])
 
+    module = ProbabilisticTensorDictModule(
+        in_keys=[("data", "param")],
+        out_keys=[("data", "action")],
+        distribution_class=Delta,
+        return_log_prob=True,
+        log_prob_key=log_prob_key,
+    )
+    td_out = module(policy_module(td))
+    assert td_out["data", "action"].shape == (3, 4, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (3, 4)
+    else:
+        assert td_out["sample_log_prob"].shape == (3, 4)
+
+    module = ProbabilisticTensorDictModule(
+        in_keys={"param": ("data", "param")},
+        out_keys=[("data", "action")],
+        distribution_class=Delta,
+        return_log_prob=True,
+        log_prob_key=log_prob_key,
+    )
     td_out = module(policy_module(td))
     assert td_out["data", "action"].shape == (3, 4, 1)
     if log_prob_key:

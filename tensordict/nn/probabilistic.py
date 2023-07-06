@@ -9,7 +9,7 @@ import re
 import warnings
 from enum import auto, Enum
 from textwrap import indent
-from typing import Any, Callable, Sequence, Optional
+from typing import Any, Callable, Sequence, Optional, List
 from warnings import warn
 
 from tensordict._contextlib import _DecoratorContextManager
@@ -148,14 +148,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     a deterministic mapping function.
 
     Args:
-        in_keys (NestedKey or iterable of NestedKey or dict): key(s) that will be read from the
+        in_keys (NestedKey or list of NestedKey or dict): key(s) that will be read from the
             input TensorDict and used to build the distribution. Importantly, if it's an
             iterable of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
             the distribution class of interest, e.g. :obj:`"loc"` and :obj:`"scale"` for
             the Normal distribution and similar. If in_keys is a dictionary, the keys
             are the keys of the distribution and the values are the keys in the
             tensordict that will get match to the corresponding distribution keys.
-        out_keys (NestedKey or iterable of NestedKey): keys where the sampled values will be
+        out_keys (NestedKey or list of NestedKey): keys where the sampled values will be
             written. Importantly, if these keys are found in the input TensorDict, the
             sampling step will be skipped.
         default_interaction_mode (str, optional): *Deprecated* keyword-only argument.
@@ -264,8 +264,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        in_keys: NestedKey | Sequence[NestedKey] | dict,
-        out_keys: NestedKey | Sequence[NestedKey] | None = None,
+        in_keys: NestedKey | List[NestedKey] | dict,
+        out_keys: NestedKey | List[NestedKey] | None = None,
         *,
         default_interaction_mode: str | None = None,
         default_interaction_type: InteractionType = InteractionType.MODE,
@@ -277,13 +277,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         n_empirical_estimate: int = 1000,
     ) -> None:
         super().__init__()
-        if isinstance(in_keys, str) or (
-            isinstance(in_keys, tuple) and set(map(type, in_keys)) == {str}
-        ):
+        if not isinstance(in_keys,List):
             in_keys = [in_keys]
-        if isinstance(out_keys, str) or (
-            isinstance(in_keys, tuple) and set(map(type, out_keys)) == {str}
-        ):
+        if not isinstance(out_keys,List):
             out_keys = [out_keys]
         elif out_keys is None:
             out_keys = ["_"]
