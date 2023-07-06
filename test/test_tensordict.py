@@ -1867,6 +1867,21 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td[index] == 2).all()
 
     @pytest.mark.filterwarnings("error")
+    def test_stack_onto(self, td_name, device, tmpdir):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        if td_name == "td_h5":
+            td0 = td.clone(newfile=tmpdir / "file0.h5").apply_(lambda x: x.zero_())
+            td1 = td.clone(newfile=tmpdir / "file1.h5").apply_(lambda x: x.zero_() + 1)
+        else:
+            td0 = td.clone().apply_(lambda x: x.zero_())
+            td1 = td.clone().apply_(lambda x: x.zero_() + 1)
+        td_out = td.unsqueeze(1).expand(td.shape[0], 2, *td.shape[1:]).clone()
+        td_stack = torch.stack([td0, td1], 1)
+        torch.stack([td0, td1], 1, out=td_out)
+        assert (td_stack == td_out).all()
+
+    @pytest.mark.filterwarnings("error")
     def test_stack_tds_on_subclass(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
