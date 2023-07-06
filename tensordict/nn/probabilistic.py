@@ -147,14 +147,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     a deterministic mapping function.
 
     Args:
-        in_keys (str or iterable of str or dict): key(s) that will be read from the
+        in_keys (NestedKey or iterable of NestedKey or dict): key(s) that will be read from the
             input TensorDict and used to build the distribution. Importantly, if it's an
-            iterable of string or a string, those keys must match the keywords used by
+            iterable of NestedKey or a NestedKey, the leaf of those keys must match the keywords used by
             the distribution class of interest, e.g. :obj:`"loc"` and :obj:`"scale"` for
-            the Normal distribution and similar. If in_keys is a dictionary,, the keys
+            the Normal distribution and similar. If in_keys is a dictionary, the keys
             are the keys of the distribution and the values are the keys in the
             tensordict that will get match to the corresponding distribution keys.
-        out_keys (str or iterable of str): keys where the sampled values will be
+        out_keys (NestedKey or iterable of NestedKey): keys where the sampled values will be
             written. Importantly, if these keys are found in the input TensorDict, the
             sampling step will be skipped.
         default_interaction_mode (str, optional): *Deprecated* keyword-only argument.
@@ -263,8 +263,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        in_keys: str | Sequence[str] | dict,
-        out_keys: str | Sequence[str] | None = None,
+        in_keys: NestedKey | Sequence[NestedKey] | dict,
+        out_keys: NestedKey | Sequence[NestedKey] | None = None,
         *,
         default_interaction_mode: str | None = None,
         default_interaction_type: InteractionType = InteractionType.MODE,
@@ -275,9 +275,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         n_empirical_estimate: int = 1000,
     ) -> None:
         super().__init__()
-        if isinstance(in_keys, str):
+        if isinstance(in_keys, str) or (isinstance(in_keys,tuple) and set(map(type, in_keys)) == {str}):
             in_keys = [in_keys]
-        if isinstance(out_keys, str):
+        if isinstance(out_keys, str) or (isinstance(in_keys,tuple) and set(map(type, out_keys)) == {str}):
             out_keys = [out_keys]
         elif out_keys is None:
             out_keys = ["_"]
@@ -287,7 +287,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             # keys must be strings
             if not all(isinstance(v, str) for v in in_keys.keys()):
                 raise ValueError(
-                    f"in_keys keys should all be strings. "
+                    f"in_keys dict keys should all be strings. "
                     f"{self.__class__.__name__} got {in_keys}"
                 )
 
@@ -319,10 +319,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         try:
-            dist_kwargs = {
-                dist_key: tensordict[td_key]
-                for dist_key, td_key in self.in_keys.items()
-            }
+            dist_kwargs = {}
+            for dist_key, td_key in self.in_keys.items():
+                if isinstance(dist_key,tuple):
+                    dist_key = dist_key[-1] # It one of the in_keys is a tuple, try to match the dist_kward with the leaf
+                dist_kwargs[dist_key]= tensordict[td_key]
             dist = self.distribution_class(**dist_kwargs, **self.distribution_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
