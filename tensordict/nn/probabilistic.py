@@ -9,7 +9,7 @@ import re
 import warnings
 from enum import auto, Enum
 from textwrap import indent
-from typing import Any, Callable, Sequence, Optional, List
+from typing import Any, Callable, Sequence, Optional, List, Dict
 from warnings import warn
 
 from tensordict._contextlib import _DecoratorContextManager
@@ -277,9 +277,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         n_empirical_estimate: int = 1000,
     ) -> None:
         super().__init__()
-        if not isinstance(in_keys,List):
+        if not isinstance(in_keys, (List, Dict)):
             in_keys = [in_keys]
-        if not isinstance(out_keys,List):
+        if not isinstance(out_keys, (List, Dict)):
             out_keys = [out_keys]
         elif out_keys is None:
             out_keys = ["_"]
