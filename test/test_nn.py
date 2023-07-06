@@ -9,7 +9,6 @@ import warnings
 
 import pytest
 import torch
-from torch.nn import Tanh
 
 from tensordict import tensorclass, TensorDict
 from tensordict._tensordict import unravel_key_list
@@ -22,7 +21,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
-from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper, Delta
+from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import set_skip_existing, skip_existing
