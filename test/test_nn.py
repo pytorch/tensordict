@@ -21,7 +21,7 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
-from tensordict.nn.distributions import NormalParamExtractor, NormalParamWrapper
+from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import set_skip_existing, skip_existing
@@ -2515,6 +2515,103 @@ def test_module_buffer():
     if torch.cuda.device_count():
         module.cuda()
         assert module.td.device.type == "cuda"
+
+
+@pytest.mark.parametrize(
+    "log_prob_key",
+    [
+        None,
+        "sample_log_prob",
+        ("nested", "sample_log_prob"),
+        ("data", "sample_log_prob"),
+    ],
+)
+def test_nested_keys_probabilistic_delta(log_prob_key):
+
+    policy_module = TensorDictModule(
+        nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
+    )
+    td = TensorDict({"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3])
+
+    module = ProbabilisticTensorDictModule(
+        in_keys=[("data", "param")],
+        out_keys=[("data", "action")],
+        distribution_class=Delta,
+        return_log_prob=True,
+        log_prob_key=log_prob_key,
+    )
+    td_out = module(policy_module(td))
+    assert td_out["data", "action"].shape == (3, 4, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (3, 4)
+    else:
+        assert td_out["sample_log_prob"].shape == (3, 4)
+
+    module = ProbabilisticTensorDictModule(
+        in_keys={"param": ("data", "param")},
+        out_keys=[("data", "action")],
+        distribution_class=Delta,
+        return_log_prob=True,
+        log_prob_key=log_prob_key,
+    )
+    td_out = module(policy_module(td))
+    assert td_out["data", "action"].shape == (3, 4, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (3, 4)
+    else:
+        assert td_out["sample_log_prob"].shape == (3, 4)
+
+
+@pytest.mark.parametrize(
+    "log_prob_key",
+    [
+        None,
+        "sample_log_prob",
+        ("nested", "sample_log_prob"),
+        ("data", "sample_log_prob"),
+    ],
+)
+def test_nested_keys_probabilistic_normal(log_prob_key):
+
+    loc_module = TensorDictModule(
+        nn.Linear(1, 1),
+        in_keys=[("data", "states")],
+        out_keys=[("data", "loc")],
+    )
+    scale_module = TensorDictModule(
+        nn.Linear(1, 1),
+        in_keys=[("data", "states")],
+        out_keys=[("data", "scale")],
+    )
+    td = TensorDict({"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3])
+
+    module = ProbabilisticTensorDictModule(
+        in_keys=[("data", "loc"), ("data", "scale")],
+        out_keys=[("data", "action")],
+        distribution_class=Normal,
+        return_log_prob=True,
+        log_prob_key=log_prob_key,
+    )
+    td_out = module(loc_module(scale_module(td)))
+    assert td_out["data", "action"].shape == (3, 4, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (3, 4, 1)
+    else:
+        assert td_out["sample_log_prob"].shape == (3, 4, 1)
+
+    module = ProbabilisticTensorDictModule(
+        in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},
+        out_keys=[("data", "action")],
+        distribution_class=Normal,
+        return_log_prob=True,
+        log_prob_key=log_prob_key,
+    )
+    td_out = module(loc_module(scale_module(td)))
+    assert td_out["data", "action"].shape == (3, 4, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (3, 4, 1)
+    else:
+        assert td_out["sample_log_prob"].shape == (3, 4, 1)
 
 
 if __name__ == "__main__":
