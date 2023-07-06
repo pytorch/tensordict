@@ -9,7 +9,7 @@ import re
 import warnings
 from enum import auto, Enum
 from textwrap import indent
-from typing import Any, Callable, Sequence, Optional, List, Dict
+from typing import Any, Callable, List, Optional
 from warnings import warn
 
 from tensordict._contextlib import _DecoratorContextManager
@@ -150,7 +150,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     Args:
         in_keys (NestedKey or list of NestedKey or dict): key(s) that will be read from the
             input TensorDict and used to build the distribution. Importantly, if it's an
-            iterable of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
+            list of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
             the distribution class of interest, e.g. :obj:`"loc"` and :obj:`"scale"` for
             the Normal distribution and similar. If in_keys is a dictionary, the keys
             are the keys of the distribution and the values are the keys in the
