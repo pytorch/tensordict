@@ -777,7 +777,7 @@ class TensorDictModuleBase(nn.Module):
                 del self._forward_hooks[i]
         return self
 
-    def reset_parameters(
+    def reset_parameters_recursive(
         self, parameters: Optional[TensorDictBase] = None
     ) -> Optional[TensorDictBase]:
         """Recursively reset the parameters of the module and its children.
@@ -814,7 +814,7 @@ class TensorDictModuleBase(nn.Module):
             False
         """
         if parameters is None:
-            self._reset_parameters()
+            self._reset_parameters(self)
             return
 
         sanitized_parameters = parameters.apply(
@@ -834,7 +834,7 @@ class TensorDictModuleBase(nn.Module):
                 return_old_tensordict=True,
             )
 
-        self._reset_parameters()
+        self._reset_parameters(self)
 
         if is_stateless:
             new_parameters = extract_weights_and_buffers(self)
@@ -845,13 +845,13 @@ class TensorDictModuleBase(nn.Module):
 
         return new_parameters
 
-    def _reset_parameters(self):
-        for child in self.children():
-            child.apply(
-                lambda m: m.reset_parameters()
-                if hasattr(m, "reset_parameters")
-                else None
-            )
+    def _reset_parameters(self, module: nn.Module) -> None:
+        for child in module.children():
+            if isinstance(child, nn.Module):
+                self._reset_parameters(child)
+
+            if hasattr(child, "reset_parameters"):
+                child.reset_parameters()
 
 
 class TensorDictModule(TensorDictModuleBase):
