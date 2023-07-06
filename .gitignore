@@ -4,6 +4,7 @@ __pycache__
 tensordict/version.py
 .pytest_cache
 build
+tensordict/_tensordict.so
 
 # docs build
 docs/_data
@@ -11,3 +12,6 @@ docs/source/gen_modules
 docs/source/reference/generated
 docs/source/tutorials
 docs/src
+
+# Pycharm
+.idea
