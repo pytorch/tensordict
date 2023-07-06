@@ -2586,19 +2586,19 @@ def test_nested_keys_probabilistic_normal(log_prob_key):
     )
     td = TensorDict({"data": TensorDict({"states": torch.zeros(3, 4, 1)}, [3, 4])}, [3])
 
-    # module = ProbabilisticTensorDictModule(
-    #     in_keys=[("data", "loc"), ("data", "scale")],
-    #     out_keys=[("data", "action")],
-    #     distribution_class=Normal,
-    #     return_log_prob=True,
-    #     log_prob_key=log_prob_key,
-    # )
-    # td_out = module(loc_module(scale_module(td)))
-    # assert td_out["data", "action"].shape == (3, 4, 1)
-    # if log_prob_key:
-    #     assert td_out[log_prob_key].shape == (3, 4, 1)
-    # else:
-    #     assert td_out["sample_log_prob"].shape == (3, 4, 1)
+    module = ProbabilisticTensorDictModule(
+        in_keys=[("data", "loc"), ("data", "scale")],
+        out_keys=[("data", "action")],
+        distribution_class=Normal,
+        return_log_prob=True,
+        log_prob_key=log_prob_key,
+    )
+    td_out = module(loc_module(scale_module(td)))
+    assert td_out["data", "action"].shape == (3, 4, 1)
+    if log_prob_key:
+        assert td_out[log_prob_key].shape == (3, 4, 1)
+    else:
+        assert td_out["sample_log_prob"].shape == (3, 4, 1)
 
     module = ProbabilisticTensorDictModule(
         in_keys={"loc": ("data", "loc"), "scale": ("data", "scale")},

@@ -277,9 +277,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         n_empirical_estimate: int = 1000,
     ) -> None:
         super().__init__()
-        if not isinstance(in_keys, (List, Dict)):
+        if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
-        if not isinstance(out_keys, (List, Dict)):
+        if isinstance(out_keys, (str, tuple)):
             out_keys = [out_keys]
         elif out_keys is None:
             out_keys = ["_"]
