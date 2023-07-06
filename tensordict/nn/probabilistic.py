@@ -9,7 +9,7 @@ import re
 import warnings
 from enum import auto, Enum
 from textwrap import indent
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from warnings import warn
 
 from tensordict._contextlib import _DecoratorContextManager
@@ -264,7 +264,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     def __init__(
         self,
-        in_keys: NestedKey | List[NestedKey] | dict,
+        in_keys: NestedKey | List[NestedKey] | Dict[str, NestedKey],
         out_keys: NestedKey | List[NestedKey] | None = None,
         *,
         default_interaction_mode: str | None = None,
