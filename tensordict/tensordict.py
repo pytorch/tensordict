@@ -1644,9 +1644,7 @@ class TensorDictBase(MutableMapping):
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
         key = _unravel_key_to_tuple(key)
-        if len(key) == 1:
-            key = key[0]
-        elif not key:
+        if not key:
             raise KeyError(_GENERIC_NESTED_ERR)
         return key
 
@@ -4041,7 +4039,7 @@ class TensorDict(TensorDictBase):
             out.refine_names(..., *self.names)
         return out
 
-    def _set(self, key: str, value, inplace: bool = False) -> TensorDictBase:
+    def _set(self, key: tuple, value, inplace: bool = False) -> TensorDictBase:
         if isinstance(key, tuple):
             td, subkey = _get_leaf_tensordict(
                 self, key, _default_hook if not inplace else None
@@ -4071,13 +4069,15 @@ class TensorDict(TensorDictBase):
         # See TensorDictBase.set for doc
         key = self._validate_key(key)
 
-        if isinstance(key, tuple):
+        if len(key) > 1:
             # get the leaf tensordict and call set from there, these means validation
             # of inputs is done in the context of the leaf (batch_size could be
             # different to root etc.)
             td, subkey = _get_leaf_tensordict(self, key, _default_hook)
             td.set(subkey, value, inplace=inplace)
             return self
+        else:
+            key = key[0]
 
         inplace = inplace and key in self.keys()
         if self.is_locked and not inplace:
@@ -4098,10 +4098,10 @@ class TensorDict(TensorDictBase):
             # note that unlike set we don't use _default_hook so missing keys are not
             # created as we iterate through the tree, instead we catch the resulting
             # KeyError and modify the error message
-            if isinstance(key, tuple):
+            if len(key) > 1:
                 td, subkey = _get_leaf_tensordict(self, key)
             else:
-                td, subkey = self, key
+                td, subkey = self, key[0]
             value = td._validate_value(value)
             td._set(subkey, value, inplace=True)
         except KeyError as e:
@@ -4186,11 +4186,11 @@ class TensorDict(TensorDictBase):
         idx: IndexType,
     ) -> TensorDictBase:
         key = self._validate_key(key)
-        if key not in self.keys(include_nested=isinstance(key, tuple)):
+        if key not in self.keys(include_nested=True):
             raise KeyError(f"did not find key {key} in {self.__class__.__name__}")
 
         value = self._validate_value(value, check_shape=False)
-        tensor_in = self.get(key)
+        tensor_in = self._get_tuple(key, NO_DEFAULT)
 
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
             warn(
@@ -5353,7 +5353,7 @@ torch.Size([3, 2])
     ) -> TensorDictBase:
         key = self._validate_key(key)
 
-        if isinstance(key, tuple) and len(key) > 1:
+        if len(key) > 1:
             source = self._source
             td = source._get_str(key[0], None)
             if td is None:
@@ -5361,7 +5361,7 @@ torch.Size([3, 2])
             td = self._get_str(key[0], NO_DEFAULT)
             td.set(key[1:], tensor, inplace)
             return self
-        elif isinstance(key, tuple):
+        else:
             key = key[0]
         key_present = key in self.keys()
         inplace = inplace and key_present
@@ -5388,10 +5388,10 @@ torch.Size([3, 2])
             # note that unlike set we don't use _default_hook so missing keys are not
             # created as we iterate through the tree, instead we catch the resulting
             # KeyError and modify the error message
-            if isinstance(key, tuple):
+            if len(key) > 1:
                 td, subkey = _get_leaf_tensordict(self, key)
             else:
-                td, subkey = self, key
+                td, subkey = self, key[0]
             value = td._validate_value(value)
             td._set(subkey, value, inplace=True)
         except KeyError as e:
@@ -7387,7 +7387,7 @@ class _CustomOpTensorDict(TensorDictBase):
         if self.is_locked:
             raise RuntimeError(TensorDictBase.LOCK_ERROR)
 
-        if isinstance(key, tuple) and len(key) > 1:
+        if len(key) > 1:
             subsource = self._source._get_str(key[0], None)
             if subsource is None:
                 self._source.create_nested(key[0])
@@ -7402,7 +7402,7 @@ class _CustomOpTensorDict(TensorDictBase):
             )
             td.set(key[1:], value, inplace=inplace)
             return self
-        elif isinstance(key, tuple):
+        else:
             key = key[0]
 
         value = self._validate_value(value)

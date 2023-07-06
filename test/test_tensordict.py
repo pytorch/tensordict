@@ -1766,7 +1766,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td.set_("key1", val2)
         assert (td.get("key1") == 0).all()
         if td_name not in ("stacked_td", "nested_stacked_td"):
-            err_msg = 'key "smartypants" not found in '
+            err_msg = r"key.*smartypants.*not found in "
         else:
             err_msg = "setting a value in-place on a stack of TensorDict"
 
@@ -1798,7 +1798,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td.get("key1").get("subkey1") == 0).all()
 
         if td_name not in ("stacked_td", "nested_stacked_td"):
-            err_msg = 'key "smartypants" not found in '
+            err_msg = r"key.*smartypants.*not found in "
         else:
             err_msg = "setting a value in-place on a stack of TensorDict"
 
