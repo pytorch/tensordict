@@ -336,13 +336,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         try:
-            dist_kwargs = {}
-            for dist_key, td_key in self.in_keys.items():
-                if isinstance(dist_key, tuple):
-                    dist_key = dist_key[
-                        -1
-                    ]  # It one of the in_keys is a tuple, try to match the dist_kward with the leaf
-                dist_kwargs[dist_key] = tensordict.get(td_key)
             dist_kwargs = {
                 dist_key: tensordict.get(td_key)
                 for dist_key, td_key in zip(self.dist_keys, self.in_keys)
