@@ -20,7 +20,7 @@ from typing import Any, Callable, Sequence, TypeVar
 import tensordict as tensordict_lib
 
 import torch
-from tensordict._tensordict import unravel_keys
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     _get_repr,
@@ -650,7 +650,7 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
         return self
 
     if isinstance(key, tuple) and len(key):
-        key = unravel_keys(key)
+        key = _unravel_key_to_tuple(key)
         if len(key) > 1:
             return self.set(key[0], getattr(self, key[0]).set(key[1:], value))
         out = self.set(key[0], value)
