@@ -149,7 +149,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     Args:
         in_keys (NestedKey or iterable of NestedKey or dict): key(s) that will be read from the
             input TensorDict and used to build the distribution. Importantly, if it's an
-            iterable of NestedKey or a NestedKey, the leaf of those keys must match the keywords used by
+            iterable of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
             the distribution class of interest, e.g. :obj:`"loc"` and :obj:`"scale"` for
             the Normal distribution and similar. If in_keys is a dictionary, the keys
             are the keys of the distribution and the values are the keys in the
@@ -288,23 +288,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             out_keys = ["_"]
         if isinstance(in_keys, dict):
             dist_keys, in_keys = zip(*in_keys.items())
-        else:
-            dist_keys = in_keys
-
-        # keys in kwargs must be strings
-        _dist_keys = []
-        for key in dist_keys:
-            if isinstance(key, str):
-                pass
-            elif isinstance(key, tuple) and len(key) == 1:
-                key = key[0]
-            else:
+            if set(map(type, dist_keys)) != {str}:
                 raise ValueError(
-                    f"The distribution keys should all be strings. "
+                    f"If in_keys is dict, its keys must be strings matching to the distribution kwargs."
                     f"{self.__class__.__name__} got {dist_keys}"
                 )
-            _dist_keys.append(key)
-        dist_keys = tuple(_dist_keys)
+        else:
+            dist_keys = in_keys
 
         self.out_keys = out_keys
         self.in_keys = in_keys
@@ -336,10 +326,12 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         try:
-            dist_kwargs = {
-                dist_key: tensordict.get(td_key)
-                for dist_key, td_key in zip(self.dist_keys, self.in_keys)
-            }
+            dist_kwargs = {}
+            for dist_key, td_key in zip(self.dist_keys, self.in_keys):
+                if isinstance(dist_key, tuple):
+                    dist_key = dist_key[-1]
+                dist_kwargs[dist_key] = tensordict.get(td_key)
+
             dist = self.distribution_class(**dist_kwargs, **self.distribution_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
