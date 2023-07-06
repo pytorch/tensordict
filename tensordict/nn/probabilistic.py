@@ -19,7 +19,7 @@ from tensordict.nn.sequence import TensorDictSequential
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import _seq_of_nested_key_check, NestedKey
+from tensordict.utils import NestedKey
 from torch import distributions as D, Tensor
 
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
