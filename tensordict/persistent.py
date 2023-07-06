@@ -770,9 +770,11 @@ class PersistentTensorDict(TensorDictBase):
         return self
 
     def _set_str(self, key, value, inplace):
+        inplace = self._convert_inplace(inplace, key)
         return self._set(key, value, inplace=inplace)
 
     def _set_tuple(self, key, value, inplace):
+        inplace = self._convert_inplace(inplace, key)
         return self._set(key, value, inplace=inplace)
 
     def _set_at_str(self, key, value, idx):

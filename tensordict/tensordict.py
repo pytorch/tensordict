@@ -109,6 +109,14 @@ except ImportError as err:
 
 NO_DEFAULT = "_no_default_"
 
+
+class INPLACE_NOT_KNOWN:
+    def __bool__(self):
+        raise NotImplementedError
+
+
+INPLACE_NOT_KNOWN = INPLACE_NOT_KNOWN()
+
 # some complex string used as separator to concatenate and split keys in
 # distributed frameworks
 DIST_SEPARATOR = ".-|-."
@@ -596,7 +604,7 @@ class TensorDictBase(MutableMapping):
                 if len(tensordict.batch_size) < len(new_batch_size):
                     # document as edge case
                     tensordict.batch_size = new_batch_size
-                    self._set(key, tensordict)
+                    self._set_str(key, tensordict, inplace=True)
         self._check_new_batch_size(new_batch_size)
         self._change_batch_size(new_batch_size)
         if self._td_dim_names is not None:
@@ -763,20 +771,16 @@ class TensorDictBase(MutableMapping):
             self
 
         """
-        key = unravel_keys(key)
+        key = _unravel_key_to_tuple(key)
         # inplace is loose here, but for set_ it is constraining. We translate it
         # to None to tell _set_str and others to drop it if the key isn't found
-        inplace = None if inplace else False
-        value = self._validate_value(item, check_shape=True)
-        if isinstance(key, str):
-            return self._set_str(key, value, inplace)
-        else:
-            return self._set_tuple(key, value, inplace)
+        inplace = INPLACE_NOT_KNOWN if inplace else False
+        return self._set_tuple(key, item, inplace)
 
     def _convert_inplace(self, inplace, key):
         if inplace is not False:
             has_key = key in self.keys()
-            if inplace and not has_key:  # inplace could be None
+            if inplace is True and not has_key:  # inplace could be None
                 raise KeyError(
                     TensorDictBase.KEY_ERROR.format(
                         key, self.__class__.__name__, sorted(self.keys())
@@ -807,12 +811,8 @@ class TensorDictBase(MutableMapping):
             self
 
         """
-        key = unravel_keys(key)
-        value = self._validate_value(value, check_shape=False)
-        if isinstance(key, str):
-            return self._set_at_str(key, value, idx)
-        else:
-            return self._set_at_tuple(key, value, idx)
+        key = _unravel_key_to_tuple(key)
+        return self._set_at_tuple(key, value, idx)
 
     @abc.abstractmethod
     def _set_at_str(self, key, value, idx):
@@ -837,12 +837,9 @@ class TensorDictBase(MutableMapping):
             self
 
         """
-        key = unravel_keys(key)
+        key = _unravel_key_to_tuple(key)
         value = self._validate_value(item, check_shape=True)
-        if isinstance(key, str):
-            return self._set_str(key, value, inplace=True)
-        else:
-            return self._set_tuple(key, value, inplace=True)
+        return self._set_tuple(key, value, inplace=True)
 
     @abc.abstractmethod
     def _stack_onto_(
@@ -1485,11 +1482,12 @@ class TensorDictBase(MutableMapping):
             if item_trsf is not None:
                 # if `self` is a `SubTensorDict` we want to process the input,
                 # hence we call `set` rather than `_set_str`.
-                inplace = None if inplace else False
                 if isinstance(self, SubTensorDict):
                     out.set(key, item_trsf, inplace=inplace)
                 else:
-                    out._set_str(key, item_trsf, inplace=inplace)
+                    out._set_str(
+                        key, item_trsf, inplace=INPLACE_NOT_KNOWN if inplace else False
+                    )
 
         if not inplace and is_locked:
             out.lock_()
@@ -3771,7 +3769,7 @@ class TensorDict(TensorDictBase):
         "_locked_tensordicts",
         "_cache",
         "_last_op",
-        "_last_op_queue",
+        "__last_op_queue",
     )
 
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
@@ -4099,6 +4097,7 @@ class TensorDict(TensorDictBase):
         inplace: bool = False,
     ) -> TensorDictBase:
         inplace = self._convert_inplace(inplace, key)
+        value = self._validate_value(value, check_shape=True)
         if not inplace:
             if self.is_locked:
                 raise RuntimeError(TensorDictBase.LOCK_ERROR)
@@ -4135,6 +4134,7 @@ class TensorDict(TensorDictBase):
         return self
 
     def _set_at_str(self, key, value, idx):
+        value = self._validate_value(value, check_shape=False)
         tensor_in = self._get_str(key, NO_DEFAULT)
 
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
@@ -4518,7 +4518,7 @@ class TensorDict(TensorDictBase):
         return {
             slot: getattr(self, slot)
             for slot in self.__slots__
-            if slot not in ("_last_op", "_cache", "_last_op_queue")
+            if slot not in ("_last_op", "_cache", "__last_op_queue")
         }
 
     def __setstate__(self, state):
@@ -5365,11 +5365,6 @@ torch.Size([3, 2])
                     value_expand = MemmapTensor.from_tensor(value_expand)
 
             parent._set_str(key, value_expand)
-            if (
-                isinstance(parent, LazyStackedTensorDict)
-                and key not in parent._valid_keys
-            ):
-                parent._valid_keys = None
 
         parent._set_at_str(key, value, self.idx)
         return self
@@ -5388,7 +5383,7 @@ torch.Size([3, 2])
         if td is None:
             td = parent.select()
             parent._set_str(key[0], td, False)
-        td._set_at_tuple(key[1:], value, self.idx)
+        SubTensorDict(td, self.idx)._set_tuple(key[1:], value, inplace=inplace)
         return self
 
     def _set_at_str(self, key, value, idx):
@@ -5505,17 +5500,15 @@ torch.Size([3, 2])
                 value = value.clone()
             else:
                 value = tree_map(torch.clone, value)
-            if isinstance(key, tuple):
-                key, subkey = key[0], key[1:]
-            else:
-                subkey = []
+            key = _unravel_key_to_tuple(key)
+            firstkey, subkey = key[0], key[1:]
             # the key must be a string by now. Let's check if it is present
-            if key in keys:
-                target_class = self.entry_class(key)
+            if firstkey in keys:
+                target_class = self.entry_class(firstkey)
                 if _is_tensor_collection(target_class):
-                    target = self._source.get(key).get_sub_tensordict(self.idx)
+                    target = self._source.get(firstkey).get_sub_tensordict(self.idx)
                     if len(subkey):
-                        target.update({subkey: value})
+                        target._set_tuple(subkey, value)
                         continue
                     elif isinstance(value, (dict, TensorDictBase)):
                         target.update(value)
@@ -5524,12 +5517,14 @@ torch.Size([3, 2])
                         f"Tried to replace a tensordict with an incompatible object of type {type(value)}"
                     )
                 else:
-                    self.set_(key, value)
+                    self._set_tuple(key, value, inplace=True)
             else:
-                if len(subkey):
-                    self.set((key, *subkey), value, inplace=inplace, **kwargs)
-                else:
-                    self.set(key, value, inplace=inplace, **kwargs)
+                self._set_tuple(
+                    key,
+                    value,
+                    inplace=INPLACE_NOT_KNOWN if inplace else False,
+                    **kwargs,
+                )
         return self
 
     def update_(
@@ -5556,12 +5551,15 @@ torch.Size([3, 2])
                 )
             if clone:
                 value = value.clone()
-            self.set_at_(
-                key,
-                value,
-                idx,
-                discard_idx_attr=discard_idx_attr,
-            )
+            key = _unravel_key_to_tuple(key)
+            if discard_idx_attr:
+                self._source._set_at_tuple(
+                    key,
+                    value,
+                    idx,
+                )
+            else:
+                self._set_at_tuple(key, value, idx)
         return self
 
     def get_parent_tensordict(self) -> TensorDictBase:
@@ -6009,9 +6007,6 @@ class LazyStackedTensorDict(TensorDictBase):
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
             tensordict._set_str(key, item, inplace)
-        if not inplace:
-            if key not in self._valid_keys:
-                self._valid_keys = sorted([*self._valid_keys, key], key=str)
         return self
 
     def _set_tuple(
@@ -6041,8 +6036,6 @@ class LazyStackedTensorDict(TensorDictBase):
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
             tensordict._set_tuple(key, item, inplace)
-        if key[0] not in self._valid_keys:
-            self._valid_keys = sorted([*self._valid_keys, key[0]], key=str)
         return self
 
     def _set_at_str(self, key, value, idx):
@@ -7398,13 +7391,25 @@ class _CustomOpTensorDict(TensorDictBase):
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
 
     def _set_str(self, key, value, inplace: bool = False):
+        value = self._validate_value(value, check_shape=False)
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
         self._source._set_str(key, value, inplace=inplace)
         return self
 
     def _set_tuple(self, key, value, inplace: bool = False):
-        value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
-        self._source._set_tuple(key, value, inplace=inplace)
+        if len(key) == 1:
+            return self._set_str(key[0], value, inplace=inplace)
+        source = self._source._get_str(key[0], None)
+        if source is None:
+            source = self._source.select()
+            self._source._set_str(key[0], source)
+        type(self)(
+            source,
+            custom_op=self.custom_op,
+            inv_op=self.inv_op,
+            custom_op_kwargs=self.custom_op_kwargs,
+            inv_op_kwargs=self.inv_op_kwargs,
+        )._set_tuple(key, value, inplace=inplace)
         return self
 
     def _set_at_str(self, key, value, idx):
