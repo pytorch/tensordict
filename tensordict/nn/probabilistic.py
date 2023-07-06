@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from enum import auto, Enum
 from textwrap import indent
 from typing import Any, Callable, Sequence, Optional
@@ -331,7 +332,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 if isinstance(dist_key, tuple):
                     dist_key = dist_key[-1]
                 dist_kwargs[dist_key] = tensordict.get(td_key)
-
             dist = self.distribution_class(**dist_kwargs, **self.distribution_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
@@ -346,6 +346,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             else:
                 raise err
         return dist
+
+    @property
+    def SAMPLE_LOG_PROB_KEY(self):
+        warnings.warn(
+            "SAMPLE_LOG_PROB_KEY will be deprecated soon."
+            "Use 'obj.log_prob_key' instead",
+            category=DeprecationWarning,
+        )
+        return self.log_prob_key
 
     @dispatch(auto_batch_size=False)
     @set_skip_existing(None)
