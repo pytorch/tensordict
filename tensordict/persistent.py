@@ -728,6 +728,8 @@ class PersistentTensorDict(TensorDictBase):
             return self
 
         if inplace:
+            # could be called before but will go under further refactoring of set
+            key = self._process_key(key)
             array = self.file[key]
             if idx is None:
                 idx = ()
