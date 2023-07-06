@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from enum import auto, Enum
 from textwrap import indent
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Sequence, Optional
 from warnings import warn
 
 from tensordict._contextlib import _DecoratorContextManager
@@ -19,7 +19,7 @@ from tensordict.nn.sequence import TensorDictSequential
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import _seq_of_nested_key_check
+from tensordict.utils import _seq_of_nested_key_check, NestedKey
 from torch import distributions as D, Tensor
 
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
@@ -179,7 +179,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         return_log_prob (bool, optional): keyword-only argument.
             If ``True``, the log-probability of the
             distribution sample will be written in the tensordict with the key
-            `'sample_log_prob'`. Default is ``False``.
+            `log_prob_key`. Default is ``False``.
+        log_prob_key (NestedKey, optional): key where to write the log_prob if return_log_prob = True.
+            Defaults to `'sample_log_prob'`.
         cache_dist (bool, optional): keyword-only argument.
             EXPERIMENTAL: if ``True``, the parameters of the
             distribution (i.e. the output of the module) will be written to the
@@ -259,8 +261,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     """
 
-    SAMPLE_LOG_PROB_KEY = "sample_log_prob"
-
     def __init__(
         self,
         in_keys: NestedKey | Sequence[NestedKey] | dict,
@@ -271,13 +271,18 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
+        log_prob_key: Optional[NestedKey] = "sample_log_prob",
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
     ) -> None:
         super().__init__()
-        if isinstance(in_keys, str) or (isinstance(in_keys,tuple) and set(map(type, in_keys)) == {str}):
+        if isinstance(in_keys, str) or (
+            isinstance(in_keys, tuple) and set(map(type, in_keys)) == {str}
+        ):
             in_keys = [in_keys]
-        if isinstance(out_keys, str) or (isinstance(in_keys,tuple) and set(map(type, out_keys)) == {str}):
+        if isinstance(out_keys, str) or (
+            isinstance(in_keys, tuple) and set(map(type, out_keys)) == {str}
+        ):
             out_keys = [out_keys]
         elif out_keys is None:
             out_keys = ["_"]
@@ -295,6 +300,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         _seq_of_nested_key_check(tuple(in_keys.values()))
         self.out_keys = out_keys
         self.in_keys = in_keys
+        if log_prob_key is None:
+            log_prob_key = "sample_log_prob"
+        self.log_prob_key = log_prob_key
 
         if default_interaction_mode is not None:
             _insert_interaction_mode_deprecation_warning("default_")
@@ -315,15 +323,17 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
         if self.return_log_prob:
-            self.out_keys.append(self.SAMPLE_LOG_PROB_KEY)
+            self.out_keys.append(self.log_prob_key)
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         try:
             dist_kwargs = {}
             for dist_key, td_key in self.in_keys.items():
-                if isinstance(dist_key,tuple):
-                    dist_key = dist_key[-1] # It one of the in_keys is a tuple, try to match the dist_kward with the leaf
-                dist_kwargs[dist_key]= tensordict[td_key]
+                if isinstance(dist_key, tuple):
+                    dist_key = dist_key[
+                        -1
+                    ]  # It one of the in_keys is a tuple, try to match the dist_kward with the leaf
+                dist_kwargs[dist_key] = tensordict[td_key]
             dist = self.distribution_class(**dist_kwargs, **self.distribution_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
@@ -360,15 +370,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             )
             if self.return_log_prob:
                 log_prob = dist.log_prob(*out_tensors)
-                tensordict_out.set(self.SAMPLE_LOG_PROB_KEY, log_prob)
+                tensordict_out.set(self.log_prob_key, log_prob)
         elif self.return_log_prob:
             out_tensors = [
-                tensordict.get(key)
-                for key in self.out_keys
-                if key != self.SAMPLE_LOG_PROB_KEY
+                tensordict.get(key) for key in self.out_keys if key != self.log_prob_key
             ]
             log_prob = dist.log_prob(*out_tensors)
-            tensordict_out.set(self.SAMPLE_LOG_PROB_KEY, log_prob)
+            tensordict_out.set(self.log_prob_key, log_prob)
             # raise RuntimeError(
             #     "ProbabilisticTensorDictModule.return_log_prob = True is incompatible with settings in which "
             #     "the submodule is responsible for sampling. To manually gather the log-probability, call first "
