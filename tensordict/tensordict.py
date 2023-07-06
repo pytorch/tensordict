@@ -34,16 +34,18 @@ from warnings import warn
 import numpy as np
 
 import torch
-from tensordict._tensordict import unravel_keys
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
 from tensordict.utils import (
     _device,
     _dtype,
+    _GENERIC_NESTED_ERR,
     _get_item,
     _getitem_batch_size,
     _is_shared,
     _is_tensorclass,
-    _maybe_unravel_keys_silent,
+    _NON_STR_KEY_ERR,
+    _NON_STR_KEY_TUPLE_ERR,
     _set_item,
     _shape,
     _StringOnlyDict,
@@ -60,10 +62,7 @@ from tensordict.utils import (
     is_tensorclass,
     lock_blocked,
     NestedKey,
-    NON_STR_KEY,
-    NON_STR_KEY_TUPLE,
     prod,
-    # unravel_keys,
 )
 from torch import distributed as dist, Tensor
 from torch.utils._pytree import tree_map
@@ -223,35 +222,29 @@ class _TensorDictKeysView:
             else:
                 yield from self._keys()
         else:
-            yield from self._iter_helper(self.tensordict)
+            yield from (
+                key if len(key) > 1 else key[0]
+                for key in self._iter_helper(self.tensordict)
+            )
 
     def _iter_helper(
         self, tensordict: TensorDictBase, prefix: str | None = None
     ) -> Iterable[str] | Iterable[tuple[str, ...]]:
-        items_iter = self._items(tensordict)
-
-        for key, value in items_iter:
+        for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
             cls = value.__class__
             if self.include_nested and (
                 _is_tensor_collection(cls) or issubclass(cls, KeyedJaggedTensor)
             ):
-                subkeys = tuple(
-                    self._iter_helper(
-                        value,
-                        full_key if isinstance(full_key, tuple) else (full_key,),
-                    )
-                )
+                subkeys = tuple(self._iter_helper(value, prefix=full_key))
                 yield from subkeys
             if not self.leaves_only or not _is_tensor_collection(cls):
                 yield full_key
 
-    def _combine_keys(self, prefix: str | None, key: NestedKey) -> NestedKey:
+    def _combine_keys(self, prefix: tuple | None, key: str) -> tuple:
         if prefix is not None:
-            if isinstance(key, tuple):
-                return prefix + key
             return prefix + (key,)
-        return key
+        return (key,)
 
     def __len__(self) -> int:
         return sum(1 for _ in self)
@@ -259,7 +252,6 @@ class _TensorDictKeysView:
     def _items(
         self, tensordict: TensorDict | None = None
     ) -> Iterable[tuple[NestedKey, CompatibleType]]:
-
         if tensordict is None:
             tensordict = self.tensordict
         if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
@@ -272,53 +264,54 @@ class _TensorDictKeysView:
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to
             # be careful to not rely on tensordict._tensordict existing.
-            return ((key, tensordict.get(key)) for key in tensordict._source.keys())
+            return (
+                (key, tensordict._get_str(key, NO_DEFAULT))
+                for key in tensordict._source.keys()
+            )
 
     def _keys(self) -> _TensorDictKeysView:
         return self.tensordict._tensordict.keys()
 
     def __contains__(self, key: NestedKey) -> bool:
+        key = _unravel_key_to_tuple(key)
+        if not key:
+            raise TypeError(_NON_STR_KEY_ERR)
+
         if isinstance(key, str):
             if key in self._keys():
                 if self.leaves_only:
                     return not _is_tensor_collection(self.tensordict.entry_class(key))
                 return True
             return False
-
-        elif isinstance(key, tuple):
+        else:
+            # thanks to _unravel_key_to_tuple we know the key is a tuple
             if len(key) == 1:
-                return key[0] in self
-            elif len(key) > 1 and self.include_nested:
+                return key[0] in self._keys()
+            elif self.include_nested:
                 if key[0] in self._keys():
                     entry_type = self.tensordict.entry_class(key[0])
-                    is_tensor = entry_type is Tensor
-                    is_kjt = not is_tensor and entry_type is KeyedJaggedTensor
-                    _is_tensordict = (
-                        not is_tensor
-                        and not is_kjt
-                        and _is_tensor_collection(entry_type)
-                    )
-
-                    # TODO: SavedTensorDict currently doesn't support nested membership checks
-                    _tensordict_nested = _is_tensordict and key[
-                        1:
-                    ] in self.tensordict.get(key[0]).keys(
-                        include_nested=self.include_nested
-                    )
-                    if _tensordict_nested:
-                        return True
-                    _kjt = (
-                        is_kjt
-                        and len(key) == 2
-                        and key[1] in self.tensordict.get(key[0]).keys()
-                    )
-                    return _kjt
-
+                    if entry_type in (Tensor, MemmapTensor):
+                        return False
+                    if entry_type is KeyedJaggedTensor:
+                        if len(key) > 2:
+                            return False
+                        return key[1] in self.tensordict.get(key[0]).keys()
+                    _is_tensordict = _is_tensor_collection(entry_type)
+                    if _is_tensordict:
+                        # # this will call _unravel_key_to_tuple many times
+                        # return key[1:] in self.tensordict._get_str(key[0], NO_DEFAULT).keys(include_nested=self.include_nested)
+                        # this won't call _unravel_key_to_tuple but requires to get the default which can be suboptimal
+                        leaf_td = self.tensordict._get_tuple(key[:-1], None)
+                        if leaf_td is None or (
+                            not _is_tensor_collection(leaf_td.__class__)
+                            and not isinstance(leaf_td, KeyedJaggedTensor)
+                        ):
+                            return False
+                        return key[-1] in leaf_td.keys()
                 return False
+            # this is reached whenever there is more than one key but include_nested is False
             if all(isinstance(subkey, str) for subkey in key):
-                raise TypeError(NON_STR_KEY_TUPLE)
-
-        raise TypeError(NON_STR_KEY)
+                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
 
     def __repr__(self):
         include_nested = f"include_nested={self.include_nested}"
@@ -386,7 +379,7 @@ class TensorDictBase(MutableMapping):
         """
         td = TensorDict(dict(module.named_parameters()), [])
         td.update(dict(module.named_buffers()))
-        td = td.detach().unflatten_keys(".")
+        td = td.unflatten_keys(".")
         td.lock_()
         return td
 
@@ -1350,11 +1343,10 @@ class TensorDictBase(MutableMapping):
             default: default value if the key is not found in the tensordict.
 
         """
-        key = unravel_keys(key)
-        if isinstance(key, str):
-            return self._get_str(key, default=default)
-        else:
-            return self._get_tuple(key, default=default)
+        key = _unravel_key_to_tuple(key)
+        if not key:
+            raise KeyError(_GENERIC_NESTED_ERR)
+        return self._get_tuple(key, default=default)
 
     @abc.abstractmethod
     def _get_str(self, key, default):
@@ -1371,7 +1363,9 @@ class TensorDictBase(MutableMapping):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-        key = unravel_keys(key)
+        key = _unravel_key_to_tuple(key)
+        if not key:
+            raise KeyError(_GENERIC_NESTED_ERR)
         try:
             # using try/except for get/del is suboptimal, but
             # this is faster that checkink if key in self keys
@@ -1705,6 +1699,8 @@ class TensorDictBase(MutableMapping):
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor | MemmapTensor:
         if isinstance(array, np.bool_):
             array = array.item()
+        if isinstance(array, list):
+            array = np.asarray(array)
         return torch.as_tensor(array, device=self.device)
 
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> TensorDictBase:
@@ -1717,11 +1713,9 @@ class TensorDictBase(MutableMapping):
         )
 
     def _validate_key(self, key: NestedKey) -> NestedKey:
-        key = unravel_keys(key)
-
-        if isinstance(key, tuple) and len(key) == 1:
-            key = key[0]
-
+        key = _unravel_key_to_tuple(key)
+        if not key:
+            raise KeyError(_GENERIC_NESTED_ERR)
         return key
 
     def _validate_value(
@@ -1739,11 +1733,11 @@ class TensorDictBase(MutableMapping):
         else:
             try:
                 value = self._convert_to_tensor(value)
-            except ValueError:
+            except ValueError as err:
                 raise ValueError(
-                    f"we only supports tensorclasses, tensordicts,"
+                    f"TensorDict conversion only supports tensorclasses, tensordicts,"
                     f" numeric scalars and tensors. Got {type(value)}"
-                )
+                ) from err
         bs = self.batch_size
         if check_shape and bs and _shape(value)[: len(bs)] != bs:
             # if TensorDict, let's try to map it to the desired shape
@@ -1791,7 +1785,7 @@ class TensorDictBase(MutableMapping):
                 val = self._get_str(k, NO_DEFAULT)
                 if _is_tensor_collection(val.__class__):
                     yield from (
-                        (unravel_keys((k, _key)), _val)
+                        (_unravel_key_to_tuple((k, _key)), _val)
                         for _key, _val in val.items(
                             include_nested=include_nested, leaves_only=leaves_only
                         )
@@ -1804,7 +1798,7 @@ class TensorDictBase(MutableMapping):
                 yield k, val
                 if _is_tensor_collection(val.__class__):
                     yield from (
-                        (unravel_keys((k, _key)), _val)
+                        (_unravel_key_to_tuple((k, _key)), _val)
                         for _key, _val in val.items(
                             include_nested=include_nested, leaves_only=leaves_only
                         )
@@ -2179,12 +2173,11 @@ class TensorDictBase(MutableMapping):
             indexed tensor.
 
         """
-        key = unravel_keys(key)
-        if isinstance(key, str):
-            return self._get_at_str(key, idx, default)
-        else:
-            # must be a tuple
-            return self._get_at_tuple(key, idx, default)
+        key = _unravel_key_to_tuple(key)
+        if not key:
+            raise KeyError(_GENERIC_NESTED_ERR)
+        # must be a tuple
+        return self._get_at_tuple(key, idx, default)
 
     def _get_at_str(self, key, idx, default):
         out = self._get_str(key, default)
@@ -2414,10 +2407,6 @@ class TensorDictBase(MutableMapping):
         Resulting tensordicts will share the storage of the initial tensordict.
 
         """
-        idx = [
-            ((*tuple(slice(None) for _ in range(dim)), i))
-            for i in range(self.shape[dim])
-        ]
         if dim < 0:
             dim = self.batch_dims + dim
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
@@ -2426,16 +2415,18 @@ class TensorDictBase(MutableMapping):
             names = copy(names)
             names = [name for i, name in enumerate(names) if i != dim]
         out = []
-        for _idx in idx:
-            out.append(
-                self.apply(
-                    lambda tensor, idx=_idx: tensor[idx],
-                    batch_size=batch_size,
-                )
+        unbind_self_dict = {key: tensor.unbind(dim) for key, tensor in self.items()}
+        for _idx in range(self.batch_size[dim]):
+            td = TensorDict(
+                {key: tensor[_idx] for key, tensor in unbind_self_dict.items()},
+                batch_size=batch_size,
+                _run_checks=False,
+                device=self.device,
+                _is_memmap=False,
+                _is_shared=False,
+                names=names,
             )
-            if names is not None:
-                for item in out:
-                    item.names = names
+            out.append(td)
             if self.is_shared():
                 out[-1].share_memory_()
             elif self.is_memmap():
@@ -2548,6 +2539,32 @@ class TensorDictBase(MutableMapping):
         if device is None:
             return self.to(torch.device("cuda"))
         return self.to(f"cuda:{device}")
+
+    def _create_nested_str(self, key):
+        self.set(key, self.select())
+
+    def _create_nested_tuple(self, key):
+        self._create_nested_str(key[0])
+        if len(key) > 1:
+            td = self._get_str(key[0], NO_DEFAULT)
+            td._create_nested_tuple(key[1:])
+
+    @lock_blocked
+    def create_nested(self, key):
+        """Creates a nested tensordict of the same shape, device and dim names as the current tensordict.
+
+        If the value already exists, it will be overwritten by this operation.
+        This operation is blocked in locked tensordicts.
+
+        Examples:
+            >>> data = TensorDict({}, [3, 4, 5])
+            >>> data.create_nested("root")
+            >>> data.create_nested(("some", "nested", "value"))
+            >>> nested = data.get(("some", "nested", "value"))
+        """
+        key = _unravel_key_to_tuple(key)
+        self._create_nested_tuple(key)
+        return self
 
     @abc.abstractmethod
     def masked_fill_(self, mask: Tensor, value: float | bool) -> TensorDictBase:
@@ -2916,6 +2933,40 @@ class TensorDictBase(MutableMapping):
             inv_op_kwargs={"size": self.batch_size},
         )
 
+    def transpose(self, dim0, dim1):
+        """Returns a tensordit that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
+
+        In-place or out-place modifications of the transposed tensordict will
+        impact the original tensordict too as the memory is shared and the operations
+        are mapped back on the original tensordict.
+
+        Examples:
+            >>> tensordict = TensorDict({"a": torch.randn(3, 4, 5)}, [3, 4])
+            >>> tensordict_transpose = tensordict.transpose(0, 1)
+            >>> print(tensordict_transpose.shape)
+            torch.Size([4, 3])
+            >>> tensordict_transpose.set("b",, torch.randn(4, 3))
+            >>> print(tensordict.get("b").shape)
+            torch.Size([3, 4])
+        """
+        if dim0 < 0:
+            dim0 = self.ndim + dim0
+        if dim1 < 0:
+            dim1 = self.ndim + dim1
+        if any((dim0 < 0, dim1 < 0)):
+            raise ValueError(
+                "The provided dimensions are incompatible with the tensordict batch-size."
+            )
+        if dim0 == dim1:
+            return self
+        return _TransposedTensorDict(
+            source=self,
+            custom_op="transpose",
+            inv_op="transpose",
+            custom_op_kwargs={"dim0": dim0, "dim1": dim1},
+            inv_op_kwargs={"dim0": dim0, "dim1": dim1},
+        )
+
     def permute(
         self,
         *dims_list: int,
@@ -3116,6 +3167,7 @@ class TensorDictBase(MutableMapping):
                 _run_checks=False,
                 _is_shared=self.is_shared(),
                 _is_memmap=self.is_memmap(),
+                names=self.names,
             )
             for key, value in self.items():
                 if key in to_flatten:
@@ -3150,6 +3202,7 @@ class TensorDictBase(MutableMapping):
                 _run_checks=False,
                 _is_shared=self.is_shared(),
                 _is_memmap=self.is_memmap(),
+                names=self.names,
             )
         else:
             out = self
@@ -3161,11 +3214,16 @@ class TensorDictBase(MutableMapping):
                     "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
 
-            tensordict = TensorDict({}, batch_size=self.batch_size, device=self.device)
+            tensordict = TensorDict(
+                {},
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self.names,
+            )
             if key in self.keys():
                 tensordict.update(self[key])
             for old_key, new_key in list_of_keys:
-                value = self[old_key]
+                value = self.get(old_key)
                 tensordict[new_key] = value
                 if inplace:
                     del self[old_key]
@@ -3269,12 +3327,10 @@ class TensorDictBase(MutableMapping):
         """
         if isinstance(idx, tuple) and len(idx) == 1:
             idx = idx[0]
-        if isinstance(idx, tuple):
-            idx = _maybe_unravel_keys_silent(idx)
-        if isinstance(idx, str) or (
-            isinstance(idx, tuple) and all(isinstance(sub_idx, str) for sub_idx in idx)
-        ):
-            return self.get(idx)
+        if isinstance(idx, (tuple, str)):
+            idx_unravel = _unravel_key_to_tuple(idx)
+            if idx_unravel:
+                return self._get_tuple(idx_unravel, NO_DEFAULT)
 
         if not self.batch_size:
             raise RuntimeError(
@@ -3332,13 +3388,12 @@ class TensorDictBase(MutableMapping):
             self.set(index, value, inplace=self._inplace_set)
             return
 
-        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
-            index = convert_ellipsis_to_idx(index, self.batch_size)
-        elif isinstance(index, (list, range)):
-            index = torch.tensor(index, device=self.device)
-        elif isinstance(index, tuple):
-            if isinstance(index, tuple):
-                index = _maybe_unravel_keys_silent(index)
+        if isinstance(index, tuple):
+            # try:
+            index_unravel = _unravel_key_to_tuple(index)
+            if index_unravel:
+                self.set(index_unravel, value, inplace=isinstance(self, SubTensorDict))
+                return
 
             if any(isinstance(sub_index, (list, range)) for sub_index in index):
                 index = tuple(
@@ -3348,27 +3403,31 @@ class TensorDictBase(MutableMapping):
                     for sub_index in index
                 )
 
-            if sum(isinstance(_index, str) for _index in index) not in [len(index), 0]:
-                raise IndexError(_STR_MIXED_INDEX_ERROR)
+            # if sum(isinstance(_index, str) for _index in index) not in [len(index), 0]:
+            #     raise IndexError(_STR_MIXED_INDEX_ERROR)
+            # if isinstance(index[0], str):
+            #     # TODO: would be nicer to have set handle the nested set, but the logic to
+            #     # preserve the error handling below is complex and requires some thought
+            #     try:
+            #         if len(index) == 1:
+            #             return self.set(
+            #                 index[0], value, inplace=isinstance(self, SubTensorDict)
+            #             )
+            #         self.set(index, value, inplace=isinstance(self, SubTensorDict))
+            #     except AttributeError as err:
+            #         if "for populating tensordict with new key-value pair" in str(err):
+            #             raise RuntimeError(
+            #                 "Trying to replace an existing nested tensordict with "
+            #                 "another one with non-matching keys. This leads to "
+            #                 "unspecified behaviours and is prohibited."
+            #             )
+            #         raise err
+            #     return
 
-            if isinstance(index[0], str):
-                # TODO: would be nicer to have set handle the nested set, but the logic to
-                # preserve the error handling below is complex and requires some thought
-                try:
-                    if len(index) == 1:
-                        return self.set(
-                            index[0], value, inplace=isinstance(self, SubTensorDict)
-                        )
-                    self.set(index, value, inplace=isinstance(self, SubTensorDict))
-                except AttributeError as err:
-                    if "for populating tensordict with new key-value pair" in str(err):
-                        raise RuntimeError(
-                            "Trying to replace an existing nested tensordict with "
-                            "another one with non-matching keys. This leads to "
-                            "unspecified behaviours and is prohibited."
-                        )
-                    raise err
-                return
+        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
+            index = convert_ellipsis_to_idx(index, self.batch_size)
+        elif isinstance(index, (list, range)):
+            index = torch.tensor(index, device=self.device)
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
@@ -3772,7 +3831,7 @@ class TensorDict(TensorDictBase):
                     self.set(key, value)
 
     @classmethod
-    def from_dict(cls, input_dict, batch_size=None, device=None):
+    def from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
         """Returns a TensorDict created from a dictionary or another :class:`TensorDict`.
 
         If ``batch_size`` is not specified, returns the maximum batch size possible.
@@ -3785,6 +3844,10 @@ class TensorDict(TensorDictBase):
                 (nested keys compatible).
             batch_size (iterable of int, optional): a batch size for the tensordict.
             device (torch.device or compatible type, optional): a device for the TensorDict.
+            batch_dims (int, optional): the ``batch_dims`` (ie number of leading dimensions
+                to be considered for ``batch_size``). Exclusinve with ``batch_size``.
+                Note that this is the __maximum__ number of batch dims of the tensordict,
+                a smaller number is tolerated.
 
         Examples:
             >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
@@ -3829,10 +3892,19 @@ class TensorDict(TensorDictBase):
                 is_shared=False)
 
         """
+        if batch_dims is not None and batch_size is not None:
+            raise ValueError(
+                "Cannot pass both batch_size and batch_dims to `from_dict`."
+            )
+
         batch_size_set = [] if batch_size is None else batch_size
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
-                input_dict[key] = TensorDict(value, batch_size_set, device=device)
+                # we don't know if another tensor of smaller size is coming
+                # so we can't be sure that the batch-size will still be valid later
+                input_dict[key] = TensorDict.from_dict(
+                    value, batch_size=[], device=device, batch_dims=None
+                )
         # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
         out = cls(
             input_dict,
@@ -3840,7 +3912,7 @@ class TensorDict(TensorDictBase):
             device=device,
         )
         if batch_size is None:
-            _set_max_batch_size(out)
+            _set_max_batch_size(out, batch_dims)
         else:
             out.batch_size = batch_size
         return out
@@ -4163,10 +4235,8 @@ class TensorDict(TensorDictBase):
         return out
 
     def _get_tuple(self, key, default):
-        first = self._get_str(key[0], None)
-        if first is None:
-            return self._default_get(first, default)
-        if len(key) == 1:
+        first = self._get_str(key[0], default)
+        if len(key) == 1 or first is default:
             return first
         try:
             if isinstance(first, KeyedJaggedTensor):
@@ -5164,7 +5234,7 @@ torch.Size([3, 2])
         idx: IndexType,
         batch_size: Sequence[int] | None = None,
     ) -> None:
-        if not isinstance(source, TensorDictBase):
+        if not _is_tensor_collection(source.__class__):
             raise TypeError(
                 f"Expected source to be a subclass of TensorDictBase, "
                 f"got {type(source)}"
@@ -5215,15 +5285,7 @@ torch.Size([3, 2])
     def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
         if inplace:
             return super().exclude(*keys, inplace=True)
-        return TensorDict(
-            {key: value for key, value in self.items()},
-            batch_size=self.batch_size,
-            device=self.device,
-            names=self._td_dim_names,
-            _run_checks=False,
-            _is_memmap=self.is_memmap(),
-            _is_shared=self.is_shared(),
-        ).exclude(*keys, inplace=True)
+        return self.to_tensordict().exclude(*keys, inplace=True)
 
     @property
     def batch_size(self) -> torch.Size:
@@ -5420,10 +5482,12 @@ torch.Size([3, 2])
         return self._source.get_at(key, self.idx, default=default)
 
     def _get_str(self, key, default):
+        if key in self.keys() and _is_tensor_collection(self.entry_class(key)):
+            return SubTensorDict(self._source._get_str(key, NO_DEFAULT), self.idx)
         return self._source._get_at_str(key, self.idx, default=default)
 
     def _get_tuple(self, key, default):
-        return self._source._get_tuple(key, self.idx, default=default)
+        return self._source._get_at_tuple(key, self.idx, default=default)
 
     def update(
         self,
@@ -5693,11 +5757,30 @@ def merge_tensordicts(*tensordicts: TensorDictBase) -> TensorDictBase:
 
 
 class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
+    tensordict: LazyStackedTensorDict
+
     def __len__(self) -> int:
-        return len(self.tensordict.valid_keys)
+        return len(self._keys())
 
     def _keys(self) -> list[str]:
-        return self.tensordict.valid_keys
+        return self.tensordict._key_list()
+
+    def __contains__(self, item):
+        item = _unravel_key_to_tuple(item)
+        if item[0] in self.tensordict._iterate_over_keys():
+            if self.leaves_only:
+                return not _is_tensor_collection(self.tensordict.entry_class(item[0]))
+            has_first_key = True
+        else:
+            has_first_key = False
+        if not has_first_key or len(item) == 1:
+            return has_first_key
+        # otherwise take the long way
+        return all(
+            item[1:]
+            in tensordict.get(item[0]).keys(self.include_nested, self.leaves_only)
+            for tensordict in self.tensordict.tensordicts
+        )
 
 
 class LazyStackedTensorDict(TensorDictBase):
@@ -5714,6 +5797,7 @@ class LazyStackedTensorDict(TensorDictBase):
          stack_dim (int): a dimension (between `-td.ndimension()` and
             `td.ndimension()-1` along which the stack should be performed.
          hook_out (callable, optional): a callable to execute after :meth:`~.get`.
+         hook_in (callable, optional): a callable to execute before :meth:`~.set`.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -5784,7 +5868,6 @@ class LazyStackedTensorDict(TensorDictBase):
         self.tensordicts: list[TensorDictBase] = list(tensordicts)
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, N)
-        self._update_valid_keys()
         self.hook_out = hook_out
         self.hook_in = hook_in
         if batch_size is not None and batch_size != self.batch_size:
@@ -5899,20 +5982,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"{len(are_memmap) - sum(are_memmap)} non memmap tensordict "
             )
         return all(are_memmap)
-
-    def get_valid_keys(self) -> list[str]:
-        if self._valid_keys is None:
-            self._update_valid_keys()
-        return self._valid_keys
-
-    def set_valid_keys(self, keys: Sequence[str]) -> None:
-        raise RuntimeError(
-            "setting valid keys is not permitted. valid keys are defined as "
-            "the intersection of all the key sets from the TensorDicts in a "
-            "stack and cannot be defined explicitely."
-        )
-
-    valid_keys = property(get_valid_keys, set_valid_keys)
 
     @staticmethod
     def _compute_batch_size(
@@ -6087,22 +6156,11 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         default: str | CompatibleType = NO_DEFAULT,
     ) -> CompatibleType:
-        # TODO: the stacking logic below works for nested keys, but the key in
-        # self.valid_keys check will fail and we'll return the default instead.
-        # For now we'll advise user that nested keys aren't supported, but it should be
-        # fairly easy to add support if we could add nested keys to valid_keys.
 
         # we can handle the case where the key is a tuple of length 1
-        keys = self.valid_keys
-        if key not in keys:
-            # first, let's try to update the valid keys
-            self._update_valid_keys()
-            keys = self.valid_keys
-
-        if key not in keys:
+        if key not in self.keys():
             return self._default_get(key, default)
-
-        tensors = [td.get(key, default=default) for td in self.tensordicts]
+        tensors = [td.get(key, default=None) for td in self.tensordicts]
         try:
             out = torch.stack(tensors, self.stack_dim)
             if _is_tensor_collection(out.__class__):
@@ -6115,7 +6173,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     # then it's a tensorclass
                     out._tensordict.hook_out = self.hook_out
                     out._tensordict.hook_in = self.hook_in
-            if self.hook_out is not None:
+            elif self.hook_out is not None:
                 out = self.hook_out(out)
             return out
         except RuntimeError as err:
@@ -6254,6 +6312,30 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         default: str | CompatibleType = NO_DEFAULT,
     ) -> CompatibleType:
+        """Returns a nested tensor when stacking cannot be achieved.
+
+        Args:
+            key (NestedKey): the entry to nest.
+            default (Any, optiona): the default value to return in case the key
+                isn't in all sub-tensordicts.
+
+                .. note:: In case the default is a tensor, this method will attempt
+                  the construction of a nestedtensor with it. Otherwise, the default
+                  value will be returned.
+
+        Examples:
+            >>> td0 = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4)}, [])
+            >>> td1 = TensorDict({"a": torch.ones(5)}, [])
+            >>> td = torch.stack([td0, td1], 0)
+            >>> a = td.get_nestedtensor("a")
+            >>> # using a tensor as default uses this default to build the nested tensor
+            >>> b = td.get_nestedtensor("b", default=torch.ones(4))
+            >>> assert (a == b).all()
+            >>> # using anything else as default returns the default
+            >>> b2 = td.get_nestedtensor("b", None)
+            >>> assert b2 is None
+
+        """
         # disallow getting nested tensor if the stacking dimension is not 0
         if self.stack_dim != 0:
             raise RuntimeError(
@@ -6262,28 +6344,20 @@ class LazyStackedTensorDict(TensorDictBase):
                 "when the stack_dim is 0."
             )
 
-        # TODO: the stacking logic below works for nested keys, but the key in
-        # self.valid_keys check will fail and we'll return the default instead.
-        # For now we'll advise user that nested keys aren't supported, but it should be
-        # fairly easy to add support if we could add nested keys to valid_keys.
-
         # we can handle the case where the key is a tuple of length 1
-        if (isinstance(key, tuple)) and len(key) == 1:
-            key = key[0]
-        elif isinstance(key, tuple):
-            tensordict, key = _get_leaf_tensordict(self, key)
-            return tensordict.get_nestedtensor(key, default=default)
-
-        keys = self.valid_keys
-        if key not in keys:
-            # first, let's try to update the valid keys
-            self._update_valid_keys()
-            keys = self.valid_keys
-
-        if key not in keys:
-            return self._default_get(key, default)
-
-        tensors = [td.get(key, default=default) for td in self.tensordicts]
+        key = _unravel_key_to_tuple(key)
+        subkey = key[0]
+        if len(key) > 1:
+            tensordict = self.get(subkey, default)
+            if tensordict is default:
+                return default
+            return tensordict.get_nestedtensor(key[1:], default=default)
+        tensors = [td.get(subkey, default=default) for td in self.tensordicts]
+        if not isinstance(default, torch.Tensor) and any(
+            tensor is default for tensor in tensors
+        ):
+            # we don't stack but return the default
+            return default
         return torch.nested.nested_tensor(tensors)
 
     def is_contiguous(self) -> bool:
@@ -6366,7 +6440,6 @@ class LazyStackedTensorDict(TensorDictBase):
             del self._orig_batch_size
         self._batch_size = new_size
 
-    # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
     ) -> _LazyStackedTensorDictKeysView:
@@ -6375,11 +6448,22 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return keys
 
-    def _update_valid_keys(self) -> None:
-        valid_keys = set(self.tensordicts[0].keys())
+    valid_keys = keys
+
+    # def _iterate_over_keys(self) -> None:
+    #     for key in self.tensordicts[0].keys():
+    #         if all(key in td.keys() for td in self.tensordicts):
+    #             yield key
+    def _iterate_over_keys(self) -> None:
+        # this is about 20x faster than the version above
+        yield from self._key_list()
+
+    @cache  # noqa: B019
+    def _key_list(self):
+        keys = set(self.tensordicts[0].keys())
         for td in self.tensordicts[1:]:
-            valid_keys = valid_keys.intersection(td.keys())
-        self._valid_keys = sorted(valid_keys)
+            keys = keys.intersection(td.keys())
+        return sorted(keys, key=str)
 
     def entry_class(self, key: NestedKey) -> type:
         data_type = type(self.tensordicts[0].get(key))
@@ -6449,7 +6533,6 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         if inplace:
             self.tensordicts = tensordicts
-            self._update_valid_keys()
             return self
         return torch.stack(tensordicts, dim=self.stack_dim)
 
@@ -6498,8 +6581,11 @@ class LazyStackedTensorDict(TensorDictBase):
     def __getitem__(self, index: IndexType) -> TensorDictBase:
         if isinstance(index, tuple) and len(index) == 1:
             index = index[0]
-        if isinstance(index, tuple):
-            index = _maybe_unravel_keys_silent(index)
+        if isinstance(index, (tuple, str)):
+            index_key = _unravel_key_to_tuple(index)
+            if index_key:
+                return self._get_tuple(index_key, NO_DEFAULT)
+
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if index is None:
@@ -6819,29 +6905,58 @@ class LazyStackedTensorDict(TensorDictBase):
             return
 
     def del_(self, key: str, **kwargs: Any) -> TensorDictBase:
+        ids = set()
+        cur_len = len(ids)
+        is_deleted = False
+        error = None
         for td in self.tensordicts:
-            td.del_(key, **kwargs)
-        self._valid_keys.remove(key)
+            # checking that the td has not been processed yet.
+            # It could be that not all sub-tensordicts have the appropriate
+            # entry but one must have it (or an error is thrown).
+            tdid = id(td)
+            ids.add(tdid)
+            new_cur_len = len(ids)
+            if new_cur_len == cur_len:
+                continue
+            cur_len = new_cur_len
+            try:
+                td.del_(key, **kwargs)
+                is_deleted = True
+            except KeyError as err:
+                error = err
+                continue
+        if not is_deleted:
+            # we know err is defined because LazyStackedTensorDict cannot be empty
+            raise error
         return self
 
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
 
-        try:
-            # using try/except for get/del is suboptimal, but
-            # this is faster that checkink if key in self keys
-            out = self.get(key, default)
-            if key in self.valid_keys:
-                self._valid_keys.remove(key)
-        except KeyError as err:
-            # if default provided, 'out' value will return, else raise error
-            if default == NO_DEFAULT:
-                raise KeyError(
-                    f"You are trying to pop key `{key}` which is not in dict "
-                    f"without providing default value."
-                ) from err
-        return out
+        # using try/except for get/del is suboptimal, but
+        # this is faster that checkink if key in self keys
+        key = _unravel_key_to_tuple(key)
+        if len(key) == 1:
+            key = key[0]
+        present = False
+        if isinstance(key, tuple):
+            if key in self.keys(True):
+                present = True
+                value = self._get_tuple(key, NO_DEFAULT)
+        elif key in self.keys():
+            present = True
+            value = self._get_str(key, NO_DEFAULT)
+        if present:
+            self.del_(key)
+        elif default is not NO_DEFAULT:
+            value = default
+        else:
+            raise KeyError(
+                f"You are trying to pop key `{key}` which is not in dict "
+                f"without providing default value."
+            )
+        return value
 
     def share_memory_(self) -> TensorDictBase:
         for td in self.tensordicts:
@@ -6935,7 +7050,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.tensordicts, input_dict_or_td.tensordicts
             ):
                 td_dest.update(td_source)
-            self._update_valid_keys()
             return self
 
         keys = self.keys(False)
@@ -6968,7 +7082,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.set((key, *subkey), value, **kwargs)
             else:
                 self.set(key, value, **kwargs)
-        self._update_valid_keys()
         return self
 
     def update_(
@@ -7014,10 +7127,6 @@ class LazyStackedTensorDict(TensorDictBase):
 
         for td in self.tensordicts:
             td.rename_key_(old_key, new_key, safe=safe)
-        self._valid_keys = sorted(
-            [key if key != old_key else new_key for key in self._valid_keys],
-            key=sort_keys,
-        )
         return self
 
     rename_key = _renamed_inplace_method(rename_key_)
@@ -7071,7 +7180,6 @@ class LazyStackedTensorDict(TensorDictBase):
 
         N = len(self.tensordicts)
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
-        self._update_valid_keys()
 
     @lock_blocked
     def append(self, tensordict: TensorDictBase) -> None:
@@ -7596,6 +7704,8 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
 
     @names.setter
     def names(self, value):
+        if value[: self.batch_dims] == self.names:
+            return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
         )
@@ -7644,6 +7754,8 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
 
     @names.setter
     def names(self, value):
+        if value[: self.batch_dims] == self.names:
+            return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
         )
@@ -7683,6 +7795,87 @@ class _ViewedTensorDict(_CustomOpTensorDict):
     @property
     def names(self):
         return [None] * self.ndim
+
+    @names.setter
+    def names(self, value):
+        raise RuntimeError(
+            "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
+        )
+
+
+class _TransposedTensorDict(_CustomOpTensorDict):
+    """A lazy view on a TensorDict with two batch dimensions transposed.
+
+    When calling `tensordict.permute(dims_list, dim)`, a lazy view of this operation is
+    returned such that the following code snippet works without raising an
+    exception:
+
+        >>> assert tensordict.transpose(dims_list, dim).transpose(dims_list, dim) is tensordict
+
+    """
+
+    def transpose(self, dim0, dim1) -> TensorDictBase:
+        if dim0 < 0:
+            dim0 = self.ndim + dim0
+        if dim1 < 0:
+            dim1 = self.ndim + dim1
+        if any((dim0 < 0, dim1 < 0)):
+            raise ValueError(
+                "The provided dimensions are incompatible with the tensordict batch-size."
+            )
+        if dim0 == dim1:
+            return self
+        dims = (self.inv_op_kwargs.get("dim0"), self.inv_op_kwargs.get("dim1"))
+        if dim0 in dims and dim1 in dims:
+            return self._source
+        return super().permute(dim0, dim1)
+
+    def add_missing_dims(
+        self, num_dims: int, batch_dims: tuple[int, ...]
+    ) -> tuple[int, ...]:
+        dim_diff = num_dims - len(batch_dims)
+        all_dims = list(range(num_dims))
+        for i, x in enumerate(batch_dims):
+            if x < 0:
+                x = x - dim_diff
+            all_dims[i] = x
+        return tuple(all_dims)
+
+    def _update_custom_op_kwargs(self, source_tensor: Tensor) -> dict[str, Any]:
+        return self.custom_op_kwargs
+
+    def _update_inv_op_kwargs(self, tensor: Tensor) -> dict[str, Any]:
+        return self.custom_op_kwargs
+
+    def _stack_onto_(
+        self,
+        key: str,
+        list_item: list[CompatibleType],
+        dim: int,
+    ) -> TensorDictBase:
+
+        trsp = self.custom_op_kwargs["dim0"], self.custom_op_kwargs["dim1"]
+        if dim == trsp[0]:
+            dim = trsp[1]
+        elif dim == trsp[1]:
+            dim = trsp[0]
+
+        list_permuted_items = []
+        for item in list_item:
+            list_permuted_items.append(item.transpose(*trsp))
+        self._source._stack_onto_(key, list_permuted_items, dim)
+        return self
+
+    @property
+    def names(self):
+        names = copy(self._source.names)
+        dim0 = self.custom_op_kwargs["dim0"]
+        dim1 = self.custom_op_kwargs["dim1"]
+        names = [
+            names[dim0] if i == dim1 else names[dim1] if i == dim0 else name
+            for i, name in enumerate(names)
+        ]
+        return names
 
     @names.setter
     def names(self, value):
@@ -7736,6 +7929,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
     def add_missing_dims(
         self, num_dims: int, batch_dims: tuple[int, ...]
     ) -> tuple[int, ...]:
+        # Adds the feature dimensions to the permute dims
         dim_diff = num_dims - len(batch_dims)
         all_dims = list(range(num_dims))
         for i, x in enumerate(batch_dims):
@@ -7789,6 +7983,8 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     @names.setter
     def names(self, value):
+        if value[: self.batch_dims] == self.names:
+            return
         raise RuntimeError(
             "Names of a lazy tensordict cannot be modified. Call to_tensordict() first."
         )
@@ -7983,12 +8179,13 @@ def make_tensordict(
     return TensorDict.from_dict(kwargs, batch_size=batch_size, device=device)
 
 
-def _set_max_batch_size(source: TensorDictBase):
+def _set_max_batch_size(source: TensorDictBase, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
     tensor_data = list(source.values())
+
     for val in tensor_data:
         if _is_tensor_collection(val.__class__):
-            _set_max_batch_size(val)
+            _set_max_batch_size(val, batch_dims=batch_dims)
     batch_size = []
     if not tensor_data:  # when source is empty
         source.batch_size = batch_size
@@ -8004,19 +8201,15 @@ def _set_max_batch_size(source: TensorDictBase):
             if tensor.dim() <= curr_dim or tensor.size(curr_dim) != curr_dim_size:
                 source.batch_size = batch_size
                 return
-        batch_size.append(curr_dim_size)
+        if batch_dims is None or len(batch_size) < batch_dims:
+            batch_size.append(curr_dim_size)
         curr_dim += 1
 
 
 def _iter_items_lazystack(
     tensordict: LazyStackedTensorDict,
 ) -> Iterator[tuple[str, CompatibleType]]:
-    for key in tensordict.valid_keys:
-        try:
-            yield key, tensordict.get(key)
-        except KeyError:
-            tensordict._update_valid_keys()
-            continue
+    return tensordict.items()
 
 
 def _clone_value(value: CompatibleType, recurse: bool) -> CompatibleType:

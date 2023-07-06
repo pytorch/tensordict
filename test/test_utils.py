@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from tensordict._tensordict import _unravel_key_to_tuple, unravel_key, unravel_key_list
 
 from tensordict.utils import _getitem_batch_size, _make_cache_key
 
@@ -115,6 +116,27 @@ def test_make_cache_key():
         (1, (2, 3), id(Q)),
         (("a", id(V)), ("b", "c"), ("d", ("e", "f"))),
     )
+
+
+@pytest.mark.parametrize("listtype", (list, tuple))
+def test_unravel_key_list(listtype):
+    keys_in = listtype(["a0", ("b0",), ("c0", ("d",))])
+    keys_out = unravel_key_list(keys_in)
+    assert keys_out == ["a0", "b0", ("c0", "d")]
+
+
+def test_unravel_key():
+    keys_in = ["a0", ("b0",), ("c0", ("d",))]
+    keys_out = [unravel_key(key_in) for key_in in keys_in]
+    assert keys_out == ["a0", "b0", ("c0", "d")]
+
+
+def test_unravel_key_to_tuple():
+    keys_in = ["a", ("b",), ("c", ("d",))]
+    keys_out = [_unravel_key_to_tuple(key_in) for key_in in keys_in]
+    assert keys_out == [("a",), ("b",), ("c", "d")]
+    assert not _unravel_key_to_tuple(("a", (1,), ("b",)))
+    assert not _unravel_key_to_tuple(("a", (slice(None),), ("b",)))
 
 
 if __name__ == "__main__":

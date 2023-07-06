@@ -584,6 +584,9 @@ class TestTensorDicts(TestTensorDictsBase):
                 "a" in td2.clone().keys()
             )
         else:
+
+            print(list(td2.keys(True, True)))
+            print(list(keys))
             assert (len(list(td2.keys(True, True))) == len(keys)) and (
                 "a" in td2.keys()
             )
@@ -1265,7 +1268,6 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "stacked_td":
             for _td in td.tensordicts:
                 _td["newnested", "first"] = torch.randn(_td.shape)
-            td._update_valid_keys()
         else:
             td["newnested", "first"] = torch.randn(td.shape)
         if nested:
@@ -1707,6 +1709,45 @@ class TestTensorDicts(TestTensorDictsBase):
         td_clone2["d"] = nested_tensordict_value
         assert (td_clone1 == td_clone2).all()
 
+    def test_transpose(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdt = td.transpose(0, 1)
+        assert tdt.shape == torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
+        for key, value in tdt.items(True):
+            assert value.shape == torch.Size(
+                [td.get(key).shape[1], td.get(key).shape[0], *td.get(key).shape[2:]]
+            )
+        tdt = td.transpose(-1, -2)
+        for key, value in tdt.items(True):
+            assert value.shape == td.get(key).transpose(2, 3).shape
+        assert tdt.transpose(-1, -2) is td
+        with td.unlock_():
+            tdt.set(("some", "transposed", "tensor"), torch.zeros(tdt.shape))
+        assert td.get(("some", "transposed", "tensor")).shape == td.shape
+        assert td.transpose(0, 0) is td
+        with pytest.raises(
+            ValueError, match="The provided dimensions are incompatible"
+        ):
+            td.transpose(-5, -6)
+        with pytest.raises(
+            ValueError, match="The provided dimensions are incompatible"
+        ):
+            tdt.transpose(-5, -6)
+
+    def test_create_nested(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            td.create_nested("root")
+            assert td.get("root").shape == td.shape
+            assert is_tensor_collection(td.get("root"))
+            td.create_nested(("some", "nested", "key"))
+            assert td.get(("some", "nested", "key")).shape == td.shape
+            assert is_tensor_collection(td.get(("some", "nested", "key")))
+        if td_name in ("sub_td", "sub_td2"):
+            return
+        with td.lock_(), pytest.raises(RuntimeError):
+            td.create_nested("root")
+
     def test_tensordict_set(self, td_name, device):
         torch.manual_seed(1)
         np.random.seed(1)
@@ -1725,7 +1766,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td.set_("key1", val2)
         assert (td.get("key1") == 0).all()
         if td_name not in ("stacked_td", "nested_stacked_td"):
-            err_msg = 'key "smartypants" not found in '
+            err_msg = r"key.*smartypants.*not found in "
         else:
             err_msg = "setting a value in-place on a stack of TensorDict"
 
@@ -1757,7 +1798,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td.get("key1").get("subkey1") == 0).all()
 
         if td_name not in ("stacked_td", "nested_stacked_td"):
-            err_msg = 'key "smartypants" not found in '
+            err_msg = r"key.*smartypants.*not found in "
         else:
             err_msg = "setting a value in-place on a stack of TensorDict"
 
@@ -1824,6 +1865,21 @@ class TestTensorDicts(TestTensorDictsBase):
         sub_td.update(td0)
         assert (sub_td == 2).all()
         assert (td[index] == 2).all()
+
+    @pytest.mark.filterwarnings("error")
+    def test_stack_onto(self, td_name, device, tmpdir):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        if td_name == "td_h5":
+            td0 = td.clone(newfile=tmpdir / "file0.h5").apply_(lambda x: x.zero_())
+            td1 = td.clone(newfile=tmpdir / "file1.h5").apply_(lambda x: x.zero_() + 1)
+        else:
+            td0 = td.clone().apply_(lambda x: x.zero_())
+            td1 = td.clone().apply_(lambda x: x.zero_() + 1)
+        td_out = td.unsqueeze(1).expand(td.shape[0], 2, *td.shape[1:]).clone()
+        td_stack = torch.stack([td0, td1], 1)
+        torch.stack([td0, td1], 1, out=td_out)
+        assert (td_stack == td_out).all()
 
     @pytest.mark.filterwarnings("error")
     def test_stack_tds_on_subclass(self, td_name, device):
@@ -5268,8 +5324,54 @@ def test_from_module(memmap):
     net = nn.Transformer()
     td = TensorDict.from_module(net)
     if memmap:
-        td = td.memmap_()
+        td = td.detach().memmap_()
     net.load_state_dict(td.flatten_keys("."))
+
+
+@pytest.mark.parametrize("batch_size", [None, [3, 4]])
+@pytest.mark.parametrize("batch_dims", [None, 1, 2])
+@pytest.mark.parametrize("device", get_available_devices())
+def test_from_dict(batch_size, batch_dims, device):
+    data = {
+        "a": torch.zeros(3, 4, 5),
+        "b": {"c": torch.zeros(3, 4, 5, 6)},
+        ("d", "e"): torch.ones(3, 4, 5),
+        ("b", "f"): torch.zeros(3, 4, 5, 5),
+        ("d", "g", "h"): torch.ones(3, 4, 5),
+    }
+    if batch_dims and batch_size:
+        with pytest.raises(ValueError, match="both"):
+            TensorDict.from_dict(
+                data, batch_size=batch_size, batch_dims=batch_dims, device=device
+            )
+        return
+    data = TensorDict.from_dict(
+        data, batch_size=batch_size, batch_dims=batch_dims, device=device
+    )
+    assert data.device == device
+    assert "a" in data.keys()
+    assert ("b", "c") in data.keys(True)
+    assert ("b", "f") in data.keys(True)
+    assert ("d", "e") in data.keys(True)
+    assert data.device == device
+    if batch_dims:
+        assert data.ndim == batch_dims
+        assert data["b"].ndim == batch_dims
+        assert data["d"].ndim == batch_dims
+        assert data["d", "g"].ndim == batch_dims
+    elif batch_size:
+        assert data.batch_size == torch.Size(batch_size)
+        assert data["b"].batch_size == torch.Size(batch_size)
+        assert data["d"].batch_size == torch.Size(batch_size)
+        assert data["d", "g"].batch_size == torch.Size(batch_size)
+
+
+def test_unbind_batchsize():
+    td = TensorDict({"a": TensorDict({"b": torch.zeros(2, 3)}, [2, 3])}, [2])
+    td["a"].batch_size
+    tds = td.unbind(0)
+    assert tds[0].batch_size == torch.Size([])
+    assert tds[0]["a"].batch_size == torch.Size([3])
 
 
 if __name__ == "__main__":

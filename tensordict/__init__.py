@@ -26,6 +26,7 @@ try:
 except ImportError:
     __version__ = None
 
+from tensordict._tensordict import unravel_key, unravel_key_list
 
 __all__ = [
     "LazyStackedTensorDict",

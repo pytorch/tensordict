@@ -23,7 +23,12 @@ import numpy as np
 import torch
 
 from packaging.version import parse
-from tensordict._tensordict import unravel_keys
+from tensordict._tensordict import (  # noqa: F401
+    _unravel_key_to_tuple,  # noqa: F401
+    unravel_key,  # noqa: F401
+    unravel_key_list,  # noqa: F401
+    unravel_keys,  # noqa: F401
+)
 from torch import Tensor
 
 if TYPE_CHECKING:
@@ -453,16 +458,6 @@ def is_seq_of_nested_key(seq: Sequence[NestedKey]) -> bool:
     return False
 
 
-def _seq_of_nested_key_check(seq: Sequence[NestedKey]) -> None:
-    if not is_seq_of_nested_key(seq):
-        raise ValueError(f"seq should be a Sequence[NestedKey]. Got {seq}")
-
-
-def _normalize_key(key: NestedKey) -> NestedKey:
-    # normalises tuples of length one to their string contents
-    return key if not isinstance(key, tuple) or len(key) > 1 else key[0]
-
-
 def index_keyedjaggedtensor(
     kjt: KeyedJaggedTensor, index: slice | range | list | torch.Tensor | np.ndarray
 ) -> KeyedJaggedTensor:
@@ -838,27 +833,6 @@ def _is_lis_of_list_of_bools(index, first_level=True):
     return False
 
 
-def _maybe_unravel_keys_silent(index):
-    """Attemps to unravel keys.
-
-    If not possible (not keys) return the original index.
-    """
-    if isinstance(index, tuple):
-        newkey = []
-        for key in index:
-            if isinstance(key, str):
-                newkey.append(key)
-            else:
-                _key = _maybe_unravel_keys_silent(key)
-                if _key is key:
-                    return index
-                newkey += _key
-        newkey = tuple(newkey)
-    else:
-        return index
-    return newkey
-
-
 def is_tensorclass(obj: type | Any) -> bool:
     """Returns True if obj is either a tensorclass or an instance of a tensorclass."""
     cls = obj if isinstance(obj, type) else type(obj)
@@ -1088,8 +1062,9 @@ def erase_cache(fun):
     return new_fun
 
 
-NON_STR_KEY_TUPLE = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
-NON_STR_KEY = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
+_NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
+_NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
+_GENERIC_NESTED_ERR = "Only NestedKeys are supported."
 
 
 class _StringKeys(KeysView):
@@ -1097,38 +1072,40 @@ class _StringKeys(KeysView):
 
     def __contains__(self, item):
         if not isinstance(item, str):
-            # at this point, we don't care about efficiency anymore
-            is_tuple = False
             try:
-                if isinstance(item, tuple) and all(
-                    isinstance(key, str) for key in unravel_keys(item)
-                ):
-                    is_tuple = True
-            except Exception:  # catch errors during unravel
-                raise TypeError(NON_STR_KEY)
-            if is_tuple:
-                raise TypeError(NON_STR_KEY_TUPLE)
-            raise TypeError(NON_STR_KEY)
+                unravel_item = _unravel_key_to_tuple(item)
+                if not unravel_item:  # catch errors during unravel
+                    raise TypeError
+            except Exception:
+                raise TypeError(_NON_STR_KEY_ERR)
+            if len(unravel_item) > 1:
+                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
+            else:
+                item = unravel_item[0]
         return super().__contains__(item)
 
 
 class _StringOnlyDict(dict):
     """A dict class where contains is restricted to strings."""
 
+    # kept here for debugging
+    # def __setitem__(self, key, value):
+    #     if not isinstance(key, str):
+    #         raise RuntimeError
+    #     return super().__setitem__(key, value)
+
     def __contains__(self, item):
         if not isinstance(item, str):
-            # at this point, we don't care about efficiency anymore
-            is_tuple = False
             try:
-                if isinstance(item, tuple) and all(
-                    isinstance(key, str) for key in unravel_keys(item)
-                ):
-                    is_tuple = True
-            except Exception:  # catch errors during unravel
-                raise TypeError(NON_STR_KEY)
-            if is_tuple:
-                raise TypeError(NON_STR_KEY_TUPLE)
-            raise TypeError(NON_STR_KEY)
+                unravel_item = _unravel_key_to_tuple(item)
+                if not unravel_item:  # catch errors during unravel
+                    raise TypeError
+            except Exception:
+                raise TypeError(_NON_STR_KEY_ERR)
+            if len(unravel_item) > 1:
+                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
+            else:
+                item = unravel_item[0]
         return super().__contains__(item)
 
     def keys(self):

@@ -3,7 +3,7 @@ import argparse
 import pytest
 import torch
 
-from tensordict import TensorDict
+from tensordict import is_tensor_collection, TensorDict
 
 
 @pytest.fixture
@@ -75,6 +75,36 @@ def big_nested_stacked_td():
 
 def big_nested_stacked_td_locked():
     return ((big_nested_stacked_td()[0][0].lock_(),), {})
+
+
+def test_plain_set_nested(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(j) for j in range(20, 0, -1))
+    tensor = torch.zeros(3, 4)
+    benchmark(lambda: td.set(key, tensor))
+
+
+def test_plain_set_stack_nested(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    key = tuple(str(j) for j in range(20, 0, -1))
+    tensor = torch.zeros(td.shape)
+    benchmark(lambda: td.set(key, tensor))
+
+
+def test_plain_set_nested_inplace(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(j) for j in range(20, 0, -1))
+    tensor = torch.zeros(3, 4)
+    td.set(key, tensor)
+    benchmark(lambda: td.set(key, tensor, inplace=True))
+
+
+def test_plain_set_stack_nested_inplace(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    key = tuple(str(j) for j in range(20, 0, -1))
+    tensor = torch.zeros(td.shape)
+    td.set(key, tensor)
+    benchmark(lambda: td.set(key, tensor, inplace=True))
 
 
 def test_items(benchmark):
@@ -213,6 +243,94 @@ def test_membership_stacked_nested_leaf(benchmark):
     benchmark(lambda: ("a",) in td.keys(True, True))
 
 
+def test_membership_nested_last(benchmark):
+    td = big_nested_td()[0][0]
+    subtd = td
+    key = []
+    while True:
+        for _key, value in subtd.items():
+            key += [_key]
+            if is_tensor_collection(value):
+                subtd = value
+                break
+            else:
+                subtd = None
+                break
+        if subtd is None:
+            break
+    key = tuple(key)
+    benchmark(lambda: key in td.keys(True))
+
+
+def test_membership_nested_leaf_last(benchmark):
+    td = big_nested_td()[0][0]
+    subtd = td
+    key = []
+    while True:
+        for _key, value in subtd.items():
+            key += [_key]
+            if is_tensor_collection(value):
+                subtd = value
+                break
+            else:
+                subtd = None
+                break
+        if subtd is None:
+            break
+    key = tuple(key)
+    benchmark(lambda: key in td.keys(True, True))
+
+
+def test_membership_stacked_nested_last(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    subtd = td
+    key = []
+    while True:
+        for _key, value in subtd.items():
+            key += [_key]
+            if is_tensor_collection(value):
+                subtd = value
+                break
+            else:
+                subtd = None
+                break
+        if subtd is None:
+            break
+    key = tuple(key)
+    benchmark(lambda: key in td.keys(True))
+
+
+def test_membership_stacked_nested_leaf_last(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    subtd = td
+    key = []
+    while True:
+        for _key, value in subtd.items():
+            key += [_key]
+            if is_tensor_collection(value):
+                subtd = value
+                break
+            else:
+                subtd = None
+                break
+        if subtd is None:
+            break
+    key = tuple(key)
+    benchmark(lambda: key in td.keys(True, True))
+
+
+def test_nested_getleaf(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(i) for i in range(19)) + ("t",)
+    benchmark(lambda: td.get(key))
+
+
+def test_nested_get(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(i) for i in range(19))
+    benchmark(lambda: td.get(key))
+
+
 def test_stacked_getleaf(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(i) for i in range(19)) + ("t",)
@@ -223,6 +341,30 @@ def test_stacked_get(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(i) for i in range(19))
     benchmark(lambda: td.get(key))
+
+
+def test_nested_getitemleaf(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(i) for i in range(19)) + ("t",)
+    benchmark(lambda: td[key])
+
+
+def test_nested_getitem(benchmark):
+    td = big_nested_td()[0][0]
+    key = tuple(str(i) for i in range(19))
+    benchmark(lambda: td[key])
+
+
+def test_stacked_getitemleaf(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    key = tuple(str(i) for i in range(19)) + ("t",)
+    benchmark(lambda: td[key])
+
+
+def test_stacked_getitem(benchmark):
+    td = big_nested_stacked_td()[0][0]
+    key = tuple(str(i) for i in range(19))
+    benchmark(lambda: td[key])
 
 
 def test_lock_nested(benchmark):
@@ -507,6 +649,21 @@ def main():
     td = TensorDict({"a": a, "b": {"b1": b}}, [3, 4])
     tdc = td.clone()
     tdc["c", "c", "c"] = c
+
+
+def test_unbind_speed(benchmark):
+    (td,), _ = big_nested_td()
+    benchmark(lambda td: td.unbind(0), td)
+
+
+def test_unbind_speed_stack0(benchmark):
+    (td,), _ = big_nested_stacked_td()
+    benchmark(lambda td: td.unbind(0), td)
+
+
+def test_unbind_speed_stack1(benchmark):
+    (td,), _ = big_nested_stacked_td()
+    benchmark(lambda td: td.unbind(1), td)
 
 
 if __name__ == "__main__":

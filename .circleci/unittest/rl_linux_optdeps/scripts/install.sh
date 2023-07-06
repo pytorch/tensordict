@@ -4,6 +4,8 @@ unset PYTORCH_VERSION
 # For unittest, nightly PyTorch is used as the following section,
 # so no need to set PYTORCH_VERSION.
 # In fact, keeping PYTORCH_VERSION forces us to hardcode PyTorch version in config.
+apt-get update && apt-get install -y git wget gcc g++
+#apt-get update && apt-get install -y git wget freeglut3 freeglut3-dev
 
 set -e
 
@@ -32,7 +34,7 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
 #    conda install -y pytorch cpuonly -c pytorch-nightly
     pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu113
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu118
 fi
 
 # install tensordict
@@ -43,7 +45,10 @@ python -c "import functorch"
 
 printf "* Installing torchrl\n"
 git clone https://github.com/pytorch/rl
-pip install -e rl
+cd rl
+git checkout more_unravel_fixes
+python setup.py develop
+cd ..
 
 # smoke test
 python -c "import torchrl"

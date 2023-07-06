@@ -20,7 +20,7 @@ from typing import Any, Callable, Sequence, TypeVar
 import tensordict as tensordict_lib
 
 import torch
-from tensordict._tensordict import unravel_keys
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.memmap import MemmapTensor
 from tensordict.tensordict import (
     _get_repr,
@@ -178,6 +178,7 @@ def tensorclass(cls: T) -> T:
     cls.set_at_ = _set_at_
     cls.get = _get
     cls.get_at = _get_at
+    cls.unbind = _unbind
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
 
@@ -649,7 +650,7 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
         return self
 
     if isinstance(key, tuple) and len(key):
-        key = unravel_keys(key)
+        key = _unravel_key_to_tuple(key)
         if len(key) > 1:
             return self.set(key[0], getattr(self, key[0]).set(key[1:], value))
         out = self.set(key[0], value)
@@ -935,3 +936,15 @@ def _all_non_td_fields_as_str(src_dict) -> list:
             result.append(f"{key}={repr(val)}")
 
     return result
+
+
+def _unbind(self, dim: int):
+    """Returns a tuple of indexed tensorclass instances unbound along the indicated dimension.
+
+    Resulting tensorclass instances will share the storage of the initial tensorclass instance.
+
+    """
+    return tuple(
+        self._from_tensordict(td, non_tensordict=copy(self._non_tensordict))
+        for td in self._tensordict.unbind(dim)
+    )
