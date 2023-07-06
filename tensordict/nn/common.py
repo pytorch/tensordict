@@ -444,7 +444,8 @@ class _OutKeysSelect:
 
     def remove(self):
         # reset ground truth
-        self.module.out_keys = self.module._out_keys
+        if self.module._out_keys is not None:
+            self.module.out_keys = self.module._out_keys
 
     def __del__(self):
         self.remove()
@@ -506,7 +507,7 @@ class TensorDictModuleBase(nn.Module):
     @out_keys.setter
     def out_keys(self, value: List[Union[str, Tuple[str]]]):
         # the first time out_keys are set, they are marked as ground truth
-        value = unravel_key_list(value)
+        value = unravel_key_list(list(value))
         if not hasattr(self, "_out_keys"):
             self._out_keys = value
         self._out_keys_apparent = value
@@ -721,7 +722,7 @@ class TensorDictModuleBase(nn.Module):
                 is_shared=False)
 
         """
-        out_keys = unravel_key_list(out_keys)
+        out_keys = unravel_key_list(list(out_keys))
         if len(out_keys) == 1:
             if out_keys[0] not in self.out_keys:
                 err_msg = f"Can't select non existent key: {out_keys[0]}. "
