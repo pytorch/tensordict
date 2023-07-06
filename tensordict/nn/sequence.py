@@ -24,9 +24,10 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 
+from tensordict._tensordict import unravel_key_list
 from tensordict.nn.common import dispatch, TensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from tensordict.utils import _normalize_key, NestedKey
+from tensordict.utils import NestedKey
 from torch import nn
 
 __all__ = ["TensorDictSequential"]
@@ -349,12 +350,11 @@ class TensorDictSequential(TensorDictModule):
         """
         if in_keys is None:
             in_keys = deepcopy(self.in_keys)
-        else:
-            in_keys = [_normalize_key(key) for key in in_keys]
+        in_keys = unravel_key_list(in_keys)
         if out_keys is None:
             out_keys = deepcopy(self.out_keys)
-        else:
-            out_keys = [_normalize_key(key) for key in out_keys]
+        out_keys = unravel_key_list(out_keys)
+
         module_list = list(self.module)
         id_to_keep = set(range(len(module_list)))
         for i, module in enumerate(module_list):
@@ -411,7 +411,6 @@ class TensorDictSequential(TensorDictModule):
                     key in sub_td.keys(include_nested=True) for key in module.in_keys
                 ):
                     module(sub_td, **kwargs)
-            tensordict._update_valid_keys()
         return tensordict
 
     @dispatch(auto_batch_size=False)

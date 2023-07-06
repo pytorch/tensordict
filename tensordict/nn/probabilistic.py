@@ -286,20 +286,29 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             out_keys = [out_keys]
         elif out_keys is None:
             out_keys = ["_"]
-        if not isinstance(in_keys, dict):
-            in_keys = {param_key: param_key for param_key in in_keys}
+        if isinstance(in_keys, dict):
+            dist_keys, in_keys = zip(*in_keys.items())
         else:
-            # keys must be strings
-            if not all(isinstance(v, str) for v in in_keys.keys()):
-                raise ValueError(
-                    f"in_keys dict keys should all be strings. "
-                    f"{self.__class__.__name__} got {in_keys}"
-                )
+            dist_keys = in_keys
 
-        _seq_of_nested_key_check(out_keys)
-        _seq_of_nested_key_check(tuple(in_keys.values()))
+        # keys in kwargs must be strings
+        _dist_keys = []
+        for key in dist_keys:
+            if isinstance(key, str):
+                pass
+            elif isinstance(key, tuple) and len(key) == 1:
+                key = key[0]
+            else:
+                raise ValueError(
+                    f"The distribution keys should all be strings. "
+                    f"{self.__class__.__name__} got {dist_keys}"
+                )
+            _dist_keys.append(key)
+        dist_keys = tuple(_dist_keys)
+
         self.out_keys = out_keys
         self.in_keys = in_keys
+        self.dist_keys = dist_keys
         if log_prob_key is None:
             log_prob_key = "sample_log_prob"
         self.log_prob_key = log_prob_key
@@ -333,13 +342,17 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                     dist_key = dist_key[
                         -1
                     ]  # It one of the in_keys is a tuple, try to match the dist_kward with the leaf
-                dist_kwargs[dist_key] = tensordict[td_key]
+                dist_kwargs[dist_key] = tensordict.get(td_key)
+            dist_kwargs = {
+                dist_key: tensordict.get(td_key)
+                for dist_key, td_key in zip(self.dist_keys, self.in_keys)
+            }
             dist = self.distribution_class(**dist_kwargs, **self.distribution_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
                 raise TypeError(
-                    "distribution keywords and tensordict keys indicated by ProbabilisticTensorDictModule.in_keys must match."
-                    f"Got this error message: \n{indent(str(err), 4 * ' ')}\nwith in_keys={self.in_keys}"
+                    "distribution keywords and tensordict keys indicated by ProbabilisticTensorDictModule.dist_keys must match."
+                    f"Got this error message: \n{indent(str(err), 4 * ' ')}\nwith dist_keys={self.dist_keys}"
                 )
             elif re.search(r"missing.*required positional arguments", str(err)):
                 raise TypeError(

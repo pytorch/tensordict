@@ -11,7 +11,7 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-from tensordict._tensordict import unravel_keys
+from tensordict._tensordict import _unravel_key_to_tuple
 
 H5_ERR = None
 try:
@@ -35,7 +35,6 @@ from tensordict.tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import (
-    _maybe_unravel_keys_silent,
     _shape,
     cache,
     DeviceType,
@@ -227,11 +226,8 @@ class PersistentTensorDict(TensorDictBase):
         self.file.close()
 
     def _process_key(self, key):
-        key = unravel_keys(key)
-        if isinstance(key, str):
-            return key
-        else:
-            return "/".join(key)
+        key = _unravel_key_to_tuple(key)
+        return "/".join(key)
 
     def _check_batch_size(self, batch_size) -> None:
         for key in self.keys(include_nested=True, leaves_only=True):
@@ -377,11 +373,9 @@ class PersistentTensorDict(TensorDictBase):
     __getitems__ = __getitem__
 
     def __setitem__(self, index, value):
-        index = _maybe_unravel_keys_silent(index)
-        if isinstance(index, str) or (
-            isinstance(index, tuple) and all(isinstance(val, str) for val in index)
-        ):
-            return self.set(index, value, inplace=True)
+        index_unravel = _unravel_key_to_tuple(index)
+        if index_unravel:
+            return self.set(index_unravel, value, inplace=True)
 
         if isinstance(index, list):
             # convert to tensor
@@ -463,6 +457,7 @@ class PersistentTensorDict(TensorDictBase):
         return self.to_tensordict()
 
     def del_(self, key):
+        key = self._process_key(key)
         del self.file[key]
         return self
 
@@ -733,6 +728,8 @@ class PersistentTensorDict(TensorDictBase):
             return self
 
         if inplace:
+            # could be called before but will go under further refactoring of set
+            key = self._process_key(key)
             array = self.file[key]
             if idx is None:
                 idx = ()

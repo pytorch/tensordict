@@ -12,6 +12,7 @@ import torch
 from torch.nn import Tanh
 
 from tensordict import tensorclass, TensorDict
+from tensordict._tensordict import unravel_key_list
 from tensordict.nn import (
     dispatch,
     probabilistic as nn_probabilistic,
@@ -66,6 +67,43 @@ class TestInteractionType:
 
 
 class TestTDModule:
+    def test_auto_unravel(self):
+        tdm = TensorDictModule(
+            lambda x: x,
+            in_keys=["a", ("b",), ("c", ("d",))],
+            out_keys=["e", ("f",), ("g", ("h",))],
+        )
+
+        assert tdm.in_keys == ["a", "b", ("c", "d")]
+        assert tdm.out_keys == ["e", "f", ("g", "h")]
+
+        class MyClass(TensorDictModuleBase):
+            def __init__(self):
+                self.in_keys = ["a", ("b",), ("c", ("d",))]
+                self.out_keys = ["e", ("f",), ("g", ("h",))]
+                super().__init__()
+
+        c = MyClass()
+        assert c.in_keys == ["a", "b", ("c", "d")]
+        c.in_keys = ["a1", ("b1",), ("c1", ("d1",))]
+        assert c.in_keys == ["a1", "b1", ("c1", "d1")]
+        assert c.out_keys == ["e", "f", ("g", "h")]
+        c.out_keys = [("e1",), ("f1",), ("g1", "h1")]
+        assert c.out_keys == ["e1", "f1", ("g1", "h1")]
+
+        class MyClass2(TensorDictModuleBase):
+            in_keys = ["a", ("b",), ("c", ("d",))]
+            out_keys = ["e", ("f",), ("g", ("h",))]
+
+        c = MyClass2()
+        assert c.in_keys == ["a", "b", ("c", "d")]
+        c.in_keys = ["a1", ("b1",), ("c1", ("d1",))]
+        assert c.in_keys == ["a1", "b1", ("c1", "d1")]
+
+        assert c.out_keys == ["e", "f", ("g", "h")]
+        c.out_keys = [("e1",), ("f1",), ("g1", "h1")]
+        assert c.out_keys == ["e1", "f1", ("g1", "h1")]
+
     @pytest.mark.parametrize("args", [True, False])
     def test_input_keys(self, args):
         if args:
@@ -785,8 +823,8 @@ class TestTDSequence:
             nn.Linear(3, 4), in_keys=["foo1", "key3"], out_keys=["key2"]
         )
         seq = TensorDictSequential(module1, module2, module3)
-        assert set(seq.in_keys) == {"key1", "key2", "key3"}
-        assert set(seq.out_keys) == {"foo1", "key1", "key2"}
+        assert set(seq.in_keys) == set(unravel_key_list(("key1", "key2", "key3")))
+        assert set(seq.out_keys) == set(unravel_key_list(("foo1", "key1", "key2")))
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
@@ -2152,13 +2190,13 @@ class TestSelectOutKeys:
         mod = TensorDictModule(
             lambda x, y: (x + 2, y + 2, x), in_keys=["a", "b"], out_keys=["c", "d", "e"]
         )
-        assert mod.out_keys == ["c", "d", "e"]
+        assert mod.out_keys == unravel_key_list(["c", "d", "e"])
         td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
         assert all(key in td.keys() for key in ["a", "b", "c", "d", "e"])
         if unpack:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
-            assert mod.out_keys == list(out_d_key)
+            assert mod.out_keys == unravel_key_list(out_d_key)
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             assert "c" not in td.keys()
             assert all(key in td.keys() for key in ["a", "b", "d"])
@@ -2167,7 +2205,10 @@ class TestSelectOutKeys:
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             assert all(key in td.keys() for key in ["a", "b", "c", "d", "e"])
         else:
-            with pytest.raises(ValueError, match="Can't select non "):
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
                 mod2 = mod.select_out_keys(out_d_key)
 
     def test_tdmodule_dispatch(self, out_d_key, unpack):
@@ -2182,7 +2223,7 @@ class TestSelectOutKeys:
         if unpack:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
-            assert mod.out_keys == list(out_d_key)
+            assert mod.out_keys == unravel_key_list(out_d_key)
             res = mod(torch.zeros(()), torch.ones(()))
             if len(list(out_d_key)) == 1:
                 res = [res]
@@ -2195,7 +2236,10 @@ class TestSelectOutKeys:
             for i, v in enumerate(["c", "d", "e"]):
                 assert (res[i] == exp_res[v]).all()
         else:
-            with pytest.raises(ValueError, match="Can't select non "):
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
                 mod2 = mod.select_out_keys(out_d_key)
 
     def test_tdmodule_dispatch_kwargs(self, out_d_key, unpack):
@@ -2212,7 +2256,7 @@ class TestSelectOutKeys:
         if unpack:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
-            assert mod.out_keys == list(out_d_key)
+            assert mod.out_keys == unravel_key_list(out_d_key)
             res = mod(torch.zeros(()), torch.ones(()))
             if len(list(out_d_key)) == 1:
                 res = [res]
@@ -2225,7 +2269,10 @@ class TestSelectOutKeys:
             for i, v in enumerate(["c", "d", "e"]):
                 assert (res[i] == exp_res[v]).all()
         else:
-            with pytest.raises(ValueError, match="Can't select non "):
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
                 mod2 = mod.select_out_keys(out_d_key)
 
     def test_tdmodule_dispatch_firstcall(self, out_d_key, unpack):
@@ -2241,7 +2288,7 @@ class TestSelectOutKeys:
         if unpack:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
-            assert mod.out_keys == list(out_d_key)
+            assert mod.out_keys == unravel_key_list(out_d_key)
             # ignore result but make sure we call _init
             mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             res = mod(torch.zeros(()), torch.ones(()))
@@ -2256,7 +2303,10 @@ class TestSelectOutKeys:
             for i, v in enumerate(["c", "d", "e"]):
                 assert (res[i] == exp_res[v]).all()
         else:
-            with pytest.raises(ValueError, match="Can't select non "):
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
                 mod2 = mod.select_out_keys(out_d_key)
 
     def test_tdseq(self, out_d_key, unpack):
@@ -2269,7 +2319,7 @@ class TestSelectOutKeys:
         if unpack:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
-            assert mod.out_keys == list(out_d_key)
+            assert mod.out_keys == unravel_key_list(out_d_key)
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             assert "c" not in td.keys()
             assert all(key in td.keys() for key in ["a", "b", "d"])
@@ -2278,7 +2328,10 @@ class TestSelectOutKeys:
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             assert all(key in td.keys() for key in ["a", "b", "c", "d"])
         else:
-            with pytest.raises(ValueError, match="Can't select non "):
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
                 mod2 = mod.select_out_keys(out_d_key)
 
     def test_tdseq_dispatch(self, out_d_key, unpack):
@@ -2295,7 +2348,7 @@ class TestSelectOutKeys:
         if unpack:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
-            assert mod.out_keys == list(out_d_key)
+            assert mod.out_keys == unravel_key_list(out_d_key)
             res = mod(torch.zeros(()), torch.ones(()))
             if len(list(out_d_key)) == 1:
                 res = [res]
@@ -2308,7 +2361,10 @@ class TestSelectOutKeys:
             for i, v in enumerate(["c", "d", "e"]):
                 assert (res[i] == exp_res[v]).all()
         else:
-            with pytest.raises(ValueError, match="Can't select non "):
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
                 mod2 = mod.select_out_keys(out_d_key)
 
     @pytest.mark.parametrize("inplace", [True, False])
@@ -2340,7 +2396,7 @@ class TestSelectOutKeys:
             if unpack:
                 mod2 = mod.select_out_keys(*out_d_key)
                 assert mod2 is mod
-                assert mod.out_keys == list(out_d_key)
+                assert mod.out_keys == unravel_key_list(out_d_key)
                 td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
                 assert "c" not in td.keys()
                 if inplace:
@@ -2355,7 +2411,10 @@ class TestSelectOutKeys:
                 else:
                     assert set(td.keys()) == {"c", "d", "e"}
             else:
-                with pytest.raises(ValueError, match="Can't select non "):
+                with pytest.raises(
+                    (RuntimeError, ValueError),
+                    match=r"key should be a |Can't select non existent",
+                ):
                     mod2 = mod.select_out_keys(out_d_key)
 
     def test_tdmodule_wrap(self, out_d_key, unpack):
@@ -2371,7 +2430,7 @@ class TestSelectOutKeys:
         if unpack:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
-            assert mod.out_keys == list(out_d_key)
+            assert mod.out_keys == unravel_key_list(out_d_key)
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             assert all(key not in td.keys() for key in {"c", "d", "e"} - {*out_d_key})
             assert all(key in td.keys() for key in ["a", "b", *out_d_key])
@@ -2380,7 +2439,10 @@ class TestSelectOutKeys:
             td = mod(TensorDict({"a": torch.zeros(()), "b": torch.ones(())}, []))
             assert all(key in td.keys() for key in ["a", "b", "c", "d", "e"])
         else:
-            with pytest.raises(ValueError, match="Can't select non "):
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
                 mod2 = mod.select_out_keys(out_d_key)
 
     def test_tdmodule_wrap_dispatch(self, out_d_key, unpack):
@@ -2399,7 +2461,7 @@ class TestSelectOutKeys:
         if unpack:
             mod2 = mod.select_out_keys(*out_d_key)
             assert mod2 is mod
-            assert mod.out_keys == list(out_d_key)
+            assert mod.out_keys == unravel_key_list(out_d_key)
             res = mod(torch.zeros(()), torch.ones(()))
             if len(list(out_d_key)) == 1:
                 res = [res]
@@ -2412,7 +2474,10 @@ class TestSelectOutKeys:
             for i, v in enumerate(["c", "d", "e"]):
                 assert (res[i] == exp_res[v]).all()
         else:
-            with pytest.raises(ValueError, match="Can't select non "):
+            with pytest.raises(
+                (RuntimeError, ValueError),
+                match=r"key should be a |Can't select non existent",
+            ):
                 mod2 = mod.select_out_keys(out_d_key)
 
 

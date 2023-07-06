@@ -13,13 +13,13 @@ from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
-from tensordict._tensordict import unravel_keys
+from tensordict._tensordict import unravel_key_list
 
 from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
-from tensordict.utils import _normalize_key, implement_for, NestedKey
+from tensordict.utils import implement_for, NestedKey
 from torch import nn, Tensor
 
 try:
@@ -472,7 +472,7 @@ class TensorDictModuleBase(nn.Module):
             in_keys = cls.__dict__.get("in_keys")
             # now let's remove it
             delattr(cls, "in_keys")
-            cls._in_keys = in_keys
+            cls._in_keys = unravel_key_list(in_keys)
             cls.in_keys = TensorDictModuleBase.in_keys
         if "out_keys" in cls.__dict__ and not isinstance(
             cls.__dict__.get("out_keys"), property
@@ -480,6 +480,7 @@ class TensorDictModuleBase(nn.Module):
             out_keys = cls.__dict__.get("out_keys")
             # now let's remove it
             delattr(cls, "out_keys")
+            out_keys = unravel_key_list(out_keys)
             cls._out_keys = out_keys
             cls._out_keys_apparent = out_keys
             cls.out_keys = TensorDictModuleBase.out_keys
@@ -492,7 +493,7 @@ class TensorDictModuleBase(nn.Module):
 
     @in_keys.setter
     def in_keys(self, value: List[Union[str, Tuple[str]]]):
-        self._in_keys = value
+        self._in_keys = unravel_key_list(value)
 
     @property
     def out_keys(self):
@@ -505,6 +506,7 @@ class TensorDictModuleBase(nn.Module):
     @out_keys.setter
     def out_keys(self, value: List[Union[str, Tuple[str]]]):
         # the first time out_keys are set, they are marked as ground truth
+        value = unravel_key_list(value)
         if not hasattr(self, "_out_keys"):
             self._out_keys = value
         self._out_keys_apparent = value
@@ -606,6 +608,7 @@ class TensorDictModuleBase(nn.Module):
                 is_shared=False)
 
         """
+        out_keys = unravel_key_list(list(out_keys))
         if len(out_keys) == 1:
             if out_keys[0] not in self.out_keys:
                 err_msg = f"Can't select non existent key: {out_keys[0]}. "
@@ -718,6 +721,7 @@ class TensorDictModuleBase(nn.Module):
                 is_shared=False)
 
         """
+        out_keys = unravel_key_list(out_keys)
         if len(out_keys) == 1:
             if out_keys[0] not in self.out_keys:
                 err_msg = f"Can't select non existent key: {out_keys[0]}. "
@@ -1000,11 +1004,11 @@ class TensorDictModule(TensorDictModuleBase):
         elif not isinstance(out_keys, list):
             raise ValueError(self._OUT_KEY_ERR)
         try:
-            in_keys = [unravel_keys(in_key) for in_key in in_keys]
+            in_keys = unravel_key_list(in_keys)
         except Exception:
             raise ValueError(self._IN_KEY_ERR)
         try:
-            out_keys = [unravel_keys(out_key) for out_key in out_keys]
+            out_keys = unravel_key_list(out_keys)
         except Exception:
             raise ValueError(self._OUT_KEY_ERR)
 
@@ -1013,10 +1017,10 @@ class TensorDictModule(TensorDictModuleBase):
                 f"Module {module} if type {type(module)} is not callable. "
                 f"Typical accepted types are nn.Module or TensorDictModule."
             )
-        self.out_keys = [_normalize_key(key) for key in out_keys]
-        self.in_keys = [_normalize_key(key) for key in in_keys]
+        self.out_keys = out_keys
+        self.in_keys = in_keys
 
-        if "_" in in_keys:
+        if "_" in self.in_keys:
             warnings.warn(
                 'key "_" is for ignoring output, it should not be used in input keys',
                 stacklevel=2,
@@ -1110,6 +1114,10 @@ class TensorDictModule(TensorDictModuleBase):
                 else:
                     raise err
             if isinstance(tensors, (dict, TensorDictBase)):
+                if isinstance(tensors, dict):
+                    keys = unravel_key_list(list(tensors.keys()))
+                    values = tensors.values()
+                    tensors = dict(zip(keys, values))
                 tensors = tuple(tensors.get(key, None) for key in self.out_keys)
             if not isinstance(tensors, tuple):
                 tensors = (tensors,)
