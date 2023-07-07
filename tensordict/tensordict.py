@@ -4168,7 +4168,7 @@ class TensorDict(TensorDictBase):
             raise KeyError(f"key {key} not found in set_at_ with tensordict {self}.")
         else:
             td = self._get_str(key[0], NO_DEFAULT)
-        td._set_at_tuple(key[1:], value, idx)
+        td._set_at_tuple(key[1:], value, idx, validated=validated)
         return self
 
     def del_(self, key: str) -> TensorDictBase:

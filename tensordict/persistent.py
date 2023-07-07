@@ -741,7 +741,7 @@ class PersistentTensorDict(TensorDictBase):
                 idx = ()
             else:
                 idx = self._process_index(idx, array)
-
+            value = value.detach().cpu()
             try:
                 array[idx] = value
             except TypeError as err:
