@@ -35,7 +35,6 @@ from tensordict.tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import (
-    _shape,
     cache,
     DeviceType,
     expand_right,
