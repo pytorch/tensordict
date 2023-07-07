@@ -3489,18 +3489,16 @@ class TensorDictBase(MutableMapping):
             self
 
         """
-        target_class = self.entry_class(key)
-        if _is_tensor_collection(target_class):
-            tensordict = self.get(key)
-            tensordict.apply_(lambda x: x.fill_(value))
+        data = self.get(key)
+        if _is_tensor_collection(data.__class__):
+            data.apply_(lambda x: x.fill_(value))
             # self._set(key, tensordict, inplace=True)
         else:
-            tensor = self.get(key)
-            tensor.fill_(value)
+            data.fill_(value)
             if isinstance(key, str):
-                self._set_str(key, tensor, inplace=True, validated=False)
+                self._set_str(key, data, inplace=True, validated=True)
             else:
-                self._set_tuple(key, tensor, inplace=True, validated=False)
+                self._set_tuple(key, data, inplace=True, validated=True)
         return self
 
     def empty(self) -> TensorDictBase:
