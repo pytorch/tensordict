@@ -730,7 +730,6 @@ def _set_item(
         tensor = setitem_keyedjaggedtensor(tensor, index, value)
         return tensor
     else:
-        print(tensor, value)
         tensor[index] = value
         return tensor
 

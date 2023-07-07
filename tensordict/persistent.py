@@ -690,10 +690,14 @@ class PersistentTensorDict(TensorDictBase):
         return out
 
     def _set(
-        self, key: str, value, inplace: bool = False, idx=None, check_shape=True
+        self, key: str, value, inplace: bool = False, idx=None,
     ) -> PersistentTensorDict:
-        if not inplace and idx is not None:
-            raise RuntimeError("Cannot pass an index to _set when inplace=False.")
+        value = self._validate_value(value, check_shape=idx is None)
+        if not inplace:
+            if idx is not None:
+                raise RuntimeError("Cannot pass an index to _set when inplace=False.")
+            elif self.is_locked:
+                raise RuntimeError(self.LOCK_ERROR)
         # shortcut set if we're placing a tensordict
         if is_tensor_collection(value):
             if isinstance(key, tuple):
@@ -774,7 +778,10 @@ class PersistentTensorDict(TensorDictBase):
         return self._set(key, value, inplace=inplace)
 
     def _set_tuple(self, key, value, inplace):
-        inplace = self._convert_inplace(inplace, key)
+        if len(key) == 1:
+            return self._set_str(key[0], value, inplace=inplace)
+        elif key[0] in self.keys():
+            return self._get_str(key[0])._set_tuple(key[1:], value, inplace=inplace)
         return self._set(key, value, inplace=inplace)
 
     def _set_at_str(self, key, value, idx):

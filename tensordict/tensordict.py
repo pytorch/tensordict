@@ -5328,6 +5328,26 @@ torch.Size([3, 2])
     def _preallocate(self, key: str, value: CompatibleType) -> TensorDictBase:
         return self._source.set(key, value)
 
+    def _convert_inplace(self, inplace, key):
+        has_key = key in self.keys()
+        if inplace is not False:
+            if inplace is True and not has_key:  # inplace could be None
+                raise KeyError(
+                    TensorDictBase.KEY_ERROR.format(
+                        key, self.__class__.__name__, sorted(self.keys())
+                    )
+                )
+            inplace = has_key
+        if not inplace and has_key:
+            raise RuntimeError(
+                "Calling `SubTensorDict.set(key, value, inplace=False)` is "
+                "prohibited for existing tensors. Consider calling "
+                "SubTensorDict.set_(...) or cloning your tensordict first."
+            )
+        elif not inplace and self.is_locked:
+            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+        return inplace
+
     def _set_str(
         self,
         key: NestedKey,
@@ -5335,12 +5355,11 @@ torch.Size([3, 2])
         inplace: bool = False,
     ) -> TensorDictBase:
         inplace = self._convert_inplace(inplace, key)
-        if self.is_locked and not inplace:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
         # it is assumed that if inplace=False then the key doesn't exist. This is
         # checked in set method, but not here. responsibility lies with the caller
         # so that this method can have minimal overhead from runtime checks
         parent = self._source
+        value = self._validate_value(value, check_shape=False)
         if not inplace:
             if _is_tensor_collection(value.__class__):
                 value_expand = _expand_to_match_shape(
@@ -6003,7 +6022,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 "permitted if all members of the stack have this key in "
                 "their register."
             ) from e
-
+        value = self._validate_value(value)
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
             tensordict._set_str(key, item, inplace)
@@ -7409,7 +7428,7 @@ class _CustomOpTensorDict(TensorDictBase):
             inv_op=self.inv_op,
             custom_op_kwargs=self.custom_op_kwargs,
             inv_op_kwargs=self.inv_op_kwargs,
-        )._set_tuple(key, value, inplace=inplace)
+        )._set_tuple(key[1:], value, inplace=inplace)
         return self
 
     def _set_at_str(self, key, value, idx):
