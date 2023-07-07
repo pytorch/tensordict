@@ -1005,7 +1005,7 @@ class TensorDictBase(MutableMapping):
 
     def _send(self, dst: int, _tag: int = -1, pseudo_rand: bool = False) -> int:
         for key in self.sorted_keys:
-            value = self.get(key)
+            value = self._get_str(key, NO_DEFAULT)
             if isinstance(value, Tensor):
                 pass
             elif _is_tensor_collection(value.__class__):
@@ -1044,7 +1044,7 @@ class TensorDictBase(MutableMapping):
 
     def _recv(self, src: int, _tag: int = -1, pseudo_rand: bool = False) -> int:
         for key in self.sorted_keys:
-            value = self.get(key)
+            value = self._get_str(key, NO_DEFAULT)
             if isinstance(value, Tensor):
                 pass
             elif _is_tensor_collection(value.__class__):
@@ -1059,7 +1059,7 @@ class TensorDictBase(MutableMapping):
             else:
                 _tag = int_generator(_tag + 1)
             dist.recv(value, src=src, tag=_tag)
-            self.set(key, value, inplace=True)
+            self._set_str(key, value, inplace=True, validated=True)
 
         return _tag
 
@@ -1155,7 +1155,7 @@ class TensorDictBase(MutableMapping):
             root = True
             _futures = []
         for key in self.sorted_keys:
-            value = self.get(key)
+            value = self._get_str(key, NO_DEFAULT)
             if _is_tensor_collection(value.__class__):
                 _tag = value._isend(
                     dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures
@@ -1225,7 +1225,7 @@ class TensorDictBase(MutableMapping):
             root = True
 
         for key in self.sorted_keys:
-            value = self.get(key)
+            value = self._get_str(key, NO_DEFAULT)
             if _is_tensor_collection(value.__class__):
                 _tag, _future_list = value._irecv(
                     src,
@@ -1275,7 +1275,7 @@ class TensorDictBase(MutableMapping):
             _future_list = []
             root = True
         for key in self.sorted_keys:
-            value = self.get(key)
+            value = self._get_str(key, NO_DEFAULT)
             if _is_tensor_collection(value.__class__):
                 _future_list = value._reduce(
                     dst=dst,
@@ -1848,6 +1848,7 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @property
+    @cache
     def sorted_keys(self) -> list[NestedKey]:
         """Returns the keys sorted in alphabetical order.
 
@@ -1857,13 +1858,7 @@ class TensorDictBase(MutableMapping):
         is unlocked.
 
         """
-        if self.is_locked and self._sorted_keys is not None:
-            return self._sorted_keys
-        elif self.is_locked:
-            self._sorted_keys = sorted(self.keys())
-            return self._sorted_keys
-        else:
-            return sorted(self.keys())
+        return sorted(self.keys())
 
     def expand(self, *shape: int) -> TensorDictBase:
         """Expands each tensors of the tensordict according to the torch.expand function.
@@ -4207,7 +4202,9 @@ class TensorDict(TensorDictBase):
     def _stack_onto_(
         self, key: str, list_item: list[CompatibleType], dim: int
     ) -> TensorDict:
-        torch.stack(list_item, dim=dim, out=self.get(key))
+        if not isinstance(key, str):
+            raise ValueError("_stack_onto_ expects string keys.")
+        torch.stack(list_item, dim=dim, out=self._get_str(key, NO_DEFAULT))
         return self
 
     def entry_class(self, key: NestedKey) -> type:
@@ -6040,6 +6037,8 @@ class LazyStackedTensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value)
             validated = True
+        if self.hook_in is not None:
+            value = self.hook_in(value)
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
             tensordict._set_str(key, item, inplace=inplace, validated=validated)
@@ -6073,6 +6072,8 @@ class LazyStackedTensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value)
             validated = True
+        if self.hook_in is not None:
+            value = self.hook_in(value)
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
             tensordict._set_tuple(key, item, inplace=inplace, validated=validated)
@@ -6083,6 +6084,8 @@ class LazyStackedTensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value, check_shape=False)
             validated = True
+        if self.hook_in is not None:
+            value = self.hook_in(value)
         item[idx] = value
         self._set_str(key, item, inplace=True, validated=validated)
         return self
@@ -6101,9 +6104,14 @@ class LazyStackedTensorDict(TensorDictBase):
         td = LazyStackedTensorDict(
             *tds, stack_dim=self.stack_dim, hook_out=self.hook_out, hook_in=self.hook_in
         )
+        if not validated:
+            value = self._validate_value(value, check_shape=False)
+            validated = True
+        if self.hook_in is not None:
+            value = self.hook_in(value)
         item = td._get_str(key, NO_DEFAULT)
         item[idx] = value
-        td._set_str(key, item, inplace=True)
+        td._set_str(key, item, inplace=True, validated=True)
         return self
 
     def unsqueeze(self, dim: int) -> TensorDictBase:
