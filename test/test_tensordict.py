@@ -902,15 +902,15 @@ class TestTensorDicts(TestTensorDictsBase):
             assert key1 == key2
         assert i == len(td.keys()) - 1
         if td.is_locked:
-            assert td._sorted_keys is not None
+            assert td._cache.get('sorted_keys', None) is not None
             td.unlock_()
-            assert td._sorted_keys is None
+            assert td._cache is None
         elif td_name not in ("sub_td", "sub_td2"):  # we cannot lock sub tensordicts
             if isinstance(td, _CustomOpTensorDict):
                 target = td._source
             else:
                 target = td
-            assert target._sorted_keys is None
+            assert target._cache is None
             td.lock_()
             _ = td.sorted_keys
             assert target._cache.get('sorted_keys', None) is not None

@@ -353,7 +353,6 @@ class TensorDictBase(MutableMapping):
         self._inplace_set = kwargs.get("_inplace_set", False)
         self.is_meta = kwargs.get("is_meta", False)
         self._is_locked = kwargs.get("_is_locked", False)
-        self._sorted_keys = None
         self._cache = None
         self._last_op = None
         self.__last_op_queue = None
@@ -3587,7 +3586,6 @@ class TensorDictBase(MutableMapping):
 
         self._is_shared = False
         self._is_memmap = False
-        self._sorted_keys = None
         return unlocked_tds
 
     @as_decorator("is_locked")
@@ -7306,7 +7304,6 @@ class LazyStackedTensorDict(TensorDictBase):
 
         self._is_shared = False
         self._is_memmap = False
-        self._sorted_keys = None
         return unlocked_tds
 
     def __del__(self):
