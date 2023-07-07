@@ -913,9 +913,9 @@ class TestTensorDicts(TestTensorDictsBase):
             assert target._sorted_keys is None
             td.lock_()
             _ = td.sorted_keys
-            assert target._sorted_keys is not None
+            assert target._cache.get('sorted_keys', None) is not None
             td.unlock_()
-            assert target._sorted_keys is None
+            assert target._cache is None
 
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
