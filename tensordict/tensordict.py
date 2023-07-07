@@ -3478,7 +3478,7 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError
 
-    def fill_(self, key: str, value: float | bool) -> TensorDictBase:
+    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         """Fills a tensor pointed by the key with the a given value.
 
         Args:
@@ -3494,7 +3494,7 @@ class TensorDictBase(MutableMapping):
             data.apply_(lambda x: x.fill_(value))
             # self._set(key, tensordict, inplace=True)
         else:
-            data.fill_(value)
+            data = data.fill_(value)
             if isinstance(key, str):
                 self._set_str(key, data, inplace=True, validated=True)
             else:
