@@ -660,6 +660,20 @@ class PersistentTensorDict(TensorDictBase):
             )
 
     def _validate_value(self, value, check_shape=True):
+        if check_shape and _shape(value)[: self.batch_dims] != self.batch_size:
+            # if TensorDict, let's try to map it to the desired shape
+            if is_tensor_collection(value):
+                out = value.clone(recurse=False)
+                out.batch_size = self.batch_size
+            else:
+                raise RuntimeError(
+                    f"batch dimension mismatch, got self.batch_size"
+                    f"={self.batch_size} and value.shape[:self.batch_dims]"
+                    f"={_shape(value)[: self.batch_dims]} with value {value}"
+                )
+        return value
+
+    def _to_numpy(self, value):
         if hasattr(value, "requires_grad") and value.requires_grad:
             raise RuntimeError("Cannot set a tensor that has requires_grad=True.")
         if isinstance(value, torch.Tensor):
@@ -676,17 +690,6 @@ class PersistentTensorDict(TensorDictBase):
             raise NotImplementedError(
                 f"Cannot set values of type {value} in a PersistentTensorDict."
             )
-        if check_shape and _shape(out)[: self.batch_dims] != self.batch_size:
-            # if TensorDict, let's try to map it to the desired shape
-            if is_tensor_collection(out):
-                out = out.clone(recurse=False)
-                out.batch_size = self.batch_size
-            else:
-                raise RuntimeError(
-                    f"batch dimension mismatch, got self.batch_size"
-                    f"={self.batch_size} and value.shape[:self.batch_dims]"
-                    f"={_shape(out)[: self.batch_dims]} with value {out}"
-                )
         return out
 
     def _set(
@@ -699,6 +702,7 @@ class PersistentTensorDict(TensorDictBase):
     ) -> PersistentTensorDict:
         if not validated:
             value = self._validate_value(value, check_shape=idx is None)
+        value = self._to_numpy(value)
         if not inplace:
             if idx is not None:
                 raise RuntimeError("Cannot pass an index to _set when inplace=False.")
@@ -741,7 +745,6 @@ class PersistentTensorDict(TensorDictBase):
                 idx = ()
             else:
                 idx = self._process_index(idx, array)
-            value = value.detach().cpu()
             try:
                 array[idx] = value
             except TypeError as err:
