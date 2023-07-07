@@ -695,8 +695,10 @@ class PersistentTensorDict(TensorDictBase):
         value,
         inplace: bool = False,
         idx=None,
+        validated=False,
     ) -> PersistentTensorDict:
-        value = self._validate_value(value, check_shape=idx is None)
+        if not validated:
+            value = self._validate_value(value, check_shape=idx is None)
         if not inplace:
             if idx is not None:
                 raise RuntimeError("Cannot pass an index to _set when inplace=False.")
@@ -790,23 +792,23 @@ class PersistentTensorDict(TensorDictBase):
             inplace = has_key
         return inplace
 
-    def _set_str(self, key, value, inplace):
+    def _set_str(self, key, value, *, inplace, validated):
         inplace = self._convert_inplace(inplace, key)
-        return self._set(key, value, inplace=inplace)
+        return self._set(key, value, inplace=inplace, validated=validated)
 
-    def _set_tuple(self, key, value, inplace):
+    def _set_tuple(self, key, value, *, inplace, validated):
         if len(key) == 1:
-            return self._set_str(key[0], value, inplace=inplace)
+            return self._set_str(key[0], value, inplace=inplace, validated=validated)
         elif key[0] in self.keys():
-            return self._get_str(key[0])._set_tuple(key[1:], value, inplace=inplace)
+            return self._get_str(key[0])._set_tuple(key[1:], value, inplace=inplace, validated=validated)
         inplace = self._convert_inplace(inplace, key)
-        return self._set(key, value, inplace=inplace)
+        return self._set(key, value, inplace=inplace, validated=validated)
 
-    def _set_at_str(self, key, value, idx):
-        return self._set(key, value, inplace=True, idx=idx)
+    def _set_at_str(self, key, value, idx, *, validated):
+        return self._set(key, value, inplace=True, idx=idx, validated=validated)
 
-    def _set_at_tuple(self, key, value, idx):
-        return self._set(key, value, inplace=True, idx=idx)
+    def _set_at_tuple(self, key, value, idx, *, validated):
+        return self._set(key, value, inplace=True, idx=idx, validated=validated)
 
     def _set_metadata(self, orig_metadata_container: PersistentTensorDict):
         for key, td in orig_metadata_container._nested_tensordicts.items():
