@@ -773,6 +773,19 @@ class PersistentTensorDict(TensorDictBase):
                     self.file.create_dataset(key, data=value, **self.kwargs)
         return self
 
+    def _convert_inplace(self, inplace, key):
+        key = self._process_key(key)
+        if inplace is not False:
+            has_key = key in self.file
+            if inplace is True and not has_key:  # inplace could be None
+                raise KeyError(
+                    TensorDictBase.KEY_ERROR.format(
+                        key, self.__class__.__name__, sorted(self.keys())
+                    )
+                )
+            inplace = has_key
+        return inplace
+
     def _set_str(self, key, value, inplace):
         inplace = self._convert_inplace(inplace, key)
         return self._set(key, value, inplace=inplace)
@@ -782,6 +795,7 @@ class PersistentTensorDict(TensorDictBase):
             return self._set_str(key[0], value, inplace=inplace)
         elif key[0] in self.keys():
             return self._get_str(key[0])._set_tuple(key[1:], value, inplace=inplace)
+        inplace = self._convert_inplace(inplace, key)
         return self._set(key, value, inplace=inplace)
 
     def _set_at_str(self, key, value, idx):
