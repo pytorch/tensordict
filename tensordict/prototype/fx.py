@@ -9,6 +9,7 @@ import operator
 from itertools import filterfalse, tee
 from typing import Any, Callable, Iterable
 
+from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
@@ -26,7 +27,7 @@ class TDGraphModule(nn.Module):
         out_keys: list[NestedKey],
     ) -> None:
         super().__init__()
-        self.out_keys = out_keys
+        self.out_keys = [_unravel_key_to_tuple(ok) for ok in out_keys]
         self._gm = graph_module
 
     def forward(
@@ -42,7 +43,9 @@ class TDGraphModule(nn.Module):
 
         for out_key, output in zip(self.out_keys, outputs):
             if out_key != "_":
-                tensordict_out._set(out_key, output)
+                tensordict_out._set_tuple(
+                    out_key, output, inplace=False, validated=True
+                )
 
         return tensordict_out
 

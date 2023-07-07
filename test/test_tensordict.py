@@ -63,9 +63,7 @@ def test_tensordict_set(device):
     td.set("key_device", torch.ones(4, 5, device="cpu", dtype=torch.double))
     assert td.get("key_device").device == torch.device(device)
 
-    with pytest.raises(
-        KeyError, match="for populating tensordict with new key-value pair"
-    ):
+    with pytest.raises(KeyError, match="not found in TensorDict with keys"):
         td.set_("smartypants", torch.ones(4, 5, device="cpu", dtype=torch.double))
     # test set_at_
     td.set("key2", torch.randn(4, 5, 6, device=device))
@@ -584,9 +582,6 @@ class TestTensorDicts(TestTensorDictsBase):
                 "a" in td2.clone().keys()
             )
         else:
-
-            print(list(td2.keys(True, True)))
-            print(list(keys))
             assert (len(list(td2.keys(True, True))) == len(keys)) and (
                 "a" in td2.keys()
             )
@@ -907,20 +902,20 @@ class TestTensorDicts(TestTensorDictsBase):
             assert key1 == key2
         assert i == len(td.keys()) - 1
         if td.is_locked:
-            assert td._sorted_keys is not None
+            assert td._cache.get("sorted_keys", None) is not None
             td.unlock_()
-            assert td._sorted_keys is None
+            assert td._cache is None
         elif td_name not in ("sub_td", "sub_td2"):  # we cannot lock sub tensordicts
             if isinstance(td, _CustomOpTensorDict):
                 target = td._source
             else:
                 target = td
-            assert target._sorted_keys is None
+            assert target._cache is None
             td.lock_()
             _ = td.sorted_keys
-            assert target._sorted_keys is not None
+            assert target._cache.get("sorted_keys", None) is not None
             td.unlock_()
-            assert target._sorted_keys is None
+            assert target._cache is None
 
     def test_masked_fill(self, td_name, device):
         torch.manual_seed(1)
@@ -1767,6 +1762,8 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td.get("key1") == 0).all()
         if td_name not in ("stacked_td", "nested_stacked_td"):
             err_msg = r"key.*smartypants.*not found in "
+        elif td_name in ("td_h5",):
+            err_msg = "Unable to open object"
         else:
             err_msg = "setting a value in-place on a stack of TensorDict"
 
@@ -1799,6 +1796,8 @@ class TestTensorDicts(TestTensorDictsBase):
 
         if td_name not in ("stacked_td", "nested_stacked_td"):
             err_msg = r"key.*smartypants.*not found in "
+        elif td_name in ("td_h5",):
+            err_msg = "Unable to open object"
         else:
             err_msg = "setting a value in-place on a stack of TensorDict"
 
@@ -3474,7 +3473,6 @@ def test_setitem_nested():
     sub_tensordict["b"] = sub_sub_tensordict
     tensordict["a"] = sub_tensordict
     assert tensordict["a", "b"] is sub_sub_tensordict
-
     tensordict["a", "b"] = sub_sub_tensordict2
     assert tensordict["a", "b"] is sub_sub_tensordict2
     assert (tensordict["a", "b", "c"] == 1).all()
@@ -5209,7 +5207,6 @@ class TestLock:
         a0 = td0["a"]
         b0 = td0["a", "b"]
         c0 = td0["a", "b", "c"]
-        print(id(td), id(td0), id(td1), id(a), id(b), id(c), id(a0), id(b0), id(c0))
         assert len(a._lock_id) == 3  # td, td0, td1
         assert len(b._lock_id) == 5  # td, td0, td1, a0, a1
         assert len(c._lock_id) == 7  # td, td0, td1, a0, a1, b0, b1
