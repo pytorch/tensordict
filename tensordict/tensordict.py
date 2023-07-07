@@ -814,11 +814,11 @@ class TensorDictBase(MutableMapping):
         return self._set_at_tuple(key, value, idx, validated=False)
 
     @abc.abstractmethod
-    def _set_at_str(self, key, value, idx,*, validated):
+    def _set_at_str(self, key, value, idx, *, validated):
         ...
 
     @abc.abstractmethod
-    def _set_at_tuple(self, key, value, idx,*, validated):
+    def _set_at_tuple(self, key, value, idx, *, validated):
         ...
 
     def set_(
@@ -1484,7 +1484,10 @@ class TensorDictBase(MutableMapping):
                     out.set(key, item_trsf, inplace=inplace)
                 else:
                     out._set_str(
-                        key, item_trsf, inplace=BEST_ATTEMPT_INPLACE if inplace else False, validated=False
+                        key,
+                        item_trsf,
+                        inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                        validated=False,
                     )
 
         if not inplace and is_locked:
@@ -1847,7 +1850,7 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @property
-    @cache
+    @cache  # noqa: B019
     def sorted_keys(self) -> list[NestedKey]:
         """Returns the keys sorted in alphabetical order.
 
@@ -3379,7 +3382,14 @@ class TensorDictBase(MutableMapping):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
-                self._set_tuple(index_unravel, value, inplace=BEST_ATTEMPT_INPLACE if isinstance(self, SubTensorDict) else False, validated=False)
+                self._set_tuple(
+                    index_unravel,
+                    value,
+                    inplace=BEST_ATTEMPT_INPLACE
+                    if isinstance(self, SubTensorDict)
+                    else False,
+                    validated=False,
+                )
                 return
 
             if any(isinstance(sub_index, (list, range)) for sub_index in index):
@@ -4083,8 +4093,8 @@ class TensorDict(TensorDictBase):
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         *,
-        inplace: bool ,
-        validated: bool ,
+        inplace: bool,
+        validated: bool,
     ) -> TensorDictBase:
         best_attempt = inplace is BEST_ATTEMPT_INPLACE
         inplace = self._convert_inplace(inplace, key)
@@ -4114,8 +4124,8 @@ class TensorDict(TensorDictBase):
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         *,
-        inplace: bool ,
-        validated: bool
+        inplace: bool,
+        validated: bool,
     ) -> TensorDictBase:
         if len(key) == 1:
             return self._set_str(key[0], value, inplace=inplace, validated=validated)
@@ -5353,8 +5363,8 @@ torch.Size([3, 2])
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         *,
-        inplace: bool ,
-        validated: bool ,
+        inplace: bool,
+        validated: bool,
     ) -> TensorDictBase:
         inplace = self._convert_inplace(inplace, key)
         # it is assumed that if inplace=False then the key doesn't exist. This is
@@ -5397,8 +5407,8 @@ torch.Size([3, 2])
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         *,
-        inplace: bool ,
-        validated: bool
+        inplace: bool,
+        validated: bool,
     ) -> TensorDictBase:
         if len(key) == 1:
             return self._set_str(key[0], value, inplace=inplace, validated=validated)
@@ -5407,7 +5417,9 @@ torch.Size([3, 2])
         if td is None:
             td = parent.select()
             parent._set_str(key[0], td, inplace=False, validated=True)
-        SubTensorDict(td, self.idx)._set_tuple(key[1:], value, inplace=inplace, validated=validated)
+        SubTensorDict(td, self.idx)._set_tuple(
+            key[1:], value, inplace=inplace, validated=validated
+        )
         return self
 
     def _set_at_str(self, key, value, idx, *, validated):
@@ -6021,8 +6033,8 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         *,
-        inplace: bool ,
-        validated: bool ,
+        inplace: bool,
+        validated: bool,
     ) -> TensorDictBase:
         try:
             inplace = self._convert_inplace(inplace, key)
@@ -6047,8 +6059,8 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         value: dict[str, CompatibleType] | CompatibleType,
         *,
-        inplace: bool ,
-        validated: bool
+        inplace: bool,
+        validated: bool,
     ) -> TensorDictBase:
         if len(key) == 1:
             return self._set_str(key[0], value, inplace=inplace, validated=validated)
@@ -7438,17 +7450,15 @@ class _CustomOpTensorDict(TensorDictBase):
     def _transform_value(self, item):
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
 
-    def _set_str(self, key, value, *, inplace: bool ,        validated: bool ):
+    def _set_str(self, key, value, *, inplace: bool, validated: bool):
         if not validated:
             value = self._validate_value(value, check_shape=True)
-            validated=True
+            validated = True
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
         self._source._set_str(key, value, inplace=inplace, validated=validated)
         return self
 
-    def _set_tuple(self, key, value, *, inplace: bool ,
-                   validated: bool
-                   ):
+    def _set_tuple(self, key, value, *, inplace: bool, validated: bool):
         if len(key) == 1:
             return self._set_str(key[0], value, inplace=inplace, validated=validated)
         source = self._source._get_str(key[0], None)

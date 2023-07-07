@@ -800,7 +800,9 @@ class PersistentTensorDict(TensorDictBase):
         if len(key) == 1:
             return self._set_str(key[0], value, inplace=inplace, validated=validated)
         elif key[0] in self.keys():
-            return self._get_str(key[0])._set_tuple(key[1:], value, inplace=inplace, validated=validated)
+            return self._get_str(key[0])._set_tuple(
+                key[1:], value, inplace=inplace, validated=validated
+            )
         inplace = self._convert_inplace(inplace, key)
         return self._set(key, value, inplace=inplace, validated=validated)
 

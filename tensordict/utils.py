@@ -723,7 +723,7 @@ def _get_item(tensor: torch.Tensor, index: IndexType) -> torch.Tensor:
 def _set_item(
     tensor: torch.Tensor, index: IndexType, value: torch.Tensor, *, validated
 ) -> torch.Tensor:
-    #the tensor must be validated
+    # the tensor must be validated
     if not validated:
         raise RuntimeError
     if isinstance(tensor, torch.Tensor):

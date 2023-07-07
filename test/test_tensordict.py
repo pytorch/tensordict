@@ -902,7 +902,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert key1 == key2
         assert i == len(td.keys()) - 1
         if td.is_locked:
-            assert td._cache.get('sorted_keys', None) is not None
+            assert td._cache.get("sorted_keys", None) is not None
             td.unlock_()
             assert td._cache is None
         elif td_name not in ("sub_td", "sub_td2"):  # we cannot lock sub tensordicts
@@ -913,7 +913,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert target._cache is None
             td.lock_()
             _ = td.sorted_keys
-            assert target._cache.get('sorted_keys', None) is not None
+            assert target._cache.get("sorted_keys", None) is not None
             td.unlock_()
             assert target._cache is None
 
