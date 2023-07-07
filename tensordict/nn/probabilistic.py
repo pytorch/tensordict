@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import re
+import warnings
 from enum import auto, Enum
 from textwrap import indent
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Dict, List, Optional
 from warnings import warn
 
 from tensordict._contextlib import _DecoratorContextManager
@@ -19,6 +20,7 @@ from tensordict.nn.sequence import TensorDictSequential
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 from torch import distributions as D, Tensor
 
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
@@ -146,14 +148,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     a deterministic mapping function.
 
     Args:
-        in_keys (str or iterable of str or dict): key(s) that will be read from the
+        in_keys (NestedKey or list of NestedKey or dict): key(s) that will be read from the
             input TensorDict and used to build the distribution. Importantly, if it's an
-            iterable of string or a string, those keys must match the keywords used by
+            list of NestedKey or a NestedKey, the leaf (last element) of those keys must match the keywords used by
             the distribution class of interest, e.g. :obj:`"loc"` and :obj:`"scale"` for
-            the Normal distribution and similar. If in_keys is a dictionary,, the keys
+            the Normal distribution and similar. If in_keys is a dictionary, the keys
             are the keys of the distribution and the values are the keys in the
             tensordict that will get match to the corresponding distribution keys.
-        out_keys (str or iterable of str): keys where the sampled values will be
+        out_keys (NestedKey or list of NestedKey): keys where the sampled values will be
             written. Importantly, if these keys are found in the input TensorDict, the
             sampling step will be skipped.
         default_interaction_mode (str, optional): *Deprecated* keyword-only argument.
@@ -178,7 +180,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         return_log_prob (bool, optional): keyword-only argument.
             If ``True``, the log-probability of the
             distribution sample will be written in the tensordict with the key
-            `'sample_log_prob'`. Default is ``False``.
+            `log_prob_key`. Default is ``False``.
+        log_prob_key (NestedKey, optional): key where to write the log_prob if return_log_prob = True.
+            Defaults to `'sample_log_prob'`.
         cache_dist (bool, optional): keyword-only argument.
             EXPERIMENTAL: if ``True``, the parameters of the
             distribution (i.e. the output of the module) will be written to the
@@ -258,51 +262,43 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
 
     """
 
-    SAMPLE_LOG_PROB_KEY = "sample_log_prob"
-
     def __init__(
         self,
-        in_keys: str | Sequence[str] | dict,
-        out_keys: str | Sequence[str] | None = None,
+        in_keys: NestedKey | List[NestedKey] | Dict[str, NestedKey],
+        out_keys: NestedKey | List[NestedKey] | None = None,
         *,
         default_interaction_mode: str | None = None,
         default_interaction_type: InteractionType = InteractionType.MODE,
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
+        log_prob_key: Optional[NestedKey] = "sample_log_prob",
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
     ) -> None:
         super().__init__()
-        if isinstance(in_keys, str):
+        if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
-        if isinstance(out_keys, str):
+        if isinstance(out_keys, (str, tuple)):
             out_keys = [out_keys]
         elif out_keys is None:
             out_keys = ["_"]
         if isinstance(in_keys, dict):
             dist_keys, in_keys = zip(*in_keys.items())
-        else:
-            dist_keys = in_keys
-
-        # keys in kwargs must be strings
-        _dist_keys = []
-        for key in dist_keys:
-            if isinstance(key, str):
-                pass
-            elif isinstance(key, tuple) and len(key) == 1:
-                key = key[0]
-            else:
+            if set(map(type, dist_keys)) != {str}:
                 raise ValueError(
-                    f"The distribution keys should all be strings. "
+                    f"If in_keys is dict, its keys must be strings matching to the distribution kwargs."
                     f"{self.__class__.__name__} got {dist_keys}"
                 )
-            _dist_keys.append(key)
-        dist_keys = tuple(_dist_keys)
+        else:
+            dist_keys = in_keys
 
         self.out_keys = out_keys
         self.in_keys = in_keys
         self.dist_keys = dist_keys
+        if log_prob_key is None:
+            log_prob_key = "sample_log_prob"
+        self.log_prob_key = log_prob_key
 
         if default_interaction_mode is not None:
             _insert_interaction_mode_deprecation_warning("default_")
@@ -323,14 +319,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
         if self.return_log_prob:
-            self.out_keys.append(self.SAMPLE_LOG_PROB_KEY)
+            self.out_keys.append(self.log_prob_key)
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
         try:
-            dist_kwargs = {
-                dist_key: tensordict.get(td_key)
-                for dist_key, td_key in zip(self.dist_keys, self.in_keys)
-            }
+            dist_kwargs = {}
+            for dist_key, td_key in zip(self.dist_keys, self.in_keys):
+                if isinstance(dist_key, tuple):
+                    dist_key = dist_key[-1]
+                dist_kwargs[dist_key] = tensordict.get(td_key)
             dist = self.distribution_class(**dist_kwargs, **self.distribution_kwargs)
         except TypeError as err:
             if "an unexpected keyword argument" in str(err):
@@ -345,6 +342,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             else:
                 raise err
         return dist
+
+    @property
+    def SAMPLE_LOG_PROB_KEY(self):
+        warnings.warn(
+            "SAMPLE_LOG_PROB_KEY will be deprecated soon."
+            "Use 'obj.log_prob_key' instead",
+            category=DeprecationWarning,
+        )
+        return self.log_prob_key
 
     @dispatch(auto_batch_size=False)
     @set_skip_existing(None)
@@ -367,15 +373,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             )
             if self.return_log_prob:
                 log_prob = dist.log_prob(*out_tensors)
-                tensordict_out.set(self.SAMPLE_LOG_PROB_KEY, log_prob)
+                tensordict_out.set(self.log_prob_key, log_prob)
         elif self.return_log_prob:
             out_tensors = [
-                tensordict.get(key)
-                for key in self.out_keys
-                if key != self.SAMPLE_LOG_PROB_KEY
+                tensordict.get(key) for key in self.out_keys if key != self.log_prob_key
             ]
             log_prob = dist.log_prob(*out_tensors)
-            tensordict_out.set(self.SAMPLE_LOG_PROB_KEY, log_prob)
+            tensordict_out.set(self.log_prob_key, log_prob)
             # raise RuntimeError(
             #     "ProbabilisticTensorDictModule.return_log_prob = True is incompatible with settings in which "
             #     "the submodule is responsible for sampling. To manually gather the log-probability, call first "
