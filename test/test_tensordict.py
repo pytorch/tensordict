@@ -3473,7 +3473,6 @@ def test_setitem_nested():
     sub_tensordict["b"] = sub_sub_tensordict
     tensordict["a"] = sub_tensordict
     assert tensordict["a", "b"] is sub_sub_tensordict
-
     tensordict["a", "b"] = sub_sub_tensordict2
     assert tensordict["a", "b"] is sub_sub_tensordict2
     assert (tensordict["a", "b", "c"] == 1).all()

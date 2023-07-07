@@ -690,7 +690,11 @@ class PersistentTensorDict(TensorDictBase):
         return out
 
     def _set(
-        self, key: str, value, inplace: bool = False, idx=None,
+        self,
+        key: str,
+        value,
+        inplace: bool = False,
+        idx=None,
     ) -> PersistentTensorDict:
         value = self._validate_value(value, check_shape=idx is None)
         if not inplace:

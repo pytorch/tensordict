@@ -110,12 +110,12 @@ except ImportError as err:
 NO_DEFAULT = "_no_default_"
 
 
-class INPLACE_NOT_KNOWN:
+class _BEST_ATTEMPT_INPLACE:
     def __bool__(self):
         raise NotImplementedError
 
 
-INPLACE_NOT_KNOWN = INPLACE_NOT_KNOWN()
+BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 # some complex string used as separator to concatenate and split keys in
 # distributed frameworks
@@ -774,7 +774,7 @@ class TensorDictBase(MutableMapping):
         key = _unravel_key_to_tuple(key)
         # inplace is loose here, but for set_ it is constraining. We translate it
         # to None to tell _set_str and others to drop it if the key isn't found
-        inplace = INPLACE_NOT_KNOWN if inplace else False
+        inplace = BEST_ATTEMPT_INPLACE if inplace else False
         return self._set_tuple(key, item, inplace)
 
     def _convert_inplace(self, inplace, key):
@@ -1486,7 +1486,7 @@ class TensorDictBase(MutableMapping):
                     out.set(key, item_trsf, inplace=inplace)
                 else:
                     out._set_str(
-                        key, item_trsf, inplace=INPLACE_NOT_KNOWN if inplace else False
+                        key, item_trsf, inplace=BEST_ATTEMPT_INPLACE if inplace else False
                     )
 
         if not inplace and is_locked:
@@ -2539,7 +2539,7 @@ class TensorDictBase(MutableMapping):
         return self.to(f"cuda:{device}")
 
     def _create_nested_str(self, key):
-        self.set(key, self.select())
+        self._set_str(key, self.select())
 
     def _create_nested_tuple(self, key):
         self._create_nested_str(key[0])
@@ -3382,15 +3382,11 @@ class TensorDictBase(MutableMapping):
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
 
-        if isinstance(index, str):
-            self.set(index, value, inplace=self._inplace_set)
-            return
-
-        if isinstance(index, tuple):
+        if isinstance(index, (tuple, str)):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
-                self.set(index_unravel, value, inplace=isinstance(self, SubTensorDict))
+                self._set_tuple(index_unravel, value, inplace=BEST_ATTEMPT_INPLACE if isinstance(self, SubTensorDict) else False)
                 return
 
             if any(isinstance(sub_index, (list, range)) for sub_index in index):
@@ -3449,7 +3445,7 @@ class TensorDictBase(MutableMapping):
                 subtd = self.get_sub_tensordict(index)
             for key, item in value.items():
                 if key in keys:
-                    self.set_at_(key, item, index)
+                    self._set_at_str(key, item, index)
                 else:
                     subtd.set(key, item)
         else:
@@ -4096,6 +4092,7 @@ class TensorDict(TensorDictBase):
         value: dict[str, CompatibleType] | CompatibleType,
         inplace: bool = False,
     ) -> TensorDictBase:
+        best_attempt = inplace is BEST_ATTEMPT_INPLACE
         inplace = self._convert_inplace(inplace, key)
         value = self._validate_value(value, check_shape=True)
         if not inplace:
@@ -4104,7 +4101,11 @@ class TensorDict(TensorDictBase):
             self._tensordict[key] = value
         else:
             try:
-                self._get_str(key, default=NO_DEFAULT).copy_(value)
+                dest = self._get_str(key, default=NO_DEFAULT)
+                if best_attempt and _is_tensor_collection(dest.__class__):
+                    dest.update(value, inplace=True)
+                else:
+                    dest.copy_(value)
             except KeyError as err:
                 raise err
             except Exception as err:
@@ -4123,8 +4124,8 @@ class TensorDict(TensorDictBase):
             return self._set_str(key[0], value, inplace)
         td = self._get_str(key[0], None)
         if td is None:
-            td = self.select()
-            self._set_str(key[0], td, False)
+            self._create_nested_str(key[0])
+            td = self._get_str(key[0], NO_DEFAULT)
             inplace = False
         elif not _is_tensor_collection(td.__class__):
             raise RuntimeError(
@@ -4607,18 +4608,16 @@ def _dict_to_nested_keys(
             yield key
 
 
-def _default_hook(td: TensorDictBase, k: tuple[str, ...]) -> None:
+def _default_hook(td: TensorDictBase, key: tuple[str, ...]) -> None:
     """Used to populate a tensordict.
 
     For example, ``td.set(("a", "b"))`` may require to create ``"a"``.
 
     """
-    out = td.get(k[0], None)
+    out = td.get(key[0], None)
     if out is None:
-        out = td.select()
-        if td.is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
-        td._set(k[0], out)
+        td._create_nested_str(key[0])
+        out = td._get_str(key[0], None)
     return out
 
 
@@ -5359,7 +5358,7 @@ torch.Size([3, 2])
         # checked in set method, but not here. responsibility lies with the caller
         # so that this method can have minimal overhead from runtime checks
         parent = self._source
-        value = self._validate_value(value, check_shape=False)
+        value = self._validate_value(value, check_shape=True)
         if not inplace:
             if _is_tensor_collection(value.__class__):
                 value_expand = _expand_to_match_shape(
@@ -5394,7 +5393,6 @@ torch.Size([3, 2])
         value: dict[str, CompatibleType] | CompatibleType,
         inplace: bool = False,
     ) -> TensorDictBase:
-        # TODO: figure out what is the fastest
         if len(key) == 1:
             return self._set_str(key[0], value, inplace)
         parent = self._source
@@ -5407,7 +5405,7 @@ torch.Size([3, 2])
 
     def _set_at_str(self, key, value, idx):
         tensor_in = self._get_str(key, NO_DEFAULT)
-
+        value = self._validate_value(value, check_shape=False)
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
             warn(
                 "Multiple indexing can lead to unexpected behaviours when "
@@ -5541,7 +5539,7 @@ torch.Size([3, 2])
                 self._set_tuple(
                     key,
                     value,
-                    inplace=INPLACE_NOT_KNOWN if inplace else False,
+                    inplace=BEST_ATTEMPT_INPLACE if inplace else False,
                     **kwargs,
                 )
         return self
@@ -6036,22 +6034,22 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> TensorDictBase:
         if len(key) == 1:
             return self._set_str(key[0], value, inplace)
-        if inplace is not False:  # inplace could be None
-            # we don't want to end up in the situation where one tensordict has
-            # inplace=True and another one inplace=False because inplace was loose.
-            # Worse could be writing with inplace=True up until some level then to
-            # realize the key is missing in one td, raising an exception and having
-            # messed up the data. Hence we must start by checking if the key
-            # is present.
-            has_key = key in self.keys(True)
-            if inplace and not has_key:  # inplace could be None
-                raise KeyError(
-                    TensorDictBase.KEY_ERROR.format(
-                        key, self.__class__.__name__, sorted(self.keys())
-                    )
-                )
-            inplace = has_key
-
+        # if inplace is not False:  # inplace could be None
+        #     # we don't want to end up in the situation where one tensordict has
+        #     # inplace=True and another one inplace=False because inplace was loose.
+        #     # Worse could be writing with inplace=True up until some level then to
+        #     # realize the key is missing in one td, raising an exception and having
+        #     # messed up the data. Hence we must start by checking if the key
+        #     # is present.
+        #     has_key = key in self.keys(True)
+        #     if inplace is True and not has_key:  # inplace could be None
+        #         raise KeyError(
+        #             TensorDictBase.KEY_ERROR.format(
+        #                 key, self.__class__.__name__, sorted(self.keys())
+        #             )
+        #         )
+        #     inplace = has_key
+        value = self._validate_value(value)
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
             tensordict._set_tuple(key, item, inplace)
@@ -6059,6 +6057,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _set_at_str(self, key, value, idx):
         item = self._get_str(key, NO_DEFAULT)
+        value = self._validate_value(value, check_shape=False)
         item[idx] = value
         self._set_str(key, item, inplace=True)
         return self
@@ -7410,7 +7409,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
 
     def _set_str(self, key, value, inplace: bool = False):
-        value = self._validate_value(value, check_shape=False)
+        value = self._validate_value(value, check_shape=True)
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
         self._source._set_str(key, value, inplace=inplace)
         return self
@@ -7420,14 +7419,14 @@ class _CustomOpTensorDict(TensorDictBase):
             return self._set_str(key[0], value, inplace=inplace)
         source = self._source._get_str(key[0], None)
         if source is None:
-            source = self._source.select()
-            self._source._set_str(key[0], source)
+            self._source._create_nested_str(key[0])
+            source = self._source._get_str(key[0], NO_DEFAULT)
         type(self)(
             source,
             custom_op=self.custom_op,
             inv_op=self.inv_op,
-            custom_op_kwargs=self.custom_op_kwargs,
-            inv_op_kwargs=self.inv_op_kwargs,
+            custom_op_kwargs=self._update_custom_op_kwargs(source),
+            inv_op_kwargs=self._update_inv_op_kwargs(source),
         )._set_tuple(key[1:], value, inplace=inplace)
         return self
 
@@ -7456,6 +7455,7 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"supported in this setting, consider calling "
                 f"`td.clone()` before `td.set_at_(...)`"
             )
+        value = self._validate_value(value, check_shape=False)
         transformed_tensor[idx] = value
         return self
 
