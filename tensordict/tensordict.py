@@ -3489,16 +3489,14 @@ class TensorDictBase(MutableMapping):
             self
 
         """
-        data = self.get(key)
+        key = _unravel_key_to_tuple(key)
+        data = self._get_tuple(key, NO_DEFAULT)
         if _is_tensor_collection(data.__class__):
             data.apply_(lambda x: x.fill_(value))
             # self._set(key, tensordict, inplace=True)
         else:
             data = data.fill_(value)
-            if isinstance(key, str):
-                self._set_str(key, data, inplace=True, validated=True)
-            else:
-                self._set_tuple(key, data, inplace=True, validated=True)
+            self._set_tuple(key, data, inplace=True, validated=True)
         return self
 
     def empty(self) -> TensorDictBase:
