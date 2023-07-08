@@ -4870,7 +4870,7 @@ def _cat(
             with _ErrorInteceptor(
                 key, "Attempted to concatenate tensors on different devices at key"
             ):
-                out[key] = torch.cat([td.get(key) for td in list_of_tensordicts], dim)
+                out[key] = torch.cat([td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts], dim)
         if device is None:
             device = list_of_tensordicts[0].device
             for td in list_of_tensordicts[1:]:
@@ -5848,7 +5848,7 @@ class LazyStackedTensorDict(TensorDictBase):
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> LazyStackedTensorDict:
-        cls._td_dim_names = None
+        cls._td_dim_name = None
         return super().__new__(cls, *args, _safe=False, _lazy=True, **kwargs)
 
     def __init__(
@@ -5931,12 +5931,14 @@ class LazyStackedTensorDict(TensorDictBase):
         return self._batch_size_setter(new_size)
 
     @property
+    @cache  # noqa
     def names(self):
-        if self._td_dim_names is None:
-            names = copy(self.tensordicts[0].names)
-            names.insert(self.stack_dim, None)
-            self._td_dim_names = names
-        return self._td_dim_names
+        names = list(self.tensordicts[0].names)
+        for td in self.tensordicts[1:]:
+            if names != td.names:
+                raise ValueError(f"Not all dim names match, got {names} and {td.names}.")
+        names.insert(self.stack_dim, self._td_dim_name)
+        return names
 
     @names.setter
     @erase_cache  # a nested lazy stacked tensordict is not apparent to the root
@@ -5944,15 +5946,15 @@ class LazyStackedTensorDict(TensorDictBase):
         if value is None:
             for td in self.tensordicts:
                 td.names = None
-            self._td_dim_names = None
+            self._td_dim_name = None
         else:
             names_c = list(value)
-            self._td_dim_names = copy(names_c)
             name = names_c[self.stack_dim]
-            names_c = list(names_c)
+            self._td_dim_name = name
             del names_c[self.stack_dim]
             for td in self.tensordicts:
                 if td._check_dim_name(name):
+                    # TODO: should reset names here
                     raise ValueError(f"The dimension name {name} is already taken.")
                 td.rename_(*names_c)
 
@@ -6208,15 +6210,19 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> CompatibleType:
 
         # we can handle the case where the key is a tuple of length 1
-        if key not in self.keys():
-            return self._default_get(key, default)
-        tensors = [td.get(key, default=None) for td in self.tensordicts]
+        tensors = []
+        for td in self.tensordicts:
+            tensors.append(td._get_str(key, default=default))
+            if tensors[-1] is default and not isinstance(default, (MemmapTensor, KeyedJaggedTensor, torch.Tensor)) and not is_tensor_collection(default):
+                # then we consider this default as non-stackable and return prematurly
+                return default
         try:
             out = torch.stack(tensors, self.stack_dim)
             if _is_tensor_collection(out.__class__):
-                if self._td_dim_names is not None:
-                    out.refine_names(*self.names, *out.names[self.ndim :])
-                if isinstance(out, TensorDictBase):
+                if self._td_dim_name is not None:
+                    out._td_dim_name = self._td_dim_name
+                if isinstance(out, LazyStackedTensorDict):
+                    # then it's a LazyStackedTD
                     out.hook_out = self.hook_out
                     out.hook_in = self.hook_in
                 else:
@@ -6311,12 +6317,12 @@ class LazyStackedTensorDict(TensorDictBase):
         out._batch_size = torch.Size(
             [dim for i, dim in enumerate(out._batch_size) if i != out.stack_dim]
         )
-        if out._td_dim_names is not None:
-            out._td_dim_names = [
-                name for i, name in enumerate(out._td_dim_names) if i != out.stack_dim
-            ]
-        else:
-            out._td_dim_names = [None] * out.ndim
+        # if out._td_dim_name is not None:
+        #     out._td_dim_name = [
+        #         name for i, name in enumerate(out._td_dim_names) if i != out.stack_dim
+        #     ]
+        # else:
+        #     out._td_dim_names = [None] * out.ndim
         return out
 
     @cache  # noqa: B019
@@ -6439,8 +6445,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 *[td.clone(recurse=False) for td in self.tensordicts],
                 stack_dim=self.stack_dim,
             )
-        if self._td_dim_names is not None:
-            out.names = self.names
+        if self._td_dim_name is not None:
+            out._td_dim_name = self._td_dim_name
         return out
 
     def pin_memory(self) -> TensorDictBase:
@@ -6454,8 +6460,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 return self
             kwargs.update({"batch_size": self.batch_size})
             out = dest(source=self, **kwargs)
-            if self._td_dim_names is not None:
-                out.names = self._td_dim_names
+            # if self._td_dim_name is not None:
+            # TODO: define a _has_names util to quickly check and avoid this
+            out.names = self.names
             return out
         elif isinstance(dest, (torch.device, str, int)):
             dest = torch.device(dest)
@@ -6689,32 +6696,23 @@ class LazyStackedTensorDict(TensorDictBase):
                 *tds,
                 stack_dim=self.stack_dim - dim_drop,
             )
-            if self._td_dim_names is not None:
-                out.names = [
-                    name if i != out.stack_dim else self.names[self.stack_dim]
-                    for i, name in enumerate(out.names)
-                ]
+            if self._td_dim_name is not None:
+                out._td_dim_name = self._td_dim_name
             return out
         elif isinstance(index, slice) and self.stack_dim == 0:
             out = LazyStackedTensorDict(
                 *self.tensordicts[index], stack_dim=self.stack_dim
             )
-            if self._td_dim_names is not None:
-                out.names = [
-                    name if i != out.stack_dim else self.names[self.stack_dim]
-                    for i, name in enumerate(out.names)
-                ]
+            if self._td_dim_name is not None:
+                out._td_dim_name = self._td_dim_name
             return out
         elif isinstance(index, slice) and self.stack_dim != 0:
             out = LazyStackedTensorDict(
                 *[tensordict[index] for tensordict in self.tensordicts],
                 stack_dim=self.stack_dim,
             )
-            if self._td_dim_names is not None:
-                out.names = [
-                    name if i != out.stack_dim else self.names[self.stack_dim]
-                    for i, name in enumerate(out.names)
-                ]
+            if self._td_dim_name is not None:
+                out._td_dim_name = self._td_dim_name
             return out
         elif isinstance(index, (slice, Number)):
             new_stack_dim = (
@@ -6724,11 +6722,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 *[td[index] for td in self.tensordicts],
                 stack_dim=new_stack_dim,
             )
-            if self._td_dim_names is not None:
-                out.names = [
-                    name if i != out.stack_dim else self.names[self.stack_dim]
-                    for i, name in enumerate(out.names)
-                ]
+            if self._td_dim_name is not None:
+                out._td_dim_name = self._td_dim_name
             return out
         elif isinstance(index, tuple):
             for i, item in enumerate(index):
@@ -6776,11 +6771,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 int(_is_number(_item)) - int(_item is None) for _item in index_to_stack
             )
             out = torch.stack(list(tensordicts), dim=new_stack_dim)
-            if self._td_dim_names is not None:
-                out.names = [
-                    name if i != out.stack_dim else self.names[self.stack_dim]
-                    for i, name in enumerate(out.names)
-                ]
+            if self._td_dim_name is not None:
+                out._td_dim_name = self._td_dim_name
             return out
         else:
             raise NotImplementedError(
@@ -8124,29 +8116,19 @@ def _check_keys(
     include_nested: bool = False,
     leaves_only: bool = False,
 ) -> set[str]:
-    keys: set[str] = set()
-    for td in list_of_tensordicts:
-        if not len(keys):
-            keys = set(td.keys(include_nested=include_nested, leaves_only=leaves_only))
+    if not len(list_of_tensordicts):
+        return set()
+    keys: set[str] = set(list_of_tensordicts[0].keys(include_nested=include_nested, leaves_only=leaves_only))
+    for td in list_of_tensordicts[1:]:
+        k = td.keys(include_nested=include_nested, leaves_only=leaves_only)
+        if not strict:
+            keys = keys.intersection(k)
         else:
-            if not strict:
-                keys = keys.intersection(
-                    set(td.keys(include_nested=include_nested, leaves_only=leaves_only))
+            if set(k) != keys:
+                raise KeyError(
+                    f"got keys {keys} and {set(td.keys())} which are "
+                    f"incompatible"
                 )
-            else:
-                if len(
-                    set(
-                        td.keys(include_nested=include_nested, leaves_only=leaves_only)
-                    ).difference(keys)
-                ) or len(
-                    set(td.keys(include_nested=include_nested, leaves_only=leaves_only))
-                ) != len(
-                    keys
-                ):
-                    raise KeyError(
-                        f"got keys {keys} and {set(td.keys())} which are "
-                        f"incompatible"
-                    )
     return keys
 
 
