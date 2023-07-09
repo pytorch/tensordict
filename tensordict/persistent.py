@@ -443,6 +443,10 @@ class PersistentTensorDict(TensorDictBase):
         except ValueError:
             self._batch_size = _batch_size
 
+    _erase_names = TensorDict._erase_names
+    names = TensorDict.names
+    _has_names = TensorDict._has_names
+
     def _rename_subtds(self, names):
         if names is None:
             names = [None] * self.ndim

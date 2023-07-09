@@ -4671,7 +4671,6 @@ class TestNamedDims(TestTensorDictsBase):
         tds.names = list("mnopq")
         assert tds.names == list("mnopq")
         assert td.names == ["m", "n", "p", "q"]
-        assert hasattr(tds, "_td_dim_names")
 
     def test_cat(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
@@ -4680,7 +4679,6 @@ class TestNamedDims(TestTensorDictsBase):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
         tdc = torch.cat([td, td], -1)
         assert tdc.names == ["a", "b", "c", "d"]
-        assert hasattr(tdc, "_td_dim_names")
 
     def test_unsqueeze(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
@@ -4691,7 +4689,6 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdu.names == ["a", "b", "c", "d", None]
         tdu = td.unsqueeze(2)
         assert tdu.names == ["a", "b", None, "c", "d"]
-        assert hasattr(tdu, "_td_dim_names")
 
     def test_squeeze(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
@@ -4702,7 +4699,6 @@ class TestNamedDims(TestTensorDictsBase):
         td.names = ["a", "b", "c", "d"]
         tds = td.squeeze(1)
         assert tds.names == ["a", "c", "d"]
-        assert hasattr(tds, "_td_dim_names")
 
     def test_clone(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
@@ -4719,7 +4715,6 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdp.names == list("dcba")
         tdp = td.permute(-1, 1, 2, -4)
         assert tdp.names == list("dbca")
-        assert hasattr(tdp, "_td_dim_names")
 
     def test_refine_names(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6])
@@ -4735,7 +4730,6 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdr.names == [None, None, "c", "d"]
         tdr = td.refine_names("a", ..., "d")
         assert tdr.names == ["a", None, "c", "d"]
-        assert hasattr(tdr, "_td_dim_names")
 
     def test_index(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
@@ -4756,7 +4750,6 @@ class TestNamedDims(TestTensorDictsBase):
         tdbool = td[torch.ones(3, 4, dtype=torch.bool)]
         assert tdbool.names == [None, "c", "d"]
         assert tdbool.ndim == 3
-        assert hasattr(tdbool, "_td_dim_names")
 
     def test_subtd(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=["a", "b", "c", "d"])
@@ -4790,13 +4783,11 @@ class TestNamedDims(TestTensorDictsBase):
             RuntimeError, match="Names of a subtensordict cannot be modified"
         ):
             tdbool.names = "All work and no play makes Jack a dull boy"
-        assert hasattr(tdbool, "_td_dim_names")
 
     def test_expand(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
         tde = td.expand(2, 3, 4, 5, 6)
         assert tde.names == [None, "a", "b", "c", "d"]
-        assert hasattr(tde, "_td_dim_names")
 
     def test_apply(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
@@ -4805,7 +4796,6 @@ class TestNamedDims(TestTensorDictsBase):
         tda = td.apply(lambda x: x.squeeze(2), batch_size=[3, 4, 6])
         # no way to tell what the names have become, in general
         assert tda.names == [None] * 3
-        assert hasattr(tda, "_td_dim_names")
 
     def test_flatten(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
@@ -4821,14 +4811,12 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdf.names == [None, "d"]
         tdu = tdf.unflatten(0, (3, 4, 1))
         assert tdu.names == [None, None, None, "d"]
-        assert hasattr(tdu, "_td_dim_names")
 
     def test_gather(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
         idx = torch.randint(6, (3, 4, 1, 18))
         tdg = td.gather(dim=-1, index=idx)
         assert tdg.names == ["a", "b", "c", "d"]
-        assert hasattr(tdg, "_td_dim_names")
 
     def test_select(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
@@ -4840,14 +4828,12 @@ class TestNamedDims(TestTensorDictsBase):
         td["*"] = torch.zeros(td.shape)
         tds = td.select("")
         assert tds.names == ["a", "b", "c", "d"]
-        assert hasattr(tds, "_td_dim_names")
 
     def test_detach(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
         td[""] = torch.zeros(td.shape, requires_grad=True)
         tdd = td.detach()
         assert tdd.names == ["a", "b", "c", "d"]
-        assert hasattr(tdd, "_td_dim_names")
 
     def test_unbind(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
@@ -4855,7 +4841,6 @@ class TestNamedDims(TestTensorDictsBase):
         assert tdu.names == ["a", "b", "c"]
         *_, tdu = td.unbind(-2)
         assert tdu.names == ["a", "b", "d"]
-        assert hasattr(tdu, "_td_dim_names")
 
     def test_split(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
@@ -4870,13 +4855,11 @@ class TestNamedDims(TestTensorDictsBase):
         assert tda.names == ["a", "b", "d"]
         tda = td.any(2)
         assert tda.names == ["a", "b", "d"]
-        assert hasattr(tda, "_td_dim_names")
 
     def test_masked_fill(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
         tdm = td.masked_fill(torch.zeros(3, 4, 1, dtype=torch.bool), 1.0)
         assert tdm.names == ["a", "b", "c", "d"]
-        assert hasattr(tdm, "_td_dim_names")
 
     def test_memmap_like(self, tmpdir):
         td = TensorDict(
@@ -4886,7 +4869,6 @@ class TestNamedDims(TestTensorDictsBase):
         )
         tdm = td.memmap_like(prefix=tmpdir)
         assert tdm.names == ["a", "b", "c", "d"]
-        assert hasattr(tdm, "_td_dim_names")
 
     def test_h5(self, tmpdir):
         td = TensorDict(
@@ -4896,7 +4878,6 @@ class TestNamedDims(TestTensorDictsBase):
         )
         tdm = td.to_h5(filename=tmpdir / "file.h5")
         assert tdm.names == ["a", "b", "c", "d"]
-        assert hasattr(tdm, "_td_dim_names")
 
     def test_nested(self):
         td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
