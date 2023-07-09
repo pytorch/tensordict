@@ -1714,6 +1714,7 @@ class TensorDictBase(MutableMapping):
             pass
         elif issubclass(cls, dict):
             value = self._convert_to_tensordict(value)
+            is_tc = True
         else:
             try:
                 value = self._convert_to_tensor(value)
@@ -3798,7 +3799,6 @@ class TensorDict(TensorDictBase):
                     f"sub-type or a dictionary, found type(source)={type(source)}."
                 )
             self._batch_size = self._parse_batch_size(source, batch_size)
-
             self.names = names
 
             if source is not None:
@@ -4509,6 +4509,7 @@ class TensorDict(TensorDictBase):
             device=self.device,
             batch_size=self.batch_size,
             source=source,
+            # names=self.names if self._has_names() else None,
             names=self._td_dim_names,
             _run_checks=False,
             _is_memmap=self._is_memmap,
