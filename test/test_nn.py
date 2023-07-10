@@ -166,6 +166,24 @@ class TestTDModule:
         tripled_nested.reset_parameters_recursive(params)
         lin.reset_parameters.assert_called_once()
 
+    def test_reset_extra_dims(self):
+        torch.manual_seed(0)
+        net = nn.Sequential(nn.Linear(1, 1), nn.ReLU())
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["mid"])
+        another_module = TensorDictModule(
+            nn.Linear(1, 1), in_keys=["mid"], out_keys=["out"]
+        )
+        seq = TensorDictSequential(module, another_module)
+
+        params = TensorDict.from_module(seq)
+        new_params = params.expand(2, 3, *params.shape).clone()
+        # Does not inherit from test case, no assertRaises :(
+        try:
+            seq.reset_parameters_recursive(new_params)
+            raise RuntimeError("Failed to raise exception during test")
+        except NotImplementedError:
+            pass
+
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
         torch.manual_seed(0)

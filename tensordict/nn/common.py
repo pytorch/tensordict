@@ -800,7 +800,7 @@ class TensorDictModuleBase(nn.Module):
             >>> (old_param == net[0].weight).any()
             tensor(False)
 
-            This method also supports functional parameter sampling:
+        This method also supports functional parameter sampling:
 
             >>> from tensordict import TensorDict
             >>> from tensordict.nn import TensorDictModule
@@ -816,6 +816,10 @@ class TensorDictModuleBase(nn.Module):
         if parameters is None:
             self._reset_parameters(self)
             return
+        elif parameters.ndim:
+            raise NotImplementedError(
+                "reset_parameters_recursive does not support batched TensorDicts, ensure batch_size is []"
+            )
 
         sanitized_parameters = parameters.apply(
             lambda x: x.detach().requires_grad_(), inplace=False
