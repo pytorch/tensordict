@@ -67,12 +67,12 @@ class _PersistentTDKeysView(_TensorDictKeysView):
             self.tensordict.file.visit(visitor)
             if self.leaves_only:
                 for key in visitor:
-                    if self.tensordict._get_metadata(key)["array"]:
+                    if self.tensordict._get_metadata(key).get("array", None):
                         yield key
             else:
                 yield from visitor
         else:
-            yield from self.tensordict.file.keys()
+            yield from self.tensordict._valid_keys()
 
     def __contains__(self, key):
         if isinstance(key, tuple) and len(key) == 1:
@@ -248,13 +248,14 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f"key {key} not found in PersistentTensorDict {self}")
 
     def _process_array(self, key, array):
+        print('processing', key)
         if isinstance(array, (h5py.Dataset,)):
             if self.device is not None:
                 device = self.device
             else:
                 device = torch.device("cpu")
             # we convert to an array first to avoid "Creating a tensor from a list of numpy.ndarrays is extremely slow."
-            array = array[:]
+            array = array[()]
             out = torch.as_tensor(array, device=device)
             if self._pin_mem:
                 return out.pin_memory()
@@ -328,7 +329,7 @@ class PersistentTensorDict(TensorDictBase):
         This method avoids creating a tensor from scratch, and just reads the metadata of the array.
         """
         array = self._get_array(key)
-        if isinstance(array, (h5py.Dataset,)):
+        if isinstance(array, (h5py.Dataset,)) and array.dtype in NUMPY_TO_TORCH_DTYPE_DICT:
             shape = torch.Size(array.shape)
             return {
                 "dtype": NUMPY_TO_TORCH_DTYPE_DICT[array.dtype],
@@ -336,6 +337,8 @@ class PersistentTensorDict(TensorDictBase):
                 "dim": len(shape),
                 "array": True,
             }
+        elif isinstance(array, (h5py.Dataset,)) and array.dtype not in NUMPY_TO_TORCH_DTYPE_DICT:
+            return {}
         else:
             shape = self.get(key).shape
             return {
@@ -399,6 +402,14 @@ class PersistentTensorDict(TensorDictBase):
                     f"Cannot broadcast the tensordict {value} to the shape of the indexed persistent tensordict {self}[{index}]."
                 ) from err
         sub_td.update(value, inplace=True)
+
+    @cache  # noqa: B019
+    def _valid_keys(self):
+        keys = []
+        for key in self.file.keys():
+            if self._get_metadata(key):
+                keys.append(key)
+        return keys
 
     # @cache  # noqa: B019
     def keys(
@@ -474,10 +485,13 @@ class PersistentTensorDict(TensorDictBase):
 
     def entry_class(self, key: NestedKey) -> type:
         entry_class = self._get_metadata(key)
-        if entry_class["array"]:
+        is_array = entry_class.get("array", None)
+        if is_array:
             return torch.Tensor
-        else:
+        elif is_array is False:
             return PersistentTensorDict
+        else:
+            raise RuntimeError(f"Encountered a non-numeric data {key}.")
 
     def is_contiguous(self):
         return False
@@ -601,7 +615,7 @@ class PersistentTensorDict(TensorDictBase):
 
         """
         md = self._get_metadata(key)
-        if md["array"]:
+        if md.get("array", None):
             array = self._get_array(key)
             array[:] = value
         else:

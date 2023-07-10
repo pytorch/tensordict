@@ -576,6 +576,9 @@ MemmapTensor of shape {self.shape}."""
     def __eq__(self, other: Any) -> torch.Tensor:
         return self._tensor == other
 
+    def __or__(self, other: Any) -> torch.Tensor:
+        return self._tensor == other
+
     def __ne__(self, other: Any) -> torch.Tensor:
         return self._tensor != other
 
