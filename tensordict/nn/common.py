@@ -817,7 +817,7 @@ class TensorDictModuleBase(nn.Module):
             self._reset_parameters(self)
             return
         elif parameters.ndim:
-            raise NotImplementedError(
+            raise RuntimeError(
                 "reset_parameters_recursive does not support batched TensorDicts, ensure `batch_size` is empty and the parameters shape match their original shape."
             )
 
