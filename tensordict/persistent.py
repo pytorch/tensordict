@@ -248,7 +248,6 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f"key {key} not found in PersistentTensorDict {self}")
 
     def _process_array(self, key, array):
-        print('processing', key)
         if isinstance(array, (h5py.Dataset,)):
             if self.device is not None:
                 device = self.device
@@ -353,10 +352,6 @@ class PersistentTensorDict(TensorDictBase):
         if isinstance(idx, tuple):
             return tuple(cls._process_index(_idx, array) for _idx in idx)
         if isinstance(idx, torch.Tensor):
-            # if idx.dtype == torch.bool:
-            #     # expand to the right
-            #     print(idx.shape, array.shape, idx.sum())
-            #     idx = expand_right(idx, array.shape)
             return idx.cpu().detach().numpy()
         if isinstance(idx, (range, list)):
             return np.asarray(idx)
