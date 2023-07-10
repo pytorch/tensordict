@@ -178,11 +178,8 @@ class TestTDModule:
         params = TensorDict.from_module(seq)
         new_params = params.expand(2, 3, *params.shape).clone()
         # Does not inherit from test case, no assertRaises :(
-        try:
+        with pytest.raises(RuntimeError):
             seq.reset_parameters_recursive(new_params)
-            raise RuntimeError("Failed to raise exception during test")
-        except NotImplementedError:
-            pass
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
