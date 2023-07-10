@@ -144,8 +144,80 @@ class TestTDModule:
         )
         seq = TensorDictSequential(module, another_module)
 
-        seq.reset_parameters()
+        seq.reset_parameters_recursive()
         assert torch.all(old_param != net[0][0].weight.data)
+
+    @pytest.mark.parametrize(
+        "net",
+        [
+            nn.ModuleList([nn.Sequential(nn.Linear(1, 1), nn.ReLU())]),
+            nn.Linear(2, 1),
+            nn.Sequential(nn.Tanh(), nn.Linear(1, 1), nn.Linear(2, 1)),
+        ],
+    )
+    def test_reset_functional(self, net):
+        torch.manual_seed(0)
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        another_module = TensorDictModule(
+            nn.Conv2d(1, 1, 1, 1), in_keys=["in"], out_keys=["out"]
+        )
+        seq = TensorDictSequential(module, another_module)
+
+        params = TensorDict.from_module(seq)
+        old_params = params.clone(recurse=True)
+        new_params = params.clone(recurse=True)
+        returned_params = seq.reset_parameters_recursive(new_params)
+
+        weights_changed = new_params != old_params
+        for w in weights_changed.values(include_nested=True, leaves_only=True):
+            assert w.all(), f"Weights should have changed but did not for {w}"
+
+        module_params = TensorDict.from_module(seq)
+        overwrote_stateful_params = module_params != old_params
+        for p in overwrote_stateful_params.values(
+            include_nested=True, leaves_only=True
+        ):
+            assert not p.any(), f"Overwrote stateful weights from the module {p}"
+
+        returned_params_eq_inplace_updated_params = returned_params == new_params
+        for p in returned_params_eq_inplace_updated_params.values(
+            include_nested=True, leaves_only=True
+        ):
+            assert (
+                p.all()
+            ), f"Discrepancy between returned weights and those in-place updated {p}"
+
+    def test_reset_functional_called_once(self):
+        import unittest.mock
+
+        torch.manual_seed(0)
+        lin = nn.Linear(1, 1)
+        lin.reset_parameters = unittest.mock.Mock(return_value=None)
+        net = nn.ModuleList([nn.Sequential(lin, nn.ReLU())])
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        nested_module = TensorDictModule(module, in_keys=["in"], out_keys=["out"])
+        tripled_nested = TensorDictModule(
+            nested_module, in_keys=["in"], out_keys=["out"]
+        )
+
+        params = TensorDict.from_module(tripled_nested)
+        tripled_nested.reset_parameters_recursive(params)
+        lin.reset_parameters.assert_called_once()
+
+    def test_reset_extra_dims(self):
+        torch.manual_seed(0)
+        net = nn.Sequential(nn.Linear(1, 1), nn.ReLU())
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["mid"])
+        another_module = TensorDictModule(
+            nn.Linear(1, 1), in_keys=["mid"], out_keys=["out"]
+        )
+        seq = TensorDictSequential(module, another_module)
+
+        params = TensorDict.from_module(seq)
+        new_params = params.expand(2, 3, *params.shape).clone()
+        # Does not inherit from test case, no assertRaises :(
+        with pytest.raises(RuntimeError):
+            seq.reset_parameters_recursive(new_params)
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
