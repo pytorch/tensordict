@@ -40,7 +40,7 @@ jobs:
           output-file-path: benchmarks/output.json
           fail-on-alert: true
           alert-threshold: '200%'
-          alert-comment-cc-users: '@vmoens,@tcbegley'
+          alert-comment-cc-users: '@vmoens'
           comment-on-alert: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
@@ -111,7 +111,7 @@ jobs:
         output-file-path: benchmarks/output.json
         fail-on-alert: true
         alert-threshold: '200%'
-        alert-comment-cc-users: '@vmoens,@tcbegley'
+        alert-comment-cc-users: '@vmoens'
         comment-on-alert: true
         github-token: ${{ secrets.GITHUB_TOKEN }}
         gh-pages-branch: gh-pages
