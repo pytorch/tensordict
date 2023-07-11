@@ -6578,33 +6578,48 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace: bool = False,
         **constructor_kwargs,
     ) -> TensorDictBase:
+        if not inplace and constructor_kwargs:
+            raise ValueError(
+                "Extra constructor kwargs are not supported for LazyStackedTensorDict."
+            )
         if inplace:
-            if any(arg for arg in (batch_size, device, names, constructor_kwargs)):
-                raise ValueError(
-                    "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
-                )
-            return self.apply_(fn, *others)
+            out = self
+        elif batch_size is not None:
+            out = self.empty()
+            out.batch_size = batch_size
         else:
-            if batch_size is not None:
-                return super().apply(
+            out = self.empty()
+
+        is_locked = out.is_locked
+        if not inplace and is_locked:
+            out.unlock_()
+
+        for key, item in self.items():
+            _others = [_other.get(key) for _other in others]
+            if _is_tensor_collection(item.__class__):
+                item_trsf = item.apply(
                     fn,
-                    *others,
+                    *_others,
+                    inplace=inplace,
                     batch_size=batch_size,
                     device=device,
-                    names=names,
                     **constructor_kwargs,
                 )
-            others = (other.unbind(self.stack_dim) for other in others)
-            out = LazyStackedTensorDict(
-                *(
-                    td.apply(fn, *oth, device=device)
-                    for td, *oth in zip(self.tensordicts, *others)
-                ),
-                stack_dim=self.stack_dim,
-            )
-            if names is not None:
-                out.names = names
-            return out
+            else:
+                item_trsf = fn(item, *_others)
+            if item_trsf is not None:
+                # if `self` is a `SubTensorDict` we want to process the input,
+                # hence we call `set` rather than `_set_str`.
+                out._set_str(
+                        key,
+                        item_trsf,
+                        inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                        validated=False,
+                    )
+
+        if not inplace and is_locked:
+            out.lock_()
+        return out
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = False

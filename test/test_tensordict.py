@@ -4327,6 +4327,33 @@ class TestLazyStackedTensorDict:
         with pytest.raises(ValueError, match="Batch sizes in tensordicts differs"):
             lstd.insert(index, TensorDict({"a": torch.ones(17)}, [17], device=device))
 
+    def test_lzy_stacked_apply(self):
+        td0 = TensorDict(
+            {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
+        )
+        td1 = TensorDict(
+            {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "d": torch.rand(1)}, [1]
+        )
+        lstd = torch.stack([td0, td1])
+        lstd_out = lstd.apply(lambda x: x*0)
+        assert lstd_out is not lstd
+        assert isinstance(lstd_out, LazyStackedTensorDict)
+        assert (lstd_out.get(("a", "b")) == 0).all()
+        assert (lstd_out[0].get(("a", "c")) == 0).all()
+        assert (lstd_out[1].get(("a", "d")) == 0).all()
+        lstd_out = lstd.apply(lambda x: x*0, batch_size=[2])
+        assert lstd_out is not lstd
+        assert (lstd_out.get(("a", "b")) == 0).all()
+        assert (lstd_out[0].get(("a", "c")) == 0).all()
+        assert (lstd_out[1].get(("a", "d")) == 0).all()
+
+        lstd_out = lstd.apply(lambda x, y: torch.where(x < 0, x, y), lstd.apply(lambda x: x*0))
+        assert lstd_out is not lstd
+        assert isinstance(lstd_out, LazyStackedTensorDict)
+        assert (lstd_out.get(("a", "b")) == 0).all()
+        assert (lstd_out[0].get(("a", "c")) == 0).all()
+        assert (lstd_out[1].get(("a", "d")) == 0).all()
+
     def test_lazy_stacked_contains(self):
         td = TensorDict(
             {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
