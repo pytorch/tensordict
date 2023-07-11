@@ -1,10 +1,15 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 import warnings
 
 import torch
 from tensordict import TensorDict
+from torch import nn
+
 from .common import TensorDictBase, TensorDictModuleBase
 from .functional_modules import make_functional
-from torch import nn
 
 
 class EnsembleModule(TensorDictModuleBase):
