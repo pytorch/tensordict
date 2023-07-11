@@ -577,10 +577,13 @@ MemmapTensor of shape {self.shape}."""
         return self._tensor == other
 
     def __or__(self, other: Any) -> torch.Tensor:
-        return self._tensor == other
+        return self._tensor | other
 
     def __ne__(self, other: Any) -> torch.Tensor:
         return self._tensor != other
+
+    def __invert__(self) -> torch.Tensor:
+        return ~self._tensor
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
