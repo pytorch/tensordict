@@ -521,8 +521,12 @@ class TestOps:
         memmap = dummy_memmap.to(device)
         assert (memmap == memmap.clone()).all()
         assert (memmap.clone() == memmap).all()
-        assert (memmap == memmap.as_tensor()).all()
-        assert (memmap.as_tensor() == memmap).all()
+        if device.type == "cpu":
+            assert (memmap == memmap.as_tensor()).all()
+            assert (memmap.as_tensor() == memmap).all()
+        else:
+            assert (memmap == memmap._tensor()).all()
+            assert (memmap._tensor() == memmap).all()
 
     def test_fill_(self, device, dummy_memmap):
         memmap = dummy_memmap.to(device)
