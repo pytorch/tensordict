@@ -328,7 +328,10 @@ class PersistentTensorDict(TensorDictBase):
         This method avoids creating a tensor from scratch, and just reads the metadata of the array.
         """
         array = self._get_array(key)
-        if isinstance(array, (h5py.Dataset,)) and array.dtype in NUMPY_TO_TORCH_DTYPE_DICT:
+        if (
+            isinstance(array, (h5py.Dataset,))
+            and array.dtype in NUMPY_TO_TORCH_DTYPE_DICT
+        ):
             shape = torch.Size(array.shape)
             return {
                 "dtype": NUMPY_TO_TORCH_DTYPE_DICT[array.dtype],
@@ -336,7 +339,10 @@ class PersistentTensorDict(TensorDictBase):
                 "dim": len(shape),
                 "array": True,
             }
-        elif isinstance(array, (h5py.Dataset,)) and array.dtype not in NUMPY_TO_TORCH_DTYPE_DICT:
+        elif (
+            isinstance(array, (h5py.Dataset,))
+            and array.dtype not in NUMPY_TO_TORCH_DTYPE_DICT
+        ):
             return {}
         else:
             shape = self.get(key).shape
