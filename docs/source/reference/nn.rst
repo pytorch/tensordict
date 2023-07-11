@@ -272,6 +272,37 @@ distinguish on a high level parameters and buffers (they are all packed together
     make_functional
     repopulate_module
 
+Ensembles
+---------
+The functional approach enables a straightforward ensemble implementation. 
+We can duplicate and reinitialize model copies using the :class:`tensordict.nn.EnsembleModule`
+
+.. code-block::
+
+    >>> import torch
+    >>> from torch import nn
+    >>> from tensordict.nn import TensorDictModule
+    >>> from torchrl.modules import EnsembleModule
+    >>> from tensordict import TensorDict
+    >>> net = nn.Sequential(nn.Linear(4, 32), nn.ReLU(), nn.Linear(32, 2))
+    >>> mod = TensorDictModule(net, in_keys=['a'], out_keys=['b'])
+    >>> ensemble = EnsembleModule(mod, num_copies=3)
+    >>> data = TensorDict({'a': torch.randn(10, 4)}, batch_size=[10])
+    >>> ensemble(data)
+    TensorDict(
+        fields={
+            a: Tensor(shape=torch.Size([3, 10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+            b: Tensor(shape=torch.Size([3, 10, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
+        batch_size=torch.Size([3, 10]),
+        device=None,
+        is_shared=False)
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    EnsembleModule
+
 Tracing and compiling
 ---------------------
 

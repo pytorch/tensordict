@@ -11,6 +11,7 @@ from tensordict.nn.common import (
     TensorDictModuleWrapper,
 )
 from tensordict.nn.distributions import NormalParamExtractor
+from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import (
     get_functional,
     is_functional,
