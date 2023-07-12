@@ -1450,7 +1450,7 @@ class TensorDictBase(MutableMapping):
             out.unlock_()
 
         for key, item in self.items():
-            _others = [_other.get(key) for _other in others]
+            _others = [_other._get_str(key, NO_DEFAULT) for _other in others]
             if _is_tensor_collection(item.__class__):
                 item_trsf = item.apply(
                     fn,
@@ -1462,6 +1462,8 @@ class TensorDictBase(MutableMapping):
                 )
             else:
                 item_trsf = fn(item, *_others)
+                # item_trsf = out._validate_value(item_trsf)
+
             if item_trsf is not None:
                 # if `self` is a `SubTensorDict` we want to process the input,
                 # hence we call `set` rather than `_set_str`.
@@ -1472,7 +1474,7 @@ class TensorDictBase(MutableMapping):
                         key,
                         item_trsf,
                         inplace=BEST_ATTEMPT_INPLACE if inplace else False,
-                        validated=False,
+                        validated=True,
                     )
 
         if not inplace and is_locked:
@@ -3735,21 +3737,6 @@ class TensorDict(TensorDictBase):
 
     """
 
-    __slots__ = (
-        "_tensordict",
-        "_batch_size",
-        "_is_shared",
-        "_is_memmap",
-        "_device",
-        "_is_locked",
-        "_td_dim_names",
-        "_lock_id",
-        "_locked_tensordicts",
-        "_cache",
-        "_last_op",
-        "__last_op_queue",
-    )
-
     def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
         cls._is_shared = False
         cls._is_memmap = False
@@ -4541,7 +4528,7 @@ class TensorDict(TensorDictBase):
     def __getstate__(self):
         return {
             slot: getattr(self, slot)
-            for slot in self.__slots__
+            for slot in self.__dict__
             if slot not in ("_last_op", "_cache", "__last_op_queue")
         }
 
