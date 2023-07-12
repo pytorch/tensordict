@@ -176,6 +176,7 @@ def tensorclass(cls: T) -> T:
     cls.__ne__ = __ne__
     cls.set = _set
     cls.set_at_ = _set_at_
+    cls.del_ = _del_
     cls.get = _get
     cls.get_at = _get_at
     cls.unbind = _unbind
@@ -551,7 +552,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
 def _repr(self) -> str:
     """Return a string representation of Tensor class object."""
     fields = _all_td_fields_as_str(self._tensordict)
-    field_str = fields
+    field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
     batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
     device_str = indent(f"device={self.device}", 4 * " ")
@@ -562,10 +563,10 @@ def _repr(self) -> str:
             4 * " ",
         )
         string = ",\n".join(
-            [field_str, non_tensor_field_str, batch_size_str, device_str, is_shared_str]
+            field_str + [non_tensor_field_str, batch_size_str, device_str, is_shared_str]
         )
     else:
-        string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+        string = ",\n".join(field_str + [batch_size_str, device_str, is_shared_str])
     return f"{self.__class__.__name__}(\n{string})"
 
 
@@ -659,6 +660,20 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
         f"Supported type for key are str and tuple, got {key} of type {type(key)}"
     )
 
+def _del_(self, key):
+    key = _unravel_key_to_tuple(key)
+    if len(key) > 1:
+        td = self.get(key[0])
+        td.del_(key[1:])
+        return
+    if key[0] in self._tensordict.keys():
+        self._tensordict.del_(key[0])
+        # self.set(key[0], None)
+    elif key[0] in self._non_tensordict.keys():
+        self._non_tensordict[key[0]] = None
+    else:
+        raise KeyError(f"Key {key} could not be found in tensorclass {self}.")
+    return
 
 def _set_at_(self, key: NestedKey, value: Any, idx: IndexType):
     if key in self._non_tensordict:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from tensordict._tensordict import _unravel_key_to_tuple
 
@@ -614,6 +614,18 @@ class PersistentTensorDict(TensorDictBase):
         self.file.create_group(key)
         target_td = self._get_str(key)
         return target_td
+
+    def map(self,
+            fn: Callable,
+            *others: TensorDictBase,
+            minibatch: int | None = None,
+            dim: int = 0,
+            inplace: bool = False,
+            **constructor_kwargs,
+            ):
+        if not inplace:
+            raise ValueError("PersistentTensorDict.map can only be applied in-place.")
+        return super().map(fn, *others, minibatch=minibatch, dim=dim, inplace=inplace, **constructor_kwargs)
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = True
