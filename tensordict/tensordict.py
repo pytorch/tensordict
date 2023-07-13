@@ -6717,11 +6717,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if index_key:
                 return self._get_tuple(index_key, NO_DEFAULT)
 
-        # if isinstance(index, tuple) and len(index) == 1:
-        #     index = index[0]
-
         index_dict = _convert_index_lazystack(index, self.stack_dim, self.batch_size)
-        print(index_dict)
         td_index = index_dict["remaining_index"]
         stack_index = index_dict["stack_index"]
         new_stack_dim = index_dict["new_stack_dim"]
@@ -8310,14 +8306,14 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
         if isinstance(index[stack_dim_index], Tensor) and \
             index[stack_dim_index].dtype == torch.bool and \
             count + index[stack_dim_index].ndim >= stack_dim:
-            print("count", count)
-
             shift_stack = stack_dim - count
             unbound = index[stack_dim_index].unbind(shift_stack)
             stack_index = tuple(idx.any() for idx in unbound)
+            # we convert tensor(True) to ()
+            unbound = tuple(_unbound if _unbound.ndim else () for _unbound in unbound)
             remaining_index = tuple(
                 tuple(
-                    idx if i != stack_dim_index else _unbound for i, idx in enumerate(index)
+                    idx if i != stack_dim_index else _unbound for i, idx in enumerate(index) if i != stack_dim_index or _unbound is not ()
                     ) for _unbound in unbound
             )
             break
