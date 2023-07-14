@@ -962,49 +962,6 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert (td_c[key] * 2 != td[key]).any()
                 assert (td_1[key] == td[key] * 2).all()
 
-    @pytest.mark.parametrize("inplace", [False, True])
-    def test_map(self, td_name, device, inplace):
-        td = getattr(self, td_name)(device)
-        if td_name == "td_h5" and not inplace:
-            with pytest.raises(
-                ValueError,
-                match="PersistentTensorDict.map can only be applied in-place.",
-            ):
-                td.map(lambda x: x * 0, inplace=inplace, minibatch=2, dim=3)
-            return
-        tdout = td.map(lambda x: x * 0, inplace=inplace, minibatch=2, dim=3)
-        assert (tdout == 0).all()
-        if inplace:
-            assert tdout is td
-        else:
-            assert tdout is not td
-
-    # @pytest.mark.parametrize("inplace", [False, True])
-    # def test_map_others(self, td_name, device, inplace):
-    #     td = getattr(self, td_name)(device)
-    #     td_other0 = getattr(self, td_name)(device)
-    #     td_other1 = getattr(self, td_name)(device)
-    #     td_other0 = td_other0.apply(lambda x: x*0+1)
-    #     td_other1 = td_other1.apply(lambda x: x*0+2)
-    #
-    #     if td_name == "td_h5" and not inplace:
-    #         with pytest.raises(ValueError, match="PersistentTensorDict.map can only be applied in-place."):
-    #             td.map(
-    #                 lambda x, y, z: y + z,
-    #                 td_other0,
-    #                 td_other1,
-    #                 inplace=inplace,
-    #                 minibatch=2,
-    #                 dim=3
-    #                 )
-    #         return
-    #     tdout = td.map(lambda x, y, z: y + z, td_other0, td_other1, inplace=inplace, minibatch=2, dim=3)
-    #     assert (tdout == 3).all()
-    #     if inplace:
-    #         assert tdout is td
-    #     else:
-    #         assert tdout is not td
-
     def test_from_empty(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -4454,52 +4411,6 @@ class TestLazyStackedTensorDict:
             match="Found more than one unique shape in the tensors to be stacked",
         ):
             td_a.update_(td_b.to_tensordict())
-
-    @pytest.mark.parametrize("stack_dim", [0, 1, -1])
-    @pytest.mark.parametrize("dim", [0, 1])
-    @pytest.mark.parametrize("inplace", [False, True])
-    def test_lazy_map(self, stack_dim, inplace, dim):
-        td1 = TensorDict({"a": torch.ones(3, 5)}, [3])
-        td2 = TensorDict({"a": torch.ones(3, 5)}, [3])
-        td_a = torch.stack([td1, td2], stack_dim)
-        td_b = td_a.apply(lambda x: x * 0 + 2)
-        td_out = td_a.map(
-            lambda x, y: x + y, td_b, inplace=inplace, dim=dim, minibatch=1
-        )
-        assert isinstance(td_out, LazyStackedTensorDict)
-        assert td_out.stack_dim == stack_dim if stack_dim == 0 else 1
-        assert (td_out == 3).all()
-        if stack_dim == 0:
-            assert (td_out[0].get("a") == 3).all()
-            assert (td_out[1].get("a") == 3).all()
-            assert (td_out[0].get("b") == 3).all()
-        else:
-            assert (td_out[:, 0].get("a") == 3).all()
-            assert (td_out[:, 1].get("a") == 3).all()
-            assert (td_out[:, 0].get("b") == 3).all()
-
-    @pytest.mark.parametrize("stack_dim", [0, 1, -1])
-    @pytest.mark.parametrize("dim", [0, 1])
-    @pytest.mark.parametrize("inplace", [False, True])
-    def test_lazy_map_het(self, stack_dim, inplace, dim):
-        td1 = TensorDict({"a": torch.ones(3, 4), "b": torch.ones(3, 3)}, [3])
-        td2 = TensorDict({"a": torch.ones(3, 5)}, [3])
-        td_a = torch.stack([td1, td2], stack_dim)
-        td_b = td_a.apply(lambda x: x * 0 + 2)
-        td_out = td_a.map(
-            lambda x, y: x + y, td_b, inplace=inplace, dim=dim, minibatch=1
-        )
-        assert isinstance(td_out, LazyStackedTensorDict)
-        assert td_out.stack_dim == stack_dim if stack_dim == 0 else 1
-        assert (td_out == 3).all()
-        if stack_dim == 0:
-            assert (td_out[0].get("a") == 3).all()
-            assert (td_out[1].get("a") == 3).all()
-            assert (td_out[0].get("b") == 3).all()
-        else:
-            assert (td_out[:, 0].get("a") == 3).all()
-            assert (td_out[:, 1].get("a") == 3).all()
-            assert (td_out[:, 0].get("b") == 3).all()
 
     def test_lazy_indexing(self):
         torch.manual_seed(0)

@@ -1375,29 +1375,6 @@ class TensorDictBase(MutableMapping):
         """
         return self.apply(fn, *others, inplace=True)
 
-    def map(
-        self,
-        fn: Callable,
-        *others: TensorDictBase,
-        minibatch: int | None = None,
-        dim: int = 0,
-        inplace: bool = False,
-        **constructor_kwargs,
-    ):
-        if not inplace:
-            out = self.empty(recurse=True)
-        for i in range(0, self.batch_size[dim], minibatch):
-            idx = (slice(None),) * dim + (slice(i, i + minibatch),)
-            others_indexed = [other[idx] for other in others]
-            if inplace:
-                self[idx].apply(fn, *others_indexed, inplace=True)
-            else:
-                applied = self[idx].apply(fn, *others_indexed)
-                out.get_sub_tensordict(idx).update(applied)
-        if inplace:
-            return self
-        return out
-
     def apply(
         self,
         fn: Callable,
@@ -6164,8 +6141,6 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def _set_at_str(self, key, value, idx, *, validated):
-        # check if idx is along the stack dim
-        # return self[idx]._set_str(key, value, inplace=False, validated=validated)
         item = self._get_str(key, NO_DEFAULT)
         if not validated:
             value = self._validate_value(value, check_shape=False)
@@ -6649,34 +6624,6 @@ class LazyStackedTensorDict(TensorDictBase):
             if names is not None:
                 out.names = names
             return out
-
-    def map(
-        self,
-        fn: Callable,
-        *others: TensorDictBase,
-        minibatch: int | None = None,
-        dim: int = 0,
-        inplace: bool = False,
-        **constructor_kwargs,
-    ):
-        if not inplace:
-            out = self.empty(recurse=True)
-        for i in range(0, self.batch_size[dim], minibatch):
-            idx = (slice(None),) * dim + (slice(i, i + minibatch),)
-            others_indexed = [other[idx] for other in others]
-            if inplace:
-                self[idx].apply(fn, *others_indexed, inplace=True)
-            else:
-                applied = self[idx].apply(fn, *others_indexed)
-                out.get_sub_tensordict(idx).update(applied)
-        if inplace:
-            return self
-        return out
-
-    def empty(self, recurse=False):
-        return torch.stack(
-            [td.empty(recurse=recurse) for td in self.tensordicts], self.stack_dim
-        )
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = False
