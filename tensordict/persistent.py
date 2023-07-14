@@ -9,7 +9,7 @@ from __future__ import annotations
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from tensordict._tensordict import _unravel_key_to_tuple
 

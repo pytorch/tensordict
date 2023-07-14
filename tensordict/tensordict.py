@@ -3310,55 +3310,21 @@ class TensorDictBase(MutableMapping):
 
         if isinstance(index, tuple) and not index:
             return self
+        if not isinstance(index, tuple):
+            index = (index,)
+        index = tuple(
+            torch.tensor(idx) if isinstance(idx, (np.ndarray, range)) else idx
+            for idx in index
+        )
+        if Ellipsis in index:
+            index = convert_ellipsis_to_idx(index, self.batch_size)
+        if all(idx == slice(None) for idx in index):
+            return self
 
-        if isinstance(index, tuple):
-            if len(index) == 1:
-                # index = index[0]
-                if index[0] == slice(None):
-                    return self
-
-        if not self.batch_size and (
-            index is not None and not all(idx is None for idx in index)
-        ):
+        if not self.batch_size and (not all(idx is None for idx in index)):
             raise RuntimeError(
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
             )
-
-        if _is_number(index):
-            return self._index_tensordict((index,))
-
-        if isinstance(index, list):
-            # idx = torch.tensor(idx, device=self.device)
-            return self._index_tensordict(index)
-
-        if isinstance(index, np.ndarray):
-            index = torch.tensor(index, device=self.device)
-            return self._index_tensordict(index)
-
-        if isinstance(index, range):
-            index = torch.tensor(index, device=self.device)
-            return self._index_tensordict(index)
-
-        if isinstance(index, tuple) and any(
-            isinstance(sub_index, (list, range)) for sub_index in index
-        ):
-            index = tuple(
-                torch.tensor(sub_index, device=self.device)
-                if isinstance(sub_index, (list, range))
-                else sub_index
-                for sub_index in index
-            )
-
-        if isinstance(index, tuple) and sum(
-            isinstance(_idx, str) for _idx in index
-        ) not in [
-            len(index),
-            0,
-        ]:
-            raise IndexError(_STR_MIXED_INDEX_ERROR)
-
-        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
-            index = convert_ellipsis_to_idx(index, self.batch_size)
 
         return self._index_tensordict(index)
 
@@ -8261,7 +8227,7 @@ def _broadcast_tensors(index):
     tensors = {
         i: tensor if isinstance(tensor, Tensor) else torch.tensor(tensor)
         for i, tensor in enumerate(index)
-        if isinstance(tensor, (range, torch.Tensor))
+        if isinstance(tensor, (range, list, np.ndarray, torch.Tensor))
     }
     if tensors:
         shape = torch.broadcast_shapes(*[tensor.shape for tensor in tensors.values()])
@@ -8292,6 +8258,7 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
     stack_dim_index = 0
     new_stack_dim = 0
     count = -1
+    has_first_tensor = False
     while True:
         if index[stack_dim_index] is None:
             stack_dim_index += 1
@@ -8307,11 +8274,14 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
             break
         if isinstance(index[stack_dim_index], int) or (
             isinstance(index[stack_dim_index], (Tensor, np.ndarray))
-            and not index[stack_dim_index].ndim
+            and (not index[stack_dim_index].ndim or has_first_tensor)
         ):
             new_stack_dim_incr = 0
         else:
             new_stack_dim_incr = 1
+            has_first_tensor = has_first_tensor or isinstance(
+                index[stack_dim_index], (Tensor, np.ndarray)
+            )
         new_stack_dim += new_stack_dim_incr
         stack_dim_index += 1
 
