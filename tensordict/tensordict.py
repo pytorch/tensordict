@@ -3317,11 +3317,12 @@ class TensorDictBase(MutableMapping):
                 if index[0] == slice(None):
                     return self
 
-        if not self.batch_size and (index is not None and not all(idx is None for idx in index)):
+        if not self.batch_size and (
+            index is not None and not all(idx is None for idx in index)
+        ):
             raise RuntimeError(
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
             )
-
 
         if _is_number(index):
             return self._index_tensordict((index,))
@@ -6704,7 +6705,6 @@ class LazyStackedTensorDict(TensorDictBase):
         if new_stack_dim is not None:
             if isinstance(stack_index, slice):
                 # we can't iterate but we can index the list directly
-                print(stack_index, td_index)
                 out = LazyStackedTensorDict(
                     *[td[td_index] for td in self.tensordicts[stack_index]],
                     stack_dim=new_stack_dim,
@@ -6721,11 +6721,15 @@ class LazyStackedTensorDict(TensorDictBase):
                     if stack_idx.ndim:
                         assert len(td_index) == len(stack_idx)
                         out = LazyStackedTensorDict(
-                            *[_nested_stack(t, _idx, td_index[i]) for i, _idx in enumerate(stack_idx.unbind(0))],
+                            *[
+                                _nested_stack(t, _idx, td_index[i])
+                                for i, _idx in enumerate(stack_idx.unbind(0))
+                            ],
                             stack_dim=new_stack_dim,
                         )
                         return out
                     return t[stack_idx][td_index]
+
                 # print(index, td_index, stack_index)
                 out = _nested_stack(self.tensordicts, stack_index, td_index)
             else:
@@ -8243,25 +8247,31 @@ def _is_number(item):
     return False
 
 
-
 def _expand_index(index, batch_size):
-    len_index = sum(
-        True for idx in index if idx is not None
-    )
+    len_index = sum(True for idx in index if idx is not None)
     if len_index > len(batch_size):
         raise ValueError
     if len_index < len(batch_size):
         index = index + (slice(None),) * (len(batch_size) - len_index)
     return index
 
+
 def _broadcast_tensors(index):
     # tensors and range need to be broadcast
-    tensors = {i: tensor if isinstance(tensor, Tensor) else torch.tensor(tensor) for i, tensor in enumerate(index) if isinstance(tensor, (range, torch.Tensor))}
+    tensors = {
+        i: tensor if isinstance(tensor, Tensor) else torch.tensor(tensor)
+        for i, tensor in enumerate(index)
+        if isinstance(tensor, (range, torch.Tensor))
+    }
     if tensors:
         shape = torch.broadcast_shapes(*[tensor.shape for tensor in tensors.values()])
         tensors = {i: tensor.expand(shape) for i, tensor in tensors.items()}
-        index = tuple(idx if i not in tensors else tensors[i] for i, idx in enumerate(index))
+        index = tuple(
+            idx if i not in tensors else tensors[i] for i, idx in enumerate(index)
+        )
     return index
+
+
 def _convert_index_lazystack(index, stack_dim, batch_size):
     out = {
         "remaining_index": None,
@@ -8295,7 +8305,10 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
             )
             stack_index = index[stack_dim_index]
             break
-        if isinstance(index[stack_dim_index], int):
+        if isinstance(index[stack_dim_index], int) or (
+            isinstance(index[stack_dim_index], (Tensor, np.ndarray))
+            and not index[stack_dim_index].ndim
+        ):
             new_stack_dim_incr = 0
         else:
             new_stack_dim_incr = 1
@@ -8311,14 +8324,16 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
         def _dispatch(remaining_index, stack_index, i=None):
             if i is not None:
                 remaining_index = tuple(
-                        idx[i] if isinstance(idx, Tensor) else idx for idx in remaining_index
-                        )
+                    idx[i] if isinstance(idx, Tensor) else idx
+                    for idx in remaining_index
+                )
             if isinstance(stack_index, list):
                 out = []
                 for j, _stack_index in enumerate(stack_index):
                     out.append(_dispatch(remaining_index, _stack_index, j))
                 return tuple(out)
             return remaining_index
+
         remaining_index = _dispatch(remaining_index, stack_index.tolist())
     out["remaining_index"] = remaining_index
     return out
