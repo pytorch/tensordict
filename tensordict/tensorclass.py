@@ -563,7 +563,8 @@ def _repr(self) -> str:
             4 * " ",
         )
         string = ",\n".join(
-            field_str + [non_tensor_field_str, batch_size_str, device_str, is_shared_str]
+            field_str
+            + [non_tensor_field_str, batch_size_str, device_str, is_shared_str]
         )
     else:
         string = ",\n".join(field_str + [batch_size_str, device_str, is_shared_str])
@@ -660,6 +661,7 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
         f"Supported type for key are str and tuple, got {key} of type {type(key)}"
     )
 
+
 def _del_(self, key):
     key = _unravel_key_to_tuple(key)
     if len(key) > 1:
@@ -674,6 +676,7 @@ def _del_(self, key):
     else:
         raise KeyError(f"Key {key} could not be found in tensorclass {self}.")
     return
+
 
 def _set_at_(self, key: NestedKey, value: Any, idx: IndexType):
     if key in self._non_tensordict:

@@ -966,15 +966,13 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_map(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         if td_name == "td_h5" and not inplace:
-            with pytest.raises(ValueError, match="PersistentTensorDict.map can only be applied in-place."):
-                td.map(
-                    lambda x: x * 0,
-                    inplace=inplace,
-                    minibatch=2,
-                    dim=3
-                    )
+            with pytest.raises(
+                ValueError,
+                match="PersistentTensorDict.map can only be applied in-place.",
+            ):
+                td.map(lambda x: x * 0, inplace=inplace, minibatch=2, dim=3)
             return
-        tdout = td.map(lambda x: x*0, inplace=inplace, minibatch=2, dim=3)
+        tdout = td.map(lambda x: x * 0, inplace=inplace, minibatch=2, dim=3)
         assert (tdout == 0).all()
         if inplace:
             assert tdout is td
@@ -4461,11 +4459,36 @@ class TestLazyStackedTensorDict:
     @pytest.mark.parametrize("dim", [0, 1])
     @pytest.mark.parametrize("inplace", [False, True])
     def test_lazy_map(self, stack_dim, inplace, dim):
+        td1 = TensorDict({"a": torch.ones(3, 5)}, [3])
+        td2 = TensorDict({"a": torch.ones(3, 5)}, [3])
+        td_a = torch.stack([td1, td2], stack_dim)
+        td_b = td_a.apply(lambda x: x * 0 + 2)
+        td_out = td_a.map(
+            lambda x, y: x + y, td_b, inplace=inplace, dim=dim, minibatch=1
+        )
+        assert isinstance(td_out, LazyStackedTensorDict)
+        assert td_out.stack_dim == stack_dim if stack_dim == 0 else 1
+        assert (td_out == 3).all()
+        if stack_dim == 0:
+            assert (td_out[0].get("a") == 3).all()
+            assert (td_out[1].get("a") == 3).all()
+            assert (td_out[0].get("b") == 3).all()
+        else:
+            assert (td_out[:, 0].get("a") == 3).all()
+            assert (td_out[:, 1].get("a") == 3).all()
+            assert (td_out[:, 0].get("b") == 3).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, -1])
+    @pytest.mark.parametrize("dim", [0, 1])
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_lazy_map_het(self, stack_dim, inplace, dim):
         td1 = TensorDict({"a": torch.ones(3, 4), "b": torch.ones(3, 3)}, [3])
         td2 = TensorDict({"a": torch.ones(3, 5)}, [3])
         td_a = torch.stack([td1, td2], stack_dim)
-        td_b = td_a.apply(lambda x: x*0+2)
-        td_out = td_a.map(lambda x, y: x+y, td_b, inplace=inplace, dim=dim, minibatch=1)
+        td_b = td_a.apply(lambda x: x * 0 + 2)
+        td_out = td_a.map(
+            lambda x, y: x + y, td_b, inplace=inplace, dim=dim, minibatch=1
+        )
         assert isinstance(td_out, LazyStackedTensorDict)
         assert td_out.stack_dim == stack_dim if stack_dim == 0 else 1
         assert (td_out == 3).all()
@@ -4479,16 +4502,21 @@ class TestLazyStackedTensorDict:
             assert (td_out[:, 0].get("b") == 3).all()
 
     def test_lazy_indexing(self):
-        td_leaf_1 = TensorDict({"a": torch.ones(3, 4), "b": torch.ones(3, 3)}, [3])
-        td_leaf_2 = TensorDict({"a": torch.ones(3, 5)}, [3])
-        td_node0 = torch.stack([td_leaf_1, td_leaf_2], 1)
-        td_node1 = td_node0.clone()
-        td_root = torch.stack([td_node0, td_node1], 0)
-
-        idx = (slice(None), 0)
-        assert isinstance(td_root[idx], LazyStackedTensorDict)
-        assert isinstance(td_root[idx][:, 0], TensorDict)
-
+        torch.manual_seed(0)
+        td_leaf_1 = TensorDict({"a": torch.ones(2, 3)}, [])
+        inner = torch.stack([td_leaf_1] * 4, 0)
+        middle = torch.stack([inner] * 3, 0)
+        outer = torch.stack([middle] * 2, 0)
+        ref_tensor = torch.zeros(2, 3, 4)
+        tensor_index = torch.randint(2, (5, 2))
+        idx_list = (1, slice(None), slice(1, 2), tensor_index, range(1, 2), None)
+        for pos1 in idx_list:
+            for pos2 in idx_list:
+                for pos3 in idx_list:
+                    index = (pos1, pos2, pos3)
+                    print(index)
+                    result = outer[index]
+                    assert result.batch_size == ref_tensor[index].shape, index
 
     # We don't support caching for unlocked lazy stacks
     # def test_cached_unlocked_stacked(self):
@@ -5429,19 +5457,22 @@ def test_unbind_batchsize():
     assert tds[0].batch_size == torch.Size([])
     assert tds[0]["a"].batch_size == torch.Size([3])
 
+
 def test_empty():
     td = TensorDict(
         {
             "a": torch.zeros(()),
             ("b", "c"): torch.zeros(()),
             ("b", "d", "e"): torch.zeros(()),
-        }, []
+        },
+        [],
     )
     td_empty = td.empty(recurse=False)
     assert len(list(td_empty.keys())) == 0
     td_empty = td.empty(recurse=True)
     assert len(list(td_empty.keys())) == 1
     assert len(list(td_empty.get("b").keys())) == 1
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
