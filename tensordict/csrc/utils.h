@@ -5,6 +5,7 @@
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <torch/torch.h>
 
 namespace py = pybind11;
 
@@ -75,4 +76,33 @@ py::list unravel_key_list(const py::list& keys) {
 
 py::list unravel_key_list(const py::tuple& keys) {
     return unravel_key_list(py::list(keys));
+}
+
+torch::Tensor _populate_index(torch::Tensor offsets, torch::Tensor offsets_cs, torch::Tensor index) {
+    int64_t total = 0;
+    for (int _cur = 0; _cur < index.numel(); ++_cur) {
+        int64_t loc = index[_cur].item<int64_t>();
+        int64_t incr = offsets[loc].item<int64_t>();
+        total += incr;
+    }
+    torch::Tensor out = torch::empty({total}, torch::dtype(torch::kLong));
+
+    int64_t* out_data = out.data_ptr<int64_t>();
+    int64_t cur_offset;
+    int64_t count = -1;
+    int64_t maxcount = -1;
+    int64_t cur = -1;
+    int64_t n = offsets.numel();
+    for (int i = 0; i < total; ++i) {
+        if (cur < n && count == maxcount) {
+            cur++;
+            count = -1;
+            int64_t cur_idx = index[cur].item<int64_t>();
+            maxcount = offsets[cur_idx].item<int64_t>() - 1;
+            cur_offset = offsets_cs[cur_idx].item<int64_t>();
+        }
+        count++;
+        out_data[i] = cur_offset + count;
+    }
+    return out;
 }
