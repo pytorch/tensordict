@@ -5243,9 +5243,9 @@ torch.Size([3, 2])
             )
             else tuple(idx)
         )
-        self._batch_size = _getitem_batch_size(self._source.batch_size, idx)
         if any(item is Ellipsis for item in idx):
             idx = convert_ellipsis_to_idx(idx, self._source.batch_size)
+        self._batch_size = _getitem_batch_size(self._source.batch_size, idx)
         self.idx = idx
 
         if batch_size is not None and batch_size != self.batch_size:
@@ -8226,6 +8226,7 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
         "stack_index": None,
         "new_stack_dim": None,
     }
+    index = convert_ellipsis_to_idx(index, batch_size)
     if not isinstance(index, tuple):
         index = (index,)
     if any(
@@ -8233,7 +8234,6 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
         for idx in index
     ):
         return None
-    index = convert_ellipsis_to_idx(index, batch_size)
     index = _expand_index(index, batch_size)
     index = _broadcast_tensors(index)
     # find the index corresponding to the stack dim

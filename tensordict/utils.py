@@ -99,8 +99,12 @@ def _getitem_batch_size(batch_size, index):
         torch.Size([1, 4, 3, 2, 1, 1])
     """
     if not isinstance(index, tuple):
+        if isinstance(index, int):
+            return batch_size[1:]
+        if isinstance(index, slice) and index == slice(None):
+            return batch_size
         index = (index,)
-    index = convert_ellipsis_to_idx(index, batch_size)
+    # index = convert_ellipsis_to_idx(index, batch_size)
     # broadcast shapes
     shapes_dict = {}
     look_for_disjoint = False
@@ -108,13 +112,7 @@ def _getitem_batch_size(batch_size, index):
     bools = []
     for i, idx in enumerate(index):
         boolean = False
-        if isinstance(
-            idx,
-            (
-                range,
-                list,
-            ),
-        ):
+        if isinstance(idx, (range, list)):
             shape = len(idx)
         elif isinstance(idx, (torch.Tensor, np.ndarray)):
             if idx.dtype == torch.bool or idx.dtype == np.dtype("bool"):
@@ -330,6 +328,11 @@ def convert_ellipsis_to_idx(
     Returns:
         new_index (tuple): Output index
     """
+    istuple = isinstance(idx, tuple)
+    if (not istuple and idx is not Ellipsis) or (
+        istuple and all(_idx is not Ellipsis for _idx in idx)
+    ):
+        return idx
     new_index = ()
     num_dims = len(batch_size)
 

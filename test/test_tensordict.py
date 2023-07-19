@@ -3353,12 +3353,8 @@ def test_mp(td_type):
     ],
 )
 def test_getitem_batch_size(idx):
-    shape = [
-        10,
-        7,
-        11,
-        5,
-    ]
+    shape = [10, 7, 11, 5]
+    shape = torch.Size(shape)
     mocking_tensor = torch.zeros(*shape)
     expected_shape = mocking_tensor[idx].shape
     resulting_shape = _getitem_batch_size(shape, idx)
