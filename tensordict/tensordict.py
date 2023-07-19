@@ -3303,15 +3303,17 @@ class TensorDictBase(MutableMapping):
             >>> print(td.get("a"))  # values have not changed
 
         """
-        if isinstance(index, (tuple, str)):
+        istuple = isinstance(index, tuple)
+        if istuple or isinstance(index, str):
             idx_unravel = _unravel_key_to_tuple(index)
             if idx_unravel:
                 return self._get_tuple(idx_unravel, NO_DEFAULT)
-
-        if isinstance(index, tuple) and not index:
+        if (istuple and not index) or (not istuple and index is Ellipsis):
             # empty tuple returns self
             return self
-        if not isinstance(index, tuple):
+        if not istuple:
+            if isinstance(index, int):
+                return self._index_tensordict(index)
             # we only want tuple indices
             index = (index,)
         # # convert range/np.ndarray to tensor: this is not cheap
@@ -3319,7 +3321,7 @@ class TensorDictBase(MutableMapping):
         #     torch.tensor(idx) if isinstance(idx, (np.ndarray, range)) else idx
         #     for idx in index
         # )
-        if any(idx is Ellipsis for idx in index):
+        if istuple and any(idx is Ellipsis for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if all(isinstance(idx, slice) and idx == slice(None) for idx in index):
             return self
@@ -3339,7 +3341,8 @@ class TensorDictBase(MutableMapping):
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
 
-        if isinstance(index, (tuple, str)):
+        istuple = isinstance(index, tuple)
+        if istuple or isinstance(index, str):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
             if index_unravel:
@@ -3353,18 +3356,18 @@ class TensorDictBase(MutableMapping):
                 )
                 return
 
-            if any(isinstance(sub_index, (list, range)) for sub_index in index):
-                index = tuple(
-                    torch.tensor(sub_index, device=self.device)
-                    if isinstance(sub_index, (list, range))
-                    else sub_index
-                    for sub_index in index
-                )
+            # if any(isinstance(sub_index, (list, range)) for sub_index in index):
+            #     index = tuple(
+            #         torch.tensor(sub_index, device=self.device)
+            #         if isinstance(sub_index, (list, range))
+            #         else sub_index
+            #         for sub_index in index
+            #     )
 
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
-        elif isinstance(index, (list, range)):
-            index = torch.tensor(index, device=self.device)
+        # elif isinstance(index, (list, range)):
+        #     index = torch.tensor(index, device=self.device)
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)

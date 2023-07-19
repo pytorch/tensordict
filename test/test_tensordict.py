@@ -1049,8 +1049,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td_gather2 = torch.gather(td, dim=dim, index=index, out=out)
         assert (td_gather2 != 0).any()
 
-    @pytest.mark.parametrize("from_list", [True, False])
-    def test_masking_set(self, td_name, device, from_list):
+    def test_masking_set(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
@@ -1064,15 +1063,11 @@ class TestTensorDicts(TestTensorDictsBase):
             ),
             batch_size=[n, *td.batch_size[d:]],
         )
-        if from_list:
-            td_mask = mask.cpu().numpy().tolist()
-        else:
-            td_mask = mask
         if td_name in ("nested_stacked_td", "stacked_td"):
             with pytest.raises(RuntimeError, match="is not supported"):
-                td[td_mask] = pseudo_td
+                td[mask] = pseudo_td
         else:
-            td[td_mask] = pseudo_td
+            td[mask] = pseudo_td
             for item in td.values():
                 assert (item[mask] == 0).all()
 

@@ -10,7 +10,11 @@ import pytest
 import torch
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key, unravel_key_list
 
-from tensordict.utils import _getitem_batch_size, _make_cache_key
+from tensordict.utils import (
+    _getitem_batch_size,
+    _make_cache_key,
+    convert_ellipsis_to_idx,
+)
 
 
 @pytest.mark.parametrize("tensor", [torch.rand(2, 3, 4, 5), torch.rand(2, 3, 4, 5, 6)])
@@ -90,6 +94,7 @@ def test_getitem_batch_size(tensor, index1, index2, index3, index4):
     ) == 1 and tensor.ndim == 5:
         pytest.skip("index possibly incompatible with tensor shape.")
     index = (index1, index2, index3, index4)
+    index = convert_ellipsis_to_idx(index, tensor.shape)
     assert tensor[index].shape == _getitem_batch_size(tensor.shape, index), index
 
 
@@ -109,6 +114,7 @@ def test_getitem_batch_size_mask(tensor, idx, ndim, slice_leading_dims):
         index = (slice(None),) * idx + (mask,)
     else:
         index = (0,) * idx + (mask,)
+    index = convert_ellipsis_to_idx(index, tensor.shape)
     assert tensor[index].shape == _getitem_batch_size(tensor.shape, index), index
 
 
