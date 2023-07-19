@@ -3244,7 +3244,6 @@ class TensorDictBase(MutableMapping):
             if num_boolean_dim:
                 names = [None] + names[num_boolean_dim:]
             else:
-
                 # def is_int(subidx):
                 #     if isinstance(subidx, Number):
                 #         return True
@@ -3361,7 +3360,6 @@ class TensorDictBase(MutableMapping):
         index: IndexType,
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
-
         if isinstance(index, (tuple, str)):
             # try:
             index_unravel = _unravel_key_to_tuple(index)
@@ -4756,7 +4754,6 @@ def _gather(
         return out
 
     if out is None:
-
         names = input.names if input._has_names() else None
 
         return TensorDict(
@@ -6242,7 +6239,6 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         default: str | CompatibleType = NO_DEFAULT,
     ) -> CompatibleType:
-
         # we can handle the case where the key is a tuple of length 1
         tensors = []
         for td in self.tensordicts:
@@ -6815,7 +6811,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
 
     def __eq__(self, other):
-
         if is_tensorclass(other):
             return other == self
         if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
@@ -6851,7 +6846,6 @@ class LazyStackedTensorDict(TensorDictBase):
         return False
 
     def __ne__(self, other):
-
         if is_tensorclass(other):
             return other != self
         if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
@@ -6932,7 +6926,6 @@ class LazyStackedTensorDict(TensorDictBase):
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
     ) -> int:
-
         if _futures is None:
             is_root = True
             _futures = []
@@ -7009,7 +7002,6 @@ class LazyStackedTensorDict(TensorDictBase):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-
         # using try/except for get/del is suboptimal, but
         # this is faster that checkink if key in self keys
         key = _unravel_key_to_tuple(key)
@@ -7348,6 +7340,38 @@ class LazyStackedTensorDict(TensorDictBase):
         # this can be a perf bottleneck
         for td in self.tensordicts:
             td._remove_lock(id(self))
+
+    def __repr__(self):
+        fields = _td_fields(self)
+        field_str = indent(f"fields={{{fields}}}", 4 * " ")
+        lazy_fields_str = indent(f"lazy_fields={{{self._repr_lazy_fields()}}}", 4 * " ")
+        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
+        device_str = indent(f"device={self.device}", 4 * " ")
+        is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
+        stack_dim = indent(f"stack_dim={self.stack_dim}", 4 * " ")
+        string = ",\n".join(
+            [
+                field_str,
+                lazy_fields_str,
+                batch_size_str,
+                device_str,
+                is_shared_str,
+                stack_dim,
+            ]
+        )
+        return f"{type(self).__name__}(\n{string})"
+
+    def _repr_lazy_fields(self):
+        keys = set(self.keys())
+        lazy_keys = [
+            _td_fields(td, [k for k in td.keys() if k not in keys])
+            for td in self.tensordicts
+        ]
+        lazy_key_str = ",\n".join(
+            [indent(f"{i} -> {line}", 4 * " ") for i, line in enumerate(lazy_keys)]
+        )
+
+        return "\n" + lazy_key_str
 
     lock_ = TensorDictBase.lock_
     lock = _renamed_inplace_method(lock_)
@@ -7954,7 +7978,6 @@ class _TransposedTensorDict(_CustomOpTensorDict):
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
-
         trsp = self.custom_op_kwargs["dim0"], self.custom_op_kwargs["dim1"]
         if dim == trsp[0]:
             dim = trsp[1]
@@ -8121,9 +8144,11 @@ def _make_repr(key: str, item: CompatibleType, tensordict: TensorDictBase) -> st
     return f"{key}: {_get_repr(item)}"
 
 
-def _td_fields(td: TensorDictBase) -> str:
+def _td_fields(td: TensorDictBase, keys=None) -> str:
     strs = []
-    for key in td.keys():
+    if keys is None:
+        keys = td.keys()
+    for key in keys:
         try:
             item = td.get(key)
             strs.append(_make_repr(key, item, td))
