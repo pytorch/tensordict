@@ -3314,11 +3314,11 @@ class TensorDictBase(MutableMapping):
         if not isinstance(index, tuple):
             # we only want tuple indices
             index = (index,)
-        # convert range/np.ndarray to tensor: this is not cheap
-        index = tuple(
-            torch.tensor(idx) if isinstance(idx, (np.ndarray, range)) else idx
-            for idx in index
-        )
+        # # convert range/np.ndarray to tensor: this is not cheap
+        # index = tuple(
+        #     torch.tensor(idx) if isinstance(idx, (np.ndarray, range)) else idx
+        #     for idx in index
+        # )
         if any(idx is Ellipsis for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if all(isinstance(idx, slice) and idx == slice(None) for idx in index):

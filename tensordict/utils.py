@@ -102,7 +102,7 @@ def _getitem_batch_size(batch_size, index):
         index = (index,)
     index = convert_ellipsis_to_idx(index, batch_size)
     # broadcast shapes
-    shapes_dict = dict()
+    shapes_dict = {}
     look_for_disjoint = False
     disjoint = False
     bools = []
