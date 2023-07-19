@@ -39,7 +39,9 @@ from tensordict.utils import _getitem_batch_size, _make_cache_key
         [0, 1],
         np.arange(0, 1),
         torch.arange(2),
-        [True, False, True],
+        range(2),
+        torch.tensor([[0, 1], [0, 1]]),
+        # [True, False, True],
         Ellipsis,
     ],
 )
@@ -54,7 +56,9 @@ from tensordict.utils import _getitem_batch_size, _make_cache_key
         [0, 1],
         np.arange(1, 3),
         torch.arange(2),
-        [True, False, True, False],
+        range(2),
+        torch.tensor([[0, 1], [0, 1]]),
+        # [True, False, True, False],
         Ellipsis,
     ],
 )
@@ -69,7 +73,9 @@ from tensordict.utils import _getitem_batch_size, _make_cache_key
         [0, 1],
         np.arange(0, 4, 2),
         torch.arange(2),
-        [True, False, False, False, True],
+        range(2),
+        torch.tensor([[0, 1], [0, 1]]),
+        # [True, False, False, False, True],
         Ellipsis,
     ],
 )
@@ -103,7 +109,7 @@ def test_getitem_batch_size_mask(tensor, idx, ndim, slice_leading_dims):
         index = (slice(None),) * idx + (mask,)
     else:
         index = (0,) * idx + (mask,)
-    assert tensor[index].shape == _getitem_batch_size(tensor.shape, index)
+    assert tensor[index].shape == _getitem_batch_size(tensor.shape, index), index
 
 
 def test_make_cache_key():

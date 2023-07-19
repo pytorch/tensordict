@@ -16,7 +16,6 @@ from collections.abc import KeysView
 from copy import copy
 from functools import wraps
 from importlib import import_module
-from numbers import Number
 from typing import Any, Callable, List, Sequence, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
@@ -80,7 +79,7 @@ def _sub_index(tensor: torch.Tensor, idx: IndexType) -> torch.Tensor:
     return tensor[idx]
 
 
-def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
+def _getitem_batch_size(batch_size, index):
     """Given an input shape and an index, returns the size of the resulting indexed tensor.
 
     This function is aimed to be used when indexing is an
@@ -99,130 +98,217 @@ def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
         >>> _getitem_batch_size([4, 3, 2, 1], idx)
         torch.Size([1, 4, 3, 2, 1, 1])
     """
-    # let's start with simple cases
-    if isinstance(items, tuple) and len(items) == 1:
-        items = items[0]
-    if isinstance(items, int):
-        return shape[1:]
-    if isinstance(items, torch.Tensor) and items.dtype is torch.bool:
-        return torch.Size([items.sum(), *shape[items.ndimension() :]])
-    if (
-        isinstance(items, (torch.Tensor, np.ndarray)) and len(items.shape) <= 1
-    ) or isinstance(items, list):
-        if isinstance(items, torch.Tensor) and not items.shape:
-            return shape[1:]
-        if _is_lis_of_list_of_bools(items):
-            warnings.warn(
-                "Got a list of list of bools: this indexing behaviour will be deprecated soon.",
-                category=DeprecationWarning,
-            )
-            items = torch.tensor(items)
-            return torch.Size([items.sum(), *shape[items.ndimension() :]])
-        if len(items):
-            return torch.Size([len(items), *shape[1:]])
+    if not isinstance(index, tuple):
+        index = (index,)
+    index = convert_ellipsis_to_idx(index, batch_size)
+    # broadcast shapes
+    shapes_dict = dict()
+    look_for_disjoint = False
+    disjoint = False
+    bools = []
+    for i, idx in enumerate(index):
+        boolean = False
+        if isinstance(
+            idx,
+            (
+                range,
+                list,
+            ),
+        ):
+            shape = len(idx)
+        elif isinstance(idx, (torch.Tensor, np.ndarray)):
+            if idx.dtype == torch.bool or idx.dtype == np.dtype("bool"):
+                shape = torch.Size([idx.sum()])
+                boolean = True
+            else:
+                shape = idx.shape
+        elif isinstance(idx, slice):
+            look_for_disjoint = not disjoint and (len(shapes_dict) > 0)
+            shape = None
         else:
-            return shape[1:]
-
-    if not isinstance(items, tuple):
-        items = (items,)
-
-    if any(item is Ellipsis for item in items):
-        items = convert_ellipsis_to_idx(items, shape)
-
-    sanitized_items = []
-    for _item in items:
-        if isinstance(_item, (list, np.ndarray)):
-            _item = torch.tensor(_item)
-        elif isinstance(_item, torch.Tensor):
-            # np.broadcast will complain if we give it CUDA tensors
-            _item = _item.cpu()
-        if isinstance(_item, torch.Tensor) and _item.dtype is torch.bool:
-            # when using NumPy's advanced indexing patterns, any index containing a
-            # boolean array can be equivalently replaced with index.nonzero()
-            # note we add unbind(-1) since behaviour of numpy.ndarray.nonzero returns
-            # tuples of arrays whereas torch.Tensor.nonzero returns a single tensor
-            # https://numpy.org/doc/stable/user/basics.indexing.html#boolean-array-indexing
-            sanitized_items.extend(_item.nonzero().unbind(-1))
-        else:
-            sanitized_items.append(_item)
-
-    # when multiple tensor-like indices are present, they must be broadcastable onto a
-    # common shape. if this is satisfied then they are broadcast to that shape, and used
-    # to extract diagonal entries of the array.
-    # if the tensor indices are contiguous, or separated by scalars, they are replaced
-    # in-place by the broadcast shape. if they are separated by non-scalar indices, the
-    # broadcast shape is prepended to the new batch size
-    # https://numpy.org/doc/stable/user/basics.indexing.html#integer-array-indexing
-    tensor_indices = []
-    contiguous, prev = True, None
-    for i, _item in enumerate(sanitized_items):
-        if isinstance(_item, torch.Tensor):
-            tensor_indices.append(_item)
-            if prev is not None and i != prev + 1:
-                contiguous = False
-            prev = i
-        elif isinstance(_item, Number) and prev is not None and i == prev + 1:
-            prev = i
-
-    bs = []
-    if tensor_indices:
-        try:
-            b = np.broadcast(*tensor_indices)
-        except ValueError as err:
-            raise ValueError(
-                "When indexing with tensor-like indices, each of those indices must be "
-                f"broadcastable to a common shape. Got indices: {tensor_indices}."
-            ) from err
-        if not contiguous:
-            bs.extend(b.shape)
-            b = None
-    else:
-        b = None
-
-    iter_bs = iter(shape)
-
-    cursor = -1
-    for _item in sanitized_items:
-        cursor += 1
-        if isinstance(_item, slice):
-            batch = next(iter_bs)
-            bs.append(len(range(*_item.indices(batch))))
-        elif isinstance(_item, range):
-            batch = next(iter_bs)
-            bs.append(min(batch, len(_item)))
-        elif isinstance(_item, (list, torch.Tensor, np.ndarray)):
-            batch = next(iter_bs)
-            if b is not None:
-                # we haven't yet accounted for tensor indices, so we insert in-place
-                bs.extend(b.shape)
-                b = None
-        elif _item is None:
-            bs.append(1)
-        elif isinstance(_item, Number):
-            try:
-                batch = next(iter_bs)
-            except StopIteration:
-                raise RuntimeError(
-                    f"The shape {shape} is incompatible with " f"the index {items}."
-                )
+            shape = None
+        if shape is not None:
+            if look_for_disjoint:
+                disjoint = True
+            shapes_dict[i] = shape
+        bools.append(boolean)
+    bs_shape = None
+    if shapes_dict:
+        bs_shape = torch.broadcast_shapes(*shapes_dict.values())
+    out = []
+    count = -1
+    for i, idx in enumerate(index):
+        if idx is None:
+            out.append(1)
             continue
-        elif _item is Ellipsis:
-            if cursor == len(sanitized_items) - 1:
-                # then we can just skip
-                continue
-            n_upcoming = len(sanitized_items) - cursor - 1
-            while cursor < len(shape) - n_upcoming:
-                batch = next(iter_bs)
-                bs.append(batch)
-                cursor += 1
-        else:
-            raise NotImplementedError(
-                f"batch dim cannot be computed for type {type(_item)}"
-            )
+        count += 1 if not bools[i] else idx.ndim
+        if i in shapes_dict:
+            if bs_shape is not None:
+                if disjoint:
+                    # the indices will be put at the beginning
+                    out = list(bs_shape) + out
+                else:
+                    # if there is a single tensor or similar, we just extend
+                    out.extend(bs_shape)
+                bs_shape = None
+            continue
+        elif isinstance(idx, int):
+            # could be spared for efficiency
+            continue
+        elif isinstance(idx, slice):
+            batch = batch_size[count]
+            out.append(len(range(*idx.indices(batch))))
+    count += 1
+    if batch_size[count:]:
+        out.extend(batch_size[count:])
+    return torch.Size(out)
 
-    list_iter_bs = list(iter_bs)
-    bs += list_iter_bs
-    return torch.Size(bs)
+
+# def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
+#     """Given an input shape and an index, returns the size of the resulting indexed tensor.
+#
+#     This function is aimed to be used when indexing is an
+#     expensive operation.
+#     Args:
+#         shape (torch.Size): Input shape
+#         items (index): Index of the hypothetical tensor
+#
+#     Returns:
+#         Size of the resulting object (tensor or tensordict)
+#
+#     Examples:
+#         >>> idx = (None, ..., None)
+#         >>> torch.zeros(4, 3, 2, 1)[idx].shape
+#         torch.Size([1, 4, 3, 2, 1, 1])
+#         >>> _getitem_batch_size([4, 3, 2, 1], idx)
+#         torch.Size([1, 4, 3, 2, 1, 1])
+#     """
+#     # let's start with simple cases
+#     if isinstance(items, tuple) and len(items) == 1:
+#         items = items[0]
+#     if isinstance(items, int):
+#         return shape[1:]
+#     if isinstance(items, torch.Tensor) and items.dtype is torch.bool:
+#         return torch.Size([items.sum(), *shape[items.ndimension() :]])
+#     if (
+#         isinstance(items, (torch.Tensor, np.ndarray)) and len(items.shape) <= 1
+#     ) or isinstance(items, list):
+#         if isinstance(items, torch.Tensor) and not items.shape:
+#             return shape[1:]
+#         if _is_lis_of_list_of_bools(items):
+#             warnings.warn(
+#                 "Got a list of list of bools: this indexing behaviour will be deprecated soon.",
+#                 category=DeprecationWarning,
+#             )
+#             items = torch.tensor(items)
+#             return torch.Size([items.sum(), *shape[items.ndimension() :]])
+#         if len(items):
+#             return torch.Size([len(items), *shape[1:]])
+#         else:
+#             return shape[1:]
+#
+#     if not isinstance(items, tuple):
+#         items = (items,)
+#
+#     if any(item is Ellipsis for item in items):
+#         items = convert_ellipsis_to_idx(items, shape)
+#
+#     sanitized_items = []
+#     shapes = []
+#     for _item in items:
+#         if isinstance(_item, (list, range, )):
+#             # _item = torch.tensor(_item)
+#             shapes.append(torch.Size([len(_item)]))
+#         elif isinstance(_item, np.ndarray):
+#             shapes.append(torch.Size(np.shape))
+#         elif isinstance(_item, torch.Tensor):
+#             shapes.append(_item.shape)
+#         else:
+#             shapes.append(None)
+#         if isinstance(_item, torch.Tensor) and _item.dtype is torch.bool:
+#             # when using NumPy's advanced indexing patterns, any index containing a
+#             # boolean array can be equivalently replaced with index.nonzero()
+#             # note we add unbind(-1) since behaviour of numpy.ndarray.nonzero returns
+#             # tuples of arrays whereas torch.Tensor.nonzero returns a single tensor
+#             # https://numpy.org/doc/stable/user/basics.indexing.html#boolean-array-indexing
+#             sanitized_items.extend(_item.nonzero().unbind(-1))
+#         else:
+#             sanitized_items.append(_item)
+#
+#     # when multiple tensor-like indices are present, they must be broadcastable onto a
+#     # common shape. if this is satisfied then they are broadcast to that shape, and used
+#     # to extract diagonal entries of the array.
+#     # if the tensor indices are contiguous, or separated by scalars, they are replaced
+#     # in-place by the broadcast shape. if they are separated by non-scalar indices, the
+#     # broadcast shape is prepended to the new batch size
+#     # https://numpy.org/doc/stable/user/basics.indexing.html#integer-array-indexing
+#     tensor_indices = []
+#     contiguous, prev = True, None
+#     for i, (_item, _shape) in enumerate(zip(sanitized_items, shapes)):
+#         if isinstance(_item, (torch.Tensor, range, list, np.ndarray)):
+#             tensor_indices.append(_item)
+#             if prev is not None and i != prev + 1:
+#                 contiguous = False
+#             prev = i
+#         elif isinstance(_item, Number) and prev is not None and i == prev + 1:
+#             prev = i
+#
+#     bs = []
+#     if tensor_indices:
+#         try:
+#             b_shape = torch.broadcast_shapes(*[shape for shape in shapes if shape])
+#         except ValueError as err:
+#             raise ValueError(
+#                 "When indexing with tensor-like indices, each of those indices must be "
+#                 f"broadcastable to a common shape. Got indices: {tensor_indices}."
+#             ) from err
+#         if not contiguous:
+#             bs.extend(b_shape)
+#
+#     iter_bs = iter(shape)
+#
+#     cursor = -1
+#     for _item in sanitized_items:
+#         cursor += 1
+#         if isinstance(_item, slice):
+#             batch = next(iter_bs)
+#             bs.append(len(range(*_item.indices(batch))))
+#         elif isinstance(_item, range):
+#             batch = next(iter_bs)
+#             bs.append(min(batch, len(_item)))
+#         elif isinstance(_item, (list, torch.Tensor, np.ndarray)):
+#             batch = next(iter_bs)
+#             if b is not None:
+#                 # we haven't yet accounted for tensor indices, so we insert in-place
+#                 bs.extend(b.shape)
+#                 b = None
+#         elif _item is None:
+#             bs.append(1)
+#         elif isinstance(_item, Number):
+#             try:
+#                 batch = next(iter_bs)
+#             except StopIteration:
+#                 raise RuntimeError(
+#                     f"The shape {shape} is incompatible with " f"the index {items}."
+#                 )
+#             continue
+#         elif _item is Ellipsis:
+#             if cursor == len(sanitized_items) - 1:
+#                 # then we can just skip
+#                 continue
+#             n_upcoming = len(sanitized_items) - cursor - 1
+#             while cursor < len(shape) - n_upcoming:
+#                 batch = next(iter_bs)
+#                 bs.append(batch)
+#                 cursor += 1
+#         else:
+#             raise NotImplementedError(
+#                 f"batch dim cannot be computed for type {type(_item)}"
+#             )
+#
+#     list_iter_bs = list(iter_bs)
+#     bs += list_iter_bs
+#     return torch.Size(bs)
 
 
 def convert_ellipsis_to_idx(

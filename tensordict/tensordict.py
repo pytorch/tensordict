@@ -3309,16 +3309,19 @@ class TensorDictBase(MutableMapping):
                 return self._get_tuple(idx_unravel, NO_DEFAULT)
 
         if isinstance(index, tuple) and not index:
+            # empty tuple returns self
             return self
         if not isinstance(index, tuple):
+            # we only want tuple indices
             index = (index,)
+        # convert range/np.ndarray to tensor: this is not cheap
         index = tuple(
             torch.tensor(idx) if isinstance(idx, (np.ndarray, range)) else idx
             for idx in index
         )
-        if Ellipsis in index:
+        if any(idx is Ellipsis for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
-        if all(idx == slice(None) for idx in index):
+        if all(isinstance(idx, slice) and idx == slice(None) for idx in index):
             return self
 
         if not self.batch_size and (not all(idx is None for idx in index)):
@@ -3358,27 +3361,6 @@ class TensorDictBase(MutableMapping):
                     for sub_index in index
                 )
 
-            # if sum(isinstance(_index, str) for _index in index) not in [len(index), 0]:
-            #     raise IndexError(_STR_MIXED_INDEX_ERROR)
-            # if isinstance(index[0], str):
-            #     # TODO: would be nicer to have set handle the nested set, but the logic to
-            #     # preserve the error handling below is complex and requires some thought
-            #     try:
-            #         if len(index) == 1:
-            #             return self.set(
-            #                 index[0], value, inplace=isinstance(self, SubTensorDict)
-            #             )
-            #         self.set(index, value, inplace=isinstance(self, SubTensorDict))
-            #     except AttributeError as err:
-            #         if "for populating tensordict with new key-value pair" in str(err):
-            #             raise RuntimeError(
-            #                 "Trying to replace an existing nested tensordict with "
-            #                 "another one with non-matching keys. This leads to "
-            #                 "unspecified behaviours and is prohibited."
-            #             )
-            #         raise err
-            #     return
-
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         elif isinstance(index, (list, range)):
@@ -3402,7 +3384,7 @@ class TensorDictBase(MutableMapping):
                     ) from err
 
             keys = set(self.keys())
-            if not all(key in keys for key in value.keys()):
+            if any(key not in keys for key in value.keys()):
                 subtd = self.get_sub_tensordict(index)
             for key, item in value.items():
                 if key in keys:
