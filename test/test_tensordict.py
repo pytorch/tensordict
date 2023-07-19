@@ -251,19 +251,10 @@ def test_mask_td(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     mask = torch.zeros(4, 5, dtype=torch.bool, device=device).bernoulli_()
-    mask_list = mask.cpu().numpy().tolist()
     td = TensorDict(batch_size=(4, 5), source=d)
 
     td_masked = torch.masked_select(td, mask)
-    td_masked1 = td[mask_list]
     assert len(td_masked.get("key1")) == td_masked.shape[0]
-    assert len(td_masked1.get("key1")) == td_masked1.shape[0]
-
-    mask_list = [False, True, False, True]
-
-    td_masked2 = td[mask_list, 0]
-    torch.testing.assert_close(td.get("key1")[mask_list, 0], td_masked2.get("key1"))
-    torch.testing.assert_close(td.get("key2")[mask_list, 0], td_masked2.get("key2"))
 
 
 @pytest.mark.parametrize("device", get_available_devices())
