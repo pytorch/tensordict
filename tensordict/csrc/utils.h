@@ -78,13 +78,8 @@ py::list unravel_key_list(const py::tuple& keys) {
     return unravel_key_list(py::list(keys));
 }
 
-torch::Tensor _populate_index(torch::Tensor offsets, torch::Tensor offsets_cs, torch::Tensor index) {
-    int64_t total = 0;
-    for (int _cur = 0; _cur < index.numel(); ++_cur) {
-        int64_t loc = index[_cur].item<int64_t>();
-        int64_t incr = offsets[loc].item<int64_t>();
-        total += incr;
-    }
+torch::Tensor _populate_index(torch::Tensor offsets, torch::Tensor offsets_cs) {
+    int64_t total = offsets.sum().item<int64_t>();
     torch::Tensor out = torch::empty({total}, torch::dtype(torch::kLong));
 
     int64_t* out_data = out.data_ptr<int64_t>();
@@ -97,12 +92,26 @@ torch::Tensor _populate_index(torch::Tensor offsets, torch::Tensor offsets_cs, t
         if (cur < n && count == maxcount) {
             cur++;
             count = -1;
-            int64_t cur_idx = index[cur].item<int64_t>();
-            maxcount = offsets[cur_idx].item<int64_t>() - 1;
-            cur_offset = offsets_cs[cur_idx].item<int64_t>();
+            maxcount = offsets[cur].item<int64_t>() - 1;
+            cur_offset = offsets_cs[cur].item<int64_t>();
         }
         count++;
         out_data[i] = cur_offset + count;
     }
     return out;
+}
+py::list _as_shape(torch::Tensor shape_tensor) {
+    torch::Tensor shape_tensor_view = shape_tensor.reshape({-1, shape_tensor.size(-1)});
+    torch::Tensor out = shape_tensor_view[0].clone();
+    torch::Tensor unique = (shape_tensor_view == out).all(0);
+    out.masked_fill_(torch::logical_not(unique), -1);
+    std::vector<int64_t> shape_vector(shape_tensor.sizes().begin(), shape_tensor.sizes().end() - 1);
+    // Extend 'shape_vector' with the values from 'out'.
+    auto out_accessor = out.accessor<int64_t, 1>();
+    for (int64_t i = 0; i < out_accessor.size(0); ++i) {
+        shape_vector.push_back(out_accessor[i]);
+    }
+
+    py::list shape = py::cast(shape_vector);
+    return shape;
 }
