@@ -7369,7 +7369,7 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         lazy_key_str = ",\n".join(
             [
-                indent(f"{i} -> {line}", 4 * " ")
+                indent(f"{i} ->{line}", 4 * " ")
                 for i, line in enumerate(lazy_keys)
                 if line != "\n"
             ]
