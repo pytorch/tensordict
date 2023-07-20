@@ -3271,11 +3271,20 @@ class TensorDictBase(MutableMapping):
                 names = [names[i] if i is not None else None for i in idx_to_take]
         return names
 
-    def _index_tensordict(self, idx: IndexType) -> TensorDictBase:
-        names = self._get_names_idx(idx)
+    def _index_tensordict(self, index: IndexType) -> TensorDictBase:
+        batch_size = self.batch_size
+        if (
+            not batch_size
+            and index is not None
+            and (index is not tuple or any(idx is not None for idx in index))
+        ):
+            raise RuntimeError(
+                f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
+            )
+        names = self._get_names_idx(index)
         return TensorDict(
-            source={key: _get_item(item, idx) for key, item in self.items()},
-            batch_size=_getitem_batch_size(self.batch_size, idx),
+            source={key: _get_item(item, index) for key, item in self.items()},
+            batch_size=_getitem_batch_size(batch_size, index),
             device=self.device,
             names=names,
             _run_checks=False,
@@ -3325,11 +3334,6 @@ class TensorDictBase(MutableMapping):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         if all(isinstance(idx, slice) and idx == slice(None) for idx in index):
             return self
-
-        if not self.batch_size and (not all(idx is None for idx in index)):
-            raise RuntimeError(
-                f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
-            )
 
         return self._index_tensordict(index)
 
