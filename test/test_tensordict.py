@@ -2734,9 +2734,15 @@ class TestTensorDictRepr:
         expected = f"""LazyStackedTensorDict(
     fields={{
         a: {tensor_class}(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+    lazy_fields={{
+        0 ->
+            c: {tensor_class}(shape=torch.Size([4, 3, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
+        1 ->
+            b: {tensor_class}(shape=torch.Size([4, 3, 1, 10]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
     batch_size=torch.Size([4, 3, 2, 1]),
     device={str(device)},
-    is_shared={is_shared})"""
+    is_shared={is_shared},
+    stack_dim={stacked_td.stack_dim})"""
         assert repr(stacked_td) == expected
 
     def test_repr_stacked_het(self, device, dtype):
@@ -2773,9 +2779,12 @@ class TestTensorDictRepr:
     fields={{
         a: Tensor(shape=torch.Size([2, -1]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
         b: Tensor(shape=torch.Size([-1]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+    lazy_fields={{
+    }},
     batch_size=torch.Size([2]),
     device={str(device)},
-    is_shared={is_shared})"""
+    is_shared={is_shared},
+    stack_dim={stacked_td.stack_dim})"""
         assert repr(stacked_td) == expected
 
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
@@ -2862,20 +2871,20 @@ class TestTensorDictRepr:
             is_shared_tensor = True
         else:
             is_shared_tensor = is_shared
-        if index is None:
-            expected = f"""LazyStackedTensorDict(
+
+        expected = f"""LazyStackedTensorDict(
     fields={{
         a: {tensor_class}(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+    lazy_fields={{
+        0 ->
+            c: {tensor_class}(shape=torch.Size([4, 3, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
+        1 ->
+            b: {tensor_class}(shape=torch.Size([4, 3, 1, 10]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
     batch_size=torch.Size([4, 3, 2, 1]),
     device={str(device)},
-    is_shared={is_shared})"""
-        else:
-            expected = f"""LazyStackedTensorDict(
-    fields={{
-        a: {tensor_class}(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
-    batch_size=torch.Size([4, 3, 2, 1]),
-    device={str(device)},
-    is_shared={is_shared})"""
+    is_shared={is_shared},
+    stack_dim={stacked_tensordict.stack_dim})"""
+
         assert repr(stacked_tensordict) == expected
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
