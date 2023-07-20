@@ -137,7 +137,8 @@ class _NestedShape:
 
     @_lazy_init
     def het_dims(self):
-        return [dim for dim in range(self.ndim) if self.as_shape[dim] == -1]
+        as_shape = self.as_shape
+        return [dim for dim, s in enumerate(as_shape) if s == -1]
 
     def numel(self):
         return (
@@ -199,7 +200,7 @@ class _NestedShape:
 
     @_lazy_init
     def is_plain(self):
-        return not self.het_dims
+        return (self._shapes.ndim == 1 or not self.het_dims)
 
     def __getitem__(self, item):
         try:
