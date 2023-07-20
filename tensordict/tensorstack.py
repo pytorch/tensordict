@@ -299,12 +299,12 @@ class TensorStack(torch.Tensor):
     def unstack(self):
         raise NotImplementedError
 
-    @property
+    @_lazy_init
     def _flat(self):
         # represents the tensor as a flat one
         return super().view(-1)
 
-    @property
+    @_lazy_init
     def _compact(self):
         # represents the tensor with a compact structure (rightmost consistent dims-wise)
         return torch.Tensor(super().view(-1, *self._shapes.common_shape))
