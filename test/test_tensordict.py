@@ -251,19 +251,10 @@ def test_mask_td(device):
         "key2": torch.randn(4, 5, 10, device=device),
     }
     mask = torch.zeros(4, 5, dtype=torch.bool, device=device).bernoulli_()
-    mask_list = mask.cpu().numpy().tolist()
     td = TensorDict(batch_size=(4, 5), source=d)
 
     td_masked = torch.masked_select(td, mask)
-    td_masked1 = td[mask_list]
     assert len(td_masked.get("key1")) == td_masked.shape[0]
-    assert len(td_masked1.get("key1")) == td_masked1.shape[0]
-
-    mask_list = [False, True, False, True]
-
-    td_masked2 = td[mask_list, 0]
-    torch.testing.assert_close(td.get("key1")[mask_list, 0], td_masked2.get("key1"))
-    torch.testing.assert_close(td.get("key2")[mask_list, 0], td_masked2.get("key2"))
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -987,11 +978,11 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_masked.batch_size[0] == mask.sum()
         assert td_masked.batch_dims == 1
 
-        mask_list = mask.cpu().numpy().tolist()
-        td_masked3 = td[mask_list]
-        assert_allclose_td(td_masked3, td_masked2)
-        assert td_masked3.batch_size[0] == mask.sum()
-        assert td_masked3.batch_dims == 1
+        # mask_list = mask.cpu().numpy().tolist()
+        # td_masked3 = td[mask_list]
+        # assert_allclose_td(td_masked3, td_masked2)
+        # assert td_masked3.batch_size[0] == mask.sum()
+        # assert td_masked3.batch_dims == 1
 
     def test_entry_type(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -1058,8 +1049,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td_gather2 = torch.gather(td, dim=dim, index=index, out=out)
         assert (td_gather2 != 0).any()
 
-    @pytest.mark.parametrize("from_list", [True, False])
-    def test_masking_set(self, td_name, device, from_list):
+    def test_masking_set(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         mask = torch.zeros(td.batch_size, dtype=torch.bool, device=device).bernoulli_(
@@ -1073,15 +1063,11 @@ class TestTensorDicts(TestTensorDictsBase):
             ),
             batch_size=[n, *td.batch_size[d:]],
         )
-        if from_list:
-            td_mask = mask.cpu().numpy().tolist()
-        else:
-            td_mask = mask
         if td_name in ("nested_stacked_td", "stacked_td"):
             with pytest.raises(RuntimeError, match="is not supported"):
-                td[td_mask] = pseudo_td
+                td[mask] = pseudo_td
         else:
-            td[td_mask] = pseudo_td
+            td[mask] = pseudo_td
             for item in td.values():
                 assert (item[mask] == 0).all()
 
@@ -1675,6 +1661,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert_allclose_td(td[range(2)], td[[0, 1]])
         if td_name not in ("td_h5",):
             # for h5, we can't use a double list index
+            assert td[range(1), range(1)].shape == td[[0], [0]].shape
             assert_allclose_td(td[range(1), range(1)], td[[0], [0]])
         assert_allclose_td(td[:, range(2)], td[:, [0, 1]])
         assert_allclose_td(td[..., range(1)], td[..., [0]])
@@ -1856,7 +1843,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
         sub_td = td.get_sub_tensordict(index)
         assert sub_td.shape == td.to_tensordict()[index].shape
-        assert sub_td.shape == td[index].shape
+        assert sub_td.shape == td[index].shape, (td, index)
         td0 = td[index]
         td0 = td0.to_tensordict()
         td0 = td0.apply(lambda x: x * 0 + 2)
@@ -3361,12 +3348,8 @@ def test_mp(td_type):
     ],
 )
 def test_getitem_batch_size(idx):
-    shape = [
-        10,
-        7,
-        11,
-        5,
-    ]
+    shape = [10, 7, 11, 5]
+    shape = torch.Size(shape)
     mocking_tensor = torch.zeros(*shape)
     expected_shape = mocking_tensor[idx].shape
     resulting_shape = _getitem_batch_size(shape, idx)
@@ -4412,6 +4395,43 @@ class TestLazyStackedTensorDict:
         ):
             td_a.update_(td_b.to_tensordict())
 
+    @property
+    def _tensor_index(self):
+        torch.manual_seed(0)
+        return torch.randint(2, (5, 2))
+
+    @property
+    def _idx_list(self):
+        return {
+            0: 1,
+            1: slice(None),
+            2: slice(1, 2),
+            3: self._tensor_index,
+            4: range(1, 2),
+            5: None,
+            6: [0, 1],
+            7: self._tensor_index.numpy(),
+        }
+
+    @pytest.mark.parametrize("pos1", range(8))
+    @pytest.mark.parametrize("pos2", range(8))
+    @pytest.mark.parametrize("pos3", range(8))
+    def test_lazy_indexing(self, pos1, pos2, pos3):
+        torch.manual_seed(0)
+        td_leaf_1 = TensorDict({"a": torch.ones(2, 3)}, [])
+        inner = torch.stack([td_leaf_1] * 4, 0)
+        middle = torch.stack([inner] * 3, 0)
+        outer = torch.stack([middle] * 2, 0)
+        outer_dense = outer.to_tensordict()
+        ref_tensor = torch.zeros(2, 3, 4)
+        pos1 = self._idx_list[pos1]
+        pos2 = self._idx_list[pos2]
+        pos3 = self._idx_list[pos3]
+        index = (pos1, pos2, pos3)
+        result = outer[index]
+        assert result.batch_size == ref_tensor[index].shape, index
+        assert result.batch_size == outer_dense[index].shape, index
+
     # We don't support caching for unlocked lazy stacks
     # def test_cached_unlocked_stacked(self):
     #     """same as above in the non-locked case.
@@ -5350,6 +5370,22 @@ def test_unbind_batchsize():
     tds = td.unbind(0)
     assert tds[0].batch_size == torch.Size([])
     assert tds[0]["a"].batch_size == torch.Size([3])
+
+
+def test_empty():
+    td = TensorDict(
+        {
+            "a": torch.zeros(()),
+            ("b", "c"): torch.zeros(()),
+            ("b", "d", "e"): torch.zeros(()),
+        },
+        [],
+    )
+    td_empty = td.empty(recurse=False)
+    assert len(list(td_empty.keys())) == 0
+    td_empty = td.empty(recurse=True)
+    assert len(list(td_empty.keys())) == 1
+    assert len(list(td_empty.get("b").keys())) == 1
 
 
 if __name__ == "__main__":
