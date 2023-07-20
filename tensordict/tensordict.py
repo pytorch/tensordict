@@ -3276,7 +3276,7 @@ class TensorDictBase(MutableMapping):
         if (
             not batch_size
             and index is not None
-            and (index is not tuple or any(idx is not None for idx in index))
+            and (not isinstance(index, tuple) or any(idx is not None for idx in index))
         ):
             raise RuntimeError(
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
