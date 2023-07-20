@@ -8161,7 +8161,11 @@ def _td_fields(td: TensorDictBase, keys=None) -> str:
                 # we know td is lazy stacked and the key is a leaf
                 # so we can get the shape and escape the error
                 shape = td.get_item_shape(key)
-                tensor = td.tensordicts[0].get(key)
+                while hasattr(
+                    td, "tensordicts"
+                ):  # we need to grab the het tensor from the inner nesting level
+                    td = td.tensordicts[0]
+                tensor = td.get(key)
                 if isinstance(tensor, TensorDictBase):
                     substr = _td_fields(tensor)
                 else:
