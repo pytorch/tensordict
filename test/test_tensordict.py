@@ -5268,6 +5268,49 @@ class TestNestedLazyStacks:
         # and there are no lazy keys in this outer stack
         # the lazy keys of inner stacks are not printed
 
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
+    def test_resolve_stack_dim(self, batch_size):
+        obs = self.get_lazy_stack(batch_size)
+
+        with pytest.raises(
+            RuntimeError,
+            match="`resolve_stack_dim` was called but some of the stacked elements are different",
+        ):
+            obs["agents"].resolve_stack_dim()
+
+        obs2 = obs.clone()
+        obs2.apply_(lambda x: x + 1)
+
+        obs_stack = torch.stack([obs, obs2])
+
+        obs_stack_resolved = obs_stack.resolve_stack_dim()
+
+        assert isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
+        assert isinstance(obs_stack_resolved, TensorDict)
+
+        assert obs_stack.batch_size == (2, *batch_size)
+        assert obs_stack_resolved.batch_size == obs_stack.batch_size
+
+        assert obs_stack["agents"].shape == (2, *batch_size, 3)
+        assert obs_stack_resolved["agents"].batch_size == obs_stack["agents"].batch_size
+
+        assert obs_stack["agents"].stack_dim == 0
+        assert (
+            obs_stack_resolved["agents"].stack_dim
+            == len(obs_stack_resolved["agents"].batch_size) - 1
+        )
+        for stack in [obs_stack_resolved, obs_stack]:
+            for index in range(2):
+                assert (stack[index]["state"] == index).all()
+                assert (stack["state"][index] == index).all()
+                assert (stack["agents"][index]["camera"] == index).all()
+                assert (stack[index]["agents"]["camera"] == index).all()
+                assert (stack["agents"]["camera"][index] == index).all()
+                assert (stack["agents"][index][..., 0]["agent_0_obs"] == index).all()
+                assert (stack[index]["agents"][..., 0]["agent_0_obs"] == index).all()
+                assert (stack["agents"][..., 0]["agent_0_obs"][index] == index).all()
+                assert (stack["agents"][..., 0][index]["agent_0_obs"] == index).all()
+
 
 def _compare_tensors_identity(td0, td1):
     if isinstance(td0, LazyStackedTensorDict):
