@@ -8,7 +8,7 @@
 #include <torch/torch.h>
 
 namespace py = pybind11;
-
+using namespace torch::indexing;
 
 py::tuple _unravel_key_to_tuple(const py::object& key) {
     bool is_tuple = py::isinstance<py::tuple>(key);
@@ -101,9 +101,16 @@ torch::Tensor _populate_index(torch::Tensor offsets, torch::Tensor offsets_cs) {
     return out;
 }
 py::list _as_shape(torch::Tensor shape_tensor) {
-    torch::Tensor shape_tensor_view = shape_tensor.reshape({-1, shape_tensor.size(-1)});
-    torch::Tensor out = shape_tensor_view[0].clone();
-    torch::Tensor not_unique = (shape_tensor_view != out).any(0);
+//    torch::Tensor shape_tensor_view = shape_tensor.reshape({-1, shape_tensor.size(-1)});
+    torch::Tensor out = shape_tensor;
+    for (int64_t i = 0; i < shape_tensor.ndimension() - 1; ++i) {
+        out = out[0];
+    }
+    out = out.clone();
+    torch::Tensor not_unique = shape_tensor != out;
+    for (int64_t i = 0; i < shape_tensor.ndimension() - 1; ++i) {
+        not_unique = not_unique.any(0);
+    }
     out.masked_fill_(not_unique, -1);
     std::vector<int64_t> shape_vector(shape_tensor.sizes().begin(), shape_tensor.sizes().end() - 1);
     // Extend 'shape_vector' with the values from 'out'.
