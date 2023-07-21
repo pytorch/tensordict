@@ -7213,6 +7213,17 @@ class LazyStackedTensorDict(TensorDictBase):
         self._is_memmap = False
         return unlocked_tds
 
+    def resolve_stack_dim(self) -> TensorDictBase:
+        res = self.tensordicts[0].unsqueeze(self.stack_dim).expand(self.shape).clone()
+        for i in range(1, len(self.tensordicts)):
+            if not _all_eq_structure(self.tensordicts[i], self.tensordicts[0]):
+                raise RuntimeError(
+                    "`resolve_stack_dim` was called but some of the stacked elements are different"
+                )
+            index = [slice(None)] * self.stack_dim + [i]  # this is index_select
+            res[index] = self.tensordicts[i]
+        return res
+
     def __del__(self):
         if self._is_locked is None:
             # then we can reliably say that this lazy stack is not part of
@@ -8332,3 +8343,35 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
         remaining_index = _dispatch(remaining_index, stack_index.tolist())
     out["remaining_index"] = remaining_index
     return out
+
+
+def _all_eq_structure(
+    td: Union[TensorDictBase, Tensor], other: Union[TensorDictBase, Tensor]
+):
+    if td.__class__ != other.__class__:
+        return False
+
+    if td.shape != other.shape or td.device != other.device:
+        return False
+
+    if isinstance(td, LazyStackedTensorDict):
+        if td.stack_dim != other.stack_dim:
+            return False
+        for t, o in zip(td.tensordicts, other.tensordicts):
+            if not _all_eq_structure(t, o):
+                return False
+    elif isinstance(td, TensorDictBase):
+        td_keys = list(td.keys())
+        other_keys = list(other.keys())
+        if td_keys != other_keys:
+            return False
+        for k in td_keys:
+            if not _all_eq_structure(td[k], other[k]):
+                return False
+    elif isinstance(td, Tensor):
+        if td.dtype != other.dtype:
+            return False
+    else:
+        raise AssertionError()
+
+    return True
