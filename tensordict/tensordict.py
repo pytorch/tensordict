@@ -3244,7 +3244,6 @@ class TensorDictBase(MutableMapping):
             if num_boolean_dim:
                 names = [None] + names[num_boolean_dim:]
             else:
-
                 # def is_int(subidx):
                 #     if isinstance(subidx, Number):
                 #         return True
@@ -3344,7 +3343,6 @@ class TensorDictBase(MutableMapping):
         index: IndexType,
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
-
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
             # try:
@@ -4729,7 +4727,6 @@ def _gather(
         return out
 
     if out is None:
-
         names = input.names if input._has_names() else None
 
         return TensorDict(
@@ -6217,7 +6214,6 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         default: str | CompatibleType = NO_DEFAULT,
     ) -> CompatibleType:
-
         # we can handle the case where the key is a tuple of length 1
         tensors = []
         for td in self.tensordicts:
@@ -6440,6 +6436,40 @@ class LazyStackedTensorDict(TensorDictBase):
             _run_checks=False,
         )
         return out
+
+    def to_tensordict(self, recursive: bool = False, clone: bool = True):
+        """Returns a regular TensorDict instance from the TensorDictBase.
+
+        Returns:
+            a new TensorDict object containing the same values.
+
+        """
+        source = {}
+        for key, value in self.items:
+            values = []
+            for td in self.tensordicts:
+                values.append(td[key])
+            value = torch.stack(values, dim=self.stack_dim)
+            if recursive:
+                if not _is_tensor_collection(value.__class__) and clone:
+                    value = value.clone()
+                else:
+                    value.to_tensordict()
+            source.update({key: value})
+
+        source = {
+            key: value.clone()
+            if not _is_tensor_collection(value.__class__)
+            else value.to_tensordict()
+            for key, value in self.items()
+        }
+
+        return TensorDict(
+            source=source,
+            device=self.device,
+            batch_size=self.batch_size,
+            names=self.names if self._has_names() else None,
+        )
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
         if recurse:
@@ -6694,7 +6724,6 @@ class LazyStackedTensorDict(TensorDictBase):
         return self.tensordicts[stack_index][td_index]
 
     def __eq__(self, other):
-
         if is_tensorclass(other):
             return other == self
         if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
@@ -6730,7 +6759,6 @@ class LazyStackedTensorDict(TensorDictBase):
         return False
 
     def __ne__(self, other):
-
         if is_tensorclass(other):
             return other != self
         if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
@@ -6811,7 +6839,6 @@ class LazyStackedTensorDict(TensorDictBase):
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
     ) -> int:
-
         if _futures is None:
             is_root = True
             _futures = []
@@ -6888,7 +6915,6 @@ class LazyStackedTensorDict(TensorDictBase):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-
         # using try/except for get/del is suboptimal, but
         # this is faster that checkink if key in self keys
         key = _unravel_key_to_tuple(key)
@@ -7833,7 +7859,6 @@ class _TransposedTensorDict(_CustomOpTensorDict):
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
-
         trsp = self.custom_op_kwargs["dim0"], self.custom_op_kwargs["dim1"]
         if dim == trsp[0]:
             dim = trsp[1]
