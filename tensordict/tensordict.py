@@ -7254,6 +7254,42 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             td._remove_lock(id(self))
 
+    def __repr__(self):
+        fields = _td_fields(self)
+        field_str = indent(f"fields={{{fields}}}", 4 * " ")
+        lazy_fields_str = indent(f"lazy_fields={{{self._repr_lazy_fields()}}}", 4 * " ")
+        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
+        device_str = indent(f"device={self.device}", 4 * " ")
+        is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
+        stack_dim = indent(f"stack_dim={self.stack_dim}", 4 * " ")
+        string = ",\n".join(
+            [
+                field_str,
+                lazy_fields_str,
+                batch_size_str,
+                device_str,
+                is_shared_str,
+                stack_dim,
+            ]
+        )
+        return f"{type(self).__name__}(\n{string})"
+
+    def _repr_lazy_fields(self):
+        keys = set(self.keys())
+        lazy_keys = [
+            _td_fields(td, [k for k in td.keys() if k not in keys])
+            for td in self.tensordicts
+        ]
+        lazy_key_str = ",\n".join(
+            [
+                indent(f"{i} ->{line}", 4 * " ")
+                for i, line in enumerate(lazy_keys)
+                if line != "\n"
+            ]
+        )
+
+        return "\n" + lazy_key_str
+
     lock_ = TensorDictBase.lock_
     lock = _renamed_inplace_method(lock_)
 
@@ -8025,9 +8061,11 @@ def _make_repr(key: str, item: CompatibleType, tensordict: TensorDictBase) -> st
     return f"{key}: {_get_repr(item)}"
 
 
-def _td_fields(td: TensorDictBase) -> str:
+def _td_fields(td: TensorDictBase, keys=None) -> str:
     strs = []
-    for key in td.keys():
+    if keys is None:
+        keys = td.keys()
+    for key in keys:
         try:
             item = td.get(key)
             strs.append(_make_repr(key, item, td))
@@ -8036,7 +8074,12 @@ def _td_fields(td: TensorDictBase) -> str:
                 # we know td is lazy stacked and the key is a leaf
                 # so we can get the shape and escape the error
                 shape = td.get_item_shape(key)
-                tensor = td.tensordicts[0].get(key)
+                temp_td = td
+                while hasattr(
+                    temp_td, "tensordicts"
+                ):  # we need to grab the het tensor from the inner nesting level
+                    temp_td = temp_td.tensordicts[0]
+                tensor = temp_td.get(key)
                 if isinstance(tensor, TensorDictBase):
                     substr = _td_fields(tensor)
                 else:
