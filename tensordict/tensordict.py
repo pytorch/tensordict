@@ -3343,7 +3343,6 @@ class TensorDictBase(MutableMapping):
         index: IndexType,
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
-
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
             # try:
@@ -6882,6 +6881,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
+
         # using try/except for get/del is suboptimal, but
         # this is faster that checkink if key in self keys
         key = _unravel_key_to_tuple(key)
@@ -7862,6 +7862,7 @@ class _TransposedTensorDict(_CustomOpTensorDict):
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
+
         trsp = self.custom_op_kwargs["dim0"], self.custom_op_kwargs["dim1"]
         if dim == trsp[0]:
             dim = trsp[1]
