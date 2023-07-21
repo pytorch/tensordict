@@ -2351,20 +2351,22 @@ class TensorDictBase(MutableMapping):
             out.names = self.names
         return out
 
-    def to_tensordict(self):
+    def to_tensordict(self, recurse: bool = True):
         """Returns a regular TensorDict instance from the TensorDictBase.
 
         Returns:
             a new TensorDict object containing the same values.
 
         """
+        source = {}
+        for key, value in self.items():
+            if not _is_tensor_collection(value.__class__):
+                value = value.clone()
+            elif recurse:
+                value.to_tensordict(recurse)
+            source.update({key: value})
         return TensorDict(
-            {
-                key: value.clone()
-                if not _is_tensor_collection(value.__class__)
-                else value.to_tensordict()
-                for key, value in self.items()
-            },
+            source,
             device=self.device,
             batch_size=self.batch_size,
             names=self.names if self._has_names() else None,
@@ -6436,40 +6438,6 @@ class LazyStackedTensorDict(TensorDictBase):
             _run_checks=False,
         )
         return out
-
-    def to_tensordict(self, recursive: bool = False, clone: bool = True):
-        """Returns a regular TensorDict instance from the TensorDictBase.
-
-        Returns:
-            a new TensorDict object containing the same values.
-
-        """
-        source = {}
-        for key, value in self.items:
-            values = []
-            for td in self.tensordicts:
-                values.append(td[key])
-            value = torch.stack(values, dim=self.stack_dim)
-            if recursive:
-                if not _is_tensor_collection(value.__class__) and clone:
-                    value = value.clone()
-                else:
-                    value.to_tensordict()
-            source.update({key: value})
-
-        source = {
-            key: value.clone()
-            if not _is_tensor_collection(value.__class__)
-            else value.to_tensordict()
-            for key, value in self.items()
-        }
-
-        return TensorDict(
-            source=source,
-            device=self.device,
-            batch_size=self.batch_size,
-            names=self.names if self._has_names() else None,
-        )
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
         if recurse:
