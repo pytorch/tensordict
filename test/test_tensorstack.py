@@ -106,6 +106,30 @@ class TestTensorStack:
         # check broadcasting
         assert t2[:, 0].shape == torch.Size((2, *x.shape))
 
+    def test_permute(self):
+        w = torch.randint(10, (3, 5, 5))
+        x = torch.randint(10, (3, 4, 5))
+        y = torch.randint(10, (3, 5, 5))
+        z = torch.randint(10, (3, 4, 5))
+        ts = TensorStack.from_tensors([[w, x], [y, z]])
+        tst = ts.permute(1, 0, 2, 3, 4)
+        assert (tst[0, 1] == ts[1, 0]).all()
+        assert (tst[1, 0] == ts[0, 1]).all()
+        assert (tst[1, 1] == ts[1, 1]).all()
+        assert (tst[0, 0] == ts[0, 0]).all()
+
+    def test_transpose(self):
+        w = torch.randint(10, (3, 5, 5))
+        x = torch.randint(10, (3, 4, 5))
+        y = torch.randint(10, (3, 5, 5))
+        z = torch.randint(10, (3, 4, 5))
+        ts = TensorStack.from_tensors([[w, x], [y, z]])
+        tst = ts.transpose(1, 0)
+        assert (tst[0, 1] == ts[1, 0]).all()
+        assert (tst[1, 0] == ts[0, 1]).all()
+        assert (tst[1, 1] == ts[1, 1]).all()
+        assert (tst[0, 0] == ts[0, 0]).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

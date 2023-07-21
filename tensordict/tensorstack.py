@@ -91,7 +91,7 @@ class _NestedShape:
         shapes = self._shapes
         if common_shape:
             shapes = shapes[..., : -len(common_shape)]
-        cs = shapes.prod(-1).view(-1).cumsum(0)
+        cs = shapes.prod(-1).reshape(-1).cumsum(0)
         cs_pad = torch.nn.functional.pad(cs[:-1], [1, 0])
         return torch.stack(
             [
@@ -200,7 +200,7 @@ class _NestedShape:
 
     @_lazy_init
     def is_plain(self):
-        return (self._shapes.ndim == 1 or not self.het_dims)
+        return self._shapes.ndim == 1 or not self.het_dims
 
     def __getitem__(self, item):
         try:
@@ -239,7 +239,7 @@ def _copy_shapes(func):
     def new_func(self, *args, **kwargs):
         out = getattr(torch.Tensor, func.__name__)(self, *args, **kwargs)
         _shapes = self._shapes
-        out._shapes = _shapes
+        out = TensorStack(out, shapes=_shapes)
         return out
 
     return new_func
@@ -337,22 +337,56 @@ class TensorStack(torch.Tensor):
     def __getitem__(self, index):
         if isinstance(index, (int,)):
             idx_beg = self._shapes._offsets_cs[0, index]
-            idx_end = self._shapes._offsets_cs[1, index]
             shapes = self._shapes[index]
-            out = self._compact.__getitem__(slice(idx_beg, idx_end))
+            if idx_beg.numel() <= 1:
+                idx_end = self._shapes._offsets_cs[1, index]
+                out = self._compact.__getitem__(slice(idx_beg, idx_end))
+            else:
+                elts = _populate_index(
+                    self._shapes._offsets[index].view(-1),
+                    idx_beg.view(-1),
+                )
+                out = self._compact[elts]
             out = TensorStack(out, shapes=shapes)
             return out
         shapes = self._shapes[index]
+        if not isinstance(index, tuple):
+            index = (index,)
         # TODO: capture wrong indexing
         elts = _populate_index(
             self._shapes._offsets[index].view(-1),
-            self._shapes._offsets_cs[0][index].view(-1),
+            self._shapes._offsets_cs[(0, *index)].view(-1),
         )
         tensor = self._compact[elts]
         return TensorStack(tensor, shapes=shapes)
 
     def __repr__(self):
         return f"{self.__class__.__name__}(shape={self.shape}, dtype={self.dtype}, device={self.device})"
+
+    def permute(self, *dims):
+        if len(dims) == 1 and isinstance(dims[0], (list, tuple)):
+            dims = tuple(dims[0])
+        n_batch_dms = len(self._shapes.batch_dim)
+        last_dims = [d - n_batch_dms for d in dims[n_batch_dms:]]
+        if last_dims != list(range(self.ndim - n_batch_dms)):
+            raise RuntimeError
+        dims = dims[:n_batch_dms]
+        out = TensorStack(self, shapes=_NestedShape(self._shapes._shapes))
+        out._shapes._shapes = self._shapes._shapes.permute(*dims, n_batch_dms)[
+            ..., last_dims
+        ]
+        out._shapes._offsets_cs = self._shapes._offsets_cs.permute(
+            0, *[dim + 1 for dim in dims]
+        )
+        out._shapes._offsets = self._shapes._offsets.permute(*dims)
+        return out
+
+    def transpose(self, dim0, dim1):
+        out = TensorStack(self, shapes=_NestedShape(self._shapes._shapes))
+        out._shapes._shapes = self._shapes._shapes.transpose(dim0, dim1)
+        out._shapes._offsets_cs = self._shapes._offsets_cs.transpose(dim0 + 1, dim1 + 1)
+        out._shapes._offsets = self._shapes._offsets.transpose(dim0, dim1)
+        return out
 
     @_copy_shapes
     def to(self, *args, **kwargs):
