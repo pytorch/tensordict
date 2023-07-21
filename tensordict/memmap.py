@@ -17,6 +17,7 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 import torch
+from torch import _C
 
 from tensordict.utils import (
     _getitem_batch_size,
@@ -849,12 +850,33 @@ def memmap_tensor_as_tensor(
         mv=memoryview(mem_map_tensor._memmap_array),
     )
 
+# def _use_super(func):
+#     def new_func(self, *args, **kwargs):
+#         return torch.Tensor(func(self, *args, **kwargs))
+#     return new_func
+
 class MemoryMappedTensor(torch.Tensor):
     filename: str | Path
-    def as_tensor(self):
-        return self
+    _clear: bool
+
+    # def __new__(cls, *args, **kwargs):
+    #     return torch.Tensor(super().__new__(cls, *args, **kwargs))
+
+    # __add__ = _use_super(torch.Tensor.__add__)
+    __torch_function__ = torch._C._disabled_torch_function_impl
+    # @classmethod
+    # def __torch_function__(cls, func, types, args=(), kwargs=None):
+    #     if kwargs is None:
+    #         kwargs = {}
+    #     with _C.DisableTorchFunctionSubclass():
+    #         return func(*args, **kwargs)
+
     @classmethod
-    def from_tensor(cls, tensor, transfer_ownership=False, prefix=None, filename=None, mode="r+"):
+    def create(cls, shape, dtype, transfer_ownership=False, prefix=None, filename=None):
+        tensor = torch.zeros((), dtype=dtype).expand(shape)
+        return cls.from_tensor(cls, tensor, transfer_ownership=transfer_ownership, prefix=prefix, filename=filename)
+    @classmethod
+    def from_tensor(cls, tensor, transfer_ownership=False, prefix=None, filename=None):
         if isinstance(tensor, MemoryMappedTensor):
             if transfer_ownership:
                 raise RuntimeError(
@@ -876,37 +898,33 @@ class MemoryMappedTensor(torch.Tensor):
             raise RuntimeError(
                 "MemoryMappedTensor.from_tensor is incompatible with tensor.requires_grad."
             )
-        # device = tensor.device if hasattr(tensor, "device") else torch.device("cpu")
-        storage_type = _DTYPE_STORAGE_MAP[tensor.dtype]
-        tensor_type = _DTYPE_TENSOR_MAP[tensor.dtype]
         shape = tensor.shape
         if filename is None:
-            with tempfile.NamedTemporaryFile() as f:
-                filename = f.name
+            filename = AwesomeTempFile()
         out = cls(
-            tensor_type(storage_type.from_file(filename, True, shape.numel()))
+            torch.from_file(str(filename), shared=True, dtype=tensor.dtype, size=shape.numel()).view(tensor.shape)
         )
         out.filename = filename
         out.copy_(tensor)
         return out
 
-_DTYPE_STORAGE_MAP = {
-    torch.float32: torch.FloatStorage,
-    torch.float64: torch.DoubleStorage,
-    torch.double: torch.DoubleStorage,
-    torch.bool: torch.BoolStorage,
-    torch.half: torch.HalfStorage,
-    torch.int: torch.IntStorage,
-    torch.long: torch.LongStorage,
-    torch.uint8: torch.QUInt8Storage,
-}
-_DTYPE_TENSOR_MAP = {
-    torch.float32: torch.FloatTensor,
-    torch.float64: torch.DoubleTensor,
-    torch.double: torch.DoubleTensor,
-    torch.bool: torch.BoolTensor,
-    torch.half: torch.HalfTensor,
-    torch.int: torch.IntTensor,
-    torch.long: torch.LongTensor,
-    torch.uint8: torch.QUInt8Tensor,
-}
+    def __getitem__(self, item):
+        out = super().__getitem__(item)
+        if not isinstance(self.filename, str) and out.data_ptr() == self.data_ptr():
+            # this is a bottleneck but we need to keep track of the file to make sure that it is not cleared
+            out = MemoryMappedTensor(out)
+            out.filename = self.filename
+        return out
+
+class _AwesomeTempFile(tempfile._TemporaryFileWrapper):
+    def __str__(self):
+        return self.name
+    def __repr__(self):
+        return self.name
+
+def AwesomeTempFile(*args, **kwargs):
+    cls = tempfile._TemporaryFileWrapper
+    tempfile._TemporaryFileWrapper = _AwesomeTempFile
+    out = tempfile.NamedTemporaryFile(*args, **kwargs)
+    tempfile._TemporaryFileWrapper = cls
+    return out
