@@ -848,3 +848,65 @@ def memmap_tensor_as_tensor(
         shape=list(mem_map_tensor.shape),
         mv=memoryview(mem_map_tensor._memmap_array),
     )
+
+class MemoryMappedTensor(torch.Tensor):
+    filename: str | Path
+    def as_tensor(self):
+        return self
+    @classmethod
+    def from_tensor(cls, tensor, transfer_ownership=False, prefix=None, filename=None, mode="r+"):
+        if isinstance(tensor, MemoryMappedTensor):
+            if transfer_ownership:
+                raise RuntimeError(
+                    "from_tensor(memmap_tensor, transfer_ownership=True) is not permitted, as this method will "
+                    "simply return the original MemmapTensor instance."
+                )
+            elif prefix is None and (
+                filename is None
+                or Path(filename).absolute() == Path(tensor.filename).absolute()
+            ):
+                # either location was not specified, or memmap is already in the
+                # correct location, so just return the MemmapTensor unmodified
+                return tensor
+        elif isinstance(tensor, np.ndarray):
+            raise TypeError(
+                "Convert input to torch.Tensor before calling MemoryMappedTensor.from_tensor."
+            )
+        if tensor.requires_grad:
+            raise RuntimeError(
+                "MemoryMappedTensor.from_tensor is incompatible with tensor.requires_grad."
+            )
+        # device = tensor.device if hasattr(tensor, "device") else torch.device("cpu")
+        storage_type = _DTYPE_STORAGE_MAP[tensor.dtype]
+        tensor_type = _DTYPE_TENSOR_MAP[tensor.dtype]
+        shape = tensor.shape
+        if filename is None:
+            with tempfile.NamedTemporaryFile() as f:
+                filename = f.name
+        out = cls(
+            tensor_type(storage_type.from_file(filename, True, shape.numel()))
+        )
+        out.filename = filename
+        out.copy_(tensor)
+        return out
+
+_DTYPE_STORAGE_MAP = {
+    torch.float32: torch.FloatStorage,
+    torch.float64: torch.DoubleStorage,
+    torch.double: torch.DoubleStorage,
+    torch.bool: torch.BoolStorage,
+    torch.half: torch.HalfStorage,
+    torch.int: torch.IntStorage,
+    torch.long: torch.LongStorage,
+    torch.uint8: torch.QUInt8Storage,
+}
+_DTYPE_TENSOR_MAP = {
+    torch.float32: torch.FloatTensor,
+    torch.float64: torch.DoubleTensor,
+    torch.double: torch.DoubleTensor,
+    torch.bool: torch.BoolTensor,
+    torch.half: torch.HalfTensor,
+    torch.int: torch.IntTensor,
+    torch.long: torch.LongTensor,
+    torch.uint8: torch.QUInt8Tensor,
+}
