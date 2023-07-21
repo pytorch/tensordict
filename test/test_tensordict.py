@@ -5140,8 +5140,7 @@ class TestNestedLazyStacks:
         else:
             raise ValueError(f"Index {i} undefined for 3 agents")
 
-    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
-    def test_lazy_stack_stack(self, batch_size):
+    def get_lazy_stack(self, batch_size):
         agent_obs = []
         for angent_id in range(3):
             agent_obs.append(self.get_agent_tensors(angent_id))
@@ -5158,6 +5157,11 @@ class TestNestedLazyStacks:
             [],
         )
         obs = obs.expand(batch_size)
+        return obs
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
+    def test_lazy_stack_stack(self, batch_size):
+        obs = self.get_lazy_stack(batch_size)
 
         expected_repr = f"""TensorDict(
     fields={{
