@@ -5309,7 +5309,7 @@ class TestNestedLazyStacks:
         # the lazy keys of inner stacks are not printed
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
-    def test_resolve_stack_dim(self, batch_size):
+    def test_stack_hetero(self, batch_size):
         obs = self.nested_lazy_het_td(batch_size)
 
         obs2 = obs.clone()
@@ -5340,8 +5340,16 @@ class TestNestedLazyStacks:
                 assert (stack[index]["lazy"]["shared"] == index).all()
                 assert (stack["lazy"]["shared"][index] == index).all()
                 assert (
-                    stack["lazy"]["shared"][index][..., 0]["individual_0_tensor"]
-                    == index
+                    stack["lazy"][index][..., 0]["individual_0_tensor"] == index
+                ).all()
+                assert (
+                    stack[index]["lazy"][..., 0]["individual_0_tensor"] == index
+                ).all()
+                assert (
+                    stack["lazy"][..., 0]["individual_0_tensor"][index] == index
+                ).all()
+                assert (
+                    stack["lazy"][..., 0][index]["individual_0_tensor"] == index
                 ).all()
 
 
