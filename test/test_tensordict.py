@@ -4031,6 +4031,109 @@ def test_shared_inheritance():
 
 
 class TestLazyStackedTensorDict:
+    @staticmethod
+    def nested_lazy_het_td(batch_size):
+        shared = torch.zeros(4, 4, 2)
+        hetero_3d = torch.zeros(3)
+        hetero_2d = torch.zeros(2)
+
+        individual_0_tensor = torch.zeros(1)
+        individual_1_tensor = torch.zeros(1, 2)
+        individual_2_tensor = torch.zeros(1, 2, 3)
+
+        td_list = [
+            TensorDict(
+                {
+                    "shared": shared,
+                    "hetero": hetero_3d,
+                    "individual_0_tensor": individual_0_tensor,
+                },
+                [],
+            ),
+            TensorDict(
+                {
+                    "shared": shared,
+                    "hetero": hetero_3d,
+                    "individual_1_tensor": individual_1_tensor,
+                },
+                [],
+            ),
+            TensorDict(
+                {
+                    "shared": shared,
+                    "hetero": hetero_2d,
+                    "individual_2_tensor": individual_2_tensor,
+                },
+                [],
+            ),
+        ]
+        for i, td in enumerate(td_list):
+            td[f"individual_{i}_td"] = td.clone()
+            td[f"shared_td"] = td.clone()
+
+        td_stack = torch.stack(td_list, dim=0)
+        obs = TensorDict(
+            {"lazy": td_stack, "dense": torch.zeros(3, 3, 2)},
+            [],
+        )
+        obs = obs.expand(batch_size)
+        return obs
+
+    def recursively_check_key(self, td, value: int):
+        if isinstance(td, LazyStackedTensorDict):
+            for t in td.tensordicts:
+                if not self.recursively_check_key(t, value):
+                    return False
+        elif isinstance(td, TensorDict):
+            for i in td.values():
+                if not self.recursively_check_key(i, value):
+                    return False
+        elif isinstance(td, torch.Tensor):
+            return (td == value).all()
+        else:
+            return False
+
+        return True
+
+    def dense_stack_tds_v1(self, td_list, stack_dim: int) -> TensorDictBase:
+        shape = list(td_list[0].shape)
+        shape.insert(stack_dim, len(td_list))
+
+        out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
+        for i in range(1, len(td_list)):
+            index = (slice(None),) * stack_dim + (i,)  # this is index_select
+            out[index] = td_list[i]
+
+        return out
+
+    def dense_stack_tds_v2(self, td_list, stack_dim: int) -> TensorDictBase:
+        shape = list(td_list[0].shape)
+        shape.insert(stack_dim, len(td_list))
+
+        out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
+
+        return torch.stack(td_list, dim=stack_dim, out=out)
+
+    @pytest.mark.parametrize("batch_size", [(), (2,), (1, 2)])
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
+    def test_setitem_hetero(self, batch_size, stack_dim):
+        obs = self.nested_lazy_het_td(batch_size)
+        obs1 = obs.clone()
+        obs1.apply_(lambda x: x + 1)
+
+        if stack_dim > len(batch_size):
+            return
+
+        res1 = self.dense_stack_tds_v1([obs, obs1], stack_dim=stack_dim)
+        res2 = self.dense_stack_tds_v2([obs, obs1], stack_dim=stack_dim)
+
+        index = (slice(None),) * stack_dim + (0,)  # get the first in the stack
+        assert self.recursively_check_key(res1[index], 0)  # check all 0
+        assert self.recursively_check_key(res2[index], 0)  # check all 0
+        index = (slice(None),) * stack_dim + (1,)  # get the second in the stack
+        assert self.recursively_check_key(res1[index], 1)  # check all 1
+        assert self.recursively_check_key(res2[index], 1)  # check all 1
+
     def test_add_batch_dim_cache(self):
         td = TensorDict(
             {"a": torch.rand(3, 4, 5), ("b", "c"): torch.rand(3, 4, 5)}, [3, 4, 5]
