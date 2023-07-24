@@ -827,7 +827,6 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def _stack_onto_(
         self,
-        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
@@ -4222,8 +4221,11 @@ class TensorDict(TensorDictBase):
         # if not isinstance(key, str):
         #     raise ValueError("_stack_onto_ expects string keys.")
         for key in self.keys():
+            vals = [item._get_str(key, None) for item in list_item]
+            if all(v is None for v in vals):
+                continue
             torch.stack(
-                [item._get_str(key, NO_DEFAULT) for item in list_item],
+                vals,
                 dim=dim,
                 out=self._get_str(key, NO_DEFAULT),
             )
@@ -4234,23 +4236,28 @@ class TensorDict(TensorDictBase):
 
     def _stack_onto_at_(
         self,
-        key: str,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,
     ) -> TensorDict:
-        if isinstance(idx, tuple) and len(idx) == 1:
-            idx = idx[0]
-        if isinstance(idx, (int, slice)) or (
-            isinstance(idx, tuple)
-            and all(isinstance(_idx, (int, slice)) for _idx in idx)
-        ):
-            torch.stack(list_item, dim=dim, out=self._tensordict[key][idx])
-        else:
-            raise ValueError(
-                f"Cannot stack onto an indexed tensor with index {idx} "
-                f"as its storage differs."
-            )
+        if not isinstance(idx, tuple):
+            idx = (idx,)
+        idx = convert_ellipsis_to_idx(idx, self.batch_size)
+        for key in self.keys():
+            vals = [td._get_str(key, NO_DEFAULT) for td in list_item]
+            if all(v is None for v in vals):
+                continue
+            v = self._get_str(key, NO_DEFAULT)
+            v_idx = v[idx]
+            if v.data_ptr() != v_idx.data_ptr():
+                raise IndexError(
+                    f"Index {idx} is incompatible with stack(..., out=data) as the storages of the indexed tensors differ."
+                )
+            torch.stack(vals, dim=dim, out=v_idx)
+            # raise ValueError(
+            #     f"Cannot stack onto an indexed tensor with index {idx} "
+            #     f"as its storage differs."
+            # )
         return self
 
     def _get_str(self, key, default):
@@ -6142,7 +6149,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 continue
             if cursor == self.stack_dim:
                 # we need to check which tds need to be indexed
-                if isinstance(idx, (int, slice)):
+                if isinstance(idx, slice) or _is_number(idx):
                     selected_td_idx = range(len(self.tensordicts))[idx]
                     if not isinstance(selected_td_idx, range):
                         isinteger = True
@@ -6159,14 +6166,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 else:
                     raise NotImplementedError(f"Unknown type {type(idx)}.")
             else:
-                if isinstance(idx, int) and cursor < self.stack_dim:
+                if _is_number(idx) and cursor <= self.stack_dim:
                     num_single += 1
                 if isinstance(idx, (int, slice, list, range, np.ndarray, torch.Tensor)):
                     out.append(idx)
                 else:
                     raise NotImplementedError(f"Unknown type {type(idx)}.")
             cursor += 1
-            return {i: out for i in selected_td_idx}, num_single, isinteger
+        return {i: tuple(out) for i in selected_td_idx}, num_single, isinteger
 
     def _set_at_str(self, key, value, idx, *, validated):
         # it may be the case that we can't get the value
@@ -6179,11 +6186,20 @@ class LazyStackedTensorDict(TensorDictBase):
             value = self.hook_in(value)
         if isinteger:
             for (i, _idx) in converted_idx.items():
-                self.tensordicts[i]._set_at_str(key, value, _idx, validated=validated)
+                if _idx:
+                    self.tensordicts[i]._set_at_str(
+                        key, value, _idx, validated=validated
+                    )
+                else:
+                    self.tensordicts[i]._set_str(
+                        key,
+                        value,
+                        validated=validated,
+                        inplace=True,
+                    )
             return self
-        for (i, _idx), _value in zip(
-            converted_idx.items(), value.unbind(self.stack_dim - num_single)
-        ):
+        unbind_dim = self.stack_dim - num_single
+        for (i, _idx), _value in zip(converted_idx.items(), value.unbind(unbind_dim)):
             self.tensordicts[i]._set_at_str(key, _value, _idx, validated=validated)
         return self
 
@@ -6282,9 +6298,12 @@ class LazyStackedTensorDict(TensorDictBase):
             # return a stack of unbound tensordicts
             out = []
             new_dim = dim if dim < self.stack_dim else dim - 1
+            new_stack_dim = (
+                self.stack_dim if dim > self.stack_dim else self.stack_dim - 1
+            )
             for td in self.tensordicts:
                 out.append(td.unbind(new_dim))
-            return tuple(torch.stack(vals) for vals in zip(*out))
+            return tuple(_stack(vals, new_stack_dim) for vals in zip(*out))
 
     def _stack_onto_(
         self,
@@ -6295,11 +6314,9 @@ class LazyStackedTensorDict(TensorDictBase):
             for source, tensordict_dest in zip(list_item, self.tensordicts):
                 tensordict_dest.update_(source)
         else:
-            # we must stack and unbind, there is no way to make it more efficient
             for i, td in enumerate(list_item):
                 idx = (slice(None),) * dim + (i,)
                 self.update_at_(td, idx)
-            # self.update_(torch.stack(list_item, dim))
         return self
 
     @cache  # noqa: B019
@@ -6881,34 +6898,18 @@ class LazyStackedTensorDict(TensorDictBase):
             )
 
     def __eq__(self, other):
-
+        if other is self:
+            return True
         if is_tensorclass(other):
             return other == self
-        if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
-            if (
-                isinstance(other, LazyStackedTensorDict)
-                and other.stack_dim == self.stack_dim
-            ):
-                if self.shape != other.shape:
-                    raise RuntimeError(
-                        "Cannot compare LazyStackedTensorDict instances of different shape."
-                    )
-                # in this case, we iterate over the tensordicts
-                return torch.stack(
-                    [
-                        td1 == td2
-                        for td1, td2 in zip(self.tensordicts, other.tensordicts)
-                    ],
-                    self.stack_dim,
-                )
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 == other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        if isinstance(other, (dict,)):
+            other = TensorDict.from_dict(other)
+        if _is_tensor_collection(other.__class__):
+            out = []
+            for i, td in enumerate(self.tensordicts):
+                idx = (slice(None),) * self.stack_dim + (i,)
+                out.append(other[idx] == td)
+            return torch.stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
             return torch.stack(
                 [td == other for td in self.tensordicts],
@@ -6917,34 +6918,18 @@ class LazyStackedTensorDict(TensorDictBase):
         return False
 
     def __ne__(self, other):
-
+        if other is self:
+            return False
         if is_tensorclass(other):
             return other != self
-        if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
-            if (
-                isinstance(other, LazyStackedTensorDict)
-                and other.stack_dim == self.stack_dim
-            ):
-                if self.shape != other.shape:
-                    raise RuntimeError(
-                        "Cannot compare LazyStackedTensorDict instances of different shape."
-                    )
-                # in this case, we iterate over the tensordicts
-                return torch.stack(
-                    [
-                        td1 != td2
-                        for td1, td2 in zip(self.tensordicts, other.tensordicts)
-                    ],
-                    self.stack_dim,
-                )
-            keys1 = set(self.keys())
-            keys2 = set(other.keys())
-            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
-                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
-            d = {}
-            for key, item1 in self.items():
-                d[key] = item1 != other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        if isinstance(other, (dict,)):
+            other = TensorDict.from_dict(other)
+        if _is_tensor_collection(other.__class__):
+            out = []
+            for i, td in enumerate(self.tensordicts):
+                idx = (slice(None),) * self.stack_dim + (i,)
+                out.append(other[idx] != td)
+            return torch.stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
             return torch.stack(
                 [td != other for td in self.tensordicts],
@@ -7277,9 +7262,10 @@ class LazyStackedTensorDict(TensorDictBase):
                         _idx,
                     )
                 return self
+            unbind_dim = self.stack_dim - num_single
             for (i, _idx), _value in zip(
                 converted_idx.items(),
-                input_dict_or_td.unbind(self.stack_dim - num_single),
+                input_dict_or_td.unbind(unbind_dim),
             ):
                 self.tensordicts[i].update_at_(
                     _value,
@@ -8421,5 +8407,7 @@ def _is_number(item):
     if isinstance(item, Number):
         return True
     if isinstance(item, Tensor) and item.ndim == 0:
+        return True
+    if isinstance(item, np.ndarray) and item.ndim == 0:
         return True
     return False

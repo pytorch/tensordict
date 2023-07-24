@@ -1182,13 +1182,15 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_device.device == torch.device("cuda")
         assert td_back.device == torch.device("cpu")
 
-    def test_unbind(self, td_name, device):
+    @pytest.mark.parametrize("dim", range(4))
+    def test_unbind(self, td_name, device, dim):
         if td_name not in ["sub_td", "idx_td", "td_reset_bs"]:
             torch.manual_seed(1)
             td = getattr(self, td_name)(device)
-            td_unbind = torch.unbind(td, dim=0)
-            assert (td == stack_td(td_unbind, 0).contiguous()).all()
-            assert (td[0] == td_unbind[0]).all()
+            td_unbind = torch.unbind(td, dim=dim)
+            assert (td == stack_td(td_unbind, dim).contiguous()).all()
+            idx = (slice(None),) * dim + (0,)
+            assert (td[idx] == td_unbind[0]).all()
 
     @pytest.mark.parametrize("squeeze_dim", [0, 1])
     def test_unsqueeze(self, td_name, device, squeeze_dim):
@@ -1342,7 +1344,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_write_on_subtd(self, td_name, device):
         td = getattr(self, td_name)(device)
         sub_td = td.get_sub_tensordict(0)
-        sub_td["a"] = torch.full((3, 2, 1, 5), 1, device=device)
+        sub_td["a"] = torch.full((3, 2, 1, 5), 1.0, device=device)
         assert (td["a"][0] == 1).all()
 
     def test_pad(self, td_name, device):
@@ -1833,7 +1835,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert recursive_checker(td_dict)
 
     @pytest.mark.parametrize(
-        "index", ["mask", "int", "range", "tensor1", "tensor2", "slice_tensor"]
+        "index", ["tensor1", "mask", "int", "range", "tensor2", "slice_tensor"]
     )
     def test_update_subtensordict(self, td_name, device, index):
         td = getattr(self, td_name)(device)
@@ -1898,6 +1900,10 @@ class TestTensorDicts(TestTensorDictsBase):
             )
             for _ in range(tds_count)
         ]
+        if td_name in ("sub_td", "sub_td2"):
+            with pytest.raises(IndexError, match="storages of the indexed tensors"):
+                torch.stack(tds_list, 0, out=td)
+            return
         stacked_td = torch.stack(tds_list, 0, out=td)
         assert stacked_td.batch_size == td.batch_size
         assert stacked_td is td
@@ -3193,6 +3199,7 @@ def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordi
             command_pipe_child.send("done")
         elif cmd == "send":
             a = torch.ones(2) * val
+            print("a", a.shape, "td", tensordict)
             tensordict.set_("a", a)
             assert (
                 tensordict.get("a") == a
