@@ -4069,7 +4069,7 @@ class TestLazyStackedTensorDict:
         ]
         for i, td in enumerate(td_list):
             td[f"individual_{i}_td"] = td.clone()
-            td[f"shared_td"] = td.clone()
+            td["shared_td"] = td.clone()
 
         td_stack = torch.stack(td_list, dim=0)
         obs = TensorDict(
