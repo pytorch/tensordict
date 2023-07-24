@@ -5201,7 +5201,7 @@ class TestNestedLazyStacks:
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
     def test_lazy_stack_stack(self, batch_size):
-        obs = self.get_lazy_stack(batch_size)
+        obs = self.nested_lazy_het_td(batch_size)
 
         expected_repr = f"""TensorDict(
     fields={{
@@ -5310,13 +5310,13 @@ class TestNestedLazyStacks:
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
     def test_resolve_stack_dim(self, batch_size):
-        obs = self.get_lazy_stack(batch_size)
+        obs = self.nested_lazy_het_td(batch_size)
 
         obs2 = obs.clone()
         obs2.apply_(lambda x: x + 1)
 
         obs_stack = torch.stack([obs, obs2])
-        obs_stack_resolved = self.dense_stack_tds_v2([obs, obs2])
+        obs_stack_resolved = self.dense_stack_tds_v2([obs, obs2], stack_dim=0)
 
         assert isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
         assert isinstance(obs_stack_resolved, TensorDict)
@@ -5324,23 +5324,24 @@ class TestNestedLazyStacks:
         assert obs_stack.batch_size == (2, *batch_size)
         assert obs_stack_resolved.batch_size == obs_stack.batch_size
 
-        assert obs_stack["agents"].shape == (2, *batch_size, 3)
-        assert obs_stack_resolved["agents"].batch_size == obs_stack["agents"].batch_size
+        assert obs_stack["lazy"].shape == (2, *batch_size, 3)
+        assert obs_stack_resolved["lazy"].batch_size == obs_stack["lazy"].batch_size
 
-        assert obs_stack["agents"].stack_dim == 0
+        assert obs_stack["lazy"].stack_dim == 0
         assert (
-            obs_stack_resolved["agents"].stack_dim
-            == len(obs_stack_resolved["agents"].batch_size) - 1
+            obs_stack_resolved["lazy"].stack_dim
+            == len(obs_stack_resolved["lazy"].batch_size) - 1
         )
         for stack in [obs_stack_resolved, obs_stack]:
             for index in range(2):
-                assert (stack[index]["state"] == index).all()
-                assert (stack["state"][index] == index).all()
-                assert (stack["agents"][index]["camera"] == index).all()
-                assert (stack[index]["agents"]["camera"] == index).all()
-                assert (stack["agents"]["camera"][index] == index).all()
+                assert (stack[index]["dense"] == index).all()
+                assert (stack["dense"][index] == index).all()
+                assert (stack["lazy"][index]["shared"] == index).all()
+                assert (stack[index]["lazy"]["shared"] == index).all()
+                assert (stack["lazy"]["shared"][index] == index).all()
                 assert (
-                    stack["agents"]["camera"][index][..., 0]["agent_o_obs"] == index
+                    stack["lazy"]["shared"][index][..., 0]["individual_0_tensor"]
+                    == index
                 ).all()
 
 
