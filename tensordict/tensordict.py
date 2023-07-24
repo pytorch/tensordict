@@ -827,7 +827,7 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def _stack_onto_(
         self,
-        key: str,
+        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
@@ -4218,12 +4218,15 @@ class TensorDict(TensorDictBase):
 
     rename_key = _renamed_inplace_method(rename_key_)
 
-    def _stack_onto_(
-        self, key: str, list_item: list[CompatibleType], dim: int
-    ) -> TensorDict:
-        if not isinstance(key, str):
-            raise ValueError("_stack_onto_ expects string keys.")
-        torch.stack(list_item, dim=dim, out=self._get_str(key, NO_DEFAULT))
+    def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> TensorDict:
+        # if not isinstance(key, str):
+        #     raise ValueError("_stack_onto_ expects string keys.")
+        for key in self.keys():
+            torch.stack(
+                [item._get_str(key, NO_DEFAULT) for item in list_item],
+                dim=dim,
+                out=self._get_str(key, NO_DEFAULT),
+            )
         return self
 
     def entry_class(self, key: NestedKey) -> type:
@@ -5009,28 +5012,26 @@ def _stack(
                     "to `stack(..., strict=True)`, this is not permitted."
                 )
 
-        for key in keys:
-            if key in out_keys:
-                out._stack_onto_(
-                    key,
-                    [_tensordict.get(key) for _tensordict in list_of_tensordicts],
-                    dim,
-                )
-            else:
-                with _ErrorInteceptor(
-                    key, "Attempted to stack tensors on different devices at key"
-                ):
-                    out.set(
-                        key,
-                        torch.stack(
-                            [
-                                _tensordict.get(key)
-                                for _tensordict in list_of_tensordicts
-                            ],
-                            dim,
-                        ),
-                        inplace=True,
-                    )
+        try:
+            out._stack_onto_(list_of_tensordicts, dim)
+        except KeyError as err:
+            raise err
+            # TODO fix this
+            # # if key in out_keys:
+            #     with _ErrorInteceptor(
+            #         key, "Attempted to stack tensors on different devices at key"
+            #     ):
+            #         out.set(
+            #             key,
+            #             torch.stack(
+            #                 [
+            #                     _tensordict.get(key)
+            #                     for _tensordict in list_of_tensordicts
+            #                 ],
+            #                 dim,
+            #             ),
+            #             inplace=True,
+            #         )
 
     return out
 
@@ -5484,10 +5485,8 @@ torch.Size([3, 2])
             return self.__class__
         return source_type
 
-    def _stack_onto_(
-        self, key: str, list_item: list[CompatibleType], dim: int
-    ) -> SubTensorDict:
-        self._source._stack_onto_at_(key, list_item, dim=dim, idx=self.idx)
+    def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> SubTensorDict:
+        self._source._stack_onto_at_(list_item, dim=dim, idx=self.idx)
         return self
 
     def to(self, dest: DeviceType | torch.Size | type, **kwargs: Any) -> TensorDictBase:
@@ -6121,15 +6120,71 @@ class LazyStackedTensorDict(TensorDictBase):
             tensordict._set_tuple(key, item, inplace=inplace, validated=validated)
         return self
 
+    def _split_index(self, index):
+        """Given a tuple index, split it in as many indices as the number of tensordicts.
+
+        Returns:
+            a dictionary with {index-of-td: index-within-td}
+            the number of single dim indices until stack dim
+            a boolean indicating if the index along the stack dim is an integer
+        """
+        if not isinstance(index, tuple):
+            index = (index,)
+        index = convert_ellipsis_to_idx(index, self.batch_size)
+        out = []
+        num_single = 0
+        isinteger = False
+        cursor = 0  # the dimension cursor
+        selected_td_idx = range(len(self.tensordicts))
+        for i, idx in enumerate(index):
+            if idx is None:
+                out.append(None)
+                continue
+            if cursor == self.stack_dim:
+                # we need to check which tds need to be indexed
+                if isinstance(idx, (int, slice)):
+                    selected_td_idx = range(len(self.tensordicts))[idx]
+                    if not isinstance(selected_td_idx, range):
+                        isinteger = True
+                        selected_td_idx = [selected_td_idx]
+                elif isinstance(idx, (list, range)):
+                    selected_td_idx = idx
+                elif isinstance(idx, (torch.Tensor, np.ndarray)):
+                    if len(idx.shape) == 1:
+                        selected_td_idx = idx.tolist()
+                    else:
+                        raise NotImplementedError(
+                            "Cannot index along stacking dim with a multidimensional tensor"
+                        )
+                else:
+                    raise NotImplementedError(f"Unknown type {type(idx)}.")
+            else:
+                if isinstance(idx, int) and cursor < self.stack_dim:
+                    num_single += 1
+                if isinstance(idx, (int, slice, list, range, np.ndarray, torch.Tensor)):
+                    out.append(idx)
+                else:
+                    raise NotImplementedError(f"Unknown type {type(idx)}.")
+            cursor += 1
+            return {i: out for i in selected_td_idx}, num_single, isinteger
+
     def _set_at_str(self, key, value, idx, *, validated):
-        item = self._get_str(key, NO_DEFAULT)
+        # it may be the case that we can't get the value
+        # because it can't be stacked.
+        converted_idx, num_single, isinteger = self._split_index(idx)
         if not validated:
             value = self._validate_value(value, check_shape=False)
             validated = True
         if self.hook_in is not None:
             value = self.hook_in(value)
-        item[idx] = value
-        self._set_str(key, item, inplace=True, validated=validated)
+        if isinteger:
+            for (i, _idx) in converted_idx.items():
+                self.tensordicts[i]._set_at_str(key, value, _idx, validated=validated)
+            return self
+        for (i, _idx), _value in zip(
+            converted_idx.items(), value.unbind(self.stack_dim - num_single)
+        ):
+            self.tensordicts[i]._set_at_str(key, _value, _idx, validated=validated)
         return self
 
     def _set_at_tuple(self, key, value, idx, *, validated):
@@ -6217,23 +6272,34 @@ class LazyStackedTensorDict(TensorDictBase):
     def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         if dim < 0:
             dim = self.batch_dims + dim
+        if dim < 0 or dim >= self.ndim:
+            raise ValueError(
+                f"Cannot unbind along dimension {dim} with batch size {self.batch_size}."
+            )
         if dim == self.stack_dim:
             return tuple(self.tensordicts)
         else:
-            return super().unbind(dim)
+            # return a stack of unbound tensordicts
+            out = []
+            new_dim = dim if dim < self.stack_dim else dim - 1
+            for td in self.tensordicts:
+                out.append(td.unbind(new_dim))
+            return tuple(torch.stack(vals) for vals in zip(*out))
 
     def _stack_onto_(
         self,
-        key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
         if dim == self.stack_dim:
             for source, tensordict_dest in zip(list_item, self.tensordicts):
-                tensordict_dest.set_(key, source)
+                tensordict_dest.update_(source)
         else:
             # we must stack and unbind, there is no way to make it more efficient
-            self.set_(key, torch.stack(list_item, dim))
+            for i, td in enumerate(list_item):
+                idx = (slice(None),) * dim + (i,)
+                self.update_at_(td, idx)
+            # self.update_(torch.stack(list_item, dim))
         return self
 
     @cache  # noqa: B019
@@ -7169,19 +7235,21 @@ class LazyStackedTensorDict(TensorDictBase):
         if input_dict_or_td is self:
             # no op
             return self
-        if (
-            isinstance(input_dict_or_td, LazyStackedTensorDict)
-            and input_dict_or_td.stack_dim == self.stack_dim
-        ):
-            if not input_dict_or_td.shape[self.stack_dim] == len(self.tensordicts):
-                raise ValueError(
-                    "cannot update stacked tensordicts with different shapes."
-                )
-            for td_dest, td_source in zip(
-                self.tensordicts, input_dict_or_td.tensordicts
-            ):
-                td_dest.update_(td_source)
-            return self
+        if isinstance(input_dict_or_td, LazyStackedTensorDict):
+            if input_dict_or_td.stack_dim == self.stack_dim:
+                if not input_dict_or_td.shape[self.stack_dim] == len(self.tensordicts):
+                    raise ValueError(
+                        "cannot update stacked tensordicts with different shapes."
+                    )
+                for td_dest, td_source in zip(
+                    self.tensordicts, input_dict_or_td.tensordicts
+                ):
+                    td_dest.update_(td_source)
+                return self
+            else:
+                for i, td in enumerate(input_dict_or_td.tensordicts):
+                    idx = (slice(None),) * input_dict_or_td.stack_dim + (i,)
+                    self.update_at_(td, idx)
         for key, value in input_dict_or_td.items():
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
                 raise TypeError(
@@ -7191,6 +7259,42 @@ class LazyStackedTensorDict(TensorDictBase):
             if clone:
                 value = value.clone()
             self.set_(key, value, **kwargs)
+        return self
+
+    def update_at_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        idx: IndexType,
+        clone: bool = False,
+    ) -> TensorDictBase:
+        if isinstance(input_dict_or_td, TensorDictBase):
+            converted_idx, num_single, isinteger = self._split_index(idx)
+            if isinteger:
+                # this will break if the index along the stack dim is [0] or :1 or smth
+                for (i, _idx) in converted_idx.items():
+                    self.tensordicts[i].update_at_(
+                        input_dict_or_td,
+                        _idx,
+                    )
+                return self
+            for (i, _idx), _value in zip(
+                converted_idx.items(),
+                input_dict_or_td.unbind(self.stack_dim - num_single),
+            ):
+                self.tensordicts[i].update_at_(
+                    _value,
+                    _idx,
+                )
+            return self
+        for key, value in input_dict_or_td.items():
+            if not isinstance(value, _ACCEPTED_CLASSES):
+                raise TypeError(
+                    f"Expected value to be one of types {_ACCEPTED_CLASSES} "
+                    f"but got {type(value)}"
+                )
+            if clone:
+                value = value.clone()
+            self.set_at_(key, value, idx)
         return self
 
     def rename_key_(
@@ -7538,7 +7642,6 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def _stack_onto_(
         self,
-        key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
@@ -7785,7 +7888,6 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
 
     def _stack_onto_(
         self,
-        key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
@@ -7794,7 +7896,7 @@ class _UnsqueezedTensorDict(_CustomOpTensorDict):
         list_item_unsqueeze = [
             item.squeeze(unsqueezed_dim - diff_to_apply) for item in list_item
         ]
-        return self._source._stack_onto_(key, list_item_unsqueeze, dim)
+        return self._source._stack_onto_(list_item_unsqueeze, dim)
 
     @property
     def names(self):
@@ -7831,7 +7933,7 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
 
     def _stack_onto_(
         self,
-        key: str,
+        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
@@ -7843,7 +7945,7 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
         list_item_unsqueeze = [
             item.unsqueeze(squeezed_dim - diff_to_apply) for item in list_item
         ]
-        return self._source._stack_onto_(key, list_item_unsqueeze, dim)
+        return self._source._stack_onto_(list_item_unsqueeze, dim)
 
     @property
     def names(self):
@@ -7950,7 +8052,7 @@ class _TransposedTensorDict(_CustomOpTensorDict):
 
     def _stack_onto_(
         self,
-        key: str,
+        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
@@ -7964,7 +8066,7 @@ class _TransposedTensorDict(_CustomOpTensorDict):
         list_permuted_items = []
         for item in list_item:
             list_permuted_items.append(item.transpose(*trsp))
-        self._source._stack_onto_(key, list_permuted_items, dim)
+        self._source._stack_onto_(list_permuted_items, dim)
         return self
 
     @property
@@ -8058,7 +8160,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     def _stack_onto_(
         self,
-        key: str,
+        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
@@ -8074,7 +8176,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
                 range(self.batch_dims - 1, item.ndimension())
             )
             list_permuted_items.append(item.permute(*perm))
-        self._source._stack_onto_(key, list_permuted_items, new_dim)
+        self._source._stack_onto_(list_permuted_items, new_dim)
         return self
 
     @property
