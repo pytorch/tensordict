@@ -3383,27 +3383,6 @@ class TensorDictBase(MutableMapping):
                     for sub_index in index
                 )
 
-            # if sum(isinstance(_index, str) for _index in index) not in [len(index), 0]:
-            #     raise IndexError(_STR_MIXED_INDEX_ERROR)
-            # if isinstance(index[0], str):
-            #     # TODO: would be nicer to have set handle the nested set, but the logic to
-            #     # preserve the error handling below is complex and requires some thought
-            #     try:
-            #         if len(index) == 1:
-            #             return self.set(
-            #                 index[0], value, inplace=isinstance(self, SubTensorDict)
-            #             )
-            #         self.set(index, value, inplace=isinstance(self, SubTensorDict))
-            #     except AttributeError as err:
-            #         if "for populating tensordict with new key-value pair" in str(err):
-            #             raise RuntimeError(
-            #                 "Trying to replace an existing nested tensordict with "
-            #                 "another one with non-matching keys. This leads to "
-            #                 "unspecified behaviours and is prohibited."
-            #             )
-            #         raise err
-            #     return
-
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         elif isinstance(index, (list, range)):
@@ -6143,7 +6122,7 @@ class LazyStackedTensorDict(TensorDictBase):
         isinteger = False
         cursor = 0  # the dimension cursor
         selected_td_idx = range(len(self.tensordicts))
-        for i, idx in enumerate(index):
+        for i, idx in enumerate(index):  # noqa: B007
             if idx is None:
                 out.append(None)
                 continue
@@ -6710,42 +6689,78 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         return torch.stack(tensordicts, dim=self.stack_dim)
 
-    def __setitem__(self, item: IndexType, value: TensorDictBase) -> TensorDictBase:
-        if isinstance(item, (list, range)):
-            item = torch.tensor(item, device=self.device)
-        if isinstance(item, tuple) and any(
-            isinstance(sub_index, (list, range)) for sub_index in item
-        ):
-            item = tuple(
-                torch.tensor(sub_index, device=self.device)
-                if isinstance(sub_index, (list, range))
-                else sub_index
-                for sub_index in item
-            )
-        if (isinstance(item, Tensor) and item.dtype is torch.bool) or (
-            isinstance(item, tuple)
+    def __setitem__(self, index: IndexType, value: TensorDictBase) -> TensorDictBase:
+        if isinstance(index, (tuple, str)):
+            # try:
+            index_unravel = _unravel_key_to_tuple(index)
+            if index_unravel:
+                self._set_tuple(
+                    index_unravel,
+                    value,
+                    inplace=BEST_ATTEMPT_INPLACE
+                    if isinstance(self, SubTensorDict)
+                    else False,
+                    validated=False,
+                )
+                return
+
+            if any(isinstance(sub_index, (list, range)) for sub_index in index):
+                index = tuple(
+                    torch.tensor(sub_index, device=self.device)
+                    if isinstance(sub_index, (list, range))
+                    else sub_index
+                    for sub_index in index
+                )
+        if (isinstance(index, Tensor) and index.dtype == torch.bool) or (
+            isinstance(index, tuple)
             and any(
-                isinstance(_item, Tensor) and _item.dtype is torch.bool
-                for _item in item
+                isinstance(_index, Tensor) and _index.dtype == torch.bool
+                for _index in index
             )
         ):
             raise RuntimeError(
                 "setting values to a LazyStackTensorDict using boolean values is not supported yet. "
                 "If this feature is needed, feel free to raise an issue on github."
             )
-        if isinstance(item, Tensor):
-            # e.g. item.shape = [1, 2, 3] and stack_dim == 2
-            if item.ndimension() >= self.stack_dim + 1:
-                items = item.unbind(self.stack_dim)
-                values = value.unbind(self.stack_dim)
-                for td, _item, sub_td in zip(self.tensordicts, items, values):
-                    td[_item] = sub_td
-            else:
-                values = value.unbind(self.stack_dim)
-                for td, sub_td in zip(self.tensordicts, values):
-                    td[item] = sub_td
+
+        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
+            index = convert_ellipsis_to_idx(index, self.batch_size)
+        elif isinstance(index, (list, range)):
+            index = torch.tensor(index, device=self.device)
+
+        if isinstance(value, (TensorDictBase, dict)):
+            indexed_bs = _getitem_batch_size(self.batch_size, index)
+            if isinstance(value, dict):
+                value = TensorDict(
+                    value, batch_size=indexed_bs, device=self.device, _run_checks=False
+                )
+            if value.batch_size != indexed_bs:
+                # try to expand
+                try:
+                    value = value.expand(indexed_bs)
+                except RuntimeError as err:
+                    raise RuntimeError(
+                        f"indexed destination TensorDict batch size is {indexed_bs} "
+                        f"(batch_size = {self.batch_size}, index={index}), "
+                        f"which differs from the source batch size {value.batch_size}"
+                    ) from err
+            converted_idx, num_single, isinteger = self._split_index(index)
+            if isinteger:
+                # this will break if the index along the stack dim is [0] or :1 or smth
+                for (i, _idx) in converted_idx.items():
+                    self.tensordicts[i][_idx] = value
+                return self
+            unbind_dim = self.stack_dim - num_single
+            for (i, _idx), _value in zip(
+                converted_idx.items(),
+                value.unbind(unbind_dim),
+            ):
+                self.tensordicts[i][_idx] = _value
             return self
-        return super().__setitem__(item, value)
+
+        else:
+            for key in self.keys():
+                self.set_at_(key, value, index)
 
     def __contains__(self, item: IndexType) -> bool:
         if isinstance(item, TensorDictBase):
@@ -6898,8 +6913,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
 
     def __eq__(self, other):
-        if other is self:
-            return True
         if is_tensorclass(other):
             return other == self
         if isinstance(other, (dict,)):
@@ -6918,8 +6931,6 @@ class LazyStackedTensorDict(TensorDictBase):
         return False
 
     def __ne__(self, other):
-        if other is self:
-            return False
         if is_tensorclass(other):
             return other != self
         if isinstance(other, (dict,)):

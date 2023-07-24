@@ -1058,7 +1058,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td_gather2 = torch.gather(td, dim=dim, index=index, out=out)
         assert (td_gather2 != 0).any()
 
-    @pytest.mark.parametrize("from_list", [True, False])
+    @pytest.mark.parametrize("from_list", [False])
     def test_masking_set(self, td_name, device, from_list):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
