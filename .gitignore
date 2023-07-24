@@ -1,9 +1,10 @@
 # Python artifacts
-__pycache__
-*.egg-info
+__pycache__/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
 tensordict/version.py
-.pytest_cache
-build
 tensordict/_tensordict.so
 
 # docs build

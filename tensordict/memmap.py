@@ -20,6 +20,7 @@ import torch
 
 from tensordict.utils import (
     _getitem_batch_size,
+    convert_ellipsis_to_idx,
     DeviceType,
     IndexType,
     NUMPY_TO_TORCH_DTYPE_DICT,
@@ -283,7 +284,7 @@ class MemmapTensor:
         else:
             # avoid extending someone else's index
             memmap_copy._index = deepcopy(memmap_copy._index)
-        memmap_copy._index.append(index)
+        memmap_copy._index.append(convert_ellipsis_to_idx(index, memmap_tensor.shape))
         memmap_copy._shape_indexed = None
         memmap_copy.file = memmap_tensor.file
         memmap_copy._memmap_array = memmap_tensor._memmap_array
@@ -576,8 +577,14 @@ MemmapTensor of shape {self.shape}."""
     def __eq__(self, other: Any) -> torch.Tensor:
         return self._tensor == other
 
+    def __or__(self, other: Any) -> torch.Tensor:
+        return self._tensor | other
+
     def __ne__(self, other: Any) -> torch.Tensor:
         return self._tensor != other
+
+    def __invert__(self) -> torch.Tensor:
+        return ~self._tensor
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():

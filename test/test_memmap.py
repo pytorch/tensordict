@@ -510,6 +510,46 @@ def test_memmap_cast():
     assert (y[2:] == 0).all()
 
 
+@pytest.fixture
+def dummy_memmap():
+    return MemmapTensor.from_tensor(torch.zeros(10, 11))
+
+
+@pytest.mark.parametrize("device", get_available_devices())
+class TestOps:
+    def test_eq(self, device, dummy_memmap):
+        memmap = dummy_memmap.to(device)
+        assert (memmap == memmap.clone()).all()
+        assert (memmap.clone() == memmap).all()
+        if device.type == "cpu":
+            assert (memmap == memmap.as_tensor()).all()
+            assert (memmap.as_tensor() == memmap).all()
+        else:
+            assert (memmap == memmap._tensor).all()
+            assert (memmap._tensor == memmap).all()
+
+    def test_fill_(self, device, dummy_memmap):
+        memmap = dummy_memmap.to(device)
+        assert (memmap.fill_(1.0) == 1).all()
+
+    def test_copy_(self, device, dummy_memmap):
+        memmap = dummy_memmap.to(device)
+        assert (memmap.copy_(torch.ones(10, 11, device=device)) == 1).all()
+        assert (torch.ones(10, 11, device=device).copy_(memmap) == 1).all()
+
+    def test_or(self, device):
+        memmap = MemmapTensor.from_tensor(torch.ones(10, 11, dtype=torch.bool)).to(
+            device
+        )
+        assert (memmap | (~memmap)).all()
+
+    def test_ne(self, device):
+        memmap = MemmapTensor.from_tensor(torch.ones(10, 11, dtype=torch.bool)).to(
+            device
+        )
+        assert (memmap != ~memmap).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

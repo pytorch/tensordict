@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import copy
 import pickle
+import unittest
 import warnings
 
 import pytest
@@ -22,6 +24,7 @@ from tensordict.nn import (
 )
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
 from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper
+from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import set_skip_existing, skip_existing
@@ -144,8 +147,80 @@ class TestTDModule:
         )
         seq = TensorDictSequential(module, another_module)
 
-        seq.reset_parameters()
+        seq.reset_parameters_recursive()
         assert torch.all(old_param != net[0][0].weight.data)
+
+    @pytest.mark.parametrize(
+        "net",
+        [
+            nn.ModuleList([nn.Sequential(nn.Linear(1, 1), nn.ReLU())]),
+            nn.Linear(2, 1),
+            nn.Sequential(nn.Tanh(), nn.Linear(1, 1), nn.Linear(2, 1)),
+        ],
+    )
+    def test_reset_functional(self, net):
+        torch.manual_seed(0)
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        another_module = TensorDictModule(
+            nn.Conv2d(1, 1, 1, 1), in_keys=["in"], out_keys=["out"]
+        )
+        seq = TensorDictSequential(module, another_module)
+
+        params = TensorDict.from_module(seq)
+        old_params = params.clone(recurse=True)
+        new_params = params.clone(recurse=True)
+        returned_params = seq.reset_parameters_recursive(new_params)
+
+        weights_changed = new_params != old_params
+        for w in weights_changed.values(include_nested=True, leaves_only=True):
+            assert w.all(), f"Weights should have changed but did not for {w}"
+
+        module_params = TensorDict.from_module(seq)
+        overwrote_stateful_params = module_params != old_params
+        for p in overwrote_stateful_params.values(
+            include_nested=True, leaves_only=True
+        ):
+            assert not p.any(), f"Overwrote stateful weights from the module {p}"
+
+        returned_params_eq_inplace_updated_params = returned_params == new_params
+        for p in returned_params_eq_inplace_updated_params.values(
+            include_nested=True, leaves_only=True
+        ):
+            assert (
+                p.all()
+            ), f"Discrepancy between returned weights and those in-place updated {p}"
+
+    def test_reset_functional_called_once(self):
+        import unittest.mock
+
+        torch.manual_seed(0)
+        lin = nn.Linear(1, 1)
+        lin.reset_parameters = unittest.mock.Mock(return_value=None)
+        net = nn.ModuleList([nn.Sequential(lin, nn.ReLU())])
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        nested_module = TensorDictModule(module, in_keys=["in"], out_keys=["out"])
+        tripled_nested = TensorDictModule(
+            nested_module, in_keys=["in"], out_keys=["out"]
+        )
+
+        params = TensorDict.from_module(tripled_nested)
+        tripled_nested.reset_parameters_recursive(params)
+        lin.reset_parameters.assert_called_once()
+
+    def test_reset_extra_dims(self):
+        torch.manual_seed(0)
+        net = nn.Sequential(nn.Linear(1, 1), nn.ReLU())
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["mid"])
+        another_module = TensorDictModule(
+            nn.Linear(1, 1), in_keys=["mid"], out_keys=["out"]
+        )
+        seq = TensorDictSequential(module, another_module)
+
+        params = TensorDict.from_module(seq)
+        new_params = params.expand(2, 3, *params.shape).clone()
+        # Does not inherit from test case, no assertRaises :(
+        with pytest.raises(RuntimeError):
+            seq.reset_parameters_recursive(new_params)
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
@@ -2612,6 +2687,100 @@ def test_nested_keys_probabilistic_normal(log_prob_key):
         assert td_out[log_prob_key].shape == (3, 4, 1)
     else:
         assert td_out["sample_log_prob"].shape == (3, 4, 1)
+
+
+class TestEnsembleModule:
+    def test_init(self):
+        """Ensure that we correctly initialize copied weights s.t. they are not identical
+        to the original weights."""
+        torch.manual_seed(0)
+        module = TensorDictModule(
+            nn.Sequential(
+                nn.Linear(2, 3),
+                nn.ReLU(),
+                nn.Linear(3, 1),
+            ),
+            in_keys=["a"],
+            out_keys=["b"],
+        )
+        mod = EnsembleModule(module, num_copies=2)
+        for param in mod.ensemble_parameters:
+            p0, p1 = param.unbind(0)
+            assert not torch.allclose(
+                p0, p1
+            ), f"Ensemble params were not initialized correctly {p0}, {p1}"
+
+    @pytest.mark.parametrize(
+        "net",
+        [
+            nn.Linear(1, 1),
+            nn.Sequential(nn.Linear(1, 1)),
+            nn.Sequential(nn.Linear(1, 1), nn.ReLU(), nn.Linear(1, 1)),
+        ],
+    )
+    def test_siso_forward(self, net):
+        """Ensure that forward works for a single input and output"""
+        module = TensorDictModule(
+            net,
+            in_keys=["bork"],
+            out_keys=["dork"],
+        )
+        mod = EnsembleModule(module, num_copies=2)
+        td = TensorDict({"bork": torch.randn(5, 1)}, batch_size=[5])
+        out = mod(td)
+        assert "dork" in out.keys(), "Ensemble forward failed to write keys"
+        assert out["dork"].shape == torch.Size(
+            [2, 5, 1]
+        ), "Ensemble forward failed to expand input"
+        outs = out["dork"].unbind(0)
+        assert not torch.allclose(outs[0], outs[1]), "Outputs should be different"
+
+    @pytest.mark.parametrize(
+        "net",
+        [
+            nn.Linear(1, 1),
+            nn.Sequential(nn.Linear(1, 1)),
+            nn.Sequential(nn.Linear(1, 1), nn.ReLU(), nn.Linear(1, 1)),
+        ],
+    )
+    def test_chained_ensembles(self, net):
+        """Ensure that the expand_input argument works"""
+        module = TensorDictModule(net, in_keys=["bork"], out_keys=["dork"])
+        next_module = TensorDictModule(
+            copy.deepcopy(net), in_keys=["dork"], out_keys=["spork"]
+        )
+        e0 = EnsembleModule(module, num_copies=4, expand_input=True)
+        e1 = EnsembleModule(next_module, num_copies=4, expand_input=False)
+        seq = TensorDictSequential(e0, e1)
+        td = TensorDict({"bork": torch.randn(5, 1)}, batch_size=[5])
+        out = seq(td)
+
+        for out_key in ["dork", "spork"]:
+            assert out_key in out.keys(), f"Ensemble forward failed to write {out_key}"
+            assert out[out_key].shape == torch.Size(
+                [4, 5, 1]
+            ), f"Ensemble forward failed to expand input for {out_key}"
+            same_outputs = torch.isclose(
+                out[out_key].repeat(4, 1, 1), out[out_key].repeat_interleave(4, dim=0)
+            ).reshape(4, 4, 5, 1)
+            mask_out_diags = torch.eye(4).logical_not()
+            assert not torch.any(
+                same_outputs[mask_out_diags]
+            ), f"Module ensemble outputs should be different for {out_key}"
+
+    def test_reset_once(self):
+        """Ensure we only call reset_parameters() once per ensemble member"""
+        lin = nn.Linear(1, 1)
+        lin.reset_parameters = unittest.mock.Mock()
+        module = TensorDictModule(
+            nn.Sequential(lin),
+            in_keys=["a"],
+            out_keys=["b"],
+        )
+        EnsembleModule(module, num_copies=2)
+        assert (
+            lin.reset_parameters.call_count == 2
+        ), f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
 
 
 if __name__ == "__main__":
