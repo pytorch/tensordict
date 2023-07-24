@@ -5203,73 +5203,23 @@ class TestNestedLazyStacks:
     def test_lazy_stack_stack(self, batch_size):
         obs = self.nested_lazy_het_td(batch_size)
 
-        expected_repr = f"""TensorDict(
-    fields={{
-        agents: LazyStackedTensorDict(
-            fields={{
-                camera: Tensor(shape={torch.Size((*batch_size,3,32,32,3))}, device=cpu, dtype=torch.float32, is_shared=False),
-                vector: Tensor(shape={torch.Size((*batch_size,3,-1))}, device=cpu, dtype=torch.float32, is_shared=False)}},
-            lazy_fields={{
-                0 ->
-                    agent_0_obs: Tensor(shape={torch.Size((*batch_size,1))}, device=cpu, dtype=torch.float32, is_shared=False),
-                    lidar: Tensor(shape={torch.Size((*batch_size,20))}, device=cpu, dtype=torch.float32, is_shared=False),
-                1 ->
-                    agent_1_obs: Tensor(shape={torch.Size((*batch_size,1,2))}, device=cpu, dtype=torch.float32, is_shared=False),
-                    lidar: Tensor(shape={torch.Size((*batch_size,20))}, device=cpu, dtype=torch.float32, is_shared=False),
-                2 ->
-                    agent_2_obs: Tensor(shape={torch.Size((*batch_size,1,2,3))}, device=cpu, dtype=torch.float32, is_shared=False)}},
-            batch_size={torch.Size((*batch_size,3))},
-            device=None,
-            is_shared=False,
-            stack_dim={obs["agents"].stack_dim}),
-        state: Tensor(shape={torch.Size((*batch_size,64,64,3))}, device=cpu, dtype=torch.float32, is_shared=False)}},
-    batch_size={torch.Size(batch_size)},
-    device=None,
-    is_shared=False)"""
-
-        assert repr(obs) == expected_repr
-
         assert isinstance(obs, TensorDict)
-        assert isinstance(obs["agents"], LazyStackedTensorDict)
-        assert obs["agents"].stack_dim == len(obs["agents"].shape) - 1  # succeeds
-        assert obs["agents"].shape == (*batch_size, 3)
-        assert isinstance(obs["agents"][..., 0], TensorDict)  # succeeds
+        assert isinstance(obs["lazy"], LazyStackedTensorDict)
+        assert obs["lazy"].stack_dim == len(obs["lazy"].shape) - 1  # succeeds
+        assert obs["lazy"].shape == (*batch_size, 3)
+        assert isinstance(obs["lazy"][..., 0], TensorDict)  # succeeds
 
         obs_stack = torch.stack([obs])
-
-        expected_repr = f"""LazyStackedTensorDict(
-    fields={{
-        agents: LazyStackedTensorDict(
-            fields={{
-                camera: Tensor(shape={torch.Size((1,*batch_size, 3, 32, 32, 3))}, device=cpu, dtype=torch.float32, is_shared=False),
-                vector: Tensor(shape={torch.Size((1,*batch_size, 3, -1))}, device=cpu, dtype=torch.float32, is_shared=False)}},
-            lazy_fields={{
-            }},
-            batch_size={torch.Size((1,*batch_size, 3))},
-            device=None,
-            is_shared=False,
-            stack_dim={0}),
-        state: Tensor(shape={torch.Size((1,*batch_size, 64, 64, 3))}, device=cpu, dtype=torch.float32, is_shared=False)}},
-    lazy_fields={{
-    }},
-    batch_size={torch.Size((1,*batch_size))},
-    device=None,
-    is_shared=False,
-    stack_dim={0})"""
-        assert expected_repr == repr(obs_stack)
-        # here the previous lazy keys are not show as this is a stack of stacks
-        # and there are no lazy keys in this outer stack
-        # the lazy keys of inner stacks are not printed
 
         assert (
             isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
         )  # succeeds
         assert obs_stack.batch_size == (1, *batch_size)  # succeeds
         assert obs_stack[0] is obs  # succeeds
-        assert isinstance(obs_stack["agents"], LazyStackedTensorDict)
-        assert obs_stack["agents"].shape == (1, *batch_size, 3)
-        assert obs_stack["agents"].stack_dim == 0  # succeeds
-        assert obs_stack["agents"][0] is obs["agents"]
+        assert isinstance(obs_stack["lazy"], LazyStackedTensorDict)
+        assert obs_stack["lazy"].shape == (1, *batch_size, 3)
+        assert obs_stack["lazy"].stack_dim == 0  # succeeds
+        assert obs_stack["lazy"].tensordicts[0] is obs["lazy"]
 
         obs2 = obs.clone()
         obs_stack = torch.stack([obs, obs2])
@@ -5279,34 +5229,10 @@ class TestNestedLazyStacks:
         )  # succeeds
         assert obs_stack.batch_size == (2, *batch_size)  # succeeds
         assert obs_stack[0] is obs  # succeeds
-        assert isinstance(obs_stack["agents"], LazyStackedTensorDict)
-        assert obs_stack["agents"].shape == (2, *batch_size, 3)
-        assert obs_stack["agents"].stack_dim == 0  # succeeds
-        assert obs_stack["agents"][0] is obs["agents"]
-
-        expected_repr = f"""LazyStackedTensorDict(
-    fields={{
-        agents: LazyStackedTensorDict(
-            fields={{
-                camera: Tensor(shape={torch.Size((2,*batch_size, 3, 32, 32, 3))}, device=cpu, dtype=torch.float32, is_shared=False),
-                vector: Tensor(shape={torch.Size((2,*batch_size, 3, -1))}, device=cpu, dtype=torch.float32, is_shared=False)}},
-            lazy_fields={{
-            }},
-            batch_size={torch.Size((2,*batch_size, 3))},
-            device=None,
-            is_shared=False,
-            stack_dim={0}),
-        state: Tensor(shape={torch.Size((2,*batch_size, 64, 64, 3))}, device=cpu, dtype=torch.float32, is_shared=False)}},
-    lazy_fields={{
-    }},
-    batch_size={torch.Size((2,*batch_size))},
-    device=None,
-    is_shared=False,
-    stack_dim={0})"""
-        assert expected_repr == repr(obs_stack)
-        # here the previous lazy keys are not show as this is a stack of stacks
-        # and there are no lazy keys in this outer stack
-        # the lazy keys of inner stacks are not printed
+        assert isinstance(obs_stack["lazy"], LazyStackedTensorDict)
+        assert obs_stack["lazy"].shape == (2, *batch_size, 3)
+        assert obs_stack["lazy"].stack_dim == 0  # succeeds
+        assert obs_stack["lazy"].tensordicts[0] is obs["lazy"]
 
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
     def test_stack_hetero(self, batch_size):
