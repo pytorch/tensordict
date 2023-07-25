@@ -1063,13 +1063,9 @@ class TestTensorDicts(TestTensorDictsBase):
             ),
             batch_size=[n, *td.batch_size[d:]],
         )
-        if td_name in ("nested_stacked_td", "stacked_td"):
-            with pytest.raises(RuntimeError, match="is not supported"):
-                td[mask] = pseudo_td
-        else:
-            td[mask] = pseudo_td
-            for item in td.values():
-                assert (item[mask] == 0).all()
+        td[mask] = pseudo_td
+        for item in td.values():
+            assert (item[mask] == 0).all()
 
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
@@ -1672,9 +1668,7 @@ class TestTensorDicts(TestTensorDictsBase):
             # this is a bit contrived, but want to check that if we pass something
             # weird as the index to the stacking dimension we'll get the error
             idx = (slice(None),) * td.stack_dim + ({1, 2, 3},)
-            with pytest.raises(
-                TypeError, match="Invalid index used for stack dimension."
-            ):
+            with pytest.raises(TypeError, match="Invalid index"):
                 td[idx]
 
     def test_setitem_nested_dict_value(self, td_name, device):
@@ -3186,7 +3180,6 @@ def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordi
             command_pipe_child.send("done")
         elif cmd == "send":
             a = torch.ones(2) * val
-            print("a", a.shape, "td", tensordict)
             tensordict.set_("a", a)
             assert (
                 tensordict.get("a") == a
@@ -4542,32 +4535,80 @@ class TestLazyStackedTensorDict:
         assert result.batch_size == ref_tensor[index].shape, index
         assert result.batch_size == outer_dense[index].shape, index
 
-    # We don't support caching for unlocked lazy stacks
-    # def test_cached_unlocked_stacked(self):
-    #     """same as above in the non-locked case.
-    #
-    #     Additionally tests that deleting the key in one tensordict raises an error."""
-    #     td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
-    #     std = torch.stack([td, td.clone()])
-    #
-    #     a = std["a"]
-    #     val = next(iter(std._cache['_get_str_key'].values()))
-    #     assert val is a
-    #     orig = std[0]['a', 'b']
-    #     other = orig.clone().zero_()
-    #     orig.unlock_()
-    #     orig.update(other)
-    #     assert (std['a', 'b', 'c', 'd'] == torch.tensor([0, 1])).all()
-    #
-    #     orig = std[1]['a', 'b', 'c']
-    #     other = orig.clone().zero_()
-    #     orig.unlock_()
-    #     orig.update(other)
-    #     assert (std['a', 'b', 'c', 'd'] == torch.tensor([0, 0])).all()
-    #
-    #     orig = std[1]['a', 'b']
-    #     orig['c'] = 1.0
-    #     print(std['a', 'b', 'c', 'd'])
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
+    @pytest.mark.parametrize("mask_dim", [0, 1, 2])
+    @pytest.mark.parametrize("single_mask_dim", [True, False])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_lazy_mask_indexing(self, stack_dim, mask_dim, single_mask_dim, device):
+        torch.manual_seed(0)
+        td = TensorDict({"a": torch.zeros(9, 10, 11)}, [9, 10, 11], device=device)
+        td = torch.stack(
+            [
+                td,
+                td.apply(lambda x: x + 1),
+                td.apply(lambda x: x + 2),
+                td.apply(lambda x: x + 3),
+            ],
+            stack_dim,
+        )
+        mask = torch.zeros(())
+        while not mask.any():
+            if single_mask_dim:
+                mask = torch.zeros(td.shape[mask_dim], dtype=torch.bool).bernoulli_()
+            else:
+                mask = torch.zeros(
+                    td.shape[mask_dim : mask_dim + 2], dtype=torch.bool
+                ).bernoulli_()
+        index = (slice(None),) * mask_dim + (mask,)
+        tdmask = td[index]
+        assert tdmask["a"].shape == td["a"][index].shape
+        assert (tdmask["a"] == td["a"][index]).all()
+        index = (0,) * mask_dim + (mask,)
+        tdmask = td[index]
+        assert tdmask["a"].shape == td["a"][index].shape
+        assert (tdmask["a"] == td["a"][index]).all()
+        index = (slice(1),) * mask_dim + (mask,)
+        tdmask = td[index]
+        assert tdmask["a"].shape == td["a"][index].shape
+        assert (tdmask["a"] == td["a"][index]).all()
+
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
+    @pytest.mark.parametrize("mask_dim", [0, 1, 2])
+    @pytest.mark.parametrize("single_mask_dim", [True, False])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_lazy_mask_setitem(self, stack_dim, mask_dim, single_mask_dim, device):
+        torch.manual_seed(0)
+        td = TensorDict({"a": torch.zeros(9, 10, 11)}, [9, 10, 11], device=device)
+        td = torch.stack(
+            [
+                td,
+                td.apply(lambda x: x + 1),
+                td.apply(lambda x: x + 2),
+                td.apply(lambda x: x + 3),
+            ],
+            stack_dim,
+        )
+        mask = torch.zeros(())
+        while not mask.any():
+            if single_mask_dim:
+                mask = torch.zeros(td.shape[mask_dim], dtype=torch.bool).bernoulli_()
+            else:
+                mask = torch.zeros(
+                    td.shape[mask_dim : mask_dim + 2], dtype=torch.bool
+                ).bernoulli_()
+        index = (slice(None),) * mask_dim + (mask,)
+        tdset = TensorDict({"a": td["a"][index] * 0 - 1}, [])
+        # we know that the batch size is accurate from test_lazy_mask_indexing
+        tdset.batch_size = td[index].batch_size
+        td[index] = tdset
+        assert (td["a"][index] == tdset["a"]).all()
+        assert (td["a"][index] == tdset["a"]).all()
+        index = (slice(1),) * mask_dim + (mask,)
+        tdset = TensorDict({"a": td["a"][index] * 0 - 1}, [])
+        tdset.batch_size = td[index].batch_size
+        td[index] = tdset
+        assert (td["a"][index] == tdset["a"]).all()
+        assert (td["a"][index] == tdset["a"]).all()
 
 
 @pytest.mark.skipif(
