@@ -4195,8 +4195,6 @@ class TensorDict(TensorDictBase):
                 dim=dim,
                 out=dest,
             )
-            assert (dest == torch.stack(vals, dim=dim)).all(), key
-            assert (dest == self.get(key)).all()
         return self
 
     def entry_class(self, key: NestedKey) -> type:
@@ -6788,7 +6786,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 # td_index is a nested tuple that mimics the shape of stack_index
                 def _nested_stack(t: list, stack_idx: Tensor, td_index):
                     if stack_idx.ndim:
-                        assert len(td_index) == len(stack_idx)
                         out = LazyStackedTensorDict(
                             *[
                                 _nested_stack(t, _idx, td_index[i])
