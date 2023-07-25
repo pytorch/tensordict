@@ -4189,11 +4189,14 @@ class TensorDict(TensorDictBase):
             vals = [item._get_str(key, None) for item in list_item]
             if all(v is None for v in vals):
                 continue
+            dest = self._get_str(key, NO_DEFAULT)
             torch.stack(
                 vals,
                 dim=dim,
-                out=self._get_str(key, NO_DEFAULT),
+                out=dest,
             )
+            assert (dest == torch.stack(vals, dim=dim)).all(), key
+            assert (dest == self.get(key)).all()
         return self
 
     def entry_class(self, key: NestedKey) -> type:
@@ -6763,7 +6766,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
         index_dict = _convert_index_lazystack(index, self.stack_dim, self.batch_size)
         if index_dict is None:
-            # the we use a sub-tensordict
+            # then we use a sub-tensordict
             return self.get_sub_tensordict(index)
         td_index = index_dict["remaining_index"]
         stack_index = index_dict["stack_index"]
@@ -6802,7 +6805,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise TypeError("Invalid index used for stack dimension.")
             out._td_dim_name = self._td_dim_name
             return out
-        return self.tensordicts[stack_index][td_index]
+        out = self.tensordicts[stack_index]
+        if td_index:
+            return out[td_index]
+        return out
 
     def __eq__(self, other):
         if is_tensorclass(other):
@@ -8340,7 +8346,10 @@ def _broadcast_tensors(index):
         )
     return index
 
-
+def _reduce_index(index):
+    if all(idx is Ellipsis or (isinstance(idx, slice) and idx == slice(None)) for idx in index):
+        index = ()
+    return index
 def _convert_index_lazystack(index, stack_dim, batch_size):
     out = {
         "remaining_index": None,
@@ -8408,5 +8417,5 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
             return remaining_index
 
         remaining_index = _dispatch(remaining_index, stack_index.tolist())
-    out["remaining_index"] = remaining_index
+    out["remaining_index"] = _reduce_index(remaining_index)
     return out
