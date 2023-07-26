@@ -436,10 +436,14 @@ class PersistentTensorDict(TensorDictBase):
         raise NotImplementedError
 
     def _stack_onto_(
-        self, key: str, list_item: list[CompatibleType], dim: int
+        self, list_item: list[CompatibleType], dim: int
     ) -> PersistentTensorDict:
-        stacked = torch.stack(list_item, dim=dim)
-        self.set_(key, stacked)
+        for key in self.keys():
+            vals = [td._get_str(key, None) for td in list_item]
+            if all(v is None for v in vals):
+                continue
+            stacked = torch.stack(vals, dim=dim)
+            self.set_(key, stacked)
         return self
 
     @property
