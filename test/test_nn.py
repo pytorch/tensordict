@@ -1078,15 +1078,15 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1159,16 +1159,16 @@ class TestTDSequence:
         assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 4
         del tdmodule[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1221,17 +1221,17 @@ class TestTDSequence:
         tdmodule[1] = tdmodule2
         tdmodule[2] = normal_params
         tdmodule[3] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params["module", "3"] = params["module", "4"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
+            params["module", "3"] = params["module", "4"]
         assert len(tdmodule) == 5
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 5
         del tdmodule[4]
-        del params["module", "4"]
+        with params.unlock_():
+            del params["module", "4"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1273,15 +1273,15 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1333,16 +1333,16 @@ class TestTDSequence:
         assert len(tdmodule.module) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule.module, "__delitem__")
         assert len(tdmodule.module) == 4
         del tdmodule.module[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule.module) == 3
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1399,17 +1399,17 @@ class TestTDSequence:
         tdmodule[1] = tdmodule2
         tdmodule[2] = normal_params
         tdmodule[3] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params["module", "3"] = params["module", "4"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
+            params["module", "3"] = params["module", "4"]
         assert len(tdmodule) == 5
 
         assert hasattr(tdmodule.module, "__delitem__")
         assert len(tdmodule.module) == 5
         del tdmodule.module[4]
-        del params["module", "4"]
+        with params.unlock_():
+            del params["module", "4"]
         assert len(tdmodule.module) == 4
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1450,15 +1450,15 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")

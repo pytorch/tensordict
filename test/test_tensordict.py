@@ -552,12 +552,14 @@ class TestTensorDicts(TestTensorDictsBase):
                     tensordict.permute(*p).permute(*other_p)._param_td
                     is not tensordict._param_td
                 )
-                assert torch.permute(tensordict, p).permute(
-                    inv_p
-                )._param_td is tensordict._param_td
-                assert torch.permute(tensordict, p).permute(
-                    other_p
-                )._param_td is not tensordict._param_td
+                assert (
+                    torch.permute(tensordict, p).permute(inv_p)._param_td
+                    is tensordict._param_td
+                )
+                assert (
+                    torch.permute(tensordict, p).permute(other_p)._param_td
+                    is not tensordict._param_td
+                )
             else:
                 assert tensordict.permute(*p).permute(*inv_p) is tensordict
                 assert tensordict.permute(*p).permute(*other_p) is not tensordict

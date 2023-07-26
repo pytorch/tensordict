@@ -263,15 +263,15 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def __getitem__(self, index: IndexType) -> TensorDictBase:
         ...
 
-    @_replace
+    @_carry_over
     def to(self, dest: DeviceType | type | torch.Size, **kwargs) -> TensorDictBase:
         ...
 
-    @_replace
+    @_carry_over
     def cpu(self):
         ...
 
-    @_replace
+    @_carry_over
     def cuda(self):
         ...
 
