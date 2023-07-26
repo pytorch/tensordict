@@ -10,6 +10,7 @@ import uuid
 import numpy as np
 import pytest
 import torch
+from torch.utils._pytree import tree_map
 
 try:
     import torchsnapshot
@@ -5537,6 +5538,34 @@ def test_empty():
     td_empty = td.empty(recurse=True)
     assert len(list(td_empty.keys())) == 1
     assert len(list(td_empty.get("b").keys())) == 1
+
+
+class TestPyTree(TestTensorDictsBase):
+    def test_pytree_map(self):
+        td = TensorDict({"a": {"b": {"c": 1}, "d": 1}, "e": 1}, [])
+        td = tree_map(lambda x: x + 1, td)
+        assert (td == 2).all()
+
+    def test_pytree_map_batch(self):
+        td = TensorDict(
+            {
+                "a": TensorDict(
+                    {
+                        "b": TensorDict({"c": torch.ones(2, 3, 4)}, [2, 3]),
+                        "d": torch.ones(2),
+                    },
+                    [2],
+                ),
+                "e": 1,
+            },
+            [],
+        )
+        td = tree_map(lambda x: x + 1, td)
+        assert (td == 2).all()
+        assert td.shape == torch.Size([])
+        assert td["a"].shape == torch.Size([2])
+        assert td["a", "b"].shape == torch.Size([2, 3])
+        assert td["a", "b", "c"].shape == torch.Size([2, 3, 4])
 
 
 if __name__ == "__main__":
