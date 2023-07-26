@@ -2721,7 +2721,7 @@ class TestTensorDictRepr:
         expected = f"""LazyStackedTensorDict(
     fields={{
         a: {tensor_class}(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
-    lazy_fields={{
+    exclusive_fields={{
         0 ->
             c: {tensor_class}(shape=torch.Size([4, 3, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
         1 ->
@@ -2766,7 +2766,7 @@ class TestTensorDictRepr:
     fields={{
         a: Tensor(shape=torch.Size([2, -1]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
         b: Tensor(shape=torch.Size([-1]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
-    lazy_fields={{
+    exclusive_fields={{
     }},
     batch_size=torch.Size([2]),
     device={str(device)},
@@ -2862,7 +2862,7 @@ class TestTensorDictRepr:
         expected = f"""LazyStackedTensorDict(
     fields={{
         a: {tensor_class}(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
-    lazy_fields={{
+    exclusive_fields={{
         0 ->
             c: {tensor_class}(shape=torch.Size([4, 3, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
         1 ->
