@@ -2721,9 +2721,15 @@ class TestTensorDictRepr:
         expected = f"""LazyStackedTensorDict(
     fields={{
         a: {tensor_class}(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+    exclusive_fields={{
+        0 ->
+            c: {tensor_class}(shape=torch.Size([4, 3, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
+        1 ->
+            b: {tensor_class}(shape=torch.Size([4, 3, 1, 10]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
     batch_size=torch.Size([4, 3, 2, 1]),
     device={str(device)},
-    is_shared={is_shared})"""
+    is_shared={is_shared},
+    stack_dim={stacked_td.stack_dim})"""
         assert repr(stacked_td) == expected
 
     def test_repr_stacked_het(self, device, dtype):
@@ -2760,9 +2766,12 @@ class TestTensorDictRepr:
     fields={{
         a: Tensor(shape=torch.Size([2, -1]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
         b: Tensor(shape=torch.Size([-1]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+    exclusive_fields={{
+    }},
     batch_size=torch.Size([2]),
     device={str(device)},
-    is_shared={is_shared})"""
+    is_shared={is_shared},
+    stack_dim={stacked_td.stack_dim})"""
         assert repr(stacked_td) == expected
 
     @pytest.mark.parametrize("index", [None, (slice(None), 0)])
@@ -2849,20 +2858,20 @@ class TestTensorDictRepr:
             is_shared_tensor = True
         else:
             is_shared_tensor = is_shared
-        if index is None:
-            expected = f"""LazyStackedTensorDict(
+
+        expected = f"""LazyStackedTensorDict(
     fields={{
         a: {tensor_class}(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+    exclusive_fields={{
+        0 ->
+            c: {tensor_class}(shape=torch.Size([4, 3, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor}),
+        1 ->
+            b: {tensor_class}(shape=torch.Size([4, 3, 1, 10]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
     batch_size=torch.Size([4, 3, 2, 1]),
     device={str(device)},
-    is_shared={is_shared})"""
-        else:
-            expected = f"""LazyStackedTensorDict(
-    fields={{
-        a: {tensor_class}(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
-    batch_size=torch.Size([4, 3, 2, 1]),
-    device={str(device)},
-    is_shared={is_shared})"""
+    is_shared={is_shared},
+    stack_dim={stacked_tensordict.stack_dim})"""
+
         assert repr(stacked_tensordict) == expected
 
     @pytest.mark.skipif(not torch.cuda.device_count(), reason="no cuda")
@@ -4109,6 +4118,85 @@ class TestLazyStackedTensorDict:
         index = (slice(None),) * stack_dim + (1,)  # get the second in the stack
         assert self.recursively_check_key(res1[index], 1)  # check all 1
         assert self.recursively_check_key(res2[index], 1)  # check all 1
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
+    def test_lazy_stack_stack(self, batch_size):
+        obs = self.nested_lazy_het_td(batch_size)
+
+        assert isinstance(obs, TensorDict)
+        assert isinstance(obs["lazy"], LazyStackedTensorDict)
+        assert obs["lazy"].stack_dim == len(obs["lazy"].shape) - 1  # succeeds
+        assert obs["lazy"].shape == (*batch_size, 3)
+        assert isinstance(obs["lazy"][..., 0], TensorDict)  # succeeds
+
+        obs_stack = torch.stack([obs])
+
+        assert (
+            isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
+        )  # succeeds
+        assert obs_stack.batch_size == (1, *batch_size)  # succeeds
+        assert obs_stack[0] is obs  # succeeds
+        assert isinstance(obs_stack["lazy"], LazyStackedTensorDict)
+        assert obs_stack["lazy"].shape == (1, *batch_size, 3)
+        assert obs_stack["lazy"].stack_dim == 0  # succeeds
+        assert obs_stack["lazy"][0] is obs["lazy"]
+
+        obs2 = obs.clone()
+        obs_stack = torch.stack([obs, obs2])
+
+        assert (
+            isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
+        )  # succeeds
+        assert obs_stack.batch_size == (2, *batch_size)  # succeeds
+        assert obs_stack[0] is obs  # succeeds
+        assert isinstance(obs_stack["lazy"], LazyStackedTensorDict)
+        assert obs_stack["lazy"].shape == (2, *batch_size, 3)
+        assert obs_stack["lazy"].stack_dim == 0  # succeeds
+        assert obs_stack["lazy"][0] is obs["lazy"]
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
+    def test_stack_hetero(self, batch_size):
+        obs = self.nested_lazy_het_td(batch_size)
+
+        obs2 = obs.clone()
+        obs2.apply_(lambda x: x + 1)
+
+        obs_stack = torch.stack([obs, obs2])
+        obs_stack_resolved = self.dense_stack_tds_v2([obs, obs2], stack_dim=0)
+
+        assert isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
+        assert isinstance(obs_stack_resolved, TensorDict)
+
+        assert obs_stack.batch_size == (2, *batch_size)
+        assert obs_stack_resolved.batch_size == obs_stack.batch_size
+
+        assert obs_stack["lazy"].shape == (2, *batch_size, 3)
+        assert obs_stack_resolved["lazy"].batch_size == obs_stack["lazy"].batch_size
+
+        assert obs_stack["lazy"].stack_dim == 0
+        assert (
+            obs_stack_resolved["lazy"].stack_dim
+            == len(obs_stack_resolved["lazy"].batch_size) - 1
+        )
+        for stack in [obs_stack_resolved, obs_stack]:
+            for index in range(2):
+                assert (stack[index]["dense"] == index).all()
+                assert (stack["dense"][index] == index).all()
+                assert (stack["lazy"][index]["shared"] == index).all()
+                assert (stack[index]["lazy"]["shared"] == index).all()
+                assert (stack["lazy"]["shared"][index] == index).all()
+                assert (
+                    stack["lazy"][index][..., 0]["individual_0_tensor"] == index
+                ).all()
+                assert (
+                    stack[index]["lazy"][..., 0]["individual_0_tensor"] == index
+                ).all()
+                assert (
+                    stack["lazy"][..., 0]["individual_0_tensor"][index] == index
+                ).all()
+                assert (
+                    stack["lazy"][..., 0][index]["individual_0_tensor"] == index
+                ).all()
 
     def test_add_batch_dim_cache(self):
         td = TensorDict(

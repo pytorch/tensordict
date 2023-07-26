@@ -3243,7 +3243,6 @@ class TensorDictBase(MutableMapping):
             if num_boolean_dim:
                 names = [None] + names[num_boolean_dim:]
             else:
-
                 # def is_int(subidx):
                 #     if isinstance(subidx, Number):
                 #         return True
@@ -3344,7 +3343,6 @@ class TensorDictBase(MutableMapping):
         index: IndexType,
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
-
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
             # try:
@@ -4733,7 +4731,6 @@ def _gather(
         return out
 
     if out is None:
-
         names = input.names if input._has_names() else None
 
         return TensorDict(
@@ -6439,7 +6436,6 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         default: str | CompatibleType = NO_DEFAULT,
     ) -> CompatibleType:
-
         # we can handle the case where the key is a tuple of length 1
         tensors = []
         for td in self.tensordicts:
@@ -7107,7 +7103,6 @@ class LazyStackedTensorDict(TensorDictBase):
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
     ) -> int:
-
         if _futures is None:
             is_root = True
             _futures = []
@@ -7184,7 +7179,6 @@ class LazyStackedTensorDict(TensorDictBase):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-
         # using try/except for get/del is suboptimal, but
         # this is faster that checkink if key in self keys
         key = _unravel_key_to_tuple(key)
@@ -7565,6 +7559,44 @@ class LazyStackedTensorDict(TensorDictBase):
         # this can be a perf bottleneck
         for td in self.tensordicts:
             td._remove_lock(id(self))
+
+    def __repr__(self):
+        fields = _td_fields(self)
+        field_str = indent(f"fields={{{fields}}}", 4 * " ")
+        exclusive_fields_str = indent(
+            f"exclusive_fields={{{self._repr_exclusive_fields()}}}", 4 * " "
+        )
+        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
+        device_str = indent(f"device={self.device}", 4 * " ")
+        is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
+        stack_dim = indent(f"stack_dim={self.stack_dim}", 4 * " ")
+        string = ",\n".join(
+            [
+                field_str,
+                exclusive_fields_str,
+                batch_size_str,
+                device_str,
+                is_shared_str,
+                stack_dim,
+            ]
+        )
+        return f"{type(self).__name__}(\n{string})"
+
+    def _repr_exclusive_fields(self):
+        keys = set(self.keys())
+        exclusive_keys = [
+            _td_fields(td, [k for k in td.keys() if k not in keys])
+            for td in self.tensordicts
+        ]
+        exclusive_key_str = ",\n".join(
+            [
+                indent(f"{i} ->{line}", 4 * " ")
+                for i, line in enumerate(exclusive_keys)
+                if line != "\n"
+            ]
+        )
+
+        return "\n" + exclusive_key_str
 
     lock_ = TensorDictBase.lock_
     lock = _renamed_inplace_method(lock_)
@@ -8169,7 +8201,6 @@ class _TransposedTensorDict(_CustomOpTensorDict):
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
-
         trsp = self.custom_op_kwargs["dim0"], self.custom_op_kwargs["dim1"]
         if dim == trsp[0]:
             dim = trsp[1]
@@ -8336,31 +8367,35 @@ def _make_repr(key: str, item: CompatibleType, tensordict: TensorDictBase) -> st
     return f"{key}: {_get_repr(item)}"
 
 
-def _td_fields(td: TensorDictBase) -> str:
+def _td_fields(td: TensorDictBase, keys=None) -> str:
     strs = []
-    for key in td.keys():
-        try:
+    if keys is None:
+        keys = td.keys()
+    for key in keys:
+        shape = td.get_item_shape(key)
+        if -1 not in shape:
             item = td.get(key)
             strs.append(_make_repr(key, item, td))
-        except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
-                # we know td is lazy stacked and the key is a leaf
-                # so we can get the shape and escape the error
-                shape = td.get_item_shape(key)
-                tensor = td.tensordicts[0].get(key)
-                if isinstance(tensor, TensorDictBase):
-                    substr = _td_fields(tensor)
-                else:
-                    substr = _get_repr_custom(
-                        tensor.__class__,
-                        shape=shape,
-                        device=tensor.device,
-                        dtype=tensor.dtype,
-                        is_shared=tensor.is_shared(),
-                    )
-                strs.append(f"{key}: {substr}")
+        else:
+            # we know td is lazy stacked and the key is a leaf
+            # so we can get the shape and escape the error
+            temp_td = td
+            while isinstance(
+                temp_td, LazyStackedTensorDict
+            ):  # we need to grab the het tensor from the inner nesting level
+                temp_td = temp_td.tensordicts[0]
+            tensor = temp_td.get(key)
+            if isinstance(tensor, TensorDictBase):
+                substr = _td_fields(tensor)
             else:
-                raise err
+                substr = _get_repr_custom(
+                    tensor.__class__,
+                    shape=shape,
+                    device=tensor.device,
+                    dtype=tensor.dtype,
+                    is_shared=tensor.is_shared(),
+                )
+            strs.append(f"{key}: {substr}")
 
     return indent(
         "\n" + ",\n".join(sorted(strs)),
