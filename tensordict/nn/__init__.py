@@ -18,6 +18,7 @@ from tensordict.nn.functional_modules import (
     make_functional,
     repopulate_module,
 )
+from tensordict.nn.params import TensorDictParams
 from tensordict.nn.probabilistic import (
     InteractionType,
     ProbabilisticTensorDictModule,
