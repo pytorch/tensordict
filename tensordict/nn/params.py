@@ -141,13 +141,60 @@ class TensorDictParams(TensorDictBase, nn.Module):
     the leaves of the tensordict.
 
     Indexing works exactly as the indexing of the wrapped tensordict.
-    TODO: Parameter names
+    The parameter names will be registered within this module using :meth:`~.TensorDict.flatten_keys("_")`.
+    Therefore, the result of :meth:`~.named_parameters()` and the content of the
+    tensordict will differ slightly in term of key names.
 
     Any operation that sets a tensor in the tensordict will be augmented by
     a :class:`torch.nn.Parameter` conversion.
+
+    Args:
+        parameters (TensorDictBase): a tensordict to represent as parameters.
+            Values will be converted to parameters unless ``no_convert=True``.
+
+    Keyword Args:
+        no_convert (bool): if ``True``, no conversion to ``nn.Parameter`` will occur.
+            Defaults to ``False``.
+
+    Examples:
+        >>> from torch import nn
+        >>> from tensordict import TensorDict
+        >>> module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
+        >>> params = TensorDict.from_module(module)
+        >>> params.lock_()
+        >>> p = TensorDictParams(params)
+        >>> print(p)
+        TensorDictParams(params=TensorDict(
+            fields={
+                0: TensorDict(
+                    fields={
+                        bias: Parameter(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
+                        weight: Parameter(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False),
+                1: TensorDict(
+                    fields={
+                        bias: Parameter(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
+                        weight: Parameter(shape=torch.Size([4, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([]),
+            device=None,
+            is_shared=False))
+        >>> class CustomModule(nn.Module):
+        ...     def __init__(self, params):
+        ...         super().__init__()
+        ...         self.params = params
+        >>> m = CustomModule(p)
+        >>> # the wrapper supports assignment and values are turned in Parameter
+        >>> m.params['other'] = torch.randn(3)
+        >>> assert isinstance(m.params['other'], nn.Parameter)
+
     """
 
-    def __init__(self, parameters: TensorDictBase, no_convert=False):
+    def __init__(self, parameters: TensorDictBase, *, no_convert=False):
         super().__init__()
         self._param_td = parameters
         if not no_convert:
@@ -510,6 +557,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
     @_unlock_and_set
     def create_nested(self, key):
         ...
+
+    def __repr__(self):
+        return f"TensorDictParams(params={self._param_td})"
 
 
 TDPARAM_HANDLED_FUNCTIONS = copy(TD_HANDLED_FUNCTIONS)
