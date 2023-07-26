@@ -6,7 +6,6 @@
 import argparse
 import re
 import uuid
-from typing import List
 
 import numpy as np
 import pytest
@@ -4120,6 +4119,85 @@ class TestLazyStackedTensorDict:
         assert self.recursively_check_key(res1[index], 1)  # check all 1
         assert self.recursively_check_key(res2[index], 1)  # check all 1
 
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
+    def test_lazy_stack_stack(self, batch_size):
+        obs = self.nested_lazy_het_td(batch_size)
+
+        assert isinstance(obs, TensorDict)
+        assert isinstance(obs["lazy"], LazyStackedTensorDict)
+        assert obs["lazy"].stack_dim == len(obs["lazy"].shape) - 1  # succeeds
+        assert obs["lazy"].shape == (*batch_size, 3)
+        assert isinstance(obs["lazy"][..., 0], TensorDict)  # succeeds
+
+        obs_stack = torch.stack([obs])
+
+        assert (
+            isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
+        )  # succeeds
+        assert obs_stack.batch_size == (1, *batch_size)  # succeeds
+        assert obs_stack[0] is obs  # succeeds
+        assert isinstance(obs_stack["lazy"], LazyStackedTensorDict)
+        assert obs_stack["lazy"].shape == (1, *batch_size, 3)
+        assert obs_stack["lazy"].stack_dim == 0  # succeeds
+        assert obs_stack["lazy"][0] is obs["lazy"]
+
+        obs2 = obs.clone()
+        obs_stack = torch.stack([obs, obs2])
+
+        assert (
+            isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
+        )  # succeeds
+        assert obs_stack.batch_size == (2, *batch_size)  # succeeds
+        assert obs_stack[0] is obs  # succeeds
+        assert isinstance(obs_stack["lazy"], LazyStackedTensorDict)
+        assert obs_stack["lazy"].shape == (2, *batch_size, 3)
+        assert obs_stack["lazy"].stack_dim == 0  # succeeds
+        assert obs_stack["lazy"][0] is obs["lazy"]
+
+    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
+    def test_stack_hetero(self, batch_size):
+        obs = self.nested_lazy_het_td(batch_size)
+
+        obs2 = obs.clone()
+        obs2.apply_(lambda x: x + 1)
+
+        obs_stack = torch.stack([obs, obs2])
+        obs_stack_resolved = self.dense_stack_tds_v2([obs, obs2], stack_dim=0)
+
+        assert isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
+        assert isinstance(obs_stack_resolved, TensorDict)
+
+        assert obs_stack.batch_size == (2, *batch_size)
+        assert obs_stack_resolved.batch_size == obs_stack.batch_size
+
+        assert obs_stack["lazy"].shape == (2, *batch_size, 3)
+        assert obs_stack_resolved["lazy"].batch_size == obs_stack["lazy"].batch_size
+
+        assert obs_stack["lazy"].stack_dim == 0
+        assert (
+            obs_stack_resolved["lazy"].stack_dim
+            == len(obs_stack_resolved["lazy"].batch_size) - 1
+        )
+        for stack in [obs_stack_resolved, obs_stack]:
+            for index in range(2):
+                assert (stack[index]["dense"] == index).all()
+                assert (stack["dense"][index] == index).all()
+                assert (stack["lazy"][index]["shared"] == index).all()
+                assert (stack[index]["lazy"]["shared"] == index).all()
+                assert (stack["lazy"]["shared"][index] == index).all()
+                assert (
+                    stack["lazy"][index][..., 0]["individual_0_tensor"] == index
+                ).all()
+                assert (
+                    stack[index]["lazy"][..., 0]["individual_0_tensor"] == index
+                ).all()
+                assert (
+                    stack["lazy"][..., 0]["individual_0_tensor"][index] == index
+                ).all()
+                assert (
+                    stack["lazy"][..., 0][index]["individual_0_tensor"] == index
+                ).all()
+
     def test_add_batch_dim_cache(self):
         td = TensorDict(
             {"a": torch.rand(3, 4, 5), ("b", "c"): torch.rand(3, 4, 5)}, [3, 4, 5]
@@ -5240,194 +5318,6 @@ class TestNamedDims(TestTensorDictsBase):
             RuntimeError, match="Names of a lazy tensordict cannot be modified"
         ):
             td.names = list("abcd")
-
-
-class TestNestedLazyStacks:
-    @staticmethod
-    def nested_lazy_het_td(batch_size):
-        shared = torch.zeros(4, 4, 2)
-        hetero_3d = torch.zeros(3)
-        hetero_2d = torch.zeros(2)
-
-        individual_0_tensor = torch.zeros(1)
-        individual_1_tensor = torch.zeros(1, 2)
-        individual_2_tensor = torch.zeros(1, 2, 3)
-
-        td_list = [
-            TensorDict(
-                {
-                    "shared": shared,
-                    "hetero": hetero_3d,
-                    "individual_0_tensor": individual_0_tensor,
-                },
-                [],
-            ),
-            TensorDict(
-                {
-                    "shared": shared,
-                    "hetero": hetero_3d,
-                    "individual_1_tensor": individual_1_tensor,
-                },
-                [],
-            ),
-            TensorDict(
-                {
-                    "shared": shared,
-                    "hetero": hetero_2d,
-                    "individual_2_tensor": individual_2_tensor,
-                },
-                [],
-            ),
-        ]
-        for i, td in enumerate(td_list):
-            td[f"individual_{i}_td"] = td.clone()
-            td["shared_td"] = td.clone()
-
-        td_stack = torch.stack(td_list, dim=0)
-        obs = TensorDict(
-            {"lazy": td_stack, "dense": torch.zeros(3, 3, 2)},
-            [],
-        )
-        obs = obs.expand(batch_size)
-        return obs
-
-    def recursively_check_key(self, td, value: int):
-        if isinstance(td, LazyStackedTensorDict):
-            for t in td.tensordicts:
-                if not self.recursively_check_key(t, value):
-                    return False
-        elif isinstance(td, TensorDict):
-            for i in td.values():
-                if not self.recursively_check_key(i, value):
-                    return False
-        elif isinstance(td, torch.Tensor):
-            return (td == value).all()
-        else:
-            return False
-
-        return True
-
-    def dense_stack_tds_v1(
-        self, td_list: List[TensorDictBase], stack_dim: int
-    ) -> TensorDictBase:
-        shape = list(td_list[0].shape)
-        shape.insert(stack_dim, len(td_list))
-
-        out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
-        for i in range(1, len(td_list)):
-            index = (slice(None),) * stack_dim + (i,)  # this is index_select
-            out[index] = td_list[i]
-
-        return out
-
-    def dense_stack_tds_v2(
-        self, td_list: List[TensorDictBase], stack_dim: int
-    ) -> TensorDictBase:
-        shape = list(td_list[0].shape)
-        shape.insert(stack_dim, len(td_list))
-
-        out = td_list[0].unsqueeze(stack_dim).expand(shape).clone()
-
-        return torch.stack(td_list, dim=stack_dim, out=out)
-
-    @pytest.mark.parametrize("batch_size", [(), (2,), (1, 2)])
-    @pytest.mark.parametrize("stack_dim", [0, 1, 2])
-    def test(self, batch_size, stack_dim):
-        obs = self.nested_lazy_het_td(batch_size)
-        obs1 = obs.clone()
-        obs1.apply_(lambda x: x + 1)
-
-        if stack_dim > len(batch_size):
-            return
-
-        res1 = self.dense_stack_tds_v1([obs, obs1], stack_dim=stack_dim)
-        res2 = self.dense_stack_tds_v2([obs, obs1], stack_dim=stack_dim)
-
-        index = (slice(None),) * stack_dim + (0,)  # get the first in the stack
-        assert self.recursively_check_key(res1[index], 0)  # check all 0
-        assert self.recursively_check_key(res2[index], 0)  # check all 0
-        index = (slice(None),) * stack_dim + (1,)  # get the second in the stack
-        assert self.recursively_check_key(res1[index], 1)  # check all 1
-        assert self.recursively_check_key(res2[index], 1)  # check all 1
-
-    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
-    def test_lazy_stack_stack(self, batch_size):
-        obs = self.nested_lazy_het_td(batch_size)
-
-        assert isinstance(obs, TensorDict)
-        assert isinstance(obs["lazy"], LazyStackedTensorDict)
-        assert obs["lazy"].stack_dim == len(obs["lazy"].shape) - 1  # succeeds
-        assert obs["lazy"].shape == (*batch_size, 3)
-        assert isinstance(obs["lazy"][..., 0], TensorDict)  # succeeds
-
-        obs_stack = torch.stack([obs])
-
-        assert (
-            isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
-        )  # succeeds
-        assert obs_stack.batch_size == (1, *batch_size)  # succeeds
-        assert obs_stack[0] is obs  # succeeds
-        assert isinstance(obs_stack["lazy"], LazyStackedTensorDict)
-        assert obs_stack["lazy"].shape == (1, *batch_size, 3)
-        assert obs_stack["lazy"].stack_dim == 0  # succeeds
-        assert obs_stack["lazy"].tensordicts[0] is obs["lazy"]
-
-        obs2 = obs.clone()
-        obs_stack = torch.stack([obs, obs2])
-
-        assert (
-            isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
-        )  # succeeds
-        assert obs_stack.batch_size == (2, *batch_size)  # succeeds
-        assert obs_stack[0] is obs  # succeeds
-        assert isinstance(obs_stack["lazy"], LazyStackedTensorDict)
-        assert obs_stack["lazy"].shape == (2, *batch_size, 3)
-        assert obs_stack["lazy"].stack_dim == 0  # succeeds
-        assert obs_stack["lazy"].tensordicts[0] is obs["lazy"]
-
-    @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
-    def test_stack_hetero(self, batch_size):
-        obs = self.nested_lazy_het_td(batch_size)
-
-        obs2 = obs.clone()
-        obs2.apply_(lambda x: x + 1)
-
-        obs_stack = torch.stack([obs, obs2])
-        obs_stack_resolved = self.dense_stack_tds_v2([obs, obs2], stack_dim=0)
-
-        assert isinstance(obs_stack, LazyStackedTensorDict) and obs_stack.stack_dim == 0
-        assert isinstance(obs_stack_resolved, TensorDict)
-
-        assert obs_stack.batch_size == (2, *batch_size)
-        assert obs_stack_resolved.batch_size == obs_stack.batch_size
-
-        assert obs_stack["lazy"].shape == (2, *batch_size, 3)
-        assert obs_stack_resolved["lazy"].batch_size == obs_stack["lazy"].batch_size
-
-        assert obs_stack["lazy"].stack_dim == 0
-        assert (
-            obs_stack_resolved["lazy"].stack_dim
-            == len(obs_stack_resolved["lazy"].batch_size) - 1
-        )
-        for stack in [obs_stack_resolved, obs_stack]:
-            for index in range(2):
-                assert (stack[index]["dense"] == index).all()
-                assert (stack["dense"][index] == index).all()
-                assert (stack["lazy"][index]["shared"] == index).all()
-                assert (stack[index]["lazy"]["shared"] == index).all()
-                assert (stack["lazy"]["shared"][index] == index).all()
-                assert (
-                    stack["lazy"][index][..., 0]["individual_0_tensor"] == index
-                ).all()
-                assert (
-                    stack[index]["lazy"][..., 0]["individual_0_tensor"] == index
-                ).all()
-                assert (
-                    stack["lazy"][..., 0]["individual_0_tensor"][index] == index
-                ).all()
-                assert (
-                    stack["lazy"][..., 0][index]["individual_0_tensor"] == index
-                ).all()
 
 
 def _compare_tensors_identity(td0, td1):
