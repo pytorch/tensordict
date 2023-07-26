@@ -4680,24 +4680,36 @@ def assert_allclose_td(
         )
     keys = sorted(actual.keys(), key=str)
     for key in keys:
-        input1 = actual.get(key)
-        input2 = expected.get(key)
-        if _is_tensor_collection(input1.__class__):
-            assert_allclose_td(input1, input2, rtol=rtol, atol=atol)
-            continue
+        shape1 = actual.get_item_shape(key)
+        shape2 = expected.get_item_shape(key)
+        if -1 in shape1 or -1 in shape2:
+            if not (-1 in shape1 and -1 in shape2):
+                raise KeyError(
+                    f"{key} corresponds to an heterogeneous entry only in one of the tensordicts provided"
+                )
+            for sub_actual, sub_expected in zip(
+                actual.tensordicts, expected.tensordicts
+            ):
+                assert_allclose_td(sub_actual, sub_expected, rtol=rtol, atol=atol)
+        else:
+            input1 = actual.get(key)
+            input2 = expected.get(key)
+            if _is_tensor_collection(input1.__class__):
+                assert_allclose_td(input1, input2, rtol=rtol, atol=atol)
+                continue
 
-        mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
-        mse = mse.div(input1.numel()).sqrt().item()
+            mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
+            mse = mse.div(input1.numel()).sqrt().item()
 
-        default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
-        msg = "\t".join([default_msg, msg]) if len(msg) else default_msg
-        if isinstance(input1, MemmapTensor):
-            input1 = input1._tensor
-        if isinstance(input2, MemmapTensor):
-            input2 = input2._tensor
-        torch.testing.assert_close(
-            input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=msg
-        )
+            default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
+            msg = "\t".join([default_msg, msg]) if len(msg) else default_msg
+            if isinstance(input1, MemmapTensor):
+                input1 = input1._tensor
+            if isinstance(input2, MemmapTensor):
+                input2 = input2._tensor
+            torch.testing.assert_close(
+                input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=msg
+            )
     return True
 
 
