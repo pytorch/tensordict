@@ -4984,9 +4984,10 @@ def _lazy_cat(
             )
 
         if dim == stack_dim:
-            out.tensordicts = []
+            td_list = []
             for lazy_td in list_of_tensordicts:
-                out.tensordicts += lazy_td.tensordicts
+                td_list += lazy_td.tensordicts
+            out.tensordicts = td_list
         else:
             for i in range(len(out.tensordicts)):
                 out.tensordicts[i] = torch.cat(

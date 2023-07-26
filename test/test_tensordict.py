@@ -4064,6 +4064,40 @@ class TestLazyStackedTensorDict:
         obs = obs.expand(batch_size)
         return obs
 
+    @pytest.mark.parametrize("batch_size", [(), (2,), (1, 2)])
+    @pytest.mark.parametrize("cat_dim", [0, 1, 2])
+    def test_cat_lazy_stack(self, batch_size, cat_dim):
+        if cat_dim > len(batch_size):
+            return
+        td_lazy = self.nested_lazy_het_td(batch_size)["lazy"]
+
+        res = torch.cat([td_lazy], dim=cat_dim)
+        assert assert_allclose_td(res, td_lazy)
+        assert res is not td_lazy
+        td_lazy_clone = td_lazy.clone()
+        res = torch.cat([td_lazy_clone], dim=cat_dim, out=td_lazy)
+        assert res is td_lazy
+        assert assert_allclose_td(res, td_lazy_clone)
+
+        td_lazy_2 = td_lazy.clone()
+        td_lazy_2.apply_(lambda x: x + 1)
+
+        res = torch.cat([td_lazy, td_lazy_2], dim=cat_dim)
+        assert res.stack_dim == len(batch_size)
+        assert res.shape[cat_dim] == td_lazy.shape[cat_dim] + td_lazy_2.shape[cat_dim]
+        index = (slice(None),) * cat_dim + (slice(0, td_lazy.shape[cat_dim]),)
+        assert assert_allclose_td(res[index], td_lazy)
+        index = (slice(None),) * cat_dim + (slice(td_lazy.shape[cat_dim], None),)
+        assert assert_allclose_td(res[index], td_lazy_2)
+
+        res = torch.cat([td_lazy, td_lazy_2], dim=cat_dim)
+        assert res.stack_dim == len(batch_size)
+        assert res.shape[cat_dim] == td_lazy.shape[cat_dim] + td_lazy_2.shape[cat_dim]
+        index = (slice(None),) * cat_dim + (slice(0, td_lazy.shape[cat_dim]),)
+        assert assert_allclose_td(res[index], td_lazy)
+        index = (slice(None),) * cat_dim + (slice(td_lazy.shape[cat_dim], None),)
+        assert assert_allclose_td(res[index], td_lazy_2)
+
     def recursively_check_key(self, td, value: int):
         if isinstance(td, LazyStackedTensorDict):
             for t in td.tensordicts:
