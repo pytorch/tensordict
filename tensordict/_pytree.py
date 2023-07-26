@@ -11,7 +11,34 @@ from tensordict import (
     TensorDict,
 )
 
-from torch.utils._pytree import _register_pytree_node, _str_to_dict, Context
+from torch.utils._pytree import _register_pytree_node, Context
+
+
+def _str_to_dict(str_spec: str) -> Tuple[List[str], str]:
+    assert str_spec[1] == "("
+    assert str_spec[-1] == ")"
+    context_and_child_strings = str_spec[2:-1]
+
+    child_strings = []
+    context_strings = []
+    nested_parentheses = 0
+    start_index = 0
+    for i, char in enumerate(context_and_child_strings):
+        if char == ":":
+            if nested_parentheses == 0:
+                context_strings.append(context_and_child_strings[start_index:i])
+                start_index = i + 1
+        elif char == "(":
+            nested_parentheses += 1
+        elif char == ")":
+            nested_parentheses -= 1
+
+        if nested_parentheses == 0 and char == ",":
+            child_strings.append(context_and_child_strings[start_index:i])
+            start_index = i + 1
+
+    child_strings.append(context_and_child_strings[start_index:])
+    return context_strings, ",".join(child_strings)
 
 
 def _maybe_str_to_tensordict(str_spec: str) -> Optional[Tuple[Any, Context, str]]:
