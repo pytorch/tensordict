@@ -4949,8 +4949,6 @@ def _lazy_cat(
     if dim > stack_dim:
         new_dim = dim - 1
 
-    # check that all tensordict match
-    _check_keys(list_of_tensordicts, strict=True)
     if out is None:
         out = []
         if dim == stack_dim:  # if dim is stack, just add all to same list
