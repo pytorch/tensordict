@@ -5529,6 +5529,15 @@ class TestNamedDims(TestTensorDictsBase):
         ):
             td.names = list("abcd")
 
+    def test_masked_select_(self):
+        atensor = torch.randn(3, 4)
+        td = TensorDict(source={"a": atensor}, batch_size=[3])
+        mask = torch.tensor([True, False, False])
+        td_mask = td.masked_select_(mask)
+        assert td_mask is td
+        assert td.batch_size == torch.Size([1])
+        torch.testing.assert_close(td_mask.get("a"), atensor[mask])
+
 
 def _compare_tensors_identity(td0, td1):
     if isinstance(td0, LazyStackedTensorDict):
