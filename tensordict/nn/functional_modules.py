@@ -15,7 +15,7 @@ from typing import Any, Callable, Iterable
 
 import torch
 
-from tensordict import TensorDict
+from tensordict import PYTREE_REGISTERED_TDS, TensorDict
 from tensordict.tensordict import _is_tensor_collection, TensorDictBase
 
 from tensordict.utils import implement_for
@@ -141,11 +141,16 @@ except ImportError:
 
 
 class _exclude_td_from_pytree:
+    def __init__(self):
+        self.tdnodes = {}
+
     def __enter__(self):
-        self.tdnode = SUPPORTED_NODES.pop(TensorDict)
+        for tdtype in PYTREE_REGISTERED_TDS:
+            self.tdnodes[tdtype] = SUPPORTED_NODES.pop(tdtype)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        SUPPORTED_NODES[TensorDict] = self.tdnode
+        for tdtype in PYTREE_REGISTERED_TDS:
+            SUPPORTED_NODES[tdtype] = self.tdnodes[tdtype]
 
 
 # Monkey-patch functorch, mainly for cases where a "isinstance(obj, Tensor) is invoked

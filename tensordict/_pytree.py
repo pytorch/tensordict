@@ -13,6 +13,13 @@ from tensordict import (
 
 from torch.utils._pytree import _register_pytree_node, Context
 
+PYTREE_REGISTERED_TDS = (
+    LazyStackedTensorDict,
+    SubTensorDict,
+    TensorDict,
+    PersistentTensorDict,
+)
+
 
 def _str_to_dict(str_spec: str) -> Tuple[List[str], str]:
     assert str_spec[1] == "("
@@ -96,11 +103,11 @@ def _tensordict_to_str(spec: "TreeSpec", child_strings: List[str]) -> str:  # no
     return f"D({','.join(context_child_strings)})"
 
 
-for cls in (LazyStackedTensorDict, SubTensorDict, TensorDict, PersistentTensorDict):
+for cls in PYTREE_REGISTERED_TDS:
     _register_pytree_node(
         cls,
         _tensordict_flatten,
         _tensordictdict_unflatten,
-        _tensordict_to_str,
-        _maybe_str_to_tensordict,
+        # _tensordict_to_str,
+        # _maybe_str_to_tensordict,
     )
