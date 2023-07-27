@@ -72,8 +72,6 @@ try:
 except ImportError:
     from tensordict.utils import infer_size_impl
 
-# from torch.utils._pytree import _register_pytree_node
-
 
 _has_functorch = False
 try:
@@ -782,21 +780,21 @@ class TensorDictBase(MutableMapping):
         ...
 
     def set_at_(
-        self, key: NestedKey, value: CompatibleType, idx: IndexType
+        self, key: NestedKey, value: CompatibleType, index: IndexType
     ) -> TensorDictBase:
         """Sets the values in-place at the index indicated by :obj:`idx`.
 
         Args:
             key (str, tuple of str): key to be modified.
             value (torch.Tensor): value to be set at the index `idx`
-            idx (int, tensor or tuple): index where to write the values.
+            index (int, tensor or tuple): index where to write the values.
 
         Returns:
             self
 
         """
         key = _unravel_key_to_tuple(key)
-        return self._set_at_tuple(key, value, idx, validated=False)
+        return self._set_at_tuple(key, value, index, validated=False)
 
     @abc.abstractmethod
     def _set_at_str(self, key, value, idx, *, validated):
@@ -2003,6 +2001,8 @@ class TensorDictBase(MutableMapping):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None and issubclass(exc_type, Exception):
+            return False
         _last_op = self._last_op_queue.pop()
         if _last_op is not None:
             last_op, (args, kwargs) = _last_op
@@ -2051,6 +2051,10 @@ class TensorDictBase(MutableMapping):
             )
         return True
 
+    # @abc.abstractmethod
+    # def __hash__(self):
+    #     ...
+
     def __eq__(self, other: object) -> TensorDictBase:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
 
@@ -2079,11 +2083,11 @@ class TensorDictBase(MutableMapping):
         return False
 
     @abc.abstractmethod
-    def del_(self, key: str) -> TensorDictBase:
+    def del_(self, key: NestedKey) -> TensorDictBase:
         """Deletes a key of the tensordict.
 
         Args:
-            key (str): key to be deleted
+            key (NestedKey): key to be deleted
 
         Returns:
             self
@@ -3243,7 +3247,6 @@ class TensorDictBase(MutableMapping):
             if num_boolean_dim:
                 names = [None] + names[num_boolean_dim:]
             else:
-
                 # def is_int(subidx):
                 #     if isinstance(subidx, Number):
                 #         return True
@@ -3344,7 +3347,6 @@ class TensorDictBase(MutableMapping):
         index: IndexType,
         value: TensorDictBase | dict | numbers.Number | CompatibleType,
     ) -> None:
-
         istuple = isinstance(index, tuple)
         if istuple or isinstance(index, str):
             # try:
@@ -3769,6 +3771,9 @@ class TensorDict(TensorDictBase):
                 for key, value in source.items():
                     self.set(key, value)
 
+    # def __hash__(self):
+    #     return hash((self._tensordict, self._batch_size, self._device))
+
     @classmethod
     def from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
         """Returns a TensorDict created from a dictionary or another :class:`TensorDict`.
@@ -4146,7 +4151,8 @@ class TensorDict(TensorDictBase):
         td._set_at_tuple(key[1:], value, idx, validated=validated)
         return self
 
-    def del_(self, key: str) -> TensorDictBase:
+    @lock_blocked
+    def del_(self, key: NestedKey) -> TensorDictBase:
         key = _unravel_key_to_tuple(key)
         if len(key) > 1:
             td, subkey = _get_leaf_tensordict(self, key)
@@ -4526,7 +4532,8 @@ class TensorDict(TensorDictBase):
         for slot, value in state.items():
             setattr(self, slot, value)
         self._cache = None
-        self._last_op = collections.deque()
+        self.__last_op_queue = None
+        self._last_op = None
 
     # some custom methods for efficiency
     def items(
@@ -4733,7 +4740,6 @@ def _gather(
         return out
 
     if out is None:
-
         names = input.names if input._has_names() else None
 
         return TensorDict(
@@ -4805,7 +4811,6 @@ def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
             "cloned, preventing empty_like to be called. "
             "Consider calling tensordict.to_tensordict() first."
         ) from err
-
     return tdclone.apply_(lambda x: torch.empty_like(x, *args, **kwargs))
 
 
@@ -5260,9 +5265,8 @@ torch.Size([3, 2])
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
-    # @staticmethod
-    # def _convert_range(idx):
-    #     return tuple(list(_idx) if isinstance(_idx, range) else _idx for _idx in idx)
+    # def __hash__(self):
+    #     return hash((self._source, self.idx))
 
     @staticmethod
     def _convert_ellipsis(idx, shape):
@@ -5605,7 +5609,8 @@ torch.Size([3, 2])
             )
         return self._source
 
-    def del_(self, key: str) -> TensorDictBase:
+    @lock_blocked
+    def del_(self, key: NestedKey) -> TensorDictBase:
         self._source = self._source.del_(key)
         return self
 
@@ -6439,7 +6444,6 @@ class LazyStackedTensorDict(TensorDictBase):
         key: NestedKey,
         default: str | CompatibleType = NO_DEFAULT,
     ) -> CompatibleType:
-
         # we can handle the case where the key is a tuple of length 1
         tensors = []
         for td in self.tensordicts:
@@ -7025,6 +7029,9 @@ class LazyStackedTensorDict(TensorDictBase):
         #     return out[td_index]
         # return out
 
+    # def __hash__(self):
+    #     return hash(self.tensordicts)
+
     def __eq__(self, other):
         if is_tensorclass(other):
             return other == self
@@ -7107,7 +7114,6 @@ class LazyStackedTensorDict(TensorDictBase):
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
     ) -> int:
-
         if _futures is None:
             is_root = True
             _futures = []
@@ -7155,7 +7161,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 future.wait()
             return
 
-    def del_(self, key: str, **kwargs: Any) -> TensorDictBase:
+    @lock_blocked
+    def del_(self, key: NestedKey, **kwargs: Any) -> TensorDictBase:
         ids = set()
         cur_len = len(ids)
         is_deleted = False
@@ -7184,7 +7191,6 @@ class LazyStackedTensorDict(TensorDictBase):
     def pop(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
-
         # using try/except for get/del is suboptimal, but
         # this is faster that checkink if key in self keys
         key = _unravel_key_to_tuple(key)
@@ -7566,6 +7572,44 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts:
             td._remove_lock(id(self))
 
+    def __repr__(self):
+        fields = _td_fields(self)
+        field_str = indent(f"fields={{{fields}}}", 4 * " ")
+        exclusive_fields_str = indent(
+            f"exclusive_fields={{{self._repr_exclusive_fields()}}}", 4 * " "
+        )
+        batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
+        device_str = indent(f"device={self.device}", 4 * " ")
+        is_shared_str = indent(f"is_shared={self.is_shared()}", 4 * " ")
+        stack_dim = indent(f"stack_dim={self.stack_dim}", 4 * " ")
+        string = ",\n".join(
+            [
+                field_str,
+                exclusive_fields_str,
+                batch_size_str,
+                device_str,
+                is_shared_str,
+                stack_dim,
+            ]
+        )
+        return f"{type(self).__name__}(\n{string})"
+
+    def _repr_exclusive_fields(self):
+        keys = set(self.keys())
+        exclusive_keys = [
+            _td_fields(td, [k for k in td.keys() if k not in keys])
+            for td in self.tensordicts
+        ]
+        exclusive_key_str = ",\n".join(
+            [
+                indent(f"{i} ->{line}", 4 * " ")
+                for i, line in enumerate(exclusive_keys)
+                if line != "\n"
+            ]
+        )
+
+        return "\n" + exclusive_key_str
+
     lock_ = TensorDictBase.lock_
     lock = _renamed_inplace_method(lock_)
 
@@ -7604,6 +7648,9 @@ class _CustomOpTensorDict(TensorDictBase):
         self._batch_size = None
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
+
+    # def __hash__(self):
+    #     return hash((self._source, self.custom_op, self.inv_op, self.custom_op_kwargs, self.inv_op_kwargs))
 
     def _update_custom_op_kwargs(self, source_tensor: Tensor) -> dict[str, Any]:
         """Allows for a transformation to be customized for a certain shape, device or dtype.
@@ -7713,13 +7760,14 @@ class _CustomOpTensorDict(TensorDictBase):
         if source is None:
             self._source._create_nested_str(key[0])
             source = self._source._get_str(key[0], NO_DEFAULT)
-        type(self)(
+        nested = type(self)(
             source,
             custom_op=self.custom_op,
             inv_op=self.inv_op,
             custom_op_kwargs=self._update_custom_op_kwargs(source),
             inv_op_kwargs=self._update_inv_op_kwargs(source),
-        )._set_tuple(key[1:], value, inplace=inplace, validated=validated)
+        )
+        nested._set_tuple(key[1:], value, inplace=inplace, validated=validated)
         return self
 
     def _set_at_str(self, key, value, idx, *, validated):
@@ -7837,7 +7885,8 @@ class _CustomOpTensorDict(TensorDictBase):
 
     rename_key = _renamed_inplace_method(rename_key_)
 
-    def del_(self, key: str) -> _CustomOpTensorDict:
+    @lock_blocked
+    def del_(self, key: NestedKey) -> _CustomOpTensorDict:
         self._source = self._source.del_(key)
         return self
 
@@ -8169,7 +8218,6 @@ class _TransposedTensorDict(_CustomOpTensorDict):
         list_item: list[CompatibleType],
         dim: int,
     ) -> TensorDictBase:
-
         trsp = self.custom_op_kwargs["dim0"], self.custom_op_kwargs["dim1"]
         if dim == trsp[0]:
             dim = trsp[1]
@@ -8336,31 +8384,35 @@ def _make_repr(key: str, item: CompatibleType, tensordict: TensorDictBase) -> st
     return f"{key}: {_get_repr(item)}"
 
 
-def _td_fields(td: TensorDictBase) -> str:
+def _td_fields(td: TensorDictBase, keys=None) -> str:
     strs = []
-    for key in td.keys():
-        try:
+    if keys is None:
+        keys = td.keys()
+    for key in keys:
+        shape = td.get_item_shape(key)
+        if -1 not in shape:
             item = td.get(key)
             strs.append(_make_repr(key, item, td))
-        except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
-                # we know td is lazy stacked and the key is a leaf
-                # so we can get the shape and escape the error
-                shape = td.get_item_shape(key)
-                tensor = td.tensordicts[0].get(key)
-                if isinstance(tensor, TensorDictBase):
-                    substr = _td_fields(tensor)
-                else:
-                    substr = _get_repr_custom(
-                        tensor.__class__,
-                        shape=shape,
-                        device=tensor.device,
-                        dtype=tensor.dtype,
-                        is_shared=tensor.is_shared(),
-                    )
-                strs.append(f"{key}: {substr}")
+        else:
+            # we know td is lazy stacked and the key is a leaf
+            # so we can get the shape and escape the error
+            temp_td = td
+            while isinstance(
+                temp_td, LazyStackedTensorDict
+            ):  # we need to grab the het tensor from the inner nesting level
+                temp_td = temp_td.tensordicts[0]
+            tensor = temp_td.get(key)
+            if isinstance(tensor, TensorDictBase):
+                substr = _td_fields(tensor)
             else:
-                raise err
+                substr = _get_repr_custom(
+                    tensor.__class__,
+                    shape=shape,
+                    device=tensor.device,
+                    dtype=tensor.dtype,
+                    is_shared=tensor.is_shared(),
+                )
+            strs.append(f"{key}: {substr}")
 
     return indent(
         "\n" + ",\n".join(sorted(strs)),

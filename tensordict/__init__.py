@@ -47,3 +47,5 @@ __all__ = [
     "PersistentTensorDict",
     "tensorclass",
 ]
+
+# from tensordict._pytree import *
