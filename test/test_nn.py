@@ -2828,6 +2828,15 @@ class TestTensorDictParams:
         assert (m.params == params).all()
         assert (params == m.params).all()
 
+    def test_td_params_cast(self):
+        params = self._get_params()
+        p = TensorDictParams(params)
+        m = self.CustomModule(p)
+        for dtype in ("half", "double", "float"):
+            getattr(m, dtype)()
+            for p in params.values(True, True):
+                assert p.dtype == getattr(torch, dtype)
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

@@ -310,17 +310,23 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def __getitem__(self, index: IndexType) -> TensorDictBase:
         ...
 
-    @_carry_over
     def to(self, dest: DeviceType | type | torch.Size, **kwargs) -> TensorDictBase:
-        ...
+        params = self._param_td.to(dest)
+        if params is self._param_td:
+            return self
+        return TensorDictParams(params)
 
-    @_carry_over
     def cpu(self):
-        ...
+        params = self._param_td.cpu()
+        if params is self._param_td:
+            return self
+        return TensorDictParams(params)
 
-    @_carry_over
-    def cuda(self):
-        ...
+    def cuda(self, device=None):
+        params = self._param_td.cuda(device=device)
+        if params is self._param_td:
+            return self
+        return TensorDictParams(params)
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
         return TensorDictParams(self._param_td.clone(recurse=recurse))
