@@ -48,13 +48,6 @@ def _str_to_dict(str_spec: str) -> Tuple[List[str], str]:
     return context_strings, ",".join(child_strings)
 
 
-def _maybe_str_to_tensordict(str_spec: str) -> Optional[Tuple[Any, Context, str]]:
-    if not str_spec.startswith("D"):
-        return None
-    context_strings, child_strings = _str_to_dict(str_spec)
-    return TensorDict, context_strings, child_strings
-
-
 def _str_to_tensordictdict(str_spec: str) -> Tuple[List[str], str]:
     context_and_child_strings = str_spec[2:-1]
 
@@ -96,18 +89,9 @@ def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, 
     )
 
 
-def _tensordict_to_str(spec: "TreeSpec", child_strings: List[str]) -> str:  # noqa: F821
-    context_child_strings = []
-    for key, child_string in zip(spec.context, child_strings):
-        context_child_strings.append(f"{key}:{child_string}")
-    return f"D({','.join(context_child_strings)})"
-
-
 for cls in PYTREE_REGISTERED_TDS:
     _register_pytree_node(
         cls,
         _tensordict_flatten,
         _tensordictdict_unflatten,
-        # _tensordict_to_str,
-        # _maybe_str_to_tensordict,
     )
