@@ -4977,15 +4977,20 @@ def _lazy_cat(
             )
 
         if dim == stack_dim:
-            td_list = []
+
+            index = 0
             for lazy_td in list_of_tensordicts:
-                td_list += lazy_td.tensordicts
-            out.tensordicts = td_list
+                for inner_td in lazy_td.tensordicts:
+                    out.tensordicts[index].update(inner_td, inplace=True)
+                    index += 1
         else:
             for i in range(len(out.tensordicts)):
-                out.tensordicts[i] = torch.cat(
-                    [lazy_td.tensordicts[i] for lazy_td in list_of_tensordicts],
-                    new_dim,
+                out.tensordicts[i].update(
+                    torch.cat(
+                        [lazy_td.tensordicts[i] for lazy_td in list_of_tensordicts],
+                        new_dim,
+                    ),
+                    inplace=True,
                 )
 
         return out
