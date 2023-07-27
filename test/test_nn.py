@@ -20,6 +20,7 @@ from tensordict.nn import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModuleBase,
+    TensorDictParams,
     TensorDictSequential,
 )
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
@@ -1078,15 +1079,15 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1159,16 +1160,16 @@ class TestTDSequence:
         assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 4
         del tdmodule[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1221,17 +1222,17 @@ class TestTDSequence:
         tdmodule[1] = tdmodule2
         tdmodule[2] = normal_params
         tdmodule[3] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params["module", "3"] = params["module", "4"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
+            params["module", "3"] = params["module", "4"]
         assert len(tdmodule) == 5
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 5
         del tdmodule[4]
-        del params["module", "4"]
+        with params.unlock_():
+            del params["module", "4"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1273,15 +1274,15 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1333,16 +1334,16 @@ class TestTDSequence:
         assert len(tdmodule.module) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule.module, "__delitem__")
         assert len(tdmodule.module) == 4
         del tdmodule.module[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule.module) == 3
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1399,17 +1400,17 @@ class TestTDSequence:
         tdmodule[1] = tdmodule2
         tdmodule[2] = normal_params
         tdmodule[3] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params["module", "3"] = params["module", "4"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
+            params["module", "3"] = params["module", "4"]
         assert len(tdmodule) == 5
 
         assert hasattr(tdmodule.module, "__delitem__")
         assert len(tdmodule.module) == 5
         del tdmodule.module[4]
-        del params["module", "4"]
+        with params.unlock_():
+            del params["module", "4"]
         assert len(tdmodule.module) == 4
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1450,15 +1451,15 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -2781,6 +2782,60 @@ class TestEnsembleModule:
         assert (
             lin.reset_parameters.call_count == 2
         ), f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
+
+
+class TestTensorDictParams:
+    def _get_params(self):
+        module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
+        params = TensorDict.from_module(module)
+        params.lock_()
+        return params
+
+    class CustomModule(nn.Module):
+        def __init__(self, params):
+            super().__init__()
+            self.params = params
+
+    def test_td_params(self):
+        params = self._get_params()
+        p = TensorDictParams(params)
+        m = self.CustomModule(p)
+        assert (
+            TensorDict(dict(m.named_parameters()), [])
+            == TensorDict({"params": params.flatten_keys("_")}, []).flatten_keys(".")
+        ).all()
+
+        assert not m.params.is_locked
+        assert m.params._param_td.is_locked
+
+        assert (
+            m.params["0", "weight"] is not None
+        )  # assess that param can be accessed via nested indexing
+
+        # assert assignment
+        m.params["other"] = torch.randn(3)
+        assert isinstance(m.params["other"], nn.Parameter)
+        assert m.params["other"].requires_grad
+
+        # change that locking is unchanged
+        assert not m.params.is_locked
+        assert m.params._param_td.is_locked
+
+        assert m.params.other.requires_grad
+        del m.params["other"]
+
+        assert m.params["0", "weight"].requires_grad
+        assert (m.params == params).all()
+        assert (params == m.params).all()
+
+    def test_td_params_cast(self):
+        params = self._get_params()
+        p = TensorDictParams(params)
+        m = self.CustomModule(p)
+        for dtype in ("half", "double", "float"):
+            getattr(m, dtype)()
+            for p in params.values(True, True):
+                assert p.dtype == getattr(torch, dtype)
 
 
 if __name__ == "__main__":

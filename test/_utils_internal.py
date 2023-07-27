@@ -9,6 +9,7 @@ import numpy as np
 import torch
 
 from tensordict import PersistentTensorDict, tensorclass, TensorDict
+from tensordict.nn.params import TensorDictParams
 from tensordict.tensordict import _stack as stack_td
 
 
@@ -223,6 +224,9 @@ class TestTensorDictsBase:
             self.nested_td(device), filename=filename, device=device
         )
         return td_h5
+
+    def td_params(self, device):
+        return TensorDictParams(self.td(device))
 
 
 def expand_list(list_of_tensors, *dims):

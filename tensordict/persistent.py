@@ -39,6 +39,7 @@ from tensordict.utils import (
     DeviceType,
     expand_right,
     IndexType,
+    lock_blocked,
     NestedKey,
     NUMPY_TO_TORCH_DTYPE_DICT,
 )
@@ -475,6 +476,7 @@ class PersistentTensorDict(TensorDictBase):
         """Materializes a PersistentTensorDict on a regular TensorDict."""
         return self.to_tensordict()
 
+    @lock_blocked
     def del_(self, key):
         key = self._process_key(key)
         del self.file[key]

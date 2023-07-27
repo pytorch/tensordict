@@ -523,6 +523,7 @@ TD_BATCH_SIZE = 4
         "nested_tensorclass",
         "permute_td",
         "nested_stacked_td",
+        "td_params",
         pytest.param(
             "td_h5", marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
         ),
@@ -539,8 +540,31 @@ class TestTensorDicts(TestTensorDictsBase):
             other_p = inv_p
             while (other_p == inv_p).all():
                 other_p = torch.randperm(4)
-            assert tensordict.permute(*p).permute(*inv_p) is tensordict
-            assert tensordict.permute(*p).permute(*other_p) is not tensordict
+            other_p = tuple(other_p.tolist())
+            p = tuple(p.tolist())
+            inv_p = tuple(inv_p.tolist())
+            if td_name in ("td_params",):
+                assert (
+                    tensordict.permute(*p).permute(*inv_p)._param_td
+                    is tensordict._param_td
+                )
+                assert (
+                    tensordict.permute(*p).permute(*other_p)._param_td
+                    is not tensordict._param_td
+                )
+                assert (
+                    torch.permute(tensordict, p).permute(inv_p)._param_td
+                    is tensordict._param_td
+                )
+                assert (
+                    torch.permute(tensordict, p).permute(other_p)._param_td
+                    is not tensordict._param_td
+                )
+            else:
+                assert tensordict.permute(*p).permute(*inv_p) is tensordict
+                assert tensordict.permute(*p).permute(*other_p) is not tensordict
+                assert torch.permute(tensordict, p).permute(inv_p) is tensordict
+                assert torch.permute(tensordict, p).permute(other_p) is not tensordict
 
     def test_to_tensordict(self, td_name, device):
         torch.manual_seed(1)
@@ -614,7 +638,8 @@ class TestTensorDicts(TestTensorDictsBase):
             and "a" not in td2.clone().keys()
         )
 
-        td2 = td.exclude("a", inplace=True)
+        with td.unlock_():
+            td2 = td.exclude("a", inplace=True)
         assert td2 is td
 
     def test_assert(self, td_name, device):
@@ -656,19 +681,29 @@ class TestTensorDicts(TestTensorDictsBase):
         sub_td = td[:, :2].to_tensordict()
         sub_td.zero_()
         sub_dict = sub_td.to_dict()
-        td[:, :2] = sub_dict
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set[:, :2] = sub_dict
         assert (td[:, :2] == 0).all()
 
     @pytest.mark.parametrize("call_del", [True, False])
     def test_remove(self, td_name, device, call_del):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if call_del:
-            del td["a"]
-        else:
-            td = td.del_("a")
+        with td.unlock_():
+            if call_del:
+                del td["a"]
+            else:
+                td = td.del_("a")
         assert td is not None
         assert "a" not in td.keys()
+        if td_name in ("sub_td", "sub_td2"):
+            return
+        td.lock_()
+        with pytest.raises(RuntimeError, match="locked"):
+            del td["b"]
 
     def test_set_unexisting(self, td_name, device):
         torch.manual_seed(1)
@@ -686,9 +721,17 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_fill_(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        new_td = td.fill_("a", 0.1)
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        new_td = td_set.fill_("a", 0.1)
         assert (td.get("a") == 0.1).all()
-        assert new_td is td
+        assert new_td is td_set
+
+    def test_shape(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert td.shape == td.batch_size
 
     def test_flatten_unflatten(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -710,8 +753,12 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
-        new_td = td.masked_fill_(mask, -10.0)
-        assert new_td is td
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        new_td = td_set.masked_fill_(mask, -10.0)
+        assert new_td is td_set
         for item in td.values():
             assert (item[mask] == -10).all(), item[mask]
 
@@ -778,7 +825,11 @@ class TestTensorDicts(TestTensorDictsBase):
         for key, item in td_clone.items(True):
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
-            td.set_(key, item)
+            if td_name == "td_params":
+                td_set = td.data
+            else:
+                td_set = td
+            td_set.set_(key, item)
 
     def test_unlock(self, td_name, device):
         torch.manual_seed(1)
@@ -846,7 +897,8 @@ class TestTensorDicts(TestTensorDictsBase):
             b = td.unflatten_keys()
             assert a is b
 
-        assert len(td._cache)
+        if td_name != "td_params":
+            assert len(td._cache)
         td.unlock_()
         assert td._cache is None
         for val in td.values(True):
@@ -920,6 +972,12 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_zero_(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="a leaf Variable that requires grad"
+            ):
+                new_td = td.zero_()
+            return
         new_td = td.zero_()
         assert new_td is td
         for k in td.keys():
@@ -929,6 +987,10 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_apply(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
+        if inplace and td_name == "td_params":
+            with pytest.raises(ValueError, match="Failed to update"):
+                td.apply(lambda x: x + 1, inplace=inplace)
+            return
         td_1 = td.apply(lambda x: x + 1, inplace=inplace)
         if inplace:
             for key in td.keys(True, True):
@@ -943,7 +1005,11 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_apply_other(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
-        td_1 = td.apply(lambda x, y: x + y, td_c, inplace=inplace)
+        if inplace and td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_1 = td_set.apply(lambda x, y: x + y, td_c, inplace=inplace)
         if inplace:
             for key in td.keys(True, True):
                 assert (td_c[key] * 2 == td[key]).all()
@@ -999,9 +1065,18 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_equal_float(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set.zero_()
         assert (td == 0.0).all()
-        td0 = td.clone().zero_()
+        td0 = td.clone()
+        if td_name == "td_params":
+            td_set = td0.data
+        else:
+            td_set = td0
+        td_set.zero_()
         assert (td0 != 1.0).all()
 
     def test_equal_other(self, td_name, device):
@@ -1012,7 +1087,11 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_equal_int(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set.zero_()
         assert (td == 0).all()
         td0 = td.to_tensordict().zero_()
         assert (td0 != 1).all()
@@ -1020,7 +1099,11 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_equal_tensor(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td.zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set.zero_()
         assert (td == torch.zeros([], dtype=torch.int, device=device)).all()
         td0 = td.to_tensordict().zero_()
         assert (td0 != torch.ones([], dtype=torch.int, device=device)).all()
@@ -1046,6 +1129,12 @@ class TestTensorDicts(TestTensorDictsBase):
         # gather with out
         td_gather.zero_()
         out = td_gather.clone()
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="don't support automatic differentiation"
+            ):
+                torch.gather(td, dim=dim, index=index, out=out)
+            return
         td_gather2 = torch.gather(td, dim=dim, index=index, out=out)
         assert (td_gather2 != 0).any()
 
@@ -1063,7 +1152,13 @@ class TestTensorDicts(TestTensorDictsBase):
             ),
             batch_size=[n, *td.batch_size[d:]],
         )
-        td[mask] = pseudo_td
+
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+
+        td_set[mask] = pseudo_td
         for item in td.values():
             assert (item[mask] == 0).all()
 
@@ -1218,6 +1313,10 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_squeeze = torch.squeeze(td, dim=None)
         tensor = torch.ones_like(td.get("a").squeeze())
+        if td_name == "td_params":
+            with pytest.raises(ValueError, match="Failed to update"):
+                td_squeeze.set_("a", tensor)
+            return
         td_squeeze.set_("a", tensor)
         assert (td_squeeze.get("a") == tensor).all()
         if td_name == "unsqueezed_td":
@@ -1267,6 +1366,7 @@ class TestTensorDicts(TestTensorDictsBase):
             "unsqueezed_td",
             "squeezed_td",
             "permute_td",
+            "td_params",
         ):
             # TODO: document this as an edge-case: with a sub-tensordict, exclude acts on the parent tensordict
             # perhaps exclude should return an error in these cases?
@@ -1320,12 +1420,21 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_update_at_(self, td_name, device):
         td = getattr(self, td_name)(device)
         td0 = td[1].clone().zero_()
+        if td_name == "td_params":
+            with pytest.raises(RuntimeError, match="a view of a leaf Variable"):
+                td.update_at_(td0, 0)
+            return
         td.update_at_(td0, 0)
         assert (td[0] == 0).all()
 
     def test_write_on_subtd(self, td_name, device):
         td = getattr(self, td_name)(device)
         sub_td = td.get_sub_tensordict(0)
+        # should not work with td_params
+        if td_name == "td_params":
+            with pytest.raises(RuntimeError, match="a view of a leaf"):
+                sub_td["a"] = torch.full((3, 2, 1, 5), 1.0, device=device)
+            return
         sub_td["a"] = torch.full((3, 2, 1, 5), 1.0, device=device)
         assert (td["a"][0] == 1).all()
 
@@ -1541,7 +1650,10 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.testing.assert_close(new_z, td.get("z"))
 
         new_z = torch.randn_like(z)
-        td.set_("z", new_z)
+        if td_name == "td_params":
+            td.data.set_("z", new_z)
+        else:
+            td.set_("z", new_z)
         torch.testing.assert_close(new_z, td.get("z"))
 
     def test_rename_key_nested(self, td_name, device) -> None:
@@ -1598,11 +1710,22 @@ class TestTensorDicts(TestTensorDictsBase):
 
         idx = actual_index
         td_clone = td.clone()
-        actual_td = td_clone[idx].clone().zero_()
+        actual_td = td_clone[idx].clone()
+        if td_name in ("td_params",):
+            td_set = actual_td.apply(lambda x: x.data)
+        else:
+            td_set = actual_td
+        td_set.zero_()
 
         for key in actual_td.keys():
             assert (actual_td.get(key) == 0).all()
-        td_clone[idx] = actual_td
+
+        if td_name in ("td_params",):
+            td_set = td_clone.data
+        else:
+            td_set = td_clone
+
+        td_set[idx] = actual_td
         for key in td_clone.keys():
             assert (td_clone[idx].get(key) == 0).all()
 
@@ -1617,7 +1740,10 @@ class TestTensorDicts(TestTensorDictsBase):
             return
 
         td_clone = td[idx].to_tensordict().zero_()
-        td[idx] = td_clone
+        if td_name == "td_params":
+            td.data[idx] = td_clone
+        else:
+            td[idx] = td_clone
         assert (td[idx].get("a") == 0).all()
 
         td_clone = torch.cat([td_clone, td_clone], 0)
@@ -1698,11 +1824,17 @@ class TestTensorDicts(TestTensorDictsBase):
         tdt = td.transpose(-1, -2)
         for key, value in tdt.items(True):
             assert value.shape == td.get(key).transpose(2, 3).shape
-        assert tdt.transpose(-1, -2) is td
+        if td_name in ("td_params",):
+            assert tdt.transpose(-1, -2)._param_td is td._param_td
+        else:
+            assert tdt.transpose(-1, -2) is td
         with td.unlock_():
             tdt.set(("some", "transposed", "tensor"), torch.zeros(tdt.shape))
         assert td.get(("some", "transposed", "tensor")).shape == td.shape
-        assert td.transpose(0, 0) is td
+        if td_name in ("td_params",):
+            assert td.transpose(0, 0)._param_td is td._param_td
+        else:
+            assert td.transpose(0, 0) is td
         with pytest.raises(
             ValueError, match="The provided dimensions are incompatible"
         ):
@@ -1774,7 +1906,10 @@ class TestTensorDicts(TestTensorDictsBase):
 
         # test set_
         val2 = {"subkey1": torch.zeros(4, 3, 2, 1, 10)}
-        td.set_("key1", val2)
+        if td_name in ("td_params",):
+            td.data.set_("key1", val2)
+        else:
+            td.set_("key1", val2)
         assert (td.get("key1").get("subkey1") == 0).all()
 
         if td_name not in ("stacked_td", "nested_stacked_td"):
@@ -1790,6 +1925,10 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_delitem(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+        if td_name in ("memmap_td",):
+            with pytest.raises(RuntimeError, match="Cannot modify"):
+                del td["a"]
+            return
         del td["a"]
         assert "a" not in td.keys()
 
@@ -1844,6 +1983,10 @@ class TestTensorDicts(TestTensorDictsBase):
         td0 = td0.to_tensordict()
         td0 = td0.apply(lambda x: x * 0 + 2)
         assert sub_td.shape == td0.shape
+        if td_name == "td_params":
+            with pytest.raises(RuntimeError, match="a leaf Variable"):
+                sub_td.update(td0)
+            return
         sub_td.update(td0)
         assert (sub_td == 2).all()
         assert (td[index] == 2).all()
@@ -1856,10 +1999,23 @@ class TestTensorDicts(TestTensorDictsBase):
             td0 = td.clone(newfile=tmpdir / "file0.h5").apply_(lambda x: x.zero_())
             td1 = td.clone(newfile=tmpdir / "file1.h5").apply_(lambda x: x.zero_() + 1)
         else:
-            td0 = td.clone().apply_(lambda x: x.zero_())
-            td1 = td.clone().apply_(lambda x: x.zero_() + 1)
+            td0 = td.clone()
+            if td_name in ("td_params",):
+                td0.data.apply_(lambda x: x.zero_())
+            else:
+                td0.apply_(lambda x: x.zero_())
+            td1 = td.clone()
+            if td_name in ("td_params",):
+                td1.data.apply_(lambda x: x.zero_() + 1)
+            else:
+                td1.apply_(lambda x: x.zero_() + 1)
+
         td_out = td.unsqueeze(1).expand(td.shape[0], 2, *td.shape[1:]).clone()
         td_stack = torch.stack([td0, td1], 1)
+        if td_name == "td_params":
+            with pytest.raises(RuntimeError, match="out.batch_size and stacked"):
+                torch.stack([td0, td1], 0, out=td_out)
+            return
         torch.stack([td0, td1], 1, out=td_out)
         assert (td_stack == td_out).all()
 
@@ -1885,6 +2041,10 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(IndexError, match="storages of the indexed tensors"):
                 torch.stack(tds_list, 0, out=td)
             return
+        if td_name == "td_params":
+            with pytest.raises(RuntimeError, match="arguments don't support automatic"):
+                torch.stack(tds_list, 0, out=td)
+            return
         stacked_td = torch.stack(tds_list, 0, out=td)
         assert stacked_td.batch_size == td.batch_size
         assert stacked_td is td
@@ -1897,6 +2057,10 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td = td.expand(3, *td.batch_size).clone().zero_()
         tds_list = [getattr(self, td_name)(device) for _ in range(3)]
+        if td_name == "td_params":
+            with pytest.raises(RuntimeError, match="arguments don't support automatic"):
+                torch.stack(tds_list, 0, out=td)
+            return
         stacked_td = stack_td(tds_list, 0, out=td)
         assert stacked_td.batch_size == td.batch_size
         for key in ("a", "b", "c"):
@@ -1991,6 +2155,8 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_set_requires_grad(self, td_name, device):
         td = getattr(self, td_name)(device)
+        if td_name in ("td_params",):
+            td.apply(lambda x: x.requires_grad_(False))
         td.unlock_()
         assert not td.get("a").requires_grad
         if td_name in ("td_h5",):
@@ -2167,7 +2333,7 @@ class TestTensorDicts(TestTensorDictsBase):
                 match="Converting a sub-tensordict values to memmap cannot be done",
             ):
                 td.memmap_()
-        elif td_name in ("td_h5",):
+        elif td_name in ("td_h5", "td_params"):
             with pytest.raises(
                 RuntimeError,
                 match="Cannot build a memmap TensorDict in-place",
@@ -2199,7 +2365,7 @@ class TestTensorDicts(TestTensorDictsBase):
             ):
                 td.memmap_(tmp_path / "tensordict")
             return
-        elif td_name in ("td_h5",):
+        elif td_name in ("td_h5", "td_params"):
             with pytest.raises(
                 RuntimeError,
                 match="Cannot build a memmap TensorDict in-place",
@@ -2229,7 +2395,7 @@ class TestTensorDicts(TestTensorDictsBase):
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
             )
-        elif td_name in ("sub_td", "sub_td2", "td_h5"):
+        elif td_name in ("sub_td", "sub_td2", "td_h5", "td_params"):
             pytest.skip(
                 "SubTensorDict/H5 and memmap_ incompatibility is checked elsewhere"
             )
@@ -2395,58 +2561,91 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         assert "a" in td.keys()
         a = td["a"].clone()
-        out = td.pop("a")
-        assert (out == a).all()
-        assert "a" not in td.keys()
+        with td.unlock_():
+            out = td.pop("a")
+            assert (out == a).all()
+            assert "a" not in td.keys()
 
-        assert "b" in td.keys()
-        b = td["b"].clone()
-        default = torch.zeros_like(b).to(device)
-        assert (default != b).all()
-        out = td.pop("b", default)
+            assert "b" in td.keys()
+            b = td["b"].clone()
+            default = torch.zeros_like(b).to(device)
+            assert (default != b).all()
+            out = td.pop("b", default)
 
-        assert torch.ne(out, default).all()
-        assert (out == b).all()
+            assert torch.ne(out, default).all()
+            assert (out == b).all()
 
-        assert "z" not in td.keys()
-        out = td.pop("z", default)
-        assert (out == default).all()
+            assert "z" not in td.keys()
+            out = td.pop("z", default)
+            assert (out == default).all()
 
-        with pytest.raises(
-            KeyError,
-            match=re.escape(r"You are trying to pop key"),
-        ):
-            td.pop("z")
+            with pytest.raises(
+                KeyError,
+                match=re.escape(r"You are trying to pop key"),
+            ):
+                td.pop("z")
 
     def test_setitem_slice(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td[:] = td.clone()
-        td[:1] = td[:1].clone().zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set[:] = td.clone()
+        td_set[:1] = td[:1].clone().zero_()
         assert (td[:1] == 0).all()
         td = getattr(self, td_name)(device)
-        td[:1] = td[:1].to_tensordict().zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set[:1] = td[:1].to_tensordict().zero_()
         assert (td[:1] == 0).all()
 
         # with broadcast
         td = getattr(self, td_name)(device)
-        td[:1] = td[0].clone().zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set[:1] = td[0].clone().zero_()
         assert (td[:1] == 0).all()
         td = getattr(self, td_name)(device)
-        td[:1] = td[0].to_tensordict().zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set[:1] = td[0].to_tensordict().zero_()
         assert (td[:1] == 0).all()
 
         td = getattr(self, td_name)(device)
-        td[:1, 0] = td[0, 0].clone().zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set[:1, 0] = td[0, 0].clone().zero_()
         assert (td[:1, 0] == 0).all()
         td = getattr(self, td_name)(device)
-        td[:1, 0] = td[0, 0].to_tensordict().zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set[:1, 0] = td[0, 0].to_tensordict().zero_()
         assert (td[:1, 0] == 0).all()
 
         td = getattr(self, td_name)(device)
-        td[:1, :, 0] = td[0, :, 0].clone().zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set[:1, :, 0] = td[0, :, 0].clone().zero_()
         assert (td[:1, :, 0] == 0).all()
         td = getattr(self, td_name)(device)
-        td[:1, :, 0] = td[0, :, 0].to_tensordict().zero_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        td_set[:1, :, 0] = td[0, :, 0].to_tensordict().zero_()
         assert (td[:1, :, 0] == 0).all()
 
     def test_casts(self, td_name, device):
@@ -2475,6 +2674,11 @@ class TestTensorDicts(TestTensorDictsBase):
             # we do not call skip to avoid systematic skips in internal code base
             return
         td_empty = torch.empty_like(td)
+        if td_name == "td_params":
+            with pytest.raises(ValueError, match="Failed to update"):
+                td.apply_(lambda x: x + 1.0)
+            return
+
         td.apply_(lambda x: x + 1.0)
         assert type(td) is type(td_empty)
         assert all(val.any() for val in (td != td_empty).values(True, True))
@@ -2495,6 +2699,12 @@ class TestTensorDicts(TestTensorDictsBase):
                 fun(td)
             return
         fun(td)
+
+        if td_name == "td_params":
+            with pytest.raises(RuntimeError, match="leaf Variable that requires grad"):
+                td.zero_()
+            return
+
         td.zero_()
         # this value should be cached
         std = fun(td)
