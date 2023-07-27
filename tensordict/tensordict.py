@@ -4939,10 +4939,10 @@ def _lazy_cat(
             f"={dim} and batch_size={batch_size}"
         )
     stack_dim = list_of_tensordicts[0].stack_dim
-    if any([(td.stack_dim != stack_dim) for td in list_of_tensordicts]):
+    if any((td.stack_dim != stack_dim) for td in list_of_tensordicts):
         raise RuntimeError("cat lazy stacked tds must have same stack dim")
 
-    batch_size[dim] = sum([td.batch_size[dim] for td in list_of_tensordicts])
+    batch_size[dim] = sum(td.batch_size[dim] for td in list_of_tensordicts)
     batch_size = torch.Size(batch_size)
 
     new_dim = dim
