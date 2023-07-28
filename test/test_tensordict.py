@@ -4274,6 +4274,17 @@ class TestLazyStackedTensorDict:
         obs = obs.expand(batch_size).clone()
         return obs
 
+    def decompose(self, td):
+        if isinstance(td, LazyStackedTensorDict):
+            for inner_td in td.tensordicts:
+                yield from self.decompose(inner_td)
+        else:
+            for v in td.values():
+                if is_tensor_collection(v):
+                    yield from self.decompose(v)
+                else:
+                    yield v
+
     @pytest.mark.parametrize("batch_size", [(), (2,), (1, 2)])
     @pytest.mark.parametrize("cat_dim", [0, 1, 2])
     def test_cat_lazy_stack(self, batch_size, cat_dim):
@@ -4285,7 +4296,10 @@ class TestLazyStackedTensorDict:
         assert assert_allclose_td(res, td_lazy)
         assert res is not td_lazy
         td_lazy_clone = td_lazy.clone()
+        data_ptr_set_before = {val.data_ptr() for val in self.decompose(td_lazy)}
         res = torch.cat([td_lazy_clone], dim=cat_dim, out=td_lazy)
+        data_ptr_set_after = {val.data_ptr() for val in self.decompose(td_lazy)}
+        assert data_ptr_set_after == data_ptr_set_before
         assert res is td_lazy
         assert assert_allclose_td(res, td_lazy_clone)
 
@@ -4312,7 +4326,14 @@ class TestLazyStackedTensorDict:
             batch_size = list(batch_size)
             batch_size[cat_dim] *= 2
             td_lazy_dest = self.nested_lazy_het_td(batch_size)["lazy"]
+            data_ptr_set_before = {
+                val.data_ptr() for val in self.decompose(td_lazy_dest)
+            }
             res = torch.cat([td_lazy, td_lazy_2], dim=cat_dim, out=td_lazy_dest)
+            data_ptr_set_after = {
+                val.data_ptr() for val in self.decompose(td_lazy_dest)
+            }
+            assert data_ptr_set_after == data_ptr_set_before
             assert res is td_lazy_dest
             index = (slice(None),) * cat_dim + (slice(0, td_lazy.shape[cat_dim]),)
             assert assert_allclose_td(res[index], td_lazy)

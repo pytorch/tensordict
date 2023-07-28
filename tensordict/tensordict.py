@@ -1570,7 +1570,7 @@ class TensorDictBase(MutableMapping):
                 if _is_tensor_collection(target_type):
                     target = self.get(key)
                     if len(subkey):
-                        target.update({subkey: value})
+                        target.update({subkey: value}, inplace=inplace, clone=clone)
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
                         value.__class__
@@ -1583,10 +1583,10 @@ class TensorDictBase(MutableMapping):
                                 LazyStackedTensorDict(
                                     *target.unbind(value.stack_dim),
                                     stack_dim=value.stack_dim,
-                                ).update(value),
+                                ).update(value, inplace=inplace, clone=clone),
                             )
                         else:
-                            target.update(value)
+                            target.update(value, inplace=inplace, clone=clone)
                         continue
             if len(subkey):
                 self.set((key, *subkey), value, inplace=inplace)
@@ -4985,7 +4985,6 @@ def _lazy_cat(
             )
 
         if dim == stack_dim:
-
             index = 0
             for lazy_td in list_of_tensordicts:
                 for inner_td in lazy_td.tensordicts:
@@ -7419,7 +7418,7 @@ class LazyStackedTensorDict(TensorDictBase):
             for td_dest, td_source in zip(
                 self.tensordicts, input_dict_or_td.tensordicts
             ):
-                td_dest.update(td_source, **kwargs)
+                td_dest.update(td_source, clone=clone, **kwargs)
             return self
 
         keys = self.keys(False)
@@ -7444,9 +7443,9 @@ class LazyStackedTensorDict(TensorDictBase):
                         value_unbind = value.unbind(self.stack_dim)
                     for t, _value in zip(self.tensordicts, value_unbind):
                         if len(subkey):
-                            t.update({key: {subkey: _value}})
+                            t.update({key: {subkey: _value}}, clone=clone, **kwargs)
                         else:
-                            t.update({key: _value})
+                            t.update({key: _value}, clone=clone, **kwargs)
                     continue
             if len(subkey):
                 self.set((key, *subkey), value, **kwargs)
