@@ -7419,7 +7419,7 @@ class LazyStackedTensorDict(TensorDictBase):
             for td_dest, td_source in zip(
                 self.tensordicts, input_dict_or_td.tensordicts
             ):
-                td_dest.update(td_source)
+                td_dest.update(td_source, **kwargs)
             return self
 
         keys = self.keys(False)

@@ -4271,7 +4271,7 @@ class TestLazyStackedTensorDict:
             {"lazy": td_stack, "dense": torch.zeros(3, 3, 2)},
             [],
         )
-        obs = obs.expand(batch_size)
+        obs = obs.expand(batch_size).clone()
         return obs
 
     @pytest.mark.parametrize("batch_size", [(), (2,), (1, 2)])
