@@ -41,9 +41,15 @@ def _apply_leaves(data, fn):
                 )
         return data
     elif isinstance(data, LazyStackedTensorDict):
-        for _data in data.tensordicts:
-            _apply_leaves(_data, fn)
-        return data
+        # this is currently not implemented as the registration of params will only work
+        # with plain TensorDict. The solution will be using pytree to get each independent
+        # leaf
+        raise RuntimeError(
+            "Using a LazyStackedTensorDict within a TensorDictParams isn't permitted."
+        )
+        # for _data in data.tensordicts:
+        #     _apply_leaves(_data, fn)
+        # return data
     elif isinstance(data, _CustomOpTensorDict):
         _apply_leaves(data._source, fn)
         return data
@@ -130,12 +136,7 @@ def _get_post_hook(func):
     @wraps(func)
     def new_func(self, *args, **kwargs):
         out = func(self, *args, **kwargs)
-        if not _is_tensor_collection(type(out)):
-            for hook in self._get_post_hook:
-                new_out = hook(self, out)
-                if new_out is not None:
-                    out = new_out
-        return out
+        return self._apply_get_post_hook(out)
 
     return new_func
 
@@ -285,18 +286,23 @@ class TensorDictParams(TensorDictBase, nn.Module):
             raise ValueError("Hooks must be callables.")
         self._get_post_hook.append(hook)
 
+    def _apply_get_post_hook(self, val):
+        if not _is_tensor_collection(type(val)):
+            for hook in self._get_post_hook:
+                new_val = hook(self, val)
+                if new_val is not None:
+                    val = new_val
+        return val
+
     def _reset_params(self):
         parameters = self._param_td
-        param_keys = [
-            key
-            for key, value in parameters.items(True, True)
-            if isinstance(value, nn.Parameter)
-        ]
-        buffer_keys = [
-            key
-            for key, value in parameters.items(True, True)
-            if not isinstance(value, nn.Parameter)
-        ]
+        param_keys = []
+        buffer_keys = []
+        for key, value in parameters.items(True, True):
+            if isinstance(value, nn.Parameter):
+                param_keys.append(key)
+            else:
+                buffer_keys.append(key)
         self.__dict__["_parameters"] = (
             parameters.select(*param_keys).flatten_keys("_").to_dict()
         )
@@ -691,11 +697,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
             if _is_tensor_collection(type(v)):
                 yield v
                 continue
-            for hook in self._get_post_hook:
-                new_v = hook(self, v)
-                if new_v is not None:
-                    v = new_v
-            yield v
+            yield self._apply_get_post_hook(v)
 
     def items(
         self, include_nested: bool = False, leaves_only: bool = False
@@ -704,11 +706,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
             if _is_tensor_collection(type(v)):
                 yield k, v
                 continue
-            for hook in self._get_post_hook:
-                new_v = hook(self, v)
-                if new_v is not None:
-                    v = new_v
-            yield k, v
+            yield k, self._apply_get_post_hook(v)
 
     def _apply(self, fn, recurse=True):
         """Modifies torch.nn.Module._apply to work with Buffer class."""
