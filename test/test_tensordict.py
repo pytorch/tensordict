@@ -4308,6 +4308,17 @@ class TestLazyStackedTensorDict:
         index = (slice(None),) * cat_dim + (slice(td_lazy.shape[cat_dim], None),)
         assert assert_allclose_td(res[index], td_lazy_2)
 
+        if cat_dim != len(batch_size):  # cat dim is not stack dim
+            batch_size = list(batch_size)
+            batch_size[cat_dim] *= 2
+            td_lazy_dest = self.nested_lazy_het_td(batch_size)["lazy"]
+            res = torch.cat([td_lazy, td_lazy_2], dim=cat_dim, out=td_lazy_dest)
+            assert res is td_lazy_dest
+            index = (slice(None),) * cat_dim + (slice(0, td_lazy.shape[cat_dim]),)
+            assert assert_allclose_td(res[index], td_lazy)
+            index = (slice(None),) * cat_dim + (slice(td_lazy.shape[cat_dim], None),)
+            assert assert_allclose_td(res[index], td_lazy_2)
+
     def recursively_check_key(self, td, value: int):
         if isinstance(td, LazyStackedTensorDict):
             for t in td.tensordicts:
