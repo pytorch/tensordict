@@ -415,6 +415,8 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def __getitem__(self, index: IndexType) -> TensorDictBase:
         ...
 
+    __getitems__ = __getitem__
+
     def to(self, dest: DeviceType | type | torch.Size, **kwargs) -> TensorDictBase:
         params = self._param_td.to(dest)
         if params is self._param_td:
