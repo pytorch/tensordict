@@ -493,6 +493,16 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _get_tuple(self, *args, **kwargs):
         ...
 
+    @_get_post_hook
+    @_fallback
+    def _get_at_str(self, key, idx, default):
+        ...
+
+    @_get_post_hook
+    @_fallback
+    def _get_at_tuple(self, key, idx, default):
+        ...
+
     @_fallback
     def _has_names(self, *args, **kwargs):
         ...
