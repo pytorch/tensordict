@@ -26,6 +26,8 @@ try:
 except ImportError:
     __version__ = None
 
+from tensordict._pytree import *
+
 from tensordict._tensordict import unravel_key, unravel_key_list
 
 __all__ = [
