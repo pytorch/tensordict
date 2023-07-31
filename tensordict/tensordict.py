@@ -4972,33 +4972,27 @@ def _lazy_cat(
                 )
         return LazyStackedTensorDict(*out, stack_dim=stack_dim)
     else:
+        if isinstance(out, TensorDict):
+            return _cat(list_of_tensordicts, dim=dim, out=out)
+
         if out.batch_size != batch_size:
             raise RuntimeError(
                 "out.batch_size and cat batch size must match, "
                 f"got out.batch_size={out.batch_size} and batch_size"
                 f"={batch_size}"
             )
-        if out.stack_dim != stack_dim:
-            raise RuntimeError(
-                "out.stack_dim and elements stack_sim did not match, "
-                f"got out.stack_dim={out.stack_dim} and stack_dim={stack_dim}"
-            )
-
-        if dim == stack_dim:
-            index = 0
-            for lazy_td in list_of_tensordicts:
-                for inner_td in lazy_td.tensordicts:
-                    out.tensordicts[index].update(inner_td, inplace=True)
-                    index += 1
+        if out.stack_dim != dim:
+            index_base = (slice(None),) * out.stack_dim
+            for i, sub_dest in enumerate(out.tensordicts):
+                index = index_base + (i,)
+                tds_to_cat = [_td[index] for _td in list_of_tensordicts]
+                torch.cat(tds_to_cat, dim, out=sub_dest)
         else:
-            for i in range(len(out.tensordicts)):
-                out.tensordicts[i].update(
-                    torch.cat(
-                        [lazy_td.tensordicts[i] for lazy_td in list_of_tensordicts],
-                        new_dim,
-                    ),
-                    inplace=True,
-                )
+            init_idx = 0
+            for td_in in list_of_tensordicts:
+                sub_dest = out.tensordicts[init_idx : init_idx + td_in.shape[dim]]
+                init_idx += init_idx + td_in.shape[dim]
+                torch.stack(sub_dest, out.stack_dim).update(td_in, inplace=True)
 
         return out
 
