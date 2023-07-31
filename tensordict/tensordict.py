@@ -4959,7 +4959,7 @@ def _lazy_cat(
 
     if out is None:
         out = []
-        if dim == stack_dim:  # if dim is stack, just add all to same list
+        if dim == stack_dim:  # if dim is stack, just add all to the same list
             for lazy_td in list_of_tensordicts:
                 out += lazy_td.tensordicts
         else:
