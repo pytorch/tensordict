@@ -4972,7 +4972,7 @@ def _lazy_cat(
                 )
         return LazyStackedTensorDict(*out, stack_dim=stack_dim)
     else:
-        if isinstance(out, TensorDict):
+        if not isinstance(out, LazyStackedTensorDict):
             return _cat(list_of_tensordicts, dim=dim, out=out)
 
         if out.batch_size != batch_size:
