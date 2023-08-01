@@ -124,14 +124,98 @@ class TestTensorStack:
         )
         assert (t[init_slice + (torch.tensor([0, 2]),)][init_slice + (0,)] == x).all()
         assert (t[init_slice + (torch.tensor([0, 2]),)][init_slice + (1,)] == z).all()
-        assert (t[init_slice + (torch.tensor([0, 2, 0, 2]),)][init_slice + (2,)] == x).all()
-        assert (t[init_slice + (torch.tensor([0, 2, 0, 2]),)][init_slice + (3,)] == z).all()
+        assert (
+            t[init_slice + (torch.tensor([0, 2, 0, 2]),)][init_slice + (2,)] == x
+        ).all()
+        assert (
+            t[init_slice + (torch.tensor([0, 2, 0, 2]),)][init_slice + (3,)] == z
+        ).all()
 
-        assert (t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (0, 0)] == x).all()
-        assert (t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (0, 1)] == z).all()
-        assert (t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (1, 0)] == x).all()
-        assert (t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (1, 1)] == z).all()
-    #
+        assert (
+            t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (0, 0)] == x
+        ).all()
+        assert (
+            t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (0, 1)] == z
+        ).all()
+        assert (
+            t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (1, 0)] == x
+        ).all()
+        assert (
+            t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (1, 1)] == z
+        ).all()
+
+    @pytest.mark.parametrize(
+        "transpose",
+        [(0, 1), (0, -1), (-1, 0), (1, 3), (1, 2), (2, 1), (0, 2), (2, 0), (2, 2)],
+    )
+    @pytest.mark.parametrize("het", [False, True])
+    @pytest.mark.parametrize("nt", [False, True])
+    def test_transpose(self, het, transpose, nt):
+        torch.manual_seed(0)
+        x = torch.randn(6, 5, 4, 3)
+        if het:
+            y = torch.randn(6, 5, 2, 3)
+        else:
+            y = torch.randn(6, 5, 4, 3)
+        if nt:
+            t = TensorStack(torch.nested.nested_tensor([x, y]), stack_dim=2)
+        else:
+            t = TensorStack([x, y], stack_dim=2)
+
+        tt = t.transpose(transpose)
+        with pytest.raises(ValueError):
+            t.transpose(transpose, 0)
+        if transpose == (1, 2) or transpose == (2, 1):
+            assert (tt[:, 0] == x).all()
+            assert (tt[:, 1] == y).all()
+        elif transpose == (0, 2) or transpose == (2, 0):
+            assert (tt[0] == x.permute(1, 0, 2, 3)).all()
+            assert (tt[1] == y.permute(1, 0, 2, 3)).all()
+        elif transpose == (2, 2):
+            assert (t[:, :, 0] == x).all()
+            assert (t[:, :, 1] == y).all()
+        elif transpose == (0, 1):
+            assert (tt[:, :, 0] == x.transpose(0, 1)).all()
+            assert (tt[:, :, 1] == y.transpose(0, 1)).all()
+        elif transpose == (0, -1):
+            assert (tt[:, :, 0] == x.transpose(0, -1)).all()
+            assert (tt[:, :, 1] == y.transpose(0, -1)).all()
+        elif transpose == (1, 3):
+            assert (tt[:, :, 0] == x.transpose(1, 2)).all()
+            assert (tt[:, :, 1] == y.transpose(1, 2)).all()
+
+    def test_permute(self):
+        torch.manual_seed(0)
+        x = torch.zeros(6, 5, 4, 3)
+        y = torch.zeros(6, 5, 4, 3)
+        t = TensorStack((x, y), stack_dim=2)
+        with pytest.raises(ValueError, match="Got incompatible argument permute_dims"):
+            t.permute((1, 2, 3), 0)
+        with pytest.raises(ValueError, match="Got incompatible argument permute_dims"):
+            t.permute((1, 2, 3, 4, 10))
+        with pytest.raises(ValueError, match="permute_dims must have the same length"):
+            t.permute((1, 2, 3, 4))
+        stack = torch.stack([x, y], 2)
+        for _ in range(128):
+            pdim = torch.randperm(5).tolist()
+            tp = t.permute(pdim)
+            assert tp.shape == stack.permute(pdim).shape
+            assert (tp == stack.permute(pdim)).all()
+
+    @pytest.mark.parametrize("unbind", range(5))
+    @pytest.mark.parametrize("nt", [False, True])
+    def test_permute(self, unbind, nt):
+        torch.manual_seed(0)
+        x = torch.zeros(6, 5, 4, 3)
+        y = torch.zeros(6, 5, 4, 3)
+        if nt:
+            t = TensorStack(torch.nested.nested_tensor([x, y]), stack_dim=2)
+        else:
+            t = TensorStack([x, y], stack_dim=2)
+        stack = torch.stack([x, y], 2)
+        for v1, v2 in zip(t.unbind(unbind), stack.unbind(unbind)):
+            assert (v1 == v2).all()
+
     # def test_indexing_composite(self, _tensorstack):
     #     _, (x, y, z) = _tensorstack
     #     t = TensorStack.from_tensors([[x, y, z], [x, y, z]])

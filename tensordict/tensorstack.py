@@ -471,13 +471,83 @@ class LazyStackedTensors:
             return out
         return any(value.any() for value in self.tensors)
 
-    def transpose(self, dim0, dim1):
+    def transpose(self, dim0, dim1=None):
+        if isinstance(dim0, (list, tuple)) and dim1 is None:
+            dim0, dim1 = dim0
+        elif isinstance(dim0, (list, tuple)):
+            raise ValueError(
+                "Expected one of `transpose((dim0, dim1))` or `transpose(dim0, dim1)`."
+            )
         if dim0 < 0:
-            dim0 = self.ndim + dim0
+            newdim0 = self.ndim + dim0
+        else:
+            newdim0 = dim0
         if dim1 < 0:
-            dim1 = self.ndim + dim1
-        if dim0 < 0 or dim1 < 0 or dim0 >= self.ndim or dim1 > self.ndim:
+            newdim1 = self.ndim + dim1
+        else:
+            newdim1 = dim1
+        if newdim0 < 0 or newdim1 < 0 or newdim0 >= self.ndim or newdim1 > self.ndim:
+            raise ValueError(
+                f"Dimensions {(dim0, dim1)} are incompatible with a tensor of shape {self.shape}."
+            )
+        if newdim0 == newdim1:
+            return self
+        if newdim0 == self.stack_dim:
+            newdim1 = newdim1 if newdim1 < self.stack_dim else newdim1 - 1
+            pdim = [i for i in range(self.ndim - 1) if i != newdim1]
+            pdim.insert(newdim0 - 1, newdim1)
+            return LazyStackedTensors(
+                [t.permute(pdim) for t in self.tensors], stack_dim=newdim1
+            )
+        elif newdim1 == self.stack_dim:
+            newdim0 = newdim0 if newdim0 < self.stack_dim else newdim0 - 1
+            pdim = [i for i in range(self.ndim - 1) if i != newdim0]
+            pdim.insert(newdim1 - 1, newdim0)
+            return LazyStackedTensors(
+                [t.permute(pdim) for t in self.tensors], stack_dim=newdim0
+            )
+        else:
+            newdim0 = newdim0 if newdim0 < self.stack_dim else newdim0 - 1
+            newdim1 = newdim1 if newdim1 < self.stack_dim else newdim1 - 1
+            return LazyStackedTensors(
+                [t.transpose(newdim1, newdim0) for t in self.tensors],
+                stack_dim=self.stack_dim,
+            )
 
+    def permute(self, *permute_dims):
+        orig_permute_dims = permute_dims
+        if isinstance(permute_dims[0], (tuple, list)):
+            if len(permute_dims) == 1:
+                permute_dims = permute_dims[0]
+            else:
+                raise ValueError(
+                    f"Got incompatible argument permute_dims: {orig_permute_dims}."
+                )
+        permute_dims = [p if p >= 0 else self.ndim + p for p in permute_dims]
+        if any(p < 0 or p >= self.ndim for p in permute_dims):
+            raise ValueError(
+                f"Got incompatible argument permute_dims: {orig_permute_dims}."
+            )
+        if len(permute_dims) != self.ndim:
+            raise ValueError(
+                f"permute_dims must have the same length as the number of dimensions of the tensor ({self.ndim}): {orig_permute_dims}."
+            )
+        for i in range(self.ndim):
+            if permute_dims[i] == self.stack_dim:
+                new_stack_dim = i
+                break
+        else:
+            # unreachable
+            raise RuntimeError
+        permute_dims = [
+            p if p < self.stack_dim else p - 1
+            for p in permute_dims
+            if p != self.stack_dim
+        ]
+        return LazyStackedTensors(
+            [t.permute(permute_dims) for t in self.tensors],
+            stack_dim=new_stack_dim,
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.get_nestedtensor()})"
