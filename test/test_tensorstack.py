@@ -112,17 +112,25 @@ class TestTensorStack:
             == t[init_slice + (range(0, 3, 2),)]
         ).all()
 
-    # def test_indexing_tensor(self, _tensorstack):
-    #     t, (x, y, z) = _tensorstack
-    #     assert (t[torch.tensor([0, 2])][0] == x).all()
-    #     assert (t[torch.tensor([0, 2])][1] == z).all()
-    #     assert (t[torch.tensor([0, 2, 0, 2])][2] == x).all()
-    #     assert (t[torch.tensor([0, 2, 0, 2])][3] == z).all()
-    #
-    #     assert (t[torch.tensor([[0, 2], [0, 2]])][0, 0] == x).all()
-    #     assert (t[torch.tensor([[0, 2], [0, 2]])][0, 1] == z).all()
-    #     assert (t[torch.tensor([[0, 2], [0, 2]])][1, 0] == x).all()
-    #     assert (t[torch.tensor([[0, 2], [0, 2]])][1, 1] == z).all()
+    @pytest.mark.parametrize("nt", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, 3, -1, -2, -3, -4])
+    def test_indexing_tensor(self, stack_dim, nt):
+        t, (x, y, z) = _tensorstack(stack_dim, nt)
+        sd = stack_dim if stack_dim >= 0 else 4 + stack_dim
+        init_slice = (slice(None),) * sd
+        assert (t[init_slice + (slice(1),)][init_slice + (0,)] == x).all(), (
+            t[init_slice + (slice(3),)][0],
+            x,
+        )
+        assert (t[init_slice + (torch.tensor([0, 2]),)][init_slice + (0,)] == x).all()
+        assert (t[init_slice + (torch.tensor([0, 2]),)][init_slice + (1,)] == z).all()
+        assert (t[init_slice + (torch.tensor([0, 2, 0, 2]),)][init_slice + (2,)] == x).all()
+        assert (t[init_slice + (torch.tensor([0, 2, 0, 2]),)][init_slice + (3,)] == z).all()
+
+        assert (t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (0, 0)] == x).all()
+        assert (t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (0, 1)] == z).all()
+        assert (t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (1, 0)] == x).all()
+        assert (t[init_slice + (torch.tensor([[0, 2], [0, 2]]),)][init_slice + (1, 1)] == z).all()
     #
     # def test_indexing_composite(self, _tensorstack):
     #     _, (x, y, z) = _tensorstack

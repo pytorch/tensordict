@@ -471,5 +471,13 @@ class LazyStackedTensors:
             return out
         return any(value.any() for value in self.tensors)
 
+    def transpose(self, dim0, dim1):
+        if dim0 < 0:
+            dim0 = self.ndim + dim0
+        if dim1 < 0:
+            dim1 = self.ndim + dim1
+        if dim0 < 0 or dim1 < 0 or dim0 >= self.ndim or dim1 > self.ndim:
+
+
     def __repr__(self):
         return f"{self.__class__.__name__}({self.get_nestedtensor()})"
