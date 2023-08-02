@@ -236,30 +236,32 @@ class TestTensorStack:
     #             == TensorStack.from_tensors([y, z])
     #         ).all()
     #
-    # @pytest.mark.parametrize(
-    #     "op",
-    #     ["__add__", "__truediv__", "__mul__", "__sub__", "__mod__", "__eq__", "__ne__"],
-    # )
-    # def test_elementwise(self, _tensorstack, op):
-    #     t, (x, y, z) = _tensorstack
-    #     t2 = getattr(t, op)(2)
-    #     torch.testing.assert_close(t2[0], getattr(x, op)(2))
-    #     torch.testing.assert_close(t2[1], getattr(y, op)(2))
-    #     torch.testing.assert_close(t2[2], getattr(z, op)(2))
-    #     t2 = getattr(t, op)(torch.ones(5) * 2)
-    #     torch.testing.assert_close(t2[0], getattr(x, op)(torch.ones(5) * 2))
-    #     torch.testing.assert_close(t2[1], getattr(y, op)(torch.ones(5) * 2))
-    #     torch.testing.assert_close(t2[2], getattr(z, op)(torch.ones(5) * 2))
-    #     # check broadcasting
-    #     assert t2[0].shape == x.shape
-    #     v = torch.ones(2, 1, 1, 1, 5) * 2
-    #     t2 = getattr(t, op)(v)
-    #     assert t2.shape == torch.Size([2, 3, 3, -1, 5])
-    #     torch.testing.assert_close(t2[:, 0], getattr(x, op)(v[:, 0]))
-    #     torch.testing.assert_close(t2[:, 1], getattr(y, op)(v[:, 0]))
-    #     torch.testing.assert_close(t2[:, 2], getattr(z, op)(v[:, 0]))
-    #     # check broadcasting
-    #     assert t2[:, 0].shape == torch.Size((2, *x.shape))
+    @pytest.mark.parametrize(
+        "op",
+        ["__add__", "__truediv__", "__mul__", "__sub__", "__mod__", "__eq__", "__ne__"],
+    )
+    @pytest.mark.parametrize("nt", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0])
+    def test_indexing_tensor(self, stack_dim, nt, op):
+        t, (x, y, z) = _tensorstack(stack_dim, nt)
+        t2 = getattr(t, op)(2)
+        torch.testing.assert_close(t2[0], getattr(x, op)(2))
+        torch.testing.assert_close(t2[1], getattr(y, op)(2))
+        torch.testing.assert_close(t2[2], getattr(z, op)(2))
+        t2 = getattr(t, op)(torch.ones(5) * 2)
+        torch.testing.assert_close(t2[0], getattr(x, op)(torch.ones(5) * 2))
+        torch.testing.assert_close(t2[1], getattr(y, op)(torch.ones(5) * 2))
+        torch.testing.assert_close(t2[2], getattr(z, op)(torch.ones(5) * 2))
+        # check broadcasting
+        assert t2[0].shape == x.shape
+        v = torch.ones(17, 1, 1, 1, 5) * 2
+        t2 = getattr(t, op)(v)
+        assert t2.shape == torch.Size([17, 3, 3, -1, 5])
+        torch.testing.assert_close(t2[:, 0], getattr(x, op)(v[:, 0]))
+        torch.testing.assert_close(t2[:, 1], getattr(y, op)(v[:, 0]))
+        torch.testing.assert_close(t2[:, 2], getattr(z, op)(v[:, 0]))
+        # check broadcasting
+        assert t2[:, 0].shape == torch.Size((17, *x.shape))
     #
     # def test_permute(self):
     #     w = torch.randint(10, (3, 5, 5))
