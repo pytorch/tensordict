@@ -55,6 +55,10 @@ def _elementiwse_broadcast(func):
                     self_expand = self
                 sd = self.stack_dim - self.ndim
                 other = other.unbind(sd)
+                other = tuple(
+                    _other.expand_as(_self)
+                    for (_other, _self) in zip(other, self_expand.tensors)
+                )
                 other = LazyStackedTensors(other, stack_dim=sd).get_nestedtensor()
             else:
                 self_expand = self
@@ -62,7 +66,7 @@ def _elementiwse_broadcast(func):
                 # print("result", getattr(torch.Tensor, func_name)(self.tensors, other))
             return type(self)(
                 getattr(torch.Tensor, func_name)(self_expand.tensors, other),
-                stack_dim=self.stack_dim,
+                stack_dim=self.stack_dim - self.ndim,
             )
         if isinstance(other, (torch.Tensor,)):
             shape = torch.broadcast_shapes(other.shape, self._shape_no0)
