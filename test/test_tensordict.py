@@ -5936,11 +5936,18 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
 
     assert isinstance(td_stack, LazyStackedTensorDict)
     dense_td_stack = dense_stack_tds(td_stack)
-    assert isinstance(dense_td_stack, TensorDict)
+    assert isinstance(dense_td_stack, TensorDict)  # check outer layer is non-lazy
+    assert isinstance(
+        dense_td_stack["lazy"], LazyStackedTensorDict
+    )  # while inner layer is still lazy
+    assert "b" not in dense_td_stack["lazy"].tensordicts[0].keys()
+    assert "b" in dense_td_stack["lazy"].tensordicts[1].keys()
+
     assert assert_allclose_td(
         dense_td_stack,
         dense_stack_tds([td_container, td_container_clone], dim=stack_dim),
-    )
+    )  # This shows it is the same to pass a list or a LazyStackedTensorDict
+
     for i in range(2):
         index = (slice(None),) * stack_dim + (i,)
         assert (dense_td_stack[index] == i).all()
