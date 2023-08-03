@@ -35,6 +35,7 @@ from tensordict.tensordict import (
     _CustomOpTensorDict,
     _stack as stack_td,
     assert_allclose_td,
+    dense_stack_tds,
     is_tensor_collection,
     make_tensordict,
     pad,
@@ -5904,6 +5905,57 @@ def test_empty():
     td_empty = td.empty(recurse=True)
     assert len(list(td_empty.keys())) == 1
     assert len(list(td_empty.get("b").keys())) == 1
+
+
+@pytest.mark.parametrize(
+    "stack_dim",
+    [0, 1, 2, 3],
+)
+@pytest.mark.parametrize(
+    "nested_stack_dim",
+    [0, 1, 2],
+)
+def test_dense_stack_tds(stack_dim, nested_stack_dim):
+    batch_size = (5, 6)
+    td0 = TensorDict(
+        {"a": torch.zeros(*batch_size, 3)},
+        batch_size,
+    )
+    td1 = TensorDict(
+        {"a": torch.zeros(*batch_size, 4), "b": torch.zeros(*batch_size, 2)},
+        batch_size,
+    )
+    td_lazy = torch.stack([td0, td1], dim=nested_stack_dim)
+    td_container = TensorDict({"lazy": td_lazy}, td_lazy.batch_size)
+    td_container_clone = td_container.clone()
+    td_container_clone.apply_(lambda x: x + 1)
+
+    assert td_lazy.stack_dim == nested_stack_dim
+    td_stack = torch.stack([td_container, td_container_clone], dim=stack_dim)
+    assert td_stack.stack_dim == stack_dim
+
+    assert isinstance(td_stack, LazyStackedTensorDict)
+    dense_td_stack = dense_stack_tds(td_stack)
+    assert isinstance(dense_td_stack, TensorDict)  # check outer layer is non-lazy
+    assert isinstance(
+        dense_td_stack["lazy"], LazyStackedTensorDict
+    )  # while inner layer is still lazy
+    assert "b" not in dense_td_stack["lazy"].tensordicts[0].keys()
+    assert "b" in dense_td_stack["lazy"].tensordicts[1].keys()
+
+    assert assert_allclose_td(
+        dense_td_stack,
+        dense_stack_tds([td_container, td_container_clone], dim=stack_dim),
+    )  # This shows it is the same to pass a list or a LazyStackedTensorDict
+
+    for i in range(2):
+        index = (slice(None),) * stack_dim + (i,)
+        assert (dense_td_stack[index] == i).all()
+
+    if stack_dim > nested_stack_dim:
+        assert dense_td_stack["lazy"].stack_dim == nested_stack_dim
+    else:
+        assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
 
 
 if __name__ == "__main__":

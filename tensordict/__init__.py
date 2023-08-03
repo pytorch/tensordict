@@ -7,6 +7,7 @@ from tensordict.memmap import MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
 from tensordict.tensorclass import tensorclass
 from tensordict.tensordict import (
+    dense_stack_tds,
     is_batchedtensor,
     is_memmap,
     is_tensor_collection,
@@ -46,6 +47,7 @@ __all__ = [
     "pad",
     "PersistentTensorDict",
     "tensorclass",
+    "dense_stack_tds",
 ]
 
 # from tensordict._pytree import *
