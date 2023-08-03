@@ -8652,8 +8652,16 @@ def dense_stack_tds(
 ) -> TensorDictBase:
     """Densely stack a list of :class:`tensordict.TensorDictBase` objects (or a :class:`tensordict.LazyStackedTensorDict`) given that they have the same structure.
 
-    This must be used when some of the :class:`tensordict.TensorDictBase` objects that need to be stacked
-    can have :class:`tensordict.LazyStackedTensorDict` among entries (or nested entries).
+    This function is called with a list of :class:`tensordict.TensorDictBase` (either passed directly or obtrained from
+    a :class:`tensordict.LazyStackedTensorDict`).
+    Instead of calling ``torch.stack(td_list)``, which would return a :class:`tensordict.LazyStackedTensorDict`,
+    this function expands the first element of the input list and stacks the input list onto that element.
+    This works only when all the elements of the input list have the same structure.
+    The :class:`tensordict.TensorDictBase` returned will have the same type of the elements of the input list.
+
+    This function is useful when some of the :class:`tensordict.TensorDictBase` objects that need to be stacked
+    are :class:`tensordict.LazyStackedTensorDict` or have :class:`tensordict.LazyStackedTensorDict`
+    among entries (or nested entries).
     In those cases, calling ``torch.stack(td_list).to_tensordict()`` is infeasible.
     Thus, this function provides an alternative for densely stacking the list provided.
 
@@ -8667,34 +8675,51 @@ def dense_stack_tds(
         >>> from tensordict import TensorDict
         >>> from tensordict import dense_stack_tds
         >>> from tensordict.tensordict import assert_allclose_td
-        >>> a = TensorDict({"a": torch.zeros(3)},[])
-        >>> b = TensorDict({"a": torch.zeros(4), "b": torch.zeros(2)},[])
-        >>> td_lazy = torch.stack([a,b], dim=0)
-        >>> td_lazy_clone = td_lazy.clone()
-        >>> td_stack = torch.stack([td_lazy,td_lazy_clone], dim=0)
+        >>> td0 = TensorDict({"a": torch.zeros(3)},[])
+        >>> td1 = TensorDict({"a": torch.zeros(4), "b": torch.zeros(2)},[])
+        >>> td_lazy = torch.stack([td0, td1], dim=0)
+        >>> td_container = TensorDict({"lazy": td_lazy}, [])
+        >>> td_container_clone = td_container.clone()
+        >>> td_stack = torch.stack([td_container, td_container_clone], dim=0)
         >>> td_stack
         LazyStackedTensorDict(
             fields={
-                a: Tensor(shape=torch.Size([2, 2, -1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                lazy: LazyStackedTensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([2, 2, -1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    exclusive_fields={
+                    },
+                    batch_size=torch.Size([2, 2]),
+                    device=None,
+                    is_shared=False,
+                    stack_dim=0)},
             exclusive_fields={
             },
-            batch_size=torch.Size([2, 2]),
+            batch_size=torch.Size([2]),
             device=None,
             is_shared=False,
             stack_dim=0)
-        >>> dense_td_stack = dense_stack_tds(td_stack) # Automatically use the LazyStackedTensorDict stack_dim
-        LazyStackedTensorDict(
+        >>> td_stack = dense_stack_tds(td_stack) # Automatically use the LazyStackedTensorDict stack_dim
+        TensorDict(
             fields={
-                a: Tensor(shape=torch.Size([2, 2, -1]), device=cpu, dtype=torch.float32, is_shared=False)},
-            exclusive_fields={
-                1 ->
-                    b: Tensor(shape=torch.Size([2, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([2, 2]),
+                lazy: LazyStackedTensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([2, 2, -1]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    exclusive_fields={
+                        1 ->
+                            b: Tensor(shape=torch.Size([2, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([2, 2]),
+                    device=None,
+                    is_shared=False,
+                    stack_dim=1)},
+            batch_size=torch.Size([2]),
             device=None,
-            is_shared=False,
-            stack_dim=1)
-        # Note that this has pushed the stack_dim (0 -> 1) and revealed the exclusive keys.
-        >>> assert_allclose_td(dense_td_stack, dense_stack_tds([td_lazy,td_lazy_clone], dim=0))
+            is_shared=False)
+        # Note that
+        # (1) td_stack is now a TensorDict
+        # (2) this has pushed the stack_dim of "lazy" (0 -> 1)
+        # (3) this has revealed the exclusive keys.
+        >>> assert_allclose_td(td_stack, dense_stack_tds([td_container, td_container_clone], dim=0))
         # This shows it is the same to pass a list or a LazyStackedTensorDict
 
     """
