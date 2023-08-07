@@ -216,26 +216,6 @@ class TestTensorStack:
         for v1, v2 in zip(t.unbind(unbind), stack.unbind(unbind)):
             assert (v1 == v2).all()
 
-    # def test_indexing_composite(self, _tensorstack):
-    #     _, (x, y, z) = _tensorstack
-    #     t = TensorStack.from_tensors([[x, y, z], [x, y, z]])
-    #     assert (t[0, 0] == x).all()
-    #     assert (t[torch.tensor([0]), torch.tensor([0])] == x).all()
-    #     assert (t[torch.tensor([0]), torch.tensor([1])] == y).all()
-    #     assert (t[torch.tensor([0]), torch.tensor([2])] == z).all()
-    #     assert (t[:, torch.tensor([0])] == x).all()
-    #     assert (t[:, torch.tensor([1])] == y).all()
-    #     assert (t[:, torch.tensor([2])] == z).all()
-    #     assert (
-    #         t[torch.tensor([0]), torch.tensor([1, 2])]
-    #         == TensorStack.from_tensors([y, z])
-    #     ).all()
-    #     with pytest.raises(IndexError, match="Cannot index along"):
-    #         assert (
-    #             t[..., torch.tensor([1, 2]), :, :, :]
-    #             == TensorStack.from_tensors([y, z])
-    #         ).all()
-    #
     @pytest.mark.parametrize(
         "op",
         ["__add__", "__truediv__", "__mul__", "__sub__", "__mod__", "__eq__", "__ne__"],
@@ -266,31 +246,30 @@ class TestTensorStack:
         # check broadcasting
         assert t2[:, 0].shape == torch.Size((17, *x.shape))
 
-    #
-    # def test_permute(self):
-    #     w = torch.randint(10, (3, 5, 5))
-    #     x = torch.randint(10, (3, 4, 5))
-    #     y = torch.randint(10, (3, 5, 5))
-    #     z = torch.randint(10, (3, 4, 5))
-    #     ts = TensorStack.from_tensors([[w, x], [y, z]])
-    #     tst = ts.permute(1, 0, 2, 3, 4)
-    #     assert (tst[0, 1] == ts[1, 0]).all()
-    #     assert (tst[1, 0] == ts[0, 1]).all()
-    #     assert (tst[1, 1] == ts[1, 1]).all()
-    #     assert (tst[0, 0] == ts[0, 0]).all()
-    #
-    # def test_transpose(self):
-    #     w = torch.randint(10, (3, 5, 5))
-    #     x = torch.randint(10, (3, 4, 5))
-    #     y = torch.randint(10, (3, 5, 5))
-    #     z = torch.randint(10, (3, 4, 5))
-    #     ts = TensorStack.from_tensors([[w, x], [y, z]])
-    #     tst = ts.transpose(1, 0)
-    #     assert (tst[0, 1] == ts[1, 0]).all()
-    #     assert (tst[1, 0] == ts[0, 1]).all()
-    #     assert (tst[1, 1] == ts[1, 1]).all()
-    #     assert (tst[0, 0] == ts[0, 0]).all()
+    @pytest.mark.parametrize("nt", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, 3, -3, -2, -1])
+    @pytest.mark.parametrize("dim", [0, 1, 2, 3, -3, -2, -1])
+    def test_split(self,stack_dim, nt, dim):
+        t, (x, y, z) = _tensorstack(stack_dim, nt)
+        tsplit = t.split(3, dim)
+        assert sum(ts.numel() for ts in tsplit) == t.numel()
+        uniques = set()
+        for ts in tsplit:
+            uniques = uniques.union(ts.unique().tolist())
+        assert uniques == set(t.unique().tolist())
 
+    @pytest.mark.parametrize("nt", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, 3, -3, -2, -1])
+    def test_reshape(self, stack_dim, nt, dim):
+        ...
+    @pytest.mark.parametrize("nt", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, 3, -3, -2, -1])
+    def test_unique(self, stack_dim, nt, dim):
+        ...
+    @pytest.mark.parametrize("nt", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1, 2, 3, -3, -2, -1])
+    def test_view(self, stack_dim, nt, dim):
+        ...
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

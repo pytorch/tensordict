@@ -575,5 +575,91 @@ class LazyStackedTensors:
             stack_dim=new_stack_dim,
         )
 
+    def split(self, split_size_or_sections, dim=0):
+        if dim < 0:
+            dim = self.ndim + dim
+        if dim < 0 or dim > self.ndim-1:
+            raise ValueError(f"split dimension isn't compatible with the tensor dimensions: dim={dim} and self.shape={self.shape}")
+        if self.shape[dim] == -1:
+            new_dim = dim if dim < self.stack_dim else dim-1
+            out = []
+            for t in self.tensors:
+                out.append(LazyStackedTensors(t.split(split_size_or_sections, dim=new_dim), stack_dim=self.stack_dim))
+            return tuple(out)
+        if isinstance(split_size_or_sections, int):
+            split_size_or_sections = [split_size_or_sections] * (self.shape[dim] // split_size_or_sections)
+            res = self.shape[dim] % split_size_or_sections[0]
+            if res > 0:
+                split_size_or_sections += [res]
+        out = []
+        i = 0
+        for splits in split_size_or_sections:
+            idx = (slice(None),) * dim + (range(i, i+splits),)
+            i += splits
+            out.append(self[idx])
+        return tuple(out)
+
+    def numel(self):
+        if self._nested:
+            return self.tensors.numel()
+        return sum(t.numel() for t in self.tensors)
+
+    def unique(self, sorted=True, return_inverse=False, return_counts=False, dim=None):
+        if dim is None:
+            tensor = self.reshape(-1)
+            return tensor.unique(sorted=sorted, return_inverse=return_inverse, return_counts=return_counts)
+
+    def reshape(self, *shape):
+        """Reshapes a tensor to the desired shape.
+
+        Returns a tensor with the same data and number of elements as self
+        but with the specified shape. This method returns a view if shape is
+        compatible with the current shape.
+        See torch.Tensor.view() on when it is possible to return a view.
+
+        with TensorStack, reshaping can only occur up until the heterogeneous
+        dimension (if any). The trailing dimensions (from the first heterogeneous
+        till the end) must match (unless the tensor is flatten with ``-1``).
+        Heterogeneous dimensions must be indicated with ``None``.
+
+        """
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = tuple(shape[0])
+        if shape == (-1,):
+            return torch.cat([t.reshape(-1) for t in self.tensors], 0)
+        trailing_dims = self._trailing_dims()
+        trailing_shape = tuple(d if d >= 0 else None for d in shape[-len(trailing_dims):])
+        if trailing_dims != trailing_shape:
+            raise ValueError(f"Trailing dimensions must match in reshape. Got {trailing_dims} and shape {trailing_dims}")
+        init_dim = shape[:-len(trailing_dims)]
+        if self.stack_dim > self.ndim - len(trailing_dims):
+            # simplest use case
+            new_stack_dim = self.stack_dim - self.ndim
+            trailing_dims_pop = [t for i, t in enumerate(trailing_dims) if i - len(trailing_dims) != new_stack_dim]
+            def trailing_shape(tensor):
+                return tuple(s for s in tensor.shape[-len(trailing_dims_pop):])
+            return type(self)([t.reshape(*init_dim, *trailing_shape(t)) for t in self.tensors], stack_dim=new_stack_dim)
+        # TODO
+        # return type(self)(
+        #     [t.reshape]
+        # )
+
+    def _trailing_dims(self):
+        trailing_dims = []
+        for d in self.shape:
+            if d == -1 or len(trailing_dims):
+                trailing_dims.append(d)
+        return tuple(trailing_dims)
+
+    def reshape_as(self):
+        ...
+    def view(self):
+        raise NotImplementedError(
+            "Viewing a TensorStack is not allowed. Use .reshape instead."
+            )
+
+    def view_as(self):
+        raise NotImplementedError("Viewing a TensorStack is not allowed. Use .reshape instead.")
+
     def __repr__(self):
         return f"{self.__class__.__name__}({self.get_nestedtensor()})"
