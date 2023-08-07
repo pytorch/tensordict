@@ -2592,6 +2592,19 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError
 
+    def where(self, condition, other, *, out=None):
+        """Return a ``TensorDict`` of elements selected from either self or other, depending on condition.
+
+        Args:
+            condition (BoolTensor): When ``True`` (nonzero), yield ``self``, otherwise yield ``other``.
+            other (TensorDictBase or Scalar): value (if ``other`` is a scalar) or values selected at indices where condition is ``False``.
+
+        Keyword Args:
+            out (Tensor, optional) – the output ``TensorDictBase`` instance.
+
+        """
+        raise NotImplementedError
+
     def masked_select(self, mask: Tensor) -> TensorDictBase:
         """Masks all tensors of the TensorDict and return a new TensorDict instance with similar keys pointing to masked values.
 
@@ -4429,6 +4442,26 @@ class TensorDict(TensorDictBase):
                 f"dest must be a string, torch.device or a TensorDict "
                 f"instance, {dest} not allowed"
             )
+
+    def where(self, condition, other, *, out=None):
+        if out is None:
+            if _is_tensor_collection(other.__class__):
+                def func(tensor, _other):
+                    return torch.where(expand_as_right(condition, tensor), tensor, _other)
+                return self.apply(func, other)
+            else:
+                def func(tensor):
+                    return torch.where(expand_as_right(condition, tensor), tensor, other)
+                return self.apply(func)
+        else:
+            if _is_tensor_collection(other.__class__):
+                def func(tensor, _other, _out):
+                    return torch.where(expand_as_right(condition, tensor), tensor, _other, out=_out)
+                return self.apply(func, other, out)
+            else:
+                def func(tensor, _out):
+                    return torch.where(expand_as_right(condition, tensor), tensor, other, out=_out)
+                return self.apply(func, out)
 
     def masked_fill_(self, mask: Tensor, value: float | int | bool) -> TensorDictBase:
         for item in self.values():
@@ -8695,3 +8728,18 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
         remaining_index = _dispatch(remaining_index, stack_index.tolist())
     out["remaining_index"] = _reduce_index(remaining_index)
     return out
+
+@implements_for_td(torch.where)
+def where(condition, input, other, *, out=None):
+    """Return a ``TensorDict`` of elements selected from either input or other, depending on condition.
+
+    Args:
+        condition (BoolTensor): When ``True`` (nonzero), yield ``input``, otherwise yield ``other``.
+        input (TensorDictBase or Scalar): value (if ``input`` is a scalar) or values selected at indices where condition is ``True``.
+        other (TensorDictBase or Scalar): value (if ``other`` is a scalar) or values selected at indices where condition is ``False``.
+
+    Keyword Args:
+        out (Tensor, optional) – the output ``TensorDictBase`` instance.
+
+    """
+    return input.where(condition, other, out=out)
