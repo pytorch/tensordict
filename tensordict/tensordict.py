@@ -3785,9 +3785,6 @@ class TensorDict(TensorDictBase):
                 for key, value in source.items():
                     self.set(key, value)
 
-    # def __hash__(self):
-    #     return hash((self._tensordict, self._batch_size, self._device))
-
     @classmethod
     def from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
         """Returns a TensorDict created from a dictionary or another :class:`TensorDict`.
