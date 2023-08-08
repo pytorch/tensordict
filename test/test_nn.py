@@ -2792,9 +2792,14 @@ class TestTensorDictParams:
         return params
 
     class CustomModule(nn.Module):
-        def __init__(self, params):
+        def __init__(self, *params):
             super().__init__()
-            self.params = params
+            if len(params) == 1:
+                params = params[0]
+                self.params = params
+            else:
+                for i, p in enumerate(params):
+                    setattr(self, f"params{i}", p)
 
     def test_td_params(self):
         params = self._get_params()
@@ -2832,10 +2837,43 @@ class TestTensorDictParams:
         params = self._get_params()
         p = TensorDictParams(params)
         m = self.CustomModule(p)
+        print("m.children", list(m.children()))
         for dtype in ("half", "double", "float"):
             getattr(m, dtype)()
             for p in params.values(True, True):
                 assert p.dtype == getattr(torch, dtype)
+
+    def test_td_params_tying(self):
+        params = self._get_params()
+        p1 = TensorDictParams(params)
+        p2 = TensorDictParams(params)
+        m = self.CustomModule(p1, p2)
+        for key in dict(m.named_parameters()).keys():
+            assert key.startswith("params0")
+
+    def test_td_params_post_hook(self):
+        hook = lambda self, x: x.data
+        td = TensorDict(
+            {
+                "a": {
+                    "b": {"c": torch.zeros((), requires_grad=True)},
+                    "d": torch.zeros((), requires_grad=True),
+                },
+                "e": torch.zeros((), requires_grad=True),
+            },
+            [],
+        )
+        param_td = TensorDictParams(td)
+        param_td.register_get_post_hook(hook)
+        assert all(p.requires_grad for p in td.values(True, True))
+        assert all(not p.requires_grad for p in param_td.values(True, True))
+        assert {p.data.data_ptr() for p in param_td.values(True, True)} == {
+            p.data.data_ptr() for p in td.values(True, True)
+        }
+        assert not param_td["e"].requires_grad
+        assert not param_td["a", "b", "c"].requires_grad
+        assert not param_td.get("e").requires_grad
+        assert not param_td.get(("a", "b", "c")).requires_grad
 
 
 if __name__ == "__main__":
