@@ -190,9 +190,7 @@ def _carry_over(func):
     @wraps(func)
     def new_func(self, *args, **kwargs):
         out = getattr(self._param_td, name)(*args, **kwargs)
-        print("out is", out)
         out = TensorDictParams(out, no_convert=True)
-        print("out is (2)", out)
         out.no_convert = self.no_convert
         return out
 
@@ -665,6 +663,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_carry_over
     def transpose(self, dim0, dim1):
+        ...
+
+    @_carry_over
+    def where(self, condition, other, *, out=None):
         ...
 
     @_carry_over

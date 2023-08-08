@@ -506,6 +506,9 @@ class PersistentTensorDict(TensorDictBase):
     def masked_fill(self, mask, value):
         return self.to_tensordict().masked_fill(mask, value)
 
+    def where(self, condition, other, *, out=None):
+        return self.to_tensordict().where(condition=condition, other=other, out=out)
+
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
             array = self._get_array(key)
