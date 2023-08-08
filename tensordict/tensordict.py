@@ -2593,6 +2593,19 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError
 
+    def where(self, condition, other, *, out=None):
+        """Return a ``TensorDict`` of elements selected from either self or other, depending on condition.
+
+        Args:
+            condition (BoolTensor): When ``True`` (nonzero), yields ``self``,
+                otherwise yields ``other``.
+            other (TensorDictBase or Scalar): value (if ``other`` is a scalar)
+                or values selected at indices where condition is ``False``.
+            out (Tensor, optional): the output ``TensorDictBase`` instance.
+
+        """
+        raise NotImplementedError
+
     def masked_select(self, mask: Tensor) -> TensorDictBase:
         """Masks all tensors of the TensorDict and return a new TensorDict instance with similar keys pointing to masked values.
 
@@ -4431,6 +4444,42 @@ class TensorDict(TensorDictBase):
                 f"instance, {dest} not allowed"
             )
 
+    def where(self, condition, other, *, out=None):
+        if out is None:
+            if _is_tensor_collection(other.__class__):
+
+                def func(tensor, _other):
+                    return torch.where(
+                        expand_as_right(condition, tensor), tensor, _other
+                    )
+
+                return self.apply(func, other)
+            else:
+
+                def func(tensor):
+                    return torch.where(
+                        expand_as_right(condition, tensor), tensor, other
+                    )
+
+                return self.apply(func)
+        else:
+            if _is_tensor_collection(other.__class__):
+
+                def func(tensor, _other, _out):
+                    return torch.where(
+                        expand_as_right(condition, tensor), tensor, _other, out=_out
+                    )
+
+                return self.apply(func, other, out)
+            else:
+
+                def func(tensor, _out):
+                    return torch.where(
+                        expand_as_right(condition, tensor), tensor, other, out=_out
+                    )
+
+                return self.apply(func, out)
+
     def masked_fill_(self, mask: Tensor, value: float | int | bool) -> TensorDictBase:
         for item in self.values():
             mask_expand = expand_as_right(mask, item)
@@ -4807,9 +4856,7 @@ def _zeros_like(td: TensorDictBase, **kwargs: Any) -> TensorDictBase:
 
 @implements_for_td(torch.ones_like)
 def _ones_like(td: TensorDictBase, **kwargs: Any) -> TensorDictBase:
-    td_clone = td.clone()
-    for key in td_clone.keys():
-        td_clone.fill_(key, 1.0)
+    td_clone = td.apply(lambda x: torch.ones_like(x))
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -5797,6 +5844,9 @@ torch.Size([3, 2])
 
     def detach_(self) -> TensorDictBase:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
+
+    def where(self, condition, other, *, out=None):
+        return self.to_tensordict().where(condition=condition, other=other, out=out)
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> TensorDictBase:
         for key, item in self.items():
@@ -7536,6 +7586,27 @@ class LazyStackedTensorDict(TensorDictBase):
 
     rename_key = _renamed_inplace_method(rename_key_)
 
+    def where(self, condition, other, *, out=None):
+        condition = condition.unbind(self.stack_dim)
+        if _is_tensor_collection(other.__class__) or (
+            isinstance(other, Tensor)
+            and other.shape[: self.stack_dim] == self.shape[: self.stack_dim]
+        ):
+            other = other.unbind(self.stack_dim)
+            return torch.stack(
+                [
+                    td.where(cond, _other)
+                    for td, cond, _other in zip(self.tensordicts, condition, other)
+                ],
+                self.stack_dim,
+                out=out,
+            )
+        return torch.stack(
+            [td.where(cond, other) for td, cond in zip(self.tensordicts, condition)],
+            self.stack_dim,
+            out=out,
+        )
+
     def masked_fill_(self, mask: Tensor, value: float | bool) -> TensorDictBase:
         mask_unbind = mask.unbind(dim=self.stack_dim)
         for _mask, td in zip(mask_unbind, self.tensordicts):
@@ -8026,6 +8097,9 @@ class _CustomOpTensorDict(TensorDictBase):
     def detach_(self) -> _CustomOpTensorDict:
         self._source.detach_()
         return self
+
+    def where(self, condition, other, *, out=None):
+        return self.to_tensordict().where(condition=condition, other=other, out=out)
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> _CustomOpTensorDict:
         for key, item in self.items():
@@ -8892,3 +8966,23 @@ def _convert_index_lazystack(index, stack_dim, batch_size):
         remaining_index = _dispatch(remaining_index, stack_index.tolist())
     out["remaining_index"] = _reduce_index(remaining_index)
     return out
+
+
+@implements_for_td(torch.where)
+def where(condition, input, other, *, out=None):
+    """Return a ``TensorDict`` of elements selected from either input or other, depending on condition.
+
+    Args:
+        condition (BoolTensor): When ``True`` (nonzero), yield ``input``, otherwise yield ``other``.
+        input (TensorDictBase or Scalar): value (if ``input`` is a scalar) or values selected at indices where condition is ``True``.
+        other (TensorDictBase or Scalar): value (if ``other`` is a scalar) or values selected at indices where condition is ``False``.
+        out (Tensor, optional): the output ``TensorDictBase`` instance.
+
+    """
+    from tensordict.persistent import PersistentTensorDict
+
+    if isinstance(out, PersistentTensorDict):
+        raise RuntimeError(
+            "Cannot use a persistent tensordict as output of torch.where."
+        )
+    return input.where(condition, other, out=out)
