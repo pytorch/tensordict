@@ -2601,8 +2601,6 @@ class TensorDictBase(MutableMapping):
                 otherwise yields ``other``.
             other (TensorDictBase or Scalar): value (if ``other`` is a scalar)
                 or values selected at indices where condition is ``False``.
-
-        Keyword Args:
             out (Tensor, optional): the output ``TensorDictBase`` instance.
 
         """
@@ -8978,8 +8976,6 @@ def where(condition, input, other, *, out=None):
         condition (BoolTensor): When ``True`` (nonzero), yield ``input``, otherwise yield ``other``.
         input (TensorDictBase or Scalar): value (if ``input`` is a scalar) or values selected at indices where condition is ``True``.
         other (TensorDictBase or Scalar): value (if ``other`` is a scalar) or values selected at indices where condition is ``False``.
-
-    Keyword Args:
         out (Tensor, optional): the output ``TensorDictBase`` instance.
 
     """
