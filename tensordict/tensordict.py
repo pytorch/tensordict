@@ -2602,8 +2602,8 @@ class TensorDictBase(MutableMapping):
             other (TensorDictBase or Scalar): value (if ``other`` is a scalar)
                 or values selected at indices where condition is ``False``.
 
-        Keyword Arguments:
-            out (Tensor, optional) – the output ``TensorDictBase`` instance.
+        Keyword Args:
+            out (Tensor, optional): the output ``TensorDictBase`` instance.
 
         """
         raise NotImplementedError
@@ -8979,8 +8979,8 @@ def where(condition, input, other, *, out=None):
         input (TensorDictBase or Scalar): value (if ``input`` is a scalar) or values selected at indices where condition is ``True``.
         other (TensorDictBase or Scalar): value (if ``other`` is a scalar) or values selected at indices where condition is ``False``.
 
-    Keyword Arguments:
-        out (Tensor, optional) – the output ``TensorDictBase`` instance.
+    Keyword Args:
+        out (Tensor, optional): the output ``TensorDictBase`` instance.
 
     """
     from tensordict.persistent import PersistentTensorDict
