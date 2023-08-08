@@ -1146,7 +1146,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_where(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        mask = torch.zeros(td.shape, dtype=torch.bool).bernoulli_()
+        mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
         td_where = torch.where(mask, td, 0)
         for k in td.keys(True, True):
             assert (td_where.get(k)[~mask] == 0).all()
