@@ -28,7 +28,7 @@ from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParam
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
-from tensordict.nn.utils import set_skip_existing, skip_existing, Buffer
+from tensordict.nn.utils import Buffer, set_skip_existing, skip_existing
 from torch import nn
 from torch.distributions import Normal
 
@@ -2887,13 +2887,14 @@ class TestTensorDictParams:
             },
             [],
         )
+        td = TensorDictParams(td, no_convert=True)
         tdclone = td.clone()
         assert type(tdclone) == type(td)
         for key, val in tdclone.items(True, True):
             assert type(val) == type(td.get(key))
             assert val.requires_grad == td.get(key).requires_grad
-            assert val.data_ptr() == td.get(key).data_ptr()
-            assert (val== td.get(key)).all()
+            assert val.data_ptr() != td.get(key).data_ptr()
+            assert (val == td.get(key)).all()
 
 
 if __name__ == "__main__":
