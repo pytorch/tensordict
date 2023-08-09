@@ -7,11 +7,10 @@ import warnings
 
 import torch
 from tensordict import TensorDict
-from torch import nn
 
-from . import TensorDictParams
-from .common import TensorDictBase, TensorDictModuleBase
-from .functional_modules import make_functional
+from tensordict.nn.params import TensorDictParams
+from tensordict.nn.common import TensorDictBase, TensorDictModuleBase
+from tensordict.nn.functional_modules import make_functional
 
 
 class EnsembleModule(TensorDictModuleBase):
