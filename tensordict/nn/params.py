@@ -440,7 +440,35 @@ class TensorDictParams(TensorDictBase, nn.Module):
         return TensorDictParams(params)
 
     def clone(self, recurse: bool = True) -> TensorDictBase:
-        return TensorDictParams(self._param_td.clone(recurse=recurse))
+        """Clones the TensorDictParams.
+
+        The effect of this call is different from a regular torch.Tensor.clone call
+        in that it will create a TensorDictParams instance with a new copy of the
+        parameters and buffers __detached__ from the current graph.
+
+        See :meth:`tensordict.TensorDictBase.clone` for more info on the clone
+        method.
+
+        """
+        if not recurse:
+            return TensorDictParams(self._param_td.clone(False), no_convert=True)
+        out = {}
+        for key, val in self._param_td.items(True, True):
+            if isinstance(val, nn.Parameter):
+                out[key] = nn.Parameter(
+                    val.data.clone(), requires_grad=val.requires_grad
+                )
+            else:
+                out[key] = Buffer(val.data.clone(), requires_grad=val.requires_grad)
+        return TensorDictParams(
+            TensorDict(
+                out,
+                batch_size=self._param_td.batch_size,
+                device=self._param_td.device,
+                names=self._param_td.names,
+            ),
+            no_convert=True,
+        )
 
     @_fallback
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
