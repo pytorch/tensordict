@@ -2889,9 +2889,9 @@ class TestTensorDictParams:
         )
         td = TensorDictParams(td, no_convert=True)
         tdclone = td.clone()
-        assert type(tdclone) == type(td)
+        assert type(tdclone) == type(td)  # noqa
         for key, val in tdclone.items(True, True):
-            assert type(val) == type(td.get(key))
+            assert type(val) == type(td.get(key))  # noqa
             assert val.requires_grad == td.get(key).requires_grad
             assert val.data_ptr() != td.get(key).data_ptr()
             assert (val == td.get(key)).all()
