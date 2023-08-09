@@ -28,7 +28,7 @@ from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParam
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
-from tensordict.nn.utils import set_skip_existing, skip_existing
+from tensordict.nn.utils import set_skip_existing, skip_existing, Buffer
 from torch import nn
 from torch.distributions import Normal
 
@@ -2874,6 +2874,26 @@ class TestTensorDictParams:
         assert not param_td["a", "b", "c"].requires_grad
         assert not param_td.get("e").requires_grad
         assert not param_td.get(("a", "b", "c")).requires_grad
+
+    def test_tdparams_clone(self):
+        td = TensorDict(
+            {
+                "a": {
+                    "b": {"c": nn.Parameter(torch.zeros((), requires_grad=True))},
+                    "d": Buffer(torch.zeros((), requires_grad=False)),
+                },
+                "e": nn.Parameter(torch.zeros((), requires_grad=True)),
+                "f": Buffer(torch.zeros((), requires_grad=False)),
+            },
+            [],
+        )
+        tdclone = td.clone()
+        assert type(tdclone) == type(td)
+        for key, val in tdclone.items(True, True):
+            assert type(val) == type(td.get(key))
+            assert val.requires_grad == td.get(key).requires_grad
+            assert val.data_ptr() == td.get(key).data_ptr()
+            assert (val== td.get(key)).all()
 
 
 if __name__ == "__main__":
