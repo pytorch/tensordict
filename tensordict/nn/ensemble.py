@@ -9,6 +9,7 @@ import torch
 from tensordict import TensorDict
 from torch import nn
 
+from . import TensorDictParams
 from .common import TensorDictBase, TensorDictModuleBase
 from .functional_modules import make_functional
 
@@ -79,16 +80,13 @@ class EnsembleModule(TensorDictModuleBase):
         params_td = make_functional(module).expand(num_copies).to_tensordict()
 
         self.module = module
-        self.params_td = params_td
-        self.ensemble_parameters = nn.ParameterList(
-            list(self.params_td.values(True, True))
-        )
         if expand_input:
             self.vmapped_forward = torch.vmap(self.module, (None, 0))
         else:
             self.vmapped_forward = torch.vmap(self.module, 0)
 
-        self.reset_parameters_recursive(self.params_td)
+        self.reset_parameters_recursive(params_td)
+        self.params_td = TensorDictParams(params_td)
 
     def forward(self, tensordict: TensorDict) -> TensorDict:
         return self.vmapped_forward(tensordict, self.params_td)
