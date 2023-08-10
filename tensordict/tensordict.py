@@ -4101,7 +4101,8 @@ class TensorDict(TensorDictBase):
                 if best_attempt and _is_tensor_collection(dest.__class__):
                     dest.update(value, inplace=True)
                 else:
-                    dest.copy_(value)
+                    if dest is not value:
+                        dest.copy_(value, non_blocking=True)
             except KeyError as err:
                 raise err
             except Exception as err:
@@ -4145,7 +4146,8 @@ class TensorDict(TensorDictBase):
                 "not write to the desired location if idx1 is a list/tensor."
             )
             tensor_in = _sub_index(tensor_in, idx)
-            tensor_in.copy_(value)
+            if tensor_in is not value:
+                tensor_in.copy_(value, non_blocking=True)
         else:
             _set_item(tensor_in, idx, value, validated=validated)
 
@@ -5564,7 +5566,8 @@ torch.Size([3, 2])
                 "not write to the desired location if idx1 is a list/tensor."
             )
             tensor_in = _sub_index(tensor_in, idx)
-            tensor_in.copy_(value)
+            if tensor_in is not value:
+                tensor_in.copy_(value)
         else:
             _set_item(tensor_in, idx, value, validated=validated)
         # make sure that the value is updated
