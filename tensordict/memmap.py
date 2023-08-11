@@ -867,7 +867,7 @@ class MemoryMappedTensor(torch.Tensor):
     filename: str | Path
     _clear: bool
 
-    def __init__(self, tensor_or_file, dtype=None, shape=None):
+    def __new__(cls, tensor_or_file, dtype=None, shape=None):
         if isinstance(tensor_or_file, str):
             tensor = torch.from_file(
                 tensor_or_file,
@@ -875,9 +875,11 @@ class MemoryMappedTensor(torch.Tensor):
                 dtype=dtype,
                 size=shape.numel()
             )
-            return type(self)(tensor).view(shape)
-        else:
-            pass
+            return cls(tensor).view(shape)
+        return super().__new__(cls, tensor_or_file)
+
+    def __init__(self, tensor_or_file, dtype=None, shape=None):
+        ...
 
     # def __new__(cls, *args, **kwargs):
     #     return torch.Tensor(super().__new__(cls, *args, **kwargs))
