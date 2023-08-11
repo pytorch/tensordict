@@ -973,5 +973,5 @@ def AwesomeTempFile(*args, **kwargs):
     return out
 
 def reduce_memmap(memmap_tensor):
-    return reduce_memmap.__reduce__()
+    return memmap_tensor.__reduce__()
 ForkingPickler.register(MemoryMappedTensor, reduce_memmap)
