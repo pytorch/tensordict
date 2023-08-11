@@ -866,6 +866,18 @@ class MemoryMappedTensor(torch.Tensor):
     filename: str | Path
     _clear: bool
 
+    def __init__(self, tensor_or_file, dtype=None, shape=None):
+        if isinstance(tensor_or_file, str):
+            tensor = torch.from_file(
+                tensor_or_file,
+                shared=True,
+                dtype=dtype,
+                size=shape.numel()
+            )
+            return type(self)(tensor).view(shape)
+        else:
+            pass
+
     # def __new__(cls, *args, **kwargs):
     #     return torch.Tensor(super().__new__(cls, *args, **kwargs))
 
@@ -918,13 +930,13 @@ class MemoryMappedTensor(torch.Tensor):
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         filename = state["filename"]
-        return type(self)(
-            torch.from_file(
+        tensor = torch.from_file(
                 filename,
                 shared=True,
                 dtype=state["dtype"],
-                size=state["shape"].numel()),
-        ).view(state["shape"])
+                size=state["shape"].numel()
+        )
+        return type(self)(tensor).view(state["shape"])
 
     def __getstate__(self) -> dict[str, Any]:
         # state = self.__dict__.copy()
@@ -934,6 +946,9 @@ class MemoryMappedTensor(torch.Tensor):
         state["shape"] = self.shape
         state["dtype"] = self.dtype
         return state
+
+    def __reduce__(self):
+        return (self.__class__, (str(self.filename), self.dtype, self.shape,))
 
     def __getitem__(self, item):
         out = super().__getitem__(item)
