@@ -898,14 +898,14 @@ class MemoryMappedTensor(torch.Tensor):
         tensor = torch.zeros((), dtype=dtype).expand(shape)
         return cls.from_tensor(cls, tensor, transfer_ownership=transfer_ownership, prefix=prefix, filename=filename)
     @classmethod
-    def from_tensor(cls, tensor, transfer_ownership=False, prefix=None, filename=None):
+    def from_tensor(cls, tensor, transfer_ownership=False, dir=None, prefix=None, filename=None):
         if isinstance(tensor, MemoryMappedTensor):
             if transfer_ownership:
                 raise RuntimeError(
                     "from_tensor(memmap_tensor, transfer_ownership=True) is not permitted, as this method will "
                     "simply return the original MemmapTensor instance."
                 )
-            elif prefix is None and (
+            elif dir is None and (
                 filename is None
                 or Path(filename).absolute() == Path(tensor.filename).absolute()
             ):
@@ -922,7 +922,7 @@ class MemoryMappedTensor(torch.Tensor):
             )
         shape = tensor.shape
         if filename is None:
-            filename = AwesomeTempFile()
+            filename = AwesomeTempFile(prefix=prefix, dir=dir)
         out = cls(
             torch.from_file(str(filename), shared=True, dtype=tensor.dtype, size=shape.numel()).view(tensor.shape)
         )
