@@ -927,11 +927,10 @@ class MemoryMappedTensor(torch.Tensor):
         ).view(state["shape"])
 
     def __getstate__(self) -> dict[str, Any]:
-        state = self.__dict__.copy()
-        id_file = state["filename"]
-        if not isinstance(id_file, str):
-            id_file = str(id_file)
-        state["filename"] = id_file
+        # state = self.__dict__.copy()
+        state = {}
+        id_file = self.filename
+        state["filename"] = str(id_file)
         state["shape"] = self.shape
         state["dtype"] = self.dtype
         return state
