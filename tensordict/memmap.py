@@ -916,28 +916,15 @@ class MemoryMappedTensor(torch.Tensor):
         return out
 
 
-    # def __setstate__(self, state: dict[str, Any]) -> None:
-    #     filename = state["filename"]
-    #     if state["file"] is None:
-    #         # state["_had_ownership"] = state["_had_ownership"]
-    #         # state["_has_ownership"] = delete
-    #         # tmpfile = tempfile.NamedTemporaryFile(delete=False)
-    #         # tmpfile.close()
-    #         tmpfile = _TemporaryFileWrapper(None, filename, delete=True)
-    #         tmpfile.name = filename
-    #         tmpfile._closer.name = filename
-    #         state["file"] = tmpfile
-    #
-    #     # We only set the ownership if it's not set
-    #     if state["transfer_ownership"]:
-    #         TRANSFER_OWNERSHIP[filename] = True
-    #     else:
-    #         TRANSFER_OWNERSHIP.setdefault(filename, state["transfer_ownership"])
-    #     if state["_has_ownership"]:
-    #         HAS_OWNERSHIP[filename] = True
-    #     else:
-    #         HAS_OWNERSHIP.setdefault(filename, state["_has_ownership"])
-    #     self.__dict__.update(state)
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        filename = state["filename"]
+        return type(self)(
+            torch.from_file(
+                str(filename),
+                shared=True,
+                dtype=state["dtype"],
+                size=state["shape"].numel()),
+        ).view(state["shape"])
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
@@ -945,6 +932,8 @@ class MemoryMappedTensor(torch.Tensor):
         if not isinstance(id_file, str):
             id_file = str(id_file)
         state["filename"] = id_file
+        state["shape"] = self.shape
+        state["dtype"] = self.dtype
         return state
 
     def __getitem__(self, item):
