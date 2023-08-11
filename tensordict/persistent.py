@@ -39,6 +39,7 @@ from tensordict.utils import (
     DeviceType,
     expand_right,
     IndexType,
+    lock_blocked,
     NestedKey,
     NUMPY_TO_TORCH_DTYPE_DICT,
 )
@@ -67,12 +68,12 @@ class _PersistentTDKeysView(_TensorDictKeysView):
             self.tensordict.file.visit(visitor)
             if self.leaves_only:
                 for key in visitor:
-                    if self.tensordict._get_metadata(key)["array"]:
+                    if self.tensordict._get_metadata(key).get("array", None):
                         yield key
             else:
                 yield from visitor
         else:
-            yield from self.tensordict.file.keys()
+            yield from self.tensordict._valid_keys()
 
     def __contains__(self, key):
         if isinstance(key, tuple) and len(key) == 1:
@@ -254,7 +255,7 @@ class PersistentTensorDict(TensorDictBase):
             else:
                 device = torch.device("cpu")
             # we convert to an array first to avoid "Creating a tensor from a list of numpy.ndarrays is extremely slow."
-            array = array[:]
+            array = array[()]
             out = torch.as_tensor(array, device=device)
             if self._pin_mem:
                 return out.pin_memory()
@@ -328,7 +329,10 @@ class PersistentTensorDict(TensorDictBase):
         This method avoids creating a tensor from scratch, and just reads the metadata of the array.
         """
         array = self._get_array(key)
-        if isinstance(array, (h5py.Dataset,)):
+        if (
+            isinstance(array, (h5py.Dataset,))
+            and array.dtype in NUMPY_TO_TORCH_DTYPE_DICT
+        ):
             shape = torch.Size(array.shape)
             return {
                 "dtype": NUMPY_TO_TORCH_DTYPE_DICT[array.dtype],
@@ -336,6 +340,11 @@ class PersistentTensorDict(TensorDictBase):
                 "dim": len(shape),
                 "array": True,
             }
+        elif (
+            isinstance(array, (h5py.Dataset,))
+            and array.dtype not in NUMPY_TO_TORCH_DTYPE_DICT
+        ):
+            return {}
         else:
             shape = self.get(key).shape
             return {
@@ -350,10 +359,6 @@ class PersistentTensorDict(TensorDictBase):
         if isinstance(idx, tuple):
             return tuple(cls._process_index(_idx, array) for _idx in idx)
         if isinstance(idx, torch.Tensor):
-            # if idx.dtype == torch.bool:
-            #     # expand to the right
-            #     print(idx.shape, array.shape, idx.sum())
-            #     idx = expand_right(idx, array.shape)
             return idx.cpu().detach().numpy()
         if isinstance(idx, (range, list)):
             return np.asarray(idx)
@@ -400,6 +405,14 @@ class PersistentTensorDict(TensorDictBase):
                 ) from err
         sub_td.update(value, inplace=True)
 
+    @cache  # noqa: B019
+    def _valid_keys(self):
+        keys = []
+        for key in self.file.keys():
+            if self._get_metadata(key):
+                keys.append(key)
+        return keys
+
     # @cache  # noqa: B019
     def keys(
         self, include_nested: bool = False, leaves_only: bool = False
@@ -424,10 +437,14 @@ class PersistentTensorDict(TensorDictBase):
         raise NotImplementedError
 
     def _stack_onto_(
-        self, key: str, list_item: list[CompatibleType], dim: int
+        self, list_item: list[CompatibleType], dim: int
     ) -> PersistentTensorDict:
-        stacked = torch.stack(list_item, dim=dim)
-        self.set_(key, stacked)
+        for key in self.keys():
+            vals = [td._get_str(key, None) for td in list_item]
+            if all(v is None for v in vals):
+                continue
+            stacked = torch.stack(vals, dim=dim)
+            self.set_(key, stacked)
         return self
 
     @property
@@ -459,6 +476,7 @@ class PersistentTensorDict(TensorDictBase):
         """Materializes a PersistentTensorDict on a regular TensorDict."""
         return self.to_tensordict()
 
+    @lock_blocked
     def del_(self, key):
         key = self._process_key(key)
         del self.file[key]
@@ -474,16 +492,22 @@ class PersistentTensorDict(TensorDictBase):
 
     def entry_class(self, key: NestedKey) -> type:
         entry_class = self._get_metadata(key)
-        if entry_class["array"]:
+        is_array = entry_class.get("array", None)
+        if is_array:
             return torch.Tensor
-        else:
+        elif is_array is False:
             return PersistentTensorDict
+        else:
+            raise RuntimeError(f"Encountered a non-numeric data {key}.")
 
     def is_contiguous(self):
         return False
 
     def masked_fill(self, mask, value):
         return self.to_tensordict().masked_fill(mask, value)
+
+    def where(self, condition, other, *, out=None):
+        return self.to_tensordict().where(condition=condition, other=other, out=out)
 
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
@@ -601,7 +625,7 @@ class PersistentTensorDict(TensorDictBase):
 
         """
         md = self._get_metadata(key)
-        if md["array"]:
+        if md.get("array", None):
             array = self._get_array(key)
             array[:] = value
         else:

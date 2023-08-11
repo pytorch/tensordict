@@ -9,13 +9,19 @@ import functools
 import inspect
 import warnings
 from textwrap import indent
-from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
 from tensordict._tensordict import unravel_key_list
 
-from tensordict.nn.functional_modules import make_functional
+from tensordict.nn.functional_modules import (
+    _swap_state,
+    extract_weights_and_buffers,
+    is_functional,
+    make_functional,
+    repopulate_module,
+)
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import is_tensor_collection, make_tensordict, TensorDictBase
@@ -776,29 +782,85 @@ class TensorDictModuleBase(nn.Module):
                 del self._forward_hooks[i]
         return self
 
-    def reset_parameters(self):
+    def reset_parameters_recursive(
+        self, parameters: Optional[TensorDictBase] = None
+    ) -> Optional[TensorDictBase]:
         """Recursively reset the parameters of the module and its children.
 
-        Examples:
-        >>> from tensordict.nn import TensorDictModule
-        >>> from torch import nn
-        >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
-        >>> old_param = net[0].weight.clone()
-        >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
-        >>> module.reset_parameters()
-        >>> (old_param == net[0].weight).all()
-        tensor(False)
-        """
-        for m in self.children():
-            self._reset_parameters(m)
+        Args:
+            parameters (TensorDict of parameters, optional): If set to None, the module will reset using self.parameters().
+                Otherwise, we will reset the parameters in the tensordict in-place. This is
+                useful for functional modules where the parameters are not stored in the module itself.
 
-    def _reset_parameters(self, module: Union[nn.Module, TensorDictModuleBase]):
-        if isinstance(module, nn.Module):
-            if hasattr(module, "reset_parameters"):
-                module.reset_parameters()
-            else:
-                for m in module.children():
-                    self._reset_parameters(m)
+        Returns:
+            A tensordict of the new parameters, only if parameters was not None.
+
+        Examples:
+            >>> from tensordict.nn import TensorDictModule
+            >>> from torch import nn
+            >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
+            >>> old_param = net[0].weight.clone()
+            >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
+            >>> module.reset_parameters()
+            >>> (old_param == net[0].weight).any()
+            tensor(False)
+
+        This method also supports functional parameter sampling:
+
+            >>> from tensordict import TensorDict
+            >>> from tensordict.nn import TensorDictModule
+            >>> from torch import nn
+            >>> net = nn.Sequential(nn.Linear(2,3), nn.ReLU())
+            >>> module = TensorDictModule(net, in_keys=['bork'], out_keys=['dork'])
+            >>> params = TensorDict.from_module(module)
+            >>> old_params = params.clone(recurse=True)
+            >>> module.reset_parameters(params)
+            >>> (old_params == params).any()
+            False
+        """
+        if parameters is None:
+            self._reset_parameters(self)
+            return
+        elif parameters.ndim:
+            raise RuntimeError(
+                "reset_parameters_recursive does not support batched TensorDicts, ensure `batch_size` is empty and the parameters shape match their original shape."
+            )
+
+        sanitized_parameters = parameters.apply(
+            lambda x: x.detach().requires_grad_(), inplace=False
+        )
+
+        if not is_functional(self):
+            make_functional(self, keep_params=True)
+        is_stateless = self._is_stateless
+        if is_stateless:
+            repopulate_module(self, sanitized_parameters)
+        else:
+            old_params = _swap_state(
+                self,
+                sanitized_parameters,
+                is_stateless=False,
+                return_old_tensordict=True,
+            )
+
+        self._reset_parameters(self)
+
+        if is_stateless:
+            new_parameters = extract_weights_and_buffers(self)
+        else:
+            new_parameters = _swap_state(
+                self, old_params, is_stateless=False, return_old_tensordict=True
+            )
+
+        return new_parameters
+
+    def _reset_parameters(self, module: nn.Module) -> None:
+        for child in module.children():
+            if isinstance(child, nn.Module):
+                self._reset_parameters(child)
+
+            if hasattr(child, "reset_parameters"):
+                child.reset_parameters()
 
 
 class TensorDictModule(TensorDictModuleBase):

@@ -7,7 +7,8 @@ import argparse
 
 import pytest
 import torch
-from _utils_internal import expand_list
+
+from _utils_internal import expand_list, TestTensorDictsBase
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -18,6 +19,7 @@ from tensordict.nn.functional_modules import (
 )
 from torch import nn
 from torch.nn import Linear
+from torch.utils._pytree import tree_map
 
 try:
     from functorch import (
@@ -582,3 +584,52 @@ class TestGetFunctional:
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
+
+
+class TestPyTree(TestTensorDictsBase):
+    def test_pytree_map(self):
+        td = TensorDict({"a": {"b": {"c": 1}, "d": 1}, "e": 1}, [])
+        td = tree_map(lambda x: x + 1, td)
+        assert (td == 2).all()
+
+    def test_pytree_map_batch(self):
+        td = TensorDict(
+            {
+                "a": TensorDict(
+                    {
+                        "b": TensorDict({"c": torch.ones(2, 3, 4)}, [2, 3]),
+                        "d": torch.ones(2),
+                    },
+                    [2],
+                ),
+                "e": 1,
+            },
+            [],
+        )
+        td = tree_map(lambda x: x + 1, td)
+        assert (td == 2).all()
+        assert td.shape == torch.Size([])
+        assert td["a"].shape == torch.Size([2])
+        assert td["a", "b"].shape == torch.Size([2, 3])
+        assert td["a", "b", "c"].shape == torch.Size([2, 3, 4])
+
+    def test_pytree_vs_apply(self):
+        td = TensorDict(
+            {
+                "a": TensorDict(
+                    {
+                        "b": TensorDict({"c": torch.ones(2, 3, 4)}, [2, 3]),
+                        "d": torch.ones(2),
+                    },
+                    [2],
+                ),
+                "e": 1,
+            },
+            [],
+        )
+        td_pytree = tree_map(lambda x: x + 1, td)
+        td_apply = td.apply(lambda x: x + 1)
+        assert (td_apply == td_pytree).all()
+        for v1, v2 in zip(td_pytree.values(True), td_apply.values(True)):
+            # recursively checks the shape, including for the nested tensordicts
+            assert v1.shape == v2.shape

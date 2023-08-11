@@ -9,7 +9,12 @@ import numpy as np
 import torch
 
 from tensordict import PersistentTensorDict, tensorclass, TensorDict
-from tensordict.tensordict import _stack as stack_td
+from tensordict.nn.params import TensorDictParams
+from tensordict.tensordict import (
+    _stack as stack_td,
+    is_tensor_collection,
+    LazyStackedTensorDict,
+)
 
 
 def prod(sequence):
@@ -224,9 +229,24 @@ class TestTensorDictsBase:
         )
         return td_h5
 
+    def td_params(self, device):
+        return TensorDictParams(self.td(device))
+
 
 def expand_list(list_of_tensors, *dims):
     n = len(list_of_tensors)
     td = TensorDict({str(i): tensor for i, tensor in enumerate(list_of_tensors)}, [])
     td = td.expand(*dims).contiguous()
     return [td[str(i)] for i in range(n)]
+
+
+def decompose(td):
+    if isinstance(td, LazyStackedTensorDict):
+        for inner_td in td.tensordicts:
+            yield from decompose(inner_td)
+    else:
+        for v in td.values():
+            if is_tensor_collection(v):
+                yield from decompose(v)
+            else:
+                yield v
