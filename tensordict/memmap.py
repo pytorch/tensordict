@@ -28,6 +28,7 @@ from tensordict.utils import (
     prod,
     TORCH_TO_NUMPY_DTYPE_DICT,
 )
+from torch.multiprocessing.reductions import ForkingPickler
 
 __all__ = ["MemmapTensor", "set_transfer_ownership"]
 
@@ -919,7 +920,7 @@ class MemoryMappedTensor(torch.Tensor):
             )
         shape = tensor.shape
         if filename is None:
-            filename = AwesomeTempFile(delete=False)
+            filename = AwesomeTempFile()
         out = cls(
             torch.from_file(str(filename), shared=True, dtype=tensor.dtype, size=shape.numel()).view(tensor.shape)
         )
@@ -970,3 +971,7 @@ def AwesomeTempFile(*args, **kwargs):
     out = tempfile.NamedTemporaryFile(*args, **kwargs)
     tempfile._TemporaryFileWrapper = cls
     return out
+
+def reduce_memmap(memmap_tensor):
+    return reduce_memmap.__reduce__()
+ForkingPickler.register(MemoryMappedTensor, reduce_memmap)
