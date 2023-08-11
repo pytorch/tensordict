@@ -919,7 +919,7 @@ class MemoryMappedTensor(torch.Tensor):
             )
         shape = tensor.shape
         if filename is None:
-            filename = AwesomeTempFile()
+            filename = AwesomeTempFile(delete=False)
         out = cls(
             torch.from_file(str(filename), shared=True, dtype=tensor.dtype, size=shape.numel()).view(tensor.shape)
         )
