@@ -920,7 +920,7 @@ class MemoryMappedTensor(torch.Tensor):
         filename = state["filename"]
         return type(self)(
             torch.from_file(
-                str(filename),
+                filename,
                 shared=True,
                 dtype=state["dtype"],
                 size=state["shape"].numel()),
