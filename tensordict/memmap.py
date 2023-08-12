@@ -939,8 +939,7 @@ class MemoryMappedTensor(torch.Tensor):
                     "Complex-valued tensors are not supported by MemoryMappedTensor."
                 )
             elif tensor.dtype == torch.bool:
-                # boolean
-                size = 8 * shape.numel()
+                size = shape.numel()
             else:
                 # assume integer
                 size = torch.iinfo(tensor.dtype).bits // 8 * shape.numel()
