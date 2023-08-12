@@ -35,7 +35,8 @@ import numpy as np
 
 import torch
 from tensordict._tensordict import _unravel_key_to_tuple
-from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
+from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor, \
+    MemoryMappedTensor
 from tensordict.utils import (
     _device,
     _dtype,
@@ -4101,7 +4102,7 @@ class TensorDict(TensorDictBase):
                 if best_attempt and _is_tensor_collection(dest.__class__):
                     dest.update(value, inplace=True)
                 else:
-                    dest.copy_(value)
+                    dest.copy_(value.contiguous())
             except KeyError as err:
                 raise err
             except Exception as err:
@@ -4357,7 +4358,7 @@ class TensorDict(TensorDictBase):
                         "copy_existing=True"
                     )
             else:
-                self._tensordict[key] = MemmapTensor.from_tensor(
+                self._tensordict[key] = MemoryMappedTensor.from_tensor(
                     value,
                     filename=str(prefix / f"{key}.memmap")
                     if prefix is not None
@@ -4403,7 +4404,7 @@ class TensorDict(TensorDictBase):
                 leaf, *_ = key[-1].rsplit(".", 2)  # remove .meta.pt suffix
                 key = (*key[:-1], leaf)
                 metadata = torch.load(path)
-                out[key] = MemmapTensor(
+                out[key] = MemoryMappedTensor(
                     *metadata["shape"],
                     device=metadata["device"],
                     dtype=metadata["dtype"],
