@@ -6,10 +6,15 @@
 from __future__ import annotations
 
 import functools
+import mmap
 import os
+
+import sys
 import tempfile
 import warnings
 from copy import copy, deepcopy
+from multiprocessing import util
+from multiprocessing.context import reduction
 from pathlib import Path
 from sys import getrefcount
 from tempfile import _TemporaryFileWrapper
@@ -17,7 +22,6 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 import torch
-from torch import _C
 
 from tensordict.utils import (
     _getitem_batch_size,
@@ -858,47 +862,53 @@ def memmap_tensor_as_tensor(
         mv=memoryview(mem_map_tensor._memmap_array),
     )
 
+
 # def _use_super(func):
 #     def new_func(self, *args, **kwargs):
 #         return torch.Tensor(func(self, *args, **kwargs))
 #     return new_func
 
+
 class MemoryMappedTensor(torch.Tensor):
     filename: str | Path
+    handler: FileHandler
     _clear: bool
 
-    def __new__(cls, tensor_or_file, dtype=None, shape=None):
+    def __new__(cls, tensor_or_file, handler=None, dtype=None, shape=None):
         if isinstance(tensor_or_file, str):
-            tensor = torch.from_file(
+            return cls.from_filename(
                 tensor_or_file,
-                shared=True,
-                dtype=dtype,
-                size=shape.numel()
+                dtype,
+                shape,
             )
-            return cls(tensor).view(shape)
+        elif handler is not None:
+            return cls.from_handler(
+                handler,
+                dtype,
+                shape,
+            )
         return super().__new__(cls, tensor_or_file)
 
-    def __init__(self, tensor_or_file, dtype=None, shape=None):
+    def __init__(self, tensor_or_file, handler=None, dtype=None, shape=None):
         ...
 
-    # def __new__(cls, *args, **kwargs):
-    #     return torch.Tensor(super().__new__(cls, *args, **kwargs))
-
-    # __add__ = _use_super(torch.Tensor.__add__)
     __torch_function__ = torch._C._disabled_torch_function_impl
-    # @classmethod
-    # def __torch_function__(cls, func, types, args=(), kwargs=None):
-    #     if kwargs is None:
-    #         kwargs = {}
-    #     with _C.DisableTorchFunctionSubclass():
-    #         return func(*args, **kwargs)
 
     @classmethod
     def create(cls, shape, dtype, transfer_ownership=False, prefix=None, filename=None):
         tensor = torch.zeros((), dtype=dtype).expand(shape)
-        return cls.from_tensor(cls, tensor, transfer_ownership=transfer_ownership, prefix=prefix, filename=filename)
+        return cls.from_tensor(
+            cls,
+            tensor,
+            transfer_ownership=transfer_ownership,
+            prefix=prefix,
+            filename=filename,
+        )
+
     @classmethod
-    def from_tensor(cls, tensor, transfer_ownership=False, dir=None, prefix=None, filename=None):
+    def from_tensor(
+        cls, tensor, transfer_ownership=False, dir=None, prefix=None, filename=None
+    ):
         if isinstance(tensor, MemoryMappedTensor):
             if transfer_ownership:
                 raise RuntimeError(
@@ -922,36 +932,75 @@ class MemoryMappedTensor(torch.Tensor):
             )
         shape = tensor.shape
         if filename is None:
-            filename = AwesomeTempFile(prefix=prefix, dir=dir)
-        out = cls(
-            torch.from_file(str(filename), shared=True, dtype=tensor.dtype, size=shape.numel()).view(tensor.shape)
-        )
+            if tensor.dtype.is_floating_point:
+                size = torch.finfo(tensor.dtype).bits // 8 * shape.numel()
+            elif tensor.dtype.is_complex:
+                raise ValueError(
+                    "Complex-valued tensors are not supported by MemoryMappedTensor."
+                )
+            else:
+                # assume integer
+                size = torch.iinfo(tensor.dtype).bits // 8 * shape.numel()
+            handler = FileHandler(size)
+            out = torch.frombuffer(memoryview(handler.buffer), dtype=tensor.dtype)
+            out = torch.reshape(out, shape)
+            out = cls(out)
+        else:
+            handler = None
+            out = cls(
+                torch.from_file(
+                    filename, shared=True, dtype=tensor.dtype, size=shape.numel()
+                ).view(tensor.shape)
+            )
+        out.handler = handler
         out.filename = filename
         out.copy_(tensor)
         return out
 
+    # def __setstate__(self, state: dict[str, Any]) -> None:
+    #     filename = state["filename"]
+    #     handler = state['handler']
+    #     if filename is not None:
+    #         return self.from_filename(filename, state['dtype'], state['shape'])
+    #     else:
+    #         return self.from_handler(handler, state['dtype'], state['shape'])
 
-    def __setstate__(self, state: dict[str, Any]) -> None:
-        filename = state["filename"]
-        tensor = torch.from_file(
-                filename,
-                shared=True,
-                dtype=state["dtype"],
-                size=state["shape"].numel()
-        )
-        return type(self)(tensor).view(state["shape"])
+    @classmethod
+    def from_filename(cls, filename, dtype, shape):
+        tensor = torch.from_file(filename, shared=True, dtype=dtype, size=shape.numel())
+        out = cls(tensor.view(shape))
+        out.handler = None
+        out.filename = filename
+        return out
 
-    def __getstate__(self) -> dict[str, Any]:
-        # state = self.__dict__.copy()
-        state = {}
-        id_file = self.filename
-        state["filename"] = str(id_file)
-        state["shape"] = self.shape
-        state["dtype"] = self.dtype
-        return state
+    @classmethod
+    def from_handler(cls, handler, dtype, shape):
+        out = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
+        out = torch.reshape(out, shape)
+        out = cls(out)
+        out.filename = None
+        out.handler = handler
+        return out
+
+    # def __getstate__(self) -> dict[str, Any]:
+    #     # state = self.__dict__.copy()
+    #     state = {}
+    #     id_file = self.filename
+    #     state["filename"] = str(id_file)
+    #     state["shape"] = self.shape
+    #     state["dtype"] = self.dtype
+    #     return state
 
     def __reduce__(self):
-        return (self.__class__, (str(self.filename), self.dtype, self.shape,))
+        return (
+            self.__class__,
+            (
+                self.filename,
+                self.handler,
+                self.dtype,
+                self.shape,
+            ),
+        )
 
     def __getitem__(self, item):
         out = super().__getitem__(item)
@@ -961,19 +1010,74 @@ class MemoryMappedTensor(torch.Tensor):
             out.filename = self.filename
         return out
 
-class _AwesomeTempFile(tempfile._TemporaryFileWrapper):
-    def __str__(self):
-        return self.name
-    def __repr__(self):
-        return self.name
 
-def AwesomeTempFile(*args, **kwargs):
-    cls = tempfile._TemporaryFileWrapper
-    tempfile._TemporaryFileWrapper = _AwesomeTempFile
-    out = tempfile.NamedTemporaryFile(*args, **kwargs)
-    tempfile._TemporaryFileWrapper = cls
-    return out
+class FileHandler:
+    if sys.platform == "linux":
+        _dir_candidates = ["/dev/shm"]
+    else:
+        _dir_candidates = []
+
+    def __init__(self, size, fd=-1, filename=None):
+        # borrowed from mp.heap
+        self.size = size
+        # if filename is None:
+        if fd == -1:
+            self.fd, name = tempfile.mkstemp(
+                prefix="pym-%d-" % os.getpid(), dir=self._choose_dir(size)
+            )
+            # self.filename = name
+            os.unlink(name)
+            util.Finalize(self, os.close, (self.fd,))
+            os.ftruncate(self.fd, size)
+        else:
+            self.fd = fd
+        # else:
+        #     self.filename = filename
+        self.buffer = mmap.mmap(self.fd, self.size)
+
+    def _choose_dir(self, size):
+        # Choose a non-storage backed directory if possible,
+        # to improve performance
+        for d in self._dir_candidates:
+            st = os.statvfs(d)
+            if st.f_bavail * st.f_frsize >= size:  # enough free space?
+                return d
+        tmpdir = util.get_temp_dir()
+        return tmpdir
+
+
+def reduce_handler(handler):
+    if handler.fd == -1:
+        raise ValueError(
+            "Handler is unpicklable because " "forking was enabled when it was created"
+        )
+    return rebuild_handler, (handler.size, reduction.DupFd(handler.fd))
+
+
+def rebuild_handler(size, dupfd):
+    detached = dupfd.detach()
+    return FileHandler(size, detached)
+
+
+reduction.register(FileHandler, reduce_handler)
+
+#
+# class _AwesomeTempFile(tempfile._TemporaryFileWrapper):
+#     def __str__(self):
+#         return self.name
+#     def __repr__(self):
+#         return self.name
+#
+# def AwesomeTempFile(*args, **kwargs):
+#     cls = tempfile._TemporaryFileWrapper
+#     tempfile._TemporaryFileWrapper = _AwesomeTempFile
+#     out = tempfile.NamedTemporaryFile(*args, **kwargs)
+#     tempfile._TemporaryFileWrapper = cls
+#     return out
+
 
 def reduce_memmap(memmap_tensor):
     return memmap_tensor.__reduce__()
+
+
 ForkingPickler.register(MemoryMappedTensor, reduce_memmap)
