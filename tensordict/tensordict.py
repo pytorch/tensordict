@@ -264,7 +264,7 @@ class _TensorDictKeysView:
         if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
             return tensordict._tensordict.items()
         elif isinstance(tensordict, LazyStackedTensorDict):
-            return _iter_items_lazystack(tensordict)
+            return _iter_items_lazystack(tensordict, return_non_for_het_values=True)
         elif isinstance(tensordict, KeyedJaggedTensor):
             return tuple((key, tensordict[key]) for key in tensordict.keys())
         elif isinstance(tensordict, _CustomOpTensorDict):
@@ -8836,9 +8836,20 @@ def _set_max_batch_size(source: TensorDictBase, batch_dims=None):
 
 
 def _iter_items_lazystack(
-    tensordict: LazyStackedTensorDict,
+    tensordict: LazyStackedTensorDict, return_non_for_het_values: bool = False
 ) -> Iterator[tuple[str, CompatibleType]]:
-    return tensordict.items()
+    for key in tensordict.keys():
+        try:
+            value = tensordict.get(key)
+        except RuntimeError as err:
+            if return_non_for_het_values and re.match(
+                r"Found more than one unique shape in the tensors", str(err)
+            ):
+                # this is a het key
+                value = None
+            else:
+                raise err
+        yield key, value
 
 
 def _clone_value(value: CompatibleType, recurse: bool) -> CompatibleType:
