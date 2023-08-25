@@ -5009,6 +5009,12 @@ class TestLazyStackedTensorDict:
         assert (td["a"][index] == tdset["a"]).all()
         assert (td["a"][index] == tdset["a"]).all()
 
+    def test_all_keys(self):
+        td = TensorDict({"a": torch.zeros(1)}, [])
+        td2 = TensorDict({"a": torch.zeros(2)}, [])
+        stack = torch.stack([td, td2])
+        assert set(stack.keys(True, True)) == {"a"}
+
 
 @pytest.mark.skipif(
     not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
