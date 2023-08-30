@@ -873,19 +873,23 @@ class MemoryMappedTensor(torch.Tensor):
     filename: str | Path
     handler: FileHandler
     _clear: bool
+    index: Any
+    parent_shape: torch.Size
 
-    def __new__(cls, tensor_or_file, handler=None, dtype=None, shape=None):
+    def __new__(cls, tensor_or_file, handler=None, dtype=None, shape=None, index=None):
         if isinstance(tensor_or_file, str):
             return cls.from_filename(
                 tensor_or_file,
                 dtype,
                 shape,
+                index,
             )
         elif handler is not None:
             return cls.from_handler(
                 handler,
                 dtype,
                 shape,
+                index,
             )
         return super().__new__(cls, tensor_or_file)
 
@@ -893,17 +897,6 @@ class MemoryMappedTensor(torch.Tensor):
         ...
 
     __torch_function__ = torch._C._disabled_torch_function_impl
-
-    @classmethod
-    def create(cls, shape, dtype, transfer_ownership=False, prefix=None, filename=None):
-        tensor = torch.zeros((), dtype=dtype).expand(shape)
-        return cls.from_tensor(
-            cls,
-            tensor,
-            transfer_ownership=transfer_ownership,
-            prefix=prefix,
-            filename=filename,
-        )
 
     @classmethod
     def from_tensor(
@@ -956,6 +949,8 @@ class MemoryMappedTensor(torch.Tensor):
             )
         out.handler = handler
         out.filename = filename
+        out.index = None
+        out.parent_shape = tensor.shape
         out.copy_(tensor)
         return out
 
@@ -968,48 +963,47 @@ class MemoryMappedTensor(torch.Tensor):
     #         return self.from_handler(handler, state['dtype'], state['shape'])
 
     @classmethod
-    def from_filename(cls, filename, dtype, shape):
-        tensor = torch.from_file(filename, shared=True, dtype=dtype, size=shape.numel())
-        out = cls(tensor.view(shape))
-        out.handler = None
+    def from_filename(cls, filename, dtype, shape, index):
+        tensor = torch.from_file(filename, shared=True, dtype=dtype, size=shape.numel()).view(shape)
+        if index is not None:
+            tensor = tensor[index]
+        out = cls(tensor)
         out.filename = filename
+        out.handler = None
+        out.index = index
+        out.parent_shape = shape
         return out
 
     @classmethod
-    def from_handler(cls, handler, dtype, shape):
+    def from_handler(cls, handler, dtype, shape, index):
         out = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
         out = torch.reshape(out, shape)
+        if index is not None:
+            out = out[index]
         out = cls(out)
         out.filename = None
         out.handler = handler
+        out.index = index
+        out.parent_shape = shape
         return out
 
-    # def __getstate__(self) -> dict[str, Any]:
-    #     # state = self.__dict__.copy()
-    #     state = {}
-    #     id_file = self.filename
-    #     state["filename"] = str(id_file)
-    #     state["shape"] = self.shape
-    #     state["dtype"] = self.dtype
-    #     return state
-
     def __reduce__(self):
-        return (
-            self.__class__,
-            (
-                self.filename,
-                self.handler,
-                self.dtype,
-                self.shape,
-            ),
-        )
+        if getattr(self, 'handler', None) is not None:
+            return type(self).from_handler, (self.handler, self.dtype, self.parent_shape, self.index)
+        elif getattr(self, 'filename', None) is not None:
+            return type(self).from_filename, (self.filename, self.dtype, self.parent_shape, self.index)
+        else:
+            raise RuntimeError
 
     def __getitem__(self, item):
         out = super().__getitem__(item)
-        if not isinstance(self.filename, str) and out.data_ptr() == self.data_ptr():
-            # this is a bottleneck but we need to keep track of the file to make sure that it is not cleared
+        if out.data_ptr() == self.data_ptr():
             out = MemoryMappedTensor(out)
+            assert isinstance(out, MemoryMappedTensor)
+            out.handler = self.handler
             out.filename = self.filename
+            out.index = item
+            out.parent_shape = self.parent_shape
         return out
 
 
