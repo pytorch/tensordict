@@ -14,7 +14,12 @@ import torch
 from tensordict.nn.utils import mappings
 from torch import distributions as D, nn
 
-__all__ = ["NormalParamExtractor", "NormalParamWrapper", "AddStateIndependentNormalScale", "Delta"]
+__all__ = [
+    "NormalParamExtractor",
+    "NormalParamWrapper",
+    "AddStateIndependentNormalScale",
+    "Delta",
+]
 
 # speeds up distribution construction
 D.Distribution.set_default_validate_args(False)
@@ -151,11 +156,12 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         torch.Size([4, 2, 2]) torch.Size([4, 2, 2])
         >>> assert (scale > 0).all()
     """
+
     def __init__(
-            self,
-            scale_shape: Union[torch.Size, int, tuple],
-            scale_mapping: str = "exp",
-            scale_lb: Number = 1e-4,
+        self,
+        scale_shape: Union[torch.Size, int, tuple],
+        scale_mapping: str = "exp",
+        scale_lb: Number = 1e-4,
     ) -> None:
 
         super().__init__()
@@ -170,7 +176,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         loc, *others = tensors
 
         # check that last dimensions of loc matches the number of dimensions in scale
-        if self.scale_shape != loc.shape[-len(self.scale_shape):]:
+        if self.scale_shape != loc.shape[-len(self.scale_shape) :]:
             raise RuntimeError(
                 f"Last dimensions of loc ({loc.shape[-len(self.scale_shape):]}) do not match the number of dimensions "
                 f"in scale ({self.state_independent_scale.shape})"
@@ -180,7 +186,9 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         input_dims = loc.dim()
         scale_dims = self.state_independent_scale.dim()
         scale_shape = self.state_independent_scale.shape
-        scale = self.state_independent_scale.view((1,) * (input_dims - scale_dims) + scale_shape)
+        scale = self.state_independent_scale.view(
+            (1,) * (input_dims - scale_dims) + scale_shape
+        )
 
         scale = torch.zeros(loc.size()).to(loc.device) + scale
         scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
