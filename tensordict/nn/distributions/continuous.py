@@ -153,7 +153,7 @@ class AddStateIndependentNormalScale(torch.nn.Module):
         >>> tensor = torch.randn(4, 2, 3)
         >>> loc, scale, others = module_normal(*module(tensor))
         >>> print(loc.shape, scale.shape)
-        torch.Size([4, 2, 2]) torch.Size([4, 2, 2])
+        torch.Size([4, 2, 4]) torch.Size([4, 2, 4])
         >>> assert (scale > 0).all()
     """
 
