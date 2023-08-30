@@ -126,7 +126,7 @@ class NormalParamExtractor(nn.Module):
 
 
 class AddStateIndependentNormalScale(torch.nn.Module):
-    """A nn.Module that adds a trainable state-independent scale parameter.
+    """A nn.Module that adds a trainable state-independent scale parameters.
 
     The scale parameters are mapped onto positive values using the specified ``scale_mapping``.
 
