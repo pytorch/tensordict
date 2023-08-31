@@ -3074,7 +3074,8 @@ class TestCompositeDist:
         if return_log_prob:
             torch.testing.assert_close(
                 lp,
-                sample.get("cont_log_prob").sum(-1) + sample.get(("nested", "cont_log_prob")).sum(-1),
+                sample.get("cont_log_prob").sum(-1)
+                + sample.get(("nested", "cont_log_prob")).sum(-1),
             )
         else:
             torch.testing.assert_close(
@@ -3127,7 +3128,8 @@ class TestCompositeDist:
         if return_log_prob:
             torch.testing.assert_close(
                 lp,
-                sample.get("cont_log_prob").sum(-1) + sample.get(("nested", "cont_log_prob")).sum(-1),
+                sample.get("cont_log_prob").sum(-1)
+                + sample.get(("nested", "cont_log_prob")).sum(-1),
             )
         else:
             torch.testing.assert_close(
