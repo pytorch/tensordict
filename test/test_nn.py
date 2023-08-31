@@ -26,6 +26,12 @@ from tensordict.nn import (
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
 from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.distributions.composite import CompositeDistribution
+from tensordict.nn.distributions import (
+    AddStateIndependentNormalScale,
+    Delta,
+    NormalParamExtractor,
+    NormalParamWrapper,
+)
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
@@ -3130,6 +3136,26 @@ class TestCompositeDist:
                 sample_clone.get("cont_log_prob")
                 + sample_clone.get(("nested", "cont_log_prob")),
             )
+
+
+class TestAddStateIndependentNormalScale:
+    def test_add_scale_basic(self, num_outputs=4):
+        module = nn.Linear(3, num_outputs)
+        module_normal = AddStateIndependentNormalScale(num_outputs)
+        tensor = torch.randn(3)
+        loc, scale = module_normal(module(tensor))
+        assert loc.shape == (num_outputs,)
+        assert scale.shape == (num_outputs,)
+        assert (scale > 0).all()
+
+    def test_add_scale_sequence(self, num_outputs=4):
+        module = nn.LSTM(3, num_outputs)
+        module_normal = AddStateIndependentNormalScale(num_outputs)
+        tensor = torch.randn(4, 2, 3)
+        loc, scale, others = module_normal(*module(tensor))
+        assert loc.shape == (4, 2, num_outputs)
+        assert scale.shape == (4, 2, num_outputs)
+        assert (scale > 0).all()
 
 
 if __name__ == "__main__":
