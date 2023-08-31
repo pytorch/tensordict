@@ -327,6 +327,7 @@ Distributions
     :template: rl_template_noinherit.rst
 
     NormalParamsExtractor
+    AddStateIndependentNormalScale
     CompositeDistribution
     Delta
     OneHotCategorical

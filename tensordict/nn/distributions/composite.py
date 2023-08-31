@@ -30,6 +30,11 @@ class CompositeDistribution(d.Distribution):
         extra_kwargs (Dict[NestedKey, Dict]): a possibly incomplete dictionary of
             extra keyword arguments for the distributions to be built.
 
+    .. note:: In this distribution class, the batch-size of the input tensordict containing the params
+        (``params``) is indicative of the batch_shape of the distribution. For instance,
+        the ``"sample_log_prob"`` entry resulting from a call to ``log_prob``
+        will be of the shape of the params (+ any supplementary batch dimension).
+
     Examples:
         >>> params = TensorDict({
         ...     "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
@@ -109,6 +114,8 @@ class CompositeDistribution(d.Distribution):
         d = {}
         for name, dist in self.dists.items():
             d[_add_suffix(name, "_log_prob")] = lp = dist.log_prob(sample.get(name))
+            while lp.ndim > sample.ndim:
+                lp = lp.sum(-1)
             slp = slp + lp
         d["sample_log_prob"] = slp
         sample.update(d)

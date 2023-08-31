@@ -24,14 +24,13 @@ from tensordict.nn import (
     TensorDictSequential,
 )
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
-from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper
-from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.distributions import (
     AddStateIndependentNormalScale,
     Delta,
     NormalParamExtractor,
     NormalParamWrapper,
 )
+from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
@@ -3075,13 +3074,13 @@ class TestCompositeDist:
         if return_log_prob:
             torch.testing.assert_close(
                 lp,
-                sample.get("cont_log_prob") + sample.get(("nested", "cont_log_prob")),
+                sample.get("cont_log_prob").sum(-1) + sample.get(("nested", "cont_log_prob")).sum(-1),
             )
         else:
             torch.testing.assert_close(
                 lp,
-                sample_clone.get("cont_log_prob")
-                + sample_clone.get(("nested", "cont_log_prob")),
+                sample_clone.get("cont_log_prob").sum(-1)
+                + sample_clone.get(("nested", "cont_log_prob")).sum(-1),
             )
 
     @pytest.mark.parametrize(
@@ -3128,13 +3127,13 @@ class TestCompositeDist:
         if return_log_prob:
             torch.testing.assert_close(
                 lp,
-                sample.get("cont_log_prob") + sample.get(("nested", "cont_log_prob")),
+                sample.get("cont_log_prob").sum(-1) + sample.get(("nested", "cont_log_prob")).sum(-1),
             )
         else:
             torch.testing.assert_close(
                 lp,
-                sample_clone.get("cont_log_prob")
-                + sample_clone.get(("nested", "cont_log_prob")),
+                sample_clone.get("cont_log_prob").sum(-1)
+                + sample_clone.get(("nested", "cont_log_prob")).sum(-1),
             )
 
 
