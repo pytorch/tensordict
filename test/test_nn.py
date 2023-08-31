@@ -23,7 +23,11 @@ from tensordict.nn import (
     TensorDictParams,
     TensorDictSequential,
 )
-from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
+from tensordict.nn.common import (
+    AddStateIndependentNormalScale,
+    TensorDictModule,
+    TensorDictModuleWrapper,
+)
 from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
@@ -2895,6 +2899,26 @@ class TestTensorDictParams:
             assert val.requires_grad == td.get(key).requires_grad
             assert val.data_ptr() != td.get(key).data_ptr()
             assert (val == td.get(key)).all()
+
+
+class TestAddStateIndependentNormalScale:
+    def test_add_scale_basic(self, num_outputs=4):
+        module = nn.Linear(3, num_outputs)
+        module_normal = AddStateIndependentNormalScale(num_outputs)
+        tensor = torch.randn(3)
+        loc, scale = module_normal(module(tensor))
+        assert loc.shape == (num_outputs,)
+        assert scale.shape == (num_outputs,)
+        assert (scale > 0).all()
+
+    def test_add_scale_sequence(self, num_outputs=4):
+        module = nn.LSTM(3, num_outputs)
+        module_normal = AddStateIndependentNormalScale(num_outputs)
+        tensor = torch.randn(4, 2, 3)
+        loc, scale, others = module_normal(*module(tensor))
+        assert loc.shape == (4, 2, num_outputs)
+        assert scale.shape == (4, 2, num_outputs)
+        assert (scale > 0).all()
 
 
 if __name__ == "__main__":
