@@ -3023,10 +3023,11 @@ class TestCompositeDist:
             params, distribution_map={"cont": d.Normal, ("nested", "cont"): d.Normal}
         )
         sample = dist.rsample((4,))
-        sample = dist.log_prob(sample)
+        sample = dist.cdf(sample)
         sample = dist.icdf(sample)
         assert sample.get("cont_icdf").requires_grad
         assert sample.get(("nested", "cont_icdf")).requires_grad
+        torch.testing.assert_close(sample.get("cont"), sample.get("cont_icdf"))
 
 
 if __name__ == "__main__":

@@ -104,7 +104,7 @@ class CompositeDistribution(d.Distribution):
     def icdf(self, sample: TensorDictBase):
         """Computes the inverse CDF.
 
-        Requires the input tensordict to have one of `<sample_name>+'_log_prob'` entry
+        Requires the input tensordict to have one of `<sample_name>+'_cdf'` entry
         or a `<sample_name>` entry.
 
         Args:
@@ -112,15 +112,14 @@ class CompositeDistribution(d.Distribution):
                 `<sample>` is the name of the sample provided during construction.
         """
         for name, dist in self.dists.items():
-            lp = sample.get(_add_suffix(name, "_log_prob"), None)
-            if lp is None:
+            prob = sample.get(_add_suffix(name, "_cdf"), None)
+            if prob is None:
                 try:
-                    lp = self.log_prob(sample.get(name))
+                    prob = self.cdf(sample.get(name))
                 except KeyError:
                     raise KeyError(
-                        f"Neither {name} nor {name + '_log_prob'} could be found in the sampled tensordict. Make sure one of these is available to icdf."
+                        f"Neither {name} nor {name + '_cdf'} could be found in the sampled tensordict. Make sure one of these is available to icdf."
                     )
-            prob = lp.exp()
             icdf = dist.icdf(prob)
             sample.set(_add_suffix(name, "_icdf"), icdf)
         return sample
