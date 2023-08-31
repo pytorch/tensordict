@@ -27,7 +27,7 @@ from tensordict.nn.common import (
     TensorDictModule,
     TensorDictModuleWrapper,
 )
-from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper, AddStateIndependentNormalScale,
+from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper, AddStateIndependentNormalScale
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
