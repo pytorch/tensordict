@@ -13,7 +13,9 @@ from torch import distributions as d
 class CompositeDistribution(d.Distribution):
     """A composition of distributions.
 
-    Groups distributions together with the TensorDict interface.
+    Groups distributions together with the TensorDict interface. All methods
+    (``log_prob``, ``cdf``, ``icdf``, ``rsample``, ``sample`` etc.) will return a
+    tensordict, possibly modified in-place if the input was a tensordict.
 
     Args:
         params (TensorDictBase): a nested key-tensor map where the root entries
@@ -68,7 +70,7 @@ class CompositeDistribution(d.Distribution):
             dists[name] = dist
         self.dists = dists
 
-    def sample(self, shape=None):
+    def sample(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])
         samples = {name: dist.sample(shape) for name, dist in self.dists.items()}
@@ -77,7 +79,23 @@ class CompositeDistribution(d.Distribution):
             shape + self.batch_shape,
         )
 
-    def rsample(self, shape=None):
+    @property
+    def mode(self) -> TensorDictBase:
+        samples = {name: dist.mode for name, dist in self.dists.items()}
+        return TensorDict(
+            samples,
+            self.batch_shape,
+        )
+
+    @property
+    def mean(self) -> TensorDictBase:
+        samples = {name: dist.mean for name, dist in self.dists.items()}
+        return TensorDict(
+            samples,
+            self.batch_shape,
+        )
+
+    def rsample(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])
         return TensorDict(
@@ -85,15 +103,18 @@ class CompositeDistribution(d.Distribution):
             shape + self.batch_shape,
         )
 
-    def log_prob(self, sample: TensorDictBase):
-        d = {
-            _add_suffix(name, "_log_prob"): dist.log_prob(sample.get(name))
-            for name, dist in self.dists.items()
-        }
+    def log_prob(self, sample: TensorDictBase) -> TensorDictBase:
+        """Writes a ``<sample>_log_prob entry`` for each sample in the input tensordit, along with a ``"sample_log_prob"`` entry with the summed log-prob."""
+        slp = 0.0
+        d = {}
+        for name, dist in self.dists.items():
+            d[_add_suffix(name, "_log_prob")] = lp = dist.log_prob(sample.get(name))
+            slp = slp + lp
+        d["sample_log_prob"] = slp
         sample.update(d)
         return sample
 
-    def cdf(self, sample: TensorDictBase):
+    def cdf(self, sample: TensorDictBase) -> TensorDictBase:
         cdfs = {
             _add_suffix(name, "_cdf"): dist.cdf(sample.get(name))
             for name, dist in self.dists.items()
@@ -101,7 +122,7 @@ class CompositeDistribution(d.Distribution):
         sample.update(cdfs)
         return sample
 
-    def icdf(self, sample: TensorDictBase):
+    def icdf(self, sample: TensorDictBase) -> TensorDictBase:
         """Computes the inverse CDF.
 
         Requires the input tensordict to have one of `<sample_name>+'_cdf'` entry

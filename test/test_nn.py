@@ -3029,6 +3029,108 @@ class TestCompositeDist:
         assert sample.get(("nested", "cont_icdf")).requires_grad
         torch.testing.assert_close(sample.get("cont"), sample.get("cont_icdf"))
 
+    @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.MEAN]
+    )
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    def test_prob_module(self, interaction, return_log_prob):
+        params = TensorDict(
+            {
+                "params": {
+                    "cont": {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                    ("nested", "cont"): {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                }
+            },
+            [3],
+        )
+        in_keys = ["params"]
+        out_keys = ["cont", ("nested", "cont")]
+        distribution_map = {"cont": d.Normal, ("nested", "cont"): d.Normal}
+        module = ProbabilisticTensorDictModule(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            distribution_class=CompositeDistribution,
+            distribution_kwargs={"distribution_map": distribution_map},
+            default_interaction_type=interaction,
+            return_log_prob=return_log_prob,
+        )
+        sample = module(params)
+        if return_log_prob:
+            assert "cont_log_prob" in sample.keys()
+            assert ("nested", "cont_log_prob") in sample.keys(True)
+        sample_clone = sample.clone()
+        lp = module.log_prob(sample_clone)
+        if return_log_prob:
+            torch.testing.assert_close(
+                lp,
+                sample.get("cont_log_prob") + sample.get(("nested", "cont_log_prob")),
+            )
+        else:
+            torch.testing.assert_close(
+                lp,
+                sample_clone.get("cont_log_prob")
+                + sample_clone.get(("nested", "cont_log_prob")),
+            )
+
+    @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.MEAN]
+    )
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    def test_prob_module_seq(self, interaction, return_log_prob):
+        params = TensorDict(
+            {
+                "params": {
+                    "cont": {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                    ("nested", "cont"): {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                }
+            },
+            [3],
+        )
+        in_keys = ["params"]
+        out_keys = ["cont", ("nested", "cont")]
+        distribution_map = {"cont": d.Normal, ("nested", "cont"): d.Normal}
+        backbone = TensorDictModule(lambda: None, in_keys=[], out_keys=[])
+        module = ProbabilisticTensorDictSequential(
+            backbone,
+            ProbabilisticTensorDictModule(
+                in_keys=in_keys,
+                out_keys=out_keys,
+                distribution_class=CompositeDistribution,
+                distribution_kwargs={"distribution_map": distribution_map},
+                default_interaction_type=interaction,
+                return_log_prob=return_log_prob,
+            ),
+        )
+        sample = module(params)
+        if return_log_prob:
+            assert "cont_log_prob" in sample.keys()
+            assert ("nested", "cont_log_prob") in sample.keys(True)
+        sample_clone = sample.clone()
+        lp = module.log_prob(sample_clone)
+        if return_log_prob:
+            torch.testing.assert_close(
+                lp,
+                sample.get("cont_log_prob") + sample.get(("nested", "cont_log_prob")),
+            )
+        else:
+            torch.testing.assert_close(
+                lp,
+                sample_clone.get("cont_log_prob")
+                + sample_clone.get(("nested", "cont_log_prob")),
+            )
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
