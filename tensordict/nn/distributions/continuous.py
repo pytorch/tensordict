@@ -175,22 +175,13 @@ class AddStateIndependentNormalScale(torch.nn.Module):
     def forward(self, *tensors: torch.Tensor) -> tuple[torch.Tensor, ...]:
         loc, *others = tensors
 
-        # check that last dimensions of loc matches the number of dimensions in scale
         if self.scale_shape != loc.shape[-len(self.scale_shape) :]:
             raise RuntimeError(
                 f"Last dimensions of loc ({loc.shape[-len(self.scale_shape):]}) do not match the number of dimensions "
                 f"in scale ({self.state_independent_scale.shape})"
             )
 
-        # Reshape scale to match the number of dimensions in loc
-        input_dims = loc.dim()
-        scale_dims = self.state_independent_scale.dim()
-        scale_shape = self.state_independent_scale.shape
-        scale = self.state_independent_scale.view(
-            (1,) * (input_dims - scale_dims) + scale_shape
-        )
-
-        scale = torch.zeros(loc.size()).to(loc.device) + scale
+        scale = torch.zeros_like(loc) + self.state_independent_scale
         scale = mappings(self.scale_mapping)(scale).clamp_min(self.scale_lb)
 
         return (loc, scale, *others)
