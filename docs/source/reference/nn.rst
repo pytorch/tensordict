@@ -317,6 +317,21 @@ first traced using :func:`~.symbolic_trace`.
 
     symbolic_trace
 
+Distributions
+-------------
+
+.. py:currentmodule::tensordict.nn.distributions
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    NormalParamsExtractor
+    CompositeDistribution
+    Delta
+    OneHotCategorical
+    TruncatedNormal
+
 
 Utils
 -----

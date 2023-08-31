@@ -4,8 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict.nn.distributions import continuous, discrete
-from tensordict.nn.distributions.continuous import *
-from tensordict.nn.distributions.discrete import *
+from tensordict.nn.distributions.continuous import (
+    Delta,
+    NormalParamExtractor,
+    NormalParamWrapper,
+)
+from tensordict.nn.distributions.discrete import OneHotCategorical, rand_one_hot
+
+from tensordict.nn.distributions.composite import CompositeDistribution
+from tensordict.nn.distributions.truncated_normal import TruncatedNormal
 
 distributions_maps = {
     distribution_class.lower(): eval(distribution_class)

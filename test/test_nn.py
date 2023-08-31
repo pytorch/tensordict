@@ -25,11 +25,12 @@ from tensordict.nn import (
 )
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
 from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper
+from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import Buffer, set_skip_existing, skip_existing
-from torch import nn
+from torch import distributions as d, nn
 from torch.distributions import Normal
 
 try:
@@ -2895,6 +2896,137 @@ class TestTensorDictParams:
             assert val.requires_grad == td.get(key).requires_grad
             assert val.data_ptr() != td.get(key).data_ptr()
             assert (val == td.get(key)).all()
+
+
+class TestCompositeDist:
+    def test_const(self):
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+        )
+        assert dist.batch_shape == params.shape
+        assert len(dist.dists) == 2
+        assert "cont" in dist.dists
+        assert ("nested", "disc") in dist.dists
+
+    def test_sample(self):
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+        )
+        sample = dist.sample()
+        assert sample.shape == params.shape
+        sample = dist.sample((4,))
+        assert sample.shape == torch.Size((4,) + params.shape)
+
+    def test_rsample(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": d.Normal,
+                ("nested", "disc"): d.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+        sample = dist.rsample()
+        assert sample.shape == params.shape
+        assert sample.requires_grad
+        sample = dist.rsample((4,))
+        assert sample.shape == torch.Size((4,) + params.shape)
+        assert sample.requires_grad
+
+    def test_log_prob(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": d.Normal,
+                ("nested", "disc"): d.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+        sample = dist.rsample((4,))
+        sample = dist.log_prob(sample)
+        assert sample.get("cont_log_prob").requires_grad
+        assert sample.get(("nested", "disc_log_prob")).requires_grad
+
+    def test_cdf(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "cont"): {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params, distribution_map={"cont": d.Normal, ("nested", "cont"): d.Normal}
+        )
+        sample = dist.rsample((4,))
+        sample = dist.cdf(sample)
+        assert sample.get("cont_cdf").requires_grad
+        assert sample.get(("nested", "cont_cdf")).requires_grad
+
+    def test_icdf(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "cont"): {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params, distribution_map={"cont": d.Normal, ("nested", "cont"): d.Normal}
+        )
+        sample = dist.rsample((4,))
+        sample = dist.log_prob(sample)
+        sample = dist.icdf(sample)
+        assert sample.get("cont_icdf").requires_grad
+        assert sample.get(("nested", "cont_icdf")).requires_grad
 
 
 if __name__ == "__main__":
