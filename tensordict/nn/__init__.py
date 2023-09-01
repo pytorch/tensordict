@@ -10,7 +10,14 @@ from tensordict.nn.common import (
     TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
-from tensordict.nn.distributions import NormalParamExtractor
+from tensordict.nn.distributions import (
+    AddStateIndependentNormalScale,
+    CompositeDistribution,
+    NormalParamExtractor,
+    OneHotCategorical,
+    rand_one_hot,
+    TruncatedNormal,
+)
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import (
     get_functional,

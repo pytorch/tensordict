@@ -13,6 +13,7 @@ from typing import Any, Callable, Dict, List, Optional
 from warnings import warn
 
 from tensordict._contextlib import _DecoratorContextManager
+from tensordict.nn import CompositeDistribution
 
 from tensordict.nn.common import dispatch, TensorDictModule, TensorDictModuleBase
 from tensordict.nn.distributions import Delta, distributions_maps
@@ -224,7 +225,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         >>> td_module = ProbabilisticTensorDictSequential(
         ...     module, normal_params, prob_module
         ... )
-        >>> params = make_functional(td_module, funs_to_decorate=["forward", "get_dist"])
+        >>> params = make_functional(td_module, funs_to_decorate=["forward", "get_dist", "log_prob"])
         >>> _ = td_module(td, params=params)
         >>> print(td)
         TensorDict(
@@ -318,10 +319,11 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         self._dist = None
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
         self.return_log_prob = return_log_prob
-        if self.return_log_prob:
+        if self.return_log_prob and self.log_prob_key not in self.out_keys:
             self.out_keys.append(self.log_prob_key)
 
     def get_dist(self, tensordict: TensorDictBase) -> D.Distribution:
+        """Creates a :class:`torch.distribution.Distribution` instance with the parameters provided in the input tensordict."""
         try:
             dist_kwargs = {}
             for dist_key, td_key in zip(self.dist_keys, self.in_keys):
@@ -342,6 +344,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             else:
                 raise err
         return dist
+
+    def log_prob(self, tensordict):
+        """Writes the log-probability of the distribution sample."""
+        dist = self.get_dist(tensordict)
+        if isinstance(dist, CompositeDistribution):
+            tensordict = dist.log_prob(tensordict)
+            return tensordict.get("sample_log_prob")
+        else:
+            return dist.log_prob(tensordict.get(self.out_keys[0]))
 
     @property
     def SAMPLE_LOG_PROB_KEY(self):
@@ -366,14 +377,19 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         dist = self.get_dist(tensordict)
         if _requires_sample:
             out_tensors = self._dist_sample(dist, interaction_type=interaction_type())
-            if isinstance(out_tensors, Tensor):
-                out_tensors = (out_tensors,)
-            tensordict_out.update(
-                {key: value for key, value in zip(self.out_keys, out_tensors)}
-            )
-            if self.return_log_prob:
-                log_prob = dist.log_prob(*out_tensors)
-                tensordict_out.set(self.log_prob_key, log_prob)
+            if isinstance(out_tensors, TensorDictBase):
+                tensordict_out.update(out_tensors)
+                if self.return_log_prob:
+                    tensordict_out = dist.log_prob(tensordict_out)
+            else:
+                if isinstance(out_tensors, Tensor):
+                    out_tensors = (out_tensors,)
+                tensordict_out.update(
+                    {key: value for key, value in zip(self.out_keys, out_tensors)}
+                )
+                if self.return_log_prob:
+                    log_prob = dist.log_prob(*out_tensors)
+                    tensordict_out.set(self.log_prob_key, log_prob)
         elif self.return_log_prob:
             out_tensors = [
                 tensordict.get(key) for key in self.out_keys if key != self.log_prob_key
@@ -507,6 +523,16 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         """Get the distribution that results from passing the input tensordict through the sequence, and then using the resulting parameters."""
         tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)
         return self.build_dist_from_params(tensordict_out)
+
+    def log_prob(
+        self, tensordict, tensordict_out: TensorDictBase | None = None, **kwargs
+    ):
+        tensordict_out = self.get_dist_params(
+            tensordict,
+            tensordict_out,
+            **kwargs,
+        )
+        return self.module[-1].log_prob(tensordict_out)
 
     def build_dist_from_params(self, tensordict: TensorDictBase) -> D.Distribution:
         """Construct a distribution from the input parameters. Other modules in the sequence are not evaluated."""
