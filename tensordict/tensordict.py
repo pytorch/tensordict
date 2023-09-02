@@ -1477,6 +1477,11 @@ class TensorDictBase(MutableMapping):
             out.lock_()
         return out
 
+    def map(self, fn, dim=0, num_workers=None):
+        def next_split():
+            numel = self.shape[dim]
+            split_size = -(numel // -num_workers)
+
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
