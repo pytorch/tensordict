@@ -5994,6 +5994,34 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
     else:
         assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
 
+@pytest.mark.parametrize(
+    "td_name",
+    [
+        "td",
+        "stacked_td",
+        "sub_td",
+        "sub_td2",
+        "idx_td",
+        "memmap_td",
+        "unsqueezed_td",
+        "squeezed_td",
+        "td_reset_bs",
+        "nested_td",
+        "nested_tensorclass",
+        "permute_td",
+        "nested_stacked_td",
+        "td_params",
+        pytest.param(
+            "td_h5", marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+        ),
+    ],
+)
+@pytest.mark.parametrize("device", get_available_devices())
+class TestTensorDictMP(TestTensorDictsBase):
+    def test_map(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        print("result", td.map(lambda x: x+1))
+        assert (td.map(lambda x: x+1) == td.apply(lambda x: x+1)).all()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
