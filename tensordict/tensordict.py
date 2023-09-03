@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from __future__ import annotations
-from torch import multiprocessing as mp
+
 import abc
 import collections
 import functools
@@ -64,7 +64,7 @@ from tensordict.utils import (
     NestedKey,
     prod,
 )
-from torch import distributed as dist, Tensor
+from torch import distributed as dist, multiprocessing as mp, Tensor
 from torch.utils._pytree import tree_map
 
 try:
@@ -1477,29 +1477,26 @@ class TensorDictBase(MutableMapping):
             out.lock_()
         return out
 
-    def map(self, fn, dim=0, num_workers=None, chunksize=None):
-        if num_workers is None:
-            num_workers = mp.cpu_count()  # Get the number of CPU cores
-
+    def map(
+        self,
+        fn: Callable,
+        dim: int = 0,
+        num_workers: int = None,
+        chunksize: int = None,
+        pool: mp.Pool = None,
+    ):
+        if pool is None:
+            if num_workers is None:
+                num_workers = mp.cpu_count()  # Get the number of CPU cores
+            with mp.Pool(num_workers) as pool:
+                return self.map(fn, dim=dim, chunksize=chunksize, pool=pool)
+        num_workers = pool._processes
         dim_orig = dim
         if dim < 0:
             dim = self.ndim + dim
         if dim < 0 or dim >= self.ndim:
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
-        # def next_split():
-        #     numel = self.shape[dim]
-        #     split_size = -(numel // -num_workers)
-        #     slices = (slice(None),) * dim
-        #     idx0 = 0
-        #     idx1 = split_size
-        #     while True:
-        #         idx = slices + (slice(idx0, idx1),)
-        #         yield idx
-        #         idx0 += split_size
-        #         idx1 += split_size
-        #         if idx0 >= self.shape[dim]:
-        #             raise StopIteration
         if chunksize is None:
             numel = self.shape[dim]
             self_split = self.split(-(numel // -num_workers), dim=dim)
@@ -1507,12 +1504,9 @@ class TensorDictBase(MutableMapping):
         else:
             self_split = self.split(chunksize, dim=dim)
             chunksize = 1
-        pool = mp.Pool(num_workers)
-        with pool:
-            out = pool.imap(fn, self_split, chunksize)
-        pool.join()
-        del pool
-        return torch.cat(list(out), dim)
+        out = pool.imap(fn, self_split, chunksize)
+        out = torch.cat(list(out), dim)
+        return out
 
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):

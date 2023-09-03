@@ -5994,6 +5994,7 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
     else:
         assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
 
+
 @pytest.mark.parametrize(
     "td_name",
     [
@@ -6018,10 +6019,27 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
 )
 @pytest.mark.parametrize("device", get_available_devices())
 class TestTensorDictMP(TestTensorDictsBase):
-    def test_map(self, td_name, device):
+    @staticmethod
+    def add1(x):
+        return x + 1
+
+    @staticmethod
+    def add1_app(x):
+        return x.apply(lambda x: x + 1)
+
+    @pytest.mark.parametrize("dim", [-2, -1, 0, 1, 2, 3])
+    def test_map(self, td_name, device, dim, _pool_fixt):
         td = getattr(self, td_name)(device)
-        print("result", td.map(lambda x: x+1))
-        assert (td.map(lambda x: x+1) == td.apply(lambda x: x+1)).all()
+        assert (
+            td.map(self.add1_app, dim=dim, pool=_pool_fixt) == td.apply(self.add1)
+        ).all()
+
+
+@pytest.fixture(scope="class")
+def _pool_fixt():
+    with mp.Pool(2) as pool:
+        yield pool
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
