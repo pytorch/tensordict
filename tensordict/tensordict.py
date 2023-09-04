@@ -6891,7 +6891,12 @@ class LazyStackedTensorDict(TensorDictBase):
             dest = torch.device(dest)
             if self.device is not None and dest == self.device:
                 return self
-            td = self.to_tensordict().to(dest, **kwargs)
+            td = LazyStackedTensorDict(
+                *[td.to(dest, **kwargs) for td in self.tensordicts],
+                stack_dim=self.stack_dim,
+                hook_out=self.hook_out,
+                hook_in=self.hook_in,
+            )
             return td
 
         elif isinstance(dest, torch.Size):
