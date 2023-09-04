@@ -6027,12 +6027,35 @@ class TestTensorDictMP(TestTensorDictsBase):
     def add1_app(x):
         return x.apply(lambda x: x + 1)
 
+    @staticmethod
+    def add1_app_error(x):
+        # algerbraic ops are not supported
+        return x + 1
+
     @pytest.mark.parametrize("dim", [-2, -1, 0, 1, 2, 3])
     def test_map(self, td_name, device, dim, _pool_fixt):
         td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="Cannot call map on a TensorDictParams object"
+            ):
+                td.map(self.add1_app, dim=dim, pool=_pool_fixt)
+            return
         assert (
             td.map(self.add1_app, dim=dim, pool=_pool_fixt) == td.apply(self.add1)
         ).all()
+
+    @pytest.mark.parametrize("dim", [-2, -1, 0, 1, 2, 3])
+    def test_map_exception(self, td_name, device, dim, _pool_fixt):
+        td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="Cannot call map on a TensorDictParams object"
+            ):
+                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+            return
+        with pytest.raises(TypeError, match="unsupported operand"):
+            td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
 
 
 @pytest.fixture(scope="class")

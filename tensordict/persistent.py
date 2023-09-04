@@ -9,9 +9,10 @@ from __future__ import annotations
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from tensordict._tensordict import _unravel_key_to_tuple
+from torch import multiprocessing as mp
 
 H5_ERR = None
 try:
@@ -600,6 +601,34 @@ class PersistentTensorDict(TensorDictBase):
         out._nested_tensordicts = {
             key: val.pin_memory() for key, val in out._nested_tensordicts.items()
         }
+        return out
+
+    def map(
+        self,
+        fn: Callable,
+        dim: int = 0,
+        num_workers: int = None,
+        chunksize: int = None,
+        pool: mp.Pool = None,
+    ):
+        if pool is None:
+            if num_workers is None:
+                num_workers = mp.cpu_count()  # Get the number of CPU cores
+            with mp.Pool(num_workers) as pool:
+                return self.map(fn, dim=dim, chunksize=chunksize, pool=pool)
+        num_workers = pool._processes
+        dim_orig = dim
+        if dim < 0:
+            dim = self.ndim + dim
+        if dim < 0 or dim >= self.ndim:
+            raise ValueError(f"Got incompatible dimension {dim_orig}")
+
+        if chunksize is None:
+            chunksize = num_workers
+        self_split = tuple(d.to_tensordict() for d in self.chunk(chunksize, dim=dim))
+        chunksize = 1
+        out = pool.imap(fn, self_split, chunksize)
+        out = torch.cat(list(out), dim)
         return out
 
     def rename_key_(

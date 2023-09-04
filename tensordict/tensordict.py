@@ -1485,6 +1485,56 @@ class TensorDictBase(MutableMapping):
         chunksize: int = None,
         pool: mp.Pool = None,
     ):
+        """Maps a function to splits of the tensordict across one dimension.
+
+        This method will apply a function to a tensordict instance by chunking
+        it in tensordicts of equal size and dispatching the operations over the
+        desired number of workers.
+
+        The function signature should be ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``.
+        The output must support the :func:`torch.cat` operation. The function
+        must be serializable.
+
+        Args:
+            fn (callable): function to apply to the tensordict.
+                Signatures similar to ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``
+                are supported.
+            dim (int, optional): the dim along which the tensordict will be chunked.
+            num_workers (int, optional): the number of workers. Exclusive with ``pool``.
+                If none is provided, the number of workers will be set to the
+                number of cpus available.
+            chunksize (int, optional): the number of chunks to split the tensordict
+                into. If none is provided, the number of chunks will equate the number
+                of workers. For very large tensordicts, such large chunks
+                may not fit in memory for the operation to be done and
+                more chunks may be needed to make the operation practically
+                doable.
+            pool (mp.Pool, optional): a multiprocess Pool instance to use
+                to execute the job. If none is provided, a pool will be created
+                within the ``map`` method.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>>
+            >>> def process_data(data):
+            ...     data.set("y", data.get("x") + 1)
+            ...     return data
+            >>> if __name__ == "__main__":
+            ...     data = TensorDict({"x": torch.zeros(1, 1_000_000)}, [1, 1_000_000]).memmap_()
+            ...     data = data.map(process_data, dim=1)
+            ...     print(data["y"][:, :10])
+            ...
+            tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
+
+        .. note:: This method is particularily useful when working with large
+            datasets stored on disk (e.g. memory-mapped tensordicts) where
+            chunks will be zero-copied slices of the original data which can
+            be passed to the processes with virtually zero-cost. This allows
+            to tread very large datasets (eg. over a Tb big) to be processed
+            at little cost.
+
+        """
         if pool is None:
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
@@ -1498,12 +1548,9 @@ class TensorDictBase(MutableMapping):
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
         if chunksize is None:
-            numel = self.shape[dim]
-            self_split = self.split(-(numel // -num_workers), dim=dim)
-            chunksize = 1
-        else:
-            self_split = self.split(chunksize, dim=dim)
-            chunksize = 1
+            chunksize = num_workers
+        self_split = self.chunk(num_workers, dim=dim)
+        chunksize = 1
         out = pool.imap(fn, self_split, chunksize)
         out = torch.cat(list(out), dim)
         return out
@@ -3605,7 +3652,7 @@ class TensorDictBase(MutableMapping):
     unlock = _renamed_inplace_method(unlock_)
 
     def __del__(self):
-        for td in self._locked_tensordicts:
+        for td in getattr(self, "_locked_tensordicts", ()):
             td._remove_lock(id(self))
 
     def is_floating_point(self):
