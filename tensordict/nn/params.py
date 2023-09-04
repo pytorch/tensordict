@@ -28,7 +28,7 @@ from tensordict.tensordict import (
     TensorDict,
 )
 from tensordict.utils import DeviceType, erase_cache, IndexType, NestedKey
-from torch import nn, Tensor
+from torch import multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
 
 
@@ -393,6 +393,21 @@ class TensorDictParams(TensorDictBase, nn.Module):
     @_unlock_and_set
     def apply_(self, fn: Callable, *others) -> TensorDictBase:
         ...
+
+    def map(
+        self,
+        fn: Callable,
+        dim: int = 0,
+        num_workers: int = None,
+        chunksize: int = None,
+        num_chunks: int = None,
+        pool: mp.Pool = None,
+    ):
+        raise RuntimeError(
+            "Cannot call map on a TensorDictParams object. Convert it "
+            "to a detached tensordict first (``tensordict.data``) and call "
+            "map in a second time."
+        )
 
     @_unlock_and_set(inplace=True)
     def apply(
