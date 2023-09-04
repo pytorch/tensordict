@@ -9,9 +9,10 @@ from __future__ import annotations
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from tensordict._tensordict import _unravel_key_to_tuple
+from torch import multiprocessing as mp
 
 H5_ERR = None
 try:
@@ -35,6 +36,7 @@ from tensordict.tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import (
+    _split_tensordict,
     cache,
     DeviceType,
     expand_right,
@@ -600,6 +602,34 @@ class PersistentTensorDict(TensorDictBase):
         out._nested_tensordicts = {
             key: val.pin_memory() for key, val in out._nested_tensordicts.items()
         }
+        return out
+
+    def map(
+        self,
+        fn: Callable,
+        dim: int = 0,
+        num_workers: int = None,
+        chunksize: int = None,
+        num_chunks: int = None,
+        pool: mp.Pool = None,
+    ):
+        if pool is None:
+            if num_workers is None:
+                num_workers = mp.cpu_count()  # Get the number of CPU cores
+            with mp.Pool(num_workers) as pool:
+                return self.map(fn, dim=dim, chunksize=chunksize, pool=pool)
+        num_workers = pool._processes
+        dim_orig = dim
+        if dim < 0:
+            dim = self.ndim + dim
+        if dim < 0 or dim >= self.ndim:
+            raise ValueError(f"Got incompatible dimension {dim_orig}")
+
+        self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
+        self_split = tuple(split.to_tensordict() for split in self_split)
+        chunksize = 1
+        out = pool.imap(fn, self_split, chunksize)
+        out = torch.cat(list(out), dim)
         return out
 
     def rename_key_(

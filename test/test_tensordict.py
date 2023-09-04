@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import os
 import re
 import uuid
 
@@ -5993,6 +5994,115 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
         assert dense_td_stack["lazy"].stack_dim == nested_stack_dim
     else:
         assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
+
+
+@pytest.mark.parametrize(
+    "td_name",
+    [
+        "td",
+        "stacked_td",
+        "sub_td",
+        "sub_td2",
+        "idx_td",
+        "memmap_td",
+        "unsqueezed_td",
+        "squeezed_td",
+        "td_reset_bs",
+        "nested_td",
+        "nested_tensorclass",
+        "permute_td",
+        "nested_stacked_td",
+        "td_params",
+        pytest.param(
+            "td_h5", marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+        ),
+    ],
+)
+@pytest.mark.parametrize("device", get_available_devices())
+class TestTensorDictMP(TestTensorDictsBase):
+    @staticmethod
+    def add1(x):
+        return x + 1
+
+    @staticmethod
+    def add1_app(x):
+        return x.apply(lambda x: x + 1)
+
+    @staticmethod
+    def add1_app_error(x):
+        # algerbraic ops are not supported
+        return x + 1
+
+    @staticmethod
+    def write_pid(x):
+        return TensorDict({"pid": os.getpid()}, []).expand(x.shape)
+
+    @pytest.mark.parametrize("dim", [-2, -1, 0, 1, 2, 3])
+    def test_map(self, td_name, device, dim, _pool_fixt):
+        td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="Cannot call map on a TensorDictParams object"
+            ):
+                td.map(self.add1_app, dim=dim, pool=_pool_fixt)
+            return
+        assert (
+            td.map(self.add1_app, dim=dim, pool=_pool_fixt) == td.apply(self.add1)
+        ).all()
+
+    @pytest.mark.parametrize("dim", [-2, -1, 0, 1, 2, 3])
+    def test_map_exception(self, td_name, device, dim, _pool_fixt):
+        td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="Cannot call map on a TensorDictParams object"
+            ):
+                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+            return
+        with pytest.raises(TypeError, match="unsupported operand"):
+            td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+
+    @pytest.mark.parametrize(
+        "chunksize,num_chunks", [[None, 2], [4, None], [None, None], [2, 2]]
+    )
+    def test_chunksize_num_chunks(
+        self, td_name, device, chunksize, num_chunks, _pool_fixt, dim=0
+    ):
+        td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="Cannot call map on a TensorDictParams object"
+            ):
+                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+            return
+        if chunksize is not None and num_chunks is not None:
+            with pytest.raises(ValueError, match="but not both"):
+                td.map(
+                    self.write_pid,
+                    dim=dim,
+                    chunksize=chunksize,
+                    num_chunks=num_chunks,
+                    pool=_pool_fixt,
+                )
+            return
+        mapped = td.map(
+            self.write_pid,
+            dim=dim,
+            chunksize=chunksize,
+            num_chunks=num_chunks,
+            pool=_pool_fixt,
+        )
+        pids = mapped.get("pid").unique()
+        if chunksize is not None:
+            assert pids.numel() == -(td.shape[0] // -chunksize)
+        elif num_chunks is not None:
+            assert pids.numel() == num_chunks
+
+
+@pytest.fixture(scope="class")
+def _pool_fixt():
+    with mp.Pool(10) as pool:
+        yield pool
 
 
 if __name__ == "__main__":
