@@ -1243,3 +1243,18 @@ class as_decorator:
             return out
 
         return new_func
+
+
+def _split_tensordict(td, chunksize, num_chunks, num_workers, dim):
+    if chunksize is None and num_chunks is None:
+        num_chunks = num_workers
+    if chunksize is not None and num_chunks is not None:
+        raise ValueError(
+            "Either chunksize or num_chunks must be provided, but not both."
+        )
+    if num_chunks is not None:
+        num_chunks = min(td.shape[dim], num_chunks)
+        return td.chunk(num_chunks, dim=dim)
+    else:
+        chunksize = min(td.shape[dim], chunksize)
+        return td.split(chunksize, dim=dim)

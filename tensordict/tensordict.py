@@ -48,6 +48,7 @@ from tensordict.utils import (
     _NON_STR_KEY_TUPLE_ERR,
     _set_item,
     _shape,
+    _split_tensordict,
     _StringOnlyDict,
     _sub_index,
     as_decorator,
@@ -1483,6 +1484,7 @@ class TensorDictBase(MutableMapping):
         dim: int = 0,
         num_workers: int = None,
         chunksize: int = None,
+        num_chunks: int = None,
         pool: mp.Pool = None,
     ):
         """Maps a function to splits of the tensordict across one dimension.
@@ -1503,12 +1505,18 @@ class TensorDictBase(MutableMapping):
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
                 If none is provided, the number of workers will be set to the
                 number of cpus available.
-            chunksize (int, optional): the number of chunks to split the tensordict
+            chunksize (int, optional): The size of each chunk of data. If none
+                is provided, the number of chunks will equate the number
+                of workers. For very large tensordicts, such large chunks
+                may not fit in memory for the operation to be done and
+                more chunks may be needed to make the operation practically
+                doable. This argument is exclusive with num_chunks.
+            num_chunks (int, optional): the number of chunks to split the tensordict
                 into. If none is provided, the number of chunks will equate the number
                 of workers. For very large tensordicts, such large chunks
                 may not fit in memory for the operation to be done and
                 more chunks may be needed to make the operation practically
-                doable.
+                doable. This argument is exclusive with chunksize.
             pool (mp.Pool, optional): a multiprocess Pool instance to use
                 to execute the job. If none is provided, a pool will be created
                 within the ``map`` method.
@@ -1539,7 +1547,9 @@ class TensorDictBase(MutableMapping):
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
             with mp.Pool(num_workers) as pool:
-                return self.map(fn, dim=dim, chunksize=chunksize, pool=pool)
+                return self.map(
+                    fn, dim=dim, chunksize=chunksize, num_chunks=num_chunks, pool=pool
+                )
         num_workers = pool._processes
         dim_orig = dim
         if dim < 0:
@@ -1547,9 +1557,7 @@ class TensorDictBase(MutableMapping):
         if dim < 0 or dim >= self.ndim:
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
-        if chunksize is None:
-            chunksize = num_workers
-        self_split = self.chunk(num_workers, dim=dim)
+        self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
         chunksize = 1
         out = pool.imap(fn, self_split, chunksize)
         out = torch.cat(list(out), dim)

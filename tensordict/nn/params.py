@@ -400,6 +400,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         dim: int = 0,
         num_workers: int = None,
         chunksize: int = None,
+        num_chunks: int = None,
         pool: mp.Pool = None,
     ):
         raise RuntimeError(

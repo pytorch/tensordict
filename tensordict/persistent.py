@@ -36,6 +36,7 @@ from tensordict.tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import (
+    _split_tensordict,
     cache,
     DeviceType,
     expand_right,
@@ -609,6 +610,7 @@ class PersistentTensorDict(TensorDictBase):
         dim: int = 0,
         num_workers: int = None,
         chunksize: int = None,
+        num_chunks: int = None,
         pool: mp.Pool = None,
     ):
         if pool is None:
@@ -623,9 +625,8 @@ class PersistentTensorDict(TensorDictBase):
         if dim < 0 or dim >= self.ndim:
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
-        if chunksize is None:
-            chunksize = num_workers
-        self_split = tuple(d.to_tensordict() for d in self.chunk(chunksize, dim=dim))
+        self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
+        self_split = tuple(split.to_tensordict() for split in self_split)
         chunksize = 1
         out = pool.imap(fn, self_split, chunksize)
         out = torch.cat(list(out), dim)
