@@ -5634,6 +5634,31 @@ torch.Size([3, 2])
         return self
 
     def to(self, dest: DeviceType | torch.Size | type, **kwargs: Any) -> T:
+        batch_size = kwargs.pop("batch_size", None)
+        other = kwargs.pop("other", None)
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
+        if other is not None:
+            if device is not None and device != other.device:
+                raise ValueError("other and device cannot be both passed")
+            device = other.device
+            dtypes = {val.dtype for val in other.values(True, True)}
+            if len(dtypes) > 1 or len(dtype) == 0:
+                dtype = None
+            elif len(dtypes) == 1:
+                dtype = dtypes[0]
+        result = self
+
+        def to(tensor):
+            return tensor.to(device=device, dtype=dtype, non_blocking=non_blocking, convert_to_format=convert_to_format)
+        apply_kwargs = {}
+        if device is not None or dtype is not None:
+            apply_kwargs["device"] = device
+            apply_kwargs["batch_size"] = batch_size
+            result = result.apply(to, **apply_kwargs)
+        elif batch_size is not None:
+            result.batch_size = batch_size
+        return result
+
         if isinstance(dest, type) and issubclass(dest, TensorDictBase):
             if isinstance(self, dest):
                 return self
