@@ -1672,6 +1672,47 @@ def test_from_dict():
     assert tc.batch_size == torch.Size([10])
 
 
+class TestNesting:
+    @tensorclass
+    class TensorClass:
+        tens: torch.Tensor
+        order: tuple[str]
+        test: str
+
+    def get_nested(self):
+
+        c = self.TensorClass(torch.ones(1), ("a", "b", "c"), "Hello", batch_size=[])
+
+        td = torch.stack(
+            [TensorDict({"t": torch.ones(1), "c": c}, batch_size=[]) for _ in range(3)]
+        )
+        return td
+
+    def test_to(self):
+        td = self.get_nested()
+        td = td.to("cpu:1")
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+    def test_idx(self):
+        td = self.get_nested()[0]
+        assert isinstance(td.get("c"), self.TensorClass)
+
+    def test_apply(self):
+        td = self.get_nested()
+        td = td.apply(lambda x: x + 1)
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+    def test_split(self):
+        td = self.get_nested()
+        td, _ = td.split([2, 1], dim=0)
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+    def test_chunk(self):
+        td = self.get_nested()
+        td, _ = td.chunk(2, dim=0)
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
