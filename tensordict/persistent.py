@@ -697,7 +697,7 @@ class PersistentTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
         if dtype is not None:
-            return self.to_tensordict().to(*args, batch_size=batch_size, **kwargs)
+            return self.to_tensordict().to(*args, **kwargs)
         result = self
         if device is not None:
             result = result.clone(False)
