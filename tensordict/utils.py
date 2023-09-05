@@ -1261,6 +1261,7 @@ def _split_tensordict(td, chunksize, num_chunks, num_workers, dim):
 
 
 def _parse_to(*args, **kwargs):
+    batch_size = kwargs.pop("batch_size", None)
     other = kwargs.pop("other", None)
     device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
         *args, **kwargs
@@ -1274,4 +1275,4 @@ def _parse_to(*args, **kwargs):
             dtype = None
         elif len(dtypes) == 1:
             dtype = dtypes[0]
-    return device, dtype, non_blocking, convert_to_format
+    return device, dtype, non_blocking, convert_to_format, batch_size

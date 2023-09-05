@@ -4530,8 +4530,9 @@ class TensorDict(TensorDictBase):
         return out
 
     def to(self, *args, **kwargs: Any) -> T:
-        batch_size = kwargs.pop("batch_size", None)
-        device, dtype, non_blocking, convert_to_format = _parse_to(*args, **kwargs)
+        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
+            *args, **kwargs
+        )
         result = self
 
         if device is not None and dtype is None and device == self.device:
@@ -5708,7 +5709,9 @@ torch.Size([3, 2])
         return self
 
     def to(self, *args, **kwargs: Any) -> T:
-        device, dtype, non_blocking, convert_to_format = _parse_to(*args, **kwargs)
+        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
+            *args, **kwargs
+        )
         result = self
 
         if device is not None and dtype is None and device == self.device:
@@ -6926,11 +6929,11 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> T:
-        batch_size = kwargs.pop("batch_size", None)
+        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
+            *args, **kwargs
+        )
         if batch_size is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
-
-        device, dtype, non_blocking, convert_to_format = _parse_to(*args, **kwargs)
         result = self
 
         if device is not None and dtype is None and device == self.device:
@@ -8133,11 +8136,11 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> T:
-        batch_size = kwargs.pop("batch_size", None)
+        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
+            *args, **kwargs
+        )
         if batch_size is not None:
             raise TypeError(f"Cannot pass batch-size to a {type(self)}.")
-
-        device, dtype, non_blocking, convert_to_format = _parse_to(*args, **kwargs)
         result = self
 
         if device is not None and dtype is None and device == self.device:
