@@ -1314,7 +1314,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_device.clone().device == device_cast
         if device_cast != td.device:
             assert td_device is not td
-        assert td_device.to(device_cast) == td_device
+        assert td_device.to(device_cast) is td_device
         assert td.to(device) is td
         assert_allclose_td(td, td_device.to(device))
 
