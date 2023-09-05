@@ -36,6 +36,7 @@ from tensordict.tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import (
+    _parse_to,
     _split_tensordict,
     cache,
     expand_right,
@@ -689,20 +690,12 @@ class PersistentTensorDict(TensorDictBase):
         )
 
     def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
-        batch_size = kwargs.pop("batch_size", None)
-        other = kwargs.pop("other", None)
-        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
             *args, **kwargs
         )
-        if other is not None:
-            if device is not None and device != other.device:
-                raise ValueError("other and device cannot be both passed")
-            device = other.device
-            dtypes = {val.dtype for val in other.values(True, True)}
-            if len(dtypes) > 1 or len(dtype) == 0:
-                dtype = None
-            elif len(dtypes) == 1:
-                dtype = dtypes[0]
+        result = self
+        if device is not None and dtype is None and device == self.device:
+            return result
         if dtype is not None:
             return self.to_tensordict().to(*args, batch_size=batch_size, **kwargs)
         result = self
