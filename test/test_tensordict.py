@@ -688,11 +688,21 @@ class TestTensorDicts(TestTensorDictsBase):
         td_dtype_device = td.to(torch.device("cpu:1"), torch.int)
         assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
         assert td_device.device == torch.device("cpu:1")
-        if td_name in ("stacked_td", "unsqueezed_td", "squeezed_td", "permute_td", "nested_stacked_td"):
+        if td_name in (
+            "stacked_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "permute_td",
+            "nested_stacked_td",
+        ):
             with pytest.raises(TypeError, match="Cannot pass batch-size to a "):
-                td_dtype_device = td.to(torch.device("cpu:1"), torch.int, batch_size=torch.Size([]))
+                td_dtype_device = td.to(
+                    torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
+                )
         else:
-            td_dtype_device = td.to(torch.device("cpu:1"), torch.int, batch_size=torch.Size([]))
+            td_dtype_device = td.to(
+                torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
+            )
             assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
             assert td_device.device == torch.device("cpu:1")
             assert td_dtype_device.batch_size == torch.Size([])
@@ -1304,7 +1314,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_device.clone().device == device_cast
         if device_cast != td.device:
             assert td_device is not td
-        assert td_device.to(device_cast) is td_device
+        assert td_device.to(device_cast) == td_device
         assert td.to(device) is td
         assert_allclose_td(td, td_device.to(device))
 

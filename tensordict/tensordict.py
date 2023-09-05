@@ -49,6 +49,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
+    _parse_to,
     _set_item,
     _shape,
     _split_tensordict,
@@ -4530,20 +4531,11 @@ class TensorDict(TensorDictBase):
 
     def to(self, *args, **kwargs: Any) -> T:
         batch_size = kwargs.pop("batch_size", None)
-        other = kwargs.pop("other", None)
-        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
-            *args, **kwargs
-        )
-        if other is not None:
-            if device is not None and device != other.device:
-                raise ValueError("other and device cannot be both passed")
-            device = other.device
-            dtypes = {val.dtype for val in other.values(True, True)}
-            if len(dtypes) > 1 or len(dtype) == 0:
-                dtype = None
-            elif len(dtypes) == 1:
-                dtype = dtypes[0]
+        device, dtype, non_blocking, convert_to_format = _parse_to(*args, **kwargs)
         result = self
+
+        if device is not None and dtype is None and device == self.device:
+            return result
 
         if convert_to_format is not None:
 
@@ -5716,6 +5708,11 @@ torch.Size([3, 2])
         return self
 
     def to(self, *args, **kwargs: Any) -> T:
+        device, dtype, non_blocking, convert_to_format = _parse_to(*args, **kwargs)
+        result = self
+
+        if device is not None and dtype is None and device == self.device:
+            return result
         return self.to_tensordict().to(*args, **kwargs)
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
@@ -6932,6 +6929,13 @@ class LazyStackedTensorDict(TensorDictBase):
         batch_size = kwargs.pop("batch_size", None)
         if batch_size is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
+
+        device, dtype, non_blocking, convert_to_format = _parse_to(*args, **kwargs)
+        result = self
+
+        if device is not None and dtype is None and device == self.device:
+            return result
+
         return LazyStackedTensorDict(
             *[td.to(*args, **kwargs) for td in self.tensordicts],
             stack_dim=self.stack_dim,
@@ -8132,6 +8136,13 @@ class _CustomOpTensorDict(TensorDictBase):
         batch_size = kwargs.pop("batch_size", None)
         if batch_size is not None:
             raise TypeError(f"Cannot pass batch-size to a {type(self)}.")
+
+        device, dtype, non_blocking, convert_to_format = _parse_to(*args, **kwargs)
+        result = self
+
+        if device is not None and dtype is None and device == self.device:
+            return result
+
         td = self._source.to(*args, **kwargs)
         self_copy = copy(self)
         self_copy._source = td

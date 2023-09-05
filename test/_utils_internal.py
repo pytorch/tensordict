@@ -15,7 +15,7 @@ from tensordict.tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
 )
-import multiprocessing as mp
+
 
 def prod(sequence):
     if hasattr(math, "prod"):

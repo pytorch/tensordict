@@ -38,7 +38,6 @@ from tensordict.tensordict import (
 from tensordict.utils import (
     _split_tensordict,
     cache,
-    DeviceType,
     expand_right,
     IndexType,
     lock_blocked,
@@ -689,9 +688,7 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
-    def to(
-        self, *args, **kwargs: Any
-    ) -> PersistentTensorDict:
+    def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
         batch_size = kwargs.pop("batch_size", None)
         other = kwargs.pop("other", None)
         device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(

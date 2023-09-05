@@ -27,7 +27,7 @@ from tensordict.tensordict import (
     TD_HANDLED_FUNCTIONS,
     TensorDict,
 )
-from tensordict.utils import DeviceType, erase_cache, IndexType, NestedKey
+from tensordict.utils import erase_cache, IndexType, NestedKey
 from torch import multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
 

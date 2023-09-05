@@ -1258,3 +1258,20 @@ def _split_tensordict(td, chunksize, num_chunks, num_workers, dim):
     else:
         chunksize = min(td.shape[dim], chunksize)
         return td.split(chunksize, dim=dim)
+
+
+def _parse_to(*args, **kwargs):
+    other = kwargs.pop("other", None)
+    device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+        *args, **kwargs
+    )
+    if other is not None:
+        if device is not None and device != other.device:
+            raise ValueError("other and device cannot be both passed")
+        device = other.device
+        dtypes = {val.dtype for val in other.values(True, True)}
+        if len(dtypes) > 1 or len(dtype) == 0:
+            dtype = None
+        elif len(dtypes) == 1:
+            dtype = dtypes[0]
+    return device, dtype, non_blocking, convert_to_format

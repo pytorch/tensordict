@@ -700,12 +700,12 @@ MemmapTensor of shape {self.shape}."""
 
     def to(
         self,
-        *args, **kwargs,
+        *args,
+        **kwargs,
     ) -> torch.Tensor | MemmapTensor:
         """Maps a MemmapTensor to a given dtype or device.
 
         Args:
-
             device (torch.device, optional): Destination device when tensors
                 will be used.
             dtype (torch.dtype, optional): the desired floating point or complex dtype of
