@@ -2602,6 +2602,7 @@ class TensorDictBase(MutableMapping):
                 dtype and device for all parameters and buffers in this TensorDict
 
         Keyword Args:
+            non_blocking (bool, optional): whether the operations should be blocking.
             memory_format (torch.memory_format, optional): the desired memory
                 format for 4D parameters and buffers in this module.
             batch_size (torch.Size, optional): resulting batch-size of the
@@ -6928,6 +6929,9 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> T:
+        batch_size = kwargs.pop("batch_size", None)
+        if batch_size is not None:
+            raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
         return LazyStackedTensorDict(
             *[td.to(*args, **kwargs) for td in self.tensordicts],
             stack_dim=self.stack_dim,
@@ -8125,6 +8129,9 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> T:
+        batch_size = kwargs.pop("batch_size", None)
+        if batch_size is not None:
+            raise TypeError(f"Cannot pass batch-size to a {type(self)}.")
         td = self._source.to(*args, **kwargs)
         self_copy = copy(self)
         self_copy._source = td

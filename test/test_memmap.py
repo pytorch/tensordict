@@ -200,6 +200,7 @@ def test_memmap_same_device_as_tensor(device):
     """
     t = torch.tensor([1], device=device)
     m = MemmapTensor.from_tensor(t)
+    assert t.device == torch.device(device)
     assert m.device == torch.device(device)
     for other_device in get_available_devices():
         if other_device != device:

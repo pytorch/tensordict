@@ -678,8 +678,31 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_cast(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td_td = td.to(TensorDict)
-        assert (td == td_td).all()
+        td_device = td.to("cpu:1")
+        assert td_device.device == torch.device("cpu:1")
+        td_dtype = td.to(torch.int)
+        assert all(t.dtype == torch.int for t in td_dtype.values(True, True))
+        td_dtype_device = td.to("cpu:1", torch.int)
+        assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
+        assert td_device.device == torch.device("cpu:1")
+        td_dtype_device = td.to(torch.device("cpu:1"), torch.int)
+        assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
+        assert td_device.device == torch.device("cpu:1")
+        if td_name in ("stacked_td", "unsqueezed_td", "squeezed_td", "permute_td", "nested_stacked_td"):
+            with pytest.raises(TypeError, match="Cannot pass batch-size to a "):
+                td_dtype_device = td.to(torch.device("cpu:1"), torch.int, batch_size=torch.Size([]))
+        else:
+            td_dtype_device = td.to(torch.device("cpu:1"), torch.int, batch_size=torch.Size([]))
+            assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
+            assert td_device.device == torch.device("cpu:1")
+            assert td_dtype_device.batch_size == torch.Size([])
+
+    # Deprecated:
+    # def test_cast(self, td_name, device):
+    #     torch.manual_seed(1)
+    #     td = getattr(self, td_name)(device)
+    #     td_td = td.to(TensorDict)
+    #     assert (td == td_td).all()
 
     def test_broadcast(self, td_name, device):
         torch.manual_seed(1)
@@ -3236,11 +3259,12 @@ class TestTensorDictsRequiresGrad:
         assert new_td.get("b").requires_grad
         assert new_td.batch_size == torch.Size([3, *batch_size])
 
-    def test_cast(self, td_name, device):
-        torch.manual_seed(1)
-        td = getattr(self, td_name)(device)
-        td_td = td.to(TensorDict)
-        assert td_td.get("b").requires_grad
+    # Deprecated
+    # def test_cast(self, td_name, device):
+    #     torch.manual_seed(1)
+    #     td = getattr(self, td_name)(device)
+    #     td_td = td.to(TensorDict)
+    #     assert td_td.get("b").requires_grad
 
     def test_clone_td(self, td_name, device):
         torch.manual_seed(1)

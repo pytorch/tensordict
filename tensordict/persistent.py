@@ -690,31 +690,33 @@ class PersistentTensorDict(TensorDictBase):
         )
 
     def to(
-        self, dest: DeviceType | torch.Size | type, **kwargs: Any
+        self, *args, **kwargs: Any
     ) -> PersistentTensorDict:
-        if isinstance(dest, type) and issubclass(dest, TensorDictBase):
-            if isinstance(self, dest):
-                return self
-            td = dest(source=self, **kwargs)
-            return td
-        elif isinstance(dest, (torch.device, str, int)):
-            # must be device
-            dest = torch.device(dest)
-            if self.device is not None and dest == self.device:
-                return self
-            out = self.clone(False)
-            out._device = dest
-            for key, nested in list(out._nested_tensordicts.items()):
-                out._nested_tensordicts[key] = nested.to(dest)
-            return out
-        elif isinstance(dest, torch.Size):
-            self.batch_size = dest
-            return self
-        else:
-            raise NotImplementedError(
-                f"dest must be a string, torch.device or a TensorDict "
-                f"instance, {dest} not allowed"
-            )
+        batch_size = kwargs.pop("batch_size", None)
+        other = kwargs.pop("other", None)
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+            *args, **kwargs
+        )
+        if other is not None:
+            if device is not None and device != other.device:
+                raise ValueError("other and device cannot be both passed")
+            device = other.device
+            dtypes = {val.dtype for val in other.values(True, True)}
+            if len(dtypes) > 1 or len(dtype) == 0:
+                dtype = None
+            elif len(dtypes) == 1:
+                dtype = dtypes[0]
+        if dtype is not None:
+            return self.to_tensordict().to(*args, batch_size=batch_size, **kwargs)
+        result = self
+        if device is not None:
+            result = result.clone(False)
+            result._device = device
+            for key, nested in list(result._nested_tensordicts.items()):
+                result._nested_tensordicts[key] = nested.to(device)
+        if batch_size is not None:
+            result.batch_size = batch_size
+        return result
 
     def _to_numpy(self, value):
         if hasattr(value, "requires_grad") and value.requires_grad:
