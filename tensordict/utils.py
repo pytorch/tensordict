@@ -1271,8 +1271,8 @@ def _parse_to(*args, **kwargs):
             raise ValueError("other and device cannot be both passed")
         device = other.device
         dtypes = {val.dtype for val in other.values(True, True)}
-        if len(dtypes) > 1 or len(dtype) == 0:
+        if len(dtypes) > 1 or len(dtypes) == 0:
             dtype = None
         elif len(dtypes) == 1:
-            dtype = dtypes[0]
+            dtype = list(dtypes)[0]
     return device, dtype, non_blocking, convert_to_format, batch_size

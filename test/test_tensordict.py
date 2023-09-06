@@ -675,19 +675,55 @@ class TestTensorDicts(TestTensorDictsBase):
         assert new_td_iterable.batch_size == expected_size
         assert all((_new_td == td).all() for _new_td in new_td_iterable)
 
-    def test_cast(self, td_name, device):
+    def test_cast_to(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         td_device = td.to("cpu:1")
         assert td_device.device == torch.device("cpu:1")
         td_dtype = td.to(torch.int)
         assert all(t.dtype == torch.int for t in td_dtype.values(True, True))
+        del td_dtype
+        # device (str), dtype
         td_dtype_device = td.to("cpu:1", torch.int)
         assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
-        assert td_device.device == torch.device("cpu:1")
+        assert td_dtype_device.device == torch.device("cpu:1")
+        del td_dtype_device
+        # device, dtype
         td_dtype_device = td.to(torch.device("cpu:1"), torch.int)
         assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
-        assert td_device.device == torch.device("cpu:1")
+        assert td_dtype_device.device == torch.device("cpu:1")
+        del td_dtype_device
+        # example tensor
+        td_dtype_device = td.to(torch.randn(3, dtype=torch.half, device="cpu:1"))
+        assert all(t.dtype == torch.half for t in td_dtype_device.values(True, True))
+        # tensor on cpu:1 is actually on cpu. This is still meaningful for tensordicts on cuda.
+        assert td_dtype_device.device == torch.device("cpu")
+        del td_dtype_device
+        # example td
+        td_dtype_device = td.to(
+            other=TensorDict(
+                {"a": torch.randn(3, dtype=torch.half, device="cpu:1")},
+                [],
+                device="cpu:1",
+            )
+        )
+        assert all(t.dtype == torch.half for t in td_dtype_device.values(True, True))
+        assert td_dtype_device.device == torch.device("cpu:1")
+        del td_dtype_device
+        # example td, many dtypes
+        td_nodtype_device = td.to(
+            other=TensorDict(
+                {"a": torch.randn(3, dtype=torch.half, device="cpu:1"),
+                 "b": torch.randint(10, ())
+                 },
+                [],
+                device="cpu:1",
+            )
+        )
+        assert all(t.dtype != torch.half for t in td_nodtype_device.values(True, True))
+        assert td_nodtype_device.device == torch.device("cpu:1")
+        del td_nodtype_device
+        # batch-size: check errors (or not)
         if td_name in (
             "stacked_td",
             "unsqueezed_td",
@@ -704,8 +740,22 @@ class TestTensorDicts(TestTensorDictsBase):
                 torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
             )
             assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
-            assert td_device.device == torch.device("cpu:1")
+            assert td_dtype_device.device == torch.device("cpu:1")
             assert td_dtype_device.batch_size == torch.Size([])
+            del td_dtype_device
+        if td_name in (
+            "stacked_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "permute_td",
+            "nested_stacked_td",
+        ):
+            with pytest.raises(TypeError, match="Cannot pass batch-size to a "):
+                td.to(batch_size=torch.Size([]))
+        else:
+            td_batchsize = td.to(batch_size=torch.Size([]))
+            assert td_batchsize.batch_size == torch.Size([])
+            del td_batchsize
 
     # Deprecated:
     # def test_cast(self, td_name, device):
