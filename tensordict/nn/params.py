@@ -27,7 +27,7 @@ from tensordict.tensordict import (
     TD_HANDLED_FUNCTIONS,
     TensorDict,
 )
-from tensordict.utils import DeviceType, erase_cache, IndexType, NestedKey
+from tensordict.utils import erase_cache, IndexType, NestedKey
 from torch import multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
 
@@ -436,8 +436,8 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     __getitems__ = __getitem__
 
-    def to(self, dest: DeviceType | type | torch.Size, **kwargs) -> TensorDictBase:
-        params = self._param_td.to(dest)
+    def to(self, *args, **kwargs) -> TensorDictBase:
+        params = self._param_td.to(*args, **kwargs)
         if params is self._param_td:
             return self
         return TensorDictParams(params)

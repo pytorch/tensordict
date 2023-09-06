@@ -12,7 +12,7 @@ import re
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Optional, Union
+from typing import Any, Optional, Tuple, Union
 
 import pytest
 import torch
@@ -1676,7 +1676,7 @@ class TestNesting:
     @tensorclass
     class TensorClass:
         tens: torch.Tensor
-        order: tuple[str]
+        order: Tuple[str]
         test: str
 
     def get_nested(self):
