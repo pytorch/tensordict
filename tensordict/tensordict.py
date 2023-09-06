@@ -372,8 +372,13 @@ class TensorDictBase(MutableMapping):
         self.__dict__.update(state)
 
     @staticmethod
-    def from_module(module):
+    def from_module(module, as_module: bool = False):
         """Copies the params and buffers of a module in a tensordict.
+
+        Args:
+            as_module (bool, optional): if ``True``, a :class:`tensordict.nn.TensorDictParams`
+                instance will be returned which can be used to store parameters
+                within a :class:`torch.nn.Module`. Defaults to ``False``.
 
         Examples:
             >>> from torch import nn
@@ -390,10 +395,17 @@ class TensorDictBase(MutableMapping):
                 device=None,
                 is_shared=False)
         """
-        td = TensorDict(dict(module.named_parameters()), [])
-        td.update(dict(module.named_buffers()))
-        td = td.unflatten_keys(".")
+        td_struct = {k: {} for k in dict(module.named_modules()).keys()}
+        del td_struct[""]
+        td_struct = TensorDict(td_struct, []).unflatten_keys(".")
+        td_params = TensorDict(dict(module.named_parameters()), []).unflatten_keys(".")
+        td_buffers = TensorDict(dict(module.named_buffers()), []).unflatten_keys(".")
+        td = td_struct.update(td_params).update(td_buffers)
         td.lock_()
+        if as_module:
+            from tensordict.nn import TensorDictParams
+
+            return TensorDictParams(td, no_convert=True)
         return td
 
     @property
@@ -3329,7 +3341,11 @@ class TensorDictBase(MutableMapping):
 
         keys = set(out.keys())
         for key, list_of_keys in to_unflatten.items():
-            if key in keys:
+            # if the key is present and either (1) it is not a tensor collection or (2) it is but it's not empty, then we raise an error.
+            if key in keys and (
+                not is_tensor_collection(out.get(key)) or not out.get(key).is_empty()
+            ):
+                print(out.get(key))
                 raise KeyError(
                     "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
@@ -3594,7 +3610,8 @@ class TensorDictBase(MutableMapping):
         return self.exclude(*self.keys(True, True))
 
     def is_empty(self) -> bool:
-        for _ in self.keys():
+        """Checks if the tensordict contains any leaf."""
+        for _ in self.keys(True, True):
             return False
         return True
 
@@ -4435,11 +4452,11 @@ class TensorDict(TensorDictBase):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        if not self._tensordict.keys():
-            raise Exception(
-                "memmap_() must be called when the TensorDict is (partially) "
-                "populated. Set a tensor first."
-            )
+        # if not self._tensordict.keys():
+        #     raise Exception(
+        #         "memmap_() must be called when the TensorDict is (partially) "
+        #         "populated. Set a tensor first."
+        #     )
         for key, value in self.items():
             if value.requires_grad:
                 raise Exception(

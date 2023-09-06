@@ -5960,12 +5960,27 @@ class TestLock:
 
 
 @pytest.mark.parametrize("memmap", [True, False])
-def test_from_module(memmap):
-    net = nn.Transformer()
-    td = TensorDict.from_module(net)
+@pytest.mark.parametrize("params", [False, True])
+def test_from_module(memmap, params):
+    net = nn.Transformer(
+        d_model=16,
+        nhead=2,
+        num_encoder_layers=3,
+        dim_feedforward=12,
+    )
+    td = TensorDict.from_module(net, as_module=params)
+    # check that we have empty tensordicts, reflecting modules wihout params
+    for subtd in td.values(True):
+        if isinstance(subtd, TensorDictBase) and subtd.is_empty():
+            break
+    else:
+        raise RuntimeError
     if memmap:
         td = td.detach().memmap_()
     net.load_state_dict(td.flatten_keys("."))
+
+    if not memmap and params:
+        assert set(td.parameters()) == set(net.parameters())
 
 
 @pytest.mark.parametrize("batch_size", [None, [3, 4]])
