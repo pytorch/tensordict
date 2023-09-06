@@ -2595,31 +2595,38 @@ class TensorDictBase(MutableMapping):
         tensor dtype.
 
         Args:
-            device (torch.device, optional): the desired device of the parameters
-                and buffers in this module
+            device (torch.device, optional): the desired device of the tensordict.
             dtype (torch.dtype, optional): the desired floating point or complex dtype of
-                the parameters and buffers in this module
+                the tensordict.
             tensor (torch.Tensor, optional): Tensor whose dtype and device are the desired
-                dtype and device for all parameters and buffers in this TensorDict
+                dtype and device for all tensors in this TensorDict.
 
         Keyword Args:
             non_blocking (bool, optional): whether the operations should be blocking.
             memory_format (torch.memory_format, optional): the desired memory
-                format for 4D parameters and buffers in this module.
+                format for 4D parameters and buffers in this tensordict.
             batch_size (torch.Size, optional): resulting batch-size of the
                 output tensordict.
             other (TensorDictBase, optional): TensorDict instance whose dtype
-                and device are the desired
-                dtype and device for all parameters and buffers in this TensorDict.
-                .. note:: Since tensordict do not have a dtype, the dtype is gathered
-                    from the leaves. If there are more than one dtype, then no dtype
-                    casting is achieved.
+                and device are the desired dtype and device for all tensors
+                in this TensorDict.
+                .. note:: Since :class:`TensorDictBase` instances do not have
+                    a dtype, the dtype is gathered from the example leaves.
+                    If there are more than one dtype, then no dtype
+                    casting is undertook.
 
         Returns:
             a new tensordict instance if the device differs from the tensordict
             device and/or if the dtype is passed. The same tensordict otherwise.
             ``batch_size`` only modifications are done in-place.
 
+        Examples:
+            >>> data = TensorDict({"a": 1.0}, [], device=None)
+            >>> data_cuda = data.to("cuda:0")  # casts to cuda
+            >>> data_int = data.to(torch.int)  # casts to int
+            >>> data_cuda_int = data.to("cuda:0", torch.int)  # multiple casting
+            >>> data_cuda = data.to(torch.randn(3, device="cuda:0"))  # using an example tensor
+            >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # using a tensordict example
         """
         raise NotImplementedError
 
