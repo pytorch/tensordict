@@ -713,9 +713,10 @@ class TestTensorDicts(TestTensorDictsBase):
         # example td, many dtypes
         td_nodtype_device = td.to(
             other=TensorDict(
-                {"a": torch.randn(3, dtype=torch.half, device="cpu:1"),
-                 "b": torch.randint(10, ())
-                 },
+                {
+                    "a": torch.randn(3, dtype=torch.half, device="cpu:1"),
+                    "b": torch.randint(10, ()),
+                },
                 [],
                 device="cpu:1",
             )
