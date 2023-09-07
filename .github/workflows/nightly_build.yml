@@ -148,38 +148,6 @@ jobs:
           pytest test/smoke_test.py -v --durations 200
           exit $EXIT_STATUS
 
-  build-wheel-mac-m1:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
-    runs-on: osx-arm64
-    strategy:
-      matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python_version[1] }}
-          architecture: x64
-      - name: Checkout tensordict
-        uses: actions/checkout@v2
-      - name: Install PyTorch nightly
-        run: |
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-      - name: Build tensordict Nightly
-        run: |
-          rm -r dist || true
-          export CC=clang CXX=clang++
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --package_name tensordict-nightly \
-            --python-tag=${{ matrix.python-tag }}
-      - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v2
-        with:
-          name: tensordict-mac-${{ matrix.python_version[0] }}.whl
-          path: dist/*.whl
-
   test-wheel-mac-m1:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch-labs'
