@@ -32,6 +32,8 @@ from typing import (
     TypeVar,
     Union,
 )
+from functorch import dim
+
 from warnings import warn
 
 import numpy as np
@@ -4452,11 +4454,6 @@ class TensorDict(TensorDictBase):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        # if not self._tensordict.keys():
-        #     raise Exception(
-        #         "memmap_() must be called when the TensorDict is (partially) "
-        #         "populated. Set a tensor first."
-        #     )
         for key, value in self.items():
             if value.requires_grad:
                 raise Exception(

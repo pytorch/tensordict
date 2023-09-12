@@ -29,6 +29,7 @@ from tensordict._tensordict import (  # noqa: F401
     unravel_keys,  # noqa: F401
 )
 from torch import Tensor
+from functorch import dim as ftdim
 
 if TYPE_CHECKING:
     from tensordict.memmap import MemmapTensor
@@ -150,7 +151,7 @@ def _getitem_batch_size(batch_size, index):
                     out.extend(bs_shape)
                 bs_shape = None
             continue
-        elif isinstance(idx, int):
+        elif isinstance(idx, (int, ftdim.Dim)):
             # could be spared for efficiency
             continue
         elif isinstance(idx, slice):
@@ -761,9 +762,12 @@ def _is_shared(tensor: torch.Tensor) -> bool:
         if torch._C._functorch.is_batchedtensor(tensor):
             return None
         return tensor.is_shared()
+    if isinstance(tensor, ftdim.Tensor):
+        return None
     elif isinstance(tensor, KeyedJaggedTensor):
         return False
     else:
+        print(type(tensor))
         return tensor.is_shared()
 
 
