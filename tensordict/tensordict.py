@@ -1389,7 +1389,7 @@ class TensorDictBase(MutableMapping):
 
         """
         return self.apply(fn, *others, inplace=True)
-    @profile
+
     def apply(
         self,
         fn: Callable,
@@ -4553,7 +4553,6 @@ class TensorDict(TensorDictBase):
 
         return out
 
-    @profile
     def to(self, *args, **kwargs: Any) -> T:
         device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
             *args, **kwargs
