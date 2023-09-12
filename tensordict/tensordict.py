@@ -1389,7 +1389,7 @@ class TensorDictBase(MutableMapping):
 
         """
         return self.apply(fn, *others, inplace=True)
-
+    @profile
     def apply(
         self,
         fn: Callable,
@@ -4553,14 +4553,18 @@ class TensorDict(TensorDictBase):
 
         return out
 
+    @profile
     def to(self, *args, **kwargs: Any) -> T:
         device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
             *args, **kwargs
         )
         result = self
 
-        if device is not None and dtype is None and device == self.device:
-            return result
+        if device is not None and dtype is None:
+            if device == self.device:
+                return result
+            elif non_blocking:
+                return TensorDict(self._tensordict, device=device, names=self.names, batch_size=batch_size if batch_size is not None else self.batch_size)
 
         if convert_to_format is not None:
 
