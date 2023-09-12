@@ -35,6 +35,7 @@ from typing import (
 from functorch import dim
 
 from warnings import warn
+from functorch import dim as ftdim
 
 import numpy as np
 
@@ -409,6 +410,14 @@ class TensorDictBase(MutableMapping):
 
             return TensorDictParams(td, no_convert=True)
         return td
+
+    def to_module(self, module):
+        children = dict(module.named_children())
+        for key, value in self.items():
+            if _is_tensor_collection(type(value)):
+                value.to_module(children[key])
+            else:
+                module._parameters[key] = value
 
     @property
     def shape(self) -> torch.Size:
@@ -3396,6 +3405,8 @@ class TensorDictBase(MutableMapping):
         else:
 
             def is_boolean(idx):
+                if isinstance(idx, ftdim.Dim):
+                    return None
                 if isinstance(idx, tuple) and len(idx) == 1:
                     return is_boolean(idx[0])
                 if hasattr(idx, "dtype") and idx.dtype is torch.bool:
