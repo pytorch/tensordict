@@ -11,6 +11,7 @@ import warnings
 
 import pytest
 import torch
+from functorch import dim as ftdim
 
 from tensordict import tensorclass, TensorDict
 from tensordict._tensordict import unravel_key_list
@@ -3157,6 +3158,38 @@ class TestAddStateIndependentNormalScale:
         assert loc.shape == (4, 2, num_outputs)
         assert scale.shape == (4, 2, num_outputs)
         assert (scale > 0).all()
+
+
+class TestFunctorchFunctional:
+    def test_func(self):
+        module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
+        params = TensorDict.from_module(module)
+        params = params.detach().clone().zero_()
+        x = torch.ones(3)
+        y = torch.func.functional_call(module, params, x)
+        assert (y == 0).all()
+        torch.testing.assert_close(y, torch.zeros(()).expand_as(y))
+        params.apply_(lambda x: x + 1)
+        y = torch.func.functional_call(module, params, x)
+        torch.testing.assert_close(y, torch.tensor(17.0).expand_as(y))
+
+    @pytest.mark.parametrize("detach", [False, True])
+    def test_func_fcd(self, detach):
+        module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
+        params = TensorDict.from_module(module)
+        b = 5
+        if detach:
+            params = params.detach().expand(b)
+        else:
+            params = params.expand(b).clone()
+        d0 = ftdim.dims(1)
+        params = params[d0]
+        x = torch.ones(3)
+        # this breaks because params components are not real tensors and swap_tensor is unhappy!
+        y = torch.func.functional_call(module, params, x)
+        y_tensor = y._tensor
+        assert y_tensor.shape[0] == b
+        assert y.dim == (d0,)
 
 
 if __name__ == "__main__":
