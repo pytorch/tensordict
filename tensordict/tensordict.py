@@ -32,11 +32,13 @@ from typing import (
     TypeVar,
     Union,
 )
+
 from warnings import warn
 
 import numpy as np
 
 import torch
+from functorch import dim as ftdim
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
 from tensordict.utils import (
@@ -69,7 +71,7 @@ from tensordict.utils import (
     NestedKey,
     prod,
 )
-from torch import distributed as dist, multiprocessing as mp, Tensor
+from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
 
 try:
@@ -407,6 +409,24 @@ class TensorDictBase(MutableMapping):
 
             return TensorDictParams(td, no_convert=True)
         return td
+
+    def to_module(self, module):
+        from tensordict.nn.functional_modules import set_tensor_dict
+
+        __base__setattr__ = nn.Module.__setattr__
+        # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
+        __dict__ = module.__dict__
+
+        for key, value in self.items():
+            cls = value.__class__
+            if _is_tensor_collection(cls) or issubclass(cls, dict):
+                value.to_module(__dict__["_modules"][key])
+            else:
+                if module.__class__.__setattr__ is __base__setattr__:
+                    set_tensor_dict(__dict__, module, key, value)
+                else:
+                    # use specialized __setattr__ if needed
+                    setattr(module, key, value)
 
     @property
     def shape(self) -> torch.Size:
@@ -3394,6 +3414,8 @@ class TensorDictBase(MutableMapping):
         else:
 
             def is_boolean(idx):
+                if isinstance(idx, ftdim.Dim):
+                    return None
                 if isinstance(idx, tuple) and len(idx) == 1:
                     return is_boolean(idx[0])
                 if hasattr(idx, "dtype") and idx.dtype is torch.bool:
@@ -3765,6 +3787,7 @@ _ACCEPTED_CLASSES = [
     Tensor,
     MemmapTensor,
     TensorDictBase,
+    ftdim.Tensor,
 ]
 if _has_torchrec:
     _ACCEPTED_CLASSES += [KeyedJaggedTensor]
@@ -4452,11 +4475,6 @@ class TensorDict(TensorDictBase):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        # if not self._tensordict.keys():
-        #     raise Exception(
-        #         "memmap_() must be called when the TensorDict is (partially) "
-        #         "populated. Set a tensor first."
-        #     )
         for key, value in self.items():
             if value.requires_grad:
                 raise Exception(
@@ -6393,7 +6411,13 @@ class LazyStackedTensorDict(TensorDictBase):
                 continue
             if cursor == self.stack_dim:
                 # we need to check which tds need to be indexed
-                if isinstance(idx, slice) or _is_number(idx):
+                if isinstance(idx, ftdim.Dim):
+                    raise ValueError(
+                        "Cannot index a lazy stacked tensordict along the stack dimension with "
+                        "a first-class dimension index. Consider consolidating the tensordict first "
+                        "using `tensordict.contiguous()`."
+                    )
+                elif isinstance(idx, slice) or _is_number(idx):
                     selected_td_idx = range(len(self.tensordicts))[idx]
                     if not isinstance(selected_td_idx, range):
                         isinteger = True
@@ -6425,6 +6449,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     idx,
                     (
                         int,
+                        ftdim.Dim,
                         slice,
                         list,
                         range,
@@ -7237,54 +7262,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 out = torch.stack(out, new_stack_dim)
                 out._td_dim_name = self._td_dim_name
                 return out
-
-        # index_dict = _convert_index_lazystack(index, self.stack_dim, self.batch_size)
-        # if index_dict is None:
-        #     # then we use a sub-tensordict
-        #     return self.get_sub_tensordict(index)
-        # td_index = index_dict["remaining_index"]
-        # stack_index = index_dict["stack_index"]
-        # new_stack_dim = index_dict["new_stack_dim"]
-        # if new_stack_dim is not None:
-        #     if isinstance(stack_index, slice):
-        #         # we can't iterate but we can index the list directly
-        #         out = LazyStackedTensorDict(
-        #             *[td[td_index] for td in self.tensordicts[stack_index]],
-        #             stack_dim=new_stack_dim,
-        #         )
-        #     elif isinstance(stack_index, (list, range)):
-        #         # then we can iterate
-        #         out = LazyStackedTensorDict(
-        #             *[self.tensordicts[idx][td_index] for idx in stack_index],
-        #             stack_dim=new_stack_dim,
-        #         )
-        #     elif isinstance(stack_index, Tensor):
-        #         # td_index is a nested tuple that mimics the shape of stack_index
-        #         def _nested_stack(t: list, stack_idx: Tensor, td_index):
-        #             if stack_idx.ndim:
-        #                 out = LazyStackedTensorDict(
-        #                     *[
-        #                         _nested_stack(t, _idx, td_index[i])
-        #                         for i, _idx in enumerate(stack_idx.unbind(0))
-        #                     ],
-        #                     stack_dim=new_stack_dim,
-        #                 )
-        #                 return out
-        #             return t[stack_idx][td_index]
-        #
-        #         # print(index, td_index, stack_index)
-        #         out = _nested_stack(self.tensordicts, stack_index, td_index)
-        #     else:
-        #         raise TypeError("Invalid index used for stack dimension.")
-        #     out._td_dim_name = self._td_dim_name
-        #     return out
-        # out = self.tensordicts[stack_index]
-        # if td_index:
-        #     return out[td_index]
-        # return out
-
-    # def __hash__(self):
-    #     return hash(self.tensordicts)
 
     def __eq__(self, other):
         if is_tensorclass(other):
@@ -8948,7 +8925,7 @@ def _clone_value(value: CompatibleType, recurse: bool) -> CompatibleType:
 
 
 def _is_number(item):
-    if isinstance(item, Number):
+    if isinstance(item, (Number, ftdim.Dim)):
         return True
     if isinstance(item, Tensor) and item.ndim == 0:
         return True
