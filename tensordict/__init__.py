@@ -51,3 +51,6 @@ __all__ = [
 ]
 
 # from tensordict._pytree import *
+
+# execute patch
+from ._functional_patch import *
