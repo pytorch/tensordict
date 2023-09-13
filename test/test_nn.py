@@ -3189,7 +3189,27 @@ class TestFunctorchFunctional:
         y = torch.func.functional_call(module, params, x)
         y_tensor = y._tensor
         assert y_tensor.shape[0] == b
-        assert y.dim == (d0,)
+        assert y.dims == (d0,)
+
+    @pytest.mark.parametrize("detach", [False, True])
+    def test_tdfunc_fcd(self, detach):
+        module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
+        params = TensorDict.from_module(module)
+        b = 5
+        if detach:
+            params = params.detach().expand(b)
+        else:
+            params = params.expand(b).clone()
+        d0 = ftdim.dims(1)
+        params = params[d0]
+        x = torch.ones(3)
+        make_functional(module)
+        y = module(x, params)
+        y_tensor = y._tensor
+        assert y_tensor.shape[0] == b
+        assert y.dims == (d0,)
+        y2 = module(x, params=params)
+        assert (y._tensor == y2._tensor).all()
 
 
 if __name__ == "__main__":
