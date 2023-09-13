@@ -20,6 +20,7 @@ from typing import Any, Callable, List, Sequence, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
 import torch
+from functorch import dim as ftdim
 
 from packaging.version import parse
 from tensordict._tensordict import (  # noqa: F401
@@ -29,7 +30,6 @@ from tensordict._tensordict import (  # noqa: F401
     unravel_keys,  # noqa: F401
 )
 from torch import Tensor
-from functorch import dim as ftdim
 
 if TYPE_CHECKING:
     from tensordict.memmap import MemmapTensor

@@ -13,6 +13,7 @@ from functools import wraps
 from typing import Any, Callable, Iterator, Sequence
 
 import torch
+from functorch import dim as ftdim
 
 from tensordict import TensorDictBase
 from tensordict.nn.utils import Buffer
@@ -72,7 +73,7 @@ def _get_args_dict(func, args, kwargs):
 
 def _maybe_make_param(tensor):
     if (
-        isinstance(tensor, Tensor)
+        isinstance(tensor, (Tensor, ftdim.Tensor))
         and not isinstance(tensor, nn.Parameter)
         and tensor.dtype in (torch.float, torch.double, torch.half)
     ):
@@ -82,7 +83,7 @@ def _maybe_make_param(tensor):
 
 def _maybe_make_param_or_buffer(tensor):
     if (
-        isinstance(tensor, Tensor)
+        isinstance(tensor, (Tensor, ftdim.Tensor))
         and not isinstance(tensor, nn.Parameter)
         and tensor.dtype in (torch.float, torch.double, torch.half)
     ):
@@ -319,7 +320,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         if kwargs is None:
             kwargs = {}
         if func not in TDPARAM_HANDLED_FUNCTIONS or not all(
-            issubclass(t, (Tensor, TensorDictBase)) for t in types
+            issubclass(t, (Tensor, ftdim.Tensor, TensorDictBase)) for t in types
         ):
             return NotImplemented
         return TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
