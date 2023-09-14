@@ -815,11 +815,8 @@ class TensorDictBase(MutableMapping):
         state_dict = copy(state_dict)
         self.batch_size = state_dict.pop("__batch_size")
         device = state_dict.pop("__device", None)
-        if device is not None:
-            if device != self.device:
-                raise RuntimeError(
-                    "Loading data from another device is not yet supproted."
-                )
+        if device is not None and self.device is not None and device != self.device:
+            raise RuntimeError("Loading data from another device is not yet supported.")
 
         for key, item in state_dict.items():
             if isinstance(item, dict):
