@@ -1352,7 +1352,9 @@ def test_torchsnapshot(tmp_path):
     assert isinstance(tc.y.x, MemmapTensor)
     assert tc.z == z
 
-    app_state = {"state": torchsnapshot.StateDict(tensordict=tc.state_dict())}
+    app_state = {
+        "state": torchsnapshot.StateDict(tensordict=tc.state_dict(keep_vars=True))
+    }
     snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmp_path))
 
     tc_dest = MyClass(
@@ -1363,7 +1365,9 @@ def test_torchsnapshot(tmp_path):
     )
     tc_dest.memmap_()
     assert isinstance(tc_dest.y.x, MemmapTensor)
-    app_state = {"state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict())}
+    app_state = {
+        "state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict(keep_vars=True))
+    }
     snapshot.restore(app_state=app_state)
 
     assert (tc_dest == tc).all()
