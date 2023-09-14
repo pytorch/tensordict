@@ -376,7 +376,7 @@ class TensorDictBase(MutableMapping):
         """Copies the params and buffers of a module in a tensordict.
 
         Args:
-            as_module (bool, optional): if ``True``, a :class:`tensordict.nn.TensorDictParams`
+            as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
                 instance will be returned which can be used to store parameters
                 within a :class:`torch.nn.Module`. Defaults to ``False``.
 
@@ -704,13 +704,13 @@ class TensorDictBase(MutableMapping):
         to rebuild the tensordict (names are currently not supported).
 
         Args:
-            destination (dict, optional): If provided, the state of module will
+            destination (dict, optional): If provided, the state of tensordict will
                 be updated into the dict and the same object is returned.
                 Otherwise, an ``OrderedDict`` will be created and returned.
                 Default: ``None``.
-            prefix (str, optional): a prefix added to parameter and buffer
+            prefix (str, optional): a prefix added to tensor
                 names to compose the keys in state_dict. Default: ``''``.
-            keep_vars (bool, optional): by default the :class:`~torch.Tensor` s
+            keep_vars (bool, optional): by default the :class:`torch.Tensor` s
                 returned in the state dict are detached from autograd. If it's
                 set to ``True``, detaching will not be performed.
                 Default: ``False``.
@@ -766,11 +766,11 @@ class TensorDictBase(MutableMapping):
         Args:
             state_dict (OrderedDict): the state_dict of to be copied.
             strict (bool, optional): whether to strictly enforce that the keys
-                in :attr:`state_dict` match the keys returned by this module's
-                :meth:`~torch.nn.Module.state_dict` function. Default: ``True``
+                in :attr:`state_dict` match the keys returned by this tensordict's
+                :meth:`torch.nn.Module.state_dict` function. Default: ``True``
             assign (bool, optional): whether to assign items in the state
                 dictionary to their corresponding keys in the tensordict instead
-                of copying them inplace into the module's current parameters and buffers.
+                of copying them inplace into the tensordict's current tensors.
                 When ``False``, the properties of the tensors in the current
                 module are preserved while when ``True``, the properties of the
                 Tensors in the state dict are preserved.
@@ -2522,7 +2522,7 @@ class TensorDictBase(MutableMapping):
             **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
 
         Returns:
-            A :class:`PersitentTensorDict` instance linked to the newly created file.
+            A :class:`~.tensordict.PersitentTensorDict` instance linked to the newly created file.
 
         Examples:
             >>> import tempfile
@@ -2660,7 +2660,7 @@ class TensorDictBase(MutableMapping):
                 TensorDict will be copied too. Default is `True`.
 
         .. note::
-          For some TensorDictBase subtypes, such as :class:`SubTensorDict`, cloning
+          For some TensorDictBase subtypes, such as :class:`~.tensordict.SubTensorDict`, cloning
           recursively makes little sense (in this specific case it would involve
           copying the parent tensordict too). In those cases, :meth:`~.clone` will
           fall back onto :meth:`~.to_tensordict`.
@@ -2732,7 +2732,7 @@ class TensorDictBase(MutableMapping):
             other (TensorDictBase, optional): TensorDict instance whose dtype
                 and device are the desired dtype and device for all tensors
                 in this TensorDict.
-                .. note:: Since :class:`TensorDictBase` instances do not have
+                .. note:: Since :class:`~tensordict.TensorDictBase` instances do not have
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
                     casting is undertook.
@@ -4040,7 +4040,7 @@ class TensorDict(TensorDictBase):
 
     @classmethod
     def from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
-        """Returns a TensorDict created from a dictionary or another :class:`TensorDict`.
+        """Returns a TensorDict created from a dictionary or another :class:`~.tensordict.TensorDict`.
 
         If ``batch_size`` is not specified, returns the maximum batch size possible.
 
@@ -5974,8 +5974,8 @@ torch.Size([3, 2])
 
         Args:
             recurse (bool, optional): if ``True`` (default), a regular
-                :class:`TensorDict` instance will be created from the :class:`SubTensorDict`.
-                Otherwise, another :class:`SubTensorDict` with identical content
+                :class:`~.tensordict.TensorDict` instance will be created from the :class:`~.tensordict.SubTensorDict`.
+                Otherwise, another :class:`~.tensordict.SubTensorDict` with identical content
                 will be returned.
 
         Examples:
@@ -8233,8 +8233,8 @@ class _CustomOpTensorDict(TensorDictBase):
 
         Args:
             recurse (bool, optional): if ``True`` (default), a regular
-                :class:`TensorDict` instance will be returned.
-                Otherwise, another :class:`SubTensorDict` with identical content
+                :class:`~.tensordict.TensorDict` instance will be returned.
+                Otherwise, another :class:`~.tensordict.SubTensorDict` with identical content
                 will be returned.
         """
         if not recurse:
@@ -8917,17 +8917,17 @@ def dense_stack_tds(
     td_list: Sequence[TensorDictBase] | LazyStackedTensorDict,
     dim: int = None,
 ) -> T:
-    """Densely stack a list of :class:`tensordict.TensorDictBase` objects (or a :class:`tensordict.LazyStackedTensorDict`) given that they have the same structure.
+    """Densely stack a list of :class:`~tensordict.TensorDictBase` objects (or a :class:`~tensordict.LazyStackedTensorDict`) given that they have the same structure.
 
-    This function is called with a list of :class:`tensordict.TensorDictBase` (either passed directly or obtrained from
-    a :class:`tensordict.LazyStackedTensorDict`).
-    Instead of calling ``torch.stack(td_list)``, which would return a :class:`tensordict.LazyStackedTensorDict`,
+    This function is called with a list of :class:`~tensordict.TensorDictBase` (either passed directly or obtrained from
+    a :class:`~tensordict.LazyStackedTensorDict`).
+    Instead of calling ``torch.stack(td_list)``, which would return a :class:`~tensordict.LazyStackedTensorDict`,
     this function expands the first element of the input list and stacks the input list onto that element.
     This works only when all the elements of the input list have the same structure.
-    The :class:`tensordict.TensorDictBase` returned will have the same type of the elements of the input list.
+    The :class:`~tensordict.TensorDictBase` returned will have the same type of the elements of the input list.
 
-    This function is useful when some of the :class:`tensordict.TensorDictBase` objects that need to be stacked
-    are :class:`tensordict.LazyStackedTensorDict` or have :class:`tensordict.LazyStackedTensorDict`
+    This function is useful when some of the :class:`~tensordict.TensorDictBase` objects that need to be stacked
+    are :class:`~tensordict.LazyStackedTensorDict` or have :class:`~tensordict.LazyStackedTensorDict`
     among entries (or nested entries).
     In those cases, calling ``torch.stack(td_list).to_tensordict()`` is infeasible.
     Thus, this function provides an alternative for densely stacking the list provided.
