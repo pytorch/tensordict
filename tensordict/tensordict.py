@@ -732,13 +732,13 @@ class TensorDictBase(MutableMapping):
         if flatten:
             source = source.flatten_keys(".")
         for key, item in source.items():
-            out[prefix + key] = (
-                item
-                if keep_vars
-                else item.detach().clone()
-                if not _is_tensor_collection(item.__class__)
-                else item.state_dict(keep_vars=keep_vars)
-            )
+            if not _is_tensor_collection(item.__class__):
+                if not keep_vars:
+                    out[prefix + key] = item.detach().clone()
+                else:
+                    out[prefix + key] = item
+            else:
+                out[prefix + key] = item.state_dict(keep_vars=keep_vars)
         if "__batch_size" in out:
             raise KeyError(
                 "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
@@ -747,8 +747,8 @@ class TensorDictBase(MutableMapping):
             raise KeyError(
                 "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
             )
-        out[prefix + "__batch_size"] = self.batch_size
-        out[prefix + "__device"] = self.device
+        out[prefix + "__batch_size"] = source.batch_size
+        out[prefix + "__device"] = source.device
         if destination is not None:
             destination.update(out)
             return destination
@@ -816,7 +816,9 @@ class TensorDictBase(MutableMapping):
         self.batch_size = state_dict.pop("__batch_size")
         device = state_dict.pop("__device", None)
         if device is not None:
-            self.to(device)
+            if device != self.device:
+                raise RuntimeError("Loading data from another device is not yet supproted.")
+
         for key, item in state_dict.items():
             if isinstance(item, dict):
                 self.set(
