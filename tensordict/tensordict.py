@@ -691,11 +691,17 @@ class TensorDictBase(MutableMapping):
             return self.device.type == "cuda" or self._is_shared
         return self._is_shared
 
-    def state_dict(self) -> OrderedDict[str, Any]:
+    def state_dict(
+        self, destination=None, prefix="", keep_vars=False
+    ) -> OrderedDict[str, Any]:
         out = collections.OrderedDict()
         for key, item in self.apply(memmap_tensor_as_tensor).items():
-            out[key] = (
-                item if not _is_tensor_collection(item.__class__) else item.state_dict()
+            out[prefix + key] = (
+                item
+                if keep_vars
+                else item.detach().clone()
+                if not _is_tensor_collection(item.__class__)
+                else item.state_dict(keep_vars=keep_vars)
             )
         if "__batch_size" in out:
             raise KeyError(
@@ -705,15 +711,18 @@ class TensorDictBase(MutableMapping):
             raise KeyError(
                 "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
             )
-        out["__batch_size"] = self.batch_size
-        out["__device"] = self.device
+        out[prefix + "__batch_size"] = self.batch_size
+        out[prefix + "__device"] = self.device
+        if destination is not None:
+            destination.update(out)
+            return destination
         return out
 
     def load_state_dict(self, state_dict: OrderedDict[str, Any]) -> T:
         # copy since we'll be using pop
         state_dict = copy(state_dict)
         self.batch_size = state_dict.pop("__batch_size")
-        device = state_dict.pop("__device")
+        device = state_dict.pop("__device", None)
         if device is not None:
             self.to(device)
         for key, item in state_dict.items():
