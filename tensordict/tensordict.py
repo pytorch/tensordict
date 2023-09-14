@@ -817,7 +817,9 @@ class TensorDictBase(MutableMapping):
         device = state_dict.pop("__device", None)
         if device is not None:
             if device != self.device:
-                raise RuntimeError("Loading data from another device is not yet supproted.")
+                raise RuntimeError(
+                    "Loading data from another device is not yet supproted."
+                )
 
         for key, item in state_dict.items():
             if isinstance(item, dict):
