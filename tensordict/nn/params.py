@@ -750,7 +750,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         )
         return sd
 
-    def load_state_dict(self, state_dict: OrderedDict[str, Any], *Args, **kwargs):
+    def load_state_dict(
+        self, state_dict: OrderedDict[str, Any], strict=True, assign=False
+    ):
         state_dict_tensors = {}
         state_dict = dict(state_dict)
         for k, v in list(state_dict.items()):
@@ -760,7 +762,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         state_dict_tensors = dict(
             TensorDict(state_dict_tensors, []).unflatten_keys(".")
         )
-        self.data.load_state_dict({**state_dict_tensors, **state_dict}, *Args, **kwargs)
+        self.data.load_state_dict(
+            {**state_dict_tensors, **state_dict}, strict=True, assign=False
+        )
         return self
 
     def _load_from_state_dict(

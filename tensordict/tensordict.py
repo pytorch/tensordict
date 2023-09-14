@@ -692,10 +692,46 @@ class TensorDictBase(MutableMapping):
         return self._is_shared
 
     def state_dict(
-        self, destination=None, prefix="", keep_vars=False
+        self,
+        destination=None,
+        prefix="",
+        keep_vars=False,
+        flatten=False,
     ) -> OrderedDict[str, Any]:
+        """Produces a state_dict from the tensordict. The structure of the state-dict will still be nested, unless ``flatten`` is set to ``True``.
+
+        A tensordict state-dict contains all the tensors and meta-data needed
+        to rebuild the tensordict (names are currently not supported).
+
+        Args:
+            destination (dict, optional): If provided, the state of module will
+                be updated into the dict and the same object is returned.
+                Otherwise, an ``OrderedDict`` will be created and returned.
+                Default: ``None``.
+            prefix (str, optional): a prefix added to parameter and buffer
+                names to compose the keys in state_dict. Default: ``''``.
+            keep_vars (bool, optional): by default the :class:`~torch.Tensor` s
+                returned in the state dict are detached from autograd. If it's
+                set to ``True``, detaching will not be performed.
+                Default: ``False``.
+            flatten (bool, optional): whether the structure should be flattened
+                with the ``"."`` character or not.
+                Defaults to ``False``.
+
+        Examples:
+            >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
+            >>> sd = data.state_dict()
+            >>> print(sd)
+            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3', OrderedDict([('3', tensor(3)), ('__batch_size', torch.Size([])), ('__device', None)])), ('__batch_size', torch.Size([])), ('__device', None)])
+            >>> sd = data.state_dict(flatten=True)
+            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3.3', tensor(3)), ('__batch_size', torch.Size([])), ('__device', None)])
+
+        """
         out = collections.OrderedDict()
-        for key, item in self.apply(memmap_tensor_as_tensor).items():
+        source = self.apply(memmap_tensor_as_tensor)
+        if flatten:
+            source = source.flatten_keys(".")
+        for key, item in source.items():
             out[prefix + key] = (
                 item
                 if keep_vars
@@ -718,7 +754,63 @@ class TensorDictBase(MutableMapping):
             return destination
         return out
 
-    def load_state_dict(self, state_dict: OrderedDict[str, Any]) -> T:
+    def load_state_dict(
+        self,
+        state_dict: OrderedDict[str, Any],
+        strict=True,
+        assign=False,
+        from_flatten=False,
+    ) -> T:
+        """Loads a state-dict, formatted as in :meth:`~.state_dict`, into the tensordict.
+
+        Args:
+            state_dict (OrderedDict): the state_dict of to be copied.
+            strict (bool, optional): whether to strictly enforce that the keys
+                in :attr:`state_dict` match the keys returned by this module's
+                :meth:`~torch.nn.Module.state_dict` function. Default: ``True``
+            assign (bool, optional): whether to assign items in the state
+                dictionary to their corresponding keys in the tensordict instead
+                of copying them inplace into the module's current parameters and buffers.
+                When ``False``, the properties of the tensors in the current
+                module are preserved while when ``True``, the properties of the
+                Tensors in the state dict are preserved.
+                Default: ``False``
+            from_flatten (bool, optional): if ``True``, the input state_dict is
+                assumed to be flattened.
+                Defaults to ``False``.
+
+        Examples:
+            >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
+            >>> data_zeroed = TensorDict({"1": 0, "2": 0, "3": {"3": 0}}, [])
+            >>> sd = data.state_dict()
+            >>> data_zeroed.load_state_dict(sd)
+            >>> print(data_zeroed["3", "3"])
+            tensor(3)
+            >>> # with flattening
+            >>> data_zeroed = TensorDict({"1": 0, "2": 0, "3": {"3": 0}}, [])
+            >>> data_zeroed.load_state_dict(data.state_dict(flatten=True), from_flatten=True)
+            >>> print(data_zeroed["3", "3"])
+            tensor(3)
+
+
+        """
+        if from_flatten:
+            self_flatten = self.flatten_keys(".")
+            self_flatten.load_state_dict(state_dict, strict=strict, assign=assign)
+            if not assign:
+                # modifications are done in-place so we should be fine returning self
+                return self
+            else:
+                # run a check over keys, if we any key with a '.' in name we're doomed
+                DOT_ERROR = "Cannot use load_state_dict(..., from_flatten=True, assign=True) when some keys contain a dot character."
+                for key in self.keys(True, True):
+                    if isinstance(key, tuple):
+                        for subkey in key:
+                            if "." in subkey:
+                                raise RuntimeError(DOT_ERROR)
+                    elif "." in key:
+                        raise RuntimeError(DOT_ERROR)
+                return self.update(self_flatten.unflatten_keys("."))
         # copy since we'll be using pop
         state_dict = copy(state_dict)
         self.batch_size = state_dict.pop("__batch_size")
@@ -729,11 +821,20 @@ class TensorDictBase(MutableMapping):
             if isinstance(item, dict):
                 self.set(
                     key,
-                    self.get(key, default=TensorDict({}, [])).load_state_dict(item),
-                    inplace=True,
+                    self.get(key, default=TensorDict({}, [])).load_state_dict(
+                        item, assign=assign, strict=strict
+                    ),
+                    inplace=not assign,
                 )
             else:
-                self.set(key, item, inplace=True)
+                self.set(key, item, inplace=not assign)
+        if strict and set(state_dict.keys()) != set(self.keys()):
+            set_sd = set(state_dict.keys())
+            set_td = set(self.keys())
+            raise RuntimeError(
+                "Cannot load state-dict because the key sets don't match: got "
+                f"state_dict extra keys \n{set_sd-set_td}\n and tensordict extra keys\n{set_td-set_sd}\n"
+            )
         return self
 
     def is_memmap(self) -> bool:
