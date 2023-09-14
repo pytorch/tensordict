@@ -1380,6 +1380,34 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_device.device == torch.device("cuda")
         assert td_back.device == torch.device("cpu")
 
+    def test_state_dict(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sd = td.state_dict()
+        td_zero = td.clone().detach().zero_()
+        td_zero.load_state_dict(sd)
+        assert_allclose_td(td, td_zero)
+
+    def test_state_dict_strict(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sd = td.state_dict()
+        td_zero = td.clone().detach().zero_()
+        del sd["a"]
+        td_zero.load_state_dict(sd, strict=False)
+        with pytest.raises(RuntimeError):
+            td_zero.load_state_dict(sd, strict=True)
+
+    def test_state_dict_assign(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sd = td.state_dict()
+        td_zero = td.clone().detach().zero_()
+        shallow_copy = td_zero.clone(False)
+        td_zero.load_state_dict(sd, assign=True)
+        assert (shallow_copy == 0).all()
+        assert_allclose_td(td, td_zero)
+
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):
         if td_name not in ["sub_td", "idx_td", "td_reset_bs"]:
@@ -5115,7 +5143,11 @@ class TestSnapshot:
         td.memmap_()
         assert isinstance(td["b", "c"], MemmapTensor)
 
-        app_state = {"state": torchsnapshot.StateDict(**{save_name: td.state_dict()})}
+        app_state = {
+            "state": torchsnapshot.StateDict(
+                **{save_name: td.state_dict(keep_vars=True)}
+            )
+        }
         path = f"/tmp/{uuid.uuid4()}"
         snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
@@ -5132,7 +5164,9 @@ class TestSnapshot:
         td_dest.memmap_()
         assert isinstance(td_dest["b", "c"], MemmapTensor)
         app_state = {
-            "state": torchsnapshot.StateDict(**{save_name: td_dest.state_dict()})
+            "state": torchsnapshot.StateDict(
+                **{save_name: td_dest.state_dict(keep_vars=True)}
+            )
         }
         snapshot.restore(app_state=app_state)
 

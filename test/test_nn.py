@@ -3159,6 +3159,47 @@ class TestAddStateIndependentNormalScale:
         assert (scale > 0).all()
 
 
+class TestStateDict:
+    @pytest.mark.parametrize("detach", [True, False])
+    def test_sd_params(self, detach):
+        td = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
+        td = TensorDictParams(td)
+        if detach:
+            sd = td.detach().clone().zero_().state_dict()
+        else:
+            sd = td.state_dict()
+            sd = {
+                k: v if not isinstance(v, torch.Tensor) else v * 0
+                for k, v in sd.items()
+            }
+            print(sd)
+        # do some op to create a graph
+        td.apply(lambda x: x + 1)
+        # load the data
+        td.load_state_dict(sd)
+        # check that data has been loaded
+        assert (td == 0).all()
+
+    def test_sd_module(self):
+        td = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
+        td = TensorDictParams(td)
+        module = nn.Linear(3, 4)
+        module.td = td
+
+        sd = module.state_dict()
+        assert "td.1" in sd
+        assert "td.3.3" in sd
+        sd = {k: v * 0 if isinstance(v, torch.Tensor) else v for k, v in sd.items()}
+
+        # load the data
+        module.load_state_dict(sd)
+
+        # check that data has been loaded
+        assert (module.td == 0).all()
+        for val in td.values(True, True):
+            assert isinstance(val, nn.Parameter)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

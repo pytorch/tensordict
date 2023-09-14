@@ -740,14 +740,22 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:  # noqa: D417
     self._tensordict._batch_size_setter(new_size)
 
 
-def _state_dict(self) -> dict[str, Any]:
+def _state_dict(
+    self, destination=None, prefix="", keep_vars=False, flatten=False
+) -> dict[str, Any]:
     """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
-    state_dict = {"_tensordict": self._tensordict.state_dict()}
+    state_dict = {
+        "_tensordict": self._tensordict.state_dict(
+            destination=destination, prefix=prefix, keep_vars=keep_vars, flatten=flatten
+        )
+    }
     state_dict["_non_tensordict"] = copy(self._non_tensordict)
     return state_dict
 
 
-def _load_state_dict(self, state_dict: dict[str, Any]):
+def _load_state_dict(
+    self, state_dict: dict[str, Any], strict=True, assign=False, from_flatten=False
+):
     """Loads a state_dict attemptedly in-place on the destination tensorclass."""
     for key, item in state_dict.items():
         # keys will never be nested which facilitates everything, but let's
@@ -778,7 +786,9 @@ def _load_state_dict(self, state_dict: dict[str, Any]):
                         f"Key '{sub_key}' wasn't expected in the state-dict."
                     )
 
-            self._tensordict.load_state_dict(item)
+            self._tensordict.load_state_dict(
+                item, strict=strict, assign=assign, from_flatten=from_flatten
+            )
         else:
             raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
 
