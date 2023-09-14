@@ -5143,7 +5143,11 @@ class TestSnapshot:
         td.memmap_()
         assert isinstance(td["b", "c"], MemmapTensor)
 
-        app_state = {"state": torchsnapshot.StateDict(**{save_name: td.state_dict(keep_vars=True)})}
+        app_state = {
+            "state": torchsnapshot.StateDict(
+                **{save_name: td.state_dict(keep_vars=True)}
+            )
+        }
         path = f"/tmp/{uuid.uuid4()}"
         snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
@@ -5160,7 +5164,9 @@ class TestSnapshot:
         td_dest.memmap_()
         assert isinstance(td_dest["b", "c"], MemmapTensor)
         app_state = {
-            "state": torchsnapshot.StateDict(**{save_name: td_dest.state_dict(keep_vars=True)})
+            "state": torchsnapshot.StateDict(
+                **{save_name: td_dest.state_dict(keep_vars=True)}
+            )
         }
         snapshot.restore(app_state=app_state)
 
