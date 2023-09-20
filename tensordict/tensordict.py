@@ -2051,7 +2051,15 @@ class TensorDictBase(MutableMapping):
         """
         return sorted(self.keys())
 
+    @overload
     def expand(self, *shape: int) -> T:
+        ...
+
+    @overload
+    def expand(self, shape: torch.Size) -> T:
+        ...
+
+    def expand(self, *args: int | torch.Size) -> T:
         """Expands each tensors of the tensordict according to the torch.expand function.
 
         In practice, this amends to: :obj:`tensor.expand(*shape, *tensor.shape)`.
@@ -2069,8 +2077,11 @@ class TensorDictBase(MutableMapping):
         d = {}
         tensordict_dims = self.batch_dims
 
-        if len(shape) == 1 and isinstance(shape[0], Sequence):
-            shape = tuple(shape[0])
+        if len(args) == 1 and isinstance(args[0], Sequence):
+            shape = tuple(args[0])
+        else:
+            # we don't check that all elements are int to reduce overhead
+            shape = args
 
         # new shape dim check
         if len(shape) < len(self.shape):
@@ -4285,7 +4296,15 @@ class TensorDict(TensorDictBase):
 
         return self.apply(pin_mem)
 
+    @overload
     def expand(self, *shape: int) -> T:
+        ...
+
+    @overload
+    def expand(self, shape: torch.Size) -> T:
+        ...
+
+    def expand(self, *args: int | torch.Size) -> T:
         """Expands every tensor with `(*shape, *tensor.shape)` and returns the same tensordict with new tensors with expanded shapes.
 
         Supports iterables to specify the shape.
@@ -4294,8 +4313,11 @@ class TensorDict(TensorDictBase):
         d = {}
         tensordict_dims = self.batch_dims
 
-        if len(shape) == 1 and isinstance(shape[0], Sequence):
-            shape = tuple(shape[0])
+        if len(args) == 1 and isinstance(args[0], Sequence):
+            shape = tuple(args[0])
+        else:
+            # we don't check that all elements are int to reduce overhead
+            shape = args
 
         # new shape dim check
         if len(shape) < len(self.shape):
@@ -4320,9 +4342,9 @@ class TensorDict(TensorDictBase):
             tensor_dims = len(value.shape)
             last_n_dims = tensor_dims - tensordict_dims
             if last_n_dims > 0:
-                d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+                d[key] = value.expand((*shape, *value.shape[-last_n_dims:]))
             else:
-                d[key] = value.expand(*shape)
+                d[key] = value.expand(shape)
         out = TensorDict(
             source=d,
             batch_size=torch.Size(shape),
@@ -6037,9 +6059,11 @@ torch.Size([3, 2])
             return self
         return self._source.select(*keys, strict=strict)[self.idx]
 
-    def expand(self, *shape: int, inplace: bool = False) -> T:
-        if len(shape) == 1 and isinstance(shape[0], Sequence):
-            shape = tuple(shape[0])
+    def expand(self, *args: int, inplace: bool = False) -> T:
+        if len(args) == 1 and isinstance(args[0], Sequence):
+            shape = tuple(args[0])
+        else:
+            shape = args
         return self.apply(
             lambda x: x.expand((*shape, *x.shape[self.ndim :])), batch_size=shape
         )
@@ -7639,12 +7663,14 @@ class LazyStackedTensorDict(TensorDictBase):
         metadata = torch.load(prefix / "meta.pt")
         return cls(*tensordicts, stack_dim=metadata["stack_dim"])
 
-    def expand(self, *shape: int, inplace: bool = False) -> T:
-        if len(shape) == 1 and isinstance(shape[0], Sequence):
-            shape = tuple(shape[0])
+    def expand(self, *args: int, inplace: bool = False) -> T:
+        if len(args) == 1 and isinstance(args[0], Sequence):
+            shape = tuple(args[0])
+        else:
+            shape = args
         stack_dim = len(shape) + self.stack_dim - self.ndimension()
         new_shape_tensordicts = [v for i, v in enumerate(shape) if i != stack_dim]
-        tensordicts = [td.expand(*new_shape_tensordicts) for td in self.tensordicts]
+        tensordicts = [td.expand(new_shape_tensordicts) for td in self.tensordicts]
         if inplace:
             self.tensordicts = tensordicts
             self.stack_dim = stack_dim

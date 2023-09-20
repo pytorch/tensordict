@@ -166,11 +166,11 @@ class RandomCrop(nn.Module):
         index0 = torch.randint(x.shape[-2] - self.h, (*batch, 1), device=x.device)
         index0 = index0 + torch.arange(self.h, device=x.device)
         index0 = (
-            index0.unsqueeze(1).unsqueeze(-1).expand(*batch, 3, self.h, x.shape[-1])
+            index0.unsqueeze(1).unsqueeze(-1).expand((*batch, 3), self.h, x.shape[-1])
         )
         index1 = torch.randint(x.shape[-1] - self.w, (*batch, 1), device=x.device)
         index1 = index1 + torch.arange(self.w, device=x.device)
-        index1 = index1.unsqueeze(1).unsqueeze(-2).expand(*batch, 3, self.h, self.w)
+        index1 = index1.unsqueeze(1).unsqueeze(-2).expand((*batch, 3), self.h, self.w)
         return x.gather(-2, index0).gather(-1, index1)
 
 

@@ -506,7 +506,7 @@ def expand_right(
     tensor_expand = tensor
     while tensor_expand.ndimension() < len(shape):
         tensor_expand = tensor_expand.unsqueeze(-1)
-    tensor_expand = tensor_expand.expand(*shape)
+    tensor_expand = tensor_expand.expand(shape)
     return tensor_expand
 
 
