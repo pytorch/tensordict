@@ -247,7 +247,7 @@ class Delta(D.Distribution):
     ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
-        return self.param.expand(*sample_shape, *self.param.shape)
+        return self.param.expand((*sample_shape, *self.param.shape))
 
     def rsample(
         self,
@@ -255,7 +255,7 @@ class Delta(D.Distribution):
     ) -> torch.Tensor:
         if sample_shape is None:
             sample_shape = torch.Size([])
-        return self.param.expand(*sample_shape, *self.param.shape)
+        return self.param.expand((*sample_shape, *self.param.shape))
 
     @property
     def mode(self) -> torch.Tensor:
