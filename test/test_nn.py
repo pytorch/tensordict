@@ -3172,7 +3172,6 @@ class TestStateDict:
                 k: v if not isinstance(v, torch.Tensor) else v * 0
                 for k, v in sd.items()
             }
-            print(sd)
         # do some op to create a graph
         td.apply(lambda x: x + 1)
         # load the data
@@ -3181,7 +3180,7 @@ class TestStateDict:
         assert (td == 0).all()
 
     def test_sd_module(self):
-        td = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
+        td = TensorDict({"1": 1.0, "2": 2.0, "3": {"3": 3.0}}, [])
         td = TensorDictParams(td)
         module = nn.Linear(3, 4)
         module.td = td

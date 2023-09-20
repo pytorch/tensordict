@@ -3456,7 +3456,6 @@ class TensorDictBase(MutableMapping):
             if key in keys and (
                 not is_tensor_collection(out.get(key)) or not out.get(key).is_empty()
             ):
-                print(out.get(key))
                 raise KeyError(
                     "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
