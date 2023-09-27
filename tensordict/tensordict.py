@@ -376,7 +376,7 @@ class TensorDictBase(MutableMapping):
         """Copies the params and buffers of a module in a tensordict.
 
         Args:
-            as_module (bool, optional): if ``True``, a :class:`tensordict.nn.TensorDictParams`
+            as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
                 instance will be returned which can be used to store parameters
                 within a :class:`torch.nn.Module`. Defaults to ``False``.
 
@@ -691,12 +691,54 @@ class TensorDictBase(MutableMapping):
             return self.device.type == "cuda" or self._is_shared
         return self._is_shared
 
-    def state_dict(self) -> OrderedDict[str, Any]:
+    def state_dict(
+        self,
+        destination=None,
+        prefix="",
+        keep_vars=False,
+        flatten=False,
+    ) -> OrderedDict[str, Any]:
+        """Produces a state_dict from the tensordict. The structure of the state-dict will still be nested, unless ``flatten`` is set to ``True``.
+
+        A tensordict state-dict contains all the tensors and meta-data needed
+        to rebuild the tensordict (names are currently not supported).
+
+        Args:
+            destination (dict, optional): If provided, the state of tensordict will
+                be updated into the dict and the same object is returned.
+                Otherwise, an ``OrderedDict`` will be created and returned.
+                Default: ``None``.
+            prefix (str, optional): a prefix added to tensor
+                names to compose the keys in state_dict. Default: ``''``.
+            keep_vars (bool, optional): by default the :class:`torch.Tensor` s
+                returned in the state dict are detached from autograd. If it's
+                set to ``True``, detaching will not be performed.
+                Default: ``False``.
+            flatten (bool, optional): whether the structure should be flattened
+                with the ``"."`` character or not.
+                Defaults to ``False``.
+
+        Examples:
+            >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
+            >>> sd = data.state_dict()
+            >>> print(sd)
+            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3', OrderedDict([('3', tensor(3)), ('__batch_size', torch.Size([])), ('__device', None)])), ('__batch_size', torch.Size([])), ('__device', None)])
+            >>> sd = data.state_dict(flatten=True)
+            OrderedDict([('1', tensor(1)), ('2', tensor(2)), ('3.3', tensor(3)), ('__batch_size', torch.Size([])), ('__device', None)])
+
+        """
         out = collections.OrderedDict()
-        for key, item in self.apply(memmap_tensor_as_tensor).items():
-            out[key] = (
-                item if not _is_tensor_collection(item.__class__) else item.state_dict()
-            )
+        source = self.apply(memmap_tensor_as_tensor)
+        if flatten:
+            source = source.flatten_keys(".")
+        for key, item in source.items():
+            if not _is_tensor_collection(item.__class__):
+                if not keep_vars:
+                    out[prefix + key] = item.detach().clone()
+                else:
+                    out[prefix + key] = item
+            else:
+                out[prefix + key] = item.state_dict(keep_vars=keep_vars)
         if "__batch_size" in out:
             raise KeyError(
                 "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
@@ -705,26 +747,95 @@ class TensorDictBase(MutableMapping):
             raise KeyError(
                 "Cannot retrieve the state_dict of a TensorDict with `'__batch_size'` key"
             )
-        out["__batch_size"] = self.batch_size
-        out["__device"] = self.device
+        out[prefix + "__batch_size"] = source.batch_size
+        out[prefix + "__device"] = source.device
+        if destination is not None:
+            destination.update(out)
+            return destination
         return out
 
-    def load_state_dict(self, state_dict: OrderedDict[str, Any]) -> T:
+    def load_state_dict(
+        self,
+        state_dict: OrderedDict[str, Any],
+        strict=True,
+        assign=False,
+        from_flatten=False,
+    ) -> T:
+        """Loads a state-dict, formatted as in :meth:`~.state_dict`, into the tensordict.
+
+        Args:
+            state_dict (OrderedDict): the state_dict of to be copied.
+            strict (bool, optional): whether to strictly enforce that the keys
+                in :attr:`state_dict` match the keys returned by this tensordict's
+                :meth:`torch.nn.Module.state_dict` function. Default: ``True``
+            assign (bool, optional): whether to assign items in the state
+                dictionary to their corresponding keys in the tensordict instead
+                of copying them inplace into the tensordict's current tensors.
+                When ``False``, the properties of the tensors in the current
+                module are preserved while when ``True``, the properties of the
+                Tensors in the state dict are preserved.
+                Default: ``False``
+            from_flatten (bool, optional): if ``True``, the input state_dict is
+                assumed to be flattened.
+                Defaults to ``False``.
+
+        Examples:
+            >>> data = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
+            >>> data_zeroed = TensorDict({"1": 0, "2": 0, "3": {"3": 0}}, [])
+            >>> sd = data.state_dict()
+            >>> data_zeroed.load_state_dict(sd)
+            >>> print(data_zeroed["3", "3"])
+            tensor(3)
+            >>> # with flattening
+            >>> data_zeroed = TensorDict({"1": 0, "2": 0, "3": {"3": 0}}, [])
+            >>> data_zeroed.load_state_dict(data.state_dict(flatten=True), from_flatten=True)
+            >>> print(data_zeroed["3", "3"])
+            tensor(3)
+
+
+        """
+        if from_flatten:
+            self_flatten = self.flatten_keys(".")
+            self_flatten.load_state_dict(state_dict, strict=strict, assign=assign)
+            if not assign:
+                # modifications are done in-place so we should be fine returning self
+                return self
+            else:
+                # run a check over keys, if we any key with a '.' in name we're doomed
+                DOT_ERROR = "Cannot use load_state_dict(..., from_flatten=True, assign=True) when some keys contain a dot character."
+                for key in self.keys(True, True):
+                    if isinstance(key, tuple):
+                        for subkey in key:
+                            if "." in subkey:
+                                raise RuntimeError(DOT_ERROR)
+                    elif "." in key:
+                        raise RuntimeError(DOT_ERROR)
+                return self.update(self_flatten.unflatten_keys("."))
         # copy since we'll be using pop
         state_dict = copy(state_dict)
         self.batch_size = state_dict.pop("__batch_size")
-        device = state_dict.pop("__device")
-        if device is not None:
-            self.to(device)
+        device = state_dict.pop("__device", None)
+        if device is not None and self.device is not None and device != self.device:
+            raise RuntimeError("Loading data from another device is not yet supported.")
+
         for key, item in state_dict.items():
             if isinstance(item, dict):
                 self.set(
                     key,
-                    self.get(key, default=TensorDict({}, [])).load_state_dict(item),
-                    inplace=True,
+                    self.get(key, default=TensorDict({}, [])).load_state_dict(
+                        item, assign=assign, strict=strict
+                    ),
+                    inplace=not assign,
                 )
             else:
-                self.set(key, item, inplace=True)
+                self.set(key, item, inplace=not assign)
+        if strict and set(state_dict.keys()) != set(self.keys()):
+            set_sd = set(state_dict.keys())
+            set_td = set(self.keys())
+            raise RuntimeError(
+                "Cannot load state-dict because the key sets don't match: got "
+                f"state_dict extra keys \n{set_sd-set_td}\n and tensordict extra keys\n{set_td-set_sd}\n"
+            )
         return self
 
     def is_memmap(self) -> bool:
@@ -1940,7 +2051,15 @@ class TensorDictBase(MutableMapping):
         """
         return sorted(self.keys())
 
+    @overload
     def expand(self, *shape: int) -> T:
+        ...
+
+    @overload
+    def expand(self, shape: torch.Size) -> T:
+        ...
+
+    def expand(self, *args: int | torch.Size) -> T:
         """Expands each tensors of the tensordict according to the torch.expand function.
 
         In practice, this amends to: :obj:`tensor.expand(*shape, *tensor.shape)`.
@@ -1958,8 +2077,11 @@ class TensorDictBase(MutableMapping):
         d = {}
         tensordict_dims = self.batch_dims
 
-        if len(shape) == 1 and isinstance(shape[0], Sequence):
-            shape = tuple(shape[0])
+        if len(args) == 1 and isinstance(args[0], Sequence):
+            shape = tuple(args[0])
+        else:
+            # we don't check that all elements are int to reduce overhead
+            shape = args
 
         # new shape dim check
         if len(shape) < len(self.shape):
@@ -2412,7 +2534,7 @@ class TensorDictBase(MutableMapping):
             **kwargs: kwargs to be passed to :meth:`h5py.File.create_dataset`.
 
         Returns:
-            A :class:`PersitentTensorDict` instance linked to the newly created file.
+            A :class:`~.tensordict.PersitentTensorDict` instance linked to the newly created file.
 
         Examples:
             >>> import tempfile
@@ -2550,7 +2672,7 @@ class TensorDictBase(MutableMapping):
                 TensorDict will be copied too. Default is `True`.
 
         .. note::
-          For some TensorDictBase subtypes, such as :class:`SubTensorDict`, cloning
+          For some TensorDictBase subtypes, such as :class:`~.tensordict.SubTensorDict`, cloning
           recursively makes little sense (in this specific case it would involve
           copying the parent tensordict too). In those cases, :meth:`~.clone` will
           fall back onto :meth:`~.to_tensordict`.
@@ -2622,7 +2744,7 @@ class TensorDictBase(MutableMapping):
             other (TensorDictBase, optional): TensorDict instance whose dtype
                 and device are the desired dtype and device for all tensors
                 in this TensorDict.
-                .. note:: Since :class:`TensorDictBase` instances do not have
+                .. note:: Since :class:`~tensordict.TensorDictBase` instances do not have
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
                     casting is undertook.
@@ -3345,7 +3467,6 @@ class TensorDictBase(MutableMapping):
             if key in keys and (
                 not is_tensor_collection(out.get(key)) or not out.get(key).is_empty()
             ):
-                print(out.get(key))
                 raise KeyError(
                     "Unflattening key(s) in tensordict will override existing unflattened key"
                 )
@@ -3930,7 +4051,7 @@ class TensorDict(TensorDictBase):
 
     @classmethod
     def from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
-        """Returns a TensorDict created from a dictionary or another :class:`TensorDict`.
+        """Returns a TensorDict created from a dictionary or another :class:`~.tensordict.TensorDict`.
 
         If ``batch_size`` is not specified, returns the maximum batch size possible.
 
@@ -4174,7 +4295,15 @@ class TensorDict(TensorDictBase):
 
         return self.apply(pin_mem)
 
+    @overload
     def expand(self, *shape: int) -> T:
+        ...
+
+    @overload
+    def expand(self, shape: torch.Size) -> T:
+        ...
+
+    def expand(self, *args: int | torch.Size) -> T:
         """Expands every tensor with `(*shape, *tensor.shape)` and returns the same tensordict with new tensors with expanded shapes.
 
         Supports iterables to specify the shape.
@@ -4183,8 +4312,11 @@ class TensorDict(TensorDictBase):
         d = {}
         tensordict_dims = self.batch_dims
 
-        if len(shape) == 1 and isinstance(shape[0], Sequence):
-            shape = tuple(shape[0])
+        if len(args) == 1 and isinstance(args[0], Sequence):
+            shape = tuple(args[0])
+        else:
+            # we don't check that all elements are int to reduce overhead
+            shape = args
 
         # new shape dim check
         if len(shape) < len(self.shape):
@@ -4209,9 +4341,9 @@ class TensorDict(TensorDictBase):
             tensor_dims = len(value.shape)
             last_n_dims = tensor_dims - tensordict_dims
             if last_n_dims > 0:
-                d[key] = value.expand(*shape, *value.shape[-last_n_dims:])
+                d[key] = value.expand((*shape, *value.shape[-last_n_dims:]))
             else:
-                d[key] = value.expand(*shape)
+                d[key] = value.expand(shape)
         out = TensorDict(
             source=d,
             batch_size=torch.Size(shape),
@@ -5864,8 +5996,8 @@ torch.Size([3, 2])
 
         Args:
             recurse (bool, optional): if ``True`` (default), a regular
-                :class:`TensorDict` instance will be created from the :class:`SubTensorDict`.
-                Otherwise, another :class:`SubTensorDict` with identical content
+                :class:`~.tensordict.TensorDict` instance will be created from the :class:`~.tensordict.SubTensorDict`.
+                Otherwise, another :class:`~.tensordict.SubTensorDict` with identical content
                 will be returned.
 
         Examples:
@@ -5926,9 +6058,11 @@ torch.Size([3, 2])
             return self
         return self._source.select(*keys, strict=strict)[self.idx]
 
-    def expand(self, *shape: int, inplace: bool = False) -> T:
-        if len(shape) == 1 and isinstance(shape[0], Sequence):
-            shape = tuple(shape[0])
+    def expand(self, *args: int, inplace: bool = False) -> T:
+        if len(args) == 1 and isinstance(args[0], Sequence):
+            shape = tuple(args[0])
+        else:
+            shape = args
         return self.apply(
             lambda x: x.expand((*shape, *x.shape[self.ndim :])), batch_size=shape
         )
@@ -7528,12 +7662,14 @@ class LazyStackedTensorDict(TensorDictBase):
         metadata = torch.load(prefix / "meta.pt")
         return cls(*tensordicts, stack_dim=metadata["stack_dim"])
 
-    def expand(self, *shape: int, inplace: bool = False) -> T:
-        if len(shape) == 1 and isinstance(shape[0], Sequence):
-            shape = tuple(shape[0])
+    def expand(self, *args: int, inplace: bool = False) -> T:
+        if len(args) == 1 and isinstance(args[0], Sequence):
+            shape = tuple(args[0])
+        else:
+            shape = args
         stack_dim = len(shape) + self.stack_dim - self.ndimension()
         new_shape_tensordicts = [v for i, v in enumerate(shape) if i != stack_dim]
-        tensordicts = [td.expand(*new_shape_tensordicts) for td in self.tensordicts]
+        tensordicts = [td.expand(new_shape_tensordicts) for td in self.tensordicts]
         if inplace:
             self.tensordicts = tensordicts
             self.stack_dim = stack_dim
@@ -8123,8 +8259,8 @@ class _CustomOpTensorDict(TensorDictBase):
 
         Args:
             recurse (bool, optional): if ``True`` (default), a regular
-                :class:`TensorDict` instance will be returned.
-                Otherwise, another :class:`SubTensorDict` with identical content
+                :class:`~.tensordict.TensorDict` instance will be returned.
+                Otherwise, another :class:`~.tensordict.SubTensorDict` with identical content
                 will be returned.
         """
         if not recurse:
@@ -8807,17 +8943,17 @@ def dense_stack_tds(
     td_list: Sequence[TensorDictBase] | LazyStackedTensorDict,
     dim: int = None,
 ) -> T:
-    """Densely stack a list of :class:`tensordict.TensorDictBase` objects (or a :class:`tensordict.LazyStackedTensorDict`) given that they have the same structure.
+    """Densely stack a list of :class:`~tensordict.TensorDictBase` objects (or a :class:`~tensordict.LazyStackedTensorDict`) given that they have the same structure.
 
-    This function is called with a list of :class:`tensordict.TensorDictBase` (either passed directly or obtrained from
-    a :class:`tensordict.LazyStackedTensorDict`).
-    Instead of calling ``torch.stack(td_list)``, which would return a :class:`tensordict.LazyStackedTensorDict`,
+    This function is called with a list of :class:`~tensordict.TensorDictBase` (either passed directly or obtrained from
+    a :class:`~tensordict.LazyStackedTensorDict`).
+    Instead of calling ``torch.stack(td_list)``, which would return a :class:`~tensordict.LazyStackedTensorDict`,
     this function expands the first element of the input list and stacks the input list onto that element.
     This works only when all the elements of the input list have the same structure.
-    The :class:`tensordict.TensorDictBase` returned will have the same type of the elements of the input list.
+    The :class:`~tensordict.TensorDictBase` returned will have the same type of the elements of the input list.
 
-    This function is useful when some of the :class:`tensordict.TensorDictBase` objects that need to be stacked
-    are :class:`tensordict.LazyStackedTensorDict` or have :class:`tensordict.LazyStackedTensorDict`
+    This function is useful when some of the :class:`~tensordict.TensorDictBase` objects that need to be stacked
+    are :class:`~tensordict.LazyStackedTensorDict` or have :class:`~tensordict.LazyStackedTensorDict`
     among entries (or nested entries).
     In those cases, calling ``torch.stack(td_list).to_tensordict()`` is infeasible.
     Thus, this function provides an alternative for densely stacking the list provided.
