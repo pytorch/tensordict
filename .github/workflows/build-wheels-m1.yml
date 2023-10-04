@@ -21,7 +21,6 @@ jobs:
       os: macos-arm64
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
-      python_version: ["3.8", "3.9", "3.10", "3.11"]
   build:
     strategy:
       matrix:
