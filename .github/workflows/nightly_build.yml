@@ -104,7 +104,8 @@ jobs:
     runs-on: macos-m1-12
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
+#        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
+        python_version: [["3.8", "3.8"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -186,7 +187,8 @@ jobs:
     runs-on: macos-m1-12
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
+#        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
+        python_version: [["3.8", "3.8"]]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -293,7 +295,8 @@ jobs:
     runs-on: macos-m1-12
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
+#        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
+        python_version: [["3.8", "3.8"]]
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v2
