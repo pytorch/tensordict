@@ -15,6 +15,9 @@ on:
 
 jobs:
   generate-matrix:
+    strategy:
+      matrix:
+        python_version: ["3.8", "3.9", "3.10", "3.11"]
     uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
     with:
       package-type: wheel
