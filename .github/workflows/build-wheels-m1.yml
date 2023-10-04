@@ -26,10 +26,10 @@ jobs:
       test-infra-ref: main
   build:
     needs: generate-matrix
-    name: pytorch-labs/tensordict
+    name: pytorch/tensordict
     uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@main
     with:
-      repository: pytorch-labs/tensordict
+      repository: pytorch/tensordict
       ref: ""
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main

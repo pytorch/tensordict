@@ -100,7 +100,7 @@ jobs:
           path: dist/*.whl
 
   build-wheel-m1:
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     runs-on: macos-m1-12
     strategy:
       matrix:
@@ -181,7 +181,7 @@ jobs:
 
   test-wheel-m1:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     needs: build-wheel-m1
     runs-on: macos-m1-12
     strategy:
@@ -288,7 +288,7 @@ jobs:
               --verbose
   upload-wheel-m1:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     needs: test-wheel-m1
     runs-on: macos-m1-12
     strategy:
