@@ -5,6 +5,8 @@
 
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <torch/torch.h>
 
 #include <memory>
 
@@ -18,4 +20,6 @@ PYBIND11_MODULE(_tensordict, m) {
   m.def("_unravel_key_to_tuple", &_unravel_key_to_tuple, py::arg("key"));
   m.def("unravel_key_list", py::overload_cast<const py::list&>(&unravel_key_list), py::arg("keys"));
   m.def("unravel_key_list", py::overload_cast<const py::tuple&>(&unravel_key_list), py::arg("keys"));
+  m.def("_populate_index", &_populate_index, "populate index function");
+  m.def("_as_shape", &_as_shape, "Converts a het shape to a shape with -1 for het dims.");
 }

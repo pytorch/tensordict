@@ -5,9 +5,10 @@
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <torch/torch.h>
 
 namespace py = pybind11;
-
+using namespace torch::indexing;
 
 py::tuple _unravel_key_to_tuple(const py::object& key) {
     bool is_tuple = py::isinstance<py::tuple>(key);
@@ -76,3 +77,63 @@ py::list unravel_key_list(const py::list& keys) {
 py::list unravel_key_list(const py::tuple& keys) {
     return unravel_key_list(py::list(keys));
 }
+
+torch::Tensor _populate_index(torch::Tensor offsets, torch::Tensor offsets_cs) {
+    int64_t total = offsets.sum().item<int64_t>();
+    torch::Tensor out = torch::empty({total}, torch::dtype(torch::kLong));
+
+    int64_t* out_data = out.data_ptr<int64_t>();
+    int64_t cur_offset;
+    int64_t count = -1;
+    int64_t maxcount = -1;
+    int64_t cur = -1;
+    int64_t n = offsets.numel();
+    for (int i = 0; i < total; ++i) {
+        if (cur < n && count == maxcount) {
+            cur++;
+            count = -1;
+            maxcount = offsets[cur].item<int64_t>() - 1;
+            cur_offset = offsets_cs[cur].item<int64_t>();
+        }
+        count++;
+        out_data[i] = cur_offset + count;
+    }
+    return out;
+}
+py::list _as_shape(torch::Tensor shape_tensor) {
+//    torch::Tensor shape_tensor_view = shape_tensor.reshape({-1, shape_tensor.size(-1)});
+    torch::Tensor out = shape_tensor;
+    for (int64_t i = 0; i < shape_tensor.ndimension() - 1; ++i) {
+        out = out[0];
+    }
+    out = out.clone();
+    torch::Tensor not_unique = shape_tensor != out;
+    for (int64_t i = 0; i < shape_tensor.ndimension() - 1; ++i) {
+        not_unique = not_unique.any(0);
+    }
+    out.masked_fill_(not_unique, -1);
+    std::vector<int64_t> shape_vector(shape_tensor.sizes().begin(), shape_tensor.sizes().end() - 1);
+    // Extend 'shape_vector' with the values from 'out'.
+    auto out_accessor = out.accessor<int64_t, 1>();
+    for (int64_t i = 0; i < out_accessor.size(0); ++i) {
+        shape_vector.push_back(out_accessor[i]);
+    }
+
+    py::list shape = py::cast(shape_vector);
+    return shape;
+}
+//py::list _as_shape(torch::Tensor shape_tensor) {
+//    torch::Tensor shape_tensor_view = shape_tensor.reshape({-1, shape_tensor.size(-1)});
+//    torch::Tensor out = shape_tensor_view[0];
+//    auto not_unique = (shape_tensor_view != out).any(0);
+//    out.masked_fill_(not_unique, -1);
+//    std::vector<int64_t> shape_vector;
+//    shape_vector.reserve(shape_tensor.ndimension() + shape_tensor.size(-1) - 1); // Reserve capacity to avoid reallocations.
+//    shape_vector.insert(shape_vector.end(), shape_tensor.sizes().begin(), shape_tensor.sizes().end() - 1);
+//    auto out_accessor = out.accessor<int64_t, 1>();
+//    for (int64_t i = 0; i < out_accessor.size(0); ++i) {
+//        shape_vector.push_back(out_accessor[i]);
+//    }
+//    py::list shape = py::cast(shape_vector);
+//    return shape;
+//}
