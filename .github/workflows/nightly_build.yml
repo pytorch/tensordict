@@ -30,7 +30,7 @@ concurrency:
 jobs:
   build-wheel-linux:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     runs-on: ubuntu-20.04
     strategy:
       matrix:
@@ -69,7 +69,7 @@ jobs:
 
   build-wheel-mac:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     runs-on: macos-latest
     strategy:
       matrix:
@@ -133,7 +133,7 @@ jobs:
 
   test-wheel-mac:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     needs: build-wheel-mac
     runs-on: macos-latest
     strategy:
@@ -232,7 +232,7 @@ jobs:
 
   upload-wheel-linux:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     needs: test-wheel-linux
     runs-on: ubuntu-20.04
     strategy:
@@ -263,7 +263,7 @@ jobs:
 
   upload-wheel-mac:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     needs: test-wheel-mac
     runs-on: macos-latest
     strategy:
@@ -319,7 +319,7 @@ jobs:
 
   test-wheel-linux:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     needs: build-wheel-linux
     runs-on: ubuntu-20.04
     strategy:
@@ -379,7 +379,7 @@ jobs:
 
   build-wheel-windows:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     runs-on: windows-latest
     strategy:
       matrix:
@@ -411,7 +411,7 @@ jobs:
 
   test-wheel-windows:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     needs: build-wheel-windows
     runs-on: windows-latest
     strategy:
@@ -465,7 +465,7 @@ jobs:
 
   upload-wheel-windows:
     # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch-labs'
+    if: github.repository_owner == 'pytorch'
     needs: test-wheel-windows
     runs-on: windows-latest
     strategy:

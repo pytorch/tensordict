@@ -402,11 +402,11 @@ print(
 ##############################################################################
 # This shows that much of the overhead is coming from i/o operations rather than the
 # transforms, and hence explains how the memory-mapped array helps us load data more
-# efficiently. Check out the `distributed example <https://github.com/pytorch-labs/tensordict/tree/main/benchmarks/distributed/dataloading.py>`__
+# efficiently. Check out the `distributed example <https://github.com/pytorch/tensordict/tree/main/benchmarks/distributed/dataloading.py>`__
 # for more context about the other results from these charts.
 #
 # We can get even better performance with the TensorClass approach by using multiple
 # workers to load batches from the memory-mapped array, though this comes with some
 # added complexity. See `this example in our benchmarks
-# <https://github.com/pytorch-labs/tensordict/blob/main/benchmarks/distributed/dataloading.py>`__
+# <https://github.com/pytorch/tensordict/blob/main/benchmarks/distributed/dataloading.py>`__
 # for an example of how this could work.

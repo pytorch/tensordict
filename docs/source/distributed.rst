@@ -81,7 +81,7 @@ Operating on Memory-mapped tensors across nodes
 We provide a simple example of a distributed script where one process creates a
 memory-mapped tensor, and sends its reference to another worker that is responsible of
 updating it. You will find this example in the
-`benchmark directory <https://github.com/pytorch-labs/tensordict/tree/main/benchmarks/distributed_benchmark.py>`_.
+`benchmark directory <https://github.com/pytorch/tensordict/tree/main/benchmarks/distributed_benchmark.py>`_.
 
 In short, our goal is to show how to handle read and write operations on big
 tensors when nodes have access to a shared physical storage. The steps involve:

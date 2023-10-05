@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 import torch
 
+from tensordict.nn import TensorDictParams
 
 try:
     import torchsnapshot
@@ -30,6 +31,7 @@ except ImportError:
     _has_h5py = False
 
 from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
+from functorch import dim as ftdim
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
@@ -6237,6 +6239,140 @@ class TestTensorDictMP(TestTensorDictsBase):
 def _pool_fixt():
     with mp.Pool(10) as pool:
         yield pool
+
+
+class TestFCD(TestTensorDictsBase):
+    """Test stack for first-class dimension."""
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "sub_td2",
+            "idx_td",
+            "memmap_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_reset_bs",
+            "nested_td",
+            "nested_tensorclass",
+            "permute_td",
+            "nested_stacked_td",
+            "td_params",
+            pytest.param(
+                "td_h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found."),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_fcd(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        d0 = ftdim.dims(1)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 0:
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0]
+        else:
+            assert td[d0].shape == td.shape[1:]
+        d0, d1 = ftdim.dims(2)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1):
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1]
+        else:
+            assert td[d0, d1].shape == td.shape[2:]
+        d0, d1, d2 = ftdim.dims(3)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1, 2):
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1, d2]
+        else:
+            assert td[d0, d1, d2].shape == td.shape[3:]
+        d0 = ftdim.dims(1)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 1:
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[:, d0]
+        else:
+            assert td[:, d0].shape == torch.Size((td.shape[0], *td.shape[2:]))
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "idx_td",
+            "memmap_td",
+            "td_reset_bs",
+            "nested_td",
+            "nested_tensorclass",
+            "nested_stacked_td",
+            "td_params",
+            pytest.param(
+                "td_h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found."),
+            ),
+            # these tds cannot see their dim names edited:
+            # "sub_td",
+            # "sub_td2",
+            # "unsqueezed_td",
+            # "squeezed_td",
+            # "permute_td",
+        ],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_fcd_names(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td.names = ["a", "b", "c", "d"]
+        d0 = ftdim.dims(1)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 0:
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0]
+        else:
+            assert td[d0].names == ["b", "c", "d"]
+        d0, d1 = ftdim.dims(2)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1):
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1]
+        else:
+            assert td[d0, d1].names == ["c", "d"]
+        d0, d1, d2 = ftdim.dims(3)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1, 2):
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1, d2]
+        else:
+            assert td[d0, d1, d2].names == ["d"]
+        d0 = ftdim.dims(1)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 1:
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[:, d0]
+        else:
+            assert td[:, d0].names == ["a", "c", "d"]
+
+    @pytest.mark.parametrize("as_module", [False, True])
+    def test_modules(self, as_module):
+        modules = [
+            lambda: nn.Linear(3, 4),
+            lambda: nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4)),
+            lambda: nn.Transformer(16, 4, 2, 2, 8),
+            lambda: nn.Sequential(nn.Conv2d(3, 4, 3), nn.Conv2d(4, 4, 3)),
+        ]
+        inputs = [
+            lambda: (torch.randn(2, 3),),
+            lambda: (torch.randn(2, 3),),
+            lambda: (torch.randn(2, 3, 16), torch.randn(2, 3, 16)),
+            lambda: (torch.randn(2, 3, 16, 16),),
+        ]
+        param_batch = 5
+        for make_module, make_input in zip(modules, inputs):
+            module = make_module()
+            td = TensorDict.from_module(module, as_module=as_module)
+            td = td.expand(param_batch).clone()
+            d0 = ftdim.dims(1)
+            td = TensorDictParams(td)[d0]
+            td.to_module(module)
+            y = module(*make_input())
+            assert y.dims == (d0,)
+            assert y._tensor.shape[0] == param_batch
 
 
 if __name__ == "__main__":
