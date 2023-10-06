@@ -2881,7 +2881,7 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError
 
-    def where(self, condition, other, *, out=None):
+    def where(self, condition, other, *, out=None, pad=None):
         """Return a ``TensorDict`` of elements selected from either self or other, depending on condition.
 
         Args:
@@ -2889,7 +2889,13 @@ class TensorDictBase(MutableMapping):
                 otherwise yields ``other``.
             other (TensorDictBase or Scalar): value (if ``other`` is a scalar)
                 or values selected at indices where condition is ``False``.
-            out (Tensor, optional): the output ``TensorDictBase`` instance.
+
+        Keyword Args:
+            out (TensorDictBase, optional): the output ``TensorDictBase`` instance.
+            pad_value (scalar, optional): if provided, missing keys from the source
+                or destination tensordict will be written as `torch.where(mask, self, pad)`
+                or `torch.where(mask, pad, other)`. Defaults to ``None``, ie
+                missing keys are not tolerated.
 
         """
         raise NotImplementedError
@@ -4731,35 +4737,53 @@ class TensorDict(TensorDictBase):
             result.batch_size = batch_size
         return result
 
-    def where(self, condition, other, *, out=None):
-        if out is None:
-            if _is_tensor_collection(other.__class__):
-
-                def func(tensor, _other):
-                    return torch.where(
-                        expand_as_right(condition, tensor), tensor, _other
-                    )
-
-                return self.apply(func, other)
-            else:
-
+    def where(self, condition, other, *, out=None, pad=None):
+        if _is_tensor_collection(other.__class__):
+            def func(tensor, _other, key):
+                if tensor is None:
+                    if pad is not None:
+                        tensor = pad
+                    else:
+                        raise KeyError(f"Key {key} not found and not pad value provided.")
+                elif _other is None:
+                    if pad is not None:
+                        _other = pad
+                    else:
+                        raise KeyError(f"Key {key} not found and not pad value provided.")
+                return torch.where(
+                    expand_as_right(condition, tensor), tensor, _other
+                )
+            result = self.empty() if out is None else out
+            other_keys = set(other.keys())
+            # we turn into a list because out could be = to self!
+            for key in list(self.keys()):
+                tensor = self._get_str(key, default=NO_DEFAULT)
+                _other = other._get_str(key, default=None)
+                if _is_tensor_collection(type(tensor)):
+                    _out = None if out is None else out._get_str(key, None)
+                    val = tensor.where(condition=condition, other=_other, out=_out, pad=pad)
+                else:
+                    val = func(tensor, _other, key)
+                result._set_str(key, val, inplace=False, validated=True)
+                other_keys.remove(key)
+            for key in other_keys:
+                tensor = None
+                _other = other._get_str(key, default=NO_DEFAULT)
+                if _is_tensor_collection(type(_other)):
+                    val = _other.where(condition=~condition, other=tensor, out=None, pad=pad)
+                else:
+                    val = func(tensor, _other, key)
+                result._set_str(key, val, inplace=False, validated=True)
+            return result
+        else:
+            if out is None:
                 def func(tensor):
                     return torch.where(
                         expand_as_right(condition, tensor), tensor, other
                     )
 
                 return self.apply(func)
-        else:
-            if _is_tensor_collection(other.__class__):
-
-                def func(tensor, _other, _out):
-                    return torch.where(
-                        expand_as_right(condition, tensor), tensor, _other, out=_out
-                    )
-
-                return self.apply(func, other, out)
             else:
-
                 def func(tensor, _out):
                     return torch.where(
                         expand_as_right(condition, tensor), tensor, other, out=_out
@@ -6106,8 +6130,8 @@ torch.Size([3, 2])
     def detach_(self) -> T:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
 
-    def where(self, condition, other, *, out=None):
-        return self.to_tensordict().where(condition=condition, other=other, out=out)
+    def where(self, condition, other, *, out=None, pad=None):
+        return self.to_tensordict().where(condition=condition, other=other, out=out, pad=None)
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> T:
         for key, item in self.items():
@@ -7791,7 +7815,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     rename_key = _renamed_inplace_method(rename_key_)
 
-    def where(self, condition, other, *, out=None):
+    def where(self, condition, other, *, out=None, pad=None):
         condition = condition.unbind(self.stack_dim)
         if _is_tensor_collection(other.__class__) or (
             isinstance(other, Tensor)
@@ -7800,14 +7824,14 @@ class LazyStackedTensorDict(TensorDictBase):
             other = other.unbind(self.stack_dim)
             return torch.stack(
                 [
-                    td.where(cond, _other)
+                    td.where(cond, _other, pad=pad)
                     for td, cond, _other in zip(self.tensordicts, condition, other)
                 ],
                 self.stack_dim,
                 out=out,
             )
         return torch.stack(
-            [td.where(cond, other) for td, cond in zip(self.tensordicts, condition)],
+            [td.where(cond, other, pad=pad) for td, cond in zip(self.tensordicts, condition)],
             self.stack_dim,
             out=out,
         )
@@ -8296,8 +8320,8 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.detach_()
         return self
 
-    def where(self, condition, other, *, out=None):
-        return self.to_tensordict().where(condition=condition, other=other, out=out)
+    def where(self, condition, other, *, out=None, pad=None):
+        return self.to_tensordict().where(condition=condition, other=other, out=out, pad=pad)
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> _CustomOpTensorDict:
         for key, item in self.items():
