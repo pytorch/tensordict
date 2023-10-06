@@ -4751,7 +4751,7 @@ class TensorDict(TensorDictBase):
                     else:
                         raise KeyError(f"Key {key} not found and not pad value provided.")
                 return torch.where(
-                    expand_as_right(condition, tensor), tensor, _other
+                    condition=expand_as_right(condition, tensor), input=tensor, other=_other
                 )
             result = self.empty() if out is None else out
             other_keys = set(other.keys())
@@ -4761,11 +4761,13 @@ class TensorDict(TensorDictBase):
                 _other = other._get_str(key, default=None)
                 if _is_tensor_collection(type(tensor)):
                     _out = None if out is None else out._get_str(key, None)
+                    if _other is None:
+                        _other = tensor.empty()
                     val = tensor.where(condition=condition, other=_other, out=_out, pad=pad)
                 else:
                     val = func(tensor, _other, key)
                 result._set_str(key, val, inplace=False, validated=True)
-                other_keys.remove(key)
+                other_keys.discard(key)
             for key in other_keys:
                 tensor = None
                 _other = other._get_str(key, default=NO_DEFAULT)
@@ -4779,14 +4781,14 @@ class TensorDict(TensorDictBase):
             if out is None:
                 def func(tensor):
                     return torch.where(
-                        expand_as_right(condition, tensor), tensor, other
+                        condition=expand_as_right(condition, tensor), input=tensor, other=other
                     )
 
                 return self.apply(func)
             else:
                 def func(tensor, _out):
                     return torch.where(
-                        expand_as_right(condition, tensor), tensor, other, out=_out
+                        condition=expand_as_right(condition, tensor), input=tensor, other=other, out=_out
                     )
 
                 return self.apply(func, out)
