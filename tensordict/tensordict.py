@@ -4748,6 +4748,7 @@ class TensorDict(TensorDictBase):
                         raise KeyError(
                             f"Key {key} not found and not pad value provided."
                         )
+                    target = _other
                 elif _other is None:
                     if pad is not None:
                         _other = pad
@@ -4755,8 +4756,11 @@ class TensorDict(TensorDictBase):
                         raise KeyError(
                             f"Key {key} not found and not pad value provided."
                         )
+                    target = tensor
+                else:
+                    target = tensor
                 return torch.where(
-                    condition=expand_as_right(condition, tensor),
+                    condition=expand_as_right(condition, target),
                     input=tensor,
                     other=_other,
                 )
