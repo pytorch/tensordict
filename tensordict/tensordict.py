@@ -4743,12 +4743,13 @@ class TensorDict(TensorDictBase):
             def func(tensor, _other, key):
                 if tensor is None:
                     if pad is not None:
-                        tensor = pad
+                        tensor = _other
+                        _other = pad
                     else:
                         raise KeyError(
                             f"Key {key} not found and not pad value provided."
                         )
-                    target = _other
+                    cond = expand_as_right(~condition, tensor)
                 elif _other is None:
                     if pad is not None:
                         _other = pad
@@ -4756,11 +4757,11 @@ class TensorDict(TensorDictBase):
                         raise KeyError(
                             f"Key {key} not found and not pad value provided."
                         )
-                    target = tensor
+                    cond = expand_as_right(condition, tensor)
                 else:
-                    target = tensor
+                    cond = expand_as_right(condition, tensor)
                 return torch.where(
-                    condition=expand_as_right(condition, target),
+                    condition=cond,
                     input=tensor,
                     other=_other,
                 )
