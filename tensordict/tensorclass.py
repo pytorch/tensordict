@@ -183,14 +183,8 @@ def tensorclass(cls: T) -> T:
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
 
-    methods = set(TensorDict.__dict__.keys()).union(TensorDictBase.__dict__.keys())
-    for attr in methods:
-        func = getattr(TensorDict, attr, None)
-        if func is None:
-            # get TensorDictBase
-            func = getattr(TensorDictBase, attr, None)
-            if func is None:
-                continue
+    for attr in TensorDict.__dict__.keys():
+        func = getattr(TensorDict, attr)
         if (
             inspect.ismethod(func) and issubclass(func.__self__, TensorDictBase)
         ):  # detects classmethods
