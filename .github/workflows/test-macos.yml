@@ -30,6 +30,8 @@ jobs:
       timeout: 120
       script: |
         # Set env vars from matrix
+        set -e
+        set -v
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
         export SYSTEM_VERSION_COMPAT=0
@@ -47,7 +49,7 @@ jobs:
   tests-silicon:
     strategy:
       matrix:
-        python_version: ["3.8"]
+        python_version: ["3.9"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
     with:
@@ -56,6 +58,8 @@ jobs:
       timeout: 120
       script: |
         # Set env vars from matrix
+        set -e
+        set -v
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
         export SYSTEM_VERSION_COMPAT=0
