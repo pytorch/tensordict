@@ -7,7 +7,7 @@ unset PYTORCH_VERSION
 
 set -e
 
-eval "$(./conda/bin/conda shell.bash hook)"
+#eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 if [ "${CU_VERSION:-}" == cpu ] ; then

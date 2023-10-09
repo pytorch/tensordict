@@ -11,7 +11,7 @@ this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
-conda_dir="${root_dir}/conda"
+#conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
 
 cd "${root_dir}"
@@ -21,13 +21,13 @@ case "$(uname -s)" in
     *) os=Linux
 esac
 
-# 1. Install conda at ./conda
-if [ ! -d "${conda_dir}" ]; then
-    printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-    bash ./miniconda.sh -b -f -p "${conda_dir}"
-fi
-eval "$(${conda_dir}/bin/conda shell.bash hook)"
+## 1. Install conda at ./conda
+#if [ ! -d "${conda_dir}" ]; then
+#    printf "* Installing conda\n"
+#    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
+#    bash ./miniconda.sh -b -f -p "${conda_dir}"
+#fi
+#eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
 # 2. Create test environment at ./env
 printf "python: ${PYTHON_VERSION}\n"
