@@ -4713,7 +4713,14 @@ class TensorDict(TensorDictBase):
             if device == self.device:
                 return result
             elif non_blocking:
-                return TensorDict(self._tensordict, device=device, names=self.names, batch_size=batch_size if batch_size is not None else self.batch_size)
+                return TensorDict(
+                    self._tensordict,
+                    device=device,
+                    names=self.names,
+                    batch_size=batch_size
+                    if batch_size is not None
+                    else self.batch_size,
+                )
 
         if convert_to_format is not None:
 
