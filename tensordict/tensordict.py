@@ -4682,23 +4682,31 @@ class TensorDict(TensorDictBase):
                 key = key[:-1]  # drop "meta.pt" from key
                 metadata = torch.load(path)
                 if key in out.keys(include_nested=True):
-                    out[key].batch_size = metadata["batch_size"]
+                    out.get(key).batch_size = metadata["batch_size"]
                     device = metadata["device"]
                     if device is not None:
                         out[key] = out[key].to(device)
                 else:
-                    out[key] = cls(
-                        {}, batch_size=metadata["batch_size"], device=metadata["device"]
+                    out.set(
+                        key,
+                        cls(
+                            {},
+                            batch_size=metadata["batch_size"],
+                            device=metadata["device"],
+                        ),
                     )
             else:
                 leaf, *_ = key[-1].rsplit(".", 2)  # remove .meta.pt suffix
                 key = (*key[:-1], leaf)
                 metadata = torch.load(path)
-                out[key] = MemmapTensor(
-                    *metadata["shape"],
-                    device=metadata["device"],
-                    dtype=metadata["dtype"],
-                    filename=str(path.parent / f"{leaf}.memmap"),
+                out.set(
+                    key,
+                    MemmapTensor(
+                        *metadata["shape"],
+                        device=metadata["device"],
+                        dtype=metadata["dtype"],
+                        filename=str(path.parent / f"{leaf}.memmap"),
+                    ),
                 )
 
         return out
