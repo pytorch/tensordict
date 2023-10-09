@@ -29,7 +29,6 @@ jobs:
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/tensordict
-      docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       script: |
@@ -46,7 +45,10 @@ jobs:
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux/scripts/run_all.sh
+        bash .circleci/unittest/linux/scripts/setup_env.sh
+        bash .circleci/unittest/linux/scripts/install.sh
+        bash .circleci/unittest/linux/scripts/run_test.sh
+        bash .circleci/unittest/linux/scripts/post_process.sh
 
   test-cpu:
     strategy:
@@ -57,7 +59,6 @@ jobs:
     with:
       runner: linux.12xlarge
       repository: pytorch/tensordict
-      docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
       timeout: 90
       script: |
         # Set env vars from matrix
@@ -69,7 +70,10 @@ jobs:
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux/scripts/run_all.sh
+        bash .circleci/unittest/linux/scripts/setup_env.sh
+        bash .circleci/unittest/linux/scripts/install.sh
+        bash .circleci/unittest/linux/scripts/run_test.sh
+        bash .circleci/unittest/linux/scripts/post_process.sh
 
   test-stable-gpu:
     strategy:
@@ -81,7 +85,6 @@ jobs:
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
       repository: pytorch/tensordict
-      docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
       timeout: 90
@@ -91,7 +94,7 @@ jobs:
         # Commenting these out for now because the GPU test are not working inside docker
         export CUDA_ARCH_VERSION=${{ matrix.cuda_arch_version }}
         export CU_VERSION="cu${CUDA_ARCH_VERSION:0:2}${CUDA_ARCH_VERSION:3:1}"
-        export TORCH_VERSION=nightly
+        export TORCH_VERSION=stable
         # Remove the following line when the GPU tests are working inside docker, and uncomment the above lines
         #export CU_VERSION="cpu"
 
@@ -99,27 +102,32 @@ jobs:
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux/scripts/run_all.sh
+        bash .circleci/unittest/linux/scripts/setup_env.sh
+        bash .circleci/unittest/linux/scripts/install.sh
+        bash .circleci/unittest/linux/scripts/run_test.sh
+        bash .circleci/unittest/linux/scripts/post_process.sh
 
   test-stable-cpu:
     strategy:
       matrix:
-        python_version: ["3.8", "3.9", "3.10", "3.11"]
+        python_version: ["3.8", "3.11"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: linux.12xlarge
       repository: pytorch/tensordict
-      docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
       timeout: 90
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
         export CU_VERSION="cpu"
-        export TORCH_VERSION=nightly
+        export TORCH_VERSION=stable
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux/scripts/run_all.sh
+        bash .circleci/unittest/linux/scripts/setup_env.sh
+        bash .circleci/unittest/linux/scripts/install.sh
+        bash .circleci/unittest/linux/scripts/run_test.sh
+        bash .circleci/unittest/linux/scripts/post_process.sh
