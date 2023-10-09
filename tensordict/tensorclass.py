@@ -185,10 +185,11 @@ def tensorclass(cls: T) -> T:
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
-        if (
-            inspect.ismethod(func) and issubclass(func.__self__, TensorDictBase)
+        tdcls = func.__self__
+        if inspect.ismethod(func) and issubclass(
+            tdcls, TensorDictBase
         ):  # detects classmethods
-            setattr(cls, attr, _wrap_classmethod(cls, func))
+            setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -439,10 +440,10 @@ def _wrap_method(self, attr, func):
     return wrapped_func
 
 
-def _wrap_classmethod(cls, func):
+def _wrap_classmethod(td_cls, cls, func):
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
-        res = func.__get__(cls)(*args, **kwargs)
+        res = func.__get__(td_cls)(*args, **kwargs)
         # res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
             # create a new tensorclass from res and copy the metadata from self
