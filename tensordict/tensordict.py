@@ -1570,7 +1570,7 @@ class TensorDictBase(MutableMapping):
             >>> assert (td_2["a"] == -2).all()
             >>> assert (td_2["b", "c"] == 2).all()
         """
-        return self._apply(
+        return self._apply_nest(
             fn,
             *others,
             batch_size=batch_size,
@@ -1581,7 +1581,7 @@ class TensorDictBase(MutableMapping):
             **constructor_kwargs,
         )
 
-    def _apply(
+    def _apply_nest(
         self,
         fn: Callable,
         *others: T,
@@ -1620,7 +1620,7 @@ class TensorDictBase(MutableMapping):
         for key, item in self.items():
             _others = [_other._get_str(key, default=NO_DEFAULT) for _other in others]
             if _is_tensor_collection(item.__class__):
-                item_trsf = item._apply(
+                item_trsf = item._apply_nest(
                     fn,
                     *_others,
                     inplace=inplace,
@@ -1665,7 +1665,7 @@ class TensorDictBase(MutableMapping):
         (device, shape etc.) match the :meth:`~.apply` ones.
 
         """
-        return self._apply(
+        return self._apply_nest(
             fn,
             *others,
             batch_size=batch_size,
@@ -4768,18 +4768,20 @@ class TensorDict(TensorDictBase):
         )
         result = self
 
-        if device is not None and dtype is None:
-            if device == self.device:
-                return result
-            elif non_blocking:
-                return TensorDict(
-                    self._tensordict,
-                    device=device,
-                    names=self.names,
-                    batch_size=batch_size
-                    if batch_size is not None
-                    else self.batch_size,
-                )
+        if device is not None and dtype is None and device == self.device:
+            return result
+        # if device is not None and dtype is None:
+        #     if device == self.device:
+        #         return result
+        #     elif non_blocking:
+        #         return TensorDict(
+        #             self._tensordict,
+        #             device=device,
+        #             names=self.names,
+        #             batch_size=batch_size
+        #             if batch_size is not None
+        #             else self.batch_size,
+        #         )
 
         if convert_to_format is not None:
 
@@ -5794,7 +5796,7 @@ torch.Size([3, 2])
     @names.setter
     def names(self, value):
         raise RuntimeError(
-            "Names of a subtensordict cannot be modified. Instantiate the tensordict first."
+            "Names of a subtensordict cannot be modified. Instantiate it as a TensorDict first."
         )
 
     def _has_names(self):
@@ -7251,7 +7253,7 @@ class LazyStackedTensorDict(TensorDictBase):
             td._fast_apply(fn, *[other[idx] for other in others], inplace=True)
         return self
 
-    def _apply(
+    def _apply_nest(
         self,
         fn: Callable,
         *others: T,
@@ -7270,7 +7272,7 @@ class LazyStackedTensorDict(TensorDictBase):
             return self.apply_(fn, *others)
         else:
             if batch_size is not None:
-                return super()._apply(
+                return super()._apply_nest(
                     fn,
                     *others,
                     batch_size=batch_size,
@@ -7282,7 +7284,7 @@ class LazyStackedTensorDict(TensorDictBase):
             others = (other.unbind(self.stack_dim) for other in others)
             out = LazyStackedTensorDict(
                 *(
-                    td._apply(fn, *oth, checked=checked, device=device)
+                    td._apply_nest(fn, *oth, checked=checked, device=device)
                     for td, *oth in zip(self.tensordicts, *others)
                 ),
                 stack_dim=self.stack_dim,

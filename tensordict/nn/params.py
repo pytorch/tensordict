@@ -423,6 +423,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
     ) -> TensorDictBase:
         ...
 
+    @_unlock_and_set(inplace=True)
+    def _apply(*args, **kwargs):
+        ...
+
     @_get_post_hook
     @_fallback
     def get(
