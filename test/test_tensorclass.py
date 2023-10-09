@@ -1672,6 +1672,7 @@ def test_from_dict():
         a: TensorDictBase
 
     tc = MyClass.from_dict(d)
+    assert isinstance(tc, MyClass)
     assert isinstance(tc.a, TensorDict)
     assert tc.batch_size == torch.Size([10])
 

@@ -185,10 +185,10 @@ def tensorclass(cls: T) -> T:
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
-        if (
-            inspect.ismethod(func) and func.__self__ is TensorDict
-        ):  # detects classmethods
-            setattr(cls, attr, _wrap_classmethod(cls, func))
+        if inspect.ismethod(func):
+            tdcls = func.__self__
+            if issubclass(tdcls, TensorDictBase):  # detects classmethods
+                setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -439,10 +439,10 @@ def _wrap_method(self, attr, func):
     return wrapped_func
 
 
-def _wrap_classmethod(cls, func):
+def _wrap_classmethod(td_cls, cls, func):
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
-        res = func.__get__(cls)(*args, **kwargs)
+        res = func.__get__(td_cls)(*args, **kwargs)
         # res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
             # create a new tensorclass from res and copy the metadata from self
@@ -498,7 +498,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
     if isinstance(item, str) or (
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
-        raise ValueError("Invalid indexing arguments.")
+        raise ValueError(f"Invalid indexing arguments: {item}.")
 
     if not is_tensorclass(value) and not isinstance(
         value, (TensorDictBase, numbers.Number, Tensor, MemmapTensor)
