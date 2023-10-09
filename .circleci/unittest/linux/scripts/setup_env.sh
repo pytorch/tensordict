@@ -46,7 +46,7 @@ pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
 
-if [[ $OSTYPE == 'darwin'* ]]; then
-  printf "* Installing C++ for OSX\n"
-  conda install -c conda-forge cxx-compiler -y
-fi
+#if [[ $OSTYPE == 'darwin'* ]]; then
+#  printf "* Installing C++ for OSX\n"
+#  conda install -c conda-forge cxx-compiler -y
+#fi
