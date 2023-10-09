@@ -2,5 +2,5 @@
 
 set -e
 
-#eval "$(./conda/bin/conda shell.bash hook)"
-#conda activate ./env
+eval "$(./conda/bin/conda shell.bash hook)"
+conda activate ./env
