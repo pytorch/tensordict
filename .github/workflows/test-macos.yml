@@ -42,10 +42,10 @@ jobs:
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux/scripts/setup_env.sh
-        bash .circleci/unittest/linux/scripts/install.sh
-        bash .circleci/unittest/linux/scripts/run_test.sh
-        bash .circleci/unittest/linux/scripts/post_process.sh
+        bash .github/unittest/linux/scripts/setup_env.sh
+        bash .github/unittest/linux/scripts/install.sh
+        bash .github/unittest/linux/scripts/run_test.sh
+        bash .github/unittest/linux/scripts/post_process.sh
 
   tests-silicon:
     strategy:
@@ -71,7 +71,7 @@ jobs:
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/linux/scripts/setup_env.sh
-        bash .circleci/unittest/linux/scripts/install.sh
-        bash .circleci/unittest/linux/scripts/run_test.sh
-        bash .circleci/unittest/linux/scripts/post_process.sh
+        bash .github/unittest/linux/scripts/setup_env.sh
+        bash .github/unittest/linux/scripts/install.sh
+        bash .github/unittest/linux/scripts/run_test.sh
+        bash .github/unittest/linux/scripts/post_process.sh
