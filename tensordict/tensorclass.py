@@ -498,7 +498,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
     if isinstance(item, str) or (
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
-        raise ValueError("Invalid indexing arguments.")
+        raise ValueError(f"Invalid indexing arguments: {item}.")
 
     if not is_tensorclass(value) and not isinstance(
         value, (TensorDictBase, numbers.Number, Tensor, MemmapTensor)
