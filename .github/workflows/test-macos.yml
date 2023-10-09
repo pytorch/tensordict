@@ -1,4 +1,4 @@
-name: Unit-tests on MacOS CPU
+name: Unit-tests on MacOS
 
 on:
   pull_request:
