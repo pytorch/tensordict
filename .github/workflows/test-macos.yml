@@ -50,8 +50,8 @@ jobs:
         python_version: ["3.8"]
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
-    runs-on: macos-m1-12
     with:
+      runner: macos-m1-12
       repository: pytorch/rl
       timeout: 120
       script: |
