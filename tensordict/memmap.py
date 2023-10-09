@@ -842,6 +842,13 @@ def _cat(
 implements_for_memmap(torch.cat)(_cat)
 
 
+def _where(condition, input, other):
+    return torch.where(condition=condition, input=input.as_tensor(), other=other)
+
+
+implements_for_memmap(torch.where)(_where)
+
+
 def set_transfer_ownership(memmap: MemmapTensor, value: bool = True) -> None:
     """Changes the transfer_ownership attribute of a MemmapTensor."""
     if isinstance(memmap, MemmapTensor):

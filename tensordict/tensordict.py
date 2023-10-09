@@ -4818,7 +4818,7 @@ class TensorDict(TensorDictBase):
                         _other = pad
                     else:
                         raise KeyError(
-                            f"Key {key} not found and not pad value provided."
+                            f"Key {key} not found and no pad value provided."
                         )
                     cond = expand_as_right(~condition, tensor)
                 elif _other is None:
@@ -4826,7 +4826,7 @@ class TensorDict(TensorDictBase):
                         _other = pad
                     else:
                         raise KeyError(
-                            f"Key {key} not found and not pad value provided."
+                            f"Key {key} not found and no pad value provided."
                         )
                     cond = expand_as_right(condition, tensor)
                 else:
@@ -4858,6 +4858,11 @@ class TensorDict(TensorDictBase):
                 tensor = None
                 _other = other._get_str(key, default=NO_DEFAULT)
                 if _is_tensor_collection(type(_other)):
+                    try:
+                        tensor = _other.empty()
+                    except NotImplementedError:
+                        # H5 tensordicts do not support select()
+                        tensor = _other.to_tensordict().empty()
                     val = _other.where(
                         condition=~condition, other=tensor, out=None, pad=pad
                     )
@@ -6231,7 +6236,7 @@ torch.Size([3, 2])
 
     def where(self, condition, other, *, out=None, pad=None):
         return self.to_tensordict().where(
-            condition=condition, other=other, out=out, pad=None
+            condition=condition, other=other, out=out, pad=pad
         )
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> T:
