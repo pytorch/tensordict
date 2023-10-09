@@ -45,7 +45,7 @@ jobs:
         echo "CU_VERSION: $CU_VERSION"
 
         ## setup_env.sh
-        bash .circleci/unittest/rl_linux_optdeps/scripts/setup_env.sh
-        bash .circleci/unittest/rl_linux_optdeps/scripts/install.sh
-        bash .circleci/unittest/rl_linux_optdeps/scripts/run_test.sh
-        bash .circleci/unittest/rl_linux_optdeps/scripts/post_process.sh
+        bash .github/unittest/rl_linux_optdeps/scripts/setup_env.sh
+        bash .github/unittest/rl_linux_optdeps/scripts/install.sh
+        bash .github/unittest/rl_linux_optdeps/scripts/run_test.sh
+        bash .github/unittest/rl_linux_optdeps/scripts/post_process.sh
