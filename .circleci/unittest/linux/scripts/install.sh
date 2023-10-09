@@ -43,10 +43,10 @@ else
 fi
 
 printf "* Installing tensordict\n"
-pip3 install -e .
+python setup.py develop
 
 # install torchsnapshot nightly
-pip3 install git+https://github.com/pytorch/torchsnapshot
+pip3 install git+https://github.com/pytorch/torchsnapshot --no-build-isolation
 
 # smoke test
 python -c "import functorch;import torchsnapshot"
