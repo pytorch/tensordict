@@ -36,6 +36,7 @@ jobs:
         export CU_VERSION="cpu"
         export SYSTEM_VERSION_COMPAT=0
         export TORCH_VERSION=nightly
+        export ARCH=x86_64
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
@@ -64,7 +65,7 @@ jobs:
         export CU_VERSION="cpu"
         export SYSTEM_VERSION_COMPAT=0
         export TORCH_VERSION=nightly
-        export ARCH=silicon
+        export ARCH=arm64
 
         echo "PYTHON_VERSION: $PYTHON_VERSION"
         echo "CU_VERSION: $CU_VERSION"
