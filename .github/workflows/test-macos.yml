@@ -26,7 +26,7 @@ jobs:
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
     with:
-      repository: pytorch/rl
+      repository: pytorch/tensordict
       timeout: 120
       script: |
         # Set env vars from matrix
@@ -52,7 +52,7 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
     with:
       runner: macos-m1-12
-      repository: pytorch/rl
+      repository: pytorch/tensordict
       timeout: 120
       script: |
         # Set env vars from matrix
