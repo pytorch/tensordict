@@ -3,7 +3,7 @@
 set -e
 
 #eval "$(./conda/bin/conda shell.bash hook)"
-conda activate ./env
+#conda activate ./env
 
 export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env

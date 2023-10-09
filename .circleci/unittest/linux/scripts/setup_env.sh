@@ -6,6 +6,8 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
+set -v
+
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -29,14 +31,13 @@ esac
 #fi
 #eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
-# 2. Create test environment at ./env
-printf "python: ${PYTHON_VERSION}\n"
-conda init bash
-if [ ! -d "${env_dir}" ]; then
-    printf "* Creating a test environment\n"
-    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
-fi
-conda activate "${env_dir}"
+## 2. Create test environment at ./env
+#printf "python: ${PYTHON_VERSION}\n"
+#if [ ! -d "${env_dir}" ]; then
+#    printf "* Creating a test environment\n"
+#    conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
+#fi
+#conda activate "${env_dir}"
 
 # 3. Install Conda dependencies
 printf "* Installing dependencies (except PyTorch)\n"
