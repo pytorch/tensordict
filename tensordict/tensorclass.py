@@ -185,11 +185,10 @@ def tensorclass(cls: T) -> T:
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
-        tdcls = func.__self__
-        if inspect.ismethod(func) and issubclass(
-            tdcls, TensorDictBase
-        ):  # detects classmethods
-            setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
+        if inspect.ismethod(func):
+            tdcls = func.__self__
+            if issubclass(tdcls, TensorDictBase):  # detects classmethods
+                setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
