@@ -28,11 +28,11 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
-      repository: pytorchl/tensordict
+      repository: pytorch/tensordict
       docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      timeout: 90
+      0
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
@@ -57,7 +57,7 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: linux.12xlarge
-      repository: pytorchl/tensordict
+      repository: pytorch/tensordict
       docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
       timeout: 90
       script: |
@@ -81,7 +81,7 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: linux.g5.4xlarge.nvidia.gpu
-      repository: pytorchl/tensordict
+      repository: pytorch/tensordict
       docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
@@ -110,7 +110,7 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: linux.12xlarge
-      repository: pytorchl/tensordict
+      repository: pytorch/tensordict
       docker-image: "nvidia/cuda:12.2.0-devel-ubuntu22.04"
       timeout: 90
       script: |
