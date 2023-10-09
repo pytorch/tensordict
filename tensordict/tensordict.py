@@ -5231,7 +5231,7 @@ def _empty_like(td: T, *args, **kwargs) -> T:
             "cloned, preventing empty_like to be called. "
             "Consider calling tensordict.to_tensordict() first."
         ) from err
-    return tdclone._fast_apply_(lambda x: torch.empty_like(x, *args, **kwargs))
+    return tdclone._fast_apply(lambda x: torch.empty_like(x, *args, **kwargs), inplace=True)
 
 
 @implements_for_td(torch.clone)
