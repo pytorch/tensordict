@@ -32,7 +32,6 @@ jobs:
       docker-image: "nvidia/cuda:12.1.0-devel-ubuntu22.04"
       gpu-arch-type: cuda
       gpu-arch-version: ${{ matrix.cuda_arch_version }}
-      0
       script: |
         # Set env vars from matrix
         export PYTHON_VERSION=${{ matrix.python_version }}
