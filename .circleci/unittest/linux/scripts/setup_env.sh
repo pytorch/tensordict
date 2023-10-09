@@ -31,6 +31,7 @@ esac
 
 # 2. Create test environment at ./env
 printf "python: ${PYTHON_VERSION}\n"
+conda init bash
 if [ ! -d "${env_dir}" ]; then
     printf "* Creating a test environment\n"
     conda create --prefix "${env_dir}" -y python="$PYTHON_VERSION"
