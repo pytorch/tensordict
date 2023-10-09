@@ -4685,7 +4685,7 @@ class TensorDict(TensorDictBase):
                     out.get(key).batch_size = metadata["batch_size"]
                     device = metadata["device"]
                     if device is not None:
-                        out[key] = out[key].to(device)
+                        out.set(key, out.get(key).to(device))
                 else:
                     out.set(
                         key,
