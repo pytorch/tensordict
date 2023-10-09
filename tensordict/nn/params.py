@@ -424,7 +424,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_unlock_and_set(inplace=True)
-    def _apply(*args, **kwargs):
+    def _apply_nest(*args, **kwargs):
         ...
 
     @_get_post_hook
