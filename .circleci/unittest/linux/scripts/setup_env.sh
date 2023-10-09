@@ -6,6 +6,8 @@
 # Do not install PyTorch and torchvision here, otherwise they also get cached.
 
 set -e
+set -v
+
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -24,7 +26,7 @@ esac
 # 1. Install conda at ./conda
 if [ ! -d "${conda_dir}" ]; then
     printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
+    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-${ARCH}.sh"
     bash ./miniconda.sh -b -f -p "${conda_dir}"
 fi
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
@@ -45,3 +47,8 @@ cat "${this_dir}/environment.yml"
 pip install pip --upgrade
 
 conda env update --file "${this_dir}/environment.yml" --prune
+
+#if [[ $OSTYPE == 'darwin'* ]]; then
+#  printf "* Installing C++ for OSX\n"
+#  conda install -c conda-forge cxx-compiler -y
+#fi
