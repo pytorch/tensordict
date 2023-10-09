@@ -26,7 +26,11 @@ esac
 # 1. Install conda at ./conda
 if [ ! -d "${conda_dir}" ]; then
     printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-arm64.sh"
+    if [[ "$ARCH" == "silicon" ]]; then
+      wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-arm64.sh"
+    else
+      wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
+    fi
     bash ./miniconda.sh -b -f -p "${conda_dir}"
 fi
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
