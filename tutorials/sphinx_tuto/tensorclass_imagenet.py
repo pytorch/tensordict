@@ -166,11 +166,11 @@ class RandomCrop(nn.Module):
         index0 = torch.randint(x.shape[-2] - self.h, (*batch, 1), device=x.device)
         index0 = index0 + torch.arange(self.h, device=x.device)
         index0 = (
-            index0.unsqueeze(1).unsqueeze(-1).expand(*batch, 3, self.h, x.shape[-1])
+            index0.unsqueeze(1).unsqueeze(-1).expand((*batch, 3), self.h, x.shape[-1])
         )
         index1 = torch.randint(x.shape[-1] - self.w, (*batch, 1), device=x.device)
         index1 = index1 + torch.arange(self.w, device=x.device)
-        index1 = index1.unsqueeze(1).unsqueeze(-2).expand(*batch, 3, self.h, self.w)
+        index1 = index1.unsqueeze(1).unsqueeze(-2).expand((*batch, 3), self.h, self.w)
         return x.gather(-2, index0).gather(-1, index1)
 
 
@@ -402,11 +402,11 @@ print(
 ##############################################################################
 # This shows that much of the overhead is coming from i/o operations rather than the
 # transforms, and hence explains how the memory-mapped array helps us load data more
-# efficiently. Check out the `distributed example <https://github.com/pytorch-labs/tensordict/tree/main/benchmarks/distributed/dataloading.py>`__
+# efficiently. Check out the `distributed example <https://github.com/pytorch/tensordict/tree/main/benchmarks/distributed/dataloading.py>`__
 # for more context about the other results from these charts.
 #
 # We can get even better performance with the TensorClass approach by using multiple
 # workers to load batches from the memory-mapped array, though this comes with some
 # added complexity. See `this example in our benchmarks
-# <https://github.com/pytorch-labs/tensordict/blob/main/benchmarks/distributed/dataloading.py>`__
+# <https://github.com/pytorch/tensordict/blob/main/benchmarks/distributed/dataloading.py>`__
 # for an example of how this could work.

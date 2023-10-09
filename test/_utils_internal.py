@@ -236,7 +236,7 @@ class TestTensorDictsBase:
 def expand_list(list_of_tensors, *dims):
     n = len(list_of_tensors)
     td = TensorDict({str(i): tensor for i, tensor in enumerate(list_of_tensors)}, [])
-    td = td.expand(*dims).contiguous()
+    td = td.expand(dims).contiguous()
     return [td[str(i)] for i in range(n)]
 
 

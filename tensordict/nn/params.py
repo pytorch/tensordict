@@ -10,9 +10,10 @@ import numbers
 import re
 from copy import copy
 from functools import wraps
-from typing import Any, Callable, Iterator, Sequence
+from typing import Any, Callable, Iterator, OrderedDict, Sequence
 
 import torch
+from functorch import dim as ftdim
 
 from tensordict import TensorDictBase
 from tensordict.nn.utils import Buffer
@@ -72,7 +73,7 @@ def _get_args_dict(func, args, kwargs):
 
 def _maybe_make_param(tensor):
     if (
-        isinstance(tensor, Tensor)
+        isinstance(tensor, (Tensor, ftdim.Tensor))
         and not isinstance(tensor, nn.Parameter)
         and tensor.dtype in (torch.float, torch.double, torch.half)
     ):
@@ -82,7 +83,7 @@ def _maybe_make_param(tensor):
 
 def _maybe_make_param_or_buffer(tensor):
     if (
-        isinstance(tensor, Tensor)
+        isinstance(tensor, (Tensor, ftdim.Tensor))
         and not isinstance(tensor, nn.Parameter)
         and tensor.dtype in (torch.float, torch.double, torch.half)
     ):
@@ -319,7 +320,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         if kwargs is None:
             kwargs = {}
         if func not in TDPARAM_HANDLED_FUNCTIONS or not all(
-            issubclass(t, (Tensor, TensorDictBase)) for t in types
+            issubclass(t, (Tensor, ftdim.Tensor, TensorDictBase)) for t in types
         ):
             return NotImplemented
         return TDPARAM_HANDLED_FUNCTIONS[func](*args, **kwargs)
@@ -743,6 +744,53 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 yield v
                 continue
             yield self._apply_get_post_hook(v)
+
+    def state_dict(self, *args, destination=None, prefix="", keep_vars=False):
+        sd = self._param_td.flatten_keys(".").state_dict(
+            destination=destination, prefix=prefix, keep_vars=keep_vars
+        )
+        return sd
+
+    def load_state_dict(
+        self, state_dict: OrderedDict[str, Any], strict=True, assign=False
+    ):
+        state_dict_tensors = {}
+        state_dict = dict(state_dict)
+        for k, v in list(state_dict.items()):
+            if isinstance(v, torch.Tensor):
+                del state_dict[k]
+                state_dict_tensors[k] = v
+        state_dict_tensors = dict(
+            TensorDict(state_dict_tensors, []).unflatten_keys(".")
+        )
+        self.data.load_state_dict(
+            {**state_dict_tensors, **state_dict}, strict=True, assign=False
+        )
+        return self
+
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        data = (
+            TensorDict(
+                {
+                    key: val
+                    for key, val in state_dict.items()
+                    if key.startswith(prefix) and val is not None
+                },
+                [],
+            )
+            .unflatten_keys(".")
+            .get(prefix[:-1])
+        )
+        self.data.load_state_dict(data)
 
     def items(
         self, include_nested: bool = False, leaves_only: bool = False

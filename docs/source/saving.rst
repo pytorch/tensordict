@@ -79,17 +79,17 @@ that we will re-populate with the saved data.
 Again, two lines of code are sufficient to save the data:
 
   >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=tensordict_source.state_dict())
+  ...     "state": torchsnapshot.StateDict(tensordict=tensordict_source.state_dict(keep_vars=True))
   ... }
   >>> snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path="/path/to/my/snapshot")
 
 We have been using :obj:`torchsnapshot.StateDict` and we explicitly called
-:obj:`my_tensordict_source.state_dict()`, unlike the previous example.
+:obj:`my_tensordict_source.state_dict(keep_vars=True)`, unlike the previous example.
 Now, to load this onto a destination tensordict:
 
   >>> snapshot = Snapshot(path="/path/to/my/snapshot")
   >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=tensordict_target.state_dict())
+  ...     "state": torchsnapshot.StateDict(tensordict=tensordict_target.state_dict(keep_vars=True))
   ... }
   >>> snapshot.restore(app_state=app_state)
 
@@ -117,7 +117,7 @@ Here is a full example:
   >>> assert isinstance(td["b", "c"], MemmapTensor)
   >>>
   >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=td.state_dict())
+  ...     "state": torchsnapshot.StateDict(tensordict=td.state_dict(keep_vars=True))
   ... }
   >>> snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=f"/tmp/{uuid.uuid4()}")
   >>>
@@ -126,7 +126,7 @@ Here is a full example:
   >>> td_dest.memmap_()
   >>> assert isinstance(td_dest["b", "c"], MemmapTensor)
   >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=td_dest.state_dict())
+  ...     "state": torchsnapshot.StateDict(tensordict=td_dest.state_dict(keep_vars=True))
   ... }
   >>> snapshot.restore(app_state=app_state)
   >>> # sanity check
@@ -157,7 +157,7 @@ Finally, tensorclass also supports this feature. The code is fairly similar to t
   >>> assert isinstance(tc.y.x, MemmapTensor)
   >>>
   >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=tc.state_dict())
+  ...     "state": torchsnapshot.StateDict(tensordict=tc.state_dict(keep_vars=True))
   ... }
   >>> snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=f"/tmp/{uuid.uuid4()}")
   >>>
@@ -165,7 +165,7 @@ Finally, tensorclass also supports this feature. The code is fairly similar to t
   >>> tc_dest.memmap_()
   >>> assert isinstance(tc_dest.y.x, MemmapTensor)
   >>> app_state = {
-  ...     "state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict())
+  ...     "state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict(keep_vars=True))
   ... }
   >>> snapshot.restore(app_state=app_state)
   >>>
