@@ -70,10 +70,11 @@ def test_memmap_data_type(dtype, shape):
     assert m.clone().shape == t.shape
 
 
-def test_memmap_del():
+def test_memmap_del(tmpdir):
+    filename = tmpdir / "tensor"
     t = torch.tensor([1])
-    m = MemmapTensor.from_tensor(t)
-    filename = m.filename
+    m = MemmapTensor.from_tensor(t, filename=filename)
+    # filename = m.filename
     assert os.path.isfile(filename)
     del m
     assert not os.path.isfile(filename)
