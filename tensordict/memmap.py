@@ -732,8 +732,7 @@ MemmapTensor of shape {self.shape}."""
             return out
 
         out = self.clone()
-        out.device = device
-        return self
+        return out.to(device)
 
     def unbind(self, dim: int) -> tuple[torch.Tensor, ...]:
         """Unbinds a MemmapTensor along the desired dimension.
