@@ -1764,7 +1764,12 @@ class TensorDictBase(MutableMapping):
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
-            td = self.cpu().as_tensor()
+            if self.device.type != "cpu":
+                raise RuntimeError(
+                    "MemmapTensor with non-cpu device are not supported in vmap ops."
+                )
+            else:
+                td = self.as_tensor()
         else:
             td = self
         out = TensorDict(
@@ -7924,6 +7929,8 @@ class LazyStackedTensorDict(TensorDictBase):
     rename_key = _renamed_inplace_method(rename_key_)
 
     def where(self, condition, other, *, out=None, pad=None):
+        if condition.ndim < self.ndim:
+            condition = expand_right(condition, self.batch_size)
         condition = condition.unbind(self.stack_dim)
         if _is_tensor_collection(other.__class__) or (
             isinstance(other, Tensor)
