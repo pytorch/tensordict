@@ -2889,6 +2889,13 @@ class TestTensorDicts(TestTensorDictsBase):
             ):
                 fun(td)
             return
+        if td_name == "memmap_td" and device.type != "cpu":
+            with pytest.raises(
+                RuntimeError,
+                match="MemmapTensor with non-cpu device are not supported in vmap ops",
+            ):
+                fun(td)
+            return
         fun(td)
 
         if td_name == "td_params":

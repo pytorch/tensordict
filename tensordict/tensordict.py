@@ -1765,7 +1765,9 @@ class TensorDictBase(MutableMapping):
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             if self.device.type != "cpu":
-                td = self.cpu()
+                raise RuntimeError(
+                    "MemmapTensor with non-cpu device are not supported in vmap ops."
+                )
             else:
                 td = self.as_tensor()
         else:
