@@ -1242,7 +1242,6 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td_where.get(k)[~mask] == 1).all()
         td_where = td.clone()
 
-
         if td_name == "td_h5":
             with pytest.raises(
                 RuntimeError,
