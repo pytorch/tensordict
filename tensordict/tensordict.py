@@ -1764,7 +1764,7 @@ class TensorDictBase(MutableMapping):
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
-            td = self.cpu().as_tensor()
+            td = self.cpu()
         else:
             td = self
         out = TensorDict(
