@@ -843,7 +843,12 @@ implements_for_memmap(torch.cat)(_cat)
 
 
 def _where(condition, input, other):
-    return torch.where(condition=condition, input=input.as_tensor(), other=other)
+    device = input.device
+    if device != torch.device("cpu"):
+        input = input.to("cpu").as_tensor().to(device)
+    else:
+        input = input.as_tensor()
+    return torch.where(condition=condition, input=input, other=other)
 
 
 implements_for_memmap(torch.where)(_where)
