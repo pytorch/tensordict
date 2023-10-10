@@ -1241,15 +1241,7 @@ class TestTensorDicts(TestTensorDictsBase):
         for k in td.keys(True, True):
             assert (td_where.get(k)[~mask] == 1).all()
         td_where = td.clone()
-        # torch.where(mask, td, torch.zeros((), device=device), out=td_where)
-        # for k in td.keys(True, True):
-        #     assert (td_where.get(k)[~mask] == 0).all()
-        if td_name == "td_params":
-            with pytest.raises(
-                RuntimeError, match="don't support automatic differentiation"
-            ):
-                torch.where(mask, td, torch.ones_like(td), out=td_where)
-            return
+
         if td_name == "td_h5":
             with pytest.raises(
                 RuntimeError,
@@ -1260,6 +1252,44 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.where(mask, td, torch.ones_like(td), out=td_where)
         for k in td.keys(True, True):
             assert (td_where.get(k)[~mask] == 1).all()
+
+    def test_where_pad(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        # test with other empty td
+        mask = torch.zeros(td.shape, dtype=torch.bool, device=td.device).bernoulli_()
+        if td_name in ("td_h5",):
+            td_full = td.to_tensordict()
+        else:
+            td_full = td
+        td_empty = td_full.empty()
+        result = td.where(mask, td_empty, pad=1)
+        for v in result.values(True, True):
+            assert (v[~mask] == 1).all()
+        td_empty = td_full.empty()
+        result = td_empty.where(~mask, td, pad=1)
+        for v in result.values(True, True):
+            assert (v[~mask] == 1).all()
+        # with output
+        td_out = td_full.empty()
+        result = td.where(mask, td_empty, pad=1, out=td_out)
+        for v in result.values(True, True):
+            assert (v[~mask] == 1).all()
+        if td_name not in ("td_params",):
+            assert result is td_out
+        else:
+            assert isinstance(result, TensorDictParams)
+        td_out = td_full.empty()
+        td_empty = td_full.empty()
+        result = td_empty.where(~mask, td, pad=1, out=td_out)
+        for v in result.values(True, True):
+            assert (v[~mask] == 1).all()
+        assert result is td_out
+
+        with pytest.raises(KeyError, match="not found and no pad value provided"):
+            td.where(mask, td_full.empty())
+        with pytest.raises(KeyError, match="not found and no pad value provided"):
+            td_full.empty().where(mask, td)
 
     def test_masking_set(self, td_name, device):
         torch.manual_seed(1)
