@@ -1764,7 +1764,10 @@ class TensorDictBase(MutableMapping):
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
-            td = self.cpu()
+            if self.device.type != "cpu":
+                td = self.cpu()
+            else:
+                td = self.as_tensor()
         else:
             td = self
         out = TensorDict(
