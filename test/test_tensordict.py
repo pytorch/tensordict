@@ -1241,15 +1241,8 @@ class TestTensorDicts(TestTensorDictsBase):
         for k in td.keys(True, True):
             assert (td_where.get(k)[~mask] == 1).all()
         td_where = td.clone()
-        # torch.where(mask, td, torch.zeros((), device=device), out=td_where)
-        # for k in td.keys(True, True):
-        #     assert (td_where.get(k)[~mask] == 0).all()
-        if td_name == "td_params":
-            with pytest.raises(
-                RuntimeError, match="don't support automatic differentiation"
-            ):
-                torch.where(mask, td, torch.ones_like(td), out=td_where)
-            return
+
+
         if td_name == "td_h5":
             with pytest.raises(
                 RuntimeError,
