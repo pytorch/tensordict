@@ -35,8 +35,8 @@ import numpy as np
 
 import torch
 from tensordict._tensordict import _unravel_key_to_tuple
-from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor, \
-    MemoryMappedTensor
+from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
+from tensordict.memmap_refact import MemoryMappedTensor
 from tensordict.utils import (
     _device,
     _dtype,
