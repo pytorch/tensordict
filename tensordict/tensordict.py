@@ -7924,6 +7924,8 @@ class LazyStackedTensorDict(TensorDictBase):
     rename_key = _renamed_inplace_method(rename_key_)
 
     def where(self, condition, other, *, out=None, pad=None):
+        if condition.ndim < self.ndim:
+            condition = expand_right(condition, self.batch_size)
         condition = condition.unbind(self.stack_dim)
         if _is_tensor_collection(other.__class__) or (
             isinstance(other, Tensor)
