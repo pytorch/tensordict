@@ -105,7 +105,7 @@ class MemoryMappedTensor(torch.Tensor):
             handler = None
             out = cls(
                 torch.from_file(
-                    filename, shared=True, dtype=tensor.dtype, size=shape.numel()
+                    str(filename), shared=True, dtype=tensor.dtype, size=shape.numel()
                 ).view(tensor.shape)
             )
         out.handler = handler
