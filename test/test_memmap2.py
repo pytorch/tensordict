@@ -70,7 +70,6 @@ def test_memmap_data_type(dtype, shape):
     assert m.clone().shape == t.shape
 
 
-
 # @pytest.mark.parametrize("transfer_ownership", [True, False])
 # def test_memmap_ownership(transfer_ownership):
 #     t = torch.tensor([1])
@@ -156,15 +155,7 @@ class TestMP:
             queue.close()
 
 
-@pytest.mark.parametrize(
-    "index",
-    [
-        None,
-        [
-            0,
-        ],
-    ],
-)
+@pytest.mark.parametrize("index", [None, [0]])
 def test_memmap_new(index):
     t = torch.tensor([1])
     m = MemmapTensor.from_tensor(t)
@@ -541,6 +532,7 @@ class TestOps:
         )
         assert (memmap != ~memmap).all()
 
+
 def test_memmap_del(tmpdir):
     t = torch.tensor([1])
     m = MemmapTensor.from_tensor(t, filename=tmpdir / "tensor")
@@ -548,6 +540,7 @@ def test_memmap_del(tmpdir):
     assert os.path.isfile(tmpdir / "tensor")
     del m
     assert not os.path.isfile(tmpdir / "tensor")
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
