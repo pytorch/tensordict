@@ -849,8 +849,6 @@ def _where(condition, input, other):
         input = input.to("cpu").to(device, non_blocking=True)
     else:
         input = input.as_tensor()
-    if condition.device != device or (isinstance(other, (MemmapTensor, torch.Tensor)) and other.device != device):
-        raise ValueError(f"{condition.device}, {device}, {other.device}")
     return torch.where(condition=condition, input=input, other=other)
 
 
