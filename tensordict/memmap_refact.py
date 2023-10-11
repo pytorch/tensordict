@@ -37,7 +37,9 @@ class MemoryMappedTensor(torch.Tensor):
     index: Any
     parent_shape: torch.Size
 
-    def __new__(cls, tensor_or_file, handler=None, dtype=None, shape=None, index=None):
+    def __new__(cls, tensor_or_file, handler=None, dtype=None, shape=None, index=None, device=None):
+        if device is not None and torch.device(device).type != "cpu":
+            raise ValueError(f"{cls} device must be cpu!")
         if isinstance(tensor_or_file, str):
             return cls.from_filename(
                 tensor_or_file,
@@ -54,7 +56,7 @@ class MemoryMappedTensor(torch.Tensor):
             )
         return super().__new__(cls, tensor_or_file)
 
-    def __init__(self, tensor_or_file, handler=None, dtype=None, shape=None):
+    def __init__(self, tensor_or_file, handler=None, dtype=None, shape=None, device=None):
         ...
 
     __torch_function__ = torch._C._disabled_torch_function_impl
@@ -172,7 +174,6 @@ class MemoryMappedTensor(torch.Tensor):
         out = super().__getitem__(item)
         if out.data_ptr() == self.data_ptr():
             out = MemoryMappedTensor(out)
-            assert isinstance(out, MemoryMappedTensor)
             out.handler = self.handler
             out.filename = self.filename
             out.index = item

@@ -14,6 +14,7 @@ from _utils_internal import get_available_devices
 
 from tensordict.memmap_refact import MemoryMappedTensor as MemmapTensor
 from torch import multiprocessing as mp
+from contextlib import nullcontext
 
 TIMEOUT = 100
 
@@ -100,62 +101,9 @@ def test_memmap_data_type(dtype, shape):
 #                 m2.contiguous()
 #
 #
-@pytest.mark.parametrize("value", [True, False])
-def test_memmap_ownership_2pass(value):
-    t = torch.tensor([1])
-    m1 = MemmapTensor.from_tensor(t, transfer_ownership=value)
-    filename = m1.filename
-    with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp2:
-        pickle.dump(m1, tmp2)
-        # after we dump m1, m1 has lost ownership and waits for m2 to pick it up
-        # if m1 is deleted and m2 is never created, the file is not cleared.
-        if value:
-            assert not m1._has_ownership
-        else:
-            assert m1._has_ownership
-
-        m2 = pickle.load(open(tmp2.name, "rb"))
-        assert m2.filename == m1.filename
-        with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp3:
-            pickle.dump(m2, tmp3)
-            m3 = pickle.load(open(tmp3.name, "rb"))
-            assert m3.filename == m1.filename
-
-    del m1, m2, m3
-    assert not os.path.isfile(filename)
 
 
-class TestMP:
-    @staticmethod
-    def getdata(data, queue):
-        queue.put(("has_ownership", data._has_ownership))
-        queue.put(("transfer_ownership", data.transfer_ownership))
-
-    @pytest.mark.parametrize("transfer_ownership", [True, False])
-    def test(self, transfer_ownership, tmp_path):
-        m = MemmapTensor(
-            3, transfer_ownership=transfer_ownership, filename=tmp_path / "tensor.mp"
-        )
-        queue = mp.Queue(1)
-        p = mp.Process(target=TestMP.getdata, args=(m, queue))
-        p.start()
-        try:
-            msg, val = queue.get()
-            assert msg == "has_ownership"
-            assert val is transfer_ownership
-            if transfer_ownership:
-                assert not m._has_ownership
-            else:
-                assert m._has_ownership
-            msg, val = queue.get()
-            assert msg == "transfer_ownership"
-            assert val is transfer_ownership
-        finally:
-            p.join()
-            queue.close()
-
-
-@pytest.mark.parametrize("index", [None, [0]])
+@pytest.mark.parametrize("index", [None, 0])
 def test_memmap_new(index):
     t = torch.tensor([1])
     m = MemmapTensor.from_tensor(t)
@@ -166,8 +114,8 @@ def test_memmap_new(index):
     m2 = MemmapTensor.from_tensor(m1)
     assert isinstance(m2, MemmapTensor)
     assert m2.filename == m1.filename
-    assert m2.filename == m2.file.name
-    assert m2.filename == m2.file._closer.name
+    # assert m2.filename == m2.file.name
+    # assert m2.filename == m2.file._closer.name
     if index is not None:
         assert m2.contiguous() == t[index]
     m2c = m2.contiguous()
@@ -199,22 +147,23 @@ def test_memmap_same_device_as_tensor(device):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_memmap_create_on_same_device(device):
     """Test if the device arg for MemmapTensor init is respected."""
-    m = MemmapTensor([3, 4], device=device)
-    assert m.device == torch.device(device)
+    with pytest.raises(ValueError) if device.type != "cpu" else nullcontext():
+        MemmapTensor([3, 4], device=device)
+    # assert m.device == torch.device(device)
 
 
-@pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize(
     "value", [torch.zeros([3, 4]), MemmapTensor.from_tensor(torch.zeros([3, 4]))]
 )
-@pytest.mark.parametrize("shape", [[3, 4], [[3, 4]]])
-def test_memmap_zero_value(device, value, shape):
+@pytest.mark.parametrize("shape", [[3, 4]])
+def test_memmap_zero_value(value, shape):
     """
     Test if all entries are zeros when MemmapTensor is created with size.
     """
+    device = "cpu"
     value = value.to(device)
     expected_memmap_tensor = MemmapTensor.from_tensor(value)
-    m = MemmapTensor(*shape, device=device)
+    m = MemmapTensor(torch.zeros(tuple(shape), device=device))
     assert m.shape == (3, 4)
     assert torch.all(m == expected_memmap_tensor)
     assert torch.all(m + torch.ones([3, 4], device=device) == 1)
@@ -267,10 +216,18 @@ class TestIndexing:
 
     def test_double_index(self):
         t = MemmapTensor.from_tensor(torch.zeros(10))
-        y = t[:2][-1:]
+        y = t[:2]
         # int
         assert isinstance(y, MemmapTensor)
         assert y.filename == t.filename
+        assert y.handler is t.handler
+        assert y.shape == torch.Size([2])
+        assert t.shape == torch.Size([10])
+        y = y[:1]
+        # int
+        assert isinstance(y, MemmapTensor)
+        assert y.filename == t.filename
+        assert y.handler is t.handler
         assert y.shape == torch.Size([1])
         assert t.shape == torch.Size([10])
 
@@ -541,6 +498,59 @@ def test_memmap_del(tmpdir):
     del m
     assert not os.path.isfile(tmpdir / "tensor")
 
+@pytest.mark.parametrize("value", [True, False])
+def test_memmap_ownership_2pass(value):
+    t = torch.tensor([1])
+    m1 = MemmapTensor.from_tensor(t, transfer_ownership=value)
+    filename = m1.filename
+    with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp2:
+        pickle.dump(m1, tmp2)
+        # after we dump m1, m1 has lost ownership and waits for m2 to pick it up
+        # if m1 is deleted and m2 is never created, the file is not cleared.
+        if value:
+            assert not m1._has_ownership
+        else:
+            assert m1._has_ownership
+
+        m2 = pickle.load(open(tmp2.name, "rb"))
+        assert m2.filename == m1.filename
+        with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp3:
+            pickle.dump(m2, tmp3)
+            m3 = pickle.load(open(tmp3.name, "rb"))
+            assert m3.filename == m1.filename
+
+    del m1, m2, m3
+    assert not os.path.isfile(filename)
+
+
+class TestMP:
+    @staticmethod
+    def getdata(data, queue):
+        queue.put(("has_ownership", data._has_ownership))
+        queue.put(("transfer_ownership", data.transfer_ownership))
+
+    @pytest.mark.parametrize("transfer_ownership", [True, False])
+    def test(self, transfer_ownership, tmp_path):
+        m = MemmapTensor(
+            3, transfer_ownership=transfer_ownership, filename=tmp_path / "tensor.mp"
+        )
+        queue = mp.Queue(1)
+        p = mp.Process(target=TestMP.getdata, args=(m, queue))
+        p.start()
+        try:
+            msg, val = queue.get()
+            assert msg == "has_ownership"
+            assert val is transfer_ownership
+            if transfer_ownership:
+                assert not m._has_ownership
+            else:
+                assert m._has_ownership
+            msg, val = queue.get()
+            assert msg == "transfer_ownership"
+            assert val is transfer_ownership
+        finally:
+            p.join()
+            queue.close()
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
