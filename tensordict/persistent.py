@@ -9,9 +9,10 @@ from __future__ import annotations
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from tensordict._tensordict import _unravel_key_to_tuple
+from torch import multiprocessing as mp
 
 H5_ERR = None
 try:
@@ -35,8 +36,9 @@ from tensordict.tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import (
+    _parse_to,
+    _split_tensordict,
     cache,
-    DeviceType,
     expand_right,
     IndexType,
     lock_blocked,
@@ -506,8 +508,10 @@ class PersistentTensorDict(TensorDictBase):
     def masked_fill(self, mask, value):
         return self.to_tensordict().masked_fill(mask, value)
 
-    def where(self, condition, other, *, out=None):
-        return self.to_tensordict().where(condition=condition, other=other, out=out)
+    def where(self, condition, other, *, out=None, pad=None):
+        return self.to_tensordict().where(
+            condition=condition, other=other, out=out, pad=pad
+        )
 
     def masked_fill_(self, mask, value):
         for key in self.keys(include_nested=True, leaves_only=True):
@@ -602,6 +606,34 @@ class PersistentTensorDict(TensorDictBase):
         }
         return out
 
+    def map(
+        self,
+        fn: Callable,
+        dim: int = 0,
+        num_workers: int = None,
+        chunksize: int = None,
+        num_chunks: int = None,
+        pool: mp.Pool = None,
+    ):
+        if pool is None:
+            if num_workers is None:
+                num_workers = mp.cpu_count()  # Get the number of CPU cores
+            with mp.Pool(num_workers) as pool:
+                return self.map(fn, dim=dim, chunksize=chunksize, pool=pool)
+        num_workers = pool._processes
+        dim_orig = dim
+        if dim < 0:
+            dim = self.ndim + dim
+        if dim < 0 or dim >= self.ndim:
+            raise ValueError(f"Got incompatible dimension {dim_orig}")
+
+        self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
+        self_split = tuple(split.to_tensordict() for split in self_split)
+        chunksize = 1
+        out = pool.imap(fn, self_split, chunksize)
+        out = torch.cat(list(out), dim)
+        return out
+
     def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
     ) -> PersistentTensorDict:
@@ -659,32 +691,24 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
-    def to(
-        self, dest: DeviceType | torch.Size | type, **kwargs: Any
-    ) -> PersistentTensorDict:
-        if isinstance(dest, type) and issubclass(dest, TensorDictBase):
-            if isinstance(self, dest):
-                return self
-            td = dest(source=self, **kwargs)
-            return td
-        elif isinstance(dest, (torch.device, str, int)):
-            # must be device
-            dest = torch.device(dest)
-            if self.device is not None and dest == self.device:
-                return self
-            out = self.clone(False)
-            out._device = dest
-            for key, nested in list(out._nested_tensordicts.items()):
-                out._nested_tensordicts[key] = nested.to(dest)
-            return out
-        elif isinstance(dest, torch.Size):
-            self.batch_size = dest
-            return self
-        else:
-            raise NotImplementedError(
-                f"dest must be a string, torch.device or a TensorDict "
-                f"instance, {dest} not allowed"
-            )
+    def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
+        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
+            *args, **kwargs
+        )
+        result = self
+        if device is not None and dtype is None and device == self.device:
+            return result
+        if dtype is not None:
+            return self.to_tensordict().to(*args, **kwargs)
+        result = self
+        if device is not None:
+            result = result.clone(False)
+            result._device = device
+            for key, nested in list(result._nested_tensordicts.items()):
+                result._nested_tensordicts[key] = nested.to(device)
+        if batch_size is not None:
+            result.batch_size = batch_size
+        return result
 
     def _to_numpy(self, value):
         if hasattr(value, "requires_grad") and value.requires_grad:

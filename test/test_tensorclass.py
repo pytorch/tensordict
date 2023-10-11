@@ -12,7 +12,7 @@ import re
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Optional, Union
+from typing import Any, Optional, Tuple, Union
 
 import pytest
 import torch
@@ -1352,7 +1352,9 @@ def test_torchsnapshot(tmp_path):
     assert isinstance(tc.y.x, MemmapTensor)
     assert tc.z == z
 
-    app_state = {"state": torchsnapshot.StateDict(tensordict=tc.state_dict())}
+    app_state = {
+        "state": torchsnapshot.StateDict(tensordict=tc.state_dict(keep_vars=True))
+    }
     snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmp_path))
 
     tc_dest = MyClass(
@@ -1363,7 +1365,9 @@ def test_torchsnapshot(tmp_path):
     )
     tc_dest.memmap_()
     assert isinstance(tc_dest.y.x, MemmapTensor)
-    app_state = {"state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict())}
+    app_state = {
+        "state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict(keep_vars=True))
+    }
     snapshot.restore(app_state=app_state)
 
     assert (tc_dest == tc).all()
@@ -1668,8 +1672,50 @@ def test_from_dict():
         a: TensorDictBase
 
     tc = MyClass.from_dict(d)
+    assert isinstance(tc, MyClass)
     assert isinstance(tc.a, TensorDict)
     assert tc.batch_size == torch.Size([10])
+
+
+class TestNesting:
+    @tensorclass
+    class TensorClass:
+        tens: torch.Tensor
+        order: Tuple[str]
+        test: str
+
+    def get_nested(self):
+
+        c = self.TensorClass(torch.ones(1), ("a", "b", "c"), "Hello", batch_size=[])
+
+        td = torch.stack(
+            [TensorDict({"t": torch.ones(1), "c": c}, batch_size=[]) for _ in range(3)]
+        )
+        return td
+
+    def test_to(self):
+        td = self.get_nested()
+        td = td.to("cpu:1")
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+    def test_idx(self):
+        td = self.get_nested()[0]
+        assert isinstance(td.get("c"), self.TensorClass)
+
+    def test_apply(self):
+        td = self.get_nested()
+        td = td.apply(lambda x: x + 1)
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+    def test_split(self):
+        td = self.get_nested()
+        td, _ = td.split([2, 1], dim=0)
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+    def test_chunk(self):
+        td = self.get_nested()
+        td, _ = td.chunk(2, dim=0)
+        assert isinstance(td.get("c")[0], self.TensorClass)
 
 
 if __name__ == "__main__":

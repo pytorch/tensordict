@@ -185,10 +185,10 @@ def tensorclass(cls: T) -> T:
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
-        if (
-            inspect.ismethod(func) and func.__self__ is TensorDict
-        ):  # detects classmethods
-            setattr(cls, attr, _wrap_classmethod(cls, func))
+        if inspect.ismethod(func):
+            tdcls = func.__self__
+            if issubclass(tdcls, TensorDictBase):  # detects classmethods
+                setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -439,10 +439,10 @@ def _wrap_method(self, attr, func):
     return wrapped_func
 
 
-def _wrap_classmethod(cls, func):
+def _wrap_classmethod(td_cls, cls, func):
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
-        res = func.__get__(cls)(*args, **kwargs)
+        res = func.__get__(td_cls)(*args, **kwargs)
         # res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
             # create a new tensorclass from res and copy the metadata from self
@@ -498,7 +498,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
     if isinstance(item, str) or (
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
-        raise ValueError("Invalid indexing arguments.")
+        raise ValueError(f"Invalid indexing arguments: {item}.")
 
     if not is_tensorclass(value) and not isinstance(
         value, (TensorDictBase, numbers.Number, Tensor, MemmapTensor)
@@ -740,14 +740,22 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:  # noqa: D417
     self._tensordict._batch_size_setter(new_size)
 
 
-def _state_dict(self) -> dict[str, Any]:
+def _state_dict(
+    self, destination=None, prefix="", keep_vars=False, flatten=False
+) -> dict[str, Any]:
     """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
-    state_dict = {"_tensordict": self._tensordict.state_dict()}
+    state_dict = {
+        "_tensordict": self._tensordict.state_dict(
+            destination=destination, prefix=prefix, keep_vars=keep_vars, flatten=flatten
+        )
+    }
     state_dict["_non_tensordict"] = copy(self._non_tensordict)
     return state_dict
 
 
-def _load_state_dict(self, state_dict: dict[str, Any]):
+def _load_state_dict(
+    self, state_dict: dict[str, Any], strict=True, assign=False, from_flatten=False
+):
     """Loads a state_dict attemptedly in-place on the destination tensorclass."""
     for key, item in state_dict.items():
         # keys will never be nested which facilitates everything, but let's
@@ -778,7 +786,9 @@ def _load_state_dict(self, state_dict: dict[str, Any]):
                         f"Key '{sub_key}' wasn't expected in the state-dict."
                     )
 
-            self._tensordict.load_state_dict(item)
+            self._tensordict.load_state_dict(
+                item, strict=strict, assign=assign, from_flatten=from_flatten
+            )
         else:
             raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
 

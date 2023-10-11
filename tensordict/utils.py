@@ -20,6 +20,7 @@ from typing import Any, Callable, List, Sequence, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
 import torch
+from functorch import dim as ftdim
 
 from packaging.version import parse
 from tensordict._tensordict import (  # noqa: F401
@@ -150,7 +151,7 @@ def _getitem_batch_size(batch_size, index):
                     out.extend(bs_shape)
                 bs_shape = None
             continue
-        elif isinstance(idx, int):
+        elif isinstance(idx, (int, ftdim.Dim)):
             # could be spared for efficiency
             continue
         elif isinstance(idx, slice):
@@ -506,7 +507,7 @@ def expand_right(
     tensor_expand = tensor
     while tensor_expand.ndimension() < len(shape):
         tensor_expand = tensor_expand.unsqueeze(-1)
-    tensor_expand = tensor_expand.expand(*shape)
+    tensor_expand = tensor_expand.expand(shape)
     return tensor_expand
 
 
@@ -761,9 +762,12 @@ def _is_shared(tensor: torch.Tensor) -> bool:
         if torch._C._functorch.is_batchedtensor(tensor):
             return None
         return tensor.is_shared()
+    if isinstance(tensor, ftdim.Tensor):
+        return None
     elif isinstance(tensor, KeyedJaggedTensor):
         return False
     else:
+        print(type(tensor))
         return tensor.is_shared()
 
 
@@ -1243,3 +1247,36 @@ class as_decorator:
             return out
 
         return new_func
+
+
+def _split_tensordict(td, chunksize, num_chunks, num_workers, dim):
+    if chunksize is None and num_chunks is None:
+        num_chunks = num_workers
+    if chunksize is not None and num_chunks is not None:
+        raise ValueError(
+            "Either chunksize or num_chunks must be provided, but not both."
+        )
+    if num_chunks is not None:
+        num_chunks = min(td.shape[dim], num_chunks)
+        return td.chunk(num_chunks, dim=dim)
+    else:
+        chunksize = min(td.shape[dim], chunksize)
+        return td.split(chunksize, dim=dim)
+
+
+def _parse_to(*args, **kwargs):
+    batch_size = kwargs.pop("batch_size", None)
+    other = kwargs.pop("other", None)
+    device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+        *args, **kwargs
+    )
+    if other is not None:
+        if device is not None and device != other.device:
+            raise ValueError("other and device cannot be both passed")
+        device = other.device
+        dtypes = {val.dtype for val in other.values(True, True)}
+        if len(dtypes) > 1 or len(dtypes) == 0:
+            dtype = None
+        elif len(dtypes) == 1:
+            dtype = list(dtypes)[0]
+    return device, dtype, non_blocking, convert_to_format, batch_size

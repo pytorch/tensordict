@@ -706,34 +706,39 @@ MemmapTensor of shape {self.shape}."""
 
     def to(
         self,
-        dest: DeviceType | torch.dtype,
-        non_blocking: bool = False,
+        *args,
+        **kwargs,
     ) -> torch.Tensor | MemmapTensor:
         """Maps a MemmapTensor to a given dtype or device.
 
         Args:
-            dest (device indicator or torch.dtype): where to cast the
-                MemmapTensor. For devices, this is a lazy operation
-                (as the data is stored on physical memory). For dtypes, the
-                tensor will be retrieved, mapped to the
-                desired dtype and cast to a new MemmapTensor.
-            non_blocking (bool, optional): no-op for MemmapTensors. Default: False.
+            device (torch.device, optional): Destination device when tensors
+                will be used.
+            dtype (torch.dtype, optional): the desired floating point or complex dtype of
+                the parameters and buffers in this module
+            tensor (torch.Tensor, optional): Tensor whose dtype and device are the desired
+                dtype and device for all parameters and buffers in this TensorDict
+
+        Keyword Args:
+            non_blocking (bool, optional): whether the operations should be blocking.
+                no-op for MemmapTensors. Default: False.
+            memory_format (torch.memory_format, optional): the desired memory
+                format for 4D parameters and buffers in this module.
 
         Returns: the same memmap-tensor with the changed device.
 
         """
-        if isinstance(dest, (int, str, torch.device)):
-            dest = torch.device(dest)
-            self.device = dest
-            return self
-        elif isinstance(dest, torch.dtype):
-            return MemmapTensor.from_tensor(self._tensor.to(dest))
-        else:
-            raise NotImplementedError(
-                f"argument dest={dest} to MemmapTensor.to(dest) is not "
-                f"handled. "
-                f"Please provide a dtype or a device."
-            )
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+            *args, **kwargs
+        )
+        if dtype is not None:
+            out = MemmapTensor.from_tensor(self._tensor.to(dtype))
+            if device is not None:
+                out.device = device
+            return out
+
+        out = self.clone()
+        return out.to(device)
 
     def unbind(self, dim: int) -> tuple[torch.Tensor, ...]:
         """Unbinds a MemmapTensor along the desired dimension.
@@ -841,6 +846,18 @@ def _cat(
 
 
 implements_for_memmap(torch.cat)(_cat)
+
+
+def _where(condition, input, other):
+    device = input.device
+    if device != torch.device("cpu"):
+        input = input.to("cpu").to(device, non_blocking=True)
+    else:
+        input = input.as_tensor()
+    return torch.where(condition=condition, input=input, other=other)
+
+
+implements_for_memmap(torch.where)(_where)
 
 
 def set_transfer_ownership(memmap: MemmapTensor, value: bool = True) -> None:

@@ -200,6 +200,7 @@ def test_memmap_same_device_as_tensor(device):
     """
     t = torch.tensor([1], device=device)
     m = MemmapTensor.from_tensor(t)
+    assert t.device == torch.device(device)
     assert m.device == torch.device(device)
     for other_device in get_available_devices():
         if other_device != device:
@@ -518,15 +519,15 @@ def dummy_memmap():
 @pytest.mark.parametrize("device", get_available_devices())
 class TestOps:
     def test_eq(self, device, dummy_memmap):
-        memmap = dummy_memmap.to(device)
-        assert (memmap == memmap.clone()).all()
-        assert (memmap.clone() == memmap).all()
+        dummy_memmap.device = device
+        assert (dummy_memmap == dummy_memmap.clone()).all()
+        assert (dummy_memmap.clone() == dummy_memmap).all()
         if device.type == "cpu":
-            assert (memmap == memmap.as_tensor()).all()
-            assert (memmap.as_tensor() == memmap).all()
+            assert (dummy_memmap == dummy_memmap.as_tensor()).all()
+            assert (dummy_memmap.as_tensor() == dummy_memmap).all()
         else:
-            assert (memmap == memmap._tensor).all()
-            assert (memmap._tensor == memmap).all()
+            assert (dummy_memmap == dummy_memmap._tensor).all()
+            assert (dummy_memmap._tensor == dummy_memmap).all()
 
     def test_fill_(self, device, dummy_memmap):
         memmap = dummy_memmap.to(device)

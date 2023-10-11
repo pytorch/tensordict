@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import os
 import re
 import uuid
 
@@ -11,6 +12,7 @@ import numpy as np
 import pytest
 import torch
 
+from tensordict.nn import TensorDictParams
 
 try:
     import torchsnapshot
@@ -29,6 +31,7 @@ except ImportError:
     _has_h5py = False
 
 from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
+from functorch import dim as ftdim
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
 from tensordict.tensordict import (
@@ -674,11 +677,95 @@ class TestTensorDicts(TestTensorDictsBase):
         assert new_td_iterable.batch_size == expected_size
         assert all((_new_td == td).all() for _new_td in new_td_iterable)
 
-    def test_cast(self, td_name, device):
+    def test_cast_to(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td_td = td.to(TensorDict)
-        assert (td == td_td).all()
+        td_device = td.to("cpu:1")
+        assert td_device.device == torch.device("cpu:1")
+        td_dtype = td.to(torch.int)
+        assert all(t.dtype == torch.int for t in td_dtype.values(True, True))
+        del td_dtype
+        # device (str), dtype
+        td_dtype_device = td.to("cpu:1", torch.int)
+        assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
+        assert td_dtype_device.device == torch.device("cpu:1")
+        del td_dtype_device
+        # device, dtype
+        td_dtype_device = td.to(torch.device("cpu:1"), torch.int)
+        assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
+        assert td_dtype_device.device == torch.device("cpu:1")
+        del td_dtype_device
+        # example tensor
+        td_dtype_device = td.to(torch.randn(3, dtype=torch.half, device="cpu:1"))
+        assert all(t.dtype == torch.half for t in td_dtype_device.values(True, True))
+        # tensor on cpu:1 is actually on cpu. This is still meaningful for tensordicts on cuda.
+        assert td_dtype_device.device == torch.device("cpu")
+        del td_dtype_device
+        # example td
+        td_dtype_device = td.to(
+            other=TensorDict(
+                {"a": torch.randn(3, dtype=torch.half, device="cpu:1")},
+                [],
+                device="cpu:1",
+            )
+        )
+        assert all(t.dtype == torch.half for t in td_dtype_device.values(True, True))
+        assert td_dtype_device.device == torch.device("cpu:1")
+        del td_dtype_device
+        # example td, many dtypes
+        td_nodtype_device = td.to(
+            other=TensorDict(
+                {
+                    "a": torch.randn(3, dtype=torch.half, device="cpu:1"),
+                    "b": torch.randint(10, ()),
+                },
+                [],
+                device="cpu:1",
+            )
+        )
+        assert all(t.dtype != torch.half for t in td_nodtype_device.values(True, True))
+        assert td_nodtype_device.device == torch.device("cpu:1")
+        del td_nodtype_device
+        # batch-size: check errors (or not)
+        if td_name in (
+            "stacked_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "permute_td",
+            "nested_stacked_td",
+        ):
+            with pytest.raises(TypeError, match="Cannot pass batch-size to a "):
+                td_dtype_device = td.to(
+                    torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
+                )
+        else:
+            td_dtype_device = td.to(
+                torch.device("cpu:1"), torch.int, batch_size=torch.Size([])
+            )
+            assert all(t.dtype == torch.int for t in td_dtype_device.values(True, True))
+            assert td_dtype_device.device == torch.device("cpu:1")
+            assert td_dtype_device.batch_size == torch.Size([])
+            del td_dtype_device
+        if td_name in (
+            "stacked_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "permute_td",
+            "nested_stacked_td",
+        ):
+            with pytest.raises(TypeError, match="Cannot pass batch-size to a "):
+                td.to(batch_size=torch.Size([]))
+        else:
+            td_batchsize = td.to(batch_size=torch.Size([]))
+            assert td_batchsize.batch_size == torch.Size([])
+            del td_batchsize
+
+    # Deprecated:
+    # def test_cast(self, td_name, device):
+    #     torch.manual_seed(1)
+    #     td = getattr(self, td_name)(device)
+    #     td_td = td.to(TensorDict)
+    #     assert (td == td_td).all()
 
     def test_broadcast(self, td_name, device):
         torch.manual_seed(1)
@@ -1154,15 +1241,7 @@ class TestTensorDicts(TestTensorDictsBase):
         for k in td.keys(True, True):
             assert (td_where.get(k)[~mask] == 1).all()
         td_where = td.clone()
-        # torch.where(mask, td, torch.zeros((), device=device), out=td_where)
-        # for k in td.keys(True, True):
-        #     assert (td_where.get(k)[~mask] == 0).all()
-        if td_name == "td_params":
-            with pytest.raises(
-                RuntimeError, match="don't support automatic differentiation"
-            ):
-                torch.where(mask, td, torch.ones_like(td), out=td_where)
-            return
+
         if td_name == "td_h5":
             with pytest.raises(
                 RuntimeError,
@@ -1173,6 +1252,44 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.where(mask, td, torch.ones_like(td), out=td_where)
         for k in td.keys(True, True):
             assert (td_where.get(k)[~mask] == 1).all()
+
+    def test_where_pad(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        # test with other empty td
+        mask = torch.zeros(td.shape, dtype=torch.bool, device=td.device).bernoulli_()
+        if td_name in ("td_h5",):
+            td_full = td.to_tensordict()
+        else:
+            td_full = td
+        td_empty = td_full.empty()
+        result = td.where(mask, td_empty, pad=1)
+        for v in result.values(True, True):
+            assert (v[~mask] == 1).all()
+        td_empty = td_full.empty()
+        result = td_empty.where(~mask, td, pad=1)
+        for v in result.values(True, True):
+            assert (v[~mask] == 1).all()
+        # with output
+        td_out = td_full.empty()
+        result = td.where(mask, td_empty, pad=1, out=td_out)
+        for v in result.values(True, True):
+            assert (v[~mask] == 1).all()
+        if td_name not in ("td_params",):
+            assert result is td_out
+        else:
+            assert isinstance(result, TensorDictParams)
+        td_out = td_full.empty()
+        td_empty = td_full.empty()
+        result = td_empty.where(~mask, td, pad=1, out=td_out)
+        for v in result.values(True, True):
+            assert (v[~mask] == 1).all()
+        assert result is td_out
+
+        with pytest.raises(KeyError, match="not found and no pad value provided"):
+            td.where(mask, td_full.empty())
+        with pytest.raises(KeyError, match="not found and no pad value provided"):
+            td_full.empty().where(mask, td)
 
     def test_masking_set(self, td_name, device):
         torch.manual_seed(1)
@@ -1294,6 +1411,34 @@ class TestTensorDicts(TestTensorDictsBase):
         td_back = td_device.cpu()
         assert td_device.device == torch.device("cuda")
         assert td_back.device == torch.device("cpu")
+
+    def test_state_dict(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sd = td.state_dict()
+        td_zero = td.clone().detach().zero_()
+        td_zero.load_state_dict(sd)
+        assert_allclose_td(td, td_zero)
+
+    def test_state_dict_strict(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sd = td.state_dict()
+        td_zero = td.clone().detach().zero_()
+        del sd["a"]
+        td_zero.load_state_dict(sd, strict=False)
+        with pytest.raises(RuntimeError):
+            td_zero.load_state_dict(sd, strict=True)
+
+    def test_state_dict_assign(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        sd = td.state_dict()
+        td_zero = td.clone().detach().zero_()
+        shallow_copy = td_zero.clone(False)
+        td_zero.load_state_dict(sd, assign=True)
+        assert (shallow_copy == 0).all()
+        assert_allclose_td(td, td_zero)
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):
@@ -2744,6 +2889,13 @@ class TestTensorDicts(TestTensorDictsBase):
             ):
                 fun(td)
             return
+        if td_name == "memmap_td" and device.type != "cpu":
+            with pytest.raises(
+                RuntimeError,
+                match="MemmapTensor with non-cpu device are not supported in vmap ops",
+            ):
+                fun(td)
+            return
         fun(td)
 
         if td_name == "td_params":
@@ -3235,11 +3387,12 @@ class TestTensorDictsRequiresGrad:
         assert new_td.get("b").requires_grad
         assert new_td.batch_size == torch.Size([3, *batch_size])
 
-    def test_cast(self, td_name, device):
-        torch.manual_seed(1)
-        td = getattr(self, td_name)(device)
-        td_td = td.to(TensorDict)
-        assert td_td.get("b").requires_grad
+    # Deprecated
+    # def test_cast(self, td_name, device):
+    #     torch.manual_seed(1)
+    #     td = getattr(self, td_name)(device)
+    #     td_td = td.to(TensorDict)
+    #     assert td_td.get("b").requires_grad
 
     def test_clone_td(self, td_name, device):
         torch.manual_seed(1)
@@ -5009,6 +5162,12 @@ class TestLazyStackedTensorDict:
         assert (td["a"][index] == tdset["a"]).all()
         assert (td["a"][index] == tdset["a"]).all()
 
+    def test_all_keys(self):
+        td = TensorDict({"a": torch.zeros(1)}, [])
+        td2 = TensorDict({"a": torch.zeros(2)}, [])
+        stack = torch.stack([td, td2])
+        assert set(stack.keys(True, True)) == {"a"}
+
 
 @pytest.mark.skipif(
     not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
@@ -5023,7 +5182,11 @@ class TestSnapshot:
         td.memmap_()
         assert isinstance(td["b", "c"], MemmapTensor)
 
-        app_state = {"state": torchsnapshot.StateDict(**{save_name: td.state_dict()})}
+        app_state = {
+            "state": torchsnapshot.StateDict(
+                **{save_name: td.state_dict(keep_vars=True)}
+            )
+        }
         path = f"/tmp/{uuid.uuid4()}"
         snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
@@ -5040,7 +5203,9 @@ class TestSnapshot:
         td_dest.memmap_()
         assert isinstance(td_dest["b", "c"], MemmapTensor)
         app_state = {
-            "state": torchsnapshot.StateDict(**{save_name: td_dest.state_dict()})
+            "state": torchsnapshot.StateDict(
+                **{save_name: td_dest.state_dict(keep_vars=True)}
+            )
         }
         snapshot.restore(app_state=app_state)
 
@@ -5868,12 +6033,27 @@ class TestLock:
 
 
 @pytest.mark.parametrize("memmap", [True, False])
-def test_from_module(memmap):
-    net = nn.Transformer()
-    td = TensorDict.from_module(net)
+@pytest.mark.parametrize("params", [False, True])
+def test_from_module(memmap, params):
+    net = nn.Transformer(
+        d_model=16,
+        nhead=2,
+        num_encoder_layers=3,
+        dim_feedforward=12,
+    )
+    td = TensorDict.from_module(net, as_module=params)
+    # check that we have empty tensordicts, reflecting modules wihout params
+    for subtd in td.values(True):
+        if isinstance(subtd, TensorDictBase) and subtd.is_empty():
+            break
+    else:
+        raise RuntimeError
     if memmap:
         td = td.detach().memmap_()
     net.load_state_dict(td.flatten_keys("."))
+
+    if not memmap and params:
+        assert set(td.parameters()) == set(net.parameters())
 
 
 @pytest.mark.parametrize("batch_size", [None, [3, 4]])
@@ -5987,6 +6167,249 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
         assert dense_td_stack["lazy"].stack_dim == nested_stack_dim
     else:
         assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
+
+
+@pytest.mark.parametrize(
+    "td_name",
+    [
+        "td",
+        "stacked_td",
+        "sub_td",
+        "sub_td2",
+        "idx_td",
+        "memmap_td",
+        "unsqueezed_td",
+        "squeezed_td",
+        "td_reset_bs",
+        "nested_td",
+        "nested_tensorclass",
+        "permute_td",
+        "nested_stacked_td",
+        "td_params",
+        pytest.param(
+            "td_h5", marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+        ),
+    ],
+)
+@pytest.mark.parametrize("device", get_available_devices())
+class TestTensorDictMP(TestTensorDictsBase):
+    @staticmethod
+    def add1(x):
+        return x + 1
+
+    @staticmethod
+    def add1_app(x):
+        return x.apply(lambda x: x + 1)
+
+    @staticmethod
+    def add1_app_error(x):
+        # algerbraic ops are not supported
+        return x + 1
+
+    @staticmethod
+    def write_pid(x):
+        return TensorDict({"pid": os.getpid()}, []).expand(x.shape)
+
+    @pytest.mark.parametrize("dim", [-2, -1, 0, 1, 2, 3])
+    def test_map(self, td_name, device, dim, _pool_fixt):
+        td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="Cannot call map on a TensorDictParams object"
+            ):
+                td.map(self.add1_app, dim=dim, pool=_pool_fixt)
+            return
+        assert (
+            td.map(self.add1_app, dim=dim, pool=_pool_fixt) == td.apply(self.add1)
+        ).all()
+
+    @pytest.mark.parametrize("dim", [-2, -1, 0, 1, 2, 3])
+    def test_map_exception(self, td_name, device, dim, _pool_fixt):
+        td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="Cannot call map on a TensorDictParams object"
+            ):
+                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+            return
+        with pytest.raises(TypeError, match="unsupported operand"):
+            td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+
+    @pytest.mark.parametrize(
+        "chunksize,num_chunks", [[None, 2], [4, None], [None, None], [2, 2]]
+    )
+    def test_chunksize_num_chunks(
+        self, td_name, device, chunksize, num_chunks, _pool_fixt, dim=0
+    ):
+        td = getattr(self, td_name)(device)
+        if td_name == "td_params":
+            with pytest.raises(
+                RuntimeError, match="Cannot call map on a TensorDictParams object"
+            ):
+                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+            return
+        if chunksize is not None and num_chunks is not None:
+            with pytest.raises(ValueError, match="but not both"):
+                td.map(
+                    self.write_pid,
+                    dim=dim,
+                    chunksize=chunksize,
+                    num_chunks=num_chunks,
+                    pool=_pool_fixt,
+                )
+            return
+        mapped = td.map(
+            self.write_pid,
+            dim=dim,
+            chunksize=chunksize,
+            num_chunks=num_chunks,
+            pool=_pool_fixt,
+        )
+        pids = mapped.get("pid").unique()
+        if chunksize is not None:
+            assert pids.numel() == -(td.shape[0] // -chunksize)
+        elif num_chunks is not None:
+            assert pids.numel() == num_chunks
+
+
+@pytest.fixture(scope="class")
+def _pool_fixt():
+    with mp.Pool(10) as pool:
+        yield pool
+
+
+class TestFCD(TestTensorDictsBase):
+    """Test stack for first-class dimension."""
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "sub_td",
+            "sub_td2",
+            "idx_td",
+            "memmap_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_reset_bs",
+            "nested_td",
+            "nested_tensorclass",
+            "permute_td",
+            "nested_stacked_td",
+            "td_params",
+            pytest.param(
+                "td_h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found."),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_fcd(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        d0 = ftdim.dims(1)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 0:
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0]
+        else:
+            assert td[d0].shape == td.shape[1:]
+        d0, d1 = ftdim.dims(2)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1):
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1]
+        else:
+            assert td[d0, d1].shape == td.shape[2:]
+        d0, d1, d2 = ftdim.dims(3)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1, 2):
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1, d2]
+        else:
+            assert td[d0, d1, d2].shape == td.shape[3:]
+        d0 = ftdim.dims(1)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 1:
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[:, d0]
+        else:
+            assert td[:, d0].shape == torch.Size((td.shape[0], *td.shape[2:]))
+
+    @pytest.mark.parametrize(
+        "td_name",
+        [
+            "td",
+            "stacked_td",
+            "idx_td",
+            "memmap_td",
+            "td_reset_bs",
+            "nested_td",
+            "nested_tensorclass",
+            "nested_stacked_td",
+            "td_params",
+            pytest.param(
+                "td_h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found."),
+            ),
+            # these tds cannot see their dim names edited:
+            # "sub_td",
+            # "sub_td2",
+            # "unsqueezed_td",
+            # "squeezed_td",
+            # "permute_td",
+        ],
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_fcd_names(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td.names = ["a", "b", "c", "d"]
+        d0 = ftdim.dims(1)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 0:
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0]
+        else:
+            assert td[d0].names == ["b", "c", "d"]
+        d0, d1 = ftdim.dims(2)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1):
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1]
+        else:
+            assert td[d0, d1].names == ["c", "d"]
+        d0, d1, d2 = ftdim.dims(3)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1, 2):
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1, d2]
+        else:
+            assert td[d0, d1, d2].names == ["d"]
+        d0 = ftdim.dims(1)
+        if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 1:
+            with pytest.raises(ValueError, match="Cannot index"):
+                td[:, d0]
+        else:
+            assert td[:, d0].names == ["a", "c", "d"]
+
+    @pytest.mark.parametrize("as_module", [False, True])
+    def test_modules(self, as_module):
+        modules = [
+            lambda: nn.Linear(3, 4),
+            lambda: nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4)),
+            lambda: nn.Transformer(16, 4, 2, 2, 8),
+            lambda: nn.Sequential(nn.Conv2d(3, 4, 3), nn.Conv2d(4, 4, 3)),
+        ]
+        inputs = [
+            lambda: (torch.randn(2, 3),),
+            lambda: (torch.randn(2, 3),),
+            lambda: (torch.randn(2, 3, 16), torch.randn(2, 3, 16)),
+            lambda: (torch.randn(2, 3, 16, 16),),
+        ]
+        param_batch = 5
+        for make_module, make_input in zip(modules, inputs):
+            module = make_module()
+            td = TensorDict.from_module(module, as_module=as_module)
+            td = td.expand(param_batch).clone()
+            d0 = ftdim.dims(1)
+            td = TensorDictParams(td)[d0]
+            td.to_module(module)
+            y = module(*make_input())
+            assert y.dims == (d0,)
+            assert y._tensor.shape[0] == param_batch
 
 
 if __name__ == "__main__":

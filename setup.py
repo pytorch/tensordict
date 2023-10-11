@@ -164,7 +164,7 @@ def _main(argv):
         version=version,
         author="tensordict contributors",
         author_email="vmoens@fb.com",
-        url="https://github.com/pytorch-labs/tensordict",
+        url="https://github.com/pytorch/tensordict",
         long_description=long_description,
         long_description_content_type="text/markdown",
         license="BSD",
@@ -189,10 +189,10 @@ def _main(argv):
         },
         zip_safe=False,
         classifiers=[
-            "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
             "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
+            "Programming Language :: Python :: 3.11",
             "Development Status :: 4 - Beta",
         ],
     )
