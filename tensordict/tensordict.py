@@ -2546,22 +2546,34 @@ class TensorDictBase(MutableMapping):
                 if prefix is not None:
                     # ensure subdirectory exists
                     os.makedirs(prefix / key, exist_ok=True)
-                    tensordict[key] = value.memmap_like(
-                        prefix=prefix / key,
+                    tensordict._set_str(
+                        key,
+                        value.memmap_like(
+                            prefix=prefix / key,
+                        ),
+                        inplace=False,
+                        validated=True,
                     )
                     torch.save(
                         {"batch_size": value.batch_size, "device": value.device},
                         prefix / key / "meta.pt",
                     )
                 else:
-                    tensordict[key] = value.memmap_like()
+                    tensordict._set_str(
+                        key, value.memmap_like(), inplace=False, validated=True
+                    )
                 continue
             else:
-                tensordict[key] = MemmapTensor.empty_like(
-                    value,
-                    filename=str(prefix / f"{key}.memmap")
-                    if prefix is not None
-                    else None,
+                tensordict._set_str(
+                    key,
+                    MemmapTensor.empty_like(
+                        value,
+                        filename=str(prefix / f"{key}.memmap")
+                        if prefix is not None
+                        else None,
+                    ),
+                    inplace=False,
+                    validated=True,
                 )
             if prefix is not None:
                 torch.save(
