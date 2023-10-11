@@ -4818,7 +4818,7 @@ class TensorDict(TensorDictBase):
 
         apply_kwargs = {}
         if device is not None or dtype is not None:
-            apply_kwargs["device"] = device
+            apply_kwargs["device"] = device if device is not None else self.device
             apply_kwargs["batch_size"] = batch_size
             result = result._fast_apply(to, **apply_kwargs)
         elif batch_size is not None:
