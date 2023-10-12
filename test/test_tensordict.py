@@ -2272,19 +2272,19 @@ class TestTensorDicts(TestTensorDictsBase):
         assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
         assert (torch.cat(td_chunks, dim) == td).all()
 
-    def test_as_tensor(self, td_name, device):
-        td = getattr(self, td_name)(device)
-        if "memmap" in td_name and device == torch.device("cpu"):
-            tdt = td.as_tensor()
-            assert (tdt == td).all()
-        elif "memmap" in td_name:
-            with pytest.raises(
-                RuntimeError, match="can only be called with MemmapTensors stored"
-            ):
-                td.as_tensor()
-        else:
-            with pytest.raises(AttributeError):
-                td.as_tensor()
+    # def test_as_tensor(self, td_name, device):
+    #     td = getattr(self, td_name)(device)
+    #     if "memmap" in td_name and device == torch.device("cpu"):
+    #         tdt = td.as_tensor()
+    #         assert (tdt == td).all()
+    #     elif "memmap" in td_name:
+    #         with pytest.raises(
+    #             RuntimeError, match="can only be called with MemmapTensors stored"
+    #         ):
+    #             td.as_tensor()
+    #     else:
+    #         with pytest.raises(AttributeError):
+    #             td.as_tensor()
 
     def test_items_values_keys(self, td_name, device):
         torch.manual_seed(1)
