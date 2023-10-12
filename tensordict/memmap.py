@@ -123,7 +123,7 @@ class MemmapTensor:
         >>> assert (x_memmap * 2 == x*2).all()
         >>>
         >>> # temp file clearance
-        >>> filename = x_memmap.filename
+        >>> filename = x_memmap._filename
         >>> assert os.path.isfile(filename)
         >>> del x_memmap
         >>> assert not os.path.isfile(filename)

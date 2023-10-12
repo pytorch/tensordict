@@ -113,7 +113,7 @@ def test_memmap_new(index):
         m1 = m
     m2 = MemmapTensor.from_tensor(m1)
     assert isinstance(m2, MemmapTensor)
-    assert m2.filename == m1.filename
+    assert m2._filename == m1._filename
     # assert m2.filename == m2.file.name
     # assert m2.filename == m2.file._closer.name
     if index is not None:
@@ -179,7 +179,7 @@ class TestIndexing:
     ):
         t = queue_in.get(timeout=TIMEOUT)
         assert isinstance(t, MemmapTensor)
-        assert t.filename == filename
+        assert t._filename == filename
         assert t.shape == shape
         assert (t == 0).all()
         msg = "done"
@@ -202,7 +202,7 @@ class TestIndexing:
         t = MemmapTensor.from_tensor(torch.zeros(10))
         # int
         assert isinstance(t[0], MemmapTensor)
-        assert t[0].filename == t.filename
+        assert t[0]._filename == t._filename
         assert t[0].shape == torch.Size([])
         assert t.shape == torch.Size([10])
 
@@ -210,7 +210,7 @@ class TestIndexing:
         t = MemmapTensor.from_tensor(torch.zeros(10))
         # int
         assert isinstance(t[:2], MemmapTensor)
-        assert t[:2].filename == t.filename
+        assert t[:2]._filename == t._filename
         assert t[:2].shape == torch.Size([2])
         assert t.shape == torch.Size([10])
 
@@ -219,15 +219,15 @@ class TestIndexing:
         y = t[:2]
         # int
         assert isinstance(y, MemmapTensor)
-        assert y.filename == t.filename
-        assert y.handler is t.handler
+        assert y._filename == t._filename
+        assert y._handler is t._handler
         assert y.shape == torch.Size([2])
         assert t.shape == torch.Size([10])
         y = y[:1]
         # int
         assert isinstance(y, MemmapTensor)
-        assert y.filename == t.filename
-        assert y.handler is t.handler
+        assert y._filename == t._filename
+        assert y._handler is t._handler
         assert y.shape == torch.Size([1])
         assert t.shape == torch.Size([10])
 
@@ -244,10 +244,10 @@ class TestIndexing:
 
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send_across_procs(self):
-        t = MemmapTensor.from_tensor(torch.zeros(10), transfer_ownership=False)
+        t = MemmapTensor.from_tensor(torch.zeros(10))
         queue_in = mp.Queue(1)
         queue_out = mp.Queue(1)
-        filename = t.filename
+        filename = t._filename
         p = mp.Process(
             target=TestIndexing._recv_and_send,
             args=(queue_in, queue_out, filename, torch.Size([10])),
@@ -273,7 +273,7 @@ class TestIndexing:
         t = MemmapTensor.from_tensor(torch.zeros(10))
         queue_in = mp.Queue(1)
         queue_out = mp.Queue(1)
-        filename = t.filename
+        filename = t._filename
         p = mp.Process(
             target=TestIndexing._recv_and_send,
             args=(queue_in, queue_out, filename, torch.Size([3])),
@@ -308,16 +308,19 @@ class TestIndexing:
     def _test_copy_onto_subproc(queue):
         t = MemmapTensor.from_tensor(torch.rand(10, 5))
         idx = torch.tensor([1, 2])
-        queue.put(t[idx], block=True)
+        t_indexed1 = t[idx]
+        queue.put(t_indexed1, block=True)
         while queue.full():
             continue
 
         idx = torch.tensor([3, 4])
-        queue.put(t[idx], block=True)
+        t_indexed2 = t[idx]
+        queue.put(t_indexed2, block=True)
         while queue.full():
             continue
         msg = queue.get(timeout=TIMEOUT)
         assert msg == "done"
+        assert (t_indexed1 == t_indexed2).all()
         del queue
 
     def test_copy_onto(self):
@@ -326,61 +329,42 @@ class TestIndexing:
         p.start()
         try:
             t_indexed1 = queue.get(timeout=TIMEOUT)
-            assert (t_indexed1._index[0] == torch.tensor([1, 2])).all()
-            # check that file is not opened if we did not access it
-            assert t_indexed1._memmap_array is None
-            _ = t_indexed1 + 1
-            # check that file is now opened
-            assert t_indexed1._memmap_array is not None
 
             # receive 2nd copy
             t_indexed2 = queue.get(timeout=TIMEOUT)
-            assert t_indexed2.filename == t_indexed1.filename
-            assert (t_indexed2._index[0] == torch.tensor([3, 4])).all()
-            # check that file is open only once
-            assert t_indexed1._memmap_array is not None
-            assert t_indexed2._memmap_array is None
             t_indexed1.copy_(t_indexed2)
-            # same assertion: after copying we should only have one file opened
-            assert t_indexed1._memmap_array is not None
-            assert t_indexed2._memmap_array is None
             _ = t_indexed2 + 1
-            # now we should find 2 opened files
-            assert t_indexed1._memmap_array is not None
-            assert t_indexed2._memmap_array is not None
             queue.put("done", block=True)
             queue.close()
+        finally:
             p.join()
-        except Exception as e:
-            p.join()
-            raise e
 
 
 def test_as_tensor():
     num_samples = 300
     rows, cols = 48, 48
-    idx = torch.randint(num_samples, (128,))
-    y = MemmapTensor(num_samples, rows, cols, dtype=torch.uint8)
+    y = MemmapTensor.from_tensor(torch.zeros((), dtype=torch.uint8).expand(num_samples, rows, cols))
     y.copy_(y + torch.randn(num_samples, rows, cols))
     assert isinstance(y, MemmapTensor)
+    idx = slice(3)
     assert isinstance(y[idx], MemmapTensor)
-    assert (y[idx] == y.as_tensor()[idx]).all()
+    assert (y[idx] == y.clone()[idx]).all()
 
 
 def test_filename(tmp_path):
-    mt = MemmapTensor(10, dtype=torch.float32, filename=tmp_path / "test.memmap")
-    assert mt.filename == str(tmp_path / "test.memmap")
+    mt = MemmapTensor.from_tensor(torch.zeros((), dtype=torch.float32).expand(10), filename=tmp_path / "test.memmap")
+    assert str(mt._filename) == str(tmp_path / "test.memmap")
 
     mt2 = MemmapTensor.from_tensor(mt)
-    assert mt2.filename == str(tmp_path / "test.memmap")
+    assert str(mt2._filename) == str(tmp_path / "test.memmap")
     assert mt2 is mt
 
     mt3 = MemmapTensor.from_tensor(mt, filename=tmp_path / "test.memmap")
-    assert mt3.filename == str(tmp_path / "test.memmap")
+    assert str(mt3._filename) == str(tmp_path / "test.memmap")
     assert mt3 is mt
 
     mt4 = MemmapTensor.from_tensor(mt, filename=tmp_path / "test2.memmap")
-    assert mt4.filename == str(tmp_path / "test2.memmap")
+    assert str(mt4._filename) == str(tmp_path / "test2.memmap")
     assert mt4 is not mt
 
     del mt
@@ -389,41 +373,12 @@ def test_filename(tmp_path):
     assert (tmp_path / "test.memmap").exists()
     assert (tmp_path / "test2.memmap").exists()
 
+def test_handler():
+    mt = MemmapTensor.from_tensor(torch.zeros((), dtype=torch.float32).expand(10))
 
-@pytest.mark.parametrize(
-    "mode", ["r", "r+", "w+", "c", "readonly", "readwrite", "write", "copyonwrite"]
-)
-def test_mode(mode, tmp_path):
-    mt = MemmapTensor(10, dtype=torch.float32, filename=tmp_path / "test.memmap")
-    mt[:] = torch.ones(10) * 1.5
-    del mt
+    mt2 = MemmapTensor.from_tensor(mt)
+    assert mt2._handler is mt._handler
 
-    if mode in ("r", "readonly"):
-        with pytest.raises(ValueError, match=r"Accepted values for mode are"):
-            MemmapTensor(
-                10, dtype=torch.float32, filename=tmp_path / "test.memmap", mode=mode
-            )
-        return
-    mt = MemmapTensor(
-        10, dtype=torch.float32, filename=tmp_path / "test.memmap", mode=mode
-    )
-    if mode in ("r+", "readwrite", "c", "copyonwrite"):
-        # data in memmap persists
-        assert (mt.as_tensor() == 1.5).all()
-    elif mode in ("w+", "write"):
-        # memmap is initialized to zero
-        assert (mt.as_tensor() == 0).all()
-
-    mt[:] = torch.ones(10) * 2.5
-    assert (mt.as_tensor() == 2.5).all()
-    del mt
-
-    mt2 = MemmapTensor(10, dtype=torch.float32, filename=tmp_path / "test.memmap")
-    if mode in ("c", "copyonwrite"):
-        # tensor was only mutated in memory, not on disk
-        assert (mt2.as_tensor() == 1.5).all()
-    else:
-        assert (mt2.as_tensor() == 2.5).all()
 
 
 def test_memmap_from_memmap():
@@ -490,59 +445,94 @@ def test_memmap_del(tmpdir):
     del m
     assert not os.path.isfile(tmpdir / "tensor")
 
-@pytest.mark.parametrize("value", [True, False])
-def test_memmap_ownership_2pass(value):
-    t = torch.tensor([1])
-    m1 = MemmapTensor.from_tensor(t, transfer_ownership=value)
-    filename = m1.filename
-    with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp2:
-        pickle.dump(m1, tmp2)
-        # after we dump m1, m1 has lost ownership and waits for m2 to pick it up
-        # if m1 is deleted and m2 is never created, the file is not cleared.
-        if value:
-            assert not m1._has_ownership
-        else:
-            assert m1._has_ownership
+# @pytest.mark.parametrize("value", [True, False])
+# def test_memmap_ownership_2pass(value):
+#     t = torch.tensor([1])
+#     m1 = MemmapTensor.from_tensor(t, transfer_ownership=value)
+#     filename = m1._filename
+#     with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp2:
+#         pickle.dump(m1, tmp2)
+#         # after we dump m1, m1 has lost ownership and waits for m2 to pick it up
+#         # if m1 is deleted and m2 is never created, the file is not cleared.
+#         if value:
+#             assert not m1._has_ownership
+#         else:
+#             assert m1._has_ownership
+#
+#         m2 = pickle.load(open(tmp2.name, "rb"))
+#         assert m2._filename == m1._filename
+#         with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp3:
+#             pickle.dump(m2, tmp3)
+#             m3 = pickle.load(open(tmp3.name, "rb"))
+#             assert m3._filename == m1._filename
+#
+#     del m1, m2, m3
+#     assert not os.path.isfile(filename)
 
-        m2 = pickle.load(open(tmp2.name, "rb"))
-        assert m2.filename == m1.filename
-        with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp3:
-            pickle.dump(m2, tmp3)
-            m3 = pickle.load(open(tmp3.name, "rb"))
-            assert m3.filename == m1.filename
 
-    del m1, m2, m3
-    assert not os.path.isfile(filename)
+# class TestMP:
+#     @staticmethod
+#     def getdata(data, queue):
+#         queue.put(("has_ownership", data._has_ownership))
+#         # queue.put(("transfer_ownership", data.transfer_ownership))
+#
+#     # @pytest.mark.parametrize("transfer_ownership", [True, False])
+#     def test(self, transfer_ownership, tmp_path):
+#         m = MemmapTensor(
+#             3, filename=tmp_path / "tensor.mp"
+#         )
+#         queue = mp.Queue(1)
+#         p = mp.Process(target=TestMP.getdata, args=(m, queue))
+#         p.start()
+#         try:
+#             msg, val = queue.get()
+#             assert msg == "has_ownership"
+#             # assert val is transfer_ownership
+#             if transfer_ownership:
+#                 assert not m._has_ownership
+#             else:
+#                 assert m._has_ownership
+#             msg, val = queue.get()
+#             assert msg == "transfer_ownership"
+#             # assert val is transfer_ownership
+#         finally:
+#             p.join()
+#             queue.close()
+@pytest.mark.parametrize(
+    "mode", ["r", "r+", "w+", "c", "readonly", "readwrite", "write", "copyonwrite"]
+)
+def test_mode(mode, tmp_path):
+    mt = MemmapTensor(10, dtype=torch.float32, filename=tmp_path / "test.memmap")
+    mt[:] = torch.ones(10) * 1.5
+    del mt
 
+    if mode in ("r", "readonly"):
+        with pytest.raises(ValueError, match=r"Accepted values for mode are"):
+            MemmapTensor(
+                10, dtype=torch.float32, filename=tmp_path / "test.memmap", mode=mode
+            )
+        return
+    mt = MemmapTensor(
+        10, dtype=torch.float32, filename=tmp_path / "test.memmap", mode=mode
+    )
+    if mode in ("r+", "readwrite", "c", "copyonwrite"):
+        # data in memmap persists
+        assert (mt.as_tensor() == 1.5).all()
+    elif mode in ("w+", "write"):
+        # memmap is initialized to zero
+        assert (mt.as_tensor() == 0).all()
 
-class TestMP:
-    @staticmethod
-    def getdata(data, queue):
-        queue.put(("has_ownership", data._has_ownership))
-        queue.put(("transfer_ownership", data.transfer_ownership))
+    mt[:] = torch.ones(10) * 2.5
+    assert (mt.as_tensor() == 2.5).all()
+    del mt
 
-    @pytest.mark.parametrize("transfer_ownership", [True, False])
-    def test(self, transfer_ownership, tmp_path):
-        m = MemmapTensor(
-            3, transfer_ownership=transfer_ownership, filename=tmp_path / "tensor.mp"
-        )
-        queue = mp.Queue(1)
-        p = mp.Process(target=TestMP.getdata, args=(m, queue))
-        p.start()
-        try:
-            msg, val = queue.get()
-            assert msg == "has_ownership"
-            assert val is transfer_ownership
-            if transfer_ownership:
-                assert not m._has_ownership
-            else:
-                assert m._has_ownership
-            msg, val = queue.get()
-            assert msg == "transfer_ownership"
-            assert val is transfer_ownership
-        finally:
-            p.join()
-            queue.close()
+    mt2 = MemmapTensor(10, dtype=torch.float32, filename=tmp_path / "test.memmap")
+    if mode in ("c", "copyonwrite"):
+        # tensor was only mutated in memory, not on disk
+        assert (mt2.as_tensor() == 1.5).all()
+    else:
+        assert (mt2.as_tensor() == 2.5).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

@@ -31,8 +31,8 @@ from torch.multiprocessing.reductions import ForkingPickler
 
 
 class MemoryMappedTensor(torch.Tensor):
-    filename: str | Path
-    handler: FileHandler
+    _filename: str | Path
+    _handler: FileHandler
     _clear: bool
     index: Any
     parent_shape: torch.Size
@@ -63,17 +63,12 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def from_tensor(
-        cls, tensor, transfer_ownership=False, dir=None, prefix=None, filename=None
+        cls, tensor, dir=None, prefix=None, filename=None
     ):
         if isinstance(tensor, MemoryMappedTensor):
-            if transfer_ownership:
-                raise RuntimeError(
-                    "from_tensor(memmap_tensor, transfer_ownership=True) is not permitted, as this method will "
-                    "simply return the original MemmapTensor instance."
-                )
-            elif dir is None and (
+            if dir is None and (
                 filename is None
-                or Path(filename).absolute() == Path(tensor.filename).absolute()
+                or Path(filename).absolute() == Path(tensor._filename).absolute()
             ):
                 # either location was not specified, or memmap is already in the
                 # correct location, so just return the MemmapTensor unmodified
@@ -110,8 +105,8 @@ class MemoryMappedTensor(torch.Tensor):
                     str(filename), shared=True, dtype=tensor.dtype, size=shape.numel()
                 ).view(tensor.shape)
             )
-        out.handler = handler
-        out.filename = filename
+        out._handler = handler
+        out._filename = filename
         out.index = None
         out.parent_shape = tensor.shape
         out.copy_(tensor)
@@ -133,8 +128,8 @@ class MemoryMappedTensor(torch.Tensor):
         if index is not None:
             tensor = tensor[index]
         out = cls(tensor)
-        out.filename = filename
-        out.handler = None
+        out._filename = filename
+        out._handler = None
         out.index = index
         out.parent_shape = shape
         return out
@@ -146,8 +141,8 @@ class MemoryMappedTensor(torch.Tensor):
         if index is not None:
             out = out[index]
         out = cls(out)
-        out.filename = None
-        out.handler = handler
+        out._filename = None
+        out._handler = handler
         out.index = index
         out.parent_shape = shape
         return out
@@ -155,14 +150,14 @@ class MemoryMappedTensor(torch.Tensor):
     def __reduce__(self):
         if getattr(self, "handler", None) is not None:
             return type(self).from_handler, (
-                self.handler,
+                self._handler,
                 self.dtype,
                 self.parent_shape,
                 self.index,
             )
         elif getattr(self, "filename", None) is not None:
             return type(self).from_filename, (
-                self.filename,
+                self._filename,
                 self.dtype,
                 self.parent_shape,
                 self.index,
@@ -174,8 +169,8 @@ class MemoryMappedTensor(torch.Tensor):
         out = super().__getitem__(item)
         if out.data_ptr() == self.data_ptr():
             out = MemoryMappedTensor(out)
-            out.handler = self.handler
-            out.filename = self.filename
+            out._handler = self._handler
+            out._filename = self._filename
             out.index = item
             out.parent_shape = self.parent_shape
         return out
