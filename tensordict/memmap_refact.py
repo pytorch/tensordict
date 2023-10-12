@@ -117,7 +117,7 @@ class MemoryMappedTensor(torch.Tensor):
         return cls.from_tensor(torch.zeros((), dtype=tensor.dtype, device=tensor.device).expand_as(tensor), filename=filename)
 
     @classmethod
-    def from_filename(cls, filename, dtype, shape, index):
+    def from_filename(cls, filename, dtype, shape, index=None):
         tensor = torch.from_file(
             filename, shared=True, dtype=dtype, size=shape.numel()
         ).view(shape)

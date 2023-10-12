@@ -4741,6 +4741,8 @@ class TensorDict(TensorDictBase):
     def load_memmap(cls, prefix: str) -> T:
         prefix = Path(prefix)
         metadata = torch.load(prefix / "meta.pt")
+        # TODO: remove this
+        assert metadata["device"] == torch.device("cpu")
         out = cls({}, batch_size=metadata["batch_size"], device=metadata["device"])
 
         for path in prefix.glob("**/*meta.pt"):
@@ -4771,13 +4773,11 @@ class TensorDict(TensorDictBase):
                 metadata = torch.load(path)
                 out.set(
                     key,
-                    MemmapTensor(
-                        *metadata["shape"],
-                        device=metadata["device"],
+                    MemmapTensor.from_filename(
                         dtype=metadata["dtype"],
-                        filename=str(path.parent / f"{leaf}.memmap"),
-                    )
-                )
+                        shape=metadata["shape"],
+                        filename=str(path.parent / f"{leaf}.memmap")
+                ))
 
         return out
 
