@@ -4723,7 +4723,7 @@ class TensorDict(TensorDictBase):
                         "copy_existing=True"
                     )
             else:
-                self._tensordict[key] = MemoryMappedTensor.from_tensor(
+                self._tensordict[key] = MemmapTensor.from_tensor(
                     value,
                     filename=str(prefix / f"{key}.memmap")
                     if prefix is not None
@@ -4776,7 +4776,7 @@ class TensorDict(TensorDictBase):
                 metadata = torch.load(path)
                 out.set(
                     key,
-                    MemoryMappedTensor(
+                    MemmapTensor(
                         *metadata["shape"],
                         device=metadata["device"],
                         dtype=metadata["dtype"],
@@ -5185,10 +5185,10 @@ def assert_allclose_td(
 
         default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
         msg = "\t".join([default_msg, msg]) if len(msg) else default_msg
-        if isinstance(input1, MemmapTensor):
-            input1 = input1._tensor
-        if isinstance(input2, MemmapTensor):
-            input2 = input2._tensor
+        # if isinstance(input1, MemmapTensor):
+        #     input1 = input1._tensor
+        # if isinstance(input2, MemmapTensor):
+        #     input2 = input2._tensor
         torch.testing.assert_close(
             input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=msg
         )
