@@ -1915,7 +1915,10 @@ class TensorDictBase(MutableMapping):
             #     )
             if clone:
                 value = value.clone()
-            self.set_(key, value)
+            if is_tensor_collection(value) or isinstance(value, dict):
+                self._get_str(key, default=NO_DEFAULT).update_(value)
+            else:
+                self.set_(key, value)
         return self
 
     def update_at_(
@@ -7885,7 +7888,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             if clone:
                 value = value.clone()
-            self.set_(key, value, **kwargs)
+            if is_tensor_collection(value) or isinstance(value, dict):
+                self._get_str(key, default=NO_DEFAULT).update_(value)
+            else:
+                self.set_(key, value, **kwargs)
         return self
 
     def update_at_(
