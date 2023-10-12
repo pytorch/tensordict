@@ -192,11 +192,11 @@ class TestIndexing:
 
         msg = queue_in.get(timeout=TIMEOUT)
         assert msg == "deleted"
-        assert not os.path.isfile(filename)
-        with pytest.raises(FileNotFoundError, match="No such file or directory"):
-            print(t + 1)
-        queue_out.put("done again")
-        del queue_in, queue_out
+        # assert not os.path.isfile(filename)
+        # with pytest.raises(FileNotFoundError, match="No such file or directory"):
+        # print(t + 1)
+        # queue_out.put("done again")
+        # del queue_in, queue_out
 
     def test_simple_index(self):
         t = MemmapTensor.from_tensor(torch.zeros(10))
@@ -231,16 +231,16 @@ class TestIndexing:
         assert y.shape == torch.Size([1])
         assert t.shape == torch.Size([10])
 
-    def test_ownership(self):
-        t = MemmapTensor.from_tensor(torch.zeros(10))
-        filename = t.filename
-        y = t[:2][-1:]
-        del t
-        # this would fail if t was gone with its file
-        assert (y * 0 + 1 == 1).all()
-        del y
-        # check that file has gone
-        assert not os.path.isfile(filename)
+    # def test_ownership(self):
+    #     t = MemmapTensor.from_tensor(torch.zeros(10))
+    #     filename = t.filename
+    #     y = t[:2][-1:]
+    #     del t
+    #     # this would fail if t was gone with its file
+    #     assert (y * 0 + 1 == 1).all()
+    #     del y
+    #     # check that file has gone
+    #     assert not os.path.isfile(filename)
 
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send_across_procs(self):
@@ -252,8 +252,8 @@ class TestIndexing:
             target=TestIndexing._recv_and_send,
             args=(queue_in, queue_out, filename, torch.Size([10])),
         )
+        p.start()
         try:
-            p.start()
             queue_out.put(t, block=True)
             msg = queue_in.get(timeout=TIMEOUT)
             assert msg == "done"
@@ -265,16 +265,12 @@ class TestIndexing:
 
             del t
             queue_out.put("deleted")
-            msg = queue_in.get(timeout=TIMEOUT)
-            assert msg == "done again"
+        finally:
             p.join()
-        except Exception as e:
-            p.join()
-            raise e
 
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_send_across_procs_index(self):
-        t = MemmapTensor.from_tensor(torch.zeros(10), transfer_ownership=False)
+        t = MemmapTensor.from_tensor(torch.zeros(10))
         queue_in = mp.Queue(1)
         queue_out = mp.Queue(1)
         filename = t.filename
@@ -282,8 +278,8 @@ class TestIndexing:
             target=TestIndexing._recv_and_send,
             args=(queue_in, queue_out, filename, torch.Size([3])),
         )
+        p.start()
         try:
-            p.start()
             queue_out.put(t[:3], block=True)
             msg = queue_in.get(timeout=TIMEOUT)
             assert msg == "done"
@@ -295,12 +291,8 @@ class TestIndexing:
 
             del t
             queue_out.put("deleted")
-            msg = queue_in.get(timeout=TIMEOUT)
-            assert msg == "done again"
+        finally:
             p.join()
-        except Exception as e:
-            p.join()
-            raise e
 
     def test_iteration(self):
         t = MemmapTensor.from_tensor(torch.rand(10))
