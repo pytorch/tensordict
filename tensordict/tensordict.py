@@ -40,8 +40,8 @@ import numpy as np
 import torch
 from functorch import dim as ftdim
 from tensordict._tensordict import _unravel_key_to_tuple
-from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
-from tensordict.memmap_refact import MemoryMappedTensor
+from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor as _MemmapTensor
+from tensordict.memmap_refact import MemoryMappedTensor as MemmapTensor
 from tensordict.utils import (
     _device,
     _dtype,
@@ -132,13 +132,13 @@ TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 CompatibleType = Union[
     Tensor,
-    MemmapTensor,
+    _MemmapTensor,
 ]  # None? # leaves space for TensorDictBase
 
 if _has_torchrec:
     CompatibleType = Union[
         Tensor,
-        MemmapTensor,
+        _MemmapTensor,
         KeyedJaggedTensor,
     ]
 _STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
@@ -1142,8 +1142,8 @@ class TensorDictBase(MutableMapping):
             elif _is_tensor_collection(value.__class__):
                 _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand)
                 continue
-            elif isinstance(value, MemmapTensor):
-                value = value.as_tensor()
+            # elif isinstance(value, MemmapTensor):
+            #     value = value.as_tensor()
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
             if not pseudo_rand:
@@ -1181,8 +1181,8 @@ class TensorDictBase(MutableMapping):
             elif _is_tensor_collection(value.__class__):
                 _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
                 continue
-            elif isinstance(value, MemmapTensor):
-                value = value.as_tensor()
+            # elif isinstance(value, MemmapTensor):
+            #     value = value.as_tensor()
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
             if not pseudo_rand:
@@ -1294,8 +1294,8 @@ class TensorDictBase(MutableMapping):
                 continue
             elif isinstance(value, Tensor):
                 pass
-            elif isinstance(value, MemmapTensor):
-                value = value.as_tensor()
+            # elif isinstance(value, MemmapTensor):
+            #     value = value.as_tensor()
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
             if not pseudo_rand:
@@ -1365,8 +1365,8 @@ class TensorDictBase(MutableMapping):
                     pseudo_rand=pseudo_rand,
                 )
                 continue
-            elif isinstance(value, MemmapTensor):
-                value = value.as_tensor()
+            # elif isinstance(value, MemmapTensor):
+            #     value = value.as_tensor()
             elif isinstance(value, Tensor):
                 pass
             else:
@@ -1415,8 +1415,8 @@ class TensorDictBase(MutableMapping):
                     _future_list=_future_list,
                 )
                 continue
-            elif isinstance(value, MemmapTensor):
-                value = value.as_tensor()
+            # elif isinstance(value, MemmapTensor):
+            #     value = value.as_tensor()
             elif isinstance(value, Tensor):
                 pass
             else:
@@ -2631,8 +2631,8 @@ class TensorDictBase(MutableMapping):
             >>>
             >>> from tensordict import TensorDict, MemmapTensor
             >>> td = TensorDict({
-            ...     "a": MemmapTensor(1_000_000),
-            ...     "b": {"c": MemmapTensor(1_000_000, 3)},
+            ...     "a": MemmapTensor.from_tensor(torch.zeros(()).expand(1_000_000)),
+            ...     "b": {"c": MemmapTensor.from_tensor(torch.zeros(()).expand(1_000_000, 3))},
             ... }, [1_000_000])
             >>>
             >>> file = tempfile.NamedTemporaryFile()

@@ -37,7 +37,7 @@ class MemoryMappedTensor(torch.Tensor):
     index: Any
     parent_shape: torch.Size
 
-    def __new__(cls, tensor_or_file, handler=None, dtype=None, shape=None, index=None, device=None):
+    def __new__(cls, tensor_or_file, *, dtype=None, shape=None, index=None, device=None, handler=None):
         if device is not None and torch.device(device).type != "cpu":
             raise ValueError(f"{cls} device must be cpu!")
         if isinstance(tensor_or_file, str):
@@ -63,7 +63,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def from_tensor(
-        cls, tensor, dir=None, prefix=None, filename=None
+        cls, tensor, *, dir=None, filename=None
     ):
         if isinstance(tensor, MemoryMappedTensor):
             if dir is None and (
@@ -112,13 +112,9 @@ class MemoryMappedTensor(torch.Tensor):
         out.copy_(tensor)
         return out
 
-    # def __setstate__(self, state: dict[str, Any]) -> None:
-    #     filename = state["filename"]
-    #     handler = state['handler']
-    #     if filename is not None:
-    #         return self.from_filename(filename, state['dtype'], state['shape'])
-    #     else:
-    #         return self.from_handler(handler, state['dtype'], state['shape'])
+    @classmethod
+    def empty_like(cls, tensor, *, filename=None):
+        return cls.from_tensor(torch.zeros((), dtype=tensor.dtype, device=tensor.device).expand_as(tensor), filename=filename)
 
     @classmethod
     def from_filename(cls, filename, dtype, shape, index):
@@ -148,14 +144,14 @@ class MemoryMappedTensor(torch.Tensor):
         return out
 
     def __reduce__(self):
-        if getattr(self, "handler", None) is not None:
+        if getattr(self, "_handler", None) is not None:
             return type(self).from_handler, (
                 self._handler,
                 self.dtype,
                 self.parent_shape,
                 self.index,
             )
-        elif getattr(self, "filename", None) is not None:
+        elif getattr(self, "_filename", None) is not None:
             return type(self).from_filename, (
                 self._filename,
                 self.dtype,
@@ -163,7 +159,7 @@ class MemoryMappedTensor(torch.Tensor):
                 self.index,
             )
         else:
-            raise RuntimeError
+            raise RuntimeError("Could not find handler or filename.")
 
     def __getitem__(self, item):
         out = super().__getitem__(item)
