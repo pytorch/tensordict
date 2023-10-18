@@ -3038,7 +3038,7 @@ class TestTensorDictRepr:
         is_shared_tensor = False
         expected = f"""TensorDict(
     fields={{
-        a: MemmapTensor(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+        a: MemoryMappedTensor(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
     batch_size=torch.Size([4, 3, 2, 1]),
     device={str(device)},
     is_shared={is_shared})"""

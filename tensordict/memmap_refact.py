@@ -112,6 +112,13 @@ class MemoryMappedTensor(torch.Tensor):
         out.copy_(tensor)
         return out
 
+    @property
+    def filename(self):
+        filename = self._filename
+        if filename is None:
+            raise RuntimeError("The MemoryMappedTensor has no file associated.")
+        return filename
+
     @classmethod
     def empty_like(cls, tensor, *, filename=None):
         return cls.from_tensor(torch.zeros((), dtype=tensor.dtype, device=tensor.device).expand_as(tensor), filename=filename)
