@@ -48,7 +48,7 @@ from tensordict.tensordict import (
 )
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 from torch import multiprocessing as mp, nn
-
+from tensordict.memmap_refact import MemoryMappedTensor
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensordict_set(device):
@@ -5180,7 +5180,7 @@ class TestSnapshot:
             [3],
         )
         td.memmap_()
-        assert isinstance(td["b", "c"], MemmapTensor)
+        assert isinstance(td["b", "c"], MemoryMappedTensor)
 
         app_state = {
             "state": torchsnapshot.StateDict(
@@ -5191,8 +5191,8 @@ class TestSnapshot:
         snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
         td_plain = td.to_tensordict()
-        # we want to delete refs to MemmapTensors
-        assert not isinstance(td_plain["a"], MemmapTensor)
+        # we want to delete refs to MemoryMappedTensors
+        assert not isinstance(td_plain["a"], MemoryMappedTensor)
         del td
 
         snapshot = torchsnapshot.Snapshot(path=path)
@@ -5201,7 +5201,7 @@ class TestSnapshot:
             [3],
         )
         td_dest.memmap_()
-        assert isinstance(td_dest["b", "c"], MemmapTensor)
+        assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
         app_state = {
             "state": torchsnapshot.StateDict(
                 **{save_name: td_dest.state_dict(keep_vars=True)}
@@ -5211,7 +5211,7 @@ class TestSnapshot:
 
         assert (td_dest == td_plain).all()
         assert td_dest["b"].batch_size == td_plain["b"].batch_size
-        assert isinstance(td_dest["b", "c"], MemmapTensor)
+        assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
 
     def test_update(
         self,
@@ -5222,7 +5222,7 @@ class TestSnapshot:
         path = f"/tmp/{uuid.uuid4()}"
         snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
         td_plain = tensordict.to_tensordict()
-        assert not isinstance(td_plain["a"], MemmapTensor)
+        assert not isinstance(td_plain["a"], MemoryMappedTensor)
         del tensordict
 
         snapshot = torchsnapshot.Snapshot(path=path)
