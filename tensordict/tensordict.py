@@ -4701,7 +4701,7 @@ class TensorDict(TensorDictBase):
                     # user didn't specify location
                     prefix is None
                     # file is already in the correct location
-                    or str(prefix / f"{key}.memmap") == value.filename
+                    or str(prefix / f"{key}.memmap") == value._filename
                 ):
                     self._tensordict[key] = value
                 elif copy_existing:
