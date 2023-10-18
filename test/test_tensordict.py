@@ -2272,20 +2272,6 @@ class TestTensorDicts(TestTensorDictsBase):
         assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
         assert (torch.cat(td_chunks, dim) == td).all()
 
-    # def test_as_tensor(self, td_name, device):
-    #     td = getattr(self, td_name)(device)
-    #     if "memmap" in td_name and device == torch.device("cpu"):
-    #         tdt = td.as_tensor()
-    #         assert (tdt == td).all()
-    #     elif "memmap" in td_name:
-    #         with pytest.raises(
-    #             RuntimeError, match="can only be called with MemmapTensors stored"
-    #         ):
-    #             td.as_tensor()
-    #     else:
-    #         with pytest.raises(AttributeError):
-    #             td.as_tensor()
-
     def test_items_values_keys(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -5240,11 +5226,11 @@ def test_memmap_as_tensor(device):
     td_memmap = td.clone().memmap_()
     assert (td == td_memmap).all()
 
-    assert (td == td_memmap.apply(lambda x: x.as_tensor())).all()
+    assert (td == td_memmap.apply(lambda x: x.clone())).all()
     if device.type == "cuda":
         td = td.pin_memory()
         td_memmap = td.clone().memmap_()
-        td_memmap_pm = td_memmap.apply(lambda x: x.as_tensor()).pin_memory()
+        td_memmap_pm = td_memmap.apply(lambda x: x.clone()).pin_memory()
         assert (td.pin_memory().to(device) == td_memmap_pm.to(device)).all()
 
 
@@ -5764,7 +5750,7 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == list("abcd")
         td.rename_(c="g")
         assert td.names == list("abgd")
-        assert td.as_tensor().names == list("abgd")
+        assert td.clone().names == list("abgd")
 
     def test_h5_td(self):
         td = self.td_h5("cpu")
