@@ -31,8 +31,9 @@ from _utils_internal import get_available_devices
 from tensordict import (
     is_tensorclass,
     LazyStackedTensorDict,
+    MemoryMappedTensor,
     tensorclass,
-    TensorDict,MemoryMappedTensor,
+    TensorDict,
 )
 from tensordict.tensordict import (
     _PermutedTensorDict,

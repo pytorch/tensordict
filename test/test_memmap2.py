@@ -6,6 +6,7 @@ import argparse
 import os.path
 import pickle
 import tempfile
+from contextlib import nullcontext
 
 import numpy as np
 import pytest
@@ -14,7 +15,6 @@ from _utils_internal import get_available_devices
 
 from tensordict.memmap_refact import MemoryMappedTensor as MemmapTensor
 from torch import multiprocessing as mp
-from contextlib import nullcontext
 
 TIMEOUT = 100
 
@@ -343,7 +343,9 @@ class TestIndexing:
 def test_as_tensor():
     num_samples = 300
     rows, cols = 48, 48
-    y = MemmapTensor.from_tensor(torch.zeros((), dtype=torch.uint8).expand(num_samples, rows, cols))
+    y = MemmapTensor.from_tensor(
+        torch.zeros((), dtype=torch.uint8).expand(num_samples, rows, cols)
+    )
     y.copy_(y + torch.randn(num_samples, rows, cols))
     assert isinstance(y, MemmapTensor)
     idx = slice(3)
@@ -352,7 +354,10 @@ def test_as_tensor():
 
 
 def test_filename(tmp_path):
-    mt = MemmapTensor.from_tensor(torch.zeros((), dtype=torch.float32).expand(10), filename=tmp_path / "test.memmap")
+    mt = MemmapTensor.from_tensor(
+        torch.zeros((), dtype=torch.float32).expand(10),
+        filename=tmp_path / "test.memmap",
+    )
     assert str(mt._filename) == str(tmp_path / "test.memmap")
 
     mt2 = MemmapTensor.from_tensor(mt)
@@ -373,12 +378,12 @@ def test_filename(tmp_path):
     assert (tmp_path / "test.memmap").exists()
     assert (tmp_path / "test2.memmap").exists()
 
+
 def test_handler():
     mt = MemmapTensor.from_tensor(torch.zeros((), dtype=torch.float32).expand(10))
 
     mt2 = MemmapTensor.from_tensor(mt)
     assert mt2._handler is mt._handler
-
 
 
 def test_memmap_from_memmap():

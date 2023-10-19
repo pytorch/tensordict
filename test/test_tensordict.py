@@ -34,6 +34,7 @@ from _utils_internal import decompose, get_available_devices, prod, TestTensorDi
 from functorch import dim as ftdim
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
+from tensordict.memmap_refact import MemoryMappedTensor
 from tensordict.tensordict import (
     _CustomOpTensorDict,
     _stack as stack_td,
@@ -48,7 +49,7 @@ from tensordict.tensordict import (
 )
 from tensordict.utils import _getitem_batch_size, convert_ellipsis_to_idx
 from torch import multiprocessing as mp, nn
-from tensordict.memmap_refact import MemoryMappedTensor
+
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_tensordict_set(device):
@@ -6297,11 +6298,23 @@ class TestFCD(TestTensorDictsBase):
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 0:
             with pytest.raises(ValueError, match="Cannot index"):
                 td[d0]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
+                td[d0]
         else:
             assert td[d0].shape == td.shape[1:]
         d0, d1 = ftdim.dims(2)
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1):
             with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
                 td[d0, d1]
         else:
             assert td[d0, d1].shape == td.shape[2:]
@@ -6309,11 +6322,23 @@ class TestFCD(TestTensorDictsBase):
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1, 2):
             with pytest.raises(ValueError, match="Cannot index"):
                 td[d0, d1, d2]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
+                td[d0, d1, d2]
         else:
             assert td[d0, d1, d2].shape == td.shape[3:]
         d0 = ftdim.dims(1)
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 1:
             with pytest.raises(ValueError, match="Cannot index"):
+                td[:, d0]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
                 td[:, d0]
         else:
             assert td[:, d0].shape == torch.Size((td.shape[0], *td.shape[2:]))
@@ -6350,11 +6375,23 @@ class TestFCD(TestTensorDictsBase):
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 0:
             with pytest.raises(ValueError, match="Cannot index"):
                 td[d0]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
+                td[d0]
         else:
             assert td[d0].names == ["b", "c", "d"]
         d0, d1 = ftdim.dims(2)
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1):
             with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
                 td[d0, d1]
         else:
             assert td[d0, d1].names == ["c", "d"]
@@ -6362,11 +6399,23 @@ class TestFCD(TestTensorDictsBase):
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1, 2):
             with pytest.raises(ValueError, match="Cannot index"):
                 td[d0, d1, d2]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
+                td[d0, d1, d2]
         else:
             assert td[d0, d1, d2].names == ["d"]
         d0 = ftdim.dims(1)
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 1:
             with pytest.raises(ValueError, match="Cannot index"):
+                td[:, d0]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
                 td[:, d0]
         else:
             assert td[:, d0].names == ["a", "c", "d"]

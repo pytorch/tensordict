@@ -4774,8 +4774,9 @@ class TensorDict(TensorDictBase):
                     MemmapTensor.from_filename(
                         dtype=metadata["dtype"],
                         shape=metadata["shape"],
-                        filename=str(path.parent / f"{leaf}.memmap")
-                ))
+                        filename=str(path.parent / f"{leaf}.memmap"),
+                    ),
+                )
 
         return out
 

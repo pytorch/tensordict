@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict.memmap import MemmapTensor, set_transfer_ownership
+from tensordict.memmap_refact import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
 from tensordict.tensorclass import tensorclass
 from tensordict.tensordict import (
@@ -20,7 +21,6 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
-from tensordict.memmap_refact import MemoryMappedTensor
 from tensordict.utils import is_tensorclass
 
 try:

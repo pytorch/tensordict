@@ -37,7 +37,16 @@ class MemoryMappedTensor(torch.Tensor):
     index: Any
     parent_shape: torch.Size
 
-    def __new__(cls, tensor_or_file, *, dtype=None, shape=None, index=None, device=None, handler=None):
+    def __new__(
+        cls,
+        tensor_or_file,
+        *,
+        dtype=None,
+        shape=None,
+        index=None,
+        device=None,
+        handler=None,
+    ):
         if device is not None and torch.device(device).type != "cpu":
             raise ValueError(f"{cls} device must be cpu!")
         if isinstance(tensor_or_file, str):
@@ -56,15 +65,15 @@ class MemoryMappedTensor(torch.Tensor):
             )
         return super().__new__(cls, tensor_or_file)
 
-    def __init__(self, tensor_or_file, handler=None, dtype=None, shape=None, device=None):
+    def __init__(
+        self, tensor_or_file, handler=None, dtype=None, shape=None, device=None
+    ):
         ...
 
     __torch_function__ = torch._C._disabled_torch_function_impl
 
     @classmethod
-    def from_tensor(
-        cls, tensor, *, dir=None, filename=None
-    ):
+    def from_tensor(cls, tensor, *, dir=None, filename=None):
         if isinstance(tensor, MemoryMappedTensor):
             if dir is None and (
                 filename is None
@@ -121,7 +130,10 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def empty_like(cls, tensor, *, filename=None):
-        return cls.from_tensor(torch.zeros((), dtype=tensor.dtype, device=tensor.device).expand_as(tensor), filename=filename)
+        return cls.from_tensor(
+            torch.zeros((), dtype=tensor.dtype, device=tensor.device).expand_as(tensor),
+            filename=filename,
+        )
 
     @classmethod
     def from_filename(cls, filename, dtype, shape, index=None):
@@ -169,7 +181,15 @@ class MemoryMappedTensor(torch.Tensor):
             raise RuntimeError("Could not find handler or filename.")
 
     def __getitem__(self, item):
-        out = super().__getitem__(item)
+        try:
+            out = super().__getitem__(item)
+        except ValueError as err:
+            if "is unbound" in str(err):
+                raise ValueError(
+                    "Using first class dimension indices with MemoryMappedTensor "
+                    "isn't supported at the moment."
+                ) from err
+            raise
         if out.data_ptr() == self.data_ptr():
             out = MemoryMappedTensor(out)
             out._handler = self._handler
