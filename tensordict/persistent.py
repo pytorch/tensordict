@@ -913,7 +913,7 @@ class PersistentTensorDict(TensorDictBase):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        filename = state["file"].file._filename
+        filename = state["file"].file.filename
         group_name = state["file"].name
         state["file"] = None
         state["filename"] = filename

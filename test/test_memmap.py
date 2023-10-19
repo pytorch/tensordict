@@ -124,11 +124,11 @@ def test_memmap_ownership_2pass(value):
             assert m1._has_ownership
 
         m2 = pickle.load(open(tmp2.name, "rb"))
-        assert m2._filename == m1.filename
+        assert m2.filename == m1.filename
         with tempfile.NamedTemporaryFile(suffix=".pkl") as tmp3:
             pickle.dump(m2, tmp3)
             m3 = pickle.load(open(tmp3.name, "rb"))
-            assert m3._filename == m1.filename
+            assert m3.filename == m1.filename
 
     del m1, m2, m3
     assert not os.path.isfile(filename)
@@ -404,7 +404,7 @@ class TestIndexing:
 
             # receive 2nd copy
             t_indexed2 = queue.get(timeout=TIMEOUT)
-            assert t_indexed2._filename == t_indexed1._filename
+            assert t_indexed2.filename == t_indexed1.filename
             assert (t_indexed2._index[0] == torch.tensor([3, 4])).all()
             # check that file is open only once
             assert t_indexed1._memmap_array is not None
