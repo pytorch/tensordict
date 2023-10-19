@@ -163,30 +163,31 @@ class MemoryMappedTensor(torch.Tensor):
         return out
 
     def __setstate__(self, state):
-        print('setstate', self.__dict__)
-        if 'filename' in state:
-            self.__dict__.update(type(self).from_filename(**state).__dict__)
+        if "filename" in state:
+            self.__dict__ = type(self).from_filename(**state).__dict__
         else:
-            self.__dict__.update(type(self).from_handler(**state).__dict__)
-        assert self.is_shared()
+            self.__dict__ = type(self).from_handler(**state).__dict__
 
     def __getstate__(self):
         if getattr(self, "_handler", None) is not None:
             return {
-                'handler': self._handler,
-                'dtype': self.dtype,
-                'shape': self.parent_shape,
-                'index': self.index,
+                "handler": self._handler,
+                "dtype": self.dtype,
+                "shape": self.parent_shape,
+                "index": self.index,
             }
         elif getattr(self, "_filename", None) is not None:
             return {
-                'filename': self._filename,
-                'dtype': self.dtype,
-                'shape': self.parent_shape,
-                'index': self.index,
+                "filename": self._filename,
+                "dtype": self.dtype,
+                "shape": self.parent_shape,
+                "index": self.index,
             }
         else:
             raise RuntimeError("Could not find handler or filename.")
+
+    def __reduce_ex__(self, protocol):
+        return self.__reduce__()
 
     def __reduce__(self):
         if getattr(self, "_handler", None) is not None:
