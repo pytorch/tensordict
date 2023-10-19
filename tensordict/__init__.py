@@ -20,6 +20,7 @@ from tensordict.tensordict import (
     TensorDict,
     TensorDictBase,
 )
+from tensordict.memmap_refact import MemoryMappedTensor
 from tensordict.utils import is_tensorclass
 
 try:
