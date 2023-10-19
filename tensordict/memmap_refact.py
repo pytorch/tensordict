@@ -163,10 +163,12 @@ class MemoryMappedTensor(torch.Tensor):
         return out
 
     def __setstate__(self, state):
+        print('setstate', self.__dict__)
         if 'filename' in state:
             self.__dict__.update(type(self).from_filename(**state).__dict__)
         else:
             self.__dict__.update(type(self).from_handler(**state).__dict__)
+        assert self.is_shared()
 
     def __getstate__(self):
         if getattr(self, "_handler", None) is not None:
