@@ -2994,6 +2994,8 @@ class TestTensorDictRepr:
         return stack_td([td1, td2], 2)
 
     def memmap_td(self, device, dtype):
+        if device.type != "cpu":
+            pytest.skip("MemoryMappedTensors can only be placed on CPU.")
         return self.td(device, dtype).memmap_()
 
     def share_memory_td(self, device, dtype):
@@ -3027,7 +3029,7 @@ class TestTensorDictRepr:
     fields={{
         a: MemoryMappedTensor(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
     batch_size=torch.Size([4, 3, 2, 1]),
-    device={str(device)},
+    device=cpu,
     is_shared={is_shared})"""
         assert repr(tensordict) == expected
 
