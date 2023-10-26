@@ -76,39 +76,7 @@ jobs:
         python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python_version[1] }}
-          architecture: x64
-      - name: Checkout tensordict
-        uses: actions/checkout@v2
-      - name: Install PyTorch nightly
-        run: |
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-      - name: Build tensordict Nightly
-        run: |
-          rm -r dist || true
-          export CC=clang CXX=clang++
-          python3 -mpip install wheel
-          python3 setup.py bdist_wheel \
-            --package_name tensordict-nightly \
-            --python-tag=${{ matrix.python-tag }}
-      - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v2
-        with:
-          name: tensordict-mac-${{ matrix.python_version[0] }}.whl
-          path: dist/*.whl
-
-  build-wheel-m1:
-    if: github.repository_owner == 'pytorch'
-    runs-on: macos-m1-12
-    strategy:
-      matrix:
-#        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
-        python_version: [["3.8", "3.8"]]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python_version[1] }}
           architecture: x64
@@ -141,57 +109,7 @@ jobs:
         python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python_version[1] }}
-          architecture: x64
-      - name: Checkout tensordict
-        uses: actions/checkout@v2
-      - name: Install PyTorch Nightly
-        run: |
-          python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-      - name: Upgrade pip
-        run: |
-          python3 -mpip install --upgrade pip
-      - name: Install test dependencies
-        run: |
-          python3 -mpip install numpy pytest --no-cache-dir
-      - name: Download built wheels
-        uses: actions/download-artifact@v2
-        with:
-          name: tensordict-mac-${{ matrix.python_version[0] }}.whl
-          path: /tmp/wheels
-      - name: Install built wheels
-        run: |
-          python3 -mpip install /tmp/wheels/*
-      - name: Log version string
-        run: |
-          # Avoid ambiguity of "import tensordict" by deleting the source files.
-          rm -rf tensordict/
-          python3 -c "import tensordict; print(tensordict.__version__)"
-      - name: Run tests
-        run: |
-          set -e
-          export IN_CI=1
-          mkdir test-reports
-          python -m torch.utils.collect_env
-          python -c "import tensordict; print(tensordict.__version__);from tensordict.nn import TensorDictModule"
-          EXIT_STATUS=0
-          pytest test/smoke_test.py -v --durations 200
-          exit $EXIT_STATUS
-
-  test-wheel-m1:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    needs: build-wheel-m1
-    runs-on: macos-m1-12
-    strategy:
-      matrix:
-#        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
-        python_version: [["3.8", "3.8"]]
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python_version[1] }}
           architecture: x64
@@ -288,34 +206,6 @@ jobs:
               --skip-existing \
               /tmp/wheels/tensordict_nightly-*.whl \
               --verbose
-  upload-wheel-m1:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    needs: test-wheel-m1
-    runs-on: macos-m1-12
-    strategy:
-      matrix:
-#        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
-        python_version: [["3.8", "3.8"]]
-    steps:
-      - name: Checkout tensordict
-        uses: actions/checkout@v2
-      - name: Download built wheels
-        uses: actions/download-artifact@v2
-        with:
-          name: tensordict-mac-${{ matrix.python_version[0] }}.whl
-          path: /tmp/wheels
-      - name: Push tensordict Binary to PYPI
-        env:
-            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          python3 -mpip install twine
-          python3 -m twine upload \
-              --username __token__ \
-              --password "$PYPI_TOKEN" \
-              --skip-existing \
-              /tmp/wheels/tensordict_nightly-*.whl \
-              --verbose
 
   test-wheel-linux:
     # Don't run on forked repos.
@@ -328,7 +218,7 @@ jobs:
         cuda_support: [["", "cpu", "cpu"]]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python_version[0] }}
           architecture: x64
@@ -386,7 +276,7 @@ jobs:
         python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout tensordict
@@ -419,7 +309,7 @@ jobs:
         python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout tensordict
