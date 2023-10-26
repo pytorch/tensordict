@@ -177,6 +177,9 @@ def test_vmap_mlp_speed(benchmark, stack, tdmodule):
 
 
 @torch.no_grad()
+@pytest.mark.skipif(
+    not torch.cuda.device_count(), reason="cuda device required for test"
+)
 @pytest.mark.parametrize("stack", [True, False])
 @pytest.mark.parametrize("tdmodule", [True, False])
 def test_vmap_transformer_speed(benchmark, stack, tdmodule):

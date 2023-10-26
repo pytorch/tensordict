@@ -423,6 +423,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
     ) -> TensorDictBase:
         ...
 
+    @_unlock_and_set(inplace=True)
+    def _apply_nest(*args, **kwargs):
+        ...
+
     @_get_post_hook
     @_fallback
     def get(
@@ -710,7 +714,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_carry_over
-    def where(self, condition, other, *, out=None):
+    def where(self, condition, other, *, out=None, pad=None):
         ...
 
     @_carry_over

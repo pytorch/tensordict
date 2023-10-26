@@ -731,8 +731,8 @@ MemmapTensor of shape {self.shape}."""
                 out.device = device
             return out
 
-        self.device = device
-        return self
+        out = self.clone()
+        return out.to(device)
 
     def unbind(self, dim: int) -> tuple[torch.Tensor, ...]:
         """Unbinds a MemmapTensor along the desired dimension.
@@ -840,6 +840,18 @@ def _cat(
 
 
 implements_for_memmap(torch.cat)(_cat)
+
+
+def _where(condition, input, other):
+    device = input.device
+    if device != torch.device("cpu"):
+        input = input.to("cpu").to(device, non_blocking=True)
+    else:
+        input = input.as_tensor()
+    return torch.where(condition=condition, input=input, other=other)
+
+
+implements_for_memmap(torch.where)(_where)
 
 
 def set_transfer_ownership(memmap: MemmapTensor, value: bool = True) -> None:

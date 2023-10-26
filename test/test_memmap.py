@@ -519,15 +519,15 @@ def dummy_memmap():
 @pytest.mark.parametrize("device", get_available_devices())
 class TestOps:
     def test_eq(self, device, dummy_memmap):
-        memmap = dummy_memmap.to(device)
-        assert (memmap == memmap.clone()).all()
-        assert (memmap.clone() == memmap).all()
+        dummy_memmap.device = device
+        assert (dummy_memmap == dummy_memmap.clone()).all()
+        assert (dummy_memmap.clone() == dummy_memmap).all()
         if device.type == "cpu":
-            assert (memmap == memmap.as_tensor()).all()
-            assert (memmap.as_tensor() == memmap).all()
+            assert (dummy_memmap == dummy_memmap.as_tensor()).all()
+            assert (dummy_memmap.as_tensor() == dummy_memmap).all()
         else:
-            assert (memmap == memmap._tensor).all()
-            assert (memmap._tensor == memmap).all()
+            assert (dummy_memmap == dummy_memmap._tensor).all()
+            assert (dummy_memmap._tensor == dummy_memmap).all()
 
     def test_fill_(self, device, dummy_memmap):
         memmap = dummy_memmap.to(device)
