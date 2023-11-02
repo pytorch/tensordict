@@ -1811,11 +1811,13 @@ class TensorDictBase(MutableMapping):
         and will raise an exception in all other cases.
 
         """
+
         def as_tensor(x):
             try:
                 return x.as_tensor()
             except AttributeError:
                 return x
+
         return self._fast_apply(as_tensor)
 
     def update(

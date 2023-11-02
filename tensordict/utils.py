@@ -767,7 +767,6 @@ def _is_shared(tensor: torch.Tensor) -> bool:
     elif isinstance(tensor, KeyedJaggedTensor):
         return False
     else:
-        print(type(tensor))
         return tensor.is_shared()
 
 
