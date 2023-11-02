@@ -2283,8 +2283,8 @@ class TestTensorDicts(TestTensorDictsBase):
             ):
                 td.as_tensor()
         else:
-            with pytest.raises(AttributeError):
-                td.as_tensor()
+            # checks that it runs
+            td.as_tensor()
 
     def test_items_values_keys(self, td_name, device):
         torch.manual_seed(1)
