@@ -1811,13 +1811,14 @@ class TensorDictBase(MutableMapping):
         and will raise an exception in all other cases.
 
         """
-        try:
-            return self._fast_apply(lambda x: x.as_tensor())
-        except AttributeError as err:
-            raise AttributeError(
-                f"{self.__class__.__name__} does not have an 'as_tensor' method "
-                f"because at least one of its tensors does not support this method."
-            ) from err
+
+        def as_tensor(x):
+            try:
+                return x.as_tensor()
+            except AttributeError:
+                return x
+
+        return self._fast_apply(as_tensor)
 
     def update(
         self,
