@@ -124,9 +124,7 @@ class PersistentTensorDict(TensorDictBase):
 
     """
 
-    def __new__(cls, *args, **kwargs):
-        cls._td_dim_names = None
-        return super().__new__(cls, *args, **kwargs)
+    _td_dim_names = None
 
     def __init__(
         self,
