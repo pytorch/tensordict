@@ -93,52 +93,52 @@ class clean(distutils.command.clean.clean):
                 print(f"removing '{path}' (and everything under it)")
                 shutil.rmtree(str(path), ignore_errors=True)
 
-
-def get_extensions():
-    extension = CppExtension
-
-    extra_link_args = []
-    extra_compile_args = {
-        "cxx": [
-            "-O3",
-            "-std=c++17",
-            "-fdiagnostics-color=always",
-        ]
-    }
-    debug_mode = os.getenv("DEBUG", "0") == "1"
-    if debug_mode:
-        print("Compiling in debug mode")
-        extra_compile_args = {
-            "cxx": [
-                "-O0",
-                "-fno-inline",
-                "-g",
-                "-std=c++17",
-                "-fdiagnostics-color=always",
-            ]
-        }
-        extra_link_args = ["-O0", "-g"]
-
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    extensions_dir = os.path.join(this_dir, "tensordict", "csrc")
-
-    extension_sources = {
-        os.path.join(extensions_dir, p)
-        for p in glob.glob(os.path.join(extensions_dir, "*.cpp"))
-    }
-    sources = list(extension_sources)
-
-    ext_modules = [
-        extension(
-            "tensordict._tensordict",
-            sources,
-            include_dirs=[this_dir],
-            extra_compile_args=extra_compile_args,
-            extra_link_args=extra_link_args,
-        )
-    ]
-
-    return ext_modules
+#
+# def get_extensions():
+#     extension = CppExtension
+#
+#     extra_link_args = []
+#     extra_compile_args = {
+#         "cxx": [
+#             "-O3",
+#             "-std=c++17",
+#             "-fdiagnostics-color=always",
+#         ]
+#     }
+#     debug_mode = os.getenv("DEBUG", "0") == "1"
+#     if debug_mode:
+#         print("Compiling in debug mode")
+#         extra_compile_args = {
+#             "cxx": [
+#                 "-O0",
+#                 "-fno-inline",
+#                 "-g",
+#                 "-std=c++17",
+#                 "-fdiagnostics-color=always",
+#             ]
+#         }
+#         extra_link_args = ["-O0", "-g"]
+#
+#     this_dir = os.path.dirname(os.path.abspath(__file__))
+#     extensions_dir = os.path.join(this_dir, "tensordict", "csrc")
+#
+#     extension_sources = {
+#         os.path.join(extensions_dir, p)
+#         for p in glob.glob(os.path.join(extensions_dir, "*.cpp"))
+#     }
+#     sources = list(extension_sources)
+#
+#     ext_modules = [
+#         extension(
+#             "tensordict._tensordict",
+#             sources,
+#             include_dirs=[this_dir],
+#             extra_compile_args=extra_compile_args,
+#             extra_link_args=extra_link_args,
+#         )
+#     ]
+#
+#     return ext_modules
 
 
 def _main(argv):
@@ -170,7 +170,7 @@ def _main(argv):
         license="BSD",
         # Package info
         packages=find_packages(exclude=("test", "tutorials", "packaging", "gallery")),
-        ext_modules=get_extensions(),
+        # ext_modules=get_extensions(),
         cmdclass={
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
             "clean": clean,
