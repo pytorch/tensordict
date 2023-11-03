@@ -31,3 +31,13 @@ def unravel_key(key):
     if len(result) == 1:
         return result[0]
     return result
+
+def unravel_keys(key):
+    if isinstance(key, str):
+        return key
+    result = ()
+    for elt in key:
+        result = result + _unravel_key_to_tuple(elt)
+    if len(result) == 1:
+        return result[0]
+    return result
