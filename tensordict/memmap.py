@@ -302,7 +302,7 @@ class MemmapTensor:
         dtype: torch.dtype,
         transfer_ownership: bool,
     ):
-        self._device = device
+        self._device = torch.device(device)
         self._shape = shape
         self._shape_indexed = None
         self.np_shape = tuple(self._shape)
