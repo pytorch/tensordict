@@ -16,7 +16,10 @@ from torch.types import (
     _layout,
     _device,
 )
+from multiprocessing import util
+from multiprocessing.context import reduction
 
+import sys
 
 def empty_like(
     input: Tensor,
@@ -146,3 +149,9 @@ def reduce_handler(handler):
 def rebuild_handler(size, dupfd):
     detached = dupfd.detach()
     return FileHandler(size, detached)
+
+def from_tensor(tensor, *, filename=None, copy_existing=False):
+    if filename is not None and tensor.storage().filename is not None and not copy_existing:
+        raise ValueError(f"A filename was provided but the tensor already has a file associated ({tensor.storage().filename}). "
+                         f"To copy the tensor onto the new location, pass copy_existing=True.")
+    return empty_like(tensor, filename=filename).copy_(tensor)

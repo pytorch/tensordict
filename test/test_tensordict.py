@@ -2523,20 +2523,20 @@ class TestTensorDicts(TestTensorDictsBase):
                 RuntimeError,
                 match="Converting a sub-tensordict values to memmap cannot be done",
             ):
-                td.memmap_()
+                td.memmap_(backend="Tensor")
         elif td_name in ("td_h5", "td_params"):
             with pytest.raises(
                 RuntimeError,
                 match="Cannot build a memmap TensorDict in-place",
             ):
-                td.memmap_()
+                td.memmap_(backend="Tensor")
         else:
-            td.memmap_()
+            td.memmap_(backend="Tensor")
             assert td.is_memmap()
 
     def test_memmap_like(self, td_name, device):
         td = getattr(self, td_name)(device)
-        tdmemmap = td.memmap_like()
+        tdmemmap = td.memmap_like(backend="Tensor")
         assert tdmemmap is not td
         for key in td.keys(True):
             assert td[key] is not tdmemmap[key]
@@ -2554,17 +2554,17 @@ class TestTensorDicts(TestTensorDictsBase):
                 RuntimeError,
                 match="Converting a sub-tensordict values to memmap cannot be done",
             ):
-                td.memmap_(tmp_path / "tensordict")
+                td.memmap_(tmp_path / "tensordict", backend="Tensor")
             return
         elif td_name in ("td_h5", "td_params"):
             with pytest.raises(
                 RuntimeError,
                 match="Cannot build a memmap TensorDict in-place",
             ):
-                td.memmap_(tmp_path / "tensordict")
+                td.memmap_(tmp_path / "tensordict", backend="Tensor")
             return
         else:
-            td.memmap_(tmp_path / "tensordict")
+            td.memmap_(tmp_path / "tensordict", backend="Tensor")
 
         assert (tmp_path / "tensordict" / "meta.pt").exists()
         metadata = torch.load(tmp_path / "tensordict" / "meta.pt")
@@ -2591,23 +2591,23 @@ class TestTensorDicts(TestTensorDictsBase):
                 "SubTensorDict/H5 and memmap_ incompatibility is checked elsewhere"
             )
 
-        td = getattr(self, td_name)(device).memmap_(prefix=tmp_path / "tensordict")
-        td2 = getattr(self, td_name)(device).memmap_()
+        td = getattr(self, td_name)(device).memmap_(prefix=tmp_path / "tensordict", backend="Tensor")
+        td2 = getattr(self, td_name)(device).memmap_(backend="Tensor")
 
         if copy_existing:
-            td3 = td.memmap_(prefix=tmp_path / "tensordict2", copy_existing=True)
+            td3 = td.memmap_(prefix=tmp_path / "tensordict2", copy_existing=True, backend="Tensor")
             assert (td == td3).all()
         else:
             with pytest.raises(
                 RuntimeError, match="TensorDict already contains MemmapTensors"
             ):
                 # calling memmap_ with prefix that is different to contents gives error
-                td.memmap_(prefix=tmp_path / "tensordict2")
+                td.memmap_(prefix=tmp_path / "tensordict2", backend="Tensor")
 
             # calling memmap_ without prefix means no-op, regardless of whether contents
             # were saved in temporary or designated location (td vs. td2 resp.)
-            td3 = td.memmap_()
-            td4 = td2.memmap_()
+            td3 = td.memmap_(backend="Tensor")
+            td4 = td2.memmap_(backend="Tensor")
 
             if td_name in ("stacked_td", "nested_stacked_td"):
                 assert all(
@@ -3007,7 +3007,7 @@ class TestTensorDictRepr:
         return stack_td([td1, td2], 2)
 
     def memmap_td(self, device, dtype):
-        return self.td(device, dtype).memmap_()
+        return self.td(device, dtype).memmap_(backend="Tensor")
 
     def share_memory_td(self, device, dtype):
         return self.td(device, dtype).share_memory_()
@@ -3726,12 +3726,12 @@ def test_mp(td_type):
             0,
         )
     elif td_type == "memmap":
-        tensordict = tensordict.memmap_()
+        tensordict = tensordict.memmap_(backend="Tensor")
     elif td_type == "memmap_stack":
         tensordict = stack_td(
             [
-                tensordict[0].clone().memmap_(),
-                tensordict[1].clone().memmap_(),
+                tensordict[0].clone().memmap_(backend="Tensor"),
+                tensordict[1].clone().memmap_(backend="Tensor"),
             ],
             0,
         )
@@ -4100,7 +4100,7 @@ def test_memory_lock(method):
     if method == "share_memory":
         td.share_memory_()
     elif method == "memmap":
-        td.memmap_()
+        td.memmap_(backend="Tensor")
     else:
         raise NotImplementedError
 
@@ -5179,7 +5179,7 @@ class TestSnapshot:
             {"a": torch.randn(3), "b": TensorDict({"c": torch.randn(3, 1)}, [3, 1])},
             [3],
         )
-        td.memmap_()
+        td.memmap_(backend="Tensor")
         assert isinstance(td["b", "c"], MemmapTensor)
 
         app_state = {
@@ -5200,7 +5200,7 @@ class TestSnapshot:
             {"a": torch.zeros(3), "b": TensorDict({"c": torch.zeros(3, 1)}, [3, 1])},
             [3],
         )
-        td_dest.memmap_()
+        td_dest.memmap_(backend="Tensor")
         assert isinstance(td_dest["b", "c"], MemmapTensor)
         app_state = {
             "state": torchsnapshot.StateDict(
@@ -5218,7 +5218,7 @@ class TestSnapshot:
     ):
         tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         state = {"state": tensordict}
-        tensordict.memmap_()
+        tensordict.memmap_(backend="Tensor")
         path = f"/tmp/{uuid.uuid4()}"
         snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
         td_plain = tensordict.to_tensordict()
@@ -5237,13 +5237,13 @@ def test_memmap_as_tensor(device):
     td = TensorDict(
         {"a": torch.randn(3, 4), "b": {"c": torch.randn(3, 4)}}, [3, 4], device="cpu"
     )
-    td_memmap = td.clone().memmap_()
+    td_memmap = td.clone().memmap_(backend="Tensor")
     assert (td == td_memmap).all()
 
     assert (td == td_memmap.apply(lambda x: x.as_tensor())).all()
     if device.type == "cuda":
         td = td.pin_memory()
-        td_memmap = td.clone().memmap_()
+        td_memmap = td.clone().memmap_(backend="Tensor")
         td_memmap_pm = td_memmap.apply(lambda x: x.as_tensor()).pin_memory()
         assert (td.pin_memory().to(device) == td_memmap_pm.to(device)).all()
 
@@ -5301,9 +5301,9 @@ def test_save_load_memmap_stacked_td(
     c = torch.stack([a, b])
     c = c.expand(10, 2)
     if like:
-        d = c.memmap_like(prefix=tmpdir)
+        d = c.memmap_like(prefix=tmpdir, backend="Tensor")
     else:
-        d = c.memmap_(prefix=tmpdir)
+        d = c.memmap_(prefix=tmpdir, backend="Tensor")
 
     d2 = LazyStackedTensorDict.load_memmap(tmpdir)
     assert (d2 == d).all()
@@ -5602,7 +5602,7 @@ class TestNamedDims(TestTensorDictsBase):
             batch_size=[3, 4, 1, 6],
             names=["a", "b", "c", "d"],
         )
-        tdm = td.memmap_like(prefix=tmpdir)
+        tdm = td.memmap_like(prefix=tmpdir, backend="Tensor")
         assert tdm.names == ["a", "b", "c", "d"]
 
     def test_h5(self, tmpdir):
@@ -6049,7 +6049,7 @@ def test_from_module(memmap, params):
     else:
         raise RuntimeError
     if memmap:
-        td = td.detach().memmap_()
+        td = td.detach().memmap_(backend="Tensor")
     net.load_state_dict(td.flatten_keys("."))
 
     if not memmap and params:

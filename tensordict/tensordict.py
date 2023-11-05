@@ -41,6 +41,7 @@ import torch
 from functorch import dim as ftdim
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor
+from tensordict._memory_map import empty_like as emtpy_like_memmap, from_tensor as from_tensor_memmap
 from tensordict.utils import (
     _device,
     _dtype,
@@ -146,6 +147,10 @@ _HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
 _TENSOR_COLLECTION_MEMO = {}
 
+MEMMAP_DEPREC = "MemmapTensor is being used by default but will be deprecated soon. " \
+                "In v0.4.0, this function will use torch.Tensor as default to create memory-mapped tensors. " \
+                "In v0.5.0, the MemmapTensor class will be deprecated and the only accepted backend will be Tensor. " \
+                "To remove this warning, call TensorDict.memmap_like(..., backend='Tensor')"
 
 def _is_tensor_collection(datatype):
     out = _TENSOR_COLLECTION_MEMO.get(datatype, None)
@@ -2479,7 +2484,7 @@ class TensorDictBase(MutableMapping):
         raise NotImplementedError(f"{self.__class__.__name__}")
 
     @abc.abstractmethod
-    def memmap_(self, prefix: str | None = None, copy_existing: bool = False) -> T:
+    def memmap_(self, prefix: str | None = None, copy_existing: bool = False, backend="MemmapTensor",) -> T:
         """Writes all tensors onto a MemmapTensor.
 
         Args:
@@ -2489,6 +2494,11 @@ class TensorDictBase(MutableMapping):
                 entry in the tensordict is already a MemmapTensor but is not saved in
                 the correct location according to prefix. If True, any MemmapTensors
                 that are not in the correct location are copied to the new location.
+            backend (str, optional): the backend to use to write memory-mapped tensors.
+                Since PyTorch 2.2.0, Tensor storages support a filename assignment,
+                thereby facilitating the utilization of simple tensors within
+                physical-storage based TensorDicts. To get the best performance,
+                please use the "Tensor" storage.
 
         The TensorDict is then locked, meaning that the only writing operations that
         can be executed must be done in-place.
@@ -2504,12 +2514,17 @@ class TensorDictBase(MutableMapping):
         """
         raise NotImplementedError(f"{self.__class__.__name__}")
 
-    def memmap_like(self, prefix: str | None = None) -> T:
+    def memmap_like(self, prefix: str | None = None, backend="MemmapTensor") -> T:
         """Creates an empty Memory-mapped tensordict with the same content shape as the current one.
 
         Args:
             prefix (str): directory prefix where the memmap tensors will have to
                 be stored.
+            backend (str, optional): the backend to use to write memory-mapped tensors.
+                Since PyTorch 2.2.0, Tensor storages support a filename assignment,
+                thereby facilitating the utilization of simple tensors within
+                physical-storage based TensorDicts. To get the best performance,
+                please use the "Tensor" storage.
 
         The resulting TensorDict will be locked and ``is_memmap() = True``,
         meaning that the only writing operations that can be executed must be done in-place.
@@ -2520,6 +2535,11 @@ class TensorDictBase(MutableMapping):
             a new ``TensorDict`` instance with data stored as memory-mapped tensors.
 
         """
+        if backend == "MemmapTensor":
+            warn(MEMMAP_DEPREC, category=DeprecationWarning)
+            empty_like = MemmapTensor.empty_like
+        else:
+            empty_like = emtpy_like_memmap
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
@@ -2547,7 +2567,7 @@ class TensorDictBase(MutableMapping):
                     tensordict._set_str(
                         key,
                         value.memmap_like(
-                            prefix=prefix / key,
+                            prefix=prefix / key, backend=backend,
                         ),
                         inplace=False,
                         validated=True,
@@ -2564,7 +2584,7 @@ class TensorDictBase(MutableMapping):
             else:
                 tensordict._set_str(
                     key,
-                    MemmapTensor.empty_like(
+                    empty_like(
                         value,
                         filename=str(prefix / f"{key}.memmap")
                         if prefix is not None
@@ -4651,7 +4671,14 @@ class TensorDict(TensorDictBase):
         self,
         prefix: str | None = None,
         copy_existing: bool = False,
+        backend = "MemmapTensor",
     ) -> T:
+        if backend == "MemmapTensor":
+            warn(MEMMAP_DEPREC, category=DeprecationWarning)
+            from_tensor = MemmapTensor.from_tensor
+        else:
+            from_tensor = from_tensor_memmap
+
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
@@ -4674,14 +4701,14 @@ class TensorDict(TensorDictBase):
                     # ensure subdirectory exists
                     os.makedirs(prefix / key, exist_ok=True)
                     self._tensordict[key] = value.memmap_(
-                        prefix=prefix / key, copy_existing=copy_existing
+                        prefix=prefix / key, copy_existing=copy_existing, backend=backend
                     )
                     torch.save(
                         {"batch_size": value.batch_size, "device": value.device},
                         prefix / key / "meta.pt",
                     )
                 else:
-                    self._tensordict[key] = value.memmap_()
+                    self._tensordict[key] = value.memmap_(backend=backend)
                 continue
             elif isinstance(value, MemmapTensor):
                 if (
@@ -4705,7 +4732,7 @@ class TensorDict(TensorDictBase):
                         "copy_existing=True"
                     )
             else:
-                self._tensordict[key] = MemmapTensor.from_tensor(
+                self._tensordict[key] = from_tensor(
                     value,
                     filename=str(prefix / f"{key}.memmap")
                     if prefix is not None
@@ -6250,7 +6277,7 @@ torch.Size([3, 2])
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix: str | None = None, copy_existing: bool = False) -> T:
+    def memmap_(self, prefix: str | None = None, copy_existing: bool = False, backend="MemmapTensor") -> T:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
         )
@@ -7726,7 +7753,7 @@ class LazyStackedTensorDict(TensorDictBase):
             td.detach_()
         return self
 
-    def memmap_(self, prefix: str | None = None, copy_existing: bool = False) -> T:
+    def memmap_(self, prefix: str | None = None, copy_existing: bool = False, backend="MemmapTensor") -> T:
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
@@ -7735,7 +7762,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for i, td in enumerate(self.tensordicts):
             td.memmap_(
                 prefix=(prefix / str(i)) if prefix is not None else None,
-                copy_existing=copy_existing,
+                copy_existing=copy_existing, backend=backend,
             )
         self._is_memmap = True
         self.lock_()
@@ -7743,7 +7770,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def memmap_like(
         self,
-        prefix: str | None = None,
+        prefix: str | None = None, backend="MemmapTensor",
     ) -> T:
         tds = []
         if prefix is not None:
@@ -7753,7 +7780,7 @@ class LazyStackedTensorDict(TensorDictBase):
             torch.save({"stack_dim": self.stack_dim}, prefix / "meta.pt")
         for i, td in enumerate(self.tensordicts):
             td_like = td.memmap_like(
-                prefix=(prefix / str(i)) if prefix is not None else None,
+                prefix=(prefix / str(i)) if prefix is not None else None,backend=backend,
             )
             tds.append(td_like)
         td_out = torch.stack(tds, self.stack_dim)
@@ -8463,9 +8490,9 @@ class _CustomOpTensorDict(TensorDictBase):
         return td_copy.masked_fill_(mask, value)
 
     def memmap_(
-        self, prefix: str | None = None, copy_existing: bool = False
+        self, prefix: str | None = None, copy_existing: bool = False, backend="MemmapTensor",
     ) -> _CustomOpTensorDict:
-        self._source.memmap_(prefix=prefix, copy_existing=copy_existing)
+        self._source.memmap_(prefix=prefix, copy_existing=copy_existing, backend=backend)
         if prefix is not None:
             prefix = Path(prefix)
             metadata = torch.load(prefix / "meta.pt")

@@ -168,7 +168,7 @@ class TestTensorDictsBase:
         return td.get_sub_tensordict((slice(None), 1))
 
     def memmap_td(self, device):
-        return self.td(device).memmap_()
+        return self.td(device).memmap_(backend="Tensor")
 
     def permute_td(self, device):
         return TensorDict(

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
+from enum import Enum
+
 import math
 import time
 
