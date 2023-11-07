@@ -4442,8 +4442,9 @@ class TensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
     ) -> T:
-        best_attempt = inplace is BEST_ATTEMPT_INPLACE
-        inplace = self._convert_inplace(inplace, key)
+        if inplace is not False:
+            best_attempt = inplace is BEST_ATTEMPT_INPLACE
+            inplace = self._convert_inplace(inplace, key)
         if not validated:
             value = self._validate_value(value, check_shape=True)
         if not inplace:
