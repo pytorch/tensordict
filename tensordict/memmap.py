@@ -208,8 +208,15 @@ class MemmapTensor:
         prefix: str | None = None,
         filename: str | None = None,
         mode: str = "r+",
+        copy_existing: str = False,
     ) -> MemmapTensor:
         if isinstance(tensor, MemmapTensor):
+            if not copy_existing and isinstance(tensor, MemmapTensor):
+                raise RuntimeError(
+                    f"A filename was provided but the tensor already has a file associated ({tensor.filename}). "
+                    f"To copy the tensor onto the new location, pass copy_existing=True."
+                )
+
             if transfer_ownership:
                 raise RuntimeError(
                     "from_tensor(memmap_tensor, transfer_ownership=True) is not permitted, as this method will "

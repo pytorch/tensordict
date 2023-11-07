@@ -2,24 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import mmap
 import os
+
+import sys
 import tempfile
+from multiprocessing import util
+from multiprocessing.context import reduction
 from typing import Optional, Union
 
 import numpy as np
 import torch
-from torch import Tensor
-from torch import memory_format
-from torch.types import (
-    _bool,
-    _dtype,
-    _layout,
-    _device,
-)
-from multiprocessing import util
-from multiprocessing.context import reduction
+from torch import memory_format, Tensor
+from torch.types import _bool, _device, _dtype, _layout
 
-import sys
 
 def empty_like(
     input: Tensor,
@@ -30,7 +26,7 @@ def empty_like(
     device: Optional[Union[_device, str, None]] = None,
     pin_memory: Optional[_bool] = False,
     requires_grad: Optional[_bool] = False,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ) -> Tensor:
     shape = input.shape
     if dtype is None:
@@ -57,12 +53,13 @@ def empty_like(
         if pin_memory:
             raise ValueError
         out = torch.frombuffer(
-            memoryview(handler.buffer), dtype=dtype,
+            memoryview(handler.buffer),
+            dtype=dtype,
             # layout=layout,
-            device=device,
+            # device=device,
             # pin_memory=pin_memory,
-            requires_grad=requires_grad
-            )
+            requires_grad=requires_grad,
+        )
         out = torch.reshape(out, shape)
     else:
         out = torch.from_file(
@@ -71,7 +68,9 @@ def empty_like(
             dtype=dtype,
             size=shape.numel(),
             layout=layout,
-            device=device, pin_memory=pin_memory, requires_grad=requires_grad
+            device=device,
+            pin_memory=pin_memory,
+            requires_grad=requires_grad,
         ).view(input.shape)
     return out
 
@@ -85,9 +84,19 @@ def zeros_like(
     device: Optional[Union[_device, str, None]] = None,
     pin_memory: Optional[_bool] = False,
     requires_grad: Optional[_bool] = False,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ):
-    return empty_like(input, memory_format=memory_format, dtype=dtype, layout=layout, device=device, pin_memory=pin_memory, requires_grad=requires_grad, filename=filename).zero_()
+    return empty_like(
+        input,
+        memory_format=memory_format,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        requires_grad=requires_grad,
+        filename=filename,
+    ).zero_()
+
 
 def ones_like(
     input: Tensor,
@@ -98,9 +107,18 @@ def ones_like(
     device: Optional[Union[_device, str, None]] = None,
     pin_memory: Optional[_bool] = False,
     requires_grad: Optional[_bool] = False,
-    filename: Optional[str] = None
+    filename: Optional[str] = None,
 ):
-    return empty_like(input, memory_format=memory_format, dtype=dtype, layout=layout, device=device, pin_memory=pin_memory, requires_grad=requires_grad, filename=filename).fill_(1.0)
+    return empty_like(
+        input,
+        memory_format=memory_format,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        requires_grad=requires_grad,
+        filename=filename,
+    ).fill_(1.0)
 
 
 class FileHandler:
@@ -150,8 +168,16 @@ def rebuild_handler(size, dupfd):
     detached = dupfd.detach()
     return FileHandler(size, detached)
 
+
 def from_tensor(tensor, *, filename=None, copy_existing=False):
-    if filename is not None and tensor.storage().filename is not None and not copy_existing:
-        raise ValueError(f"A filename was provided but the tensor already has a file associated ({tensor.storage().filename}). "
-                         f"To copy the tensor onto the new location, pass copy_existing=True.")
+    if (
+        filename is not None
+        and not copy_existing
+        and tensor.untyped_storage().filename is not None
+    ):
+        raise RuntimeError(
+            f"A filename was provided but the tensor already has a file associated "
+            f"({tensor.untyped_storage().filename}). "
+            f"To copy the tensor onto the new location, pass copy_existing=True."
+        )
     return empty_like(tensor, filename=filename).copy_(tensor)

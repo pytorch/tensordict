@@ -6,6 +6,7 @@ import math
 import tempfile
 
 import numpy as np
+import pytest
 import torch
 
 from tensordict import PersistentTensorDict, tensorclass, TensorDict
@@ -15,6 +16,8 @@ from tensordict.tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
 )
+
+global_dir_prefix = str(tempfile.TemporaryDirectory())
 
 
 def prod(sequence):
@@ -169,6 +172,9 @@ class TestTensorDictsBase:
 
     def memmap_td(self, device):
         return self.td(device).memmap_(backend="Tensor")
+
+    def memmap_td_file(self, device):
+        return self.td(device).memmap_(backend="Tensor", prefix=global_dir_prefix)
 
     def permute_td(self, device):
         return TensorDict(

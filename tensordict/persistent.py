@@ -10,7 +10,9 @@ import tempfile
 import warnings
 from pathlib import Path
 from typing import Any, Callable
+from warnings import warn
 
+from tensordict._memory_map import empty_like as empty_like_memmap
 from tensordict._tensordict import _unravel_key_to_tuple
 from torch import multiprocessing as mp
 
@@ -31,6 +33,7 @@ from tensordict.tensordict import (
     _TensorDictKeysView,
     CompatibleType,
     is_tensor_collection,
+    MEMMAP_DEPREC,
     NO_DEFAULT,
     TensorDict,
     TensorDictBase,
@@ -518,7 +521,10 @@ class PersistentTensorDict(TensorDictBase):
         return self
 
     def memmap_(
-        self, prefix: str | None = None, copy_existing: bool = False
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        backend="MemmapTensor",
     ) -> PersistentTensorDict:
         raise RuntimeError(
             "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. Use `td.memmap()` instead."
@@ -527,15 +533,18 @@ class PersistentTensorDict(TensorDictBase):
     def memmap(
         self,
         prefix: str | None = None,
+        backend="MemmapTensor",
     ) -> TensorDict:
         """Converts the PersistentTensorDict to a memmap equivalent."""
-        mm_like = self.memmap_like(prefix)
+        mm_like = self.memmap_like(prefix, backend=backend)
         for key in self.keys(include_nested=True, leaves_only=True):
             mm_val = mm_like[key]
             mm_val._memmap_array[:] = self._get_array(key)
         return mm_like
 
-    def memmap_like(self, prefix: str | None = None) -> TensorDictBase:
+    def memmap_like(
+        self, prefix: str | None = None, backend="MemmapTensor"
+    ) -> TensorDictBase:
         # re-implements this to make it faster using the meta-data
         if prefix is not None:
             prefix = Path(prefix)
@@ -567,7 +576,8 @@ class PersistentTensorDict(TensorDictBase):
                 else:
                     tensordict[key] = value.memmap_like()
                 continue
-            else:
+            elif backend == "MemmapTensor":
+                warn(MEMMAP_DEPREC, category=DeprecationWarning)
                 tensordict[key] = MemmapTensor(
                     value["shape"],
                     device="cpu",
@@ -576,6 +586,17 @@ class PersistentTensorDict(TensorDictBase):
                     if prefix is not None
                     else None,
                 )
+            elif backend == "Tensor":
+                tensordict[key] = empty_like_memmap(
+                    torch.zeros((), device="cpu", dtype=value["dtype"]).expand(
+                        value["shape"]
+                    ),
+                    filename=str(prefix / f"{key}.memmap")
+                    if prefix is not None
+                    else None,
+                )
+            else:
+                raise RuntimeError(f"Unrecognized backend {backend}.")
             if prefix is not None:
                 torch.save(
                     {

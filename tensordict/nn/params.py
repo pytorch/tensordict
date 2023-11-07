@@ -629,7 +629,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     def memmap_(
-        self, prefix: str | None = None, copy_existing: bool = False
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        backend="MemmapTensor",
     ) -> TensorDictBase:
         raise RuntimeError("Cannot build a memmap TensorDict in-place.")
 

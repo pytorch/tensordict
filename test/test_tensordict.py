@@ -6,6 +6,7 @@
 import argparse
 import os
 import re
+import tempfile
 import uuid
 
 import numpy as np
@@ -30,7 +31,13 @@ try:
 except ImportError:
     _has_h5py = False
 
-from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
+from _utils_internal import (
+    decompose,
+    get_available_devices,
+    global_dir_prefix,
+    prod,
+    TestTensorDictsBase,
+)
 from functorch import dim as ftdim
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
@@ -524,6 +531,7 @@ TD_BATCH_SIZE = 4
         "sub_td2",
         "idx_td",
         "memmap_td",
+        "memmap_td_file",
         "unsqueezed_td",
         "squeezed_td",
         "td_reset_bs",
@@ -2106,7 +2114,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_delitem(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name in ("memmap_td",):
+        if td_name in ("memmap_td", "memmap_td_file"):
             with pytest.raises(RuntimeError, match="Cannot modify"):
                 del td["a"]
             return
@@ -2543,7 +2551,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (tdmemmap == 0).all()
 
     def test_memmap_prefix(self, td_name, device, tmp_path):
-        if td_name == "memmap_td":
+        if td_name in ("memmap_td", "memmap_td_file"):
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
             )
@@ -2582,7 +2590,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     @pytest.mark.parametrize("copy_existing", [False, True])
     def test_memmap_existing(self, td_name, device, copy_existing, tmp_path):
-        if td_name == "memmap_td":
+        if td_name in ("memmap_td", "memmap_td_file"):
             pytest.skip(
                 "Memmap case is redundant, functionality checked by other cases"
             )
@@ -2591,15 +2599,20 @@ class TestTensorDicts(TestTensorDictsBase):
                 "SubTensorDict/H5 and memmap_ incompatibility is checked elsewhere"
             )
 
-        td = getattr(self, td_name)(device).memmap_(prefix=tmp_path / "tensordict", backend="Tensor")
+        td = getattr(self, td_name)(device).memmap_(
+            prefix=tmp_path / "tensordict", backend="Tensor"
+        )
         td2 = getattr(self, td_name)(device).memmap_(backend="Tensor")
 
         if copy_existing:
-            td3 = td.memmap_(prefix=tmp_path / "tensordict2", copy_existing=True, backend="Tensor")
+            td3 = td.memmap_(
+                prefix=tmp_path / "tensordict2", copy_existing=True, backend="Tensor"
+            )
             assert (td == td3).all()
         else:
             with pytest.raises(
-                RuntimeError, match="TensorDict already contains MemmapTensors"
+                RuntimeError,
+                match="A filename was provided but the tensor already has a file associated",
             ):
                 # calling memmap_ with prefix that is different to contents gives error
                 td.memmap_(prefix=tmp_path / "tensordict2", backend="Tensor")
@@ -2889,7 +2902,7 @@ class TestTensorDicts(TestTensorDictsBase):
             ):
                 fun(td)
             return
-        if td_name == "memmap_td" and device.type != "cpu":
+        if td_name in ("memmap_td", "memmap_td_file") and device.type != "cpu":
             with pytest.raises(
                 RuntimeError,
                 match="MemmapTensor with non-cpu device are not supported in vmap ops",
@@ -3009,6 +3022,9 @@ class TestTensorDictRepr:
     def memmap_td(self, device, dtype):
         return self.td(device, dtype).memmap_(backend="Tensor")
 
+    def memmap_td_file(self, device, dtype):
+        return self.td(device, dtype).memmap_(backend="Tensor")
+
     def share_memory_td(self, device, dtype):
         return self.td(device, dtype).share_memory_()
 
@@ -3038,7 +3054,7 @@ class TestTensorDictRepr:
         is_shared_tensor = False
         expected = f"""TensorDict(
     fields={{
-        a: MemmapTensor(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+        a: Tensor(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
     batch_size=torch.Size([4, 3, 2, 1]),
     device={str(device)},
     is_shared={is_shared})"""
@@ -5174,13 +5190,13 @@ class TestLazyStackedTensorDict:
 )
 class TestSnapshot:
     @pytest.mark.parametrize("save_name", ["doc", "data"])
-    def test_inplace(self, save_name):
+    def test_inplace(self, save_name, tmpdir):
         td = TensorDict(
             {"a": torch.randn(3), "b": TensorDict({"c": torch.randn(3, 1)}, [3, 1])},
             [3],
         )
-        td.memmap_(backend="Tensor")
-        assert isinstance(td["b", "c"], MemmapTensor)
+        td.memmap_(prefix=str(tmpdir), backend="Tensor")
+        assert isinstance(td["b", "c"], torch.Tensor)
 
         app_state = {
             "state": torchsnapshot.StateDict(
@@ -5191,8 +5207,6 @@ class TestSnapshot:
         snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
         td_plain = td.to_tensordict()
-        # we want to delete refs to MemmapTensors
-        assert not isinstance(td_plain["a"], MemmapTensor)
         del td
 
         snapshot = torchsnapshot.Snapshot(path=path)
@@ -5200,8 +5214,8 @@ class TestSnapshot:
             {"a": torch.zeros(3), "b": TensorDict({"c": torch.zeros(3, 1)}, [3, 1])},
             [3],
         )
-        td_dest.memmap_(backend="Tensor")
-        assert isinstance(td_dest["b", "c"], MemmapTensor)
+        td_dest.memmap_(prefix=str(tmpdir), backend="Tensor")
+        assert isinstance(td_dest["b", "c"], torch.Tensor)
         app_state = {
             "state": torchsnapshot.StateDict(
                 **{save_name: td_dest.state_dict(keep_vars=True)}
@@ -5211,18 +5225,16 @@ class TestSnapshot:
 
         assert (td_dest == td_plain).all()
         assert td_dest["b"].batch_size == td_plain["b"].batch_size
-        assert isinstance(td_dest["b", "c"], MemmapTensor)
+        assert td_dest["b", "c"].untyped_storage().filename is not None
 
-    def test_update(
-        self,
-    ):
+    def test_update(self, tmpdir):
         tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         state = {"state": tensordict}
-        tensordict.memmap_(backend="Tensor")
+        tensordict.memmap_(prefix=str(tmpdir), backend="Tensor")
         path = f"/tmp/{uuid.uuid4()}"
         snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
         td_plain = tensordict.to_tensordict()
-        assert not isinstance(td_plain["a"], MemmapTensor)
+        assert td_plain["a"].untyped_storage().filename is None
         del tensordict
 
         snapshot = torchsnapshot.Snapshot(path=path)
@@ -6178,6 +6190,7 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
         "sub_td2",
         "idx_td",
         "memmap_td",
+        "memmap_td_file",
         "unsqueezed_td",
         "squeezed_td",
         "td_reset_bs",
@@ -6290,6 +6303,7 @@ class TestFCD(TestTensorDictsBase):
             "sub_td2",
             "idx_td",
             "memmap_td",
+            "memmap_td_file",
             "unsqueezed_td",
             "squeezed_td",
             "td_reset_bs",
@@ -6339,6 +6353,7 @@ class TestFCD(TestTensorDictsBase):
             "stacked_td",
             "idx_td",
             "memmap_td",
+            "memmap_td_file",
             "td_reset_bs",
             "nested_td",
             "nested_tensorclass",

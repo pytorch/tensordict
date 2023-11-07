@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
-from enum import Enum
 
 import math
 import time
@@ -16,6 +15,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import KeysView
 from copy import copy
+from enum import Enum
 from functools import wraps
 from importlib import import_module
 from typing import Any, Callable, List, Sequence, Tuple, TYPE_CHECKING, Union
