@@ -5252,7 +5252,7 @@ def test_memmap_as_tensor(device):
     td_memmap = td.clone().memmap_(backend="Tensor")
     assert (td == td_memmap).all()
 
-    assert (td == td_memmap.apply(lambda x: x.as_tensor())).all()
+    assert (td == td_memmap.as_tensor()).all()
     if device.type == "cuda":
         td = td.pin_memory()
         td_memmap = td.clone().memmap_(backend="Tensor")

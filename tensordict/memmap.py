@@ -208,7 +208,7 @@ class MemmapTensor:
         prefix: str | None = None,
         filename: str | None = None,
         mode: str = "r+",
-        copy_existing: str = False,
+        copy_existing: str = True,
     ) -> MemmapTensor:
         if isinstance(tensor, MemmapTensor):
             if not copy_existing and isinstance(tensor, MemmapTensor):
