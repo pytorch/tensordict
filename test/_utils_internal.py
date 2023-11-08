@@ -171,10 +171,17 @@ class TestTensorDictsBase:
         return td.get_sub_tensordict((slice(None), 1))
 
     def memmap_td(self, device):
-        return self.td(device).memmap_(backend="Tensor")
+        # MemmapTensor allows a 'cuda' device, which means that the data will
+        # be sent to cuda when accessed.
+        # When deprecating MemmapTensor, we'll also deprecate this behaviour.
+        if device.type == "cpu":
+            return self.td(device).memmap_(backend="Tensor")
+        return self.td(device).memmap_(backend="MemmapTensor")
 
     def memmap_td_file(self, device):
-        return self.td(device).memmap_(backend="Tensor", prefix=global_dir_prefix)
+        if device.type == "cpu":
+            return self.td(device).memmap_(backend="Tensor", prefix=global_dir_prefix)
+        return self.td(device).memmap_(backend="MemmapTensor", prefix=global_dir_prefix)
 
     def permute_td(self, device):
         return TensorDict(

@@ -4692,6 +4692,11 @@ class TensorDict(TensorDictBase):
             from_tensor = MemmapTensor.from_tensor
         elif backend == "Tensor":
             from_tensor = from_tensor_memmap
+            if self.device.type != "cpu":
+                # TODO: provide a method to remove the device of a tensordict
+                raise RuntimeError("A tensordict on cuda cannot be memory-mapped. "
+                                   "Choose the MemmapBackend or remove the device from "
+                                   "the tensordict and its children.")
         else:
             raise RuntimeError(f"Unrecognized backend {backend}.")
 
