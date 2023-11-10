@@ -1587,6 +1587,7 @@ class TensorDictBase(MutableMapping):
         names: Sequence[str] | None = None,
         inplace: bool = False,
         checked: bool = False,
+        default: Any = NO_DEFAULT,
         **constructor_kwargs,
     ) -> T:
         if inplace:
@@ -1615,7 +1616,7 @@ class TensorDictBase(MutableMapping):
             out.unlock_()
 
         for key, item in self.items():
-            _others = [_other._get_str(key, default=NO_DEFAULT) for _other in others]
+            _others = [_other._get_str(key, default=default) for _other in others]
             if _is_tensor_collection(item.__class__):
                 item_trsf = item._apply_nest(
                     fn,
@@ -1624,6 +1625,7 @@ class TensorDictBase(MutableMapping):
                     batch_size=batch_size,
                     device=device,
                     checked=checked,
+                    default=default,
                     **constructor_kwargs,
                 )
             else:
@@ -1653,6 +1655,7 @@ class TensorDictBase(MutableMapping):
         device: torch.device | None = None,
         names: Sequence[str] | None = None,
         inplace: bool = False,
+        default: Any = NO_DEFAULT,
         **constructor_kwargs,
     ) -> T:
         """A faster apply method.
@@ -1670,6 +1673,7 @@ class TensorDictBase(MutableMapping):
             names=names,
             inplace=inplace,
             checked=True,
+            default=default,
             **constructor_kwargs,
         )
 
