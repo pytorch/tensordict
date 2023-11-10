@@ -3164,73 +3164,30 @@ class TensorDictBase(MutableMapping):
             A list of TensorDict with specified size in given dimension.
 
         """
-        batch_sizes = []
-        if self.batch_dims == 0:
-            raise RuntimeError("TensorDict with empty batch size is not splittable")
-        if not (-self.batch_dims <= dim < self.batch_dims):
-            raise IndexError(
-                f"Dimension out of range (expected to be in range of [-{self.batch_dims}, {self.batch_dims - 1}], but got {dim})"
-            )
+        # we must use slices to keep the storage of the tensors
+        batch_size = self.batch_size
         if dim < 0:
-            dim += self.batch_dims
+            dim = len(batch_size) + dim
         if isinstance(split_size, int):
-            rep, remainder = divmod(self.batch_size[dim], split_size)
-            rep_shape = torch.Size(
-                [
-                    split_size if idx == dim else size
-                    for (idx, size) in enumerate(self.batch_size)
-                ]
-            )
-            batch_sizes = [rep_shape for _ in range(rep)]
-            if remainder:
-                batch_sizes.append(
-                    torch.Size(
-                        [
-                            remainder if dim_idx == dim else dim_size
-                            for (dim_idx, dim_size) in enumerate(self.batch_size)
-                        ]
-                    )
-                )
-        elif isinstance(split_size, list) and all(
-            isinstance(element, int) for element in split_size
-        ):
-            if sum(split_size) != self.batch_size[dim]:
-                raise RuntimeError(
-                    f"Split method expects split_size to sum exactly to {self.batch_size[dim]} (tensor's size at dimension {dim}), but got split_size={split_size}"
-                )
-            for i in split_size:
-                batch_sizes.append(
-                    torch.Size(
-                        [
-                            i if dim_idx == dim else dim_size
-                            for (dim_idx, dim_size) in enumerate(self.batch_size)
-                        ]
-                    )
-                )
+            idx0 = 0
+            idx1 = split_size
+            split_sizes = [slice(idx0, idx1)]
+            while idx1 <= batch_size[dim]:
+                idx0 = idx1
+                idx1 += split_size
+                split_sizes.append(slice(idx0, idx1))
         else:
-            raise TypeError(
-                "split(): argument 'split_size' must be int or list of ints"
-            )
-        dictionaries = [{} for _ in range(len(batch_sizes))]
-        for key, item in self.items():
-            split_tensors = torch.split(item, split_size, dim)
-            for idx, split_tensor in enumerate(split_tensors):
-                dictionaries[idx][key] = split_tensor
-        names = None
-        if self._has_names():
-            names = copy(self.names)
-        return [
-            TensorDict(
-                dictionaries[i],
-                batch_sizes[i],
-                device=self.device,
-                names=names,
-                _run_checks=False,
-                _is_shared=self.is_shared(),
-                _is_memmap=self.is_memmap(),
-            )
-            for i in range(len(dictionaries))
-        ]
+            if len(split_size) == 0:
+                raise RuntimeError("Insufficient number of elements in split_size.")
+            idx0 = 0
+            idx1 = split_size[0]
+            split_sizes = [slice(idx0, idx1)]
+            for idx in split_size[1:]:
+                idx0 = idx1
+                idx1 += idx
+                split_sizes.append(slice(idx0, idx1))
+        index = (slice(None),) * dim
+        return tuple(self[index + (ss,)] for ss in split_sizes)
 
     def gather(self, dim: int, index: Tensor, out: T | None = None) -> T:
         """Gathers values along an axis specified by `dim`.
@@ -4692,11 +4649,13 @@ class TensorDict(TensorDictBase):
             from_tensor = MemmapTensor.from_tensor
         elif backend == "Tensor":
             from_tensor = from_tensor_memmap
-            if self.device.type != "cpu":
+            if self.device is not None and self.device.type != "cpu":
                 # TODO: provide a method to remove the device of a tensordict
-                raise RuntimeError("A tensordict on cuda cannot be memory-mapped. "
-                                   "Choose the MemmapBackend or remove the device from "
-                                   "the tensordict and its children.")
+                raise RuntimeError(
+                    "A tensordict on cuda cannot be memory-mapped. "
+                    "Choose the MemmapBackend or remove the device from "
+                    "the tensordict and its children."
+                )
         else:
             raise RuntimeError(f"Unrecognized backend {backend}.")
 
