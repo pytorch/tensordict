@@ -3168,17 +3168,31 @@ class TensorDictBase(MutableMapping):
         batch_size = self.batch_size
         if dim < 0:
             dim = len(batch_size) + dim
+        if dim < 0 or dim >= len(batch_size):
+            raise RuntimeError(
+                f"The number of dimensions is insufficient for the split_dim {dim}."
+            )
         if isinstance(split_size, int):
+            if split_size <= 0:
+                raise RuntimeError(
+                    f"split_size must be strictly greater than 0, got {split_size}."
+                )
             idx0 = 0
             idx1 = split_size
             split_sizes = [slice(idx0, idx1)]
-            while idx1 <= batch_size[dim]:
+            while idx1 < batch_size[dim]:
                 idx0 = idx1
-                idx1 += split_size
+                idx1 = idx1 + split_size
                 split_sizes.append(slice(idx0, idx1))
-        else:
+        elif isinstance(split_size, list) and all(
+            isinstance(element, int) for element in split_size
+        ):
             if len(split_size) == 0:
                 raise RuntimeError("Insufficient number of elements in split_size.")
+            if sum(split_size) != batch_size[dim]:
+                raise RuntimeError(
+                    f"Split method expects split_size to sum exactly to {self.batch_size[dim]} (tensor's size at dimension {dim}), but got split_size={split_size}"
+                )
             idx0 = 0
             idx1 = split_size[0]
             split_sizes = [slice(idx0, idx1)]
@@ -3186,6 +3200,11 @@ class TensorDictBase(MutableMapping):
                 idx0 = idx1
                 idx1 += idx
                 split_sizes.append(slice(idx0, idx1))
+        else:
+            raise TypeError(
+                "split(): argument 'split_size' must be int or list of ints"
+            )
+
         index = (slice(None),) * dim
         return tuple(self[index + (ss,)] for ss in split_sizes)
 
