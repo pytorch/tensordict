@@ -4456,7 +4456,7 @@ class TensorDict(TensorDictBase):
                 if best_attempt and _is_tensor_collection(dest.__class__):
                     dest.update(value, inplace=True)
                 else:
-                    dest.copy_(value)
+                    dest.copy_(value, non_blocking=True)
             except KeyError as err:
                 raise err
             except Exception as err:
