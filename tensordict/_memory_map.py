@@ -28,6 +28,7 @@ def empty_like(
     requires_grad: Optional[_bool] = False,
     filename: Optional[str] = None,
 ) -> Tensor:
+    """Creates an empty tensor on disk."""
     shape = input.shape
     if dtype is None:
         dtype = input.dtype
@@ -47,7 +48,7 @@ def empty_like(
         else:
             # assume integer
             size = torch.iinfo(dtype).bits // 8 * shape.numel()
-        handler = FileHandler(size)
+        handler = _FileHandler(size)
         if layout is not None:
             raise ValueError
         if pin_memory:
@@ -86,6 +87,7 @@ def zeros_like(
     requires_grad: Optional[_bool] = False,
     filename: Optional[str] = None,
 ):
+    """Creates a zeroed-tensor on disk."""
     return empty_like(
         input,
         memory_format=memory_format,
@@ -109,6 +111,7 @@ def ones_like(
     requires_grad: Optional[_bool] = False,
     filename: Optional[str] = None,
 ):
+    """Creates a tensor filled with ones on disk."""
     return empty_like(
         input,
         memory_format=memory_format,
@@ -121,7 +124,7 @@ def ones_like(
     ).fill_(1.0)
 
 
-class FileHandler:
+class _FileHandler:
     if sys.platform == "linux":
         _dir_candidates = ["/dev/shm"]
     else:
@@ -156,20 +159,21 @@ class FileHandler:
         return tmpdir
 
 
-def reduce_handler(handler):
+def _reduce_handler(handler):
     if handler.fd == -1:
         raise ValueError(
             "Handler is unpicklable because " "forking was enabled when it was created"
         )
-    return rebuild_handler, (handler.size, reduction.DupFd(handler.fd))
+    return _rebuild_handler, (handler.size, reduction.DupFd(handler.fd))
 
 
-def rebuild_handler(size, dupfd):
+def _rebuild_handler(size, dupfd):
     detached = dupfd.detach()
-    return FileHandler(size, detached)
+    return _FileHandler(size, detached)
 
 
 def from_tensor(tensor, *, filename=None, copy_existing=False):
+    """Creates a tensor on disk with the same content as the input tensor."""
     if (
         filename is not None
         and not copy_existing
