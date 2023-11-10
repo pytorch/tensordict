@@ -484,8 +484,8 @@ class iSendBase:
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_isend(self, pseudo_rand, set_context):
         queue = mp.Queue(1)
-        main_worker = mp.Process(target=type(self).server, args=(queue, pseudo_rand))
-        secondary_worker = mp.Process(target=type(self).client, args=(pseudo_rand,))
+        main_worker = mp.Process(target=self.server, args=(queue, pseudo_rand))
+        secondary_worker = mp.Process(target=self.client, args=(pseudo_rand,))
 
         main_worker.start()
         secondary_worker.start()
