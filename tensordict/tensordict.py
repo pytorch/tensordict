@@ -2433,8 +2433,14 @@ class TensorDictBase(MutableMapping):
                 del target[key]
         return target
 
-    def copy_(self, tensordict: T) -> T:
-        """See :obj:`TensorDictBase.update_`."""
+    def copy_(self, tensordict: T, non_blocking: bool = False) -> T:
+        """See :obj:`TensorDictBase.update_`.
+
+        Args:
+            tensordict (TensorDictBase or compatible type): the value to copy.
+            non_blocking (bool, optional): currently ignored, present for compatibility
+                with torch.Tensor.
+        """
         return self.update_(tensordict)
 
     def copy_at_(self, tensordict: T, idx: IndexType) -> T:

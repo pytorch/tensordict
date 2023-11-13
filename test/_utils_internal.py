@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import math
 import tempfile
+import warnings
 
 import numpy as np
 import pytest
@@ -176,7 +177,9 @@ class TestTensorDictsBase:
         # When deprecating MemmapTensor, we'll also deprecate this behaviour.
         if device.type == "cpu":
             return self.td(device).memmap_(backend="Tensor")
-        return self.td(device).memmap_(backend="MemmapTensor")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return self.td(device).memmap_(backend="MemmapTensor")
 
     def memmap_td_file(self, device):
         if device.type == "cpu":
