@@ -175,6 +175,7 @@ class TestTensorDictsBase:
         # MemmapTensor allows a 'cuda' device, which means that the data will
         # be sent to cuda when accessed.
         # When deprecating MemmapTensor, we'll also deprecate this behaviour.
+        device = torch.device(device)
         if device.type == "cpu":
             return self.td(device).memmap_(backend="Tensor")
         with warnings.catch_warnings():
@@ -182,6 +183,7 @@ class TestTensorDictsBase:
             return self.td(device).memmap_(backend="MemmapTensor")
 
     def memmap_td_file(self, device):
+        device = torch.device(device)
         if device.type == "cpu":
             return self.td(device).memmap_(backend="Tensor", prefix=global_dir_prefix)
         return self.td(device).memmap_(backend="MemmapTensor", prefix=global_dir_prefix)
