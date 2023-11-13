@@ -1753,9 +1753,10 @@ class TensorDictBase(MutableMapping):
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
             with mp.Pool(num_workers) as pool:
-                return self.map(
+                result = self.map(
                     fn, dim=dim, chunksize=chunksize, num_chunks=num_chunks, pool=pool
                 )
+            return result
         num_workers = pool._processes
         dim_orig = dim
         if dim < 0:
@@ -1765,9 +1766,9 @@ class TensorDictBase(MutableMapping):
 
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
         chunksize = 1
-        out = pool.imap(fn, self_split, chunksize)
-        out = torch.cat(list(out), dim)
-        return out
+        result = pool.imap(fn, self_split, chunksize)
+        result = torch.cat(list(result), dim)
+        return result
 
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
