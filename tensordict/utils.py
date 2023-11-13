@@ -2,12 +2,14 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
 from __future__ import annotations
 
+import collections
 import dataclasses
 import inspect
 import math
+
+import sys
 import time
 
 import warnings
@@ -16,7 +18,7 @@ from collections.abc import KeysView
 from copy import copy
 from functools import wraps
 from importlib import import_module
-from typing import Any, Callable, List, Sequence, Tuple, TYPE_CHECKING, Union
+from typing import Any, Callable, Dict, List, Sequence, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
 import torch
@@ -1103,12 +1105,6 @@ class implement_for:
                 # check that backends don't conflict
                 version = self.import_module(self.module_name)
                 if self.check_version(version, self.from_version, self.to_version):
-                    if VERBOSE:
-                        module = import_module(self.module_name)
-                        warnings.warn(
-                            f"Got multiple backends for {func_name}. "
-                            f"Using the last queried ({module} with version {version})."
-                        )
                     self.do_set = True
                 if not self.do_set:
                     return implementations[func_name].fn
@@ -1135,8 +1131,6 @@ class implement_for:
         values and call :meth:`~.module_set` for each.
 
         """
-        if VERBOSE:
-            print("resetting implement_for")
         if setters_dict is None:
             setters_dict = copy(cls._implementations)
         for setter in setters_dict.values():
