@@ -355,17 +355,14 @@ class TensorDictBase(MutableMapping):
     )
     KEY_ERROR = 'key "{}" not found in {} with ' "keys {}"
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> T:
-        self = super().__new__(cls)
-        self._safe = kwargs.get("_safe", False)
-        self._lazy = kwargs.get("_lazy", False)
-        self._inplace_set = kwargs.get("_inplace_set", False)
-        self.is_meta = kwargs.get("is_meta", False)
-        self._is_locked = kwargs.get("_is_locked", False)
-        self._cache = None
-        self._last_op = None
-        self.__last_op_queue = None
-        return self
+    _safe = False
+    _lazy = False
+    _inplace_set = False
+    is_meta = False
+    _is_locked = False
+    _cache = None
+    _last_op = None
+    __last_op_queue = None
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
@@ -1812,8 +1809,14 @@ class TensorDictBase(MutableMapping):
         and will raise an exception in all other cases.
 
         """
-        warnings.warn("as_tensor will soon be deprecated.", category=DeprecationWarning)
-        return self
+
+        def as_tensor(x):
+            try:
+                return x.as_tensor()
+            except AttributeError:
+                return x
+
+        return self._fast_apply(as_tensor)
 
     def update(
         self,
@@ -3128,73 +3131,49 @@ class TensorDictBase(MutableMapping):
             A list of TensorDict with specified size in given dimension.
 
         """
-        batch_sizes = []
-        if self.batch_dims == 0:
-            raise RuntimeError("TensorDict with empty batch size is not splittable")
-        if not (-self.batch_dims <= dim < self.batch_dims):
-            raise IndexError(
-                f"Dimension out of range (expected to be in range of [-{self.batch_dims}, {self.batch_dims - 1}], but got {dim})"
-            )
+        # we must use slices to keep the storage of the tensors
+        batch_size = self.batch_size
         if dim < 0:
-            dim += self.batch_dims
-        if isinstance(split_size, int):
-            rep, remainder = divmod(self.batch_size[dim], split_size)
-            rep_shape = torch.Size(
-                [
-                    split_size if idx == dim else size
-                    for (idx, size) in enumerate(self.batch_size)
-                ]
+            dim = len(batch_size) + dim
+        if dim < 0 or dim >= len(batch_size):
+            raise RuntimeError(
+                f"The number of dimensions is insufficient for the split_dim {dim}."
             )
-            batch_sizes = [rep_shape for _ in range(rep)]
-            if remainder:
-                batch_sizes.append(
-                    torch.Size(
-                        [
-                            remainder if dim_idx == dim else dim_size
-                            for (dim_idx, dim_size) in enumerate(self.batch_size)
-                        ]
-                    )
+        if isinstance(split_size, int):
+            if split_size <= 0:
+                raise RuntimeError(
+                    f"split_size must be strictly greater than 0, got {split_size}."
                 )
+            idx0 = 0
+            idx1 = split_size
+            split_sizes = [slice(idx0, idx1)]
+            while idx1 < batch_size[dim]:
+                idx0 = idx1
+                idx1 = idx1 + split_size
+                split_sizes.append(slice(idx0, idx1))
         elif isinstance(split_size, list) and all(
             isinstance(element, int) for element in split_size
         ):
-            if sum(split_size) != self.batch_size[dim]:
+            if len(split_size) == 0:
+                raise RuntimeError("Insufficient number of elements in split_size.")
+            if sum(split_size) != batch_size[dim]:
                 raise RuntimeError(
                     f"Split method expects split_size to sum exactly to {self.batch_size[dim]} (tensor's size at dimension {dim}), but got split_size={split_size}"
                 )
-            for i in split_size:
-                batch_sizes.append(
-                    torch.Size(
-                        [
-                            i if dim_idx == dim else dim_size
-                            for (dim_idx, dim_size) in enumerate(self.batch_size)
-                        ]
-                    )
-                )
+            idx0 = 0
+            idx1 = split_size[0]
+            split_sizes = [slice(idx0, idx1)]
+            for idx in split_size[1:]:
+                idx0 = idx1
+                idx1 += idx
+                split_sizes.append(slice(idx0, idx1))
         else:
             raise TypeError(
                 "split(): argument 'split_size' must be int or list of ints"
             )
-        dictionaries = [{} for _ in range(len(batch_sizes))]
-        for key, item in self.items():
-            split_tensors = torch.split(item, split_size, dim)
-            for idx, split_tensor in enumerate(split_tensors):
-                dictionaries[idx][key] = split_tensor
-        names = None
-        if self._has_names():
-            names = copy(self.names)
-        return [
-            TensorDict(
-                dictionaries[i],
-                batch_sizes[i],
-                device=self.device,
-                names=names,
-                _run_checks=False,
-                _is_shared=self.is_shared(),
-                _is_memmap=self.is_memmap(),
-            )
-            for i in range(len(dictionaries))
-        ]
+
+        index = (slice(None),) * dim
+        return tuple(self[index + (ss,)] for ss in split_sizes)
 
     def gather(self, dim: int, index: Tensor, out: T | None = None) -> T:
         """Gathers values along an axis specified by `dim`.
@@ -4072,26 +4051,11 @@ class TensorDict(TensorDictBase):
 
     """
 
-    __slots__ = (
-        "_tensordict",
-        "_batch_size",
-        "_is_shared",
-        "_is_memmap",
-        "_device",
-        "_is_locked",
-        "_td_dim_names",
-        "_lock_id",
-        "_locked_tensordicts",
-        "_cache",
-        "_last_op",
-        "__last_op_queue",
-    )
-
-    def __new__(cls, *args: Any, **kwargs: Any) -> TensorDict:
-        cls._is_shared = False
-        cls._is_memmap = False
-        cls._td_dim_names = None
-        return super().__new__(cls, *args, _safe=True, _lazy=False, **kwargs)
+    _is_shared = False
+    _is_memmap = False
+    _td_dim_names = None
+    _safe = True
+    _lazy = False
 
     def __init__(
         self,
@@ -4995,11 +4959,12 @@ class TensorDict(TensorDictBase):
         )
 
     def __getstate__(self):
-        return {
-            slot: getattr(self, slot)
-            for slot in self.__slots__
-            if slot not in ("_last_op", "_cache", "__last_op_queue")
+        result = {
+            key: val
+            for key, val in self.__dict__.items()
+            if key not in ("_last_op", "_cache", "__last_op_queue")
         }
+        return result
 
     def __setstate__(self, state):
         for slot, value in state.items():
@@ -5784,10 +5749,11 @@ torch.Size([3, 2])
 
     """
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> SubTensorDict:
-        cls._is_shared = False
-        cls._is_memmap = False
-        return super().__new__(cls, _safe=False, _lazy=True, _inplace_set=True)
+    _is_shared = False
+    _is_memmap = False
+    _safe = False
+    _lazy = True
+    _inplace_set = True
 
     def __init__(
         self,
@@ -6408,9 +6374,9 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             return super().__torch_function__(func, types, args, kwargs)
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> LazyStackedTensorDict:
-        cls._td_dim_name = None
-        return super().__new__(cls, *args, _safe=False, _lazy=True, **kwargs)
+    _td_dim_name = None
+    _safe = False
+    _lazy = True
 
     def __init__(
         self,
@@ -8156,8 +8122,8 @@ class LazyStackedTensorDict(TensorDictBase):
 class _CustomOpTensorDict(TensorDictBase):
     """Encodes lazy operations on tensors contained in a TensorDict."""
 
-    def __new__(cls, *args: Any, **kwargs: Any) -> _CustomOpTensorDict:
-        return super().__new__(cls, *args, _safe=False, _lazy=True, **kwargs)
+    _safe = False
+    _lazy = True
 
     def __init__(
         self,

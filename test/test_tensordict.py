@@ -2273,6 +2273,20 @@ class TestTensorDicts(TestTensorDictsBase):
         assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
         assert (torch.cat(td_chunks, dim) == td).all()
 
+    def test_as_tensor(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if "memmap" in td_name and device == torch.device("cpu"):
+            tdt = td.as_tensor()
+            assert (tdt == td).all()
+        elif "memmap" in td_name:
+            with pytest.raises(
+                RuntimeError, match="can only be called with MemmapTensors stored"
+            ):
+                td.as_tensor()
+        else:
+            # checks that it runs
+            td.as_tensor()
+
     def test_items_values_keys(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -2684,56 +2698,41 @@ class TestTensorDicts(TestTensorDictsBase):
             torch.testing.assert_close(td.get(("a", "b", "d")), tensor2)
 
     @pytest.mark.parametrize("performer", ["torch", "tensordict"])
-    def test_split(self, td_name, device, performer):
+    @pytest.mark.parametrize("dim", range(4))
+    def test_split(self, td_name, device, performer, dim):
         td = getattr(self, td_name)(device)
+        tensor = torch.zeros(()).expand(td.shape)
 
-        for dim in range(td.batch_dims):
-            rep, remainder = divmod(td.shape[dim], 2)
-            length = rep + remainder
+        rep, remainder = divmod(td.shape[dim], 2)
 
-            # split_sizes to be [2, 2, ..., 2, 1] or [2, 2, ..., 2]
-            split_sizes = [2] * rep + [1] * remainder
-            for test_split_size in (2, split_sizes):
-                if performer == "torch":
-                    tds = torch.split(td, test_split_size, dim)
-                elif performer == "tensordict":
-                    tds = td.split(test_split_size, dim)
-                assert len(tds) == length
+        # split_sizes to be [2, 2, ..., 2, 1] or [2, 2, ..., 2]
+        split_sizes = [2] * rep + [1] * remainder
+        for test_split_size in (2, split_sizes):
+            if performer == "torch":
+                tds = torch.split(td, test_split_size, dim)
+            elif performer == "tensordict":
+                tds = td.split(test_split_size, dim)
+            tensors = tensor.split(test_split_size, dim)
+            length = len(tensors)
+            assert len(tds) == length, (
+                test_split_size,
+                dim,
+                [td.shape for td in tds],
+                td.shape,
+                length,
+            )
 
-                for idx, split_td in enumerate(tds):
-                    expected_split_dim_size = 1 if idx == rep else 2
-                    expected_batch_size = [
-                        expected_split_dim_size if dim_idx == dim else dim_size
-                        for (dim_idx, dim_size) in enumerate(td.batch_size)
-                    ]
+            for _tensor, split_td in zip(tensors, tds):
+                assert _tensor.shape == split_td.shape
 
-                    # Test each split_td has the expected batch_size
-                    assert split_td.batch_size == torch.Size(expected_batch_size)
+                if td_name == "nested_td":
+                    assert isinstance(split_td["my_nested_td"], TensorDict)
+                    assert isinstance(split_td["my_nested_td", "inner"], torch.Tensor)
 
-                    if td_name == "nested_td":
-                        assert isinstance(split_td["my_nested_td"], TensorDict)
-                        assert isinstance(
-                            split_td["my_nested_td"]["inner"], torch.Tensor
-                        )
-
-                    # Test each tensor (or nested_td) in split_td has the expected shape
-                    for key, item in split_td.items():
-                        expected_shape = [
-                            expected_split_dim_size if dim_idx == dim else dim_size
-                            for (dim_idx, dim_size) in enumerate(td[key].shape)
-                        ]
-                        assert item.shape == torch.Size(expected_shape)
-
-                        if key == "my_nested_td":
-                            expected_inner_tensor_size = [
-                                expected_split_dim_size if dim_idx == dim else dim_size
-                                for (dim_idx, dim_size) in enumerate(
-                                    td[key]["inner"].shape
-                                )
-                            ]
-                            assert item["inner"].shape == torch.Size(
-                                expected_inner_tensor_size
-                            )
+                # Test each tensor (or nested_td) in split_td has the expected shape
+                for key, item in split_td.items(True, True):
+                    expected_shape = _tensor.shape + td[key].shape[len(_tensor.shape) :]
+                    assert item.shape == torch.Size(expected_shape)
 
     def test_pop(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -4306,7 +4305,9 @@ def test_flatten_unflatten_key_collision(inplace, separator):
 def test_split_with_invalid_arguments():
     td = TensorDict({"a": torch.zeros(2, 1)}, [])
     # Test empty batch size
-    with pytest.raises(RuntimeError, match="not splittable"):
+    with pytest.raises(
+        RuntimeError, match="The number of dimensions is insufficient for the split_dim"
+    ):
         td.split(1, 0)
 
     td = TensorDict({}, [3, 2])
@@ -4318,16 +4319,22 @@ def test_split_with_invalid_arguments():
         td.split(["1", 2], 0)
 
     # Test invalid split_size sum
-    with pytest.raises(RuntimeError, match="expects split_size to sum exactly"):
+    with pytest.raises(
+        RuntimeError, match="Insufficient number of elements in split_size"
+    ):
         td.split([], 0)
 
     with pytest.raises(RuntimeError, match="expects split_size to sum exactly"):
         td.split([1, 1], 0)
 
     # Test invalid dimension input
-    with pytest.raises(IndexError, match="Dimension out of range"):
+    with pytest.raises(
+        RuntimeError, match="The number of dimensions is insufficient for the split_dim"
+    ):
         td.split(1, 2)
-    with pytest.raises(IndexError, match="Dimension out of range"):
+    with pytest.raises(
+        RuntimeError, match="The number of dimensions is insufficient for the split_dim"
+    ):
         td.split(1, -3)
 
 
