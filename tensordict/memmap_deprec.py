@@ -5,7 +5,8 @@
 
 """This is a deprecated class and will be removed in v0.4.
 
-Consider using tensordict.MemoryMappedTensor instead."""
+Consider using tensordict.MemoryMappedTensor instead.
+"""
 
 from __future__ import annotations
 

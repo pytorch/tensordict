@@ -177,6 +177,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def empty_like(cls, input, *, filename=None):
+        # noqa: D417
         """Creates a tensor with no content but the same shape and dtype as the input tensor.
 
         Args:
@@ -193,6 +194,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def full_like(cls, input, fill_value, *, filename=None):
+        # noqa: D417
         """Creates a tensor with a single content indicated by the `fill_value` argument, but the same shape and dtype as the input tensor.
 
         Args:
@@ -212,6 +214,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def zeros_like(cls, input, *, filename=None):
+        # noqa: D417
         """Creates a tensor with a 0-filled content, but the same shape and dtype as the input tensor.
 
         Args:
@@ -228,6 +231,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def ones_like(cls, input, *, filename=None):
+        # noqa: D417
         """Creates a tensor with a 1-filled content, but the same shape and dtype as the input tensor.
 
         Args:
@@ -244,6 +248,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def ones(cls, *shape, dtype=None, device=None, filename=None):
+        # noqa: D417
         """Creates a tensor with a 1-filled content, specific shape, dtype and filename.
 
         Args:
@@ -274,6 +279,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def zeros(cls, *shape, dtype=None, device=None, filename=None):
+        # noqa: D417
         """Creates a tensor with a 0-filled content, specific shape, dtype and filename.
 
         Args:
@@ -305,6 +311,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def empty(cls, *shape, dtype=None, device=None, filename=None):
+        # noqa: D417
         """Creates a tensor with empty content, specific shape, dtype and filename.
 
         Args:
@@ -333,6 +340,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def full(cls, *shape, fill_value, dtype=None, device=None, filename=None):
+        # noqa: D417
         """Creates a tensor with a single content specified by `fill_value`, specific shape, dtype and filename.
 
         Args:
@@ -361,6 +369,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def from_filename(cls, filename, dtype, shape, index=None):
+        # noqa: D417
         """Loads a MemoryMappedTensor from a given filename.
 
         Args:
@@ -386,6 +395,7 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def from_handler(cls, handler, dtype, shape, index):
+        # noqa: D417
         """Loads a MemoryMappedTensor from a given handler.
 
         Args:
@@ -407,6 +417,11 @@ class MemoryMappedTensor(torch.Tensor):
         out.index = index
         out.parent_shape = shape
         return out
+
+    @property
+    def _tensor(self):
+        # for bc-compatibility with MemmapTensor, to be deprecated in v0.4
+        return self
 
     def __setstate__(self, state):
         if "filename" in state:
