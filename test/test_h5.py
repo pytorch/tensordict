@@ -26,7 +26,7 @@ class TestH5Serialization:
     @classmethod
     def worker(cls, cyberbliptronics, q1, q2):
         assert isinstance(cyberbliptronics, PersistentTensorDict)
-        assert cyberbliptronics.file._filename.endswith("groups.hdf5")
+        assert cyberbliptronics.file.filename.endswith("groups.hdf5")
         q1.put(
             cyberbliptronics["Base_Group"][
                 "Sub_Group",

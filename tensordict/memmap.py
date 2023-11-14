@@ -116,7 +116,7 @@ class MemoryMappedTensor(torch.Tensor):
 
         """
         if isinstance(input, MemoryMappedTensor):
-            if dir is None and (
+            if (
                 filename is None
                 or Path(filename).absolute() == Path(input._filename).absolute()
             ):
@@ -256,6 +256,10 @@ class MemoryMappedTensor(torch.Tensor):
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
         """
+        if device is not None:
+            device = torch.device(device)
+            if device.type != "cpu":
+                raise RuntimeError("Only CPU tensors are supported.")
         result = torch.ones((), dtype=dtype, device=device)
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
@@ -282,6 +286,10 @@ class MemoryMappedTensor(torch.Tensor):
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
         """
+        if device is not None:
+            device = torch.device(device)
+            if device.type != "cpu":
+                raise RuntimeError("Only CPU tensors are supported.")
         result = torch.zeros((), dtype=dtype, device=device)
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
@@ -309,6 +317,10 @@ class MemoryMappedTensor(torch.Tensor):
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
         """
+        if device is not None:
+            device = torch.device(device)
+            if device.type != "cpu":
+                raise RuntimeError("Only CPU tensors are supported.")
         result = torch.zeros((), dtype=dtype, device=device)
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
@@ -334,6 +346,10 @@ class MemoryMappedTensor(torch.Tensor):
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
         """
+        if device is not None:
+            device = torch.device(device)
+            if device.type != "cpu":
+                raise RuntimeError("Only CPU tensors are supported.")
         result = torch.zeros((), dtype=dtype, device=device).fill_(fill_value)
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
