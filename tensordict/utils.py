@@ -32,7 +32,7 @@ from tensordict._tensordict import (  # noqa: F401
 from torch import Tensor
 
 if TYPE_CHECKING:
-    from tensordict.memmap import MemmapTensor
+    from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
     from tensordict.tensordict import TensorDictBase
 
 try:
@@ -161,153 +161,6 @@ def _getitem_batch_size(batch_size, index):
     if batch_size[count:]:
         out.extend(batch_size[count:])
     return torch.Size(out)
-
-
-# def _getitem_batch_size(shape: torch.Size, items: IndexType) -> torch.Size:
-#     """Given an input shape and an index, returns the size of the resulting indexed tensor.
-#
-#     This function is aimed to be used when indexing is an
-#     expensive operation.
-#     Args:
-#         shape (torch.Size): Input shape
-#         items (index): Index of the hypothetical tensor
-#
-#     Returns:
-#         Size of the resulting object (tensor or tensordict)
-#
-#     Examples:
-#         >>> idx = (None, ..., None)
-#         >>> torch.zeros(4, 3, 2, 1)[idx].shape
-#         torch.Size([1, 4, 3, 2, 1, 1])
-#         >>> _getitem_batch_size([4, 3, 2, 1], idx)
-#         torch.Size([1, 4, 3, 2, 1, 1])
-#     """
-#     # let's start with simple cases
-#     if isinstance(items, tuple) and len(items) == 1:
-#         items = items[0]
-#     if isinstance(items, int):
-#         return shape[1:]
-#     if isinstance(items, torch.Tensor) and items.dtype is torch.bool:
-#         return torch.Size([items.sum(), *shape[items.ndimension() :]])
-#     if (
-#         isinstance(items, (torch.Tensor, np.ndarray)) and len(items.shape) <= 1
-#     ) or isinstance(items, list):
-#         if isinstance(items, torch.Tensor) and not items.shape:
-#             return shape[1:]
-#         if _is_lis_of_list_of_bools(items):
-#             warnings.warn(
-#                 "Got a list of list of bools: this indexing behaviour will be deprecated soon.",
-#                 category=DeprecationWarning,
-#             )
-#             items = torch.tensor(items)
-#             return torch.Size([items.sum(), *shape[items.ndimension() :]])
-#         if len(items):
-#             return torch.Size([len(items), *shape[1:]])
-#         else:
-#             return shape[1:]
-#
-#     if not isinstance(items, tuple):
-#         items = (items,)
-#
-#     if any(item is Ellipsis for item in items):
-#         items = convert_ellipsis_to_idx(items, shape)
-#
-#     sanitized_items = []
-#     shapes = []
-#     for _item in items:
-#         if isinstance(_item, (list, range, )):
-#             # _item = torch.tensor(_item)
-#             shapes.append(torch.Size([len(_item)]))
-#         elif isinstance(_item, np.ndarray):
-#             shapes.append(torch.Size(np.shape))
-#         elif isinstance(_item, torch.Tensor):
-#             shapes.append(_item.shape)
-#         else:
-#             shapes.append(None)
-#         if isinstance(_item, torch.Tensor) and _item.dtype is torch.bool:
-#             # when using NumPy's advanced indexing patterns, any index containing a
-#             # boolean array can be equivalently replaced with index.nonzero()
-#             # note we add unbind(-1) since behaviour of numpy.ndarray.nonzero returns
-#             # tuples of arrays whereas torch.Tensor.nonzero returns a single tensor
-#             # https://numpy.org/doc/stable/user/basics.indexing.html#boolean-array-indexing
-#             sanitized_items.extend(_item.nonzero().unbind(-1))
-#         else:
-#             sanitized_items.append(_item)
-#
-#     # when multiple tensor-like indices are present, they must be broadcastable onto a
-#     # common shape. if this is satisfied then they are broadcast to that shape, and used
-#     # to extract diagonal entries of the array.
-#     # if the tensor indices are contiguous, or separated by scalars, they are replaced
-#     # in-place by the broadcast shape. if they are separated by non-scalar indices, the
-#     # broadcast shape is prepended to the new batch size
-#     # https://numpy.org/doc/stable/user/basics.indexing.html#integer-array-indexing
-#     tensor_indices = []
-#     contiguous, prev = True, None
-#     for i, (_item, _shape) in enumerate(zip(sanitized_items, shapes)):
-#         if isinstance(_item, (torch.Tensor, range, list, np.ndarray)):
-#             tensor_indices.append(_item)
-#             if prev is not None and i != prev + 1:
-#                 contiguous = False
-#             prev = i
-#         elif isinstance(_item, Number) and prev is not None and i == prev + 1:
-#             prev = i
-#
-#     bs = []
-#     if tensor_indices:
-#         try:
-#             b_shape = torch.broadcast_shapes(*[shape for shape in shapes if shape])
-#         except ValueError as err:
-#             raise ValueError(
-#                 "When indexing with tensor-like indices, each of those indices must be "
-#                 f"broadcastable to a common shape. Got indices: {tensor_indices}."
-#             ) from err
-#         if not contiguous:
-#             bs.extend(b_shape)
-#
-#     iter_bs = iter(shape)
-#
-#     cursor = -1
-#     for _item in sanitized_items:
-#         cursor += 1
-#         if isinstance(_item, slice):
-#             batch = next(iter_bs)
-#             bs.append(len(range(*_item.indices(batch))))
-#         elif isinstance(_item, range):
-#             batch = next(iter_bs)
-#             bs.append(min(batch, len(_item)))
-#         elif isinstance(_item, (list, torch.Tensor, np.ndarray)):
-#             batch = next(iter_bs)
-#             if b is not None:
-#                 # we haven't yet accounted for tensor indices, so we insert in-place
-#                 bs.extend(b.shape)
-#                 b = None
-#         elif _item is None:
-#             bs.append(1)
-#         elif isinstance(_item, Number):
-#             try:
-#                 batch = next(iter_bs)
-#             except StopIteration:
-#                 raise RuntimeError(
-#                     f"The shape {shape} is incompatible with " f"the index {items}."
-#                 )
-#             continue
-#         elif _item is Ellipsis:
-#             if cursor == len(sanitized_items) - 1:
-#                 # then we can just skip
-#                 continue
-#             n_upcoming = len(sanitized_items) - cursor - 1
-#             while cursor < len(shape) - n_upcoming:
-#                 batch = next(iter_bs)
-#                 bs.append(batch)
-#                 cursor += 1
-#         else:
-#             raise NotImplementedError(
-#                 f"batch dim cannot be computed for type {type(_item)}"
-#             )
-#
-#     list_iter_bs = list(iter_bs)
-#     bs += list_iter_bs
-#     return torch.Size(bs)
 
 
 def convert_ellipsis_to_idx(
@@ -449,9 +302,9 @@ else:
 
 
 def expand_as_right(
-    tensor: torch.Tensor | MemmapTensor | TensorDictBase,
-    dest: torch.Tensor | MemmapTensor | TensorDictBase,
-) -> torch.Tensor | MemmapTensor | TensorDictBase:
+    tensor: torch.Tensor | _MemmapTensor | TensorDictBase,
+    dest: torch.Tensor | _MemmapTensor | TensorDictBase,
+) -> torch.Tensor | _MemmapTensor | TensorDictBase:
     """Expand a tensor on the right to match another tensor shape.
 
     Args:
@@ -485,9 +338,7 @@ def expand_as_right(
     return tensor.expand(dest.shape)
 
 
-def expand_right(
-    tensor: torch.Tensor | MemmapTensor, shape: Sequence[int]
-) -> torch.Tensor:
+def expand_right(tensor: torch.Tensor, shape: Sequence[int]) -> torch.Tensor:
     """Expand a tensor on the right to match a desired shape.
 
     Args:
@@ -1122,7 +973,7 @@ def cache(fun):
         >>> print(timeit.timeit("set(td.all_keys())", globals={'td': td}))
         0.88
     """
-    from tensordict.memmap import MemmapTensor
+    from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
     @wraps(fun)
     def newfun(_self: "TensorDictBase", *args, **kwargs):
@@ -1135,7 +986,7 @@ def cache(fun):
         key = _make_cache_key(args, kwargs)
         if key not in cache:
             out = fun(_self, *args, **kwargs)
-            if not isinstance(out, (Tensor, MemmapTensor, KeyedJaggedTensor)):
+            if not isinstance(out, (Tensor, _MemmapTensor, KeyedJaggedTensor)):
                 # we don't cache tensors to avoid filling the mem and / or
                 # stacking them from their origin
                 cache[key] = out

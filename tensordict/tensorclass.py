@@ -21,7 +21,7 @@ import tensordict as tensordict_lib
 
 import torch
 from tensordict._tensordict import _unravel_key_to_tuple
-from tensordict.memmap import MemmapTensor
+from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.tensordict import (
     _get_repr,
     is_tensor_collection,
@@ -501,7 +501,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         raise ValueError(f"Invalid indexing arguments: {item}.")
 
     if not is_tensorclass(value) and not isinstance(
-        value, (TensorDictBase, numbers.Number, Tensor, MemmapTensor)
+        value, (TensorDictBase, numbers.Number, Tensor, _MemmapTensor)
     ):
         raise ValueError(
             f"__setitem__ only supports tensorclasses, tensordicts,"
@@ -846,7 +846,7 @@ def __eq__(self, other: object) -> bool:
 
     """
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor, MemmapTensor)
+        other, (dict, numbers.Number, Tensor, _MemmapTensor)
     ):
         return False
     if is_tensorclass(other):
@@ -903,7 +903,7 @@ def __ne__(self, other: object) -> bool:
 
     """
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor, MemmapTensor)
+        other, (dict, numbers.Number, Tensor, _MemmapTensor)
     ):
         return True
     if is_tensorclass(other):

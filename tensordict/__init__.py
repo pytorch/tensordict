@@ -3,8 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from tensordict.memmap import MemmapTensor, set_transfer_ownership
-from tensordict.memmap_refact import MemoryMappedTensor
+from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap_deprec import MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
 from tensordict.tensorclass import tensorclass
 from tensordict.tensordict import (

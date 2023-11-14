@@ -10,6 +10,7 @@ import torch
 
 from tensordict import PersistentTensorDict, tensorclass, TensorDict
 from tensordict.nn.params import TensorDictParams
+from tensordict.persistent import _has_h5 as _has_h5py
 from tensordict.tensordict import (
     _stack as stack_td,
     is_tensor_collection,
@@ -41,6 +42,9 @@ class MyClass:
 
 
 class TestTensorDictsBase:
+    TYPES_DEVICES = []
+    TYPES_DEVICES_NOLAZY = []
+
     def td(self, device):
         return TensorDict(
             source={
@@ -51,6 +55,10 @@ class TestTensorDictsBase:
             batch_size=[4, 3, 2, 1],
             device=device,
         )
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["td", device]]
+        TYPES_DEVICES_NOLAZY += [["td", device]]
 
     def nested_td(self, device):
         return TensorDict(
@@ -65,6 +73,10 @@ class TestTensorDictsBase:
             batch_size=[4, 3, 2, 1],
             device=device,
         )
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["nested_td", device]]
+        TYPES_DEVICES_NOLAZY += [["nested_td", device]]
 
     def nested_tensorclass(self, device):
 
@@ -95,6 +107,10 @@ class TestTensorDictsBase:
             device=device,
         )
 
+    for device in get_available_devices():
+        TYPES_DEVICES += [["nested_tensorclass", device]]
+        TYPES_DEVICES_NOLAZY += [["nested_tensorclass", device]]
+
     def nested_stacked_td(self, device):
         td = TensorDict(
             source={
@@ -109,6 +125,10 @@ class TestTensorDictsBase:
             device=device,
         )
         return torch.stack(list(td.unbind(1)), 1)
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["nested_stacked_td", device]]
+        TYPES_DEVICES_NOLAZY += [["nested_stacked_td", device]]
 
     def stacked_td(self, device):
         td1 = TensorDict(
@@ -131,6 +151,9 @@ class TestTensorDictsBase:
         )
         return stack_td([td1, td2], 2)
 
+    for device in get_available_devices():
+        TYPES_DEVICES += [["stacked_td", device]]
+
     def idx_td(self, device):
         td = TensorDict(
             source={
@@ -142,6 +165,9 @@ class TestTensorDictsBase:
             device=device,
         )
         return td[1]
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["idx_td", device]]
 
     def sub_td(self, device):
         td = TensorDict(
@@ -155,6 +181,9 @@ class TestTensorDictsBase:
         )
         return td.get_sub_tensordict(1)
 
+    for device in get_available_devices():
+        TYPES_DEVICES += [["sub_td", device]]
+
     def sub_td2(self, device):
         td = TensorDict(
             source={
@@ -167,8 +196,14 @@ class TestTensorDictsBase:
         )
         return td.get_sub_tensordict((slice(None), 1))
 
+    for device in get_available_devices():
+        TYPES_DEVICES += [["sub_td2", device]]
+
     def memmap_td(self, device):
         return self.td(device).memmap_()
+
+    TYPES_DEVICES += [["memmap_td", torch.device("cpu")]]
+    TYPES_DEVICES_NOLAZY += [["memmap_td", torch.device("cpu")]]
 
     def permute_td(self, device):
         return TensorDict(
@@ -180,6 +215,9 @@ class TestTensorDictsBase:
             batch_size=[3, 1, 4, 2],
             device=device,
         ).permute(2, 0, 3, 1)
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["permute_td", device]]
 
     def unsqueezed_td(self, device):
         td = TensorDict(
@@ -193,6 +231,9 @@ class TestTensorDictsBase:
         )
         return td.unsqueeze(-1)
 
+    for device in get_available_devices():
+        TYPES_DEVICES += [["unsqueezed_td", device]]
+
     def squeezed_td(self, device):
         td = TensorDict(
             source={
@@ -204,6 +245,9 @@ class TestTensorDictsBase:
             device=device,
         )
         return td.squeeze(2)
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["squeezed_td", device]]
 
     def td_reset_bs(self, device):
         td = TensorDict(
@@ -218,6 +262,10 @@ class TestTensorDictsBase:
         td.batch_size = torch.Size([4, 3, 2, 1])
         return td
 
+    for device in get_available_devices():
+        TYPES_DEVICES += [["td_reset_bs", device]]
+        TYPES_DEVICES_NOLAZY += [["td_reset_bs", device]]
+
     def td_h5(
         self,
         device,
@@ -229,8 +277,17 @@ class TestTensorDictsBase:
         )
         return td_h5
 
+    if _has_h5py:
+        for device in get_available_devices():
+            TYPES_DEVICES += [["td_h5", device]]
+            TYPES_DEVICES_NOLAZY += [["td_h5", device]]
+
     def td_params(self, device):
         return TensorDictParams(self.td(device))
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["td_params", device]]
+        TYPES_DEVICES_NOLAZY += [["td_params", device]]
 
 
 def expand_list(list_of_tensors, *dims):

@@ -40,8 +40,11 @@ import numpy as np
 import torch
 from functorch import dim as ftdim
 from tensordict._tensordict import _unravel_key_to_tuple
-from tensordict.memmap import memmap_tensor_as_tensor, MemmapTensor as _MemmapTensor
-from tensordict.memmap_refact import MemoryMappedTensor as MemmapTensor
+from tensordict.memmap import MemoryMappedTensor as MemmapTensor
+from tensordict.memmap_deprec import (
+    memmap_tensor_as_tensor,
+    MemmapTensor as _MemmapTensor,
+)
 from tensordict.utils import (
     _device,
     _dtype,
@@ -1139,8 +1142,8 @@ class TensorDictBase(MutableMapping):
             elif _is_tensor_collection(value.__class__):
                 _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand)
                 continue
-            # elif isinstance(value, MemmapTensor):
-            #     value = value.as_tensor()
+            elif isinstance(value, _MemmapTensor):
+                value = value.as_tensor()
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
             if not pseudo_rand:
@@ -1178,8 +1181,8 @@ class TensorDictBase(MutableMapping):
             elif _is_tensor_collection(value.__class__):
                 _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
                 continue
-            # elif isinstance(value, MemmapTensor):
-            #     value = value.as_tensor()
+            elif isinstance(value, _MemmapTensor):
+                value = value.as_tensor()
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
             if not pseudo_rand:
@@ -1291,8 +1294,8 @@ class TensorDictBase(MutableMapping):
                 continue
             elif isinstance(value, Tensor):
                 pass
-            # elif isinstance(value, MemmapTensor):
-            #     value = value.as_tensor()
+            elif isinstance(value, _MemmapTensor):
+                value = value.as_tensor()
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
             if not pseudo_rand:
@@ -1362,8 +1365,8 @@ class TensorDictBase(MutableMapping):
                     pseudo_rand=pseudo_rand,
                 )
                 continue
-            # elif isinstance(value, MemmapTensor):
-            #     value = value.as_tensor()
+            elif isinstance(value, _MemmapTensor):
+                value = value.as_tensor()
             elif isinstance(value, Tensor):
                 pass
             else:
@@ -1412,8 +1415,8 @@ class TensorDictBase(MutableMapping):
                     _future_list=_future_list,
                 )
                 continue
-            # elif isinstance(value, MemmapTensor):
-            #     value = value.as_tensor()
+            elif isinstance(value, _MemmapTensor):
+                value = value.as_tensor()
             elif isinstance(value, Tensor):
                 pass
             else:
@@ -2584,6 +2587,7 @@ class TensorDictBase(MutableMapping):
                     prefix / f"{key}.meta.pt",
                 )
         tensordict._is_memmap = True
+        tensordict._device = torch.device("cpu")
         tensordict.lock_()
         return tensordict
 
@@ -2627,10 +2631,10 @@ class TensorDictBase(MutableMapping):
             >>> import tempfile
             >>> import timeit
             >>>
-            >>> from tensordict import TensorDict, MemmapTensor
+            >>> from tensordict import TensorDict, MemoryMappedTensor
             >>> td = TensorDict({
-            ...     "a": MemmapTensor.from_tensor(torch.zeros(()).expand(1_000_000)),
-            ...     "b": {"c": MemmapTensor.from_tensor(torch.zeros(()).expand(1_000_000, 3))},
+            ...     "a": MemoryMappedTensor.from_tensor(torch.zeros(()).expand(1_000_000)),
+            ...     "b": {"c": MemoryMappedTensor.from_tensor(torch.zeros(()).expand(1_000_000, 3))},
             ... }, [1_000_000])
             >>>
             >>> file = tempfile.NamedTemporaryFile()
@@ -4698,6 +4702,7 @@ class TensorDict(TensorDictBase):
                     prefix / f"{key}.meta.pt",
                 )
         self._is_memmap = True
+        self._device = torch.device("cpu")
         self.lock_()
         return self
 
@@ -4752,18 +4757,6 @@ class TensorDict(TensorDictBase):
 
         if device is not None and dtype is None and device == self.device:
             return result
-        # if device is not None and dtype is None:
-        #     if device == self.device:
-        #         return result
-        #     elif non_blocking:
-        #         return TensorDict(
-        #             self._tensordict,
-        #             device=device,
-        #             names=self.names,
-        #             batch_size=batch_size
-        #             if batch_size is not None
-        #             else self.batch_size,
-        #         )
 
         if convert_to_format is not None:
 
@@ -5144,10 +5137,10 @@ def assert_allclose_td(
 
         default_msg = f"key {key} does not match, got mse = {mse:4.4f}"
         msg = "\t".join([default_msg, msg]) if len(msg) else default_msg
-        # if isinstance(input1, MemmapTensor):
-        #     input1 = input1._tensor
-        # if isinstance(input2, MemmapTensor):
-        #     input2 = input2._tensor
+        if isinstance(input1, _MemmapTensor):
+            input1 = input1._tensor
+        if isinstance(input2, _MemmapTensor):
+            input2 = input2._tensor
         torch.testing.assert_close(
             input1, input2, rtol=rtol, atol=atol, equal_nan=equal_nan, msg=msg
         )
@@ -7714,6 +7707,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 copy_existing=copy_existing,
             )
         self._is_memmap = True
+        self._device = torch.device("cpu")
         self.lock_()
         return self
 
@@ -7733,7 +7727,8 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             tds.append(td_like)
         td_out = torch.stack(tds, self.stack_dim)
-        td_out._is_memmap = True
+        self._is_memmap = True
+        self._device = torch.device("cpu")
         td_out.lock_()
         return td_out
 
@@ -8452,6 +8447,7 @@ class _CustomOpTensorDict(TensorDictBase):
             torch.save(metadata, prefix / "meta.pt")
 
         self._is_memmap = True
+        self._device = torch.device("cpu")
         self.lock_()
         return self
 
