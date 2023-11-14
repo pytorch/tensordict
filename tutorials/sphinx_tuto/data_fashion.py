@@ -101,13 +101,13 @@ for i, (img, label) in enumerate(test_data):
 
 batch_size = 64
 
-train_dataloader = DataLoader(training_data, batch_size=batch_size)
-test_dataloader = DataLoader(test_data, batch_size=batch_size)
+train_dataloader = DataLoader(training_data, batch_size=batch_size)  # noqa: TOR401
+test_dataloader = DataLoader(test_data, batch_size=batch_size)  # noqa: TOR401
 
-train_dataloader_td = DataLoader(
+train_dataloader_td = DataLoader(  # noqa: TOR401
     training_data_td, batch_size=batch_size, collate_fn=lambda x: x
 )
-test_dataloader_td = DataLoader(
+test_dataloader_td = DataLoader(  # noqa: TOR401
     test_data_td, batch_size=batch_size, collate_fn=lambda x: x
 )
 

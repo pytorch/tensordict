@@ -103,13 +103,13 @@ test_data_tc = FashionMNISTData.from_dataset(test_data, device=device)
 
 batch_size = 64
 
-train_dataloader = DataLoader(training_data, batch_size=batch_size)
-test_dataloader = DataLoader(test_data, batch_size=batch_size)
+train_dataloader = DataLoader(training_data, batch_size=batch_size)  # noqa: TOR401
+test_dataloader = DataLoader(test_data, batch_size=batch_size)  # noqa: TOR401
 
-train_dataloader_tc = DataLoader(
+train_dataloader_tc = DataLoader(  # noqa: TOR401
     training_data_tc, batch_size=batch_size, collate_fn=lambda x: x
 )
-test_dataloader_tc = DataLoader(
+test_dataloader_tc = DataLoader(  # noqa: TOR401
     test_data_tc, batch_size=batch_size, collate_fn=lambda x: x
 )
 
