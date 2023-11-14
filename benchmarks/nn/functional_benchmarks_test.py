@@ -9,15 +9,8 @@ from functorch import make_functional_with_buffers as functorch_make_functional
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from tensordict.nn.functional_modules import make_functional
-from torch import nn
 
-try:
-    from torch import vmap
-except ImportError:
-    try:
-        from functorch import vmap
-    except ImportError:
-        raise RuntimeError("vmap couldn't be found, check pytorch version.")
+from torch import nn, vmap
 
 
 def make_net():

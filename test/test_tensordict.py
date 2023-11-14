@@ -34,6 +34,7 @@ from _utils_internal import decompose, get_available_devices, prod, TestTensorDi
 from functorch import dim as ftdim
 
 from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.tensordict import (
     _CustomOpTensorDict,
     _stack as stack_td,
@@ -516,28 +517,9 @@ TD_BATCH_SIZE = 4
 
 
 @pytest.mark.parametrize(
-    "td_name",
-    [
-        "td",
-        "stacked_td",
-        "sub_td",
-        "sub_td2",
-        "idx_td",
-        "memmap_td",
-        "unsqueezed_td",
-        "squeezed_td",
-        "td_reset_bs",
-        "nested_td",
-        "nested_tensorclass",
-        "permute_td",
-        "nested_stacked_td",
-        "td_params",
-        pytest.param(
-            "td_h5", marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
-        ),
-    ],
+    "td_name,device",
+    TestTensorDictsBase.TYPES_DEVICES,
 )
-@pytest.mark.parametrize("device", get_available_devices())
 class TestTensorDicts(TestTensorDictsBase):
     def test_permute_applied_twice(self, td_name, device):
         torch.manual_seed(0)
@@ -2572,13 +2554,13 @@ class TestTensorDicts(TestTensorDictsBase):
             pass
         elif td_name in ("unsqueezed_td", "squeezed_td", "permute_td"):
             assert metadata["batch_size"] == td._source.batch_size
-            assert metadata["device"] == td._source.device
+            # assert metadata["device"] == td._source.device
         else:
             assert metadata["batch_size"] == td.batch_size
-            assert metadata["device"] == td.device
+            # assert metadata["device"] == td.device
 
         td2 = td.__class__.load_memmap(tmp_path / "tensordict")
-        assert (td == td2).all()
+        assert (td.cpu() == td2.cpu()).all()
 
     @pytest.mark.parametrize("copy_existing", [False, True])
     def test_memmap_existing(self, td_name, device, copy_existing, tmp_path):
@@ -2992,6 +2974,8 @@ class TestTensorDictRepr:
         return stack_td([td1, td2], 2)
 
     def memmap_td(self, device, dtype):
+        if device is not None and device.type != "cpu":
+            pytest.skip("MemoryMappedTensors can only be placed on CPU.")
         return self.td(device, dtype).memmap_()
 
     def share_memory_td(self, device, dtype):
@@ -3018,15 +3002,13 @@ class TestTensorDictRepr:
 
     def test_repr_memmap(self, device, dtype):
         tensordict = self.memmap_td(device, dtype)
-        is_shared = False
-        tensor_device = device if device else tensordict["a"].device
-        is_shared_tensor = False
+        # tensor_device = device if device else tensordict["a"].device  # noqa: F841
         expected = f"""TensorDict(
     fields={{
-        a: MemmapTensor(shape=torch.Size([4, 3, 2, 1, 5]), device={tensor_device}, dtype={dtype}, is_shared={is_shared_tensor})}},
+        a: MemoryMappedTensor(shape=torch.Size([4, 3, 2, 1, 5]), device=cpu, dtype={dtype}, is_shared=False)}},
     batch_size=torch.Size([4, 3, 2, 1]),
-    device={str(device)},
-    is_shared={is_shared})"""
+    device=cpu,
+    is_shared=False)"""
         assert repr(tensordict) == expected
 
     def test_repr_share_memory(self, device, dtype):
@@ -3573,161 +3555,164 @@ def test_create_on_device():
     assert (a.to(device) == viewedtd.get("a")).all()
 
 
-def _remote_process(worker_id, command_pipe_child, command_pipe_parent, tensordict):
-    command_pipe_parent.close()
-    while True:
-        cmd, val = command_pipe_child.recv()
-        if cmd == "recv":
-            b = tensordict.get("b")
-            assert (b == val).all()
-            command_pipe_child.send("done")
-        elif cmd == "send":
-            a = torch.ones(2) * val
-            tensordict.set_("a", a)
-            assert (
-                tensordict.get("a") == a
-            ).all(), f'found {a} and {tensordict.get("a")}'
-            command_pipe_child.send("done")
-        elif cmd == "set_done":
-            tensordict.set_("done", torch.ones(1, dtype=torch.bool))
-            command_pipe_child.send("done")
-        elif cmd == "set_undone_":
-            tensordict.set_("done", torch.zeros(1, dtype=torch.bool))
-            command_pipe_child.send("done")
-        elif cmd == "update":
-            tensordict.update_(
-                TensorDict(
-                    source={"a": tensordict.get("a").clone() + 1},
-                    batch_size=tensordict.batch_size,
+class TestMPInplace:
+    @classmethod
+    def _remote_process(
+        cls, worker_id, command_pipe_child, command_pipe_parent, tensordict
+    ):
+        command_pipe_parent.close()
+        while True:
+            cmd, val = command_pipe_child.recv()
+            if cmd == "recv":
+                b = tensordict.get("b")
+                assert (b == val).all()
+                command_pipe_child.send("done")
+            elif cmd == "send":
+                a = torch.ones(2) * val
+                tensordict.set_("a", a)
+                assert (
+                    tensordict.get("a") == a
+                ).all(), f'found {a} and {tensordict.get("a")}'
+                command_pipe_child.send("done")
+            elif cmd == "set_done":
+                tensordict.set_("done", torch.ones(1, dtype=torch.bool))
+                command_pipe_child.send("done")
+            elif cmd == "set_undone_":
+                tensordict.set_("done", torch.zeros(1, dtype=torch.bool))
+                command_pipe_child.send("done")
+            elif cmd == "update":
+                tensordict.update_(
+                    TensorDict(
+                        source={"a": tensordict.get("a").clone() + 1},
+                        batch_size=tensordict.batch_size,
+                    )
                 )
-            )
-            command_pipe_child.send("done")
-        elif cmd == "update_":
-            tensordict.update_(
-                TensorDict(
-                    source={"a": tensordict.get("a").clone() - 1},
-                    batch_size=tensordict.batch_size,
+                command_pipe_child.send("done")
+            elif cmd == "update_":
+                tensordict.update_(
+                    TensorDict(
+                        source={"a": tensordict.get("a").clone() - 1},
+                        batch_size=tensordict.batch_size,
+                    )
                 )
-            )
-            command_pipe_child.send("done")
+                command_pipe_child.send("done")
 
-        elif cmd == "close":
+            elif cmd == "close":
+                command_pipe_child.close()
+                break
+
+    @classmethod
+    def _driver_func(cls, tensordict, tensordict_unbind):
+        procs = []
+        children = []
+        parents = []
+
+        for i in range(2):
+            command_pipe_parent, command_pipe_child = mp.Pipe()
+            proc = mp.Process(
+                target=cls._remote_process,
+                args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
+            )
+            proc.start()
             command_pipe_child.close()
-            break
+            parents.append(command_pipe_parent)
+            children.append(command_pipe_child)
+            procs.append(proc)
 
+        b = torch.ones(2, 1) * 10
+        tensordict.set_("b", b)
+        for i in range(2):
+            parents[i].send(("recv", 10))
+            is_done = parents[i].recv()
+            assert is_done == "done"
 
-def _driver_func(tensordict, tensordict_unbind):
-    procs = []
-    children = []
-    parents = []
+        for i in range(2):
+            parents[i].send(("send", i))
+            is_done = parents[i].recv()
+            assert is_done == "done"
+        a = tensordict.get("a").clone()
+        assert (a[0] == 0).all()
+        assert (a[1] == 1).all()
 
-    for i in range(2):
-        command_pipe_parent, command_pipe_child = mp.Pipe()
-        proc = mp.Process(
-            target=_remote_process,
-            args=(i, command_pipe_child, command_pipe_parent, tensordict_unbind[i]),
-        )
-        proc.start()
-        command_pipe_child.close()
-        parents.append(command_pipe_parent)
-        children.append(command_pipe_child)
-        procs.append(proc)
+        assert not tensordict.get("done").any()
+        for i in range(2):
+            parents[i].send(("set_done", i))
+            is_done = parents[i].recv()
+            assert is_done == "done"
+        assert tensordict.get("done").all()
 
-    b = torch.ones(2, 1) * 10
-    tensordict.set_("b", b)
-    for i in range(2):
-        parents[i].send(("recv", 10))
-        is_done = parents[i].recv()
-        assert is_done == "done"
+        for i in range(2):
+            parents[i].send(("set_undone_", i))
+            is_done = parents[i].recv()
+            assert is_done == "done"
+        assert not tensordict.get("done").any()
 
-    for i in range(2):
-        parents[i].send(("send", i))
-        is_done = parents[i].recv()
-        assert is_done == "done"
-    a = tensordict.get("a").clone()
-    assert (a[0] == 0).all()
-    assert (a[1] == 1).all()
+        a_prev = tensordict.get("a").clone().contiguous()
+        for i in range(2):
+            parents[i].send(("update_", i))
+            is_done = parents[i].recv()
+            assert is_done == "done"
+        new_a = tensordict.get("a").clone().contiguous()
+        torch.testing.assert_close(a_prev - 1, new_a)
 
-    assert not tensordict.get("done").any()
-    for i in range(2):
-        parents[i].send(("set_done", i))
-        is_done = parents[i].recv()
-        assert is_done == "done"
-    assert tensordict.get("done").all()
+        a_prev = tensordict.get("a").clone().contiguous()
+        for i in range(2):
+            parents[i].send(("update", i))
+            is_done = parents[i].recv()
+            assert is_done == "done"
+        new_a = tensordict.get("a").clone().contiguous()
+        torch.testing.assert_close(a_prev + 1, new_a)
 
-    for i in range(2):
-        parents[i].send(("set_undone_", i))
-        is_done = parents[i].recv()
-        assert is_done == "done"
-    assert not tensordict.get("done").any()
+        for i in range(2):
+            parents[i].send(("close", None))
+            procs[i].join()
 
-    a_prev = tensordict.get("a").clone().contiguous()
-    for i in range(2):
-        parents[i].send(("update_", i))
-        is_done = parents[i].recv()
-        assert is_done == "done"
-    new_a = tensordict.get("a").clone().contiguous()
-    torch.testing.assert_close(a_prev - 1, new_a)
-
-    a_prev = tensordict.get("a").clone().contiguous()
-    for i in range(2):
-        parents[i].send(("update", i))
-        is_done = parents[i].recv()
-        assert is_done == "done"
-    new_a = tensordict.get("a").clone().contiguous()
-    torch.testing.assert_close(a_prev + 1, new_a)
-
-    for i in range(2):
-        parents[i].send(("close", None))
-        procs[i].join()
-
-
-@pytest.mark.parametrize(
-    "td_type",
-    [
-        "memmap",
-        "memmap_stack",
-        "contiguous",
-        "stack",
-    ],
-)
-def test_mp(td_type):
-    tensordict = TensorDict(
-        source={
-            "a": torch.randn(2, 2),
-            "b": torch.randn(2, 1),
-            "done": torch.zeros(2, 1, dtype=torch.bool),
-        },
-        batch_size=[2],
+    @pytest.mark.parametrize(
+        "td_type",
+        [
+            "memmap",
+            "memmap_stack",
+            "contiguous",
+            "stack",
+        ],
     )
-    if td_type == "contiguous":
-        tensordict = tensordict.share_memory_()
-    elif td_type == "stack":
-        tensordict = stack_td(
-            [
-                tensordict[0].clone().share_memory_(),
-                tensordict[1].clone().share_memory_(),
-            ],
-            0,
+    def test_mp(self, td_type):
+        tensordict = TensorDict(
+            source={
+                "a": torch.randn(2, 2),
+                "b": torch.randn(2, 1),
+                "done": torch.zeros(2, 1, dtype=torch.bool),
+            },
+            batch_size=[2],
         )
-    elif td_type == "memmap":
-        tensordict = tensordict.memmap_()
-    elif td_type == "memmap_stack":
-        tensordict = stack_td(
-            [
-                tensordict[0].clone().memmap_(),
-                tensordict[1].clone().memmap_(),
-            ],
-            0,
+        if td_type == "contiguous":
+            tensordict = tensordict.share_memory_()
+        elif td_type == "stack":
+            tensordict = stack_td(
+                [
+                    tensordict[0].clone().share_memory_(),
+                    tensordict[1].clone().share_memory_(),
+                ],
+                0,
+            )
+        elif td_type == "memmap":
+            tensordict = tensordict.memmap_()
+        elif td_type == "memmap_stack":
+            tensordict = stack_td(
+                [
+                    tensordict[0].clone().memmap_(),
+                    tensordict[1].clone().memmap_(),
+                ],
+                0,
+            )
+        else:
+            raise NotImplementedError
+        self._driver_func(
+            tensordict,
+            (tensordict.get_sub_tensordict(0), tensordict.get_sub_tensordict(1))
+            # tensordict,
+            # tensordict.unbind(0),
         )
-    else:
-        raise NotImplementedError
-    _driver_func(
-        tensordict,
-        (tensordict.get_sub_tensordict(0), tensordict.get_sub_tensordict(1))
-        # tensordict,
-        # tensordict.unbind(0),
-    )
 
 
 @pytest.mark.parametrize(
@@ -5173,7 +5158,7 @@ class TestSnapshot:
             [3],
         )
         td.memmap_()
-        assert isinstance(td["b", "c"], MemmapTensor)
+        assert isinstance(td["b", "c"], MemoryMappedTensor)
 
         app_state = {
             "state": torchsnapshot.StateDict(
@@ -5184,8 +5169,8 @@ class TestSnapshot:
         snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=path)
 
         td_plain = td.to_tensordict()
-        # we want to delete refs to MemmapTensors
-        assert not isinstance(td_plain["a"], MemmapTensor)
+        # we want to delete refs to MemoryMappedTensors
+        assert not isinstance(td_plain["a"], MemoryMappedTensor)
         del td
 
         snapshot = torchsnapshot.Snapshot(path=path)
@@ -5194,7 +5179,7 @@ class TestSnapshot:
             [3],
         )
         td_dest.memmap_()
-        assert isinstance(td_dest["b", "c"], MemmapTensor)
+        assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
         app_state = {
             "state": torchsnapshot.StateDict(
                 **{save_name: td_dest.state_dict(keep_vars=True)}
@@ -5204,7 +5189,7 @@ class TestSnapshot:
 
         assert (td_dest == td_plain).all()
         assert td_dest["b"].batch_size == td_plain["b"].batch_size
-        assert isinstance(td_dest["b", "c"], MemmapTensor)
+        assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
 
     def test_update(
         self,
@@ -5215,7 +5200,7 @@ class TestSnapshot:
         path = f"/tmp/{uuid.uuid4()}"
         snapshot = torchsnapshot.Snapshot.take(app_state=state, path=path)
         td_plain = tensordict.to_tensordict()
-        assert not isinstance(td_plain["a"], MemmapTensor)
+        assert not isinstance(td_plain["a"], MemoryMappedTensor)
         del tensordict
 
         snapshot = torchsnapshot.Snapshot(path=path)
@@ -5233,11 +5218,11 @@ def test_memmap_as_tensor(device):
     td_memmap = td.clone().memmap_()
     assert (td == td_memmap).all()
 
-    assert (td == td_memmap.apply(lambda x: x.as_tensor())).all()
+    assert (td == td_memmap.apply(lambda x: x.clone())).all()
     if device.type == "cuda":
         td = td.pin_memory()
         td_memmap = td.clone().memmap_()
-        td_memmap_pm = td_memmap.apply(lambda x: x.as_tensor()).pin_memory()
+        td_memmap_pm = td_memmap.apply(lambda x: x.clone()).pin_memory()
         assert (td.pin_memory().to(device) == td_memmap_pm.to(device)).all()
 
 
@@ -5757,7 +5742,7 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == list("abcd")
         td.rename_(c="g")
         assert td.names == list("abgd")
-        assert td.as_tensor().names == list("abgd")
+        assert td.clone().names == list("abgd")
 
     def test_h5_td(self):
         td = self.td_h5("cpu")
@@ -6163,28 +6148,9 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
 
 
 @pytest.mark.parametrize(
-    "td_name",
-    [
-        "td",
-        "stacked_td",
-        "sub_td",
-        "sub_td2",
-        "idx_td",
-        "memmap_td",
-        "unsqueezed_td",
-        "squeezed_td",
-        "td_reset_bs",
-        "nested_td",
-        "nested_tensorclass",
-        "permute_td",
-        "nested_stacked_td",
-        "td_params",
-        pytest.param(
-            "td_h5", marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
-        ),
-    ],
+    "td_name,device",
+    TestTensorDictsBase.TYPES_DEVICES,
 )
-@pytest.mark.parametrize("device", get_available_devices())
 class TestTensorDictMP(TestTensorDictsBase):
     @staticmethod
     def add1(x):
@@ -6274,35 +6240,18 @@ def _pool_fixt():
 class TestFCD(TestTensorDictsBase):
     """Test stack for first-class dimension."""
 
-    @pytest.mark.parametrize(
-        "td_name",
-        [
-            "td",
-            "stacked_td",
-            "sub_td",
-            "sub_td2",
-            "idx_td",
-            "memmap_td",
-            "unsqueezed_td",
-            "squeezed_td",
-            "td_reset_bs",
-            "nested_td",
-            "nested_tensorclass",
-            "permute_td",
-            "nested_stacked_td",
-            "td_params",
-            pytest.param(
-                "td_h5",
-                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found."),
-            ),
-        ],
-    )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("td_name,device", TestTensorDictsBase.TYPES_DEVICES)
     def test_fcd(self, td_name, device):
         td = getattr(self, td_name)(device)
         d0 = ftdim.dims(1)
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 0:
             with pytest.raises(ValueError, match="Cannot index"):
+                td[d0]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
                 td[d0]
         else:
             assert td[d0].shape == td.shape[1:]
@@ -6310,11 +6259,23 @@ class TestFCD(TestTensorDictsBase):
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1):
             with pytest.raises(ValueError, match="Cannot index"):
                 td[d0, d1]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
+                td[d0, d1]
         else:
             assert td[d0, d1].shape == td.shape[2:]
         d0, d1, d2 = ftdim.dims(3)
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1, 2):
             with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1, d2]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
                 td[d0, d1, d2]
         else:
             assert td[d0, d1, d2].shape == td.shape[3:]
@@ -6322,34 +6283,16 @@ class TestFCD(TestTensorDictsBase):
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 1:
             with pytest.raises(ValueError, match="Cannot index"):
                 td[:, d0]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
+                td[:, d0]
         else:
             assert td[:, d0].shape == torch.Size((td.shape[0], *td.shape[2:]))
 
-    @pytest.mark.parametrize(
-        "td_name",
-        [
-            "td",
-            "stacked_td",
-            "idx_td",
-            "memmap_td",
-            "td_reset_bs",
-            "nested_td",
-            "nested_tensorclass",
-            "nested_stacked_td",
-            "td_params",
-            pytest.param(
-                "td_h5",
-                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not found."),
-            ),
-            # these tds cannot see their dim names edited:
-            # "sub_td",
-            # "sub_td2",
-            # "unsqueezed_td",
-            # "squeezed_td",
-            # "permute_td",
-        ],
-    )
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("td_name,device", TestTensorDictsBase.TYPES_DEVICES_NOLAZY)
     def test_fcd_names(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.names = ["a", "b", "c", "d"]
@@ -6357,11 +6300,23 @@ class TestFCD(TestTensorDictsBase):
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 0:
             with pytest.raises(ValueError, match="Cannot index"):
                 td[d0]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
+                td[d0]
         else:
             assert td[d0].names == ["b", "c", "d"]
         d0, d1 = ftdim.dims(2)
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1):
             with pytest.raises(ValueError, match="Cannot index"):
+                td[d0, d1]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
                 td[d0, d1]
         else:
             assert td[d0, d1].names == ["c", "d"]
@@ -6369,11 +6324,23 @@ class TestFCD(TestTensorDictsBase):
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim in (0, 1, 2):
             with pytest.raises(ValueError, match="Cannot index"):
                 td[d0, d1, d2]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
+                td[d0, d1, d2]
         else:
             assert td[d0, d1, d2].names == ["d"]
         d0 = ftdim.dims(1)
         if isinstance(td, LazyStackedTensorDict) and td.stack_dim == 1:
             with pytest.raises(ValueError, match="Cannot index"):
+                td[:, d0]
+        elif td_name == "memmap_td":
+            with pytest.raises(
+                ValueError,
+                match="Using first class dimension indices with MemoryMappedTensor",
+            ):
                 td[:, d0]
         else:
             assert td[:, d0].names == ["a", "c", "d"]

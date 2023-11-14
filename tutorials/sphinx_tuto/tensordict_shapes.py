@@ -67,7 +67,7 @@ assert reshaped_tensordict["b"].shape == torch.Size([12, 5])
 chunks = tensordict.split([3, 1], dim=1)
 assert chunks[0].batch_size == torch.Size([3, 3])
 assert chunks[1].batch_size == torch.Size([3, 1])
-torch.testing.assert_allclose(chunks[0]["a"], tensordict["a"][:, :-1])
+torch.testing.assert_close(chunks[0]["a"], tensordict["a"][:, :-1])
 
 ##############################################################################
 # .. note::
@@ -108,7 +108,7 @@ torch.testing.assert_allclose(chunks[0]["a"], tensordict["a"][:, :-1])
 slices = tensordict.unbind(dim=1)
 assert len(slices) == 4
 assert all(s.batch_size == torch.Size([3]) for s in slices)
-torch.testing.assert_allclose(slices[0]["a"], tensordict["a"][:, 0])
+torch.testing.assert_close(slices[0]["a"], tensordict["a"][:, 0])
 
 ##############################################################################
 # Stacking and concatenating
@@ -181,7 +181,7 @@ assert concatenated_tensordict["b"].shape == torch.Size([6, 4, 5])
 
 exp_tensordict = tensordict.expand(2, *tensordict.batch_size)
 assert exp_tensordict.batch_size == torch.Size([2, 3, 4])
-torch.testing.assert_allclose(exp_tensordict["a"][0], exp_tensordict["a"][1])
+torch.testing.assert_close(exp_tensordict["a"][0], exp_tensordict["a"][1])
 
 ##############################################################################
 # Squeezing and Unsqueezing ``TensorDict``

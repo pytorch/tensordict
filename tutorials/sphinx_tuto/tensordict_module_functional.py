@@ -58,7 +58,7 @@ print(func(params, buffers, tensordict))
 
 params_expand = [p.expand(3, *p.shape) for p in params]
 buffers_expand = [p.expand(3, *p.shape) for p in buffers]
-print(functorch.vmap(func, (0, 0, None))(params_expand, buffers_expand, tensordict))
+print(torch.vmap(func, (0, 0, None))(params_expand, buffers_expand, tensordict))
 
 ###############################################################################
 # We can also use the native :func:`make_functional <tensordict.nn.make_functional>`
@@ -74,5 +74,5 @@ model = TensorDictModule(nn.Linear(3, 4), in_keys=["a"], out_keys=["output"])
 params = make_functional(model)
 # we stack two groups of parameters to show the vmap usage:
 params = torch.stack([params, params.apply(lambda x: torch.zeros_like(x))], 0)
-result_td = functorch.vmap(model, (None, 0))(tensordict, params)
+result_td = torch.vmap(model, (None, 0))(tensordict, params)
 print("the output tensordict shape is: ", result_td.shape)

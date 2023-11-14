@@ -308,12 +308,12 @@ val_dataloader = DataLoader(
     num_workers=NUM_WORKERS,
 )
 
-train_dataloader_tc = DataLoader(
+train_dataloader_tc = DataLoader(  # noqa: TOR401
     train_data_tc,
     batch_size=batch_size,
     collate_fn=Collate(collate_transform, device),
 )
-val_dataloader_tc = DataLoader(
+val_dataloader_tc = DataLoader(  # noqa: TOR401
     val_data_tc,
     batch_size=batch_size,
     collate_fn=Collate(device=device),
