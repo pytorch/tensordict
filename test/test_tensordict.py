@@ -2560,7 +2560,7 @@ class TestTensorDicts(TestTensorDictsBase):
             # assert metadata["device"] == td.device
 
         td2 = td.__class__.load_memmap(tmp_path / "tensordict")
-        assert (td.cpu() == td2).all()
+        assert (td.cpu() == td2.cpu()).all()
 
     @pytest.mark.parametrize("copy_existing", [False, True])
     def test_memmap_existing(self, td_name, device, copy_existing, tmp_path):
