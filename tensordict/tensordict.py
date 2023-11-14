@@ -2587,6 +2587,7 @@ class TensorDictBase(MutableMapping):
                     prefix / f"{key}.meta.pt",
                 )
         tensordict._is_memmap = True
+        self._is_shared = False
         tensordict._device = torch.device("cpu")
         tensordict.lock_()
         return tensordict
@@ -4423,8 +4424,9 @@ class TensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
     ) -> T:
-        best_attempt = inplace is BEST_ATTEMPT_INPLACE
-        inplace = self._convert_inplace(inplace, key)
+        if inplace is not False:
+            best_attempt = inplace is BEST_ATTEMPT_INPLACE
+            inplace = self._convert_inplace(inplace, key)
         if not validated:
             value = self._validate_value(value, check_shape=True)
         if not inplace:
@@ -4702,6 +4704,7 @@ class TensorDict(TensorDictBase):
                     prefix / f"{key}.meta.pt",
                 )
         self._is_memmap = True
+        self._is_shared = False
         self._device = torch.device("cpu")
         self.lock_()
         return self
@@ -7707,6 +7710,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 copy_existing=copy_existing,
             )
         self._is_memmap = True
+        self._is_shared = False
         self._device = torch.device("cpu")
         self.lock_()
         return self
@@ -7728,6 +7732,7 @@ class LazyStackedTensorDict(TensorDictBase):
             tds.append(td_like)
         td_out = torch.stack(tds, self.stack_dim)
         self._is_memmap = True
+        self._is_shared = False
         self._device = torch.device("cpu")
         td_out.lock_()
         return td_out
@@ -8447,6 +8452,7 @@ class _CustomOpTensorDict(TensorDictBase):
             torch.save(metadata, prefix / "meta.pt")
 
         self._is_memmap = True
+        self._is_shared = False
         self._device = torch.device("cpu")
         self.lock_()
         return self

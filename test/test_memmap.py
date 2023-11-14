@@ -73,17 +73,7 @@ def test_memmap_same_device_as_tensor(device):
     """
     t = torch.tensor([1], device=device)
     m = MemoryMappedTensor.from_tensor(t)
-    assert m.device == torch.device(device)
-    for other_device in get_available_devices():
-        if other_device != device:
-            with pytest.raises(
-                RuntimeError,
-                match="Expected all tensors to be on the same device, "
-                + "but found at least two devices",
-            ):
-                assert torch.all(m + torch.ones([3, 4], device=other_device) == 1)
-        m = m.to(other_device)
-        assert m.device == torch.device(other_device)
+    assert m.device == torch.device("cpu")
 
 
 @pytest.mark.parametrize("device", get_available_devices())

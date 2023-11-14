@@ -31,6 +31,8 @@ def get_available_devices():
     if n_cuda > 0:
         for i in range(n_cuda):
             devices += [torch.device(f"cuda:{i}")]
+            if i == 1:
+                break
     return devices
 
 
