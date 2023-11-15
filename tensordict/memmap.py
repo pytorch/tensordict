@@ -13,7 +13,7 @@ import tempfile
 from multiprocessing import util
 from multiprocessing.context import reduction
 from pathlib import Path
-from typing import Any
+from typing import Any, overload
 
 import numpy as np
 import torch
@@ -247,7 +247,17 @@ class MemoryMappedTensor(torch.Tensor):
         )
 
     @classmethod
-    def ones(cls, *shape, dtype=None, device=None, filename=None):
+    @overload
+    def ones(cls, *size, dtype=None, device=None, filename=None):
+        ...
+
+    @classmethod
+    @overload
+    def ones(cls, shape, *, dtype=None, device=None, filename=None):
+        ...
+
+    @classmethod
+    def ones(cls, *args, **kwargs):
         # noqa: D417
         """Creates a tensor with a 1-filled content, specific shape, dtype and filename.
 
@@ -261,6 +271,7 @@ class MemoryMappedTensor(torch.Tensor):
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
         """
+        shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
         if device is not None:
             device = torch.device(device)
             if device.type != "cpu":
@@ -278,7 +289,17 @@ class MemoryMappedTensor(torch.Tensor):
         )
 
     @classmethod
-    def zeros(cls, *shape, dtype=None, device=None, filename=None):
+    @overload
+    def zeros(cls, *size, dtype=None, device=None, filename=None):
+        ...
+
+    @classmethod
+    @overload
+    def zeros(cls, shape, *, dtype=None, device=None, filename=None):
+        ...
+
+    @classmethod
+    def zeros(cls, *args, **kwargs):
         # noqa: D417
         """Creates a tensor with a 0-filled content, specific shape, dtype and filename.
 
@@ -292,6 +313,7 @@ class MemoryMappedTensor(torch.Tensor):
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
         """
+        shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
         if device is not None:
             device = torch.device(device)
             if device.type != "cpu":
@@ -310,7 +332,17 @@ class MemoryMappedTensor(torch.Tensor):
         return result
 
     @classmethod
-    def empty(cls, *shape, dtype=None, device=None, filename=None):
+    @overload
+    def empty(cls, *size, dtype=None, device=None, filename=None):
+        ...
+
+    @classmethod
+    @overload
+    def empty(cls, shape, *, dtype=None, device=None, filename=None):
+        ...
+
+    @classmethod
+    def empty(cls, *args, **kwargs):
         # noqa: D417
         """Creates a tensor with empty content, specific shape, dtype and filename.
 
@@ -324,6 +356,7 @@ class MemoryMappedTensor(torch.Tensor):
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
         """
+        shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
         if device is not None:
             device = torch.device(device)
             if device.type != "cpu":
@@ -339,7 +372,17 @@ class MemoryMappedTensor(torch.Tensor):
         return result
 
     @classmethod
-    def full(cls, *shape, fill_value, dtype=None, device=None, filename=None):
+    @overload
+    def full(cls, *size, fill_value, dtype=None, device=None, filename=None):
+        ...
+
+    @classmethod
+    @overload
+    def full(cls, shape, *, fill_value, dtype=None, device=None, filename=None):
+        ...
+
+    @classmethod
+    def full(cls, *args, **kwargs):
         # noqa: D417
         """Creates a tensor with a single content specified by `fill_value`, specific shape, dtype and filename.
 
@@ -354,6 +397,7 @@ class MemoryMappedTensor(torch.Tensor):
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
         """
+        shape, device, dtype, fill_value, filename = _proc_args_const(*args, **kwargs)
         if device is not None:
             device = torch.device(device)
             if device.type != "cpu":
@@ -546,3 +590,25 @@ ForkingPickler.register(MemoryMappedTensor, _reduce_memmap)
 
 # For backward compatibility in imports
 from tensordict.memmap_deprec import MemmapTensor  # noqa: F401
+
+
+def _proc_args_const(*args, **kwargs):
+    if len(args) > 0:
+        # then the first (or the N first) args are the shape
+        if len(args) == 1 and not isinstance(args[0], int):
+            shape = torch.Size(args[0])
+        else:
+            shape = torch.Size(args)
+    else:
+        # we should have a "shape" keyword arg
+        shape = kwargs.pop("shape", None)
+        if shape is None:
+            raise TypeError("Could not find the shape argument in the arguments.")
+        shape = torch.Size(shape)
+    return (
+        shape,
+        kwargs.pop("device", None),
+        kwargs.pop("dtype", None),
+        kwargs.pop("fill_value", None),
+        kwargs.pop("filename", None),
+    )
