@@ -118,7 +118,8 @@ def test_existing(tmp_path):
 @pytest.mark.parametrize("device", [None] + get_available_devices())
 @pytest.mark.parametrize("from_path", [True, False])
 class TestConstructors:
-    def test_zeros(self, shape, dtype, device, tmp_path, from_path):
+    @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
+    def test_zeros(self, shape, dtype, device, tmp_path, from_path, shape_arg):
         if from_path:
             filename = tmp_path / "file.memmap"
         else:
@@ -129,9 +130,22 @@ class TestConstructors:
                     shape, dtype=dtype, device=device, filename=filename
                 )
             return
-        t = MemoryMappedTensor.zeros(
-            shape, dtype=dtype, device=device, filename=filename
-        )
+        if shape_arg == "expand":
+            with pytest.raises(TypeError) if shape == () else nullcontext():
+                t = MemoryMappedTensor.zeros(
+                    *shape, dtype=dtype, device=device, filename=filename
+                )
+            if shape == ():
+                return
+        elif shape_arg == "arg":
+            t = MemoryMappedTensor.zeros(
+                shape, dtype=dtype, device=device, filename=filename
+            )
+        elif shape_arg == "kwarg":
+            t = MemoryMappedTensor.zeros(
+                shape=shape, dtype=dtype, device=device, filename=filename
+            )
+
         assert t.shape == shape
         if dtype is not None:
             assert t.dtype is dtype
@@ -139,7 +153,8 @@ class TestConstructors:
             assert t.filename == filename
         assert (t == 0).all()
 
-    def test_ones(self, shape, dtype, device, tmp_path, from_path):
+    @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
+    def test_ones(self, shape, dtype, device, tmp_path, from_path, shape_arg):
         if from_path:
             filename = tmp_path / "file.memmap"
         else:
@@ -150,9 +165,21 @@ class TestConstructors:
                     shape, dtype=dtype, device=device, filename=filename
                 )
             return
-        t = MemoryMappedTensor.ones(
-            shape, dtype=dtype, device=device, filename=filename
-        )
+        if shape_arg == "expand":
+            with pytest.raises(TypeError) if shape == () else nullcontext():
+                t = MemoryMappedTensor.ones(
+                    *shape, dtype=dtype, device=device, filename=filename
+                )
+            if shape == ():
+                return
+        elif shape_arg == "arg":
+            t = MemoryMappedTensor.ones(
+                shape, dtype=dtype, device=device, filename=filename
+            )
+        elif shape_arg == "kwarg":
+            t = MemoryMappedTensor.ones(
+                shape=shape, dtype=dtype, device=device, filename=filename
+            )
         assert t.shape == shape
         if dtype is not None:
             assert t.dtype is dtype
@@ -160,7 +187,41 @@ class TestConstructors:
             assert t.filename == filename
         assert (t == 1).all()
 
-    def test_full(self, shape, dtype, device, tmp_path, from_path):
+    @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
+    def test_empty(self, shape, dtype, device, tmp_path, from_path, shape_arg):
+        if from_path:
+            filename = tmp_path / "file.memmap"
+        else:
+            filename = None
+        if device is not None and device.type != "cpu":
+            with pytest.raises(RuntimeError):
+                MemoryMappedTensor.empty(
+                    shape, dtype=dtype, device=device, filename=filename
+                )
+            return
+        if shape_arg == "expand":
+            with pytest.raises(TypeError) if shape == () else nullcontext():
+                t = MemoryMappedTensor.empty(
+                    *shape, dtype=dtype, device=device, filename=filename
+                )
+            if shape == ():
+                return
+        elif shape_arg == "arg":
+            t = MemoryMappedTensor.empty(
+                shape, dtype=dtype, device=device, filename=filename
+            )
+        elif shape_arg == "kwarg":
+            t = MemoryMappedTensor.empty(
+                shape=shape, dtype=dtype, device=device, filename=filename
+            )
+        assert t.shape == shape
+        if dtype is not None:
+            assert t.dtype is dtype
+        if filename is not None:
+            assert t.filename == filename
+
+    @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
+    def test_full(self, shape, dtype, device, tmp_path, from_path, shape_arg):
         if from_path:
             filename = tmp_path / "file.memmap"
         else:
@@ -171,9 +232,21 @@ class TestConstructors:
                     shape, fill_value=2, dtype=dtype, device=device, filename=filename
                 )
             return
-        t = MemoryMappedTensor.full(
-            shape, fill_value=2, dtype=dtype, device=device, filename=filename
-        )
+        if shape_arg == "expand":
+            with pytest.raises(TypeError) if shape == () else nullcontext():
+                t = MemoryMappedTensor.full(
+                    *shape, fill_value=2, dtype=dtype, device=device, filename=filename
+                )
+            if shape == ():
+                return
+        elif shape_arg == "arg":
+            t = MemoryMappedTensor.full(
+                shape, fill_value=2, dtype=dtype, device=device, filename=filename
+            )
+        elif shape_arg == "kwarg":
+            t = MemoryMappedTensor.full(
+                shape=shape, fill_value=2, dtype=dtype, device=device, filename=filename
+            )
         assert t.shape == shape
         if dtype is not None:
             assert t.dtype is dtype
