@@ -6,7 +6,7 @@
 from tensordict._lazy import LazyStackedTensorDict  # noqa: F401
 from tensordict.base import (  # noqa: F401
     is_tensor_collection,
-    NestedKey,
+    NO_DEFAULT,
     TensorDictBase,
 )
 from tensordict.functional import (  # noqa: F401
@@ -16,4 +16,22 @@ from tensordict.functional import (  # noqa: F401
     pad,
     pad_sequence,
 )
+from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap_deprec import is_memmap, MemmapTensor
 from tensordict.td import SubTensorDict, TensorDict  # noqa: F401
+from tensordict.utils import (
+    cache,
+    convert_ellipsis_to_idx,
+    erase_cache,
+    expand_as_right,
+    expand_right,
+    implement_for,
+    index_keyedjaggedtensor,
+    infer_size_impl,
+    int_generator,
+    is_nested_key,
+    is_seq_of_nested_key,
+    is_tensorclass,
+    lock_blocked,
+    NestedKey,
+)
