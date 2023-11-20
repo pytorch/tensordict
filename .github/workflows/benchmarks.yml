@@ -49,12 +49,8 @@ jobs:
 
   benchmark_gpu:
     name: GPU Pytest benchmark
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        include:
-         - os: linux.g5.4xlarge.nvidia.gpu
-           python-version: 3.8
+    runs-on: linux.g5.4xlarge.nvidia.gpu
+    os: linux
     defaults:
       run:
         shell: bash -l {0}
@@ -100,6 +96,11 @@ jobs:
         python -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
         python -m pip install -e .
         python -m pip install pytest pytest-benchmark
+    - name: check GPU presence
+      run: |
+        python -c """import torch
+        assert torch.cuda.device_count()
+        """
     - name: Run benchmarks
       run: |
         cd benchmarks/
