@@ -34,7 +34,7 @@ from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import Buffer, set_skip_existing, skip_existing
-from tensordict.td import unravel_key_list
+from tensordict._tensordict import unravel_key_list
 from torch import distributions as d, nn
 from torch.distributions import Normal
 

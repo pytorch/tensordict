@@ -17,7 +17,7 @@ from tensordict.memmap_deprec import is_memmap, MemmapTensor, set_transfer_owner
 from tensordict.persistent import PersistentTensorDict
 from tensordict.td import is_tensor_collection, SubTensorDict, TensorDict
 from tensordict.tensorclass import tensorclass
-from tensordict.utils import is_batchedtensor, is_tensorclass
+from tensordict.utils import assert_allclose_td, is_batchedtensor, is_tensorclass
 
 try:
     from tensordict.version import __version__
@@ -33,6 +33,7 @@ __all__ = [
     "MemmapTensor",
     "SubTensorDict",
     "make_tensordict",
+    "assert_allclose_td",
     "TensorDict",
     "TensorDictBase",
     "merge_tensordicts",
