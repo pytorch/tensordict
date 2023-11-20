@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import functools
 import inspect
-from typing import Any, Callable, OrderedDict
+from typing import Any, Callable
 
 import torch
 from torch import nn

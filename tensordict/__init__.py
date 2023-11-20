@@ -4,19 +4,20 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict._lazy import LazyStackedTensorDict
-from tensordict.base import is_batchedtensor, TensorDictBase
-from tensordict.functional import merge_tensordicts, pad, pad_sequence
+from tensordict.base import TensorDictBase
+from tensordict.functional import (
+    dense_stack_tds,
+    make_tensordict,
+    merge_tensordicts,
+    pad,
+    pad_sequence,
+)
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import is_memmap, MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
-from tensordict.td import (
-    is_tensor_collection,
-    make_tensordict,
-    SubTensorDict,
-    TensorDict,
-)
+from tensordict.td import is_tensor_collection, SubTensorDict, TensorDict
 from tensordict.tensorclass import tensorclass
-from tensordict.utils import is_tensorclass
+from tensordict.utils import is_batchedtensor, is_tensorclass
 
 try:
     from tensordict.version import __version__
@@ -31,12 +32,12 @@ __all__ = [
     "LazyStackedTensorDict",
     "MemmapTensor",
     "SubTensorDict",
+    "make_tensordict",
     "TensorDict",
     "TensorDictBase",
     "merge_tensordicts",
     "set_transfer_ownership",
     "pad_sequence",
-    "make_tensordict",
     "is_memmap",
     "is_batchedtensor",
     "is_tensor_collection",

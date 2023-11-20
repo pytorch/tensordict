@@ -49,7 +49,6 @@ from tensordict._tensordict import (  # noqa: F401
 )
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
-from torch._C._functorch import get_unwrapped, is_batchedtensor
 from torch.nn.parameter import _ParameterMeta
 
 if TYPE_CHECKING:
@@ -64,12 +63,6 @@ try:
 except ImportError:
     pass
 
-try:
-    from torchrec import KeyedJaggedTensor
-
-    _has_torchrec = True
-except ImportError as err:
-    _has_torchrec = False
 TORCHREC_ERR = None
 try:
     from torchrec import KeyedJaggedTensor
@@ -81,7 +74,7 @@ except ImportError as err:
     class KeyedJaggedTensor:  # noqa: D103, D101
         pass
 
-    TORCHREC_ERR = str(err)
+    TORCHREC_ERR = err
 
 T = TypeVar("T", bound="TensorDictBase")
 
@@ -401,7 +394,7 @@ def index_keyedjaggedtensor(
 
     """
     if not _has_torchrec:
-        raise ImportError(TORCHREC_ERR)
+        raise TORCHREC_ERR
     if isinstance(index, (int,)):
         raise ValueError(
             "Indexing KeyedJaggedTensor instances with an integer is prohibited, "
@@ -471,9 +464,6 @@ def setitem_keyedjaggedtensor(
         ... )
         >>> setitem_keyedjaggedtensor(jag_tensor, [0, 2], sub_jag_tensor)
     """
-    #     if not _has_torchrec:
-    #         raise ImportError(TORCHREC_ERR)
-
     orig_tensor_lengths = orig_tensor.lengths()
     orig_tensor_keys = orig_tensor.keys()
     orig_tensor_numel = len(orig_tensor_lengths) // len(orig_tensor_keys)
@@ -1278,7 +1268,7 @@ def assert_allclose_td(
     ):
         raise TypeError("assert_allclose inputs must be of TensorDict type")
 
-    from ._lazy import LazyStackedTensorDict
+    from tensordict._lazy import LazyStackedTensorDict
 
     if isinstance(actual, LazyStackedTensorDict) and isinstance(
         expected, LazyStackedTensorDict
@@ -1338,7 +1328,7 @@ def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
     return f"{cls.__name__}({s})"
 
 
-def _make_repr(key: str, item: "CompatibleType", tensordict: T) -> str:
+def _make_repr(key: str, item, tensordict: T) -> str:
     from tensordict.base import _is_tensor_collection
 
     if _is_tensor_collection(type(item)):
@@ -1466,7 +1456,7 @@ def _set_max_batch_size(source: T, batch_dims=None):
         curr_dim += 1
 
 
-def _clone_value(value: "CompatibleType", recurse: bool) -> "CompatibleType":
+def _clone_value(value, recurse: bool):
     from tensordict.base import _is_tensor_collection
 
     if recurse:
@@ -1719,6 +1709,7 @@ class set_lazy_legacy(_DecoratorContextManager):
 
 
 def lazy_legacy():
+    """Returns `True` if lazy representations will be used for selected methods."""
     global _LAZY_OP
     return _LAZY_OP
 

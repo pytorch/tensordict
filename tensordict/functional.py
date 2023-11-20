@@ -4,11 +4,10 @@ from typing import Sequence
 
 import torch
 
-from ._lazy import LazyStackedTensorDict
-
-from .base import _is_tensor_collection, T, TensorDictBase
-from .tensordict import TensorDict
-from .utils import _check_keys, _shape, DeviceType
+from tensordict._lazy import LazyStackedTensorDict
+from tensordict.base import _is_tensor_collection, CompatibleType, T, TensorDictBase
+from tensordict.td import TensorDict
+from tensordict.utils import _check_keys, _shape, DeviceType
 
 
 def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
@@ -264,3 +263,73 @@ def dense_stack_tds(
 
     out = td_list[0].unsqueeze(dim).expand(shape).clone()
     return torch.stack(td_list, dim=dim, out=out)
+
+
+def make_tensordict(
+    input_dict: dict[str, CompatibleType] | None = None,
+    batch_size: Sequence[int] | torch.Size | int | None = None,
+    device: DeviceType | None = None,
+    **kwargs: CompatibleType,  # source
+) -> TensorDict:
+    """Returns a TensorDict created from the keyword arguments or an input dictionary.
+
+    If ``batch_size`` is not specified, returns the maximum batch size possible.
+
+    This function works on nested dictionaries too, or can be used to determine the
+    batch-size of a nested tensordict.
+
+    Args:
+        input_dict (dictionary, optional): a dictionary to use as a data source
+            (nested keys compatible).
+        **kwargs (TensorDict or torch.Tensor): keyword arguments as data source
+            (incompatible with nested keys).
+        batch_size (iterable of int, optional): a batch size for the tensordict.
+        device (torch.device or compatible type, optional): a device for the TensorDict.
+
+    Examples:
+        >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
+        >>> print(make_tensordict(input_dict))
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+        >>> # alternatively
+        >>> td = make_tensordict(**input_dict)
+        >>> # nested dict: the nested TensorDict can have a different batch-size
+        >>> # as long as its leading dims match.
+        >>> input_dict = {"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}
+        >>> print(make_tensordict(input_dict))
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3, 4]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+        >>> # we can also use this to work out the batch sie of a tensordict
+        >>> input_td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}, [])
+        >>> print(make_tensordict(input_td))
+        TensorDict(
+            fields={
+                a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: TensorDict(
+                    fields={
+                        c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                    batch_size=torch.Size([3, 4]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+    """
+    if input_dict is not None:
+        kwargs.update(input_dict)
+    return TensorDict.from_dict(kwargs, batch_size=batch_size, device=device)

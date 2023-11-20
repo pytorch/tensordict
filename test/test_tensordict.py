@@ -37,13 +37,13 @@ import contextlib
 from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
 from functorch import dim as ftdim
 
-from tensordict import LazyStackedTensorDict, MemmapTensor, TensorDict
+from tensordict import LazyStackedTensorDict, make_tensordict, MemmapTensor, TensorDict
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import TensorDictBase
 from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.td import _SubTensorDict, is_tensor_collection, make_tensordict
+from tensordict.td import _SubTensorDict, is_tensor_collection
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,

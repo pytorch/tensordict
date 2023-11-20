@@ -21,13 +21,10 @@ from functorch import dim as ftdim
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.base import (
     _ACCEPTED_CLASSES,
-    _add_batch_dim,
     _is_tensor_collection,
-    _remove_batch_dim,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
     is_tensor_collection,
-    KeyedJaggedTensor,
     NO_DEFAULT,
     T,
     TensorDictBase,
@@ -51,11 +48,31 @@ from tensordict.utils import (
     IndexType,
     infer_size_impl,
     is_tensorclass,
+    KeyedJaggedTensor,
     lock_blocked,
     NestedKey,
 )
 from torch import Tensor
 from torch.utils._pytree import tree_map
+
+_has_functorch = False
+try:
+    try:
+        from torch._C._functorch import (
+            _add_batch_dim,
+            _remove_batch_dim,
+            is_batchedtensor,
+        )
+    except ImportError:
+        from functorch._C import is_batchedtensor
+
+    _has_functorch = True
+except ImportError:
+    _has_functorch = False
+
+    def is_batchedtensor(tensor: Tensor) -> bool:
+        """Placeholder for the functorch function."""
+        return False
 
 
 class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
@@ -124,7 +141,7 @@ class LazyStackedTensorDict(TensorDictBase):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Callable:
-        from ._torch_func import LAZY_TD_HANDLED_FUNCTIONS
+        from tensordict._torch_func import LAZY_TD_HANDLED_FUNCTIONS
 
         if func in LAZY_TD_HANDLED_FUNCTIONS:
             if kwargs is None:

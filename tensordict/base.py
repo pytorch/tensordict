@@ -27,9 +27,8 @@ from typing import (
 
 import numpy as np
 import torch
-from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 
-from .utils import (
+from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _is_tensorclass,
     _KEY_ERROR,
@@ -50,6 +49,7 @@ from .utils import (
     NestedKey,
     prod,
 )
+from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
@@ -259,7 +259,7 @@ class TensorDictBase(MutableMapping):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Callable:
-        from ._torch_func import TD_HANDLED_FUNCTIONS
+        from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 
         if kwargs is None:
             kwargs = {}
@@ -1855,7 +1855,7 @@ class TensorDictBase(MutableMapping):
 
         """
         # TODO: allow to pass a list of keys to update if not everything needs to be updated
-        from ._lazy import LazyStackedTensorDict
+        from tensordict._lazy import LazyStackedTensorDict
 
         if input_dict_or_td is self:
             # no op
@@ -3270,7 +3270,7 @@ class TensorDictBase(MutableMapping):
 
 
         """
-        from .persistent import PersistentTensorDict
+        from tensordict.persistent import PersistentTensorDict
 
         out = PersistentTensorDict.from_dict(
             self,
