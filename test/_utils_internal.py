@@ -9,13 +9,11 @@ import numpy as np
 import torch
 
 from tensordict import PersistentTensorDict, tensorclass, TensorDict
+from tensordict._lazy import LazyStackedTensorDict
+from tensordict._torch_func import _stack as stack_td
+from tensordict.base import is_tensor_collection
 from tensordict.nn.params import TensorDictParams
 from tensordict.persistent import _has_h5 as _has_h5py
-from tensordict.tensordict import (
-    _stack as stack_td,
-    is_tensor_collection,
-    LazyStackedTensorDict,
-)
 
 
 def prod(sequence):
@@ -181,7 +179,7 @@ class TestTensorDictsBase:
             batch_size=[2, 4, 3, 2, 1],
             device=device,
         )
-        return td.get_sub_tensordict(1)
+        return td._get_sub_tensordict(1)
 
     for device in get_available_devices():
         TYPES_DEVICES += [["sub_td", device]]
@@ -196,7 +194,7 @@ class TestTensorDictsBase:
             batch_size=[4, 2, 3, 2, 1],
             device=device,
         )
-        return td.get_sub_tensordict((slice(None), 1))
+        return td._get_sub_tensordict((slice(None), 1))
 
     for device in get_available_devices():
         TYPES_DEVICES += [["sub_td2", device]]

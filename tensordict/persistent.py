@@ -11,7 +11,7 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable
 
-from tensordict._tensordict import _unravel_key_to_tuple
+from tensordict.td import _unravel_key_to_tuple
 from torch import multiprocessing as mp
 
 H5_ERR = None
@@ -23,19 +23,18 @@ except ModuleNotFoundError as err:
     H5_ERR = err
     _has_h5 = False
 
+import json
+import os
+
 import numpy as np
 import torch
-
-from tensordict import MemmapTensor
-from tensordict.tensordict import (
-    _TensorDictKeysView,
-    CompatibleType,
-    is_tensor_collection,
-    NO_DEFAULT,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict.base import is_tensor_collection, T, TensorDictBase
+from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
+from tensordict.td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
 from tensordict.utils import (
+    _KEY_ERROR,
+    _LOCK_ERROR,
     _parse_to,
     _split_tensordict,
     cache,
@@ -319,7 +318,7 @@ class PersistentTensorDict(TensorDictBase):
                     batch_size=self.batch_size,
                     device=self.device,
                 )
-            return out.get_sub_tensordict(idx)
+            return out._get_sub_tensordict(idx)
         else:
             return default
 
@@ -372,7 +371,7 @@ class PersistentTensorDict(TensorDictBase):
         if isinstance(item, list):
             # convert to tensor
             item = torch.tensor(item)
-        return self.get_sub_tensordict(item)
+        return self._get_sub_tensordict(item)
 
     __getitems__ = __getitem__
 
@@ -384,7 +383,7 @@ class PersistentTensorDict(TensorDictBase):
         if isinstance(index, list):
             # convert to tensor
             index = torch.tensor(index)
-        sub_td = self.get_sub_tensordict(index)
+        sub_td = self._get_sub_tensordict(index)
         err_set_batch_size = None
         if not isinstance(value, TensorDictBase):
             value = TensorDict.from_dict(value, batch_size=[])
@@ -535,58 +534,80 @@ class PersistentTensorDict(TensorDictBase):
             mm_val._memmap_array[:] = self._get_array(key)
         return mm_like
 
-    def memmap_like(self, prefix: str | None = None) -> TensorDictBase:
+    def memmap_like(self, prefix: str | None = None) -> T:
         # re-implements this to make it faster using the meta-data
+        def save_metadata(data: TensorDictBase, filepath, metadata=None):
+            if metadata is None:
+                metadata = {}
+            metadata.update(
+                {
+                    "shape": list(data.shape),
+                    "device": str(data.device),
+                }
+            )
+            with open(filepath, "w") as json_metadata:
+                json.dump(metadata, json_metadata)
+
         if prefix is not None:
             prefix = Path(prefix)
             if not prefix.exists():
-                prefix.mkdir(exist_ok=True)
-            torch.save(
-                {"batch_size": self.batch_size, "device": self.device},
-                prefix / "meta.pt",
-            )
+                os.makedirs(prefix, exist_ok=True)
+            metadata = {}
         if not self.keys():
             raise Exception(
                 "memmap_like() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
-        tensordict = TensorDict({}, self.batch_size, device=self.device)
+        tensordict = TensorDict(
+            {},
+            self.batch_size,
+            device=self.device,
+            names=self.names if self._has_names() else None,
+        )
         for key, value in self._items_metadata():
             if not value["array"]:
                 value = self.get(key)
                 if prefix is not None:
                     # ensure subdirectory exists
-                    (prefix / key).mkdir(exist_ok=True)
-                    tensordict[key] = value.memmap_like(
-                        prefix=prefix / key,
-                    )
-                    torch.save(
-                        {"batch_size": value.batch_size, "device": value.device},
-                        prefix / key / "meta.pt",
+                    os.makedirs(prefix / key, exist_ok=True)
+                    tensordict._set_str(
+                        key,
+                        value.memmap_like(
+                            prefix=prefix / key,
+                        ),
+                        inplace=False,
+                        validated=True,
                     )
                 else:
-                    tensordict[key] = value.memmap_like()
+                    tensordict._set_str(
+                        key, value.memmap_like(), inplace=False, validated=True
+                    )
                 continue
             else:
-                tensordict[key] = MemmapTensor(
-                    value["shape"],
-                    device="cpu",
-                    dtype=value["dtype"],
-                    filename=str(prefix / f"{key}.memmap")
-                    if prefix is not None
-                    else None,
-                )
-            if prefix is not None:
-                torch.save(
-                    {
-                        "shape": value["shape"],
-                        "device": torch.device("cpu"),
-                        "dtype": value["dtype"],
-                    },
-                    prefix / f"{key}.meta.pt",
+                if prefix is not None:
+                    metadata[key] = {
+                        "dtype": str(value.dtype),
+                        "shape": value.shape,
+                        "device": str(value.device),
+                    }
+                tensordict._set_str(
+                    key,
+                    MemoryMappedTensor.empty(
+                        value["shape"],
+                        # device="cpu",
+                        dtype=value["dtype"],
+                        filename=str(prefix / f"{key}.memmap")
+                        if prefix is not None
+                        else None,
+                    ),
+                    inplace=False,
+                    validated=True,
                 )
         tensordict._is_memmap = True
+        tensordict._device = torch.device("cpu")
         tensordict.lock_()
+        if prefix is not None:
+            save_metadata(self, prefix=prefix, metadata=metadata)
         return tensordict
 
     def pin_memory(self):
@@ -683,6 +704,20 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
+    def flatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
+        if inplace:
+            raise ValueError(
+                "Cannot call flatten_keys in_place with a PersistentTensorDict."
+            )
+        return self.to_tensordict().flatten_keys(separator=separator)
+
+    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
+        if inplace:
+            raise ValueError(
+                "Cannot call unflatten_keys in_place with a PersistentTensorDict."
+            )
+        return self.to_tensordict().unflatten_keys(separator=separator)
+
     def share_memory_(self):
         raise NotImplementedError(
             "Cannot call share_memory_ on a PersistentTensorDict. "
@@ -713,7 +748,7 @@ class PersistentTensorDict(TensorDictBase):
             raise RuntimeError("Cannot set a tensor that has requires_grad=True.")
         if isinstance(value, torch.Tensor):
             out = value.cpu().detach().numpy()
-        elif isinstance(value, MemmapTensor):
+        elif isinstance(value, _MemmapTensor):
             out = value._memmap_array
         elif isinstance(value, dict):
             out = TensorDict(value, [])
@@ -742,7 +777,7 @@ class PersistentTensorDict(TensorDictBase):
             if idx is not None:
                 raise RuntimeError("Cannot pass an index to _set when inplace=False.")
             elif self.is_locked:
-                raise RuntimeError(self.LOCK_ERROR)
+                raise RuntimeError(_LOCK_ERROR)
         # shortcut set if we're placing a tensordict
         if is_tensor_collection(value):
             if isinstance(key, tuple):
@@ -823,9 +858,7 @@ class PersistentTensorDict(TensorDictBase):
             has_key = key in self.file
             if inplace is True and not has_key:  # inplace could be None
                 raise KeyError(
-                    TensorDictBase.KEY_ERROR.format(
-                        key, self.__class__.__name__, sorted(self.keys())
-                    )
+                    _KEY_ERROR.format(key, self.__class__.__name__, sorted(self.keys()))
                 )
             inplace = has_key
         return inplace
@@ -931,6 +964,27 @@ class PersistentTensorDict(TensorDictBase):
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
         # not accessible
         ...
+
+    __eq__ = TensorDict.__eq__
+    __ne__ = TensorDict.__ne__
+    __xor__ = TensorDict.__xor__
+    _apply_nest = TensorDict._apply_nest
+    _check_device = TensorDict._check_device
+    _check_is_shared = TensorDict._check_is_shared
+    _convert_to_tensordict = TensorDict._convert_to_tensordict
+    _index_tensordict = TensorDict._index_tensordict
+    all = TensorDict.all
+    any = TensorDict.any
+    expand = TensorDict.expand
+    masked_select = TensorDict.masked_select
+    reshape = TensorDict.reshape
+    split = TensorDict.split
+    to_module = TensorDict.to_module
+    unbind = TensorDict.unbind
+    _view = TensorDict._view
+    _permute = TensorDict._permute
+    _transpose = TensorDict._transpose
+    _get_names_idx = TensorDict._get_names_idx
 
 
 def _set_max_batch_size(source: PersistentTensorDict):

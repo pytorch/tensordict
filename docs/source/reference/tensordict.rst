@@ -64,3 +64,4 @@ Utils
     pad
     pad_sequence
     dense_stack_tds
+    set_lazy_legacy

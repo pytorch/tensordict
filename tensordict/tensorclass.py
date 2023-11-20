@@ -21,17 +21,18 @@ import tensordict as tensordict_lib
 
 import torch
 from tensordict._tensordict import _unravel_key_to_tuple
+from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
-from tensordict.tensordict import (
-    _get_repr,
-    is_tensor_collection,
-    NO_DEFAULT,
-    TD_HANDLED_FUNCTIONS,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict.td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 
-from tensordict.utils import DeviceType, IndexType, is_tensorclass, NestedKey
+from tensordict.utils import (
+    _get_repr,
+    _LOCK_ERROR,
+    DeviceType,
+    IndexType,
+    is_tensorclass,
+    NestedKey,
+)
 from torch import Tensor
 
 T = TypeVar("T", bound=TensorDictBase)
@@ -196,8 +197,8 @@ def tensorclass(cls: T) -> T:
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
-    tensordict_lib.tensordict._ACCEPTED_CLASSES = (
-        *tensordict_lib.tensordict._ACCEPTED_CLASSES,
+    tensordict_lib.base._ACCEPTED_CLASSES = (
+        *tensordict_lib.base._ACCEPTED_CLASSES,
         cls,
     )
     return cls
@@ -623,14 +624,14 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
     if isinstance(key, str):
         __dict__ = self.__dict__
         if __dict__["_tensordict"].is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+            raise RuntimeError(_LOCK_ERROR)
         expected_keys = self.__dataclass_fields__
         if key not in expected_keys:
             raise AttributeError(
                 f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
             )
 
-        if isinstance(value, tuple(tensordict_lib.tensordict._ACCEPTED_CLASSES)):
+        if isinstance(value, tuple(tensordict_lib.base._ACCEPTED_CLASSES)):
             # Avoiding key clash, honoring the user input to assign tensor type data to the key
             if key in self._non_tensordict.keys():
                 if inplace:

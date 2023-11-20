@@ -3,24 +3,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from tensordict._lazy import LazyStackedTensorDict
+from tensordict.base import is_batchedtensor, TensorDictBase
+from tensordict.functional import merge_tensordicts, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.memmap_deprec import MemmapTensor, set_transfer_ownership
+from tensordict.memmap_deprec import is_memmap, MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
-from tensordict.tensorclass import tensorclass
-from tensordict.tensordict import (
-    dense_stack_tds,
-    is_batchedtensor,
-    is_memmap,
+from tensordict.td import (
     is_tensor_collection,
-    LazyStackedTensorDict,
     make_tensordict,
-    merge_tensordicts,
-    pad,
-    pad_sequence,
     SubTensorDict,
     TensorDict,
-    TensorDictBase,
 )
+from tensordict.tensorclass import tensorclass
 from tensordict.utils import is_tensorclass
 
 try:

@@ -98,7 +98,7 @@ class MemoryMappedTensor(torch.Tensor):
     __torch_function__ = torch._C._disabled_torch_function_impl
 
     @classmethod
-    def from_tensor(cls, input, *, filename=None, existsok=False):
+    def from_tensor(cls, input, *, filename=None, existsok=False, copy_existing=False):
         """Creates a MemoryMappedTensor with the same content as another tensor.
 
         If the tensor is already a MemoryMappedTensor the original tensor is
@@ -113,6 +113,11 @@ class MemoryMappedTensor(torch.Tensor):
                 instead.
             existsok (bool, optional): if ``True``, the file will overwrite
                 an existing file. Defaults to ``False``.
+            copy_existing (bool, optional): if ``True`` and the provided input
+                is a MemoryMappedTensor with an associated filename, copying
+                the content to the new location is permitted. Otherwise an
+                exception is thown. This behaviour exists to prevent
+                unadvertedly duplicating data on disk.
 
         """
         if isinstance(input, MemoryMappedTensor):
@@ -123,6 +128,16 @@ class MemoryMappedTensor(torch.Tensor):
                 # either location was not specified, or memmap is already in the
                 # correct location, so just return the MemmapTensor unmodified
                 return input
+            elif (
+                not copy_existing
+                and filename is not None
+                and Path(filename).absolute() != Path(input._filename).absolute()
+            ):
+                raise RuntimeError(
+                    f"A filename was provided but the tensor already has a file associated "
+                    f"({input.filename}). "
+                    f"To copy the tensor onto the new location, pass copy_existing=True."
+                )
         elif isinstance(input, np.ndarray):
             raise TypeError(
                 "Convert input to torch.Tensor before calling MemoryMappedTensor.from_tensor."
