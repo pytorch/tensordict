@@ -1074,6 +1074,7 @@ class TensorDict(TensorDictBase):
     def names(self, value):
         # we don't run checks on types for efficiency purposes
         if value is None:
+            self._rename_subtds(value)
             self._erase_names()
             return
         num_none = sum(v is None for v in value)
@@ -1092,7 +1093,7 @@ class TensorDict(TensorDictBase):
     def _rename_subtds(self, names):
         if names is None:
             for item in self._tensordict.values():
-                if _is_tensor_collection(item.__class__):
+                if _is_tensor_collection(type(item)):
                     item._erase_names()
             return
         for item in self._tensordict.values():
