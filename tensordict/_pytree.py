@@ -83,11 +83,18 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
 
 
 def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]:
+    device = context["device"]
+    if device is not None:
+        device = (
+            device
+            if all(val.device == device for val in values if hasattr(val, "device"))
+            else None
+        )
     return TensorDict(
         dict(zip(context["keys"], values)),
         context["batch_size"],
         names=context["names"],
-        device=context["device"],
+        device=device,
     )
 
 

@@ -4,7 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict._lazy import LazyStackedTensorDict  # noqa: F401
-from tensordict.base import is_tensor_collection, TensorDictBase  # noqa: F401
+from tensordict.base import (  # noqa: F401
+    is_tensor_collection,
+    NestedKey,
+    TensorDictBase,
+)
 from tensordict.functional import (  # noqa: F401
     dense_stack_tds,
     make_tensordict,
