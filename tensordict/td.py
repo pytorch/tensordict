@@ -812,7 +812,7 @@ class TensorDict(TensorDictBase):
         batch_dims = self.batch_dims
 
         def _view(tensor):
-            return tensor.view(*shape, *tensor.shape[batch_dims:])
+            return tensor.view((*shape, *tensor.shape[batch_dims:]))
 
         return self._fast_apply(_view, batch_size=shape, call_on_nested=True)
 
@@ -830,7 +830,7 @@ class TensorDict(TensorDictBase):
         batch_dims = self.batch_dims
 
         def _reshape(tensor):
-            return tensor.reshape(*shape, *tensor.shape[batch_dims:])
+            return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
 
         return self._fast_apply(_reshape, batch_size=shape, call_on_nested=True)
 
