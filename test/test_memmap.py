@@ -506,7 +506,11 @@ def test_filename(tmp_path):
     assert mt3 is mt
 
     # memmap -> memmap with a new filename
-    mt4 = MemoryMappedTensor.from_tensor(mt, filename=tmp_path / "test2.memmap")
+    with pytest.raises(RuntimeError, match="copy_existing"):
+        MemoryMappedTensor.from_tensor(mt, filename=tmp_path / "test2.memmap")
+    mt4 = MemoryMappedTensor.from_tensor(
+        mt, filename=tmp_path / "test2.memmap", copy_existing=True
+    )
     assert str(mt4._filename) == str(tmp_path / "test2.memmap")
     assert mt4 is not mt
 

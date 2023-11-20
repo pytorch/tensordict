@@ -78,6 +78,7 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
         "keys": list(d.keys()),
         "batch_size": d.batch_size,
         "names": d.names,
+        "device": d.device,
     }
 
 
@@ -86,6 +87,7 @@ def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, 
         dict(zip(context["keys"], values)),
         context["batch_size"],
         names=context["names"],
+        device=context["device"],
     )
 
 

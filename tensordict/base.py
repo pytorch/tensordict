@@ -1344,7 +1344,7 @@ class TensorDictBase(MutableMapping):
                 Default: ``None``.
             prefix (str, optional): a prefix added to tensor
                 names to compose the keys in state_dict. Default: ``''``.
-            keep_vars (bool, optional): by default the :class:`torch.Tensor` s
+            keep_vars (bool, optional): by default the :class:`torch.Tensor` items
                 returned in the state dict are detached from autograd. If it's
                 set to ``True``, detaching will not be performed.
                 Default: ``False``.
@@ -3827,6 +3827,7 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    @cache  # noqa: B019
     def detach(self) -> T:
         """Detach the tensors in the tensordict.
 

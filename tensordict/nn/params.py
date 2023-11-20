@@ -737,7 +737,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @property
     def data(self):
-        return self.apply(lambda x: x.data)
+        return self._param_td.detach()
 
     @_unlock_and_set(inplace=True)
     def flatten_keys(
@@ -864,8 +864,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
             yield self._apply_get_post_hook(v)
 
     def state_dict(
-        self, *args, destination=None, prefix="", keep_vars=False, flatten=False
+        self, *args, destination=None, prefix="", keep_vars=False, flatten=True
     ):
+        # flatten must be True by default to comply with module's state-dict API
+        # since we want all params to be visible at root
         return self._param_td.state_dict(
             destination=destination,
             prefix=prefix,
@@ -876,6 +878,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def load_state_dict(
         self, state_dict: OrderedDict[str, Any], strict=True, assign=False
     ):
+        # The state-dict is presumably the result of a call to TensorDictParams.state_dict
+        # but can't be sure.
+
         state_dict_tensors = {}
         state_dict = dict(state_dict)
         for k, v in list(state_dict.items()):

@@ -604,6 +604,7 @@ class PersistentTensorDict(TensorDictBase):
                     validated=True,
                 )
         tensordict._is_memmap = True
+        tensordict._is_shared = False
         tensordict._device = torch.device("cpu")
         tensordict.lock_()
         if prefix is not None:

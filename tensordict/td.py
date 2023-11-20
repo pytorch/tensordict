@@ -776,6 +776,7 @@ class TensorDict(TensorDictBase):
                     validated=True,
                 )
         tensordict._is_memmap = True
+        tensordict._is_shared = False
         tensordict._device = torch.device("cpu")
         tensordict.lock_()
         if prefix is not None:
@@ -1433,6 +1434,7 @@ class TensorDict(TensorDictBase):
                 metadata=metadata,
             )
         self._is_memmap = True
+        self._is_shared = False  # since they are mutually exclusive
         self._device = torch.device("cpu")
         self.lock_()
         return self

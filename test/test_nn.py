@@ -13,6 +13,7 @@ import pytest
 import torch
 
 from tensordict import tensorclass, TensorDict
+from tensordict._tensordict import unravel_key_list
 from tensordict.nn import (
     dispatch,
     probabilistic as nn_probabilistic,
@@ -34,9 +35,9 @@ from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import Buffer, set_skip_existing, skip_existing
-from tensordict._tensordict import unravel_key_list
 from torch import distributions as d, nn
 from torch.distributions import Normal
+from torch.utils._pytree import tree_map
 
 try:
     import functorch  # noqa
@@ -3168,15 +3169,13 @@ class TestStateDict:
             sd = td.detach().clone().zero_().state_dict()
         else:
             sd = td.state_dict()
-            sd = {
-                k: v if not isinstance(v, torch.Tensor) else v * 0
-                for k, v in sd.items()
-            }
+            sd = tree_map(lambda t: t * 0 if isinstance(t, torch.Tensor) else t, sd)
         # do some op to create a graph
         td.apply(lambda x: x + 1)
         # load the data
         td.load_state_dict(sd)
         # check that data has been loaded
+        print(sd)
         assert (td == 0).all()
 
     def test_sd_module(self):
