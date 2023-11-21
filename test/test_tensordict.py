@@ -39,11 +39,11 @@ from functorch import dim as ftdim
 
 from tensordict import LazyStackedTensorDict, make_tensordict, MemmapTensor, TensorDict
 from tensordict._lazy import _CustomOpTensorDict
+from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import TensorDictBase
 from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.td import _SubTensorDict, is_tensor_collection
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -539,23 +539,22 @@ class TestTensorDicts(TestTensorDictsBase):
             inv_p = tuple(inv_p.tolist())
             if td_name in ("td_params",):
                 # TODO: Should we break this?
-                # assert (
-                #     tensordict.permute(*p).permute(*inv_p)
-                #     is tensordict._param_td
-                # )
-                # assert (
-                #     tensordict.permute(*p).permute(*other_p)._param_td
-                #     is not tensordict._param_td
-                # )
-                # assert (
-                #     torch.permute(tensordict, p).permute(inv_p)._param_td
-                #     is tensordict._param_td
-                # )
-                # assert (
-                #     torch.permute(tensordict, p).permute(other_p)._param_td
-                #     is not tensordict._param_td
-                # )
-                pass
+                assert (
+                    tensordict.permute(*p).permute(*inv_p)._param_td
+                    is tensordict._param_td
+                )
+                assert (
+                    tensordict.permute(*p).permute(*other_p)._param_td
+                    is not tensordict._param_td
+                )
+                assert (
+                    torch.permute(tensordict, p).permute(inv_p)._param_td
+                    is tensordict._param_td
+                )
+                assert (
+                    torch.permute(tensordict, p).permute(other_p)._param_td
+                    is not tensordict._param_td
+                )
             else:
                 assert assert_allclose_td(
                     tensordict.permute(*p).permute(*inv_p), tensordict

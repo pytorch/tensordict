@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict._lazy import LazyStackedTensorDict
+from tensordict._td import is_tensor_collection, SubTensorDict, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.functional import (
     dense_stack_tds,
@@ -15,7 +16,6 @@ from tensordict.functional import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import is_memmap, MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
-from tensordict.td import is_tensor_collection, SubTensorDict, TensorDict
 from tensordict.tensorclass import tensorclass
 from tensordict.utils import assert_allclose_td, is_batchedtensor, is_tensorclass
 

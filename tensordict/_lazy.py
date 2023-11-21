@@ -18,6 +18,7 @@ from typing import Any, Callable, Iterator, Sequence
 import numpy as np
 import torch
 from functorch import dim as ftdim
+from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -30,7 +31,6 @@ from tensordict.base import (
     TensorDictBase,
 )
 from tensordict.memmap import MemoryMappedTensor as MemmapTensor
-from tensordict.td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict.utils import (
     _broadcast_tensors,
     _getitem_batch_size,

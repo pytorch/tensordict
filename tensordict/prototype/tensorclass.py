@@ -1,7 +1,7 @@
 import warnings
 from functools import wraps
 
-from tensordict.td import is_tensorclass as is_tensorclass_true  # no_qa
+from tensordict._td import is_tensorclass as is_tensorclass_true  # no_qa
 from tensordict.tensorclass import tensorclass as tensorclass_true  # no_qa
 
 

@@ -229,7 +229,7 @@ class TensorDictBase(MutableMapping):
 
     def _get_sub_tensordict(self, idx: IndexType) -> T:
         """Returns a _SubTensorDict with the desired index."""
-        from tensordict.td import _SubTensorDict
+        from tensordict._td import _SubTensorDict
 
         return _SubTensorDict(source=self, idx=idx)
 

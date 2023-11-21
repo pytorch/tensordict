@@ -11,10 +11,10 @@ from typing import Any, Callable, Sequence, TypeVar
 import torch
 
 from tensordict._lazy import LazyStackedTensorDict
+from tensordict._td import TensorDict
 
 from tensordict.base import NO_DEFAULT, TensorDictBase
 from tensordict.persistent import PersistentTensorDict
-from tensordict.td import TensorDict
 from tensordict.utils import _check_keys, _ErrorInteceptor, DeviceType, lazy_legacy
 from torch import Tensor
 

@@ -9,9 +9,9 @@ import operator
 from itertools import filterfalse, tee
 from typing import Any, Callable, Iterable
 
-from tensordict.nn import TensorDictModule, TensorDictSequential
+from tensordict._td import _unravel_key_to_tuple
 
-from tensordict.td import _unravel_key_to_tuple
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torch import fx, nn

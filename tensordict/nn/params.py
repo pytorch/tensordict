@@ -15,6 +15,7 @@ from typing import Any, Callable, Iterator, OrderedDict, Sequence
 import torch
 from functorch import dim as ftdim
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
+from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 
 from tensordict.base import (
@@ -24,7 +25,6 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.td import _SubTensorDict, TensorDict
 from tensordict.utils import (
     _LOCK_ERROR,
     as_decorator,

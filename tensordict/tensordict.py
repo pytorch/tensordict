@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict._lazy import LazyStackedTensorDict  # noqa: F401
+from tensordict._td import SubTensorDict, TensorDict  # noqa: F401
 from tensordict.base import (  # noqa: F401
     is_tensor_collection,
     NO_DEFAULT,
@@ -18,7 +19,6 @@ from tensordict.functional import (  # noqa: F401
 )
 from tensordict.memmap import MemoryMappedTensor  # noqa: F401
 from tensordict.memmap_deprec import is_memmap, MemmapTensor  # noqa: F401
-from tensordict.td import SubTensorDict, TensorDict  # noqa: F401
 from tensordict.utils import (  # noqa: F401
     assert_allclose_td,
     cache,

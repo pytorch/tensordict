@@ -11,7 +11,7 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable
 
-from tensordict.td import _unravel_key_to_tuple
+from tensordict._td import _unravel_key_to_tuple
 from torch import multiprocessing as mp
 
 H5_ERR = None
@@ -28,10 +28,10 @@ import os
 
 import numpy as np
 import torch
+from tensordict._td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
 from tensordict.base import is_tensor_collection, T, TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
-from tensordict.td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
 from tensordict.utils import (
     _KEY_ERROR,
     _LOCK_ERROR,

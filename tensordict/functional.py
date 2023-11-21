@@ -5,8 +5,8 @@ from typing import Sequence
 import torch
 
 from tensordict._lazy import LazyStackedTensorDict
+from tensordict._td import TensorDict
 from tensordict.base import _is_tensor_collection, CompatibleType, T, TensorDictBase
-from tensordict.td import TensorDict
 from tensordict.utils import _check_keys, _shape, DeviceType
 
 
