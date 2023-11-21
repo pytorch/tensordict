@@ -1246,8 +1246,8 @@ class TensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value, check_shape=True)
         if not inplace:
-            # if self.is_locked:
-            #     raise RuntimeError(_LOCK_ERROR)
+            if self.is_locked:
+                raise RuntimeError(_LOCK_ERROR)
             self._tensordict[key] = value
         else:
             try:
