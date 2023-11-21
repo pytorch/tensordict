@@ -528,7 +528,7 @@ class TensorDictBase(MutableMapping):
                 f"chunks must be a strictly positive integer, got {chunks}."
             )
         # fall back on split, using upper rounding
-        split_size = - (self.batch_size[dim] // -chunks)
+        split_size = -(self.batch_size[dim] // -chunks)
         return self.split(split_size, dim=dim)
 
     @overload
