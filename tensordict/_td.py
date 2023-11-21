@@ -259,20 +259,23 @@ class TensorDict(TensorDictBase):
         return td_struct
 
     @as_decorator()
-    def to_module(self, module, return_swap: bool = True, swap_dest=None):
-
+    def to_module(self, module, return_swap: bool = True, swap_dest=None, memo=None):
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         __dict__ = module.__dict__
-        out = None
+        swap = None
         has_set_device = False
+        if memo is None:
+            memo = {}
         if return_swap:
             # this could break if the device and batch-size are not congruent.
             # For batch-size it is a minor issue (unlikely that a td with batch-size
             # is passed with to_module) but for the device it could be a problem.
             if swap_dest is None:
-                out = self.empty()
+                swap = self.empty()
+                swap.clear_device_()
             else:
-                out = swap_dest
+                swap = swap_dest
+            memo[id(module)] = swap
 
         for key, value in self.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
@@ -295,24 +298,30 @@ class TensorDict(TensorDictBase):
                     local_dest = swap_dest._get_str(key, default=NO_DEFAULT)
                 else:
                     local_dest = None
-                local_out = value.to_module(
-                    __dict__["_modules"][key],
-                    return_swap=return_swap,
-                    swap_dest=local_dest,
-                )
-            if return_swap:
+                child = __dict__["_modules"][key]
+                if id(child) in memo:
+                    local_out = memo[id(child)]
+                else:
+                    local_out = value.to_module(
+                        child,
+                        return_swap=return_swap,
+                        swap_dest=local_dest,
+                        memo=memo,
+                    )
                 # we don't want to do this op more than once
-                if (
+                if return_swap and (
                     not has_set_device
-                    and out.device is not None
+                    and swap.device is not None
                     and local_out.device is not None
-                    and local_out.device != out.device
+                    and local_out.device != swap.device
                 ):
                     has_set_device = True
                     # map out to the local_out device
-                    out = out.to(device=local_out.device)
-                out._set_str(key, local_out, inplace=False, validated=True)
-        return out
+                    swap = swap.to(device=local_out.device)
+
+            if return_swap:
+                swap._set_str(key, local_out, inplace=False, validated=True)
+        return swap
 
     def __ne__(self, other: object) -> T | bool:
         if _is_tensorclass(other):
@@ -1237,8 +1246,8 @@ class TensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value, check_shape=True)
         if not inplace:
-            if self.is_locked:
-                raise RuntimeError(_LOCK_ERROR)
+            # if self.is_locked:
+            #     raise RuntimeError(_LOCK_ERROR)
             self._tensordict[key] = value
         else:
             try:

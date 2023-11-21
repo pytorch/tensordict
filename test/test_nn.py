@@ -3198,6 +3198,88 @@ class TestStateDict:
             assert isinstance(val, nn.Parameter)
 
 
+@pytest.mark.parametrize(
+    "module_name,input_name", [["_module_shared", "_x"], ["_transformer", "_tuple_x"]]
+)
+class TestToModule:
+    @property
+    def _transformer(self):
+        # we use transformer because it's deep, has buffers etc.
+        return nn.Transformer(d_model=8, dim_feedforward=8).eval()
+
+    @property
+    def _module_shared(self):
+        # a module with the same layer appearing twice
+        l0 = nn.Linear(8, 9)
+        l1 = nn.Linear(9, 8)
+        return nn.Sequential(
+            l0,
+            l1,
+            nn.Sequential(
+                l0,
+            ),
+        )
+
+    @property
+    def _tuple_x(self):
+        x = torch.randn(2, 2, 8)
+        return (x, x)
+
+    @property
+    def _x(self):
+        return (torch.randn(2, 2, 8),)
+
+    def test_static(self, module_name, input_name):
+        torch.manual_seed(0)
+        module = getattr(self, module_name)
+        x = getattr(self, input_name)
+        params = TensorDict.from_module(module)
+        params0 = params.clone().zero_()
+        y = module(*x)
+        params0.to_module(module)
+        y0 = module(*x)
+        params.to_module(module)
+        y1 = module(*x)
+        torch.testing.assert_close(y, y1)
+        assert (y0 == 0).all()
+        assert (y0 != y1).all()
+
+    def test_cm(self, module_name, input_name):
+        torch.manual_seed(0)
+        module = getattr(self, module_name)
+        x = getattr(self, input_name)
+        params = TensorDict.from_module(module)
+        params0 = params.clone().apply(
+            lambda t, p: nn.Parameter(t * 0) if isinstance(p, nn.Parameter) else t * 0,
+            params,
+        )
+        y = module(*x)
+        with params0.to_module(module):
+            y0 = module(*x)
+            assert (params0 == TensorDict.from_module(module)).all()
+        y1 = module(*x)
+        torch.testing.assert_close(y, y1)
+        assert (y0 == 0).all()
+        assert (y0 != y1).all()
+        assert (TensorDict.from_module(module) == params).all()
+
+    def test_cm_meta(self, module_name, input_name):
+        torch.manual_seed(0)
+        module = getattr(self, module_name)
+        x = getattr(self, input_name)
+        params = TensorDict.from_module(module)
+        params_meta = params.detach().to("meta")
+        y = module(*x)
+        with params_meta.to_module(module):
+            module_meta = copy.deepcopy(module)
+        y1 = module(*x)
+        with params.to_module(module_meta):
+            y2 = module_meta(*x)
+        torch.testing.assert_close(y, y1)
+        torch.testing.assert_close(y, y2)
+        assert (TensorDict.from_module(module) == params).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

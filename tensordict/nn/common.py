@@ -1091,7 +1091,7 @@ class TensorDictModule(TensorDictModuleBase):
             )
 
         self.module = module
-        make_functional(self, keep_params=True, return_params=False)
+        # make_functional(self, keep_params=True, return_params=False)
 
     @property
     def is_functional(self) -> bool:
