@@ -29,18 +29,15 @@ except ImportError as err:
 from _utils_internal import get_available_devices
 
 from tensordict import (
+    assert_allclose_td,
     is_tensorclass,
     LazyStackedTensorDict,
     MemoryMappedTensor,
     tensorclass,
     TensorDict,
-)
-from tensordict.tensordict import (
-    _PermutedTensorDict,
-    _ViewedTensorDict,
-    assert_allclose_td,
     TensorDictBase,
 )
+from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from torch import Tensor
 
 

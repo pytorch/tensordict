@@ -14,9 +14,10 @@ from functools import wraps
 from typing import Any, Callable, Iterable
 
 import torch
+from tensordict._pytree import PYTREE_REGISTERED_TDS
 
-from tensordict import PYTREE_REGISTERED_TDS, TensorDict
-from tensordict.tensordict import _is_tensor_collection, TensorDictBase
+from tensordict._td import TensorDict
+from tensordict.base import _is_tensor_collection, TensorDictBase
 
 from tensordict.utils import implement_for
 from torch import nn

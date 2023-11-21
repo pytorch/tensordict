@@ -8,7 +8,8 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_key, unravel_key_list
+from tensordict import unravel_key, unravel_key_list
+from tensordict._tensordict import _unravel_key_to_tuple
 
 from tensordict.utils import (
     _getitem_batch_size,

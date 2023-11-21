@@ -883,3 +883,12 @@ def memmap_tensor_as_tensor(
         shape=list(mem_map_tensor.shape),
         mv=memoryview(mem_map_tensor._memmap_array),
     )
+
+
+def is_memmap(datatype: type | Any) -> bool:
+    """Returns ``True`` if the class is a subclass of :class:`~.MemmapTensor` or the object an instance of it."""
+    return (
+        issubclass(datatype, MemmapTensor)
+        if isinstance(datatype, type)
+        else isinstance(datatype, MemmapTensor)
+    )

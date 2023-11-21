@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import functools
 import inspect
-from typing import Any, Callable, OrderedDict
+from typing import Any, Callable
 
 import torch
 from torch import nn
@@ -16,7 +16,6 @@ __all__ = ["mappings", "inv_softplus", "biased_softplus"]
 _SKIP_EXISTING = False
 
 from tensordict._contextlib import _DecoratorContextManager
-from torch.nn.parameter import _disabled_torch_function_impl, _ParameterMeta
 
 
 def inv_softplus(bias: float | torch.Tensor) -> float | torch.Tensor:
@@ -286,46 +285,5 @@ def _rebuild_buffer(data, requires_grad, backward_hooks):
     return buffer
 
 
-class Buffer(torch.Tensor, metaclass=_ParameterMeta):
-    r"""A kind of Tensor that is to be considered a module buffer.
-
-    Args:
-        data (Tensor): buffer tensor.
-        requires_grad (bool, optional): if the buffer requires gradient. See
-            :ref:`locally-disable-grad-doc` for more details. Default: `False`
-    """
-
-    def __new__(cls, data=None, requires_grad=False):
-        if data is None:
-            data = torch.empty(0)
-        if type(data) is torch.Tensor or type(data) is Buffer:
-            # For ease of BC maintenance, keep this path for standard Tensor.
-            # Eventually (tm), we should change the behavior for standard Tensor to match.
-            return torch.Tensor._make_subclass(cls, data, requires_grad)
-
-        # Path for custom tensors: set a flag on the instance to indicate parameter-ness.
-        t = data.detach().requires_grad_(requires_grad)
-        t._is_buffer = True
-        return t
-
-    def __deepcopy__(self, memo):
-        if id(self) in memo:
-            return memo[id(self)]
-        else:
-            result = type(self)(
-                self.data.clone(memory_format=torch.preserve_format), self.requires_grad
-            )
-            memo[id(self)] = result
-            return result
-
-    def __repr__(self):
-        return "Buffer containing:\n" + super(Buffer, self).__repr__()
-
-    def __reduce_ex__(self, proto):
-        # See Note [Don't serialize hooks]
-        return (
-            torch._utils._rebuild_parameter,
-            (self.data, self.requires_grad, OrderedDict()),
-        )
-
-    __torch_function__ = _disabled_torch_function_impl
+# For backward compatibility in imports
+from tensordict.utils import Buffer  # noqa

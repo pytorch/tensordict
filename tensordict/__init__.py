@@ -3,25 +3,21 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from tensordict.memmap import MemoryMappedTensor
-from tensordict.memmap_deprec import MemmapTensor, set_transfer_ownership
-from tensordict.persistent import PersistentTensorDict
-from tensordict.tensorclass import tensorclass
-from tensordict.tensordict import (
+from tensordict._lazy import LazyStackedTensorDict
+from tensordict._td import is_tensor_collection, SubTensorDict, TensorDict
+from tensordict.base import TensorDictBase
+from tensordict.functional import (
     dense_stack_tds,
-    is_batchedtensor,
-    is_memmap,
-    is_tensor_collection,
-    LazyStackedTensorDict,
     make_tensordict,
     merge_tensordicts,
     pad,
     pad_sequence,
-    SubTensorDict,
-    TensorDict,
-    TensorDictBase,
 )
-from tensordict.utils import is_tensorclass
+from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap_deprec import is_memmap, MemmapTensor, set_transfer_ownership
+from tensordict.persistent import PersistentTensorDict
+from tensordict.tensorclass import tensorclass
+from tensordict.utils import assert_allclose_td, is_batchedtensor, is_tensorclass
 
 try:
     from tensordict.version import __version__
@@ -36,12 +32,13 @@ __all__ = [
     "LazyStackedTensorDict",
     "MemmapTensor",
     "SubTensorDict",
+    "make_tensordict",
+    "assert_allclose_td",
     "TensorDict",
     "TensorDictBase",
     "merge_tensordicts",
     "set_transfer_ownership",
     "pad_sequence",
-    "make_tensordict",
     "is_memmap",
     "is_batchedtensor",
     "is_tensor_collection",
