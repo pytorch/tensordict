@@ -2957,6 +2957,8 @@ class TensorDictBase(MutableMapping):
                 of the pool will be seeded with the provided seed incremented
                 by a unique integer from ``0`` to ``num_workers``. If no seed
                 is provided, a random integer will be used as seed.
+                To work with unseeded workers, a pool should be created separately
+                and passed to :meth:`map` directly.
                 .. note::
                   Caution should be taken when providing a low-valued seed as
                   this can cause autocorrelation between experiments, example:
@@ -2964,6 +2966,15 @@ class TensorDictBase(MutableMapping):
                   range from 4 to 11. If the seed is 5, the workers seed will range
                   from 5 to 12. These two experiments will have an overlap of 7
                   seeds, which can have unexpected effects on the results.
+
+                .. note::
+                  The goal of seeding the workers is to have independent seed on
+                  each worker, and NOT to have reproducible results across calls
+                  of the `map` method. In other words, two experiments may and
+                  probably will return different results as it is impossible to
+                  know which worker will pick which job. However, we can make sure
+                  that each worker has a different seed and that the pseudo-random
+                  operations on each will be uncorrelated.
 
         Examples:
             >>> import torch
