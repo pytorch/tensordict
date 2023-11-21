@@ -33,15 +33,15 @@ def big_td():
     )
 
 
-def big_nested_td():
+def big_nested_td(size=(3, 4)):
     return (
         (
             TensorDict(
                 {
-                    ".".join([str(j) for j in range(i)] + ["t"]): torch.zeros(3, 4) + i
+                    ".".join([str(j) for j in range(i)] + ["t"]): torch.zeros(size) + i
                     for i in range(1, 20)
                 },
-                [3, 4],
+                size,
             ).unflatten_keys("."),
         ),
         {},
@@ -62,7 +62,7 @@ def big_nested_stacked_td():
                         + i
                         for i in range(1, 20)
                     },
-                    [3, 10],
+                    batch_size=[3, 10],
                 )
                 .unflatten_keys(".")
                 .unbind(1),
@@ -664,6 +664,16 @@ def test_unbind_speed_stack0(benchmark):
 def test_unbind_speed_stack1(benchmark):
     (td,), _ = big_nested_stacked_td()
     benchmark(lambda td: td.unbind(1), td)
+
+
+def test_split(benchmark):
+    (td,), _ = big_nested_td(size=(3, 20))
+    benchmark(lambda td: td.split(2, dim=1), td)
+
+
+def test_chunk(benchmark):
+    (td,), _ = big_nested_td(size=(3, 20))
+    benchmark(lambda td: td.chunk(10, dim=1), td)
 
 
 if __name__ == "__main__":
