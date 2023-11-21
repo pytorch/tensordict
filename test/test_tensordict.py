@@ -6555,17 +6555,36 @@ class TestMap:
 
     @classmethod
     def get_rand_incr(cls, td):
+        # torch
         td["r"] = td["r"] + torch.randint(0, 10, ())
+        # numpy
+        td["s"] = td["s"] + np.random.randint(0, 10, ())
         return td
 
     def test_map_seed(self):
-        td = TensorDict({"r": torch.zeros(20, dtype=torch.int)}, batch_size=[20])
-        td_out_0 = td.map(self.get_rand_incr, num_workers=4, seed=0, chunksize=1)
-        td_out_1 = td.map(self.get_rand_incr, num_workers=4, seed=0, chunksize=1)
+        td = TensorDict(
+            {
+                "r": torch.zeros(20, dtype=torch.int),
+                "s": torch.zeros(20, dtype=torch.int),
+            },
+            batch_size=[20],
+        )
+        # we use 20 workers to make sure that each worker has one item to work with
+        # Using less could cause undeterministic behaviour depending on the workers'
+        # speed, since we cannot tell who will pick which job.
+        td_out_0 = td.map(self.get_rand_incr, num_workers=20, seed=0, chunksize=1)
+        td_out_1 = td.map(self.get_rand_incr, num_workers=20, seed=0, chunksize=1)
         # we cannot know which worker picks which job, but since they will all have
         # a seed from 0 to 4 and produce 1 number each, we can chekc that
         # those numbers are exactly what we were expecting.
-        assert (td_out_0["r"].sort().values == td_out_1["r"].sort().values).all()
+        assert (td_out_0["r"].sort().values == td_out_1["r"].sort().values).all(), (
+            td_out_0["r"].sort().values,
+            td_out_1["r"].sort().values,
+        )
+        assert (td_out_0["s"].sort().values == td_out_1["s"].sort().values).all(), (
+            td_out_0["s"].sort().values,
+            td_out_1["s"].sort().values,
+        )
 
 
 if __name__ == "__main__":

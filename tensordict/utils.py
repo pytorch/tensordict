@@ -1728,5 +1728,5 @@ def _proc_init(base_seed, queue):
     worker_id = queue.get()
     seed = base_seed + worker_id
     torch.manual_seed(seed)
-    _generate_state(base_seed, worker_id)
-    print("seeded with", seed)
+    np_seed = _generate_state(base_seed, worker_id)
+    np.random.seed(np_seed)
