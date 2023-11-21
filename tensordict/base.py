@@ -2943,13 +2943,13 @@ class TensorDictBase(MutableMapping):
                 of workers. For very large tensordicts, such large chunks
                 may not fit in memory for the operation to be done and
                 more chunks may be needed to make the operation practically
-                doable. This argument is exclusive with num_chunks.
+                doable. This argument is exclusive with ``num_chunks``.
             num_chunks (int, optional): the number of chunks to split the tensordict
                 into. If none is provided, the number of chunks will equate the number
                 of workers. For very large tensordicts, such large chunks
                 may not fit in memory for the operation to be done and
                 more chunks may be needed to make the operation practically
-                doable. This argument is exclusive with chunksize.
+                doable. This argument is exclusive with ``chunksize``.
             pool (mp.Pool, optional): a multiprocess Pool instance to use
                 to execute the job. If none is provided, a pool will be created
                 within the ``map`` method.
