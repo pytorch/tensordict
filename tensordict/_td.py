@@ -15,7 +15,7 @@ from copy import copy
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterable, Iterator, Sequence
+from typing import Any, Callable, Iterable, Iterator, List, Sequence
 from warnings import warn
 
 import numpy as np
@@ -585,8 +585,14 @@ class TensorDict(TensorDictBase):
             _is_memmap=self._is_memmap,
         )
 
-    def _index_tensordict(self, index: IndexType) -> T:
+    def _index_tensordict(
+        self,
+        index: IndexType,
+        new_batch_size: torch.Size | None = None,
+        names: List[str] | None = None,
+    ) -> T:
         batch_size = self.batch_size
+        batch_dims = len(batch_size)
         if (
             not batch_size
             and index is not None
@@ -595,10 +601,24 @@ class TensorDict(TensorDictBase):
             raise RuntimeError(
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
             )
-        names = self._get_names_idx(index)
-        batch_size = _getitem_batch_size(batch_size, index)
+        if names is None:
+            names = self._get_names_idx(index)
+        if new_batch_size is not None:
+            batch_size = new_batch_size
+        else:
+            batch_size = _getitem_batch_size(batch_size, index)
+        source = {}
+        for key, item in self.items():
+            if isinstance(item, TensorDict):
+                # this is the simplest case, we can pre-compute the batch size easily
+                new_batch_size = batch_size + item.batch_size[batch_dims:]
+                source[key] = item._index_tensordict(
+                    index, new_batch_size=new_batch_size
+                )
+            else:
+                source[key] = _get_item(item, index)
         return TensorDict(
-            source={key: _get_item(item, index) for key, item in self.items()},
+            source=source,
             batch_size=batch_size,
             device=self.device,
             names=names,
@@ -650,28 +670,32 @@ class TensorDict(TensorDictBase):
             names = copy(self.names)
             names = [name for i, name in enumerate(names) if i != dim]
         out = []
-        unbind_self_dict = {key: tensor.unbind(dim) for key, tensor in self.items()}
+        # unbind_self_dict = {key: tensor.unbind(dim) for key, tensor in self.items()}
+        prefix = (slice(None),) * dim
         for _idx in range(self.batch_size[dim]):
-            td = TensorDict(
-                {key: tensor[_idx] for key, tensor in unbind_self_dict.items()},
-                batch_size=batch_size,
-                _run_checks=False,
-                device=self.device,
-                _is_memmap=False,
-                _is_shared=False,
-                names=names,
-            )
+            _idx = prefix + (_idx,)
+            td = self._index_tensordict(_idx, new_batch_size=batch_size, names=names)
+            # td = TensorDict(
+            #     {key: tensor[_idx] for key, tensor in unbind_self_dict.items()},
+            #     batch_size=batch_size,
+            #     _run_checks=False,
+            #     device=self.device,
+            #     _is_memmap=False,
+            #     _is_shared=False,
+            #     names=names,
+            # )
             out.append(td)
             if self.is_shared():
-                out[-1].share_memory_()
+                td._is_shared = True
             elif self.is_memmap():
-                out[-1].memmap_()
+                td._is_memmap = True
         return tuple(out)
 
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
         # we must use slices to keep the storage of the tensors
         WRONG_TYPE = "split(): argument 'split_size' must be int or list of ints"
         batch_size = self.batch_size
+        batch_sizes = []
         batch_dims = len(batch_size)
         if dim < 0:
             dim = len(batch_size) + dim
@@ -679,14 +703,30 @@ class TensorDict(TensorDictBase):
             raise IndexError(
                 f"Dimension out of range (expected to be in range of [-{self.batch_dims}, {self.batch_dims - 1}], but got {dim})"
             )
+        max_size = batch_size[dim]
         if isinstance(split_size, int):
             idx0 = 0
-            idx1 = split_size
+            idx1 = min(max_size, split_size)
             split_sizes = [slice(idx0, idx1)]
-            while idx1 < batch_size[dim]:
+            batch_sizes.append(
+                torch.Size(
+                    tuple(
+                        d if i != dim else idx1 - idx0 for i, d in enumerate(batch_size)
+                    )
+                )
+            )
+            while idx1 < max_size:
                 idx0 = idx1
-                idx1 += split_size
+                idx1 = min(max_size, idx1 + split_size)
                 split_sizes.append(slice(idx0, idx1))
+                batch_sizes.append(
+                    torch.Size(
+                        tuple(
+                            d if i != dim else idx1 - idx0
+                            for i, d in enumerate(batch_size)
+                        )
+                    )
+                )
         elif isinstance(split_size, (list, tuple)):
             if len(split_size) == 0:
                 raise RuntimeError("Insufficient number of elements in split_size.")
@@ -694,10 +734,26 @@ class TensorDict(TensorDictBase):
                 idx0 = 0
                 idx1 = split_size[0]
                 split_sizes = [slice(idx0, idx1)]
+                batch_sizes.append(
+                    torch.Size(
+                        tuple(
+                            d if i != dim else idx1 - idx0
+                            for i, d in enumerate(batch_size)
+                        )
+                    )
+                )
                 for idx in split_size[1:]:
                     idx0 = idx1
-                    idx1 += idx
+                    idx1 = min(max_size, idx1 + idx)
                     split_sizes.append(slice(idx0, idx1))
+                    batch_sizes.append(
+                        torch.Size(
+                            tuple(
+                                d if i != dim else idx1 - idx0
+                                for i, d in enumerate(batch_size)
+                            )
+                        )
+                    )
             except TypeError:
                 raise TypeError(WRONG_TYPE)
 
@@ -708,7 +764,11 @@ class TensorDict(TensorDictBase):
         else:
             raise TypeError(WRONG_TYPE)
         index = (slice(None),) * dim
-        return tuple(self[index + (ss,)] for ss in split_sizes)
+        names = self.names
+        return tuple(
+            self._index_tensordict(index + (ss,), new_batch_size=bs, names=names)
+            for ss, bs in zip(split_sizes, batch_sizes)
+        )
 
     def memmap_like(self, prefix: str | None = None) -> T:
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
@@ -2301,10 +2361,11 @@ class _SubTensorDict(TensorDictBase):
     #     return self.to_tensordict()._apply_nest(*args, **kwargs)
     _convert_to_tensordict = TensorDict._convert_to_tensordict
 
-    def _get_names_idx(self, *args, **kwargs):
-        raise NotImplementedError
+    _get_names_idx = TensorDict._get_names_idx
 
-    def _index_tensordict(self, index):
+    def _index_tensordict(self, index, new_batch_size=None, names=None):
+        # we ignore the names and new_batch_size which are only provided for
+        # efficiency purposes
         return self._get_sub_tensordict(index)
 
     def _remove_batch_dim(self, *args, **kwargs):

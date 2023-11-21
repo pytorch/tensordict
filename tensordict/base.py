@@ -17,6 +17,7 @@ from typing import (
     Callable,
     Generator,
     Iterator,
+    List,
     Optional,
     OrderedDict,
     overload,
@@ -526,19 +527,9 @@ class TensorDictBase(MutableMapping):
             raise ValueError(
                 f"chunks must be a strictly positive integer, got {chunks}."
             )
-        indices = []
-        _idx_start = 0
-        if chunks > 1:
-            interval = _idx_end = self.batch_size[dim] // chunks
-        else:
-            interval = _idx_end = self.batch_size[dim]
-        for c in range(chunks):
-            indices.append(slice(_idx_start, _idx_end))
-            _idx_start = _idx_end
-            _idx_end = _idx_end + interval if c < chunks - 2 else self.batch_size[dim]
-        if dim < 0:
-            dim = len(self.batch_size) + dim
-        return tuple(self[(*[slice(None) for _ in range(dim)], idx)] for idx in indices)
+        # fall back on split, using upper rounding
+        split_size = - (self.batch_size[dim] // -chunks)
+        return self.split(split_size, dim=dim)
 
     @overload
     def unsqueeze(self, dim: int) -> T:
@@ -3625,7 +3616,12 @@ class TensorDictBase(MutableMapping):
             return self
 
     @abc.abstractmethod
-    def _index_tensordict(self, index: IndexType) -> T:
+    def _index_tensordict(
+        self,
+        index: IndexType,
+        new_batch_size: torch.Size | None = None,
+        names: List[str] | None = None,
+    ) -> T:
         ...
 
     # Locking functionality

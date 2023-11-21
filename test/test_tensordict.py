@@ -2750,11 +2750,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
                 for idx, split_td in enumerate(tds):
                     expected_split_dim_size = 1 if idx == rep else 2
-                    expected_batch_size = [
-                        expected_split_dim_size if dim_idx == dim else dim_size
-                        for (dim_idx, dim_size) in enumerate(td.batch_size)
-                    ]
-
+                    expected_batch_size = tensorsplit[idx].shape
                     # Test each split_td has the expected batch_size
                     assert split_td.batch_size == torch.Size(expected_batch_size)
 
