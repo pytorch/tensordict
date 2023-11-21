@@ -32,6 +32,7 @@ from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _is_tensorclass,
     _KEY_ERROR,
+    _proc_init,
     _shape,
     _split_tensordict,
     _td_fields,
@@ -2917,6 +2918,7 @@ class TensorDictBase(MutableMapping):
         chunksize: int = None,
         num_chunks: int = None,
         pool: mp.Pool = None,
+        seed: int = None,
     ):
         """Maps a function to splits of the tensordict across one dimension.
 
@@ -2951,6 +2953,17 @@ class TensorDictBase(MutableMapping):
             pool (mp.Pool, optional): a multiprocess Pool instance to use
                 to execute the job. If none is provided, a pool will be created
                 within the ``map`` method.
+            seed (integer, optional): the initial seed of the pool. Each member
+                of the pool will be seeded with the provided seed incremented
+                by a unique integer from ``0`` to ``num_workers``. If no seed
+                is provided, a random integer will be used as seed.
+                .. note::
+                  Caution should be taken when providing a low-valued seed as
+                  this can cause autocorrelation between experiments, example:
+                  if 8 workers are asked and the seed is 4, the workers seed will
+                  range from 4 to 11. If the seed is 5, the workers seed will range
+                  from 5 to 12. These two experiments will have an overlap of 7
+                  seeds, which can have unexpected effects on the results.
 
         Examples:
             >>> import torch
@@ -2979,7 +2992,14 @@ class TensorDictBase(MutableMapping):
         if pool is None:
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
-            with mp.Pool(num_workers) as pool:
+            if seed is None:
+                seed = torch.empty((), dtype=torch.int64).random_()
+            queue = mp.Queue(maxsize=num_workers)
+            for i in range(num_workers):
+                queue.put(i)
+            with mp.Pool(
+                num_workers, initializer=_proc_init, initargs=(seed, queue)
+            ) as pool:
                 return self.map(
                     fn, dim=dim, chunksize=chunksize, num_chunks=num_chunks, pool=pool
                 )

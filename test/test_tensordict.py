@@ -6550,6 +6550,24 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
+class TestMap:
+    """Tests for TensorDict.map that are independent from tensordict's type."""
+
+    @classmethod
+    def get_rand_incr(cls, td):
+        td["r"] = td["r"] + torch.randint(0, 10, ())
+        return td
+
+    def test_map_seed(self):
+        td = TensorDict({"r": torch.zeros(20, dtype=torch.int)}, batch_size=[20])
+        td_out_0 = td.map(self.get_rand_incr, num_workers=4, seed=0, chunksize=1)
+        td_out_1 = td.map(self.get_rand_incr, num_workers=4, seed=0, chunksize=1)
+        # we cannot know which worker picks which job, but since they will all have
+        # a seed from 0 to 4 and produce 1 number each, we can chekc that
+        # those numbers are exactly what we were expecting.
+        assert (td_out_0["r"].sort().values == td_out_1["r"].sort().values).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

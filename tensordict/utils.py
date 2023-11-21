@@ -7,7 +7,6 @@ from __future__ import annotations
 import collections
 import dataclasses
 import inspect
-
 import math
 import os
 
@@ -50,6 +49,7 @@ from tensordict._tensordict import (  # noqa: F401
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import _ParameterMeta
+from torch.utils.data._utils.worker import _generate_state
 
 if TYPE_CHECKING:
     from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
@@ -1721,3 +1721,12 @@ def _legacy_lazy(func):
         )
     func.LEGACY = True
     return func
+
+
+# Process initializer for map
+def _proc_init(base_seed, queue):
+    worker_id = queue.get()
+    seed = base_seed + worker_id
+    torch.manual_seed(seed)
+    _generate_state(base_seed, worker_id)
+    print("seeded with", seed)
