@@ -3003,7 +3003,8 @@ class TensorDictBase(MutableMapping):
             at little cost.
 
         """
-        from torch import multiprocessing as mp
+        # from torch import multiprocessing as mp
+        from multiprocessing as mp
 
         if pool is None:
             if num_workers is None:
@@ -3041,7 +3042,7 @@ class TensorDictBase(MutableMapping):
         # while len(out) < len(self_split):
         #     out.append(imap.next(timeout=50.0))
         # out = pool.map(fn, self_split, chunksize)
-        out = torch.cat(list(out), dim)
+        out = torch.cat(list(imap), dim)
         return out
 
     # Functorch compatibility
