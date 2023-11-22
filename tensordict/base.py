@@ -3037,10 +3037,10 @@ class TensorDictBase(MutableMapping):
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
         print('number of tds', len(self_split))
         chunksize = 1
-        # out = []
+        out = []
         imap = pool.imap(fn, self_split, chunksize)
-        # while len(out) < len(self_split):
-        #     out.append(imap.next(timeout=50.0))
+        while len(out) < len(self_split):
+            out.append(imap.next(timeout=50.0))
         # out = pool.map(fn, self_split, chunksize)
         out = torch.cat(list(imap), dim)
         return out
