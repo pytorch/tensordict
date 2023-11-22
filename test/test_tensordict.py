@@ -6571,7 +6571,7 @@ class TestMap:
                 "c": torch.arange(20),
             },
             batch_size=[20],
-        )
+        ).memmap_()
         generator = torch.Generator()
         # we use 4 workers with max 5 items each,
         # making sure that no worker does more than any other.
