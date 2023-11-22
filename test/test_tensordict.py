@@ -6560,6 +6560,7 @@ class TestMap:
         td["r"] = td["r"] + torch.randint(0, 100, ())
         # numpy
         td["s"] = td["s"] + np.random.randint(0, 100, ())
+        print(td['c'])
         return td
 
     def test_map_seed(self):
