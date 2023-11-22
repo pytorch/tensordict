@@ -778,16 +778,19 @@ class LazyStackedTensorDict(TensorDictBase):
                     # then it's a LazyStackedTD
                     out.hook_out = self.hook_out
                     out.hook_in = self.hook_in
+                    incr = 0 if self.hook_in is None else 1
                     out._batch_size = (
-                        self._batch_size + out.batch_size[(len(self._batch_size) + 1) :]
+                        self._batch_size
+                        + out.batch_size[(len(self._batch_size) + incr) :]
                     )
                 else:
                     # then it's a tensorclass
                     out._tensordict.hook_out = self.hook_out
                     out._tensordict.hook_in = self.hook_in
+                    incr = 0 if self.hook_in is None else 1
                     out._tensordict._batch_size = (
                         self._batch_size
-                        + out._tensordict.batch_size[(len(self._batch_size) + 1) :]
+                        + out._tensordict.batch_size[(len(self._batch_size) + incr) :]
                     )
             elif self.hook_out is not None:
                 out = self.hook_out(out)
