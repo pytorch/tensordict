@@ -3015,7 +3015,7 @@ class TensorDictBase(MutableMapping):
             )
 
             queue = mp.Queue(maxsize=num_workers)
-            for i in range(num_workers):
+            for i in range(num_workers * 2):
                 queue.put(i)
             with mp.Pool(
                 processes=num_workers,
