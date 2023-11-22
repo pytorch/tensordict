@@ -1726,8 +1726,8 @@ def _legacy_lazy(func):
 # Process initializer for map
 def _proc_init(base_seed, queue):
     print('init worker', os.getpid())
-    if queue.empty():
-        exit()
+    # if queue.empty():
+    #     exit()
     worker_id = queue.get(timeout=10)
     print('worker id', worker_id)
     seed = base_seed + worker_id
