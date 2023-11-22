@@ -6572,8 +6572,12 @@ class TestMap:
         # we use 20 workers to make sure that each worker has one item to work with
         # Using less could cause undeterministic behaviour depending on the workers'
         # speed, since we cannot tell who will pick which job.
-        td_out_0 = td.map(self.get_rand_incr, num_workers=20, seed=0, chunksize=1)
-        td_out_1 = td.map(self.get_rand_incr, num_workers=20, seed=0, chunksize=1)
+        td_out_0 = td.map(
+            self.get_rand_incr, num_workers=20, seed=0, chunksize=1, maxtasksperchild=1
+        )
+        td_out_1 = td.map(
+            self.get_rand_incr, num_workers=20, seed=0, chunksize=1, maxtasksperchild=1
+        )
         # we cannot know which worker picks which job, but since they will all have
         # a seed from 0 to 4 and produce 1 number each, we can chekc that
         # those numbers are exactly what we were expecting.

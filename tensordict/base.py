@@ -2914,11 +2914,12 @@ class TensorDictBase(MutableMapping):
         self,
         fn: Callable,
         dim: int = 0,
-        num_workers: int = None,
-        chunksize: int = None,
-        num_chunks: int = None,
-        pool: mp.Pool = None,
-        seed: int = None,
+        num_workers: int | None = None,
+        chunksize: int | None = None,
+        num_chunks: int | None = None,
+        pool: mp.Pool | None = None,
+        seed: int | None = None,
+        maxtasksperchild: int | None = None,
     ):
         """Maps a function to splits of the tensordict across one dimension.
 
@@ -2975,6 +2976,9 @@ class TensorDictBase(MutableMapping):
                   know which worker will pick which job. However, we can make sure
                   that each worker has a different seed and that the pseudo-random
                   operations on each will be uncorrelated.
+            maxtasksperchild (int, optional): the maximum number of jobs picked
+                by every child process. Defaults to ``None``, i.e., no restriction
+                on the number of jobs.
 
         Examples:
             >>> import torch
@@ -3009,7 +3013,10 @@ class TensorDictBase(MutableMapping):
             for i in range(num_workers):
                 queue.put(i)
             with mp.Pool(
-                num_workers, initializer=_proc_init, initargs=(seed, queue)
+                num_workers,
+                initializer=_proc_init,
+                initargs=(seed, queue),
+                maxtasksperchild=maxtasksperchild,
             ) as pool:
                 return self.map(
                     fn, dim=dim, chunksize=chunksize, num_chunks=num_chunks, pool=pool
