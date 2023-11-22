@@ -3004,7 +3004,7 @@ class TensorDictBase(MutableMapping):
 
         """
         # from torch import multiprocessing as mp
-        from multiprocessing as mp
+        import multiprocessing as mp
 
         if pool is None:
             if num_workers is None:
