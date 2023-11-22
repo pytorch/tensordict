@@ -6582,7 +6582,7 @@ class TestMap:
             num_workers=4,
             generator=generator,
             chunksize=1,
-            max_tasks_per_child=5,
+            # max_tasks_per_child=5,
         )
         print('first')
         generator.manual_seed(0)
@@ -6591,7 +6591,7 @@ class TestMap:
             num_workers=4,
             generator=generator,
             chunksize=1,
-            max_tasks_per_child=5,
+            # max_tasks_per_child=5,
         )
         print('second')
         # we cannot know which worker picks which job, but since they will all have
