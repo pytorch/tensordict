@@ -2954,9 +2954,10 @@ class TensorDictBase(MutableMapping):
             pool (mp.Pool, optional): a multiprocess Pool instance to use
                 to execute the job. If none is provided, a pool will be created
                 within the ``map`` method.
-            seed (integer, optional): the initial seed of the pool. Each member
+            generator (torch.Generator, optional): a generator to use for seeding.
+                A base seed will be generated from it, and each worker
                 of the pool will be seeded with the provided seed incremented
-                by a unique integer from ``0`` to ``num_workers``. If no seed
+                by a unique integer from ``0`` to ``num_workers``. If no generator
                 is provided, a random integer will be used as seed.
                 To work with unseeded workers, a pool should be created separately
                 and passed to :meth:`map` directly.
