@@ -6563,6 +6563,7 @@ class TestMap:
         return td
 
     def test_map_seed(self):
+        mp.set_start_method('spawn')
         td = TensorDict(
             {
                 "r": torch.zeros(20, dtype=torch.int),
