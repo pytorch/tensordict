@@ -19,7 +19,7 @@ import numpy as np
 import torch
 from functorch import dim as ftdim
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple
+from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _is_tensor_collection,
@@ -359,11 +359,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 "permitted if all members of the stack have this key in "
                 "their register."
             ) from e
-        if self.hook_in is not None:
-            value = self.hook_in(value)
         if not validated:
             value = self._validate_value(value)
             validated = True
+        if self.hook_in is not None:
+            value = self.hook_in(value)
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
             tensordict._set_str(key, item, inplace=inplace, validated=validated)
@@ -778,10 +778,17 @@ class LazyStackedTensorDict(TensorDictBase):
                     # then it's a LazyStackedTD
                     out.hook_out = self.hook_out
                     out.hook_in = self.hook_in
+                    out._batch_size = (
+                        self._batch_size + out.batch_size[(len(self._batch_size) + 1) :]
+                    )
                 else:
                     # then it's a tensorclass
                     out._tensordict.hook_out = self.hook_out
                     out._tensordict.hook_in = self.hook_in
+                    out._tensordict._batch_size = (
+                        self._batch_size
+                        + out._tensordict.batch_size[(len(self._batch_size) + 1) :]
+                    )
             elif self.hook_out is not None:
                 out = self.hook_out(out)
             return out
@@ -802,7 +809,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def _get_tuple(self, key, default):
         first = self._get_str(key[0], None)
         if first is None:
-            return self._default_get(first, default)
+            return self._default_get(key[0], default)
         if len(key) == 1:
             return first
         try:
@@ -1580,36 +1587,37 @@ class LazyStackedTensorDict(TensorDictBase):
                 td_dest.update(td_source, clone=clone, **kwargs)
             return self
 
-        keys = self.keys(False)
+        inplace = kwargs.get("inplace", False)
         for key, value in input_dict_or_td.items():
             if clone and hasattr(value, "clone"):
                 value = value.clone()
             elif clone:
                 value = tree_map(torch.clone, value)
+            key = unravel_key(key)
             if isinstance(key, tuple):
-                key, subkey = key[0], key[1:]
+                # we must check that the target is not a leaf
+                target = self._get_str(key[0], default=None)
+                if is_tensor_collection(target):
+                    target.update({key[1:]: value}, inplace=inplace, clone=clone)
+                elif target is None:
+                    self._set_tuple(key, value, inplace=inplace, validated=False)
+                else:
+                    raise TypeError(
+                        f"Type mismatch: self.get(key[0]) is {type(target)} but expected a tensor collection."
+                    )
             else:
-                subkey = ()
-            # the key must be a string by now. Let's check if it is present
-            if key in keys:
-                target_class = self.entry_class(key)
-                if _is_tensor_collection(target_class):
-                    if isinstance(value, dict):
-                        value_unbind = TensorDict(
-                            value, self.batch_size, _run_checks=False
-                        ).unbind(self.stack_dim)
-                    else:
-                        value_unbind = value.unbind(self.stack_dim)
-                    for t, _value in zip(self.tensordicts, value_unbind):
-                        if len(subkey):
-                            t.update({key: {subkey: _value}}, clone=clone, **kwargs)
-                        else:
-                            t.update({key: _value}, clone=clone, **kwargs)
-                    continue
-            if len(subkey):
-                self.set((key, *subkey), value, **kwargs)
-            else:
-                self.set(key, value, **kwargs)
+                target = self._get_str(key, default=None)
+                if is_tensor_collection(target) and (
+                    is_tensor_collection(value) or isinstance(value, dict)
+                ):
+                    target.update(value, inplace=inplace, clone=clone)
+                elif target is None or not is_tensor_collection(value):
+                    self._set_str(key, value, inplace=inplace, validated=False)
+                else:
+                    raise TypeError(
+                        f"Type mismatch: self.get(key) is {type(target)} but value is of type {type(value)}."
+                    )
+
         return self
 
     def update_(
