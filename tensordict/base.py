@@ -3014,7 +3014,7 @@ class TensorDictBase(MutableMapping):
                 torch.empty((), dtype=torch.int64).random_(generator=generator).item()
             )
 
-            queue = mp.Queue(maxsize=num_workers)
+            queue = mp.Queue(maxsize=num_workers * 2)
             for i in range(num_workers * 2):
                 queue.put(i)
             with mp.Pool(
