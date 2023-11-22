@@ -6574,7 +6574,7 @@ class TestMap:
         # making sure that no worker does more than any other.
         generator.manual_seed(0)
         td_out_0 = td.map(
-            self.get_rand_incr,
+            TestMap.get_rand_incr,
             num_workers=4,
             generator=generator,
             chunksize=1,
@@ -6582,7 +6582,7 @@ class TestMap:
         )
         generator.manual_seed(0)
         td_out_1 = td.map(
-            self.get_rand_incr,
+            TestMap.get_rand_incr,
             num_workers=4,
             generator=generator,
             chunksize=1,
