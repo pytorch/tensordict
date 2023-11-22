@@ -1732,3 +1732,4 @@ def _proc_init(base_seed, queue):
     torch.manual_seed(seed)
     np_seed = _generate_state(base_seed, worker_id)
     np.random.seed(np_seed)
+    print('done')
