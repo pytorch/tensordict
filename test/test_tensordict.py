@@ -6568,6 +6568,7 @@ class TestMap:
             {
                 "r": torch.zeros(20, dtype=torch.int),
                 "s": torch.zeros(20, dtype=torch.int),
+                "c": torch.arange(20),
             },
             batch_size=[20],
         )
