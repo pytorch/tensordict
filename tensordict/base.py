@@ -3036,10 +3036,13 @@ class TensorDictBase(MutableMapping):
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
         print('number of tds', len(self_split))
         chunksize = 1
-        out = pool.imap_unordered(fn, self_split, chunksize)
+        out = []
+        imap = pool.imap(fn, self_split, chunksize)
+        while len(out) < len(self_split):
+            print('out', out)
+            out.append(next(imap, timeout=5.0))
         # out = pool.map(fn, self_split, chunksize)
-        out = torch.cat(list(out), dim)
-        print('out', out)
+        out = torch.cat(out, dim)
         return out
 
     # Functorch compatibility
