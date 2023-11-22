@@ -3038,8 +3038,8 @@ class TensorDictBase(MutableMapping):
         chunksize = 1
         out = pool.imap_unordered(fn, self_split, chunksize)
         # out = pool.map(fn, self_split, chunksize)
-        print('out', out)
         out = torch.cat(list(out), dim)
+        print('out', out)
         return out
 
     # Functorch compatibility
