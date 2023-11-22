@@ -6580,6 +6580,7 @@ class TestMap:
             chunksize=1,
             max_tasks_per_child=5,
         )
+        print('first')
         generator.manual_seed(0)
         td_out_1 = td.map(
             TestMap.get_rand_incr,
@@ -6588,6 +6589,7 @@ class TestMap:
             chunksize=1,
             max_tasks_per_child=5,
         )
+        print('second')
         # we cannot know which worker picks which job, but since they will all have
         # a seed from 0 to 4 and produce 1 number each, we can chekc that
         # those numbers are exactly what we were expecting.
