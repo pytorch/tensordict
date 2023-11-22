@@ -6556,9 +6556,9 @@ class TestMap:
     @classmethod
     def get_rand_incr(cls, td):
         # torch
-        td["r"] = td["r"] + torch.randint(0, 10, ())
+        td["r"] = td["r"] + torch.randint(0, 100, ())
         # numpy
-        td["s"] = td["s"] + np.random.randint(0, 10, ())
+        td["s"] = td["s"] + np.random.randint(0, 100, ())
         return td
 
     def test_map_seed(self):
@@ -6569,14 +6569,24 @@ class TestMap:
             },
             batch_size=[20],
         )
-        # we use 20 workers to make sure that each worker has one item to work with
-        # Using less could cause undeterministic behaviour depending on the workers'
-        # speed, since we cannot tell who will pick which job.
+        generator = torch.Generator()
+        # we use 4 workers with max 5 items each,
+        # making sure that no worker does more than any other.
+        generator.manual_seed(0)
         td_out_0 = td.map(
-            self.get_rand_incr, num_workers=20, seed=0, chunksize=1, maxtasksperchild=1
+            self.get_rand_incr,
+            num_workers=4,
+            generator=generator,
+            chunksize=1,
+            max_tasks_per_child=5,
         )
+        generator.manual_seed(0)
         td_out_1 = td.map(
-            self.get_rand_incr, num_workers=20, seed=0, chunksize=1, maxtasksperchild=1
+            self.get_rand_incr,
+            num_workers=4,
+            generator=generator,
+            chunksize=1,
+            max_tasks_per_child=5,
         )
         # we cannot know which worker picks which job, but since they will all have
         # a seed from 0 to 4 and produce 1 number each, we can chekc that

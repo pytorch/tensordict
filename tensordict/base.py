@@ -2918,8 +2918,8 @@ class TensorDictBase(MutableMapping):
         chunksize: int | None = None,
         num_chunks: int | None = None,
         pool: mp.Pool | None = None,
-        seed: int | None = None,
-        maxtasksperchild: int | None = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
     ):
         """Maps a function to splits of the tensordict across one dimension.
 
@@ -2976,7 +2976,7 @@ class TensorDictBase(MutableMapping):
                   know which worker will pick which job. However, we can make sure
                   that each worker has a different seed and that the pseudo-random
                   operations on each will be uncorrelated.
-            maxtasksperchild (int, optional): the maximum number of jobs picked
+            max_tasks_per_child (int, optional): the maximum number of jobs picked
                 by every child process. Defaults to ``None``, i.e., no restriction
                 on the number of jobs.
 
@@ -3007,8 +3007,12 @@ class TensorDictBase(MutableMapping):
         if pool is None:
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
-            if seed is None:
-                seed = torch.empty((), dtype=torch.int64).random_()
+            if generator is None:
+                generator = torch.Generator()
+            seed = (
+                torch.empty((), dtype=torch.int64).random_(generator=generator).item()
+            )
+
             queue = mp.Queue(maxsize=num_workers)
             for i in range(num_workers):
                 queue.put(i)
@@ -3016,7 +3020,7 @@ class TensorDictBase(MutableMapping):
                 num_workers,
                 initializer=_proc_init,
                 initargs=(seed, queue),
-                maxtasksperchild=maxtasksperchild,
+                maxtasksperchild=max_tasks_per_child,
             ) as pool:
                 return self.map(
                     fn, dim=dim, chunksize=chunksize, num_chunks=num_chunks, pool=pool
