@@ -6557,9 +6557,9 @@ class TestMap:
     def get_rand_incr(cls, td):
         print('worker', os.getpid())
         # torch
-        td["r"] = td["r"] + torch.randint(0, 100, ())
+        td["r"] += torch.randint(0, 100, ()).item()
         # numpy
-        td["s"] = td["s"] + np.random.randint(0, 100, ())
+        td["s"] += np.random.randint(0, 100, ()).item()
         print(td['c'])
         return td
 
