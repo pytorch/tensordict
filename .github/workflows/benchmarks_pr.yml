@@ -52,8 +52,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           benchmark-file: ${{ env.CONTENDER_JSON }}
           comparison-benchmark-file: ${{ env.BASELINE_JSON }}
-          benchmark-metrics: 'name,max,mean,ops'
-          comparison-benchmark-metric: 'ops'
+          benchmark-metrics: 'name,max,mean'
+          comparison-benchmark-metric: 'mean'
           comparison-higher-is-better: true
           comparison-threshold: 5
           benchmark-title: 'Result of CPU Benchmark Tests'
@@ -139,8 +139,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           benchmark-file: ${{ env.CONTENDER_JSON }}
           comparison-benchmark-file: ${{ env.BASELINE_JSON }}
-          benchmark-metrics: 'name,max,mean,ops'
-          comparison-benchmark-metric: 'ops'
+          benchmark-metrics: 'name,max,mean'
+          comparison-benchmark-metric: 'mean'
           comparison-higher-is-better: true
           comparison-threshold: 5
           benchmark-title: 'Result of GPU Benchmark Tests'
