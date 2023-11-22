@@ -263,7 +263,6 @@ class TensorDict(TensorDictBase):
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         __dict__ = module.__dict__
         swap = None
-        _is_locked = False
         has_set_device = False
         if memo is None:
             memo = {}
@@ -276,8 +275,6 @@ class TensorDict(TensorDictBase):
                 swap.clear_device_()
             else:
                 swap = swap_dest
-                _is_locked = swap._is_locked
-                swap._is_locked = False
             memo[id(module)] = swap
 
         for key, value in self.items():
@@ -323,9 +320,8 @@ class TensorDict(TensorDictBase):
                     swap = swap.to(device=local_out.device)
 
             if return_swap:
+                assert local_out is not None, key
                 swap._set_str(key, local_out, inplace=False, validated=True)
-        if swap is not None and _is_locked:
-            self._is_locked = _is_locked
         return swap
 
     def __ne__(self, other: object) -> T | bool:
