@@ -276,6 +276,7 @@ class TensorDict(TensorDictBase):
             else:
                 swap = swap_dest
             memo[id(module)] = swap
+            _swap = {}
 
         for key, value in self.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
@@ -320,7 +321,12 @@ class TensorDict(TensorDictBase):
                     swap = swap.to(device=local_out.device)
 
             if return_swap:
-                swap._set_str(key, local_out, inplace=False, validated=True)
+                _swap[key] = local_out
+        if return_swap:
+            if isinstance(swap, TensorDict):
+                swap._tensordict.update(_swap)
+            else:
+                swap.update(_swap)
         return swap
 
     def __ne__(self, other: object) -> T | bool:
