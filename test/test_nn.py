@@ -3201,6 +3201,7 @@ class TestStateDict:
 @pytest.mark.parametrize(
     "module_name,input_name", [["_module_shared", "_x"], ["_transformer", "_tuple_x"]]
 )
+@pytest.mark.parametrize("as_module", [True, False])
 class TestToModule:
     @property
     def _transformer(self):
@@ -3229,12 +3230,15 @@ class TestToModule:
     def _x(self):
         return (torch.randn(2, 2, 8),)
 
-    def test_static(self, module_name, input_name):
+    def test_static(self, module_name, input_name, as_module):
         torch.manual_seed(0)
         module = getattr(self, module_name)
         x = getattr(self, input_name)
-        params = TensorDict.from_module(module)
-        params0 = params.clone().zero_()
+        params = TensorDict.from_module(module, as_module=as_module)
+        params0 = params.clone().apply(
+            lambda t, p: nn.Parameter(t * 0) if isinstance(p, nn.Parameter) else t * 0,
+            params,
+        )
         y = module(*x)
         params0.to_module(module)
         y0 = module(*x)
@@ -3244,11 +3248,11 @@ class TestToModule:
         assert (y0 == 0).all()
         assert (y0 != y1).all()
 
-    def test_cm(self, module_name, input_name):
+    def test_cm(self, module_name, input_name, as_module):
         torch.manual_seed(0)
         module = getattr(self, module_name)
         x = getattr(self, input_name)
-        params = TensorDict.from_module(module)
+        params = TensorDict.from_module(module, as_module=as_module)
         params0 = params.clone().apply(
             lambda t, p: nn.Parameter(t * 0) if isinstance(p, nn.Parameter) else t * 0,
             params,
@@ -3263,11 +3267,11 @@ class TestToModule:
         assert (y0 != y1).all()
         assert (TensorDict.from_module(module) == params).all()
 
-    def test_cm_meta(self, module_name, input_name):
+    def test_cm_meta(self, module_name, input_name, as_module):
         torch.manual_seed(0)
         module = getattr(self, module_name)
         x = getattr(self, input_name)
-        params = TensorDict.from_module(module)
+        params = TensorDict.from_module(module, as_module=as_module)
         params_meta = params.detach().to("meta")
         y = module(*x)
         with params_meta.to_module(module):
