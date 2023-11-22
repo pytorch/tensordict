@@ -3040,7 +3040,7 @@ class TensorDictBase(MutableMapping):
         imap = pool.imap(fn, self_split, chunksize)
         while len(out) < len(self_split):
             print('out', out)
-            out.append(imap.next(timeout=5.0))
+            out.append(imap.next(timeout=50.0))
             print(out[-1]['c'])
         # out = pool.map(fn, self_split, chunksize)
         out = torch.cat(out, dim)
