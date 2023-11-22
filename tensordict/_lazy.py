@@ -359,11 +359,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 "permitted if all members of the stack have this key in "
                 "their register."
             ) from e
+        if self.hook_in is not None:
+            value = self.hook_in(value)
         if not validated:
             value = self._validate_value(value)
             validated = True
-        if self.hook_in is not None:
-            value = self.hook_in(value)
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
             tensordict._set_str(key, item, inplace=inplace, validated=validated)
@@ -1584,7 +1584,7 @@ class LazyStackedTensorDict(TensorDictBase):
         for key, value in input_dict_or_td.items():
             if clone and hasattr(value, "clone"):
                 value = value.clone()
-            else:
+            elif clone:
                 value = tree_map(torch.clone, value)
             if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]

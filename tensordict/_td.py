@@ -271,7 +271,7 @@ class TensorDict(TensorDictBase):
             # For batch-size it is a minor issue (unlikely that a td with batch-size
             # is passed with to_module) but for the device it could be a problem.
             if swap_dest is None:
-                swap = self.empty()
+                swap = TensorDict({}, batch_size=[])
                 swap.clear_device_()
             else:
                 swap = swap_dest
