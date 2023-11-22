@@ -3014,8 +3014,8 @@ class TensorDictBase(MutableMapping):
                 torch.empty((), dtype=torch.int64).random_(generator=generator).item()
             )
 
-            queue = mp.Queue(maxsize=num_workers * 2)
-            for i in range(num_workers * 2):
+            queue = mp.Queue(maxsize=num_workers)
+            for i in range(num_workers):
                 queue.put(i)
             with mp.Pool(
                 processes=num_workers,
@@ -3036,14 +3036,12 @@ class TensorDictBase(MutableMapping):
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
         print('number of tds', len(self_split))
         chunksize = 1
-        out = []
+        # out = []
         imap = pool.imap(fn, self_split, chunksize)
-        while len(out) < len(self_split):
-            print('out', out)
-            out.append(imap.next(timeout=50.0))
-            print(out[-1]['c'])
+        # while len(out) < len(self_split):
+        #     out.append(imap.next(timeout=50.0))
         # out = pool.map(fn, self_split, chunksize)
-        out = torch.cat(out, dim)
+        out = torch.cat(list(out), dim)
         return out
 
     # Functorch compatibility
