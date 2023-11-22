@@ -328,7 +328,9 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def to_module(self, module: nn.Module, return_swap: bool = False, swap_dest=None):
+    def to_module(
+        self, module: nn.Module, return_swap: bool = False, swap_dest=None, memo=None
+    ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
 
         Args:
@@ -337,6 +339,10 @@ class TensorDictBase(MutableMapping):
                 will be returned. Defaults to ``False``.
             swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
                 the tensordict where the swap should be written.
+            memo (dict, optional): when the same module is present multiple times
+                in the input module, a memo is used to avoid fetching the params
+                that have just been set. This argument should be ignored during
+                regular calls to `to_module`.
 
         Examples:
             >>> from torch import nn
@@ -3119,7 +3125,8 @@ class TensorDictBase(MutableMapping):
                 return self.lock_()
             if last_op == self.__class__.to_module.__name__:
                 if is_tensor_collection(out):
-                    return self.to_module(*args, **kwargs, swap_dest=out)
+                    with out.unlock_():
+                        return self.to_module(*args, **kwargs, swap_dest=out)
                 else:
                     raise RuntimeError(
                         "to_module cannot be used as a decorator when return_swap=False."

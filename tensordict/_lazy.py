@@ -863,6 +863,8 @@ class LazyStackedTensorDict(TensorDictBase):
             batch_size=n,
             vmap_level=vmap_level,
         ):
+            if _is_tensor_collection(type(tensor)):
+                return tensor._remove_batch_dim(vmap_level, batch_size, out_dim)
             return _remove_batch_dim(tensor, vmap_level, batch_size, out_dim)
 
         out.hook_out = hook_out
