@@ -3041,6 +3041,7 @@ class TensorDictBase(MutableMapping):
         imap = pool.imap(fn, self_split, chunksize)
         while len(out) < len(self_split):
             out.append(imap.next(timeout=50.0))
+            print(len(out))
         # out = pool.map(fn, self_split, chunksize)
         out = torch.cat(list(imap), dim)
         return out
