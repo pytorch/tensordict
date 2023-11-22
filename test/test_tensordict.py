@@ -8,6 +8,7 @@ import gc
 import json
 import os
 import re
+import time
 import uuid
 
 import numpy as np
@@ -6549,18 +6550,24 @@ class TestFCD(TestTensorDictsBase):
             assert y.dims == (d0,)
             assert y._tensor.shape[0] == param_batch
 
-
+COUNTER = 0
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
     @classmethod
     def get_rand_incr(cls, td):
-        print('worker', os.getpid())
+        global COUNTER
+        if COUNTER == 5:
+            print('pausing')
+            time.sleep(1000)
+            return
+        COUNTER += 1
+        # print('worker', os.getpid())
         # torch
         td["r"] += torch.randint(0, 100, ()).item()
         # numpy
         td["s"] += np.random.randint(0, 100, ()).item()
-        print(td['c'])
+        # print(td['c'])
         return td
 
     def test_map_seed(self):
@@ -6582,7 +6589,7 @@ class TestMap:
             num_workers=4,
             generator=generator,
             chunksize=1,
-            max_tasks_per_child=6,
+            max_tasks_per_child=5,
         )
         print('first')
         generator.manual_seed(0)
@@ -6591,7 +6598,7 @@ class TestMap:
             num_workers=4,
             generator=generator,
             chunksize=1,
-            max_tasks_per_child=6,
+            max_tasks_per_child=5,
         )
         print('second')
         # we cannot know which worker picks which job, but since they will all have
