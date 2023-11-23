@@ -3002,8 +3002,6 @@ class TensorDictBase(MutableMapping):
         """
         from torch import multiprocessing as mp
 
-        # import multiprocessing as mp
-
         if pool is None:
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
@@ -3033,14 +3031,8 @@ class TensorDictBase(MutableMapping):
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
-        print("number of tds", len(self_split))
         chunksize = 1
-        out = []
         imap = pool.imap(fn, self_split, chunksize)
-        while len(out) < len(self_split):
-            out.append(imap.next(timeout=50.0))
-            print(len(out))
-        # out = pool.map(fn, self_split, chunksize)
         out = torch.cat(list(imap), dim)
         return out
 

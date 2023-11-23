@@ -8,7 +8,6 @@ import gc
 import json
 import os
 import re
-import time
 import uuid
 
 import numpy as np
@@ -34,6 +33,7 @@ except ImportError:
     _has_h5py = False
 
 import contextlib
+from sys import platform
 
 from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
 from functorch import dim as ftdim
@@ -6547,30 +6547,24 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
-COUNTER = 0
-
-
+@pytest.mark.skipif(
+    platform.startswith("linux"),
+    reason="mp.Pool with maxtasksperchild starts more processes than needed on linux.",
+)
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
     @classmethod
     def get_rand_incr(cls, td):
-        global COUNTER
-        if COUNTER == 5:
-            print("pausing")
-            time.sleep(1000)
-            return
-        COUNTER += 1
-        # print('worker', os.getpid())
         # torch
         td["r"] += torch.randint(0, 100, ()).item()
         # numpy
         td["s"] += np.random.randint(0, 100, ()).item()
-        # print(td['c'])
         return td
 
     def test_map_seed(self):
-        mp.set_start_method("spawn")
+        if mp.get_start_method(allow_none=True) is None:
+            mp.set_start_method("spawn")
         td = TensorDict(
             {
                 "r": torch.zeros(20, dtype=torch.int),
@@ -6590,7 +6584,7 @@ class TestMap:
             chunksize=1,
             max_tasks_per_child=5,
         )
-        print("first")
+        print("got 1")
         generator.manual_seed(0)
         td_out_1 = td.map(
             TestMap.get_rand_incr,
@@ -6599,7 +6593,7 @@ class TestMap:
             chunksize=1,
             max_tasks_per_child=5,
         )
-        print("second")
+        print("got 2")
         # we cannot know which worker picks which job, but since they will all have
         # a seed from 0 to 4 and produce 1 number each, we can chekc that
         # those numbers are exactly what we were expecting.
