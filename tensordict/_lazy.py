@@ -1088,13 +1088,11 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @cache  # noqa: B019
     def _key_list(self, leaves_only=False, nodes_only=False):
-        keys = set(
-            self.tensordicts[0].keys(leaves_only=leaves_only, nodes_only=nodes_only)
-        )
+        s0 = self.tensordicts[0].keys(leaves_only=leaves_only, nodes_only=nodes_only)
+        keys = set(s0)
         for td in self.tensordicts[1:]:
-            keys = keys.intersection(
-                td.keys(leaves_only=leaves_only, nodes_only=nodes_only)
-            )
+            s = set(td.keys(leaves_only=leaves_only, nodes_only=nodes_only))
+            keys = keys.intersection(s)
         return sorted(keys, key=str)
 
     def entry_class(self, key: NestedKey) -> type:

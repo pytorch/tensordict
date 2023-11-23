@@ -284,6 +284,7 @@ class TensorDict(TensorDictBase):
             _swap = {}
 
         for key, value in self.items(include_nested=False, leaves_only=True):
+            assert not is_tensor_collection(value), (key, self)
             if module.__class__.__setattr__ is __base__setattr__:
                 # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                 local_out = _set_tensor_dict(__dict__, module, key, value)
@@ -296,6 +297,7 @@ class TensorDict(TensorDictBase):
                 _swap[key] = local_out
 
         for key, value in self.items(include_nested=False, nodes_only=True):
+            assert is_tensor_collection(value)
             for _ in value.keys():
                 # if there is at least one key, we must populate the module.
                 # Otherwise we just go to the next key
@@ -1721,9 +1723,7 @@ class TensorDict(TensorDictBase):
             source._tensor_dict[key] = val
 
         for key in self.keys(nodes_only=True):
-            source._tensor_dict[key] = self._get_str(key, NO_DEFAULT).clone(
-                recurse=False
-            )
+            source._dict_dict[key] = self._get_str(key, NO_DEFAULT).clone(recurse=False)
 
         return TensorDict(
             source=source,
