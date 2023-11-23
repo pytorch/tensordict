@@ -234,6 +234,11 @@ class TensorDictParams(TensorDictBase, nn.Module):
             If ``no_convert`` is ``True`` and if non-parameters are present, they
             will be registered as buffers.
             Defaults to ``False``.
+        lock (bool): if ``True``, the tensordict hosted by TensorDictParams will
+            be locked. This can be useful to avoid unwanted modifications, but
+            also restricts the operations that can be done over the object (and
+            can have significant performance impact when `unlock_()` is required).
+            Defaults to ``False``.
 
     Examples:
         >>> from torch import nn
@@ -273,7 +278,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     """
 
-    def __init__(self, parameters: TensorDictBase, *, no_convert=False):
+    def __init__(
+        self, parameters: TensorDictBase, *, no_convert=False, lock: bool = False
+    ):
         super().__init__()
         if isinstance(parameters, TensorDictParams):
             parameters = parameters._param_td
@@ -283,7 +290,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
             func = _maybe_make_param
         else:
             func = _maybe_make_param_or_buffer
-        self._param_td = _apply_leaves(self._param_td, lambda x: func(x)).lock_()
+        self._param_td = _apply_leaves(self._param_td, lambda x: func(x))
+        self._lock = lock
+        if lock:
+            self._param_td.lock_()
         self._reset_params()
         self._is_locked = False
         self._locked_tensordicts = []
