@@ -865,13 +865,14 @@ class TensorDictParams(TensorDictBase, nn.Module):
         return f"TensorDictParams(params={self._param_td})"
 
     def values(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
     ) -> Iterator[CompatibleType]:
-        for v in self._param_td.values(include_nested, leaves_only):
-            if _is_tensor_collection(type(v)):
+        if not nodes_only:
+            for v in self._param_td.values(include_nested, leaves_only=True):
+                yield self._apply_get_post_hook(v)
+        if not leaves_only:
+            for v in self._param_td.values(include_nested, nodes_only=True):
                 yield v
-                continue
-            yield self._apply_get_post_hook(v)
 
     def state_dict(
         self, *args, destination=None, prefix="", keep_vars=False, flatten=True
@@ -928,14 +929,24 @@ class TensorDictParams(TensorDictBase, nn.Module):
         )
         self.data.load_state_dict(data)
 
+    @_fallback
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool=False,
     ) -> Iterator[CompatibleType]:
-        for k, v in self._param_td.items(include_nested, leaves_only):
-            if _is_tensor_collection(type(v)):
+        if not nodes_only:
+            # we also need leaves
+            for k, v in self._param_td.items(
+                leaves_only=True,
+                include_nested=include_nested,
+                ):
+                yield k, self._apply_get_post_hook(v)
+        if not leaves_only:
+            # we also need nodes
+            for k, v in self._param_td.items(
+                nodes_only=True,
+                include_nested=include_nested,
+            ):
                 yield k, v
-                continue
-            yield k, self._apply_get_post_hook(v)
 
     def _apply(self, fn, recurse=True):
         """Modifies torch.nn.Module._apply to work with Buffer class."""

@@ -1041,6 +1041,7 @@ def erase_cache(fun):
 
 _NON_STR_KEY_TUPLE_ERR = "Nested membership checks with tuples of strings is only supported when setting `include_nested=True`."
 _NON_STR_KEY_ERR = "TensorDict keys are always strings. Membership checks are only supported for strings or non-empty tuples of strings (for nested TensorDicts)"
+_NODES_LEAVES_ERR = "leaves_only and nodes_only are exclusive arguments."
 _GENERIC_NESTED_ERR = "Only NestedKeys are supported. Got key {}."
 
 
@@ -1061,15 +1062,38 @@ class _StringKeys(KeysView):
                 item = unravel_item[0]
         return super().__contains__(item)
 
+    def __add__(self, other):
+        return _StringKeys((*self, *other))
 
-class _StringOnlyDict(dict):
-    """A dict class where contains is restricted to strings."""
+class _StringOnlyDoubleDict:
+    """A dict class where contains is restricted to strings.
+
+    Keys are sorted in two different dictionaries, depending on whether they are of Tensor
+    type or not.
+    """
 
     # kept here for debugging
     # def __setitem__(self, key, value):
     #     if not isinstance(key, str):
     #         raise RuntimeError
     #     return super().__setitem__(key, value)
+
+    def __init__(self, *args, **kwargs):
+        self._tensor_dict = {}
+        self._dict_dict = {}
+        if args:
+            if len(args) > 1:
+                raise TypeError("Expected at most one argument.")
+            if isinstance(args[0], _StringOnlyDoubleDict):
+                self._tensor_dict.update(args[0]._tensor_dict)
+                self._dict_dict.update(args[0]._dict_dict)
+            else:
+                kwargs.update(args[0])
+        for key, item in kwargs.items():
+            if isinstance(item, torch.Tensor):
+                self._tensor_dict[key] = item
+            else:
+                self._dict_dict[key] = item
 
     def __contains__(self, item):
         if not isinstance(item, str):
@@ -1083,11 +1107,104 @@ class _StringOnlyDict(dict):
                 raise TypeError(_NON_STR_KEY_TUPLE_ERR)
             else:
                 item = unravel_item[0]
-        return super().__contains__(item)
+        return (item in self._tensor_dict) or (item in self._dict_dict)
 
-    def keys(self):
-        return _StringKeys(self)
+    def __getitem__(self, key):
+      result = self._tensor_dict.get(key, None)
+      if result is None:
+          return self._dict_dict[key]
+      return result
 
+    def __setitem__(self, key, value):
+      if isinstance(value, torch.Tensor):
+          self._tensor_dict[key] = value
+          self._dict_dict.pop(key, None)
+      else:
+          self._dict_dict[key] = value
+          self._tensor_dict.pop(key, None)
+
+    def __iter__(self):
+      yield from self._tensor_dict
+      yield from self._dict_dict
+
+    def keys(self, leaves_only=False, nodes_only=False):
+        if leaves_only:
+            return _StringKeys(self._tensor_dict.keys())
+        if nodes_only:
+            return _StringKeys(self._dict_dict.keys())
+        return _StringKeys(self._tensor_dict.keys()) + _StringKeys(self._dict_dict.keys())
+
+    def keys_tensors(self):
+        return self._tensor_dict.keys()
+
+    def items(self, leaves_only=False, nodes_only=False):
+        if not nodes_only:
+            yield from self._tensor_dict.items()
+        if not leaves_only:
+            yield from self._dict_dict.items()
+
+    def items_tensors(self):
+      return self._tensor_dict.items()
+
+    def values(self, leaves_only=False, nodes_only=False):
+        if not nodes_only:
+            yield from self._tensor_dict.values()
+        if not leaves_only:
+            yield from self._dict_dict.values()
+
+    def list(self):
+        return list(self.keys())
+
+    def len(self):
+        return len(self._tensor_dict) + len(self._dict_dict)
+
+    def __delitem__(self, key):
+        val = self._tensor_dict.pop(key, None)
+        if val is None:
+            del self._dict_dict[key]
+    def get(self, key, *args, **kwargs):
+        if not args and not kwargs:
+            return self[key]
+        default = args[0] if args else kwargs['default']
+        val = self._tensor_dict.get(key, None)
+        if val is None:
+            return self._dict_dict.get(key, default)
+        return val
+    def pop(self, key, *args, **kwargs):
+        if not args and not kwargs:
+            val = self._tensor_dict.pop(key, None)
+            if val is None:
+                return self._dict_dict.pop(key)
+            return val
+        default = args[0] if args else kwargs['default']
+        val = self._tensor_dict.pop(key, None)
+        if val is None:
+            return self._dict_dict.pop(key, default)
+        return val
+    def copy(self):
+        return type(self)(self)
+
+    def popitem(self):
+        raise NotImplementedError(f"Cannot execute popitem on {type(self)} as the insertion order isn't guaranteed.")
+
+    def reversed(self):
+        return reversed(self.keys())
+    def setdefault(self, key, *args, **kwargs):
+        if not args and not kwargs:
+            return self.get(key, None)
+        if key in self._tensor_dict:
+            return self._tensor_dict[key]
+        if key in self._dict_dict:
+            return self._dict_dict[key]
+        default = args[0] if args else kwargs['default']
+        if isinstance(default, torch.Tensor):
+            return self._tensor_dict.setdefault(key, default=default)
+        return self._dict_dict.setdefault(key, default=default)
+    def update(self, other):
+        for key, item in other.items():
+            self[key] = item
+    def __or__(self, other):
+        return _StringOnlyDoubleDict(self, **other)
 
 def lock_blocked(func):
     """Checks that the tensordict is unlocked before executing a function."""

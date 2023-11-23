@@ -71,10 +71,14 @@ class _PersistentTDKeysView(_TensorDictKeysView):
                 for key in visitor:
                     if self.tensordict._get_metadata(key).get("array", None):
                         yield key
+            elif self.nodes_only:
+                for key in visitor:
+                    if not self.tensordict._get_metadata(key).get("array", None):
+                        yield key
             else:
                 yield from visitor
         else:
-            yield from self.tensordict._valid_keys()
+            yield from self.tensordict._valid_keys(nodes_only=self.nodes_only, leaves_only=self.leaves_only)
 
     def __contains__(self, key):
         if isinstance(key, tuple) and len(key) == 1:
@@ -405,21 +409,33 @@ class PersistentTensorDict(TensorDictBase):
         sub_td.update(value, inplace=True)
 
     @cache  # noqa: B019
-    def _valid_keys(self):
+    def _valid_keys(self, leaves_only=False, nodes_only=False):
         keys = []
-        for key in self.file.keys():
-            if self._get_metadata(key):
-                keys.append(key)
+        if not leaves_only and not nodes_only:
+            for key in self.file.keys():
+                if self._get_metadata(key):
+                    keys.append(key)
+        elif leaves_only:
+            for key, val in self.file.items():
+                if self._get_metadata(key).get('dtype', None):
+                    keys.append(key)
+        elif nodes_only:
+            for key, val in self.file.items():
+                if self._get_metadata(key).get('dtype', NO_DEFAULT) is None:
+                    keys.append(key)
         return keys
+
+
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
     ) -> _PersistentTDKeysView:
         return _PersistentTDKeysView(
             tensordict=self,
             include_nested=include_nested,
             leaves_only=leaves_only,
+            nodes_only=nodes_only,
         )
 
     def _items_metadata(self, include_nested=False, leaves_only=False):

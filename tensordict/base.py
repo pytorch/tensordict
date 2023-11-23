@@ -36,7 +36,7 @@ from tensordict.utils import (
     _shape,
     _split_tensordict,
     _td_fields,
-    _unravel_key_to_tuple,
+    _unravel_key_to_tuple,unravel_key,
     as_decorator,
     cache,
     convert_ellipsis_to_idx,
@@ -48,7 +48,7 @@ from tensordict.utils import (
     lazy_legacy,
     lock_blocked,
     NestedKey,
-    prod,
+    prod, _NODES_LEAVES_ERR,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 
@@ -2088,75 +2088,43 @@ class TensorDictBase(MutableMapping):
         return self.get(key)
 
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
     ) -> Iterator[tuple[str, CompatibleType]]:
         """Returns a generator of key-value pairs for the tensordict."""
         # check the conditions once only
-        if include_nested and leaves_only:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                if _is_tensor_collection(val.__class__):
-                    yield from (
-                        (_unravel_key_to_tuple((k, _key)), _val)
-                        for _key, _val in val.items(
-                            include_nested=include_nested, leaves_only=leaves_only
-                        )
-                    )
-                else:
-                    yield k, val
-        elif include_nested:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                yield k, val
-                if _is_tensor_collection(val.__class__):
-                    yield from (
-                        (_unravel_key_to_tuple((k, _key)), _val)
-                        for _key, _val in val.items(
-                            include_nested=include_nested, leaves_only=leaves_only
-                        )
-                    )
-        elif leaves_only:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                if not _is_tensor_collection(val.__class__):
-                    yield k, val
-        else:
-            for k in self.keys():
+        if nodes_only and leaves_only:
+            raise ValueError(_NODES_LEAVES_ERR)
+        if not nodes_only:
+            for k in self.keys(leaves_only=True):
                 yield k, self._get_str(k, NO_DEFAULT)
+        if not leaves_only or include_nested:
+            for k in self.keys(nodes_only=True):
+                val = self._get_str(k, NO_DEFAULT)
+                if not leaves_only:
+                    yield k, val
+                if include_nested:
+                    yield from (unravel_key((k, subk)) for subk, val in val.items(leaves_only=leaves_only, nodes_only=nodes_only, include_nested=True))
 
     def values(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False
     ) -> Iterator[CompatibleType]:
         """Returns a generator representing the values for the tensordict."""
         # check the conditions once only
-        if include_nested and leaves_only:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                if _is_tensor_collection(val.__class__):
-                    yield from val.values(
-                        include_nested=include_nested, leaves_only=leaves_only
-                    )
-                else:
-                    yield val
-        elif include_nested:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                yield val
-                if _is_tensor_collection(val.__class__):
-                    yield from val.values(
-                        include_nested=include_nested, leaves_only=leaves_only
-                    )
-        elif leaves_only:
-            for k in self.keys():
-                val = self._get_str(k, NO_DEFAULT)
-                if not _is_tensor_collection(val.__class__):
-                    yield val
-        else:
-            for k in self.keys():
+        if nodes_only and leaves_only:
+            raise ValueError(_NODES_LEAVES_ERR)
+        if not nodes_only:
+            for k in self.keys(leaves_only=True):
                 yield self._get_str(k, NO_DEFAULT)
+        if not leaves_only or include_nested:
+            for k in self.keys(nodes_only=True):
+                val = self._get_str(k, NO_DEFAULT)
+                if not leaves_only:
+                    yield val
+                if include_nested:
+                    yield from val.values(leaves_only=leaves_only, nodes_only=nodes_only, include_nested=True)
 
     @abc.abstractmethod
-    def keys(self, include_nested: bool = False, leaves_only: bool = False):
+    def keys(self, include_nested: bool = False, leaves_only: bool = False, nodes_only:bool = False):
         """Returns a generator of tensordict keys."""
         ...
 

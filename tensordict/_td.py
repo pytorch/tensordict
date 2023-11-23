@@ -55,11 +55,11 @@ from tensordict.utils import (
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
-    _set_item,
+    _set_item,unravel_key,
     _set_max_batch_size,
     _shape,
     _STRDTYPE2DTYPE,
-    _StringOnlyDict,
+    _StringOnlyDoubleDict,
     _sub_index,
     _unravel_key_to_tuple,
     as_decorator,
@@ -71,7 +71,7 @@ from tensordict.utils import (
     is_tensorclass,
     KeyedJaggedTensor,
     lock_blocked,
-    NestedKey,
+    NestedKey, _NODES_LEAVES_ERR,
 )
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
@@ -205,7 +205,7 @@ class TensorDict(TensorDictBase):
         self._device = device
 
         if not _run_checks:
-            _tensordict: dict = _StringOnlyDict()
+            _tensordict: dict = _StringOnlyDoubleDict()
             self._batch_size = batch_size
             for key, value in source.items():
                 if isinstance(value, dict):
@@ -221,7 +221,7 @@ class TensorDict(TensorDictBase):
             self._tensordict = _tensordict
             self._td_dim_names = names
         else:
-            self._tensordict = _StringOnlyDict()
+            self._tensordict = _StringOnlyDoubleDict()
             if not isinstance(source, (TensorDictBase, dict)):
                 raise ValueError(
                     "A TensorDict source is expected to be a TensorDictBase "
@@ -526,9 +526,19 @@ class TensorDict(TensorDictBase):
         if not inplace and is_locked:
             out.unlock_()
 
-        for key, item in self.items():
+        for key, item in self.items(leaves_only=True):
             _others = [_other._get_str(key, default=NO_DEFAULT) for _other in others]
-            if not call_on_nested and _is_tensor_collection(item.__class__):
+            item_trsf = fn(item, *_others)
+            out._set_str(
+                key,
+                item_trsf,
+                inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                validated=checked,
+            )
+
+        for key, item in self.items(nodes_only=True):
+            _others = [_other._get_str(key, default=NO_DEFAULT) for _other in others]
+            if not call_on_nested:
                 item_trsf = item._apply_nest(
                     fn,
                     *_others,
@@ -541,10 +551,7 @@ class TensorDict(TensorDictBase):
             else:
                 item_trsf = fn(item, *_others)
             if item_trsf is not None:
-                if isinstance(self, _SubTensorDict):
-                    out.set(key, item_trsf, inplace=inplace)
-                else:
-                    out._set_str(
+                out._set_str(
                         key,
                         item_trsf,
                         inplace=BEST_ATTEMPT_INPLACE if inplace else False,
@@ -1728,21 +1735,23 @@ class TensorDict(TensorDictBase):
             keys_to_select = None
             for key in keys:
                 if isinstance(key, str):
-                    subkey = []
+                    subkey = None
                 else:
                     key, subkey = key[0], key[1:]
-                try:
-                    source[key] = self.get(key)
-                    if len(subkey):
-                        if keys_to_select is None:
-                            # delay creation of defaultdict
-                            keys_to_select = defaultdict(list)
-                        keys_to_select[key].append(subkey)
-                except KeyError as err:
+                val = self._get_str(key, None)
+                if val is None:
                     if not strict:
                         continue
                     else:
-                        raise KeyError(f"select failed to get key {key}") from err
+                        raise KeyError(f"select failed to get key {key} in tensordict with keys {self.keys()}")
+                else:
+                    source[key] = val
+
+                if subkey:
+                    if keys_to_select is None:
+                        # delay creation of defaultdict
+                        keys_to_select = defaultdict(list)
+                    keys_to_select[key].append(subkey)
             if keys_to_select is not None:
                 for key, val in keys_to_select.items():
                     source[key] = source[key].select(
@@ -1765,21 +1774,21 @@ class TensorDict(TensorDictBase):
         return out
 
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
     ) -> _TensorDictKeysView:
-        if not include_nested and not leaves_only:
-            return self._tensordict.keys()
+        if not include_nested:
+            return self._tensordict.keys(leaves_only=leaves_only, nodes_only=nodes_only, )
         else:
             return self._nested_keys(
-                include_nested=include_nested, leaves_only=leaves_only
+                include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only,
             )
 
     # @cache  # noqa: B019
     def _nested_keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
     ) -> _TensorDictKeysView:
         return _TensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
+            self, include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only,
         )
 
     def __getstate__(self):
@@ -1799,21 +1808,25 @@ class TensorDict(TensorDictBase):
 
     # some custom methods for efficiency
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only:bool=False,
     ) -> Iterator[tuple[str, CompatibleType]]:
-        if not include_nested and not leaves_only:
-            return self._tensordict.items()
+        if nodes_only and leaves_only:
+            raise ValueError(_NODES_LEAVES_ERR)
+        if not include_nested:
+            return self._tensordict.items(leaves_only=leaves_only, nodes_only=nodes_only)
         else:
-            return super().items(include_nested=include_nested, leaves_only=leaves_only)
+            return super().items(include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only)
 
     def values(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only:bool=False,
     ) -> Iterator[tuple[str, CompatibleType]]:
-        if not include_nested and not leaves_only:
-            return self._tensordict.values()
+        if nodes_only and leaves_only:
+            raise ValueError(_NODES_LEAVES_ERR)
+        if not include_nested:
+            return self._tensordict.values(leaves_only=leaves_only, nodes_only=nodes_only)
         else:
             return super().values(
-                include_nested=include_nested, leaves_only=leaves_only
+                include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only,
             )
 
 
@@ -2040,9 +2053,9 @@ class _SubTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
     ) -> _TensorDictKeysView:
-        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only)
+        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only)
 
     def entry_class(self, key: NestedKey) -> type:
         source_type = type(self._source.get(key))
@@ -2371,7 +2384,79 @@ class _SubTensorDict(TensorDictBase):
 
     _add_batch_dim = TensorDict._add_batch_dim
 
-    _apply_nest = TensorDict._apply_nest
+    def _apply_nest(
+        self,
+        fn: Callable,
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = None,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        call_on_nested: bool = False,
+        **constructor_kwargs,
+    ) -> T:
+        if inplace:
+            out = self
+        elif batch_size is not None:
+            out = TensorDict(
+                {},
+                batch_size=torch.Size(batch_size),
+                names=names,
+                device=self.device if not device else device,
+                _run_checks=False,
+                **constructor_kwargs,
+            )
+        else:
+            out = TensorDict(
+                {},
+                batch_size=self.batch_size,
+                device=self.device if not device else device,
+                names=self.names if self._has_names() else None,
+                _run_checks=False,
+                **constructor_kwargs,
+            )
+
+        is_locked = out.is_locked
+        if not inplace and is_locked:
+            out.unlock_()
+
+        for key, item in self.items(leaves_only=True):
+            _others = [_other._get_str(key, default=NO_DEFAULT) for _other in others]
+            item_trsf = fn(item, *_others)
+            out._set_str(
+                key,
+                item_trsf,
+                inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                validated=checked,
+            )
+
+        for key, item in self.items(nodes_only=True):
+            _others = [_other._get_str(key, default=NO_DEFAULT) for _other in others]
+            if not call_on_nested:
+                item_trsf = item._apply_nest(
+                    fn,
+                    *_others,
+                    inplace=inplace,
+                    batch_size=batch_size,
+                    device=device,
+                    checked=checked,
+                    **constructor_kwargs,
+                )
+            else:
+                item_trsf = fn(item, *_others)
+            if item_trsf is not None:
+                out._set_str(
+                        key,
+                        item_trsf,
+                        inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                        validated=checked,
+                    )
+
+        if not inplace and is_locked:
+            out.lock_()
+        return out
+
     # def _apply_nest(self, *args, **kwargs):
     #     return self.to_tensordict()._apply_nest(*args, **kwargs)
     _convert_to_tensordict = TensorDict._convert_to_tensordict
@@ -2420,77 +2505,76 @@ class _TensorDictKeysView:
         tensordict: T,
         include_nested: bool,
         leaves_only: bool,
+        nodes_only: bool,
     ) -> None:
         self.tensordict = tensordict
         self.include_nested = include_nested
         self.leaves_only = leaves_only
+        self.nodes_only = nodes_only
 
     def __iter__(self) -> Iterable[str] | Iterable[tuple[str, ...]]:
-        if not self.include_nested:
-            if self.leaves_only:
-                for key in self._keys():
-                    target_class = self.tensordict.entry_class(key)
-                    if _is_tensor_collection(target_class):
-                        continue
-                    yield key
-            else:
-                yield from self._keys()
-        else:
-            yield from (
-                key if len(key) > 1 else key[0]
-                for key in self._iter_helper(self.tensordict)
-            )
+        if not self.nodes_only:
+            yield from self._tensor_keys()
+        if not self.leaves_only or self.include_nested:
+            for node_key in self._node_keys():
+                if not self.leaves_only:
+                    yield node_key
+                if self.include_nested:
+                    yield from (unravel_key((node_key, _key)) for _key in self.tensordict._get_str(node_key, NO_DEFAULT).keys(include_nested=True, leaves_only=self.leaves_only, nodes_only=self.nodes_only))
 
-    def _iter_helper(
-        self, tensordict: T, prefix: str | None = None
-    ) -> Iterable[str] | Iterable[tuple[str, ...]]:
-        for key, value in self._items(tensordict):
-            full_key = self._combine_keys(prefix, key)
-            cls = value.__class__
-            if self.include_nested and (
-                _is_tensor_collection(cls) or issubclass(cls, KeyedJaggedTensor)
-            ):
-                subkeys = tuple(self._iter_helper(value, prefix=full_key))
-                yield from subkeys
-            if not self.leaves_only or not _is_tensor_collection(cls):
-                yield full_key
+    # def _iter_helper(
+    #     self, tensordict: T, prefix: str | None = None
+    # ) -> Iterable[str] | Iterable[tuple[str, ...]]:
+    #     for key, value in self._items(tensordict):
+    #         full_key = self._combine_keys(prefix, key)
+    #         cls = value.__class__
+    #         if self.include_nested and (
+    #             _is_tensor_collection(cls) or issubclass(cls, KeyedJaggedTensor)
+    #         ):
+    #             subkeys = tuple(self._iter_helper(value, prefix=full_key))
+    #             yield from subkeys
+    #         if not self.leaves_only or not _is_tensor_collection(cls):
+    #             yield full_key
 
-    def _combine_keys(self, prefix: tuple | None, key: str) -> tuple:
-        if prefix is not None:
-            return prefix + (key,)
-        return (key,)
+    # def _combine_keys(self, prefix: tuple | None, key: str) -> tuple:
+    #     if prefix is not None:
+    #         return prefix + (key,)
+    #     return (key,)
 
     def __len__(self) -> int:
         return sum(1 for _ in self)
 
-    def _items(
-        self, tensordict: TensorDictBase | None = None
-    ) -> Iterable[tuple[NestedKey, CompatibleType]]:
-        if tensordict is None:
-            tensordict = self.tensordict
-        if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
-            return tensordict._tensordict.items()
-        if isinstance(tensordict, KeyedJaggedTensor):
-            return tuple((key, tensordict[key]) for key in tensordict.keys())
-        from tensordict._lazy import (
-            _CustomOpTensorDict,
-            _iter_items_lazystack,
-            LazyStackedTensorDict,
-        )
+    #@classmethod
+    #def _items(
+    #    cls, tensordict: TensorDictBase | None = None
+    #) -> Iterable[tuple[NestedKey, CompatibleType]]:
+    #    if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
+    #        return tensordict._tensordict.items()
+    #    if isinstance(tensordict, KeyedJaggedTensor):
+    #        return tuple((key, tensordict[key]) for key in tensordict.keys())
+    #    from tensordict._lazy import (
+    #        _CustomOpTensorDict,
+    #        _iter_items_lazystack,
+    #        LazyStackedTensorDict,
+    #    )
 
-        if isinstance(tensordict, LazyStackedTensorDict):
-            return _iter_items_lazystack(tensordict, return_none_for_het_values=True)
-        if isinstance(tensordict, _CustomOpTensorDict):
-            # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
-            # or _CustomOpTensorDict, so as we iterate through the contents we need to
-            # be careful to not rely on tensordict._tensordict existing.
-            return (
-                (key, tensordict._get_str(key, NO_DEFAULT))
-                for key in tensordict._source.keys()
-            )
-        raise NotImplementedError(type(tensordict))
+    #    if isinstance(tensordict, LazyStackedTensorDict):
+    #        return _iter_items_lazystack(tensordict, return_none_for_het_values=True)
+    #    if isinstance(tensordict, _CustomOpTensorDict):
+    #        # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
+    #        # or _CustomOpTensorDict, so as we iterate through the contents we need to
+    #        # be careful to not rely on tensordict._tensordict existing.
+    #        return (
+    #            (key, tensordict._get_str(key, NO_DEFAULT))
+    #            for key in tensordict._source.keys()
+    #        )
+    #    raise NotImplementedError(type(tensordict))
 
-    def _keys(self) -> _TensorDictKeysView:
+    def _tensor_keys(self):
+        return self.tensordict._tensordict._tensor_dict.keys()
+    def _node_keys(self):
+        return self.tensordict._tensordict._dict_dict.keys()
+    def _keys(self):
         return self.tensordict._tensordict.keys()
 
     def __contains__(self, key: NestedKey) -> bool:
@@ -2498,46 +2582,56 @@ class _TensorDictKeysView:
         if not key:
             raise TypeError(_NON_STR_KEY_ERR)
 
-        if isinstance(key, str):
-            if key in self._keys():
-                if self.leaves_only:
-                    return not _is_tensor_collection(self.tensordict.entry_class(key))
-                return True
+        if len(key) == 1:
+            return key[0] in self._keys()
+        if not self.include_nested:
             return False
-        else:
-            # thanks to _unravel_key_to_tuple we know the key is a tuple
-            if len(key) == 1:
-                return key[0] in self._keys()
-            elif self.include_nested:
-                if key[0] in self._keys():
-                    entry_type = self.tensordict.entry_class(key[0])
-                    if entry_type in (Tensor, _MemmapTensor):
-                        return False
-                    if entry_type is KeyedJaggedTensor:
-                        if len(key) > 2:
-                            return False
-                        return key[1] in self.tensordict.get(key[0]).keys()
-                    _is_tensordict = _is_tensor_collection(entry_type)
-                    if _is_tensordict:
-                        # # this will call _unravel_key_to_tuple many times
-                        # return key[1:] in self.tensordict._get_str(key[0], NO_DEFAULT).keys(include_nested=self.include_nested)
-                        # this won't call _unravel_key_to_tuple but requires to get the default which can be suboptimal
-                        leaf_td = self.tensordict._get_tuple(key[:-1], None)
-                        if leaf_td is None or (
-                            not _is_tensor_collection(leaf_td.__class__)
-                            and not isinstance(leaf_td, KeyedJaggedTensor)
-                        ):
-                            return False
-                        return key[-1] in leaf_td.keys()
-                return False
-            # this is reached whenever there is more than one key but include_nested is False
-            if all(isinstance(subkey, str) for subkey in key):
-                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
+        if key[0] in self._node_keys():
+            other_keys = unravel_key(key[1:])
+            return other_keys in self.tensordict._get_str(key[0], default=NO_DEFAULT).keys(include_nested=isinstance(other_keys, tuple), leaves_only=self.leaves_only, nodes_only=self.nodes_only)
+        return False
+
+        # if isinstance(key, str):
+        #     if key in self._keys():
+        #         if self.leaves_only:
+        #             return not _is_tensor_collection(self.tensordict.entry_class(key))
+        #         return True
+        #     return False
+        # else:
+        #     # thanks to _unravel_key_to_tuple we know the key is a tuple
+        #     if len(key) == 1:
+        #         return key[0] in self._keys()
+        #     elif self.include_nested:
+        #         if key[0] in self._keys():
+        #             entry_type = self.tensordict.entry_class(key[0])
+        #             if entry_type in (Tensor, _MemmapTensor):
+        #                 return False
+        #             if entry_type is KeyedJaggedTensor:
+        #                 if len(key) > 2:
+        #                     return False
+        #                 return key[1] in self.tensordict.get(key[0]).keys()
+        #             _is_tensordict = _is_tensor_collection(entry_type)
+        #             if _is_tensordict:
+        #                 # # this will call _unravel_key_to_tuple many times
+        #                 # return key[1:] in self.tensordict._get_str(key[0], NO_DEFAULT).keys(include_nested=self.include_nested)
+        #                 # this won't call _unravel_key_to_tuple but requires to get the default which can be suboptimal
+        #                 leaf_td = self.tensordict._get_tuple(key[:-1], None)
+        #                 if leaf_td is None or (
+        #                     not _is_tensor_collection(leaf_td.__class__)
+        #                     and not isinstance(leaf_td, KeyedJaggedTensor)
+        #                 ):
+        #                     return False
+        #                 return key[-1] in leaf_td.keys()
+        #         return False
+        #     # this is reached whenever there is more than one key but include_nested is False
+        #     if all(isinstance(subkey, str) for subkey in key):
+        #         raise TypeError(_NON_STR_KEY_TUPLE_ERR)
 
     def __repr__(self):
         include_nested = f"include_nested={self.include_nested}"
         leaves_only = f"leaves_only={self.leaves_only}"
-        return f"{self.__class__.__name__}({list(self)},\n{indent(include_nested, 4*' ')},\n{indent(leaves_only, 4*' ')})"
+        nodes_only = f"leaves_only={self.nodes_only}"
+        return f"{self.__class__.__name__}({list(self)},\n{indent(include_nested, 4*' ')},\n{indent(leaves_only, 4*' ')},\n{indent(nodes_only, 4*' ')})"
 
 
 def _set_tensor_dict(  # noqa: F811

@@ -78,28 +78,36 @@ except ImportError:
 class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
     tensordict: LazyStackedTensorDict
 
-    def __len__(self) -> int:
-        return len(self._keys())
-
-    def _keys(self) -> list[str]:
+    def _tensor_keys(self):
+        return self.tensordict._key_list(leaves_only=True)
+    def _node_keys(self):
+        return self.tensordict._key_list(nodes_only=True)
+    def _keys(self):
         return self.tensordict._key_list()
 
-    def __contains__(self, item):
-        item = _unravel_key_to_tuple(item)
-        if item[0] in self.tensordict._iterate_over_keys():
-            if self.leaves_only:
-                return not _is_tensor_collection(self.tensordict.entry_class(item[0]))
-            has_first_key = True
-        else:
-            has_first_key = False
-        if not has_first_key or len(item) == 1:
-            return has_first_key
-        # otherwise take the long way
-        return all(
-            item[1:]
-            in tensordict.get(item[0]).keys(self.include_nested, self.leaves_only)
-            for tensordict in self.tensordict.tensordicts
-        )
+    #
+    # def __len__(self) -> int:
+    #     return len(self._keys())
+    #
+    # def _keys(self) -> list[str]:
+    #     return self.tensordict._key_list()
+    #
+    # def __contains__(self, item):
+    #     item = _unravel_key_to_tuple(item)
+    #     if item[0] in self.tensordict._iterate_over_keys():
+    #         if self.leaves_only:
+    #             return not _is_tensor_collection(self.tensordict.entry_class(item[0]))
+    #         has_first_key = True
+    #     else:
+    #         has_first_key = False
+    #     if not has_first_key or len(item) == 1:
+    #         return has_first_key
+    #     # otherwise take the long way
+    #     return all(
+    #         item[1:]
+    #         in tensordict.get(item[0]).keys(self.include_nested, self.leaves_only)
+    #         for tensordict in self.tensordict.tensordicts
+    #     )
 
 
 class LazyStackedTensorDict(TensorDictBase):
@@ -1053,10 +1061,10 @@ class LazyStackedTensorDict(TensorDictBase):
         self._batch_size = new_size
 
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
     ) -> _LazyStackedTensorDictKeysView:
         keys = _LazyStackedTensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
+            self, include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only,
         )
         return keys
 
@@ -1071,10 +1079,10 @@ class LazyStackedTensorDict(TensorDictBase):
         yield from self._key_list()
 
     @cache  # noqa: B019
-    def _key_list(self):
-        keys = set(self.tensordicts[0].keys())
+    def _key_list(self, leaves_only=False, nodes_only=False):
+        keys = set(self.tensordicts[0].keys(leaves_only=leaves_only, nodes_only=nodes_only))
         for td in self.tensordicts[1:]:
-            keys = keys.intersection(td.keys())
+            keys = keys.intersection(td.keys(leaves_only=leaves_only, nodes_only=nodes_only))
         return sorted(keys, key=str)
 
     def entry_class(self, key: NestedKey) -> type:
@@ -2152,9 +2160,9 @@ class _CustomOpTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self, include_nested: bool = False, leaves_only: bool = False, nodes_only:bool = False,
     ) -> _TensorDictKeysView:
-        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only)
+        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only)
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = True
