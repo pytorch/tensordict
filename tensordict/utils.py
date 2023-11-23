@@ -1726,9 +1726,7 @@ def _legacy_lazy(func):
 
 # Process initializer for map
 def _proc_init(base_seed, queue):
-    print("worker", os.getpid())
     worker_id = queue.get(timeout=10)
-    print(worker_id)
     seed = base_seed + worker_id
     torch.manual_seed(seed)
     np_seed = _generate_state(base_seed, worker_id)

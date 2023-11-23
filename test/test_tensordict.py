@@ -6557,9 +6557,9 @@ class TestMap:
     @classmethod
     def get_rand_incr(cls, td):
         # torch
-        td["r"] += torch.randint(0, 100, ()).item()
+        td["r"] = td["r"] + torch.randint(0, 100, ()).item()
         # numpy
-        td["s"] += np.random.randint(0, 100, ()).item()
+        td["s"] = td["s"] + np.random.randint(0, 100, ()).item()
         return td
 
     def test_map_seed(self):
@@ -6572,7 +6572,7 @@ class TestMap:
                 "c": torch.arange(20),
             },
             batch_size=[20],
-        ).memmap_()
+        )
         generator = torch.Generator()
         # we use 4 workers with max 5 items each,
         # making sure that no worker does more than any other.
