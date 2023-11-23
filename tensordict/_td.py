@@ -1713,8 +1713,20 @@ class TensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def clone(self, recurse: bool = True) -> T:
+        source = _StringOnlyDoubleDict()
+        for key in self.keys(leaves_only=True):
+            val = self._get_str(key, NO_DEFAULT)
+            if recurse:
+                val = val.clone()
+            source._tensor_dict[key] = val
+
+        for key in self.keys(nodes_only=True):
+            source._tensor_dict[key] = self._get_str(key, NO_DEFAULT).clone(
+                recurse=False
+            )
+
         return TensorDict(
-            source={key: _clone_value(value, recurse) for key, value in self.items()},
+            source=source,
             batch_size=self.batch_size,
             device=self.device,
             names=copy(self._td_dim_names),
@@ -1745,7 +1757,7 @@ class TensorDict(TensorDictBase):
         if inplace and self.is_locked:
             raise RuntimeError(_LOCK_ERROR)
 
-        source = {}
+        source = _StringOnlyDoubleDict()
         if len(keys):
             keys_to_select = None
             for key in keys:
@@ -1761,17 +1773,18 @@ class TensorDict(TensorDictBase):
                         raise KeyError(
                             f"select failed to get key {key} in tensordict with keys {self.keys()}"
                         )
-                else:
-                    source[key] = val
-
-                if subkey:
+                elif subkey:
+                    source._dict_dict[key] = val
                     if keys_to_select is None:
                         # delay creation of defaultdict
                         keys_to_select = defaultdict(list)
                     keys_to_select[key].append(subkey)
+                else:
+                    source._tensor_dict[key] = val
+
             if keys_to_select is not None:
                 for key, val in keys_to_select.items():
-                    source[key] = source[key].select(
+                    source._dict_dict[key] = source._dict_dict[key].select(
                         *val, strict=strict, inplace=inplace
                     )
 
@@ -2307,9 +2320,15 @@ class _SubTensorDict(TensorDictBase):
     def contiguous(self) -> T:
         if self.is_contiguous():
             return self
+        source = _StringOnlyDoubleDict()
+        for key in self.keys(leaves_only=True):
+            source._tensor_dict[key] = self._get_str(key, default=NO_DEFAULT)
+        for key in self.keys(nodes_only=True):
+            source._dict_dict[key] = self._get_str(key, default=NO_DEFAULT)
+
         return TensorDict(
             batch_size=self.batch_size,
-            source={key: value for key, value in self.items()},
+            source=source,
             device=self.device,
             names=self.names,
             _run_checks=False,
