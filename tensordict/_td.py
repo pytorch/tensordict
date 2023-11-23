@@ -1837,9 +1837,11 @@ class TensorDict(TensorDictBase):
         if nodes_only and leaves_only:
             raise ValueError(_NODES_LEAVES_ERR)
         if not include_nested:
-            return self._tensordict.items(
-                leaves_only=leaves_only, nodes_only=nodes_only
-            )
+            if leaves_only:
+                return self._tensordict._tensor_dict.items()
+            if nodes_only:
+                return self._tensordict._dict_dict.items()
+            return self._tensordict.items()
         else:
             return super().items(
                 include_nested=include_nested,
@@ -1856,9 +1858,11 @@ class TensorDict(TensorDictBase):
         if nodes_only and leaves_only:
             raise ValueError(_NODES_LEAVES_ERR)
         if not include_nested:
-            return self._tensordict.values(
-                leaves_only=leaves_only, nodes_only=nodes_only
-            )
+            if leaves_only:
+                return self._tensordict._tensor_dict.values()
+            if nodes_only:
+                return self._tensordict._dict_dict.values()
+            return self._tensordict.values()
         else:
             return super().values(
                 include_nested=include_nested,
