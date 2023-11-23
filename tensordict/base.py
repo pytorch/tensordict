@@ -3520,6 +3520,10 @@ class TensorDictBase(MutableMapping):
                 result._set_str(
                     leaf_flat, self.get(leaf), validated=True, inplace=False
                 )
+            shared = result._is_shared = self._is_shared
+            mmap = result._is_memmap = self._is_memmap
+            if shared or mmap:
+                result._is_locked = True
             return result
 
     @cache  # noqa: B019

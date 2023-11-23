@@ -133,6 +133,8 @@ class LazyStackedTensorDict(TensorDictBase):
 
     """
 
+    _is_vmapped: bool = False
+
     @classmethod
     def __torch_function__(
         cls,
@@ -362,7 +364,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value)
             validated = True
-        if self.hook_in is not None:
+        if self._is_vmapped:
             value = self.hook_in(value)
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
@@ -397,7 +399,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value)
             validated = True
-        if self.hook_in is not None:
+        if self._is_vmapped:
             value = self.hook_in(value)
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
@@ -554,7 +556,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value, check_shape=False)
             validated = True
-        if self.hook_in is not None:
+        if self._is_vmapped:
             value = self.hook_in(value)
         split_index = self._split_index(index)
         converted_idx = split_index["index_dict"]
@@ -649,7 +651,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value, check_shape=False)
             validated = True
-        if self.hook_in is not None:
+        if self._is_vmapped:
             value = self.hook_in(value)
         item = td._get_str(key, NO_DEFAULT)
         item[idx] = value
@@ -778,7 +780,8 @@ class LazyStackedTensorDict(TensorDictBase):
                     # then it's a LazyStackedTD
                     out.hook_out = self.hook_out
                     out.hook_in = self.hook_in
-                    incr = 0 if self.hook_in is None else 1
+                    out._is_vmapped = self._is_vmapped
+                    incr = 0 if not self._is_vmapped else 1
                     out._batch_size = (
                         self._batch_size
                         + out.batch_size[(len(self._batch_size) + incr) :]
@@ -787,7 +790,8 @@ class LazyStackedTensorDict(TensorDictBase):
                     # then it's a tensorclass
                     out._tensordict.hook_out = self.hook_out
                     out._tensordict.hook_in = self.hook_in
-                    incr = 0 if self.hook_in is None else 1
+                    out._tensordict._is_vmapped = self._is_vmapped
+                    incr = 0 if not self._is_vmapped else 1
                     out._tensordict._batch_size = (
                         self._batch_size
                         + out._tensordict.batch_size[(len(self._batch_size) + incr) :]
@@ -860,7 +864,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # we return a stack with hook_out, and hack the batch_size and names
         # Per se it is still a LazyStack but the stacking dim is "hidden" from
         # the outside
-        out = td.clone(False)
+        out = td.copy()
 
         def hook_out(tensor, in_dim=in_dim, vmap_level=vmap_level):
             return _add_batch_dim(tensor, in_dim, vmap_level)
@@ -879,6 +883,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
         out.hook_out = hook_out
         out.hook_in = hook_in
+        out._is_vmapped = True
         out._batch_size = torch.Size(
             [dim for i, dim in enumerate(out._batch_size) if i != out.stack_dim]
         )
@@ -1580,7 +1585,7 @@ class LazyStackedTensorDict(TensorDictBase):
             isinstance(input_dict_or_td, LazyStackedTensorDict)
             and input_dict_or_td.stack_dim == self.stack_dim
         ):
-            if not input_dict_or_td.shape[self.stack_dim] == len(self.tensordicts):
+            if len(input_dict_or_td.tensordicts) != len(self.tensordicts):
                 raise ValueError(
                     "cannot update stacked tensordicts with different shapes."
                 )
