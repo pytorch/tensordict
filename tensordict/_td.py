@@ -52,10 +52,11 @@ from tensordict.utils import (
     _is_tensorclass,
     _KEY_ERROR,
     _LOCK_ERROR,
+    _NODES_LEAVES_ERR,
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
-    _set_item,unravel_key,
+    _set_item,
     _set_max_batch_size,
     _shape,
     _STRDTYPE2DTYPE,
@@ -71,7 +72,8 @@ from tensordict.utils import (
     is_tensorclass,
     KeyedJaggedTensor,
     lock_blocked,
-    NestedKey, _NODES_LEAVES_ERR,
+    NestedKey,
+    unravel_key,
 )
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
@@ -277,39 +279,42 @@ class TensorDict(TensorDictBase):
             memo[id(module)] = swap
             _swap = {}
 
-        for key, value in self.items():
-            if isinstance(value, (Tensor, ftdim.Tensor)):
-                if module.__class__.__setattr__ is __base__setattr__:
-                    # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
-                    local_out = _set_tensor_dict(__dict__, module, key, value)
-                else:
-                    if return_swap:
-                        local_out = getattr(module, key)
-                    # use specialized __setattr__ if needed
-                    setattr(module, key, value)
+        for key, value in self.items(include_nested=False, leaves_only=True):
+            if module.__class__.__setattr__ is __base__setattr__:
+                # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
+                local_out = _set_tensor_dict(__dict__, module, key, value)
             else:
-                for _ in value.keys():
-                    # if there is at least one key, we must populate the module.
-                    # Otherwise we just go to the next key
-                    break
-                else:
-                    continue
-                if swap_dest is not None:
-                    local_dest = swap_dest._get_str(key, default=NO_DEFAULT)
-                else:
-                    local_dest = None
-                child = __dict__["_modules"][key]
-                if id(child) in memo:
-                    local_out = memo[id(child)]
-                else:
-                    local_out = value.to_module(
-                        child,
-                        return_swap=return_swap,
-                        swap_dest=local_dest,
-                        memo=memo,
-                    )
-                # we don't want to do this op more than once
-                if return_swap and (
+                if return_swap:
+                    local_out = getattr(module, key)
+                # use specialized __setattr__ if needed
+                setattr(module, key, value)
+            if return_swap:
+                _swap[key] = local_out
+
+        for key, value in self.items(include_nested=False, nodes_only=True):
+            for _ in value.keys():
+                # if there is at least one key, we must populate the module.
+                # Otherwise we just go to the next key
+                break
+            else:
+                continue
+            if swap_dest is not None:
+                local_dest = swap_dest._get_str(key, default=NO_DEFAULT)
+            else:
+                local_dest = None
+            child = __dict__["_modules"][key]
+            if id(child) in memo:
+                local_out = memo[id(child)]
+            else:
+                local_out = value.to_module(
+                    child,
+                    return_swap=return_swap,
+                    swap_dest=local_dest,
+                    memo=memo,
+                )
+            # we don't want to do this op more than once
+            if return_swap:
+                if (
                     not has_set_device
                     and swap.device is not None
                     and local_out.device is not None
@@ -318,8 +323,6 @@ class TensorDict(TensorDictBase):
                     has_set_device = True
                     # map out to the local_out device
                     swap = swap.to(device=local_out.device)
-
-            if return_swap:
                 _swap[key] = local_out
         if return_swap:
             if isinstance(swap, TensorDict):
@@ -552,11 +555,11 @@ class TensorDict(TensorDictBase):
                 item_trsf = fn(item, *_others)
             if item_trsf is not None:
                 out._set_str(
-                        key,
-                        item_trsf,
-                        inplace=BEST_ATTEMPT_INPLACE if inplace else False,
-                        validated=checked,
-                    )
+                    key,
+                    item_trsf,
+                    inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                    validated=checked,
+                )
 
         if not inplace and is_locked:
             out.lock_()
@@ -630,14 +633,16 @@ class TensorDict(TensorDictBase):
         else:
             batch_size = _getitem_batch_size(batch_size, index)
         source = {}
-        for key, item in self.items():
-            if isinstance(item, TensorDict):
+        for key, item in self.items(leaves_only=True):
+            source[key] = _get_item(item, index)
+        for key, item in self.items(nodes_only=True):
+            try:
                 # this is the simplest case, we can pre-compute the batch size easily
                 new_batch_size = batch_size + item.batch_size[batch_dims:]
                 source[key] = item._index_tensordict(
                     index, new_batch_size=new_batch_size
                 )
-            else:
+            except Exception:
                 source[key] = _get_item(item, index)
         return TensorDict(
             source=source,
@@ -1743,7 +1748,9 @@ class TensorDict(TensorDictBase):
                     if not strict:
                         continue
                     else:
-                        raise KeyError(f"select failed to get key {key} in tensordict with keys {self.keys()}")
+                        raise KeyError(
+                            f"select failed to get key {key} in tensordict with keys {self.keys()}"
+                        )
                 else:
                     source[key] = val
 
@@ -1774,21 +1781,35 @@ class TensorDict(TensorDictBase):
         return out
 
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> _TensorDictKeysView:
         if not include_nested:
-            return self._tensordict.keys(leaves_only=leaves_only, nodes_only=nodes_only, )
+            return self._tensordict.keys(
+                leaves_only=leaves_only,
+                nodes_only=nodes_only,
+            )
         else:
             return self._nested_keys(
-                include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only,
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                nodes_only=nodes_only,
             )
 
     # @cache  # noqa: B019
     def _nested_keys(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> _TensorDictKeysView:
         return _TensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only,
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            nodes_only=nodes_only,
         )
 
     def __getstate__(self):
@@ -1808,25 +1829,41 @@ class TensorDict(TensorDictBase):
 
     # some custom methods for efficiency
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only:bool=False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> Iterator[tuple[str, CompatibleType]]:
         if nodes_only and leaves_only:
             raise ValueError(_NODES_LEAVES_ERR)
         if not include_nested:
-            return self._tensordict.items(leaves_only=leaves_only, nodes_only=nodes_only)
+            return self._tensordict.items(
+                leaves_only=leaves_only, nodes_only=nodes_only
+            )
         else:
-            return super().items(include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only)
+            return super().items(
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                nodes_only=nodes_only,
+            )
 
     def values(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only:bool=False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> Iterator[tuple[str, CompatibleType]]:
         if nodes_only and leaves_only:
             raise ValueError(_NODES_LEAVES_ERR)
         if not include_nested:
-            return self._tensordict.values(leaves_only=leaves_only, nodes_only=nodes_only)
+            return self._tensordict.values(
+                leaves_only=leaves_only, nodes_only=nodes_only
+            )
         else:
             return super().values(
-                include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only,
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                nodes_only=nodes_only,
             )
 
 
@@ -2053,9 +2090,16 @@ class _SubTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> _TensorDictKeysView:
-        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only)
+        return self._source.keys(
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            nodes_only=nodes_only,
+        )
 
     def entry_class(self, key: NestedKey) -> type:
         source_type = type(self._source.get(key))
@@ -2447,11 +2491,11 @@ class _SubTensorDict(TensorDictBase):
                 item_trsf = fn(item, *_others)
             if item_trsf is not None:
                 out._set_str(
-                        key,
-                        item_trsf,
-                        inplace=BEST_ATTEMPT_INPLACE if inplace else False,
-                        validated=checked,
-                    )
+                    key,
+                    item_trsf,
+                    inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                    validated=checked,
+                )
 
         if not inplace and is_locked:
             out.lock_()
@@ -2520,7 +2564,14 @@ class _TensorDictKeysView:
                 if not self.leaves_only:
                     yield node_key
                 if self.include_nested:
-                    yield from (unravel_key((node_key, _key)) for _key in self.tensordict._get_str(node_key, NO_DEFAULT).keys(include_nested=True, leaves_only=self.leaves_only, nodes_only=self.nodes_only))
+                    yield from (
+                        unravel_key((node_key, _key))
+                        for _key in self.tensordict._get_str(node_key, NO_DEFAULT).keys(
+                            include_nested=True,
+                            leaves_only=self.leaves_only,
+                            nodes_only=self.nodes_only,
+                        )
+                    )
 
     # def _iter_helper(
     #     self, tensordict: T, prefix: str | None = None
@@ -2544,10 +2595,10 @@ class _TensorDictKeysView:
     def __len__(self) -> int:
         return sum(1 for _ in self)
 
-    #@classmethod
-    #def _items(
+    # @classmethod
+    # def _items(
     #    cls, tensordict: TensorDictBase | None = None
-    #) -> Iterable[tuple[NestedKey, CompatibleType]]:
+    # ) -> Iterable[tuple[NestedKey, CompatibleType]]:
     #    if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
     #        return tensordict._tensordict.items()
     #    if isinstance(tensordict, KeyedJaggedTensor):
@@ -2572,8 +2623,10 @@ class _TensorDictKeysView:
 
     def _tensor_keys(self):
         return self.tensordict._tensordict._tensor_dict.keys()
+
     def _node_keys(self):
         return self.tensordict._tensordict._dict_dict.keys()
+
     def _keys(self):
         return self.tensordict._tensordict.keys()
 
@@ -2588,7 +2641,13 @@ class _TensorDictKeysView:
             return False
         if key[0] in self._node_keys():
             other_keys = unravel_key(key[1:])
-            return other_keys in self.tensordict._get_str(key[0], default=NO_DEFAULT).keys(include_nested=isinstance(other_keys, tuple), leaves_only=self.leaves_only, nodes_only=self.nodes_only)
+            return other_keys in self.tensordict._get_str(
+                key[0], default=NO_DEFAULT
+            ).keys(
+                include_nested=isinstance(other_keys, tuple),
+                leaves_only=self.leaves_only,
+                nodes_only=self.nodes_only,
+            )
         return False
 
         # if isinstance(key, str):

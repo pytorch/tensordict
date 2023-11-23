@@ -612,27 +612,24 @@ def _dtype(tensor: Tensor) -> torch.dtype:
 
 
 def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
-    if isinstance(tensor, Tensor):
-        try:
-            return tensor[index]
-        except IndexError as err:
-            # try to map list index to tensor, and assess type. If bool, we
-            # likely have a nested list of booleans which is not supported by pytorch
-            if _is_lis_of_list_of_bools(index):
-                index = torch.tensor(index, device=tensor.device)
-                if index.dtype is torch.bool:
-                    warnings.warn(
-                        "Indexing a tensor with a nested list of boolean values is "
-                        "going to be deprecated as this functionality is not supported "
-                        f"by PyTorch. (follows error: {err})",
-                        category=DeprecationWarning,
-                    )
-                return tensor[index]
-            raise err
-    elif isinstance(tensor, KeyedJaggedTensor):
-        return index_keyedjaggedtensor(tensor, index)
-    else:
+    try:
         return tensor[index]
+    except Exception as err:
+        # try to map list index to tensor, and assess type. If bool, we
+        # likely have a nested list of booleans which is not supported by pytorch
+        if isinstance(tensor, KeyedJaggedTensor):
+            return index_keyedjaggedtensor(tensor, index)
+        if _is_lis_of_list_of_bools(index):
+            index = torch.tensor(index, device=tensor.device)
+            if index.dtype is torch.bool:
+                warnings.warn(
+                    "Indexing a tensor with a nested list of boolean values is "
+                    "going to be deprecated as this functionality is not supported "
+                    f"by PyTorch. (follows error: {err})",
+                    category=DeprecationWarning,
+                )
+            return tensor[index]
+        raise err
 
 
 def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> Tensor:
@@ -1065,6 +1062,7 @@ class _StringKeys(KeysView):
     def __add__(self, other):
         return _StringKeys((*self, *other))
 
+
 class _StringOnlyDoubleDict:
     """A dict class where contains is restricted to strings.
 
@@ -1110,29 +1108,31 @@ class _StringOnlyDoubleDict:
         return (item in self._tensor_dict) or (item in self._dict_dict)
 
     def __getitem__(self, key):
-      result = self._tensor_dict.get(key, None)
-      if result is None:
-          return self._dict_dict[key]
-      return result
+        result = self._tensor_dict.get(key, None)
+        if result is None:
+            return self._dict_dict[key]
+        return result
 
     def __setitem__(self, key, value):
-      if isinstance(value, torch.Tensor):
-          self._tensor_dict[key] = value
-          self._dict_dict.pop(key, None)
-      else:
-          self._dict_dict[key] = value
-          self._tensor_dict.pop(key, None)
+        if isinstance(value, torch.Tensor):
+            self._tensor_dict[key] = value
+            self._dict_dict.pop(key, None)
+        else:
+            self._dict_dict[key] = value
+            self._tensor_dict.pop(key, None)
 
     def __iter__(self):
-      yield from self._tensor_dict
-      yield from self._dict_dict
+        yield from self._tensor_dict
+        yield from self._dict_dict
 
     def keys(self, leaves_only=False, nodes_only=False):
         if leaves_only:
             return _StringKeys(self._tensor_dict.keys())
         if nodes_only:
             return _StringKeys(self._dict_dict.keys())
-        return _StringKeys(self._tensor_dict.keys()) + _StringKeys(self._dict_dict.keys())
+        return _StringKeys(self._tensor_dict.keys()) + _StringKeys(
+            self._dict_dict.keys()
+        )
 
     def keys_tensors(self):
         return self._tensor_dict.keys()
@@ -1144,7 +1144,7 @@ class _StringOnlyDoubleDict:
             yield from self._dict_dict.items()
 
     def items_tensors(self):
-      return self._tensor_dict.items()
+        return self._tensor_dict.items()
 
     def values(self, leaves_only=False, nodes_only=False):
         if not nodes_only:
@@ -1162,33 +1162,39 @@ class _StringOnlyDoubleDict:
         val = self._tensor_dict.pop(key, None)
         if val is None:
             del self._dict_dict[key]
+
     def get(self, key, *args, **kwargs):
         if not args and not kwargs:
             return self[key]
-        default = args[0] if args else kwargs['default']
+        default = args[0] if args else kwargs["default"]
         val = self._tensor_dict.get(key, None)
         if val is None:
             return self._dict_dict.get(key, default)
         return val
+
     def pop(self, key, *args, **kwargs):
         if not args and not kwargs:
             val = self._tensor_dict.pop(key, None)
             if val is None:
                 return self._dict_dict.pop(key)
             return val
-        default = args[0] if args else kwargs['default']
+        default = args[0] if args else kwargs["default"]
         val = self._tensor_dict.pop(key, None)
         if val is None:
             return self._dict_dict.pop(key, default)
         return val
+
     def copy(self):
         return type(self)(self)
 
     def popitem(self):
-        raise NotImplementedError(f"Cannot execute popitem on {type(self)} as the insertion order isn't guaranteed.")
+        raise NotImplementedError(
+            f"Cannot execute popitem on {type(self)} as the insertion order isn't guaranteed."
+        )
 
     def reversed(self):
         return reversed(self.keys())
+
     def setdefault(self, key, *args, **kwargs):
         if not args and not kwargs:
             return self.get(key, None)
@@ -1196,15 +1202,18 @@ class _StringOnlyDoubleDict:
             return self._tensor_dict[key]
         if key in self._dict_dict:
             return self._dict_dict[key]
-        default = args[0] if args else kwargs['default']
+        default = args[0] if args else kwargs["default"]
         if isinstance(default, torch.Tensor):
             return self._tensor_dict.setdefault(key, default=default)
         return self._dict_dict.setdefault(key, default=default)
+
     def update(self, other):
         for key, item in other.items():
             self[key] = item
+
     def __or__(self, other):
         return _StringOnlyDoubleDict(self, **other)
+
 
 def lock_blocked(func):
     """Checks that the tensordict is unlocked before executing a function."""

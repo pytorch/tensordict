@@ -80,8 +80,10 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
 
     def _tensor_keys(self):
         return self.tensordict._key_list(leaves_only=True)
+
     def _node_keys(self):
         return self.tensordict._key_list(nodes_only=True)
+
     def _keys(self):
         return self.tensordict._key_list()
 
@@ -1061,10 +1063,16 @@ class LazyStackedTensorDict(TensorDictBase):
         self._batch_size = new_size
 
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> _LazyStackedTensorDictKeysView:
         keys = _LazyStackedTensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only,
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            nodes_only=nodes_only,
         )
         return keys
 
@@ -1080,9 +1088,13 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @cache  # noqa: B019
     def _key_list(self, leaves_only=False, nodes_only=False):
-        keys = set(self.tensordicts[0].keys(leaves_only=leaves_only, nodes_only=nodes_only))
+        keys = set(
+            self.tensordicts[0].keys(leaves_only=leaves_only, nodes_only=nodes_only)
+        )
         for td in self.tensordicts[1:]:
-            keys = keys.intersection(td.keys(leaves_only=leaves_only, nodes_only=nodes_only))
+            keys = keys.intersection(
+                td.keys(leaves_only=leaves_only, nodes_only=nodes_only)
+            )
         return sorted(keys, key=str)
 
     def entry_class(self, key: NestedKey) -> type:
@@ -2160,9 +2172,16 @@ class _CustomOpTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only:bool = False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> _TensorDictKeysView:
-        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only, nodes_only=nodes_only)
+        return self._source.keys(
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            nodes_only=nodes_only,
+        )
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = True

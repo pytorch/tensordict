@@ -865,7 +865,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
         return f"TensorDictParams(params={self._param_td})"
 
     def values(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> Iterator[CompatibleType]:
         if not nodes_only:
             for v in self._param_td.values(include_nested, leaves_only=True):
@@ -931,14 +934,17 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_fallback
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool=False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> Iterator[CompatibleType]:
         if not nodes_only:
             # we also need leaves
             for k, v in self._param_td.items(
                 leaves_only=True,
                 include_nested=include_nested,
-                ):
+            ):
                 yield k, self._apply_get_post_hook(v)
         if not leaves_only:
             # we also need nodes

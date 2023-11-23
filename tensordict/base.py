@@ -33,10 +33,11 @@ from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _is_tensorclass,
     _KEY_ERROR,
+    _NODES_LEAVES_ERR,
     _shape,
     _split_tensordict,
     _td_fields,
-    _unravel_key_to_tuple,unravel_key,
+    _unravel_key_to_tuple,
     as_decorator,
     cache,
     convert_ellipsis_to_idx,
@@ -48,7 +49,8 @@ from tensordict.utils import (
     lazy_legacy,
     lock_blocked,
     NestedKey,
-    prod, _NODES_LEAVES_ERR,
+    prod,
+    unravel_key,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 
@@ -2088,7 +2090,10 @@ class TensorDictBase(MutableMapping):
         return self.get(key)
 
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> Iterator[tuple[str, CompatibleType]]:
         """Returns a generator of key-value pairs for the tensordict."""
         # check the conditions once only
@@ -2103,10 +2108,20 @@ class TensorDictBase(MutableMapping):
                 if not leaves_only:
                     yield k, val
                 if include_nested:
-                    yield from (unravel_key((k, subk)) for subk, val in val.items(leaves_only=leaves_only, nodes_only=nodes_only, include_nested=True))
+                    yield from (
+                        unravel_key((k, subk))
+                        for subk, val in val.items(
+                            leaves_only=leaves_only,
+                            nodes_only=nodes_only,
+                            include_nested=True,
+                        )
+                    )
 
     def values(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> Iterator[CompatibleType]:
         """Returns a generator representing the values for the tensordict."""
         # check the conditions once only
@@ -2121,10 +2136,19 @@ class TensorDictBase(MutableMapping):
                 if not leaves_only:
                     yield val
                 if include_nested:
-                    yield from val.values(leaves_only=leaves_only, nodes_only=nodes_only, include_nested=True)
+                    yield from val.values(
+                        leaves_only=leaves_only,
+                        nodes_only=nodes_only,
+                        include_nested=True,
+                    )
 
     @abc.abstractmethod
-    def keys(self, include_nested: bool = False, leaves_only: bool = False, nodes_only:bool = False):
+    def keys(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
+    ):
         """Returns a generator of tensordict keys."""
         ...
 

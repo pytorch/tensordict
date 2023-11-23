@@ -78,7 +78,9 @@ class _PersistentTDKeysView(_TensorDictKeysView):
             else:
                 yield from visitor
         else:
-            yield from self.tensordict._valid_keys(nodes_only=self.nodes_only, leaves_only=self.leaves_only)
+            yield from self.tensordict._valid_keys(
+                nodes_only=self.nodes_only, leaves_only=self.leaves_only
+            )
 
     def __contains__(self, key):
         if isinstance(key, tuple) and len(key) == 1:
@@ -417,19 +419,20 @@ class PersistentTensorDict(TensorDictBase):
                     keys.append(key)
         elif leaves_only:
             for key, val in self.file.items():
-                if self._get_metadata(key).get('dtype', None):
+                if self._get_metadata(key).get("dtype", None):
                     keys.append(key)
         elif nodes_only:
             for key, val in self.file.items():
-                if self._get_metadata(key).get('dtype', NO_DEFAULT) is None:
+                if self._get_metadata(key).get("dtype", NO_DEFAULT) is None:
                     keys.append(key)
         return keys
 
-
-
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False, nodes_only: bool = False,
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        nodes_only: bool = False,
     ) -> _PersistentTDKeysView:
         return _PersistentTDKeysView(
             tensordict=self,
