@@ -22,8 +22,9 @@ from typing import (
     OrderedDict,
     overload,
     Sequence,
+    Tuple,
     TypeVar,
-    Union, Tuple,
+    Union,
 )
 
 import numpy as np
