@@ -3004,6 +3004,7 @@ class TensorDictBase(MutableMapping):
 
         """
         from torch import multiprocessing as mp
+
         # import multiprocessing as mp
 
         if pool is None:
@@ -3035,7 +3036,7 @@ class TensorDictBase(MutableMapping):
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
-        print('number of tds', len(self_split))
+        print("number of tds", len(self_split))
         chunksize = 1
         out = []
         imap = pool.imap(fn, self_split, chunksize)

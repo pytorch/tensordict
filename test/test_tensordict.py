@@ -6550,7 +6550,10 @@ class TestFCD(TestTensorDictsBase):
             assert y.dims == (d0,)
             assert y._tensor.shape[0] == param_batch
 
+
 COUNTER = 0
+
+
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
@@ -6558,7 +6561,7 @@ class TestMap:
     def get_rand_incr(cls, td):
         global COUNTER
         if COUNTER == 5:
-            print('pausing')
+            print("pausing")
             time.sleep(1000)
             return
         COUNTER += 1
@@ -6571,7 +6574,7 @@ class TestMap:
         return td
 
     def test_map_seed(self):
-        mp.set_start_method('spawn')
+        mp.set_start_method("spawn")
         td = TensorDict(
             {
                 "r": torch.zeros(20, dtype=torch.int),
@@ -6591,7 +6594,7 @@ class TestMap:
             chunksize=1,
             max_tasks_per_child=5,
         )
-        print('first')
+        print("first")
         generator.manual_seed(0)
         td_out_1 = td.map(
             TestMap.get_rand_incr,
@@ -6600,7 +6603,7 @@ class TestMap:
             chunksize=1,
             max_tasks_per_child=5,
         )
-        print('second')
+        print("second")
         # we cannot know which worker picks which job, but since they will all have
         # a seed from 0 to 4 and produce 1 number each, we can chekc that
         # those numbers are exactly what we were expecting.
