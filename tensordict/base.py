@@ -3125,7 +3125,6 @@ class TensorDictBase(MutableMapping):
                 return self.lock_()
             if last_op == self.__class__.to_module.__name__:
                 if is_tensor_collection(out):
-                    # with out.unlock_():
                     return self.to_module(*args, **kwargs, swap_dest=out)
                 else:
                     raise RuntimeError(

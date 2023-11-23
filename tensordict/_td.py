@@ -272,7 +272,6 @@ class TensorDict(TensorDictBase):
             # is passed with to_module) but for the device it could be a problem.
             if swap_dest is None:
                 swap = TensorDict({}, batch_size=[])
-                swap.clear_device_()
             else:
                 swap = swap_dest
             memo[id(module)] = swap
@@ -324,6 +323,7 @@ class TensorDict(TensorDictBase):
                 _swap[key] = local_out
         if return_swap:
             if isinstance(swap, TensorDict):
+                # this is very ad-hoc but faster than calling _set_str every time
                 swap._tensordict.update(_swap)
             else:
                 swap.update(_swap)
