@@ -1210,8 +1210,12 @@ class _StringOnlyDoubleDict:
         return self._dict_dict.setdefault(key, default=default)
 
     def update(self, other):
-        for key, item in other.items():
-            self[key] = item
+        if isinstance(other, _StringOnlyDoubleDict):
+            self._tensor_dict.update(other._tensor_dict)
+            self._dict_dict.update(other._dict_dict)
+        else:
+            for key, item in other.items():
+                self[key] = item
 
     def __or__(self, other):
         return _StringOnlyDoubleDict(self, **other)

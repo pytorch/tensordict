@@ -281,10 +281,9 @@ class TensorDict(TensorDictBase):
             else:
                 swap = swap_dest
             memo[id(module)] = swap
-            _swap = {}
+            _swap = _StringOnlyDoubleDict()
 
         for key, value in self.items(include_nested=False, leaves_only=True):
-            assert not is_tensor_collection(value), (key, self)
             if module.__class__.__setattr__ is __base__setattr__:
                 # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                 local_out = _set_tensor_dict(__dict__, module, key, value)
@@ -294,10 +293,9 @@ class TensorDict(TensorDictBase):
                 # use specialized __setattr__ if needed
                 setattr(module, key, value)
             if return_swap:
-                _swap[key] = local_out
+                _swap._tensor_dict[key] = local_out
 
         for key, value in self.items(include_nested=False, nodes_only=True):
-            assert is_tensor_collection(value)
             for _ in value.keys():
                 # if there is at least one key, we must populate the module.
                 # Otherwise we just go to the next key
@@ -329,7 +327,7 @@ class TensorDict(TensorDictBase):
                     has_set_device = True
                     # map out to the local_out device
                     swap = swap.to(device=local_out.device)
-                _swap[key] = local_out
+                _swap._dict_dict[key] = local_out
         if return_swap:
             if isinstance(swap, TensorDict):
                 # this is very ad-hoc but faster than calling _set_str every time
