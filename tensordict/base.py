@@ -17,6 +17,7 @@ from typing import (
     Callable,
     Generator,
     Iterator,
+    List,
     Optional,
     OrderedDict,
     overload,
@@ -328,7 +329,9 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def to_module(self, module: nn.Module, return_swap: bool = False, swap_dest=None):
+    def to_module(
+        self, module: nn.Module, return_swap: bool = False, swap_dest=None, memo=None
+    ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
 
         Args:
@@ -337,6 +340,10 @@ class TensorDictBase(MutableMapping):
                 will be returned. Defaults to ``False``.
             swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
                 the tensordict where the swap should be written.
+            memo (dict, optional): when the same module is present multiple times
+                in the input module, a memo is used to avoid fetching the params
+                that have just been set. This argument should be ignored during
+                regular calls to `to_module`.
 
         Examples:
             >>> from torch import nn
@@ -527,19 +534,9 @@ class TensorDictBase(MutableMapping):
             raise ValueError(
                 f"chunks must be a strictly positive integer, got {chunks}."
             )
-        indices = []
-        _idx_start = 0
-        if chunks > 1:
-            interval = _idx_end = self.batch_size[dim] // chunks
-        else:
-            interval = _idx_end = self.batch_size[dim]
-        for c in range(chunks):
-            indices.append(slice(_idx_start, _idx_end))
-            _idx_start = _idx_end
-            _idx_end = _idx_end + interval if c < chunks - 2 else self.batch_size[dim]
-        if dim < 0:
-            dim = len(self.batch_size) + dim
-        return tuple(self[(*[slice(None) for _ in range(dim)], idx)] for idx in indices)
+        # fall back on split, using upper rounding
+        split_size = -(self.batch_size[dim] // -chunks)
+        return self.split(split_size, dim=dim)
 
     @overload
     def unsqueeze(self, dim: int) -> T:
@@ -3573,6 +3570,10 @@ class TensorDictBase(MutableMapping):
                 result._set_str(
                     leaf_flat, self.get(leaf), validated=True, inplace=False
                 )
+            shared = result._is_shared = self._is_shared
+            mmap = result._is_memmap = self._is_memmap
+            if shared or mmap:
+                result._is_locked = True
             return result
 
     @cache  # noqa: B019
@@ -3676,7 +3677,12 @@ class TensorDictBase(MutableMapping):
             return self
 
     @abc.abstractmethod
-    def _index_tensordict(self, index: IndexType) -> T:
+    def _index_tensordict(
+        self,
+        index: IndexType,
+        new_batch_size: torch.Size | None = None,
+        names: List[str] | None = None,
+    ) -> T:
         ...
 
     # Locking functionality
