@@ -529,7 +529,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     def __hash__(self):
-        return hash((id(self), id(self._param_td)))
+        return hash((id(self), id(self.__dict__.get("_param_td", None))))
 
     @_fallback
     def __eq__(self, other: object) -> TensorDictBase:
@@ -541,7 +541,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     def __getattr__(self, item: str) -> Any:
         try:
-            return getattr(self._param_td, item)
+            return getattr(self.__dict__["_param_td"], item)
         except AttributeError:
             return super().__getattr__(item)
 
