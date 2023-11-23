@@ -23,7 +23,7 @@ from typing import (
     overload,
     Sequence,
     TypeVar,
-    Union,
+    Union, Tuple,
 )
 
 import numpy as np
@@ -3047,7 +3047,7 @@ class TensorDictBase(MutableMapping):
         value: CompatibleType | dict[str, CompatibleType],
         *,
         check_shape: bool = True,
-    ) -> CompatibleType | dict[str, CompatibleType]:
+    ) -> Tuple[CompatibleType | dict[str, CompatibleType], bool]:
         cls = type(value)
         is_tc = _is_tensor_collection(cls)
         if is_tc or issubclass(cls, tuple(_ACCEPTED_CLASSES)):
@@ -3088,7 +3088,7 @@ class TensorDictBase(MutableMapping):
                 value = value.clone(False).refine_names(*self.names)
             elif not has_names and value._has_names():
                 self.names = value.names[: self.batch_dims]
-        return value
+        return value, is_tc
 
     # Context manager functionality
     @property

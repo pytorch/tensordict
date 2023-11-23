@@ -205,36 +205,38 @@ class TensorDict(TensorDictBase):
         if device is not None and isinstance(device, (int, str)):
             device = torch.device(device)
         self._device = device
-
-        if not _run_checks:
-            _tensordict: dict = _StringOnlyDoubleDict()
-            self._batch_size = batch_size
-            for key, value in source.items():
-                if isinstance(value, dict):
-                    value = TensorDict(
-                        value,
-                        batch_size=self._batch_size,
-                        device=self._device,
-                        _run_checks=_run_checks,
-                        _is_shared=_is_shared,
-                        _is_memmap=_is_memmap,
-                    )
-                _tensordict[key] = value
-            self._tensordict = _tensordict
-            self._td_dim_names = names
+        if isinstance(source, _StringOnlyDoubleDict):
+            self._tensordict = source
         else:
-            self._tensordict = _StringOnlyDoubleDict()
-            if not isinstance(source, (TensorDictBase, dict)):
-                raise ValueError(
-                    "A TensorDict source is expected to be a TensorDictBase "
-                    f"sub-type or a dictionary, found type(source)={type(source)}."
-                )
-            self._batch_size = self._parse_batch_size(source, batch_size)
-            self.names = names
-
-            if source is not None:
+            if not _run_checks:
+                _tensordict: dict = _StringOnlyDoubleDict()
+                self._batch_size = batch_size
                 for key, value in source.items():
-                    self.set(key, value)
+                    if isinstance(value, dict):
+                        value = TensorDict(
+                            value,
+                            batch_size=self._batch_size,
+                            device=self._device,
+                            _run_checks=_run_checks,
+                            _is_shared=_is_shared,
+                            _is_memmap=_is_memmap,
+                        )
+                    _tensordict[key] = value
+                self._tensordict = _tensordict
+                self._td_dim_names = names
+            else:
+                self._tensordict = _StringOnlyDoubleDict()
+                if not isinstance(source, (TensorDictBase, dict)):
+                    raise ValueError(
+                        "A TensorDict source is expected to be a TensorDictBase "
+                        f"sub-type or a dictionary, found type(source)={type(source)}."
+                    )
+                self._batch_size = self._parse_batch_size(source, batch_size)
+                self.names = names
+
+                if source is not None:
+                    for key, value in source.items():
+                        self.set(key, value)
 
     @staticmethod
     def from_module(
@@ -632,19 +634,19 @@ class TensorDict(TensorDictBase):
             batch_size = new_batch_size
         else:
             batch_size = _getitem_batch_size(batch_size, index)
-        source = {}
+        source = _StringOnlyDoubleDict()
         for key, item in self.items(leaves_only=True):
-            source[key] = _get_item(item, index)
+            source._tensor_dict[key] = _get_item(item, index)
         for key, item in self.items(nodes_only=True):
             try:
                 # this is the simplest case, we can pre-compute the batch size easily
                 new_batch_size = batch_size + item.batch_size[batch_dims:]
-                source[key] = item._index_tensordict(
+                source._dict_dict[key] = item._index_tensordict(
                     index, new_batch_size=new_batch_size
                 )
             except Exception:
-                source[key] = _get_item(item, index)
-        return TensorDict(
+                source._dict_dict[key] = _get_item(item, index)
+        out = TensorDict(
             source=source,
             batch_size=batch_size,
             device=self.device,
@@ -653,6 +655,7 @@ class TensorDict(TensorDictBase):
             _is_shared=self.is_shared(),
             _is_memmap=self.is_memmap(),
         )
+        return out
 
     def expand(self, *args, **kwargs) -> T:
         tensordict_dims = self.batch_dims
@@ -1263,11 +1266,16 @@ class TensorDict(TensorDictBase):
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
             inplace = self._convert_inplace(inplace, key)
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value, is_tc = self._validate_value(value, check_shape=True)
+        else:
+            is_tc = _is_tensor_collection(type(value))
         if not inplace:
             if self._is_locked:
                 raise RuntimeError(_LOCK_ERROR)
-            self._tensordict[key] = value
+            if is_tc:
+                self._tensordict._dict_dict[key] = value
+            else:
+                self._tensordict._tensor_dict[key] = value
         else:
             try:
                 dest = self._get_str(key, default=NO_DEFAULT)
@@ -1306,7 +1314,7 @@ class TensorDict(TensorDictBase):
 
     def _set_at_str(self, key, value, idx, *, validated):
         if not validated:
-            value = self._validate_value(value, check_shape=False)
+            value, is_tc = self._validate_value(value, check_shape=False)
             validated = True
         tensor_in = self._get_str(key, NO_DEFAULT)
 
@@ -2012,7 +2020,7 @@ class _SubTensorDict(TensorDictBase):
         # so that this method can have minimal overhead from runtime checks
         parent = self._source
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value, is_tc = self._validate_value(value, check_shape=True)
             validated = True
         if not inplace:
             if _is_tensor_collection(value.__class__):
@@ -2065,7 +2073,7 @@ class _SubTensorDict(TensorDictBase):
     def _set_at_str(self, key, value, idx, *, validated):
         tensor_in = self._get_str(key, NO_DEFAULT)
         if not validated:
-            value = self._validate_value(value, check_shape=False)
+            value, is_tc = self._validate_value(value, check_shape=False)
             validated = True
         if isinstance(idx, tuple) and len(idx) and isinstance(idx[0], tuple):
             warn(

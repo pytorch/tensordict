@@ -372,7 +372,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 "their register."
             ) from e
         if not validated:
-            value = self._validate_value(value)
+            value, _ = self._validate_value(value)
             validated = True
         if self._is_vmapped:
             value = self.hook_in(value)
@@ -407,7 +407,7 @@ class LazyStackedTensorDict(TensorDictBase):
         #         )
         #     inplace = has_key
         if not validated:
-            value = self._validate_value(value)
+            value, _ = self._validate_value(value)
             validated = True
         if self._is_vmapped:
             value = self.hook_in(value)
@@ -564,7 +564,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _set_at_str(self, key, value, index, *, validated):
         if not validated:
-            value = self._validate_value(value, check_shape=False)
+            value, _ = self._validate_value(value, check_shape=False)
             validated = True
         if self._is_vmapped:
             value = self.hook_in(value)
@@ -659,7 +659,7 @@ class LazyStackedTensorDict(TensorDictBase):
             *tds, stack_dim=self.stack_dim, hook_out=self.hook_out, hook_in=self.hook_in
         )
         if not validated:
-            value = self._validate_value(value, check_shape=False)
+            value, _ = self._validate_value(value, check_shape=False)
             validated = True
         if self._is_vmapped:
             value = self.hook_in(value)
@@ -2096,7 +2096,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def _set_str(self, key, value, *, inplace: bool, validated: bool):
         if not validated:
-            value = self._validate_value(value, check_shape=True)
+            value, _ = self._validate_value(value, check_shape=True)
             validated = True
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
         self._source._set_str(key, value, inplace=inplace, validated=validated)
@@ -2145,7 +2145,7 @@ class _CustomOpTensorDict(TensorDictBase):
                 f"`td.clone()` before `td.set_at_(...)`"
             )
         if not validated:
-            value = self._validate_value(value, check_shape=False)
+            value, _ = self._validate_value(value, check_shape=False)
 
         transformed_tensor[idx] = value
         return self
