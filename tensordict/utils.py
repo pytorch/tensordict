@@ -1138,19 +1138,21 @@ class _StringOnlyDoubleDict:
         return self._tensor_dict.keys()
 
     def items(self, leaves_only=False, nodes_only=False):
-        if not nodes_only:
-            yield from self._tensor_dict.items()
-        if not leaves_only:
-            yield from self._dict_dict.items()
+        if not nodes_only and leaves_only:
+            return self._tensor_dict.items()
+        if not leaves_only and nodes_only:
+            return self._dict_dict.items()
+        return self._tensor_dict.items() | self._dict_dict.items()
 
     def items_tensors(self):
         return self._tensor_dict.items()
 
     def values(self, leaves_only=False, nodes_only=False):
-        if not nodes_only:
-            yield from self._tensor_dict.values()
-        if not leaves_only:
-            yield from self._dict_dict.values()
+        if not nodes_only and leaves_only:
+            return self._tensor_dict.values()
+        if not leaves_only and nodes_only:
+            return self._dict_dict.values()
+        return tuple(self._tensor_dict.items()) + tuple(self._dict_dict.items())
 
     def list(self):
         return list(self.keys())
