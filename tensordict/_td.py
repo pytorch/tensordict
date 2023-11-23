@@ -207,6 +207,8 @@ class TensorDict(TensorDictBase):
         self._device = device
         if isinstance(source, _StringOnlyDoubleDict):
             self._tensordict = source
+            self._batch_size = batch_size
+            self._td_dim_names = names
         else:
             if not _run_checks:
                 _tensordict: dict = _StringOnlyDoubleDict()

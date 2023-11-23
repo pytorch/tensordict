@@ -791,7 +791,9 @@ class PersistentTensorDict(TensorDictBase):
         validated=False,
     ) -> PersistentTensorDict:
         if not validated:
-            value = self._validate_value(value, check_shape=idx is None)
+            value, is_tc = self._validate_value(value, check_shape=idx is None)
+        else:
+            is_tc = is_tensor_collection(value)
         value = self._to_numpy(value)
         if not inplace:
             if idx is not None:
@@ -799,7 +801,7 @@ class PersistentTensorDict(TensorDictBase):
             elif self.is_locked:
                 raise RuntimeError(_LOCK_ERROR)
         # shortcut set if we're placing a tensordict
-        if is_tensor_collection(value):
+        if is_tc:
             if isinstance(key, tuple):
                 key, subkey = key[0], key[1:]
             else:

@@ -1142,7 +1142,7 @@ class _StringOnlyDoubleDict:
             return self._tensor_dict.items()
         if nodes_only:
             return self._dict_dict.items()
-        return self._tensor_dict.items() | self._dict_dict.items()
+        return (*self._tensor_dict.items(), *self._dict_dict.items())
 
     def items_tensors(self):
         return self._tensor_dict.items()
@@ -1152,7 +1152,7 @@ class _StringOnlyDoubleDict:
             return self._tensor_dict.values()
         if nodes_only:
             return self._dict_dict.values()
-        return tuple(self._tensor_dict.items()) + tuple(self._dict_dict.items())
+        return (*self._tensor_dict.values(), *self._dict_dict.values())
 
     def list(self):
         return list(self.keys())
