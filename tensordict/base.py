@@ -3125,8 +3125,7 @@ class TensorDictBase(MutableMapping):
                 return self.lock_()
             if last_op == self.__class__.to_module.__name__:
                 if is_tensor_collection(out):
-                    with out.unlock_():
-                        return self.to_module(*args, **kwargs, swap_dest=out)
+                    return self.to_module(*args, **kwargs, swap_dest=out)
                 else:
                     raise RuntimeError(
                         "to_module cannot be used as a decorator when return_swap=False."
@@ -3520,6 +3519,10 @@ class TensorDictBase(MutableMapping):
                 result._set_str(
                     leaf_flat, self.get(leaf), validated=True, inplace=False
                 )
+            shared = result._is_shared = self._is_shared
+            mmap = result._is_memmap = self._is_memmap
+            if shared or mmap:
+                result._is_locked = True
             return result
 
     @cache  # noqa: B019

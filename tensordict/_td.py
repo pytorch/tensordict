@@ -271,11 +271,11 @@ class TensorDict(TensorDictBase):
             # For batch-size it is a minor issue (unlikely that a td with batch-size
             # is passed with to_module) but for the device it could be a problem.
             if swap_dest is None:
-                swap = self.empty()
-                swap.clear_device_()
+                swap = TensorDict({}, batch_size=[])
             else:
                 swap = swap_dest
             memo[id(module)] = swap
+            _swap = {}
 
         for key, value in self.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
@@ -320,8 +320,13 @@ class TensorDict(TensorDictBase):
                     swap = swap.to(device=local_out.device)
 
             if return_swap:
-                assert local_out is not None, key
-                swap._set_str(key, local_out, inplace=False, validated=True)
+                _swap[key] = local_out
+        if return_swap:
+            if isinstance(swap, TensorDict):
+                # this is very ad-hoc but faster than calling _set_str every time
+                swap._tensordict.update(_swap)
+            else:
+                swap.update(_swap)
         return swap
 
     def __ne__(self, other: object) -> T | bool:
@@ -1242,12 +1247,13 @@ class TensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
     ) -> T:
-        best_attempt = inplace is BEST_ATTEMPT_INPLACE
-        inplace = self._convert_inplace(inplace, key)
+        if inplace is not False:
+            best_attempt = inplace is BEST_ATTEMPT_INPLACE
+            inplace = self._convert_inplace(inplace, key)
         if not validated:
             value = self._validate_value(value, check_shape=True)
         if not inplace:
-            if self.is_locked:
+            if self._is_locked:
                 raise RuntimeError(_LOCK_ERROR)
             self._tensordict[key] = value
         else:
@@ -1703,14 +1709,13 @@ class TensorDict(TensorDictBase):
     def empty(self, recurse=False) -> T:
         if not recurse:
             return TensorDict(
-                device=self.device,
-                batch_size=self.batch_size,
+                device=self._device,
+                batch_size=self._batch_size,
                 source={},
-                # names=self.names if self._has_names() else None,
                 names=self._td_dim_names,
                 _run_checks=False,
-                _is_memmap=self._is_memmap,
-                _is_shared=self._is_shared,
+                _is_memmap=False,
+                _is_shared=False,
             )
         return super().empty(recurse=recurse)
 
