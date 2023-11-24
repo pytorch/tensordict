@@ -246,7 +246,7 @@ class TensorDict(TensorDictBase):
     def _locked_tensordicts(self):
         _locked_tensordicts = self.__dict__.get("__locked_tensordicts", None)
         if _locked_tensordicts is None:
-            _locked_tensordicts = self.__locked_tensordicts = set()
+            _locked_tensordicts = self.__locked_tensordicts = []
         return _locked_tensordicts
 
     @_locked_tensordicts.setter
