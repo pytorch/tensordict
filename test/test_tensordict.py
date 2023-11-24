@@ -3055,15 +3055,40 @@ class TestTensorDicts(TestTensorDictsBase):
             test_id()
 
     def test_update_select(self, td_name, device):
+        if td_name in ("memmap_td",):
+            pytest.skip(reason="update not possible with memory-mapped td")
         td = getattr(self, td_name)(device)
-        t = torch.zeros(()).expand((4, 3, 2, 1))
-        other_td = TensorDict({"My": {"father": {"was": t, "a": t}, "relentlessly": t}, "self-improving": t}, batch_size=(4, 3, 2, 1))
-        td.update(other_td, keys_to_update=(("My", ("father",), "was"), ("My", "relentlessly")))
+        t = lambda: torch.zeros(()).expand((4, 3, 2, 1))
+        other_td = TensorDict(
+            {
+                "My": {"father": {"was": t(), "a": t()}, "relentlessly": t()},
+                "self-improving": t(),
+            },
+            batch_size=(4, 3, 2, 1),
+        )
+        td.update(
+            other_td,
+            keys_to_update=(("My", ("father",), "was"), ("My", "relentlessly")),
+        )
         assert ("My", "father", "was") in td.keys(True)
         assert ("My", ("father",), "was") in td.keys(True)
         assert ("My", "relentlessly") in td.keys(True)
         assert ("My", "father", "a") in td.keys(True)
         assert ("self-improving",) not in td.keys(True)
+        t = lambda: torch.ones(()).expand((4, 3, 2, 1))
+        other_td = TensorDict(
+            {
+                "My": {"father": {"was": t(), "a": t()}, "relentlessly": t()},
+                "self-improving": t(),
+            },
+            batch_size=(4, 3, 2, 1),
+        )
+        td.update(other_td, keys_to_update=(("My", "relentlessly"),))
+        assert (td["My", "relentlessly"] == 1).all()
+        assert (td["My", "father", "was"] == 0).all()
+        td.update(other_td, keys_to_update=(("My", ("father",), "was"),))
+        assert (td["My", "father", "was"] == 1).all()
+
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])

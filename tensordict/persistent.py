@@ -77,7 +77,8 @@ class _PersistentTDKeysView(_TensorDictKeysView):
             yield from self.tensordict._valid_keys()
 
     def __contains__(self, key):
-        if isinstance(key, tuple) and len(key) == 1:
+        key = _unravel_key_to_tuple(key)
+        if len(key) == 1:
             key = key[0]
         for a_key in self:
             if isinstance(a_key, tuple) and len(a_key) == 1:

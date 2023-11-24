@@ -1742,7 +1742,9 @@ def _proc_init(base_seed, queue):
     np.random.seed(np_seed)
 
 
-def _prune_selected_keys(selected_keys, prefix):
+def _prune_selected_keys(keys_to_update, prefix):
     if keys_to_update is None:
         return None
-    return tuple(key[1:] for key in selected_keys if isinstance(key, tuple) and key[0] == prefix)
+    return tuple(
+        key[1:] for key in keys_to_update if isinstance(key, tuple) and key[0] == prefix
+    )

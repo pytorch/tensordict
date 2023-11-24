@@ -19,7 +19,7 @@ import numpy as np
 import torch
 from functorch import dim as ftdim
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_key
+from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _is_tensor_collection,
@@ -36,6 +36,7 @@ from tensordict.utils import (
     _getitem_batch_size,
     _is_number,
     _parse_to,
+    _prune_selected_keys,
     _renamed_inplace_method,
     _shape,
     _td_fields,
@@ -1576,7 +1577,14 @@ class LazyStackedTensorDict(TensorDictBase):
             return self
         return torch.stack(tensordicts, stack_dim)
 
-    def update(self, input_dict_or_td: T, clone: bool = False, **kwargs: Any) -> T:
+    def update(
+        self,
+        input_dict_or_td: T,
+        clone: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+        **kwargs: Any,
+    ) -> T:
         if input_dict_or_td is self:
             # no op
             return self
@@ -1592,8 +1600,17 @@ class LazyStackedTensorDict(TensorDictBase):
             for td_dest, td_source in zip(
                 self.tensordicts, input_dict_or_td.tensordicts
             ):
-                td_dest.update(td_source, clone=clone, **kwargs)
+                td_dest.update(
+                    td_source, clone=clone, keys_to_update=keys_to_update, **kwargs
+                )
             return self
+
+        if keys_to_update is not None:
+            if len(keys_to_update) == 0:
+                return self
+            keys_to_update = unravel_key_list(keys_to_update)
+        else:
+            keys_to_update = ()
 
         inplace = kwargs.get("inplace", False)
         for key, value in input_dict_or_td.items():
@@ -1601,26 +1618,45 @@ class LazyStackedTensorDict(TensorDictBase):
                 value = value.clone()
             elif clone:
                 value = tree_map(torch.clone, value)
-            key = unravel_key(key)
-            if isinstance(key, tuple):
+            key = _unravel_key_to_tuple(key)
+            firstkey, subkey = key[0], key[1:]
+            if keys_to_update and not any(
+                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                for ktu in keys_to_update
+            ):
+                continue
+
+            if subkey:
                 # we must check that the target is not a leaf
-                target = self._get_str(key[0], default=None)
+                target = self._get_str(firstkey, default=None)
                 if is_tensor_collection(target):
-                    target.update({key[1:]: value}, inplace=inplace, clone=clone)
+                    sub_keys_to_update = _prune_selected_keys(keys_to_update, firstkey)
+                    target.update(
+                        {subkey: value},
+                        inplace=inplace,
+                        clone=clone,
+                        keys_to_update=sub_keys_to_update,
+                    )
                 elif target is None:
-                    self._set_tuple(key, value, inplace=inplace, validated=False)
+                    self._set_tuple(firstkey, value, inplace=inplace, validated=False)
                 else:
                     raise TypeError(
                         f"Type mismatch: self.get(key[0]) is {type(target)} but expected a tensor collection."
                     )
             else:
-                target = self._get_str(key, default=None)
+                target = self._get_str(firstkey, default=None)
                 if is_tensor_collection(target) and (
                     is_tensor_collection(value) or isinstance(value, dict)
                 ):
-                    target.update(value, inplace=inplace, clone=clone)
+                    sub_keys_to_update = _prune_selected_keys(keys_to_update, firstkey)
+                    target.update(
+                        value,
+                        inplace=inplace,
+                        clone=clone,
+                        keys_to_update=sub_keys_to_update,
+                    )
                 elif target is None or not is_tensor_collection(value):
-                    self._set_str(key, value, inplace=inplace, validated=False)
+                    self._set_str(firstkey, value, inplace=inplace, validated=False)
                 else:
                     raise TypeError(
                         f"Type mismatch: self.get(key) is {type(target)} but value is of type {type(value)}."
