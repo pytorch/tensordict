@@ -33,7 +33,6 @@ except ImportError:
     _has_h5py = False
 
 import contextlib
-from sys import platform
 
 from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
 from functorch import dim as ftdim
@@ -6547,10 +6546,6 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
-@pytest.mark.skipif(
-    platform.startswith("linux"),
-    reason="mp.Pool with maxtasksperchild starts more processes than needed on linux.",
-)
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
@@ -6563,6 +6558,10 @@ class TestMap:
         return td
 
     def test_map_seed(self):
+        pytest.skip(
+            reason="Using max_tasks_per_child is unstable and can cause multiple processes to start over even though all jobs are completed",
+        )
+
         if mp.get_start_method(allow_none=True) is None:
             mp.set_start_method("spawn")
         td = TensorDict(
@@ -6592,6 +6591,49 @@ class TestMap:
             generator=generator,
             chunksize=1,
             max_tasks_per_child=5,
+        )
+        print("got 2")
+        # we cannot know which worker picks which job, but since they will all have
+        # a seed from 0 to 4 and produce 1 number each, we can chekc that
+        # those numbers are exactly what we were expecting.
+        assert (td_out_0["r"].sort().values == td_out_1["r"].sort().values).all(), (
+            td_out_0["r"].sort().values,
+            td_out_1["r"].sort().values,
+        )
+        assert (td_out_0["s"].sort().values == td_out_1["s"].sort().values).all(), (
+            td_out_0["s"].sort().values,
+            td_out_1["s"].sort().values,
+        )
+
+    def test_map_seed_single(self):
+        # A cheap version of the previous test
+        if mp.get_start_method(allow_none=True) is None:
+            mp.set_start_method("spawn")
+        td = TensorDict(
+            {
+                "r": torch.zeros(20, dtype=torch.int),
+                "s": torch.zeros(20, dtype=torch.int),
+                "c": torch.arange(20),
+            },
+            batch_size=[20],
+        )
+        generator = torch.Generator()
+        # we use 4 workers with max 5 items each,
+        # making sure that no worker does more than any other.
+        generator.manual_seed(0)
+        td_out_0 = td.map(
+            TestMap.get_rand_incr,
+            num_workers=1,
+            generator=generator,
+            chunksize=1,
+        )
+        print("got 1")
+        generator.manual_seed(0)
+        td_out_1 = td.map(
+            TestMap.get_rand_incr,
+            num_workers=1,
+            generator=generator,
+            chunksize=1,
         )
         print("got 2")
         # we cannot know which worker picks which job, but since they will all have
