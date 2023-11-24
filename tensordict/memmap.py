@@ -614,21 +614,19 @@ else:
             tmpdir = util.get_temp_dir()
             return tmpdir
 
+    def _reduce_handler(handler):
+        if handler.fd == -1:
+            raise ValueError(
+                "Handler is unpicklable because "
+                "forking was enabled when it was created"
+            )
+        return _rebuild_handler, (handler.size, reduction.DupFd(handler.fd))
 
-def _reduce_handler(handler):
-    if handler.fd == -1:
-        raise ValueError(
-            "Handler is unpicklable because " "forking was enabled when it was created"
-        )
-    return _rebuild_handler, (handler.size, reduction.DupFd(handler.fd))
+    def _rebuild_handler(size, dupfd):
+        detached = dupfd.detach()
+        return _FileHandler(size, detached)
 
-
-def _rebuild_handler(size, dupfd):
-    detached = dupfd.detach()
-    return _FileHandler(size, detached)
-
-
-reduction.register(_FileHandler, _reduce_handler)
+    reduction.register(_FileHandler, _reduce_handler)
 
 
 def _reduce_memmap(memmap_tensor):
