@@ -1740,3 +1740,9 @@ def _proc_init(base_seed, queue):
     torch.manual_seed(seed)
     np_seed = _generate_state(base_seed, worker_id)
     np.random.seed(np_seed)
+
+
+def _prune_selected_keys(selected_keys, prefix):
+    if keys_to_update is None:
+        return None
+    return tuple(key[1:] for key in selected_keys if isinstance(key, tuple) and key[0] == prefix)
