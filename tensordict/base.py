@@ -33,6 +33,7 @@ from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _is_tensorclass,
     _KEY_ERROR,
+    _proc_init,
     _shape,
     _split_tensordict,
     _td_fields,
@@ -2961,10 +2962,12 @@ class TensorDictBase(MutableMapping):
         self,
         fn: Callable,
         dim: int = 0,
-        num_workers: int = None,
-        chunksize: int = None,
-        num_chunks: int = None,
-        pool: mp.Pool = None,
+        num_workers: int | None = None,
+        chunksize: int | None = None,
+        num_chunks: int | None = None,
+        pool: mp.Pool | None = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
     ):
         """Maps a function to splits of the tensordict across one dimension.
 
@@ -2989,16 +2992,42 @@ class TensorDictBase(MutableMapping):
                 of workers. For very large tensordicts, such large chunks
                 may not fit in memory for the operation to be done and
                 more chunks may be needed to make the operation practically
-                doable. This argument is exclusive with num_chunks.
+                doable. This argument is exclusive with ``num_chunks``.
             num_chunks (int, optional): the number of chunks to split the tensordict
                 into. If none is provided, the number of chunks will equate the number
                 of workers. For very large tensordicts, such large chunks
                 may not fit in memory for the operation to be done and
                 more chunks may be needed to make the operation practically
-                doable. This argument is exclusive with chunksize.
+                doable. This argument is exclusive with ``chunksize``.
             pool (mp.Pool, optional): a multiprocess Pool instance to use
                 to execute the job. If none is provided, a pool will be created
                 within the ``map`` method.
+            generator (torch.Generator, optional): a generator to use for seeding.
+                A base seed will be generated from it, and each worker
+                of the pool will be seeded with the provided seed incremented
+                by a unique integer from ``0`` to ``num_workers``. If no generator
+                is provided, a random integer will be used as seed.
+                To work with unseeded workers, a pool should be created separately
+                and passed to :meth:`map` directly.
+                .. note::
+                  Caution should be taken when providing a low-valued seed as
+                  this can cause autocorrelation between experiments, example:
+                  if 8 workers are asked and the seed is 4, the workers seed will
+                  range from 4 to 11. If the seed is 5, the workers seed will range
+                  from 5 to 12. These two experiments will have an overlap of 7
+                  seeds, which can have unexpected effects on the results.
+
+                .. note::
+                  The goal of seeding the workers is to have independent seed on
+                  each worker, and NOT to have reproducible results across calls
+                  of the `map` method. In other words, two experiments may and
+                  probably will return different results as it is impossible to
+                  know which worker will pick which job. However, we can make sure
+                  that each worker has a different seed and that the pseudo-random
+                  operations on each will be uncorrelated.
+            max_tasks_per_child (int, optional): the maximum number of jobs picked
+                by every child process. Defaults to ``None``, i.e., no restriction
+                on the number of jobs.
 
         Examples:
             >>> import torch
@@ -3027,7 +3056,21 @@ class TensorDictBase(MutableMapping):
         if pool is None:
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
-            with mp.Pool(num_workers) as pool:
+            if generator is None:
+                generator = torch.Generator()
+            seed = (
+                torch.empty((), dtype=torch.int64).random_(generator=generator).item()
+            )
+
+            queue = mp.Queue(maxsize=num_workers)
+            for i in range(num_workers):
+                queue.put(i)
+            with mp.Pool(
+                processes=num_workers,
+                initializer=_proc_init,
+                initargs=(seed, queue),
+                maxtasksperchild=max_tasks_per_child,
+            ) as pool:
                 return self.map(
                     fn, dim=dim, chunksize=chunksize, num_chunks=num_chunks, pool=pool
                 )
@@ -3040,8 +3083,8 @@ class TensorDictBase(MutableMapping):
 
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
         chunksize = 1
-        out = pool.imap(fn, self_split, chunksize)
-        out = torch.cat(list(out), dim)
+        imap = pool.imap(fn, self_split, chunksize)
+        out = torch.cat(list(imap), dim)
         return out
 
     # Functorch compatibility

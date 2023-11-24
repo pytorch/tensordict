@@ -2584,9 +2584,9 @@ def _set_tensor_dict(  # noqa: F811
 
     if isinstance(tensor, torch.nn.Parameter):
         # module.register_parameter(name, tensor)
-        for (
-            hook
-        ) in torch.nn.modules.module._global_parameter_registration_hooks.values():
+        for hook in getattr(
+            torch.nn.modules.module, "_global_parameter_registration_hooks", {}
+        ).values():
             output = hook(module, name, tensor)
             if output is not None:
                 tensor = output
