@@ -3054,6 +3054,16 @@ class TestTensorDicts(TestTensorDictsBase):
             assert lazy_legacy()
             test_id()
 
+    def test_update_select(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        t = torch.zeros(()).expand((4, 3, 2, 1))
+        other_td = TensorDict({"My": {"father": {"was": t, "a": t}, "relentlessly": t}, "self-improving": t}, batch_size=(4, 3, 2, 1))
+        td.update(other_td, keys_to_update=(("my", ("father",), "was"), ("my", "relentlessly")))
+        assert ("My", "father", "was") in td.keys(True)
+        assert ("My", ("father",), "was") in td.keys(True)
+        assert ("My", "relentlessly") in td.keys(True)
+        assert ("My", "father", "a") in td.keys(True)
+        assert ("self-improving",) not in td.keys(True)
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.uint8])

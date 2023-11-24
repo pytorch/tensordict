@@ -1878,9 +1878,10 @@ class TensorDictBase(MutableMapping):
             key = _unravel_key_to_tuple(key)
             firstkey, subkey = key[0], key[1:]
             if keys_to_update:
-                if (subkey and key in keys_to_update) or (
-                    not subkey and firstkey in keys_to_update
+                if (subkey and key not in keys_to_update) or (
+                    not subkey and firstkey not in keys_to_update
                 ):
+                    print("key", key, "not in", keys_to_update)
                     continue
             target = self._get_str(firstkey, None)
             if clone and hasattr(value, "clone"):
@@ -1965,7 +1966,7 @@ class TensorDictBase(MutableMapping):
             keys_to_update = ()
         for key, value in input_dict_or_td.items():
             key = unravel_key(key)
-            if key in keys_to_update:
+            if key not in keys_to_update:
                 continue
             # if not isinstance(value, _accepted_classes):
             #     raise TypeError(
@@ -2030,7 +2031,7 @@ class TensorDictBase(MutableMapping):
             keys_to_update = ()
         for key, value in input_dict_or_td.items():
             key = unravel_key(key)
-            if key in keys_to_update:
+            if key not in keys_to_update:
                 continue
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
                 raise TypeError(

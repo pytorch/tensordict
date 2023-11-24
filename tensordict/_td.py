@@ -2113,8 +2113,8 @@ class _SubTensorDict(TensorDictBase):
             key = _unravel_key_to_tuple(key)
             firstkey, subkey = key[0], key[1:]
             if keys_to_update:
-                if (subkey and key in keys_to_update) or (
-                    not subkey and firstkey in keys_to_update
+                if (subkey and key not in keys_to_update) or (
+                    not subkey and firstkey not in keys_to_update
                 ):
                     continue
             if clone and hasattr(value, "clone"):
@@ -2180,8 +2180,8 @@ class _SubTensorDict(TensorDictBase):
             key = _unravel_key_to_tuple(key)
             firstkey, *keys = key
             if keys_to_update:
-                if (keys and key in keys_to_update) or (
-                    not keys and firstkey in keys_to_update
+                if (keys and key not in keys_to_update) or (
+                    not keys and firstkey not in keys_to_update
                 ):
                     continue
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
