@@ -51,7 +51,6 @@ from tensordict.utils import (
     lock_blocked,
     NestedKey,
     prod,
-    unravel_key,
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
