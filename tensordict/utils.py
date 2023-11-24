@@ -1116,19 +1116,28 @@ class as_decorator:
         self.attr = attr
 
     def __call__(self, func):
-        @wraps(func)
-        def new_func(_self, *args, **kwargs):
-            if self.attr is not None:
+        if self.attr is not None:
+
+            @wraps(func)
+            def new_func(_self, *args, **kwargs):
                 _attr_pre = getattr(_self, self.attr)
-            out = func(_self, *args, **kwargs)
-            if self.attr is not None:
+                out = func(_self, *args, **kwargs)
                 _attr_post = getattr(_self, self.attr)
-            if out is not None:
-                if self.attr is None or (_attr_post is not _attr_pre):
+                if out is not None:
+                    if _attr_post is not _attr_pre:
+                        out._last_op = (new_func.__name__, (args, kwargs, _self))
+                    else:
+                        out._last_op = None
+                return out
+
+        else:
+
+            @wraps(func)
+            def new_func(_self, *args, **kwargs):
+                out = func(_self, *args, **kwargs)
+                if out is not None:
                     out._last_op = (new_func.__name__, (args, kwargs, _self))
-                else:
-                    out._last_op = None
-            return out
+                return out
 
         return new_func
 
