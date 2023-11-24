@@ -231,28 +231,6 @@ class TensorDict(TensorDictBase):
                 for key, value in source.items():
                     self.set(key, value)
 
-    @property
-    def _lock_id(self):
-        _lock_id = self.__dict__.get("__lock_id", None)
-        if _lock_id is None:
-            _lock_id = self.__lock_id = set()
-        return _lock_id
-
-    @_lock_id.setter
-    def _lock_id(self, value):
-        self.__lock_id = value
-
-    @property
-    def _locked_tensordicts(self):
-        _locked_tensordicts = self.__dict__.get("__locked_tensordicts", None)
-        if _locked_tensordicts is None:
-            _locked_tensordicts = self.__locked_tensordicts = []
-        return _locked_tensordicts
-
-    @_locked_tensordicts.setter
-    def _locked_tensordicts(self, value):
-        self.__locked_tensordicts = value
-
     @staticmethod
     def from_module(
         module: torch.nn.Module, as_module: bool = False, lock: bool = False
