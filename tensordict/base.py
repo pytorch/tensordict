@@ -1866,7 +1866,6 @@ class TensorDictBase(MutableMapping):
         """
         from tensordict._lazy import LazyStackedTensorDict
 
-        inplace = BEST_ATTEMPT_INPLACE if inplace else False
         if input_dict_or_td is self:
             # no op
             return self
@@ -1911,7 +1910,12 @@ class TensorDictBase(MutableMapping):
                         else:
                             target.update(value, inplace=inplace, clone=clone)
                         continue
-            self._set_tuple(key, value, inplace=inplace, validated=False)
+            self._set_tuple(
+                key,
+                value,
+                inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                validated=False,
+            )
         return self
 
     def update_(
