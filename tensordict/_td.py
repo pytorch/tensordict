@@ -196,33 +196,29 @@ class TensorDict(TensorDictBase):
         _is_shared: bool | None = False,
         _is_memmap: bool | None = False,
     ) -> None:
-        self._lock_id = set()
-        self._locked_tensordicts = []
-
         self._is_shared = _is_shared
         self._is_memmap = _is_memmap
         if device is not None and isinstance(device, (int, str)):
             device = torch.device(device)
         self._device = device
 
+        self._tensordict = _tensordict = _StringOnlyDict()
         if not _run_checks:
-            _tensordict: dict = _StringOnlyDict()
             self._batch_size = batch_size
-            for key, value in source.items():
-                if isinstance(value, dict):
-                    value = TensorDict(
-                        value,
-                        batch_size=self._batch_size,
-                        device=self._device,
-                        _run_checks=_run_checks,
-                        _is_shared=_is_shared,
-                        _is_memmap=_is_memmap,
-                    )
-                _tensordict[key] = value
-            self._tensordict = _tensordict
+            if source:  # faster than calling items
+                for key, value in source.items():
+                    if isinstance(value, dict):
+                        value = TensorDict(
+                            value,
+                            batch_size=self._batch_size,
+                            device=self._device,
+                            _run_checks=_run_checks,
+                            _is_shared=_is_shared,
+                            _is_memmap=_is_memmap,
+                        )
+                    _tensordict[key] = value
             self._td_dim_names = names
         else:
-            self._tensordict = _StringOnlyDict()
             if not isinstance(source, (TensorDictBase, dict)):
                 raise ValueError(
                     "A TensorDict source is expected to be a TensorDictBase "

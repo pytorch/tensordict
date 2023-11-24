@@ -3758,6 +3758,28 @@ class TensorDictBase(MutableMapping):
         else:
             self._locked_tensordicts += _locked_tensordicts
 
+    @property
+    def _lock_id(self):
+        _lock_id = self.__dict__.get("__lock_id", None)
+        if _lock_id is None:
+            _lock_id = self.__dict__["__lock_id"] = set()
+        return _lock_id
+
+    @_lock_id.setter
+    def _lock_id(self, value):
+        self.__dict__["__lock_id"] = value
+
+    @property
+    def _locked_tensordicts(self):
+        _locked_tensordicts = self.__dict__.get("__locked_tensordicts", None)
+        if _locked_tensordicts is None:
+            _locked_tensordicts = self.__dict__["__locked_tensordicts"] = []
+        return _locked_tensordicts
+
+    @_locked_tensordicts.setter
+    def _locked_tensordicts(self, value):
+        self.__dict__["__locked_tensordicts"] = value
+
     @as_decorator("is_locked")
     def lock_(self) -> T:
         if self.is_locked:
