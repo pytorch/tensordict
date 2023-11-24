@@ -1588,6 +1588,10 @@ class LazyStackedTensorDict(TensorDictBase):
         if input_dict_or_td is self:
             # no op
             return self
+        if keys_to_update is not None:
+            keys_to_update = unravel_key_list(keys_to_update)
+            if len(keys_to_update) == 0:
+                return self
 
         if (
             isinstance(input_dict_or_td, LazyStackedTensorDict)
@@ -1605,18 +1609,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             return self
 
-        if keys_to_update is not None:
-            if len(keys_to_update) == 0:
-                return self
-            keys_to_update = unravel_key_list(keys_to_update)
-
         inplace = kwargs.get("inplace", False)
         for key, value in input_dict_or_td.items():
             if clone and hasattr(value, "clone"):
                 value = value.clone()
             elif clone:
                 value = tree_map(torch.clone, value)
-            firstkey, *subkey = _unravel_key_to_tuple(key)
+            key = _unravel_key_to_tuple(key)
+            firstkey, subkey = key[0], key[1:]
             if keys_to_update and not any(
                 firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
                 for ktu in keys_to_update
@@ -1635,7 +1635,7 @@ class LazyStackedTensorDict(TensorDictBase):
                         keys_to_update=sub_keys_to_update,
                     )
                 elif target is None:
-                    self._set_tuple(firstkey, value, inplace=inplace, validated=False)
+                    self._set_tuple(key, value, inplace=inplace, validated=False)
                 else:
                     raise TypeError(
                         f"Type mismatch: self.get(key[0]) is {type(target)} but expected a tensor collection."

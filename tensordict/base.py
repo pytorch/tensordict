@@ -1876,7 +1876,8 @@ class TensorDictBase(MutableMapping):
                 return self
             keys_to_update = unravel_key_list(keys_to_update)
         for key, value in input_dict_or_td.items():
-            key = _unravel_key_to_tuple(key);firstkey, subkey = key[0], key[1:];
+            key = _unravel_key_to_tuple(key)
+            firstkey, subkey = key[0], key[1:]
             if keys_to_update and not any(
                 firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
                 for ktu in keys_to_update
