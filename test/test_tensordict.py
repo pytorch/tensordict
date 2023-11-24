@@ -6123,10 +6123,10 @@ class TestLock:
         a0 = td0["a"]
         b0 = td0["a", "b"]
         c0 = td0["a", "b", "c"]
-        assert not hasattr(td, "_locked_tensordicts")
-        assert not hasattr(a, "_locked_tensordicts")
-        assert not hasattr(b, "_locked_tensordicts")
-        assert not hasattr(c, "_locked_tensordicts")
+        assert not td._locked_tensordicts
+        assert not a._locked_tensordicts
+        assert not b._locked_tensordicts
+        assert not c._locked_tensordicts
         assert len(a0._locked_tensordicts)
         assert len(b0._locked_tensordicts)
         td.unlock_()
