@@ -49,7 +49,7 @@ from tensordict.utils import (
     _getitem_batch_size,
     _is_number,
     _is_shared,
-    _is_tensorclass,unravel_key_list, unravel_key,
+    _is_tensorclass,
     _KEY_ERROR,
     _LOCK_ERROR,
     _NON_STR_KEY_ERR,
@@ -72,6 +72,8 @@ from tensordict.utils import (
     KeyedJaggedTensor,
     lock_blocked,
     NestedKey,
+    unravel_key,
+    unravel_key_list,
 )
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
@@ -2150,7 +2152,11 @@ class _SubTensorDict(TensorDictBase):
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> _SubTensorDict:
         return self.update_at_(
-            input_dict, idx=self.idx, discard_idx_attr=True, clone=clone, keys_to_update=keys_to_update,
+            input_dict,
+            idx=self.idx,
+            discard_idx_attr=True,
+            clone=clone,
+            keys_to_update=keys_to_update,
         )
 
     def update_at_(

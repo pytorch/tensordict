@@ -38,7 +38,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     as_decorator,
-    cache,unravel_key,
+    cache,
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
@@ -49,6 +49,7 @@ from tensordict.utils import (
     lock_blocked,
     NestedKey,
     prod,
+    unravel_key,
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
@@ -64,6 +65,8 @@ T = TypeVar("T", bound="TensorDictBase")
 
 class _BEST_ATTEMPT_INPLACE:
     def __bool__(self):
+        # we use an exception to exit when running `inplace = BEST_ATTEMPT_INPLACE if inplace else False`
+        # more than once
         raise NotImplementedError
 
 
@@ -1845,6 +1848,7 @@ class TensorDictBase(MutableMapping):
                 the list of keys in ``key_to_update`` will be updated.
                 This is aimed at avoiding calls to
                 ``data_dest.update(data_src.select(*keys_to_update))``.
+
         Returns:
             self
 
@@ -1860,9 +1864,9 @@ class TensorDictBase(MutableMapping):
             >>> assert td['a'] is not other_td['a']
 
         """
-
         from tensordict._lazy import LazyStackedTensorDict
 
+        inplace = BEST_ATTEMPT_INPLACE if inplace else False
         if input_dict_or_td is self:
             # no op
             return self

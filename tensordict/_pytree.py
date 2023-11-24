@@ -11,7 +11,13 @@ from tensordict import (
     TensorDict,
 )
 
-from torch.utils._pytree import _register_pytree_node, Context
+try:
+    from torch.utils._pytree import Context, register_pytree_node
+except ImportError:
+    from torch.utils._pytree import (
+        _register_pytree_node as register_pytree_node,
+        Context,
+    )
 
 PYTREE_REGISTERED_TDS = (
     LazyStackedTensorDict,
@@ -99,7 +105,7 @@ def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, 
 
 
 for cls in PYTREE_REGISTERED_TDS:
-    _register_pytree_node(
+    register_pytree_node(
         cls,
         _tensordict_flatten,
         _tensordictdict_unflatten,
