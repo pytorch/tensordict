@@ -51,6 +51,7 @@ from tensordict.utils import (
     prod,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
+from torch.utils._pytree import tree_map
 
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
@@ -1857,19 +1858,17 @@ class TensorDictBase(MutableMapping):
         if input_dict_or_td is self:
             # no op
             return self
-        keys = set(self.keys(False))
         for key, value in list(input_dict_or_td.items()):
             if clone and hasattr(value, "clone"):
                 value = value.clone()
-            if isinstance(key, tuple):
-                key, subkey = key[0], key[1:]
-            else:
-                subkey = []
+            elif clone:
+                value = tree_map(torch.clone, value)
+            key = _unravel_key_to_tuple(key)
+            firstkey, subkey = key[0], key[1:]
+            target = self._get_str(firstkey, None)
             # the key must be a string by now. Let's check if it is present
-            if key in keys:
-                target_type = self.entry_class(key)
-                if _is_tensor_collection(target_type):
-                    target = self.get(key)
+            if target is not None:
+                if _is_tensor_collection(type(target)):
                     if len(subkey):
                         target.update({subkey: value}, inplace=inplace, clone=clone)
                         continue
@@ -1879,20 +1878,19 @@ class TensorDictBase(MutableMapping):
                         if isinstance(value, LazyStackedTensorDict) and not isinstance(
                             target, LazyStackedTensorDict
                         ):
-                            self.set(
+                            self._set_tuple(
                                 key,
                                 LazyStackedTensorDict(
                                     *target.unbind(value.stack_dim),
                                     stack_dim=value.stack_dim,
                                 ).update(value, inplace=inplace, clone=clone),
+                                validated=True,
+                                inplace=False,
                             )
                         else:
                             target.update(value, inplace=inplace, clone=clone)
                         continue
-            if len(subkey):
-                self.set((key, *subkey), value, inplace=inplace)
-            else:
-                self.set(key, value, inplace=inplace)
+            self._set_tuple(key, value, inplace=inplace, validated=False)
         return self
 
     def update_(

@@ -2100,7 +2100,7 @@ class _SubTensorDict(TensorDictBase):
         for key, value in input_dict_or_td.items():
             if clone and hasattr(value, "clone"):
                 value = value.clone()
-            else:
+            elif clone:
                 value = tree_map(torch.clone, value)
             key = _unravel_key_to_tuple(key)
             firstkey, subkey = key[0], key[1:]
