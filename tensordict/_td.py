@@ -296,7 +296,6 @@ class TensorDict(TensorDictBase):
             memo = {"hooks": tuple(hooks.values())}
         else:
             hooks = memo["hooks"]
-
         if return_swap:
             # this could break if the device and batch-size are not congruent.
             # For batch-size it is a minor issue (unlikely that a td with batch-size
