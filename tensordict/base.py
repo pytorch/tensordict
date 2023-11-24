@@ -38,7 +38,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     as_decorator,
-    cache,
+    cache,unravel_key,
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
@@ -49,6 +49,7 @@ from tensordict.utils import (
     lock_blocked,
     NestedKey,
     prod,
+    unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
@@ -1823,6 +1824,8 @@ class TensorDictBase(MutableMapping):
         input_dict_or_td: dict[str, CompatibleType] | T,
         clone: bool = False,
         inplace: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         """Updates the TensorDict with values from either a dictionary or another TensorDict.
 
@@ -1837,6 +1840,11 @@ class TensorDictBase(MutableMapping):
                 for that key-value pair. If the entry cannot be found, it will be
                 added. Defaults to ``False``.
 
+        Keyword Args:
+            keys_to_update (sequence of NestedKeys, optional): if provided, only
+                the list of keys in ``key_to_update`` will be updated.
+                This is aimed at avoiding calls to
+                ``data_dest.update(data_src.select(*keys_to_update))``.
         Returns:
             self
 
@@ -1852,24 +1860,33 @@ class TensorDictBase(MutableMapping):
             >>> assert td['a'] is not other_td['a']
 
         """
-        # TODO: allow to pass a list of keys to update if not everything needs to be updated
+
         from tensordict._lazy import LazyStackedTensorDict
 
         if input_dict_or_td is self:
             # no op
             return self
-        for key, value in list(input_dict_or_td.items()):
+        if keys_to_update is not None:
+            keys_to_update = unravel_key_list(keys_to_update)
+        else:
+            keys_to_update = ()
+        for key, value in input_dict_or_td.items():
+            key = _unravel_key_to_tuple(key)
+            firstkey, subkey = key[0], key[1:]
+            if keys_to_update:
+                if (subkey and key in keys_to_update) or (
+                    not subkey and firstkey in keys_to_update
+                ):
+                    continue
+            target = self._get_str(firstkey, None)
             if clone and hasattr(value, "clone"):
                 value = value.clone()
             elif clone:
                 value = tree_map(torch.clone, value)
-            key = _unravel_key_to_tuple(key)
-            firstkey, subkey = key[0], key[1:]
-            target = self._get_str(firstkey, None)
             # the key must be a string by now. Let's check if it is present
             if target is not None:
                 if _is_tensor_collection(type(target)):
-                    if len(subkey):
+                    if subkey:
                         target.update({subkey: value}, inplace=inplace, clone=clone)
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
@@ -1897,6 +1914,8 @@ class TensorDictBase(MutableMapping):
         self,
         input_dict_or_td: dict[str, CompatibleType] | T,
         clone: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         """Updates the TensorDict in-place with values from either a dictionary or another TensorDict.
 
@@ -1907,6 +1926,12 @@ class TensorDictBase(MutableMapping):
                 in self.
             clone (bool, optional): whether the tensors in the input (
                 tensor) dict should be cloned before being set. Defaults to ``False``.
+
+        Keyword Args:
+            keys_to_update (sequence of NestedKeys, optional): if provided, only
+                the list of keys in ``key_to_update`` will be updated.
+                This is aimed at avoiding calls to
+                ``data_dest.update_(data_src.select(*keys_to_update))``.
 
         Returns:
             self
@@ -1925,7 +1950,14 @@ class TensorDictBase(MutableMapping):
         if input_dict_or_td is self:
             # no op
             return self
+        if keys_to_update is not None:
+            keys_to_update = unravel_key_list(keys_to_update)
+        else:
+            keys_to_update = ()
         for key, value in input_dict_or_td.items():
+            key = unravel_key(key)
+            if key in keys_to_update:
+                continue
             # if not isinstance(value, _accepted_classes):
             #     raise TypeError(
             #         f"Expected value to be one of types {_accepted_classes} "
@@ -1941,6 +1973,8 @@ class TensorDictBase(MutableMapping):
         input_dict_or_td: dict[str, CompatibleType] | T,
         idx: IndexType,
         clone: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         """Updates the TensorDict in-place at the specified index with values from either a dictionary or another TensorDict.
 
@@ -1954,6 +1988,10 @@ class TensorDictBase(MutableMapping):
             clone (bool, optional): whether the tensors in the input (
                 tensor) dict should be cloned before being set. Default is
                 `False`.
+
+        Keyword Args:
+            keys_to_update (sequence of NestedKeys, optional): if provided, only
+                the list of keys in ``key_to_update`` will be updated.
 
         Returns:
             self
@@ -1977,7 +2015,14 @@ class TensorDictBase(MutableMapping):
             >>> assert (td[1] == 1).all()
 
         """
+        if keys_to_update is not None:
+            keys_to_update = unravel_key_list(keys_to_update)
+        else:
+            keys_to_update = ()
         for key, value in input_dict_or_td.items():
+            key = unravel_key(key)
+            if key in keys_to_update:
+                continue
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "
