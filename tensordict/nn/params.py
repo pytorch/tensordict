@@ -387,6 +387,8 @@ class TensorDictParams(TensorDictBase, nn.Module):
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
         clone: bool = False,
         inplace: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
     ) -> TensorDictBase:
         if not self.no_convert:
             func = _maybe_make_param
@@ -397,7 +399,13 @@ class TensorDictParams(TensorDictBase, nn.Module):
         else:
             input_dict_or_td = tree_map(func, input_dict_or_td)
         with self._param_td.unlock_():
-            TensorDictBase.update(self, input_dict_or_td, clone=clone, inplace=inplace)
+            TensorDictBase.update(
+                self,
+                input_dict_or_td,
+                clone=clone,
+                inplace=inplace,
+                keys_to_update=keys_to_update,
+            )
             self._reset_params()
         return self
 

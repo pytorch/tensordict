@@ -55,6 +55,7 @@ from tensordict.utils import (
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
     _parse_to,
+    _prune_selected_keys,
     _set_item,
     _set_max_batch_size,
     _shape,
@@ -2105,18 +2106,18 @@ class _SubTensorDict(TensorDictBase):
             # no op
             return self
         if keys_to_update is not None:
+            if len(keys_to_update) == 0:
+                return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         keys = set(self.keys(False))
         for key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(key)
             firstkey, subkey = key[0], key[1:]
-            if keys_to_update:
-                if (subkey and key in keys_to_update) or (
-                    not subkey and firstkey in keys_to_update
-                ):
-                    continue
+            if keys_to_update and not any(
+                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                for ktu in keys_to_update
+            ):
+                continue
             if clone and hasattr(value, "clone"):
                 value = value.clone()
             elif clone:
@@ -2127,12 +2128,22 @@ class _SubTensorDict(TensorDictBase):
                 if _is_tensor_collection(target_class):
                     target = self._source.get(firstkey)._get_sub_tensordict(self.idx)
                     if len(subkey):
-                        target._set_tuple(subkey, value, inplace=False, validated=False)
+                        sub_keys_to_update = _prune_selected_keys(
+                            keys_to_update, firstkey
+                        )
+                        target.update(
+                            {subkey: value},
+                            inplace=False,
+                            keys_to_update=sub_keys_to_update,
+                        )
                         continue
                     elif isinstance(value, dict) or _is_tensor_collection(
                         value.__class__
                     ):
-                        target.update(value)
+                        sub_keys_to_update = _prune_selected_keys(
+                            keys_to_update, firstkey
+                        )
+                        target.update(value, keys_to_update=sub_keys_to_update)
                         continue
                     raise ValueError(
                         f"Tried to replace a tensordict with an incompatible object of type {type(value)}"
@@ -2173,17 +2184,17 @@ class _SubTensorDict(TensorDictBase):
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> _SubTensorDict:
         if keys_to_update is not None:
+            if len(keys_to_update) == 0:
+                return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         for key, value in input_dict.items():
             key = _unravel_key_to_tuple(key)
-            firstkey, *keys = key
-            if keys_to_update:
-                if (keys and key in keys_to_update) or (
-                    not keys and firstkey in keys_to_update
-                ):
-                    continue
+            firstkey, _ = key[0], key[1:]
+            if keys_to_update and not any(
+                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                for ktu in keys_to_update
+            ):
+                continue
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "

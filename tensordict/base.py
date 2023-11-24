@@ -34,6 +34,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _KEY_ERROR,
     _proc_init,
+    _prune_selected_keys,
     _shape,
     _split_tensordict,
     _td_fields,
@@ -50,7 +51,6 @@ from tensordict.utils import (
     lock_blocked,
     NestedKey,
     prod,
-    unravel_key,
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
@@ -1871,17 +1871,17 @@ class TensorDictBase(MutableMapping):
             # no op
             return self
         if keys_to_update is not None:
+            if len(keys_to_update) == 0:
+                return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         for key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(key)
             firstkey, subkey = key[0], key[1:]
-            if keys_to_update:
-                if (subkey and key in keys_to_update) or (
-                    not subkey and firstkey in keys_to_update
-                ):
-                    continue
+            if keys_to_update and not any(
+                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                for ktu in keys_to_update
+            ):
+                continue
             target = self._get_str(firstkey, None)
             if clone and hasattr(value, "clone"):
                 value = value.clone()
@@ -1891,7 +1891,15 @@ class TensorDictBase(MutableMapping):
             if target is not None:
                 if _is_tensor_collection(type(target)):
                     if subkey:
-                        target.update({subkey: value}, inplace=inplace, clone=clone)
+                        sub_keys_to_update = _prune_selected_keys(
+                            keys_to_update, firstkey
+                        )
+                        target.update(
+                            {subkey: value},
+                            inplace=inplace,
+                            clone=clone,
+                            keys_to_update=sub_keys_to_update,
+                        )
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
                         value.__class__
@@ -1899,17 +1907,33 @@ class TensorDictBase(MutableMapping):
                         if isinstance(value, LazyStackedTensorDict) and not isinstance(
                             target, LazyStackedTensorDict
                         ):
+                            sub_keys_to_update = _prune_selected_keys(
+                                keys_to_update, firstkey
+                            )
                             self._set_tuple(
                                 key,
                                 LazyStackedTensorDict(
                                     *target.unbind(value.stack_dim),
                                     stack_dim=value.stack_dim,
-                                ).update(value, inplace=inplace, clone=clone),
+                                ).update(
+                                    value,
+                                    inplace=inplace,
+                                    clone=clone,
+                                    keys_to_update=sub_keys_to_update,
+                                ),
                                 validated=True,
                                 inplace=False,
                             )
                         else:
-                            target.update(value, inplace=inplace, clone=clone)
+                            sub_keys_to_update = _prune_selected_keys(
+                                keys_to_update, firstkey
+                            )
+                            target.update(
+                                value,
+                                inplace=inplace,
+                                clone=clone,
+                                keys_to_update=sub_keys_to_update,
+                            )
                         continue
             self._set_tuple(
                 key,
@@ -1960,12 +1984,15 @@ class TensorDictBase(MutableMapping):
             # no op
             return self
         if keys_to_update is not None:
+            if len(keys_to_update) == 0:
+                return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         for key, value in input_dict_or_td.items():
-            key = unravel_key(key)
-            if key in keys_to_update:
+            firstkey, *nextkeys = _unravel_key_to_tuple(key)
+            if keys_to_update and not any(
+                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                for ktu in keys_to_update
+            ):
                 continue
             # if not isinstance(value, _accepted_classes):
             #     raise TypeError(
@@ -1974,7 +2001,7 @@ class TensorDictBase(MutableMapping):
             #     )
             if clone:
                 value = value.clone()
-            self.set_(key, value)
+            self.set_((firstkey, *nextkeys), value)
         return self
 
     def update_at_(
@@ -2025,12 +2052,15 @@ class TensorDictBase(MutableMapping):
 
         """
         if keys_to_update is not None:
+            if len(keys_to_update) == 0:
+                return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         for key, value in input_dict_or_td.items():
-            key = unravel_key(key)
-            if key in keys_to_update:
+            firstkey, *nextkeys = _unravel_key_to_tuple(key)
+            if keys_to_update and not any(
+                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                for ktu in keys_to_update
+            ):
                 continue
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
                 raise TypeError(
@@ -2039,7 +2069,7 @@ class TensorDictBase(MutableMapping):
                 )
             if clone:
                 value = value.clone()
-            self.set_at_(key, value, idx)
+            self.set_at_((firstkey, *nextkeys), value, idx)
         return self
 
     @lock_blocked
