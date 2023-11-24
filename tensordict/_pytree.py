@@ -11,7 +11,7 @@ from tensordict import (
     TensorDict,
 )
 
-from torch.utils._pytree import register_pytree_node, Context
+from torch.utils._pytree import Context, register_pytree_node
 
 PYTREE_REGISTERED_TDS = (
     LazyStackedTensorDict,
