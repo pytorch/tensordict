@@ -1875,11 +1875,8 @@ class TensorDictBase(MutableMapping):
             if len(keys_to_update) == 0:
                 return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         for key, value in input_dict_or_td.items():
-            key = _unravel_key_to_tuple(key)
-            firstkey, subkey = key[0], key[1:]
+            key = _unravel_key_to_tuple(key);firstkey, subkey = key[0], key[1:];
             if keys_to_update and not any(
                 firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
                 for ktu in keys_to_update
@@ -1990,11 +1987,12 @@ class TensorDictBase(MutableMapping):
             if len(keys_to_update) == 0:
                 return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         for key, value in input_dict_or_td.items():
-            key = unravel_key(key)
-            if key not in keys_to_update:
+            firstkey, *nextkeys = _unravel_key_to_tuple(key)
+            if keys_to_update and not any(
+                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                for ktu in keys_to_update
+            ):
                 continue
             # if not isinstance(value, _accepted_classes):
             #     raise TypeError(
@@ -2003,7 +2001,7 @@ class TensorDictBase(MutableMapping):
             #     )
             if clone:
                 value = value.clone()
-            self.set_(key, value)
+            self.set_((firstkey, *nextkeys), value)
         return self
 
     def update_at_(
@@ -2057,11 +2055,12 @@ class TensorDictBase(MutableMapping):
             if len(keys_to_update) == 0:
                 return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         for key, value in input_dict_or_td.items():
-            key = unravel_key(key)
-            if key not in keys_to_update:
+            firstkey, *nextkeys = _unravel_key_to_tuple(key)
+            if keys_to_update and not any(
+                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                for ktu in keys_to_update
+            ):
                 continue
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
                 raise TypeError(
@@ -2070,7 +2069,7 @@ class TensorDictBase(MutableMapping):
                 )
             if clone:
                 value = value.clone()
-            self.set_at_(key, value, idx)
+            self.set_at_((firstkey, *nextkeys), value, idx)
         return self
 
     @lock_blocked

@@ -2109,12 +2109,9 @@ class _SubTensorDict(TensorDictBase):
             if len(keys_to_update) == 0:
                 return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         keys = set(self.keys(False))
         for key, value in input_dict_or_td.items():
-            key = _unravel_key_to_tuple(key)
-            firstkey, subkey = key[0], key[1:]
+            key = _unravel_key_to_tuple(key);firstkey, subkey = key[0], key[1:];
             if keys_to_update and not any(
                 firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
                 for ktu in keys_to_update
@@ -2189,16 +2186,13 @@ class _SubTensorDict(TensorDictBase):
             if len(keys_to_update) == 0:
                 return self
             keys_to_update = unravel_key_list(keys_to_update)
-        else:
-            keys_to_update = ()
         for key, value in input_dict.items():
-            key = _unravel_key_to_tuple(key)
-            firstkey, *keys = key
-            if keys_to_update:
-                if (keys and key not in keys_to_update) or (
-                    not keys and firstkey not in keys_to_update
-                ):
-                    continue
+            key = _unravel_key_to_tuple(key);firstkey, keys = key[0], key[1:];
+            if keys_to_update and not any(
+                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                for ktu in keys_to_update
+            ):
+                continue
             if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "
