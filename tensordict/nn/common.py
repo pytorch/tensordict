@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
+from copy import deepcopy
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
@@ -1227,10 +1228,13 @@ class TensorDictModule(TensorDictModuleBase):
         try:
             return super().__getattr__(name)
         except AttributeError as err1:
-            try:
-                return getattr(super().__getattr__("module"), name)
-            except Exception as err2:
-                raise err2 from err1
+            if not name.startswith("_"):
+                # no fallback for private attributes
+                try:
+                    return getattr(super().__getattr__("module"), name)
+                except Exception as err2:
+                    raise err2 from err1
+            raise
 
     def __getstate__(self):
         state = self.__dict__.copy()

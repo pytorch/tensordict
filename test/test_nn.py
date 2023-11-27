@@ -722,6 +722,19 @@ class TestTDModule:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
+    def test_deepcopy(self):
+        class DummyModule(nn.Linear):
+            some_attribute = "a"
+
+            def __deepcopy__(self, memodict={}):
+                return DummyModule(self.in_features, self.out_features)
+
+        tdmodule = TensorDictModule(DummyModule(1, 1), in_keys=["a"], out_keys=["b"])
+        with pytest.raises(AttributeError):
+            tdmodule.__deepcopy__
+        assert tdmodule.some_attribute == "a"
+        assert isinstance(copy.deepcopy(tdmodule), TensorDictModule)
+
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
