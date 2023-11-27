@@ -548,9 +548,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     def __getattr__(self, item: str) -> Any:
-        try:
-            return getattr(self.__dict__["_param_td"], item)
-        except AttributeError:
+        if not item.startswith("_"):
+            try:
+                return getattr(self.__dict__["_param_td"], item)
+            except AttributeError:
+                return super().__getattr__(item)
+        else:
             return super().__getattr__(item)
 
     @_fallback
