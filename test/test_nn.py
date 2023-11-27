@@ -726,7 +726,7 @@ class TestTDModule:
         class DummyModule(nn.Linear):
             some_attribute = "a"
 
-            def __deepcopy__(self, memodict={}):
+            def __deepcopy__(self, memodict=None):
                 return DummyModule(self.in_features, self.out_features)
 
         tdmodule = TensorDictModule(DummyModule(1, 1), in_keys=["a"], out_keys=["b"])

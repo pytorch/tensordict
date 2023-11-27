@@ -8,7 +8,6 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
-from copy import deepcopy
 from textwrap import indent
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
