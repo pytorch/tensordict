@@ -1227,10 +1227,13 @@ class TensorDictModule(TensorDictModuleBase):
         try:
             return super().__getattr__(name)
         except AttributeError as err1:
-            try:
-                return getattr(super().__getattr__("module"), name)
-            except Exception as err2:
-                raise err2 from err1
+            if not name.startswith("_"):
+                # no fallback for private attributes
+                try:
+                    return getattr(super().__getattr__("module"), name)
+                except Exception as err2:
+                    raise err2 from err1
+            raise
 
     def __getstate__(self):
         state = self.__dict__.copy()
