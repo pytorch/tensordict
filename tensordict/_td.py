@@ -800,6 +800,7 @@ class TensorDict(TensorDictBase):
                 {
                     "shape": list(data.shape),
                     "device": str(data.device),
+                    "_type": data.__class__.__name__,
                 }
             )
             with open(filepath, "w") as json_metadata:
@@ -1465,6 +1466,7 @@ class TensorDict(TensorDictBase):
                 {
                     "shape": list(data.shape),
                     "device": str(data.device),
+                    "_type": data.__class__.__name__,
                 }
             )
             with open(filepath, "w") as json_metadata:
@@ -1540,6 +1542,9 @@ class TensorDict(TensorDictBase):
             return metadata
 
         metadata = load_metadata(prefix / "meta.json")
+        type_name = metadata["_type"]
+        if type_name != cls.__name__:
+            raise RuntimeError
         out = cls({}, batch_size=metadata.pop("shape"), device=metadata.pop("device"))
 
         for key, entry_metadata in metadata.items():
