@@ -295,6 +295,7 @@ class TensorDict(TensorDictBase):
                     if return_swap:
                         local_out = getattr(module, key)
                     # use specialized __setattr__ if needed
+                    delattr(module, key)
                     setattr(module, key, value)
             else:
                 if value.is_empty():
