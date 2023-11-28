@@ -346,7 +346,7 @@ def _tensorclass_memmap(self, prefix: str | None = None, copy_existing: bool = F
             print("saving with type name", self.__class__.__name__)
             metadata = {"_type": self.__class__.__name__}
             for key, value in self._non_tensordict.items():
-                if isinstance(value, (int, bool, str, dict)):
+                if isinstance(value, (int, bool, str, float, dict)):
                     metadata[key] = value
             json.dump(metadata, f)
         prefix = prefix / "_tensordict"
