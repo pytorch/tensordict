@@ -364,9 +364,9 @@ def _tensorclass_load_memmap(cls, prefix: str):
                 f"type_name {type_name} in prefix {prefix} does not match {cls.__name__}."
             )
             # try to get the type from register
-            for cls in tensordict_lib.base._ACCEPTED_CLASSES:
-                if cls.__name__ == type_name:
-                    return cls.load_memmap(prefix)
+            for other_cls in tensordict_lib.base._ACCEPTED_CLASSES:
+                if other_cls.__name__ == type_name:
+                    return other_cls.load_memmap(prefix)
             else:
                 raise RuntimeError(
                     f"Could not find name {type_name} in {tensordict_lib.base._ACCEPTED_CLASSES}."

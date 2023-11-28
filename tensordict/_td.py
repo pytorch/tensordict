@@ -1532,6 +1532,9 @@ class TensorDict(TensorDictBase):
         def load_metadata(filepath):
             with open(filepath) as json_metadata:
                 metadata = json.load(json_metadata)
+                if metadata['_type'] != cls.__name__:
+                    # return early to load from another cls
+                    return metadata
                 if metadata["device"] == "None":
                     metadata["device"] = None
                 else:
@@ -1544,7 +1547,14 @@ class TensorDict(TensorDictBase):
         metadata = load_metadata(prefix / "meta.json")
         type_name = metadata["_type"]
         if type_name != cls.__name__:
-            raise RuntimeError
+            import tensordict
+            for other_cls in tensordict.base._ACCEPTED_CLASSES:
+                if other_cls.__name__ == type_name:
+                    return other_cls.load_memmap(prefix)
+            else:
+                raise RuntimeError(
+                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}."
+                )
         out = cls({}, batch_size=metadata.pop("shape"), device=metadata.pop("device"))
 
         for key, entry_metadata in metadata.items():
