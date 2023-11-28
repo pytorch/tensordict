@@ -800,7 +800,7 @@ class TensorDict(TensorDictBase):
                 {
                     "shape": list(data.shape),
                     "device": str(data.device),
-                    "_type": data.__class__.__name__,
+                    "_type": str(data.__class__),
                 }
             )
             with open(filepath, "w") as json_metadata:
@@ -1466,7 +1466,7 @@ class TensorDict(TensorDictBase):
                 {
                     "shape": list(data.shape),
                     "device": str(data.device),
-                    "_type": data.__class__.__name__,
+                    "_type": str(data.__class__),
                 }
             )
             with open(filepath, "w") as json_metadata:
@@ -1532,7 +1532,7 @@ class TensorDict(TensorDictBase):
         def load_metadata(filepath):
             with open(filepath) as json_metadata:
                 metadata = json.load(json_metadata)
-                if metadata["_type"] != cls.__name__:
+                if metadata["_type"] != str(cls):
                     # return early to load from another cls
                     return metadata
                 if metadata["device"] == "None":
@@ -1546,11 +1546,11 @@ class TensorDict(TensorDictBase):
 
         metadata = load_metadata(prefix / "meta.json")
         type_name = metadata["_type"]
-        if type_name != cls.__name__:
+        if type_name != str(cls):
             import tensordict
 
             for other_cls in tensordict.base._ACCEPTED_CLASSES:
-                if other_cls.__name__ == type_name:
+                if str(other_cls) == type_name:
                     return other_cls.load_memmap(prefix)
             else:
                 raise RuntimeError(
