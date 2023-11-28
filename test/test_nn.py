@@ -3211,9 +3211,6 @@ class TestStateDict:
             assert isinstance(val, nn.Parameter)
 
 
-@pytest.mark.parametrize(
-    "module_name,input_name", [["_module_shared", "_x"], ["_transformer", "_tuple_x"]]
-)
 @pytest.mark.parametrize("as_module", [True, False])
 class TestToModule:
     @property
@@ -3243,6 +3240,10 @@ class TestToModule:
     def _x(self):
         return (torch.randn(2, 2, 8),)
 
+    @pytest.mark.parametrize(
+        "module_name,input_name",
+        [["_module_shared", "_x"], ["_transformer", "_tuple_x"]],
+    )
     def test_static(self, module_name, input_name, as_module):
         torch.manual_seed(0)
         module = getattr(self, module_name)
@@ -3261,6 +3262,10 @@ class TestToModule:
         assert (y0 == 0).all()
         assert (y0 != y1).all()
 
+    @pytest.mark.parametrize(
+        "module_name,input_name",
+        [["_module_shared", "_x"], ["_transformer", "_tuple_x"]],
+    )
     def test_cm(self, module_name, input_name, as_module):
         torch.manual_seed(0)
         module = getattr(self, module_name)
@@ -3280,6 +3285,10 @@ class TestToModule:
         assert (y0 != y1).all()
         assert (TensorDict.from_module(module) == params).all()
 
+    @pytest.mark.parametrize(
+        "module_name,input_name",
+        [["_module_shared", "_x"], ["_transformer", "_tuple_x"]],
+    )
     def test_cm_meta(self, module_name, input_name, as_module):
         torch.manual_seed(0)
         module = getattr(self, module_name)
@@ -3295,6 +3304,19 @@ class TestToModule:
         torch.testing.assert_close(y, y1)
         torch.testing.assert_close(y, y2)
         assert (TensorDict.from_module(module) == params).all()
+
+    def test_params_detach(self, as_module):
+        class MyLinear(nn.Linear):
+            def __setattr__(self, key, value):
+                return super().__setattr__(key, value)
+
+        l = MyLinear(3, 4)
+        params = TensorDict.from_module(l, as_module=as_module)
+        # this will break if the parameters are not deleted before being set
+        with params.detach().to_module(l):
+            l(torch.randn(3))
+        assert len(list(l.parameters())) == 2
+        assert (TensorDict.from_module(l) == params).all()
 
 
 if __name__ == "__main__":
