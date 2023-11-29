@@ -1098,6 +1098,75 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert (td_1[key] == td[key] + 1).all()
 
     @pytest.mark.parametrize("inplace", [False, True])
+    def test_apply_default(self, td_name, device, inplace):
+        if td_name in ("td_h5",):
+            pytest.skip("Cannot test assignment in persistent tensordict.")
+        td = getattr(self, td_name)(device)
+        td_c = td.to_tensordict()
+        if td_name in ("td_params",):
+            td.data.zero_()
+        else:
+            td.zero_()
+        with td.unlock_():
+            td["nested", "newkey"] = torch.zeros(td.shape)
+
+        def get_old_val(newval, oldval):
+            if oldval is not None:
+                return oldval
+            return newval
+
+        if inplace and td_name == "td_params":
+            with pytest.raises(ValueError, match="Failed to update"):
+                td.apply(get_old_val, td_c, inplace=inplace, default=None)
+            return
+        td_1 = td.apply(get_old_val, td_c, inplace=inplace, default=None)
+        if inplace:
+            for key in td.keys(True, True):
+                td_c_val = td_c.get(key, None)
+                if td_c_val is not None:
+                    assert (td_c[key] == td[key]).all()
+                else:
+                    assert key == ("nested", "newkey")
+                    assert (td_1[key] == 0).all()
+                assert (td_1[key] == td[key]).all()
+        else:
+            for key in td.keys(True, True):
+                td_c_val = td_c.get(key, None)
+                if td_c_val is not None:
+                    assert (td_c[key] == td_1[key]).all()
+                else:
+                    assert key == ("nested", "newkey")
+                    assert (td_1[key] == 0).all()
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_named_apply(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+        td_c = td.to_tensordict()
+
+        def named_plus(name, x):
+            if "a" in name:
+                return x + 1
+
+        if inplace and td_name == "td_params":
+            with pytest.raises(ValueError, match="Failed to update"):
+                td.named_apply(named_plus, inplace=inplace)
+            return
+        td_1 = td.named_apply(named_plus, inplace=inplace)
+        if inplace:
+            assert td_1 is td
+            for key in td_1.keys(True, True):
+                if "a" in key:
+                    assert (td_c[key] + 1 == td_1[key]).all()
+                else:
+                    assert (td_c[key] == td_1[key]).all()
+                assert (td_1[key] == td[key]).all()
+        else:
+            for key in td_1.keys(True, True):
+                assert "a" in key
+                assert (td_c[key] + 1 != td[key]).any()
+                assert (td_1[key] == td[key] + 1).all()
+
+    @pytest.mark.parametrize("inplace", [False, True])
     def test_apply_other(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
