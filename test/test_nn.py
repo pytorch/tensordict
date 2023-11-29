@@ -3310,13 +3310,13 @@ class TestToModule:
             def __setattr__(self, key, value):
                 return super().__setattr__(key, value)
 
-        l = MyLinear(3, 4)
-        params = TensorDict.from_module(l, as_module=as_module)
+        linear = MyLinear(3, 4)
+        params = TensorDict.from_module(linear, as_module=as_module)
         # this will break if the parameters are not deleted before being set
-        with params.detach().to_module(l):
-            l(torch.randn(3))
-        assert len(list(l.parameters())) == 2
-        assert (TensorDict.from_module(l) == params).all()
+        with params.detach().to_module(linear):
+            linear(torch.randn(3))
+        assert len(list(linear.parameters())) == 2
+        assert (TensorDict.from_module(linear) == params).all()
 
 
 if __name__ == "__main__":
