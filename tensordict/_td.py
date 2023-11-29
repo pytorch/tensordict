@@ -537,8 +537,17 @@ class TensorDict(TensorDictBase):
             out.unlock_()
 
         for key, item in self.items():
-            _others = [_other._get_str(key, default=default) for _other in others]
             if not call_on_nested and _is_tensor_collection(item.__class__):
+                if default is not NO_DEFAULT:
+                    _others = [_other._get_str(key, default=None) for _other in others]
+                    _others = [
+                        self.empty() if _other is None else _other for _other in _others
+                    ]
+                else:
+                    _others = [
+                        _other._get_str(key, default=NO_DEFAULT) for _other in others
+                    ]
+
                 item_trsf = item._apply_nest(
                     fn,
                     *_others,
@@ -551,6 +560,7 @@ class TensorDict(TensorDictBase):
                     **constructor_kwargs,
                 )
             else:
+                _others = [_other._get_str(key, default=default) for _other in others]
                 if named:
                     item_trsf = fn(key, item, *_others)
                 else:
