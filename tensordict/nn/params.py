@@ -451,6 +451,21 @@ class TensorDictParams(TensorDictBase, nn.Module):
         device: torch.device | None = None,
         names: Sequence[str] | None = None,
         inplace: bool = False,
+        default: Any = NO_DEFAULT,
+        **constructor_kwargs,
+    ) -> TensorDictBase:
+        ...
+
+    @_unlock_and_set(inplace=True)
+    def named_apply(
+        self,
+        fn: Callable,
+        *others: TensorDictBase,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = None,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        default: Any = NO_DEFAULT,
         **constructor_kwargs,
     ) -> TensorDictBase:
         ...

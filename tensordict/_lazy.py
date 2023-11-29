@@ -1084,10 +1084,12 @@ class LazyStackedTensorDict(TensorDictBase):
             return LazyStackedTensorDict
         return data_type
 
-    def apply_(self, fn: Callable, *others):
+    def apply_(self, fn: Callable, *others, **kwargs):
         for i, td in enumerate(self.tensordicts):
             idx = (slice(None),) * self.stack_dim + (i,)
-            td._fast_apply(fn, *[other[idx] for other in others], inplace=True)
+            td._fast_apply(
+                fn, *[other[idx] for other in others], inplace=True, **kwargs
+            )
         return self
 
     def _apply_nest(
@@ -1100,6 +1102,8 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
         **constructor_kwargs,
     ) -> T:
         if inplace:
@@ -1107,7 +1111,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise ValueError(
                     "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
                 )
-            return self.apply_(fn, *others)
+            return self.apply_(fn, *others, named=named, default=default)
         else:
             if batch_size is not None:
                 # any op that modifies the batch-size will result in a regular TensorDict
@@ -1120,6 +1124,8 @@ class LazyStackedTensorDict(TensorDictBase):
                     names=names,
                     checked=checked,
                     call_on_nested=call_on_nested,
+                    default=default,
+                    named=named,
                     **constructor_kwargs,
                 )
             others = (other.unbind(self.stack_dim) for other in others)
@@ -1131,6 +1137,8 @@ class LazyStackedTensorDict(TensorDictBase):
                         checked=checked,
                         device=device,
                         call_on_nested=call_on_nested,
+                        default=default,
+                        named=named,
                     )
                     for td, *oth in zip(self.tensordicts, *others)
                 ),

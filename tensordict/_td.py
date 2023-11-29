@@ -507,6 +507,8 @@ class TensorDict(TensorDictBase):
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
         **constructor_kwargs,
     ) -> T:
         if inplace:
@@ -535,7 +537,7 @@ class TensorDict(TensorDictBase):
             out.unlock_()
 
         for key, item in self.items():
-            _others = [_other._get_str(key, default=NO_DEFAULT) for _other in others]
+            _others = [_other._get_str(key, default=default) for _other in others]
             if not call_on_nested and _is_tensor_collection(item.__class__):
                 item_trsf = item._apply_nest(
                     fn,
@@ -544,10 +546,15 @@ class TensorDict(TensorDictBase):
                     batch_size=batch_size,
                     device=device,
                     checked=checked,
+                    named=named,
+                    default=default,
                     **constructor_kwargs,
                 )
             else:
-                item_trsf = fn(item, *_others)
+                if named:
+                    item_trsf = fn(key, item, *_others)
+                else:
+                    item_trsf = fn(item, *_others)
             if item_trsf is not None:
                 if isinstance(self, _SubTensorDict):
                     out.set(key, item_trsf, inplace=inplace)
