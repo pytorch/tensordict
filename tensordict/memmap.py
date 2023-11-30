@@ -549,7 +549,7 @@ class MemoryMappedTensor(torch.Tensor):
                     "isn't supported at the moment."
                 ) from err
             raise
-        if out.storage().data_ptr() == self.storage().data_ptr():
+        if out.untyped_storage().data_ptr() == self.untyped_storage().data_ptr():
             out = MemoryMappedTensor(out)
             out._handler = self._handler
             out._filename = self._filename
