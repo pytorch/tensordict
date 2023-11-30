@@ -98,7 +98,15 @@ class MemoryMappedTensor(torch.Tensor):
     __torch_function__ = torch._C._disabled_torch_function_impl
 
     @classmethod
-    def from_tensor(cls, input, *, filename=None, existsok=False, copy_existing=False):
+    def from_tensor(
+        cls,
+        input,
+        *,
+        filename=None,
+        existsok=False,
+        copy_existing=False,
+        copy_data=True,
+    ):
         """Creates a MemoryMappedTensor with the same content as another tensor.
 
         If the tensor is already a MemoryMappedTensor the original tensor is
@@ -118,6 +126,8 @@ class MemoryMappedTensor(torch.Tensor):
                 the content to the new location is permitted. Otherwise an
                 exception is thown. This behaviour exists to prevent
                 unadvertedly duplicating data on disk.
+            copy_data (bool, optional): if ``True``, the content of the tensor
+                will be copied on the storage. Defaults to ``True``.
 
         """
         if isinstance(input, MemoryMappedTensor):
@@ -205,6 +215,7 @@ class MemoryMappedTensor(torch.Tensor):
         return cls.from_tensor(
             torch.zeros((), dtype=input.dtype, device=input.device).expand_as(input),
             filename=filename,
+            copy_data=False,
         )
 
     @classmethod
@@ -221,11 +232,10 @@ class MemoryMappedTensor(torch.Tensor):
                 is provided, a handler is used.
         """
         return cls.from_tensor(
-            torch.zeros((), dtype=input.dtype, device=input.device)
-            .fill_(fill_value)
-            .expand_as(input),
+            torch.zeros((), dtype=input.dtype, device=input.device).expand_as(input),
             filename=filename,
-        )
+            copy_data=False,
+        ).fill_(fill_value)
 
     @classmethod
     def zeros_like(cls, input, *, filename=None):
@@ -242,7 +252,8 @@ class MemoryMappedTensor(torch.Tensor):
         return cls.from_tensor(
             torch.zeros((), dtype=input.dtype, device=input.device).expand_as(input),
             filename=filename,
-        )
+            copy_data=False,
+        ).fill_(0.0)
 
     @classmethod
     def ones_like(cls, input, *, filename=None):
@@ -259,7 +270,8 @@ class MemoryMappedTensor(torch.Tensor):
         return cls.from_tensor(
             torch.ones((), dtype=input.dtype, device=input.device).expand_as(input),
             filename=filename,
-        )
+            copy_data=False,
+        ).fill_(1.0)
 
     @classmethod
     @overload
@@ -537,7 +549,7 @@ class MemoryMappedTensor(torch.Tensor):
                     "isn't supported at the moment."
                 ) from err
             raise
-        if out.storage().data_ptr() == self.storage().data_ptr():
+        if out.untyped_storage().data_ptr() == self.untyped_storage().data_ptr():
             out = MemoryMappedTensor(out)
             out._handler = self._handler
             out._filename = self._filename
