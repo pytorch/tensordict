@@ -18,6 +18,8 @@ from typing import Any, overload
 import numpy as np
 import torch
 
+from tensordict.utils import implement_for
+
 from torch.multiprocessing.reductions import ForkingPickler
 
 
@@ -540,6 +542,7 @@ class MemoryMappedTensor(torch.Tensor):
         else:
             raise RuntimeError("Could not find handler or filename.")
 
+    @implement_for("torch", "2.0", None)
     def __getitem__(self, item):
         try:
             out = super().__getitem__(item)
@@ -551,6 +554,25 @@ class MemoryMappedTensor(torch.Tensor):
                 ) from err
             raise
         if out.untyped_storage().data_ptr() == self.untyped_storage().data_ptr():
+            out = MemoryMappedTensor(out)
+            out._handler = self._handler
+            out._filename = self._filename
+            out.index = item
+            out.parent_shape = self.parent_shape
+        return out
+
+    @implement_for("torch", None, "2.0")  # noqa: F811
+    def __getitem__(self, item):
+        try:
+            out = super().__getitem__(item)
+        except ValueError as err:
+            if "is unbound" in str(err):
+                raise ValueError(
+                    "Using first class dimension indices with MemoryMappedTensor "
+                    "isn't supported at the moment."
+                ) from err
+            raise
+        if out.storage().data_ptr() == self.storage().data_ptr():
             out = MemoryMappedTensor(out)
             out._handler = self._handler
             out._filename = self._filename
