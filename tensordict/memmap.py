@@ -186,7 +186,8 @@ class MemoryMappedTensor(torch.Tensor):
         out._filename = filename
         out.index = None
         out.parent_shape = input.shape
-        out.copy_(input)
+        if copy_data:
+            out.copy_(input)
         return out
 
     @property
