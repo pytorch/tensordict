@@ -12,7 +12,7 @@ import re
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Optional, Union
+from typing import Any, Optional, Tuple, Union
 
 import pytest
 import torch
@@ -29,18 +29,15 @@ except ImportError as err:
 from _utils_internal import get_available_devices
 
 from tensordict import (
+    assert_allclose_td,
     is_tensorclass,
     LazyStackedTensorDict,
-    MemmapTensor,
+    MemoryMappedTensor,
     tensorclass,
     TensorDict,
-)
-from tensordict.tensordict import (
-    _PermutedTensorDict,
-    _ViewedTensorDict,
-    assert_allclose_td,
     TensorDictBase,
 )
+from tensordict._lazy import _PermutedTensorDict, _ViewedTensorDict
 from torch import Tensor
 
 
@@ -379,16 +376,16 @@ def test_setitem_memmap():
     @tensorclass
     class MyDataMemMap1:
         x: torch.Tensor
-        y: MemmapTensor
+        y: MemoryMappedTensor
 
     data1 = MyDataMemMap1(
         x=torch.zeros(3, 4, 5),
-        y=MemmapTensor.from_tensor(torch.zeros(3, 4, 5)),
+        y=MemoryMappedTensor.from_tensor(torch.zeros(3, 4, 5)),
         batch_size=[3, 4],
     )
 
     data2 = MyDataMemMap1(
-        x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
+        x=MemoryMappedTensor.from_tensor(torch.ones(3, 4, 5)),
         y=torch.ones(3, 4, 5),
         batch_size=[3, 4],
     )
@@ -407,22 +404,22 @@ def test_setitem_other_cls():
     @tensorclass
     class MyData1:
         x: torch.Tensor
-        y: MemmapTensor
+        y: MemoryMappedTensor
 
     data1 = MyData1(
         x=torch.zeros(3, 4, 5),
-        y=MemmapTensor.from_tensor(torch.zeros(3, 4, 5)),
+        y=MemoryMappedTensor.from_tensor(torch.zeros(3, 4, 5)),
         batch_size=[3, 4],
     )
 
     # Set Item should work for other tensorclass
     @tensorclass
     class MyData2:
-        x: MemmapTensor
+        x: MemoryMappedTensor
         y: torch.Tensor
 
     data_other_cls = MyData2(
-        x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
+        x=MemoryMappedTensor.from_tensor(torch.ones(3, 4, 5)),
         y=torch.ones(3, 4, 5),
         batch_size=[3, 4],
     )
@@ -432,11 +429,11 @@ def test_setitem_other_cls():
     # Set Item should raise if other tensorclass with different members
     @tensorclass
     class MyData3:
-        x: MemmapTensor
+        x: MemoryMappedTensor
         z: torch.Tensor
 
     data_wrong_cls = MyData3(
-        x=MemmapTensor.from_tensor(torch.ones(3, 4, 5)),
+        x=MemoryMappedTensor.from_tensor(torch.ones(3, 4, 5)),
         z=torch.ones(3, 4, 5),
         batch_size=[3, 4],
     )
@@ -476,7 +473,7 @@ def test_setitem_broadcast(broadcast_type):
     elif broadcast_type == "tensordict":
         val = TensorDict({"X": torch.zeros(2, 4, 5)}, batch_size=[2, 4])
     elif broadcast_type == "maptensor":
-        val = MemmapTensor.from_tensor(torch.zeros(4, 5))
+        val = MemoryMappedTensor.from_tensor(torch.zeros(4, 5))
 
     data[:2] = val
     assert (data[:2] == 0).all()
@@ -1349,10 +1346,12 @@ def test_torchsnapshot(tmp_path):
         batch_size=[],
     )
     tc.memmap_()
-    assert isinstance(tc.y.x, MemmapTensor)
+    assert isinstance(tc.y.x, MemoryMappedTensor)
     assert tc.z == z
 
-    app_state = {"state": torchsnapshot.StateDict(tensordict=tc.state_dict())}
+    app_state = {
+        "state": torchsnapshot.StateDict(tensordict=tc.state_dict(keep_vars=True))
+    }
     snapshot = torchsnapshot.Snapshot.take(app_state=app_state, path=str(tmp_path))
 
     tc_dest = MyClass(
@@ -1362,13 +1361,15 @@ def test_torchsnapshot(tmp_path):
         batch_size=[],
     )
     tc_dest.memmap_()
-    assert isinstance(tc_dest.y.x, MemmapTensor)
-    app_state = {"state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict())}
+    assert isinstance(tc_dest.y.x, MemoryMappedTensor)
+    app_state = {
+        "state": torchsnapshot.StateDict(tensordict=tc_dest.state_dict(keep_vars=True))
+    }
     snapshot.restore(app_state=app_state)
 
     assert (tc_dest == tc).all()
     assert tc_dest.y.batch_size == tc.y.batch_size
-    assert isinstance(tc_dest.y.x, MemmapTensor)
+    assert isinstance(tc_dest.y.x, MemoryMappedTensor)
     # torchsnapshot does not support updating strings and such
     assert tc_dest.z != z
 
@@ -1382,7 +1383,7 @@ def test_torchsnapshot(tmp_path):
     tc_dest.load_state_dict(tc.state_dict())
     assert (tc_dest == tc).all()
     assert tc_dest.y.batch_size == tc.y.batch_size
-    assert isinstance(tc_dest.y.x, MemmapTensor)
+    assert isinstance(tc_dest.y.x, MemoryMappedTensor)
     # load_state_dict outperforms snapshot in this case
     assert tc_dest.z == z
 
@@ -1606,8 +1607,8 @@ def test_memmap_():
 
     cmemmap = c.memmap_()
     assert cmemmap is c
-    assert isinstance(c.x, MemmapTensor)
-    assert isinstance(c.y.x, MemmapTensor)
+    assert isinstance(c.x, MemoryMappedTensor)
+    assert isinstance(c.y.x, MemoryMappedTensor)
     assert c.z == "foo"
 
 
@@ -1629,8 +1630,8 @@ def test_memmap_like():
     assert cmemmap is not c
     assert cmemmap.y is not c.y
     assert (cmemmap == 0).all()
-    assert isinstance(cmemmap.x, MemmapTensor)
-    assert isinstance(cmemmap.y.x, MemmapTensor)
+    assert isinstance(cmemmap.x, MemoryMappedTensor)
+    assert isinstance(cmemmap.y.x, MemoryMappedTensor)
     assert cmemmap.z == "foo"
 
 
@@ -1668,8 +1669,50 @@ def test_from_dict():
         a: TensorDictBase
 
     tc = MyClass.from_dict(d)
+    assert isinstance(tc, MyClass)
     assert isinstance(tc.a, TensorDict)
     assert tc.batch_size == torch.Size([10])
+
+
+class TestNesting:
+    @tensorclass
+    class TensorClass:
+        tens: torch.Tensor
+        order: Tuple[str]
+        test: str
+
+    def get_nested(self):
+
+        c = self.TensorClass(torch.ones(1), ("a", "b", "c"), "Hello", batch_size=[])
+
+        td = torch.stack(
+            [TensorDict({"t": torch.ones(1), "c": c}, batch_size=[]) for _ in range(3)]
+        )
+        return td
+
+    def test_to(self):
+        td = self.get_nested()
+        td = td.to("cpu:1")
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+    def test_idx(self):
+        td = self.get_nested()[0]
+        assert isinstance(td.get("c"), self.TensorClass)
+
+    def test_apply(self):
+        td = self.get_nested()
+        td = td.apply(lambda x: x + 1)
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+    def test_split(self):
+        td = self.get_nested()
+        td, _ = td.split([2, 1], dim=0)
+        assert isinstance(td.get("c")[0], self.TensorClass)
+
+    def test_chunk(self):
+        td = self.get_nested()
+        td, _ = td.chunk(2, dim=0)
+        assert isinstance(td.get("c")[0], self.TensorClass)
 
 
 if __name__ == "__main__":

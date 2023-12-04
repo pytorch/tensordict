@@ -9,15 +9,8 @@ from functorch import make_functional_with_buffers as functorch_make_functional
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 from tensordict.nn.functional_modules import make_functional
-from torch import nn
 
-try:
-    from torch import vmap
-except ImportError:
-    try:
-        from functorch import vmap
-    except ImportError:
-        raise RuntimeError("vmap couldn't be found, check pytorch version.")
+from torch import nn, vmap
 
 
 def make_net():
@@ -128,6 +121,16 @@ def test_instantiation_td(benchmark, net):
 # Execution
 def test_exec_functorch(benchmark, net):
     x = torch.randn(2, 2)
+    sd = net.state_dict()
+
+    def fun(x, sd):
+        torch.func.functional_call(net, sd, x)
+
+    benchmark(fun, x, sd)
+
+
+def test_exec_functional_call(benchmark, net):
+    x = torch.randn(2, 2)
     fmodule, params, buffers = functorch_make_functional(net)
     benchmark(fmodule, params, buffers, x)
 
@@ -137,6 +140,18 @@ def test_exec_td(benchmark, net):
     fmodule = net
     params = make_functional(fmodule)
     benchmark(fmodule, x, params=params)
+
+
+def test_exec_td_decorator(benchmark, net):
+    x = torch.randn(2, 2)
+    fmodule = net
+    params = TensorDict.from_module(fmodule)
+
+    def fun(x, params):
+        with params.to_module(net):
+            net(x)
+
+    benchmark(fun, x, params)
 
 
 @torch.no_grad()
@@ -179,6 +194,51 @@ def test_vmap_mlp_speed(benchmark, stack, tdmodule):
 @torch.no_grad()
 @pytest.mark.parametrize("stack", [True, False])
 @pytest.mark.parametrize("tdmodule", [True, False])
+def test_vmap_mlp_speed_decorator(benchmark, stack, tdmodule):
+    # tests speed of vmapping over a transformer
+    device = "cuda" if torch.cuda.device_count() else "cpu"
+    t = nn.Sequential(
+        nn.Linear(64, 64, device=device),
+        nn.ReLU(),
+        nn.Linear(64, 64, device=device),
+        nn.ReLU(),
+        nn.Linear(64, 64, device=device),
+        nn.ReLU(),
+        nn.Linear(64, 64, device=device),
+        nn.ReLU(),
+    )
+    if tdmodule:
+        t = TensorDictModule(t, in_keys=["x"], out_keys=["y"])
+
+    x = torch.randn(1, 1, 64, device=device)
+    t.eval()
+    params = TensorDict.from_module(t)
+    if not stack:
+        params = params.expand(2).to_tensordict().lock_()
+    else:
+        params = torch.stack([params, params.clone()], 0).lock_()
+
+    def fun(x, params):
+        with params.to_module(t):
+            return t(x)
+
+    vfun = vmap(fun, (None, 0))
+
+    if tdmodule:
+        data = TensorDict({"x": x}, [])
+        vfun(data, params)
+        benchmark(vfun, data, params)
+    else:
+        vfun(x, params)
+        benchmark(vfun, x, params)
+
+
+@torch.no_grad()
+@pytest.mark.skipif(
+    not torch.cuda.device_count(), reason="cuda device required for test"
+)
+@pytest.mark.parametrize("stack", [True, False])
+@pytest.mark.parametrize("tdmodule", [True, False])
 def test_vmap_transformer_speed(benchmark, stack, tdmodule):
     # tests speed of vmapping over a transformer
     device = "cuda" if torch.cuda.device_count() else "cpu"
@@ -210,6 +270,53 @@ def test_vmap_transformer_speed(benchmark, stack, tdmodule):
         fun = vmap(t, (None, None, 0))
         fun(x, x, params)
         benchmark(fun, x, x, params)
+
+
+@torch.no_grad()
+@pytest.mark.skipif(
+    not torch.cuda.device_count(), reason="cuda device required for test"
+)
+@pytest.mark.parametrize("stack", [True, False])
+@pytest.mark.parametrize("tdmodule", [True, False])
+def test_vmap_transformer_speed_decorator(benchmark, stack, tdmodule):
+    # tests speed of vmapping over a transformer
+    device = "cuda" if torch.cuda.device_count() else "cpu"
+    t = torch.nn.Transformer(
+        8,
+        dim_feedforward=8,
+        device=device,
+        batch_first=False,
+    )
+    if tdmodule:
+        t = TensorDictModule(t, in_keys=["x", "x"], out_keys=["y"])
+
+    x = torch.randn(2, 2, 8, device=device)
+    t.eval()
+    params = TensorDict.from_module(t)
+    if not stack:
+        params = params.expand(2).to_tensordict().lock_()
+    else:
+        params = torch.stack([params, params.clone()], 0).lock_()
+
+    if tdmodule:
+
+        def fun(x, params):
+            with params.to_module(t):
+                return t(x)
+
+        vfun = vmap(fun, (None, 0))
+        data = TensorDict({"x": x}, [])
+        vfun(data, params)
+        benchmark(vfun, data, params)
+    else:
+
+        def fun(x, params):
+            with params.to_module(t):
+                return t(x, x)
+
+        vfun = vmap(fun, (None, 0))
+        vfun(x, params)
+        benchmark(vfun, x, params)
 
 
 if __name__ == "__main__":

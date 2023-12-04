@@ -8,9 +8,14 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_key, unravel_key_list
+from tensordict import unravel_key, unravel_key_list
+from tensordict._tensordict import _unravel_key_to_tuple
 
-from tensordict.utils import _getitem_batch_size, _make_cache_key
+from tensordict.utils import (
+    _getitem_batch_size,
+    _make_cache_key,
+    convert_ellipsis_to_idx,
+)
 
 
 @pytest.mark.parametrize("tensor", [torch.rand(2, 3, 4, 5), torch.rand(2, 3, 4, 5, 6)])
@@ -39,7 +44,9 @@ from tensordict.utils import _getitem_batch_size, _make_cache_key
         [0, 1],
         np.arange(0, 1),
         torch.arange(2),
-        [True, False, True],
+        range(2),
+        torch.tensor([[0, 1], [0, 1]]),
+        # [True, False, True],
         Ellipsis,
     ],
 )
@@ -54,7 +61,9 @@ from tensordict.utils import _getitem_batch_size, _make_cache_key
         [0, 1],
         np.arange(1, 3),
         torch.arange(2),
-        [True, False, True, False],
+        range(2),
+        torch.tensor([[0, 1], [0, 1]]),
+        # [True, False, True, False],
         Ellipsis,
     ],
 )
@@ -69,7 +78,9 @@ from tensordict.utils import _getitem_batch_size, _make_cache_key
         [0, 1],
         np.arange(0, 4, 2),
         torch.arange(2),
-        [True, False, False, False, True],
+        range(2),
+        torch.tensor([[0, 1], [0, 1]]),
+        # [True, False, False, False, True],
         Ellipsis,
     ],
 )
@@ -84,6 +95,7 @@ def test_getitem_batch_size(tensor, index1, index2, index3, index4):
     ) == 1 and tensor.ndim == 5:
         pytest.skip("index possibly incompatible with tensor shape.")
     index = (index1, index2, index3, index4)
+    index = convert_ellipsis_to_idx(index, tensor.shape)
     assert tensor[index].shape == _getitem_batch_size(tensor.shape, index), index
 
 
@@ -103,7 +115,8 @@ def test_getitem_batch_size_mask(tensor, idx, ndim, slice_leading_dims):
         index = (slice(None),) * idx + (mask,)
     else:
         index = (0,) * idx + (mask,)
-    assert tensor[index].shape == _getitem_batch_size(tensor.shape, index)
+    index = convert_ellipsis_to_idx(index, tensor.shape)
+    assert tensor[index].shape == _getitem_batch_size(tensor.shape, index), index
 
 
 def test_make_cache_key():

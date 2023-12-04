@@ -20,18 +20,19 @@ from typing import Any, Callable, Sequence, TypeVar
 import tensordict as tensordict_lib
 
 import torch
+from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
-from tensordict.memmap import MemmapTensor
-from tensordict.tensordict import (
-    _get_repr,
-    is_tensor_collection,
-    NO_DEFAULT,
-    TD_HANDLED_FUNCTIONS,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
-from tensordict.utils import DeviceType, IndexType, is_tensorclass, NestedKey
+from tensordict.utils import (
+    _get_repr,
+    _LOCK_ERROR,
+    DeviceType,
+    IndexType,
+    is_tensorclass,
+    NestedKey,
+)
 from torch import Tensor
 
 T = TypeVar("T", bound=TensorDictBase)
@@ -176,6 +177,7 @@ def tensorclass(cls: T) -> T:
     cls.__ne__ = __ne__
     cls.set = _set
     cls.set_at_ = _set_at_
+    cls.del_ = _del_
     cls.get = _get
     cls.get_at = _get_at
     cls.unbind = _unbind
@@ -184,10 +186,10 @@ def tensorclass(cls: T) -> T:
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
-        if (
-            inspect.ismethod(func) and func.__self__ is TensorDict
-        ):  # detects classmethods
-            setattr(cls, attr, _wrap_classmethod(cls, func))
+        if inspect.ismethod(func):
+            tdcls = func.__self__
+            if issubclass(tdcls, TensorDictBase):  # detects classmethods
+                setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
@@ -195,8 +197,8 @@ def tensorclass(cls: T) -> T:
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
-    tensordict_lib.tensordict._ACCEPTED_CLASSES = (
-        *tensordict_lib.tensordict._ACCEPTED_CLASSES,
+    tensordict_lib.base._ACCEPTED_CLASSES = (
+        *tensordict_lib.base._ACCEPTED_CLASSES,
         cls,
     )
     return cls
@@ -438,10 +440,10 @@ def _wrap_method(self, attr, func):
     return wrapped_func
 
 
-def _wrap_classmethod(cls, func):
+def _wrap_classmethod(td_cls, cls, func):
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
-        res = func.__get__(cls)(*args, **kwargs)
+        res = func.__get__(td_cls)(*args, **kwargs)
         # res = func(*args, **kwargs)
         if isinstance(res, TensorDictBase):
             # create a new tensorclass from res and copy the metadata from self
@@ -497,10 +499,10 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
     if isinstance(item, str) or (
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
-        raise ValueError("Invalid indexing arguments.")
+        raise ValueError(f"Invalid indexing arguments: {item}.")
 
     if not is_tensorclass(value) and not isinstance(
-        value, (TensorDictBase, numbers.Number, Tensor, MemmapTensor)
+        value, (TensorDictBase, numbers.Number, Tensor, _MemmapTensor)
     ):
         raise ValueError(
             f"__setitem__ only supports tensorclasses, tensordicts,"
@@ -551,7 +553,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
 def _repr(self) -> str:
     """Return a string representation of Tensor class object."""
     fields = _all_td_fields_as_str(self._tensordict)
-    field_str = fields
+    field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
     batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
     device_str = indent(f"device={self.device}", 4 * " ")
@@ -562,10 +564,11 @@ def _repr(self) -> str:
             4 * " ",
         )
         string = ",\n".join(
-            [field_str, non_tensor_field_str, batch_size_str, device_str, is_shared_str]
+            field_str
+            + [non_tensor_field_str, batch_size_str, device_str, is_shared_str]
         )
     else:
-        string = ",\n".join([field_str, batch_size_str, device_str, is_shared_str])
+        string = ",\n".join(field_str + [batch_size_str, device_str, is_shared_str])
     return f"{self.__class__.__name__}(\n{string})"
 
 
@@ -621,14 +624,14 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
     if isinstance(key, str):
         __dict__ = self.__dict__
         if __dict__["_tensordict"].is_locked:
-            raise RuntimeError(TensorDictBase.LOCK_ERROR)
+            raise RuntimeError(_LOCK_ERROR)
         expected_keys = self.__dataclass_fields__
         if key not in expected_keys:
             raise AttributeError(
                 f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
             )
 
-        if isinstance(value, tuple(tensordict_lib.tensordict._ACCEPTED_CLASSES)):
+        if isinstance(value, tuple(tensordict_lib.base._ACCEPTED_CLASSES)):
             # Avoiding key clash, honoring the user input to assign tensor type data to the key
             if key in self._non_tensordict.keys():
                 if inplace:
@@ -658,6 +661,22 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
     raise ValueError(
         f"Supported type for key are str and tuple, got {key} of type {type(key)}"
     )
+
+
+def _del_(self, key):
+    key = _unravel_key_to_tuple(key)
+    if len(key) > 1:
+        td = self.get(key[0])
+        td.del_(key[1:])
+        return
+    if key[0] in self._tensordict.keys():
+        self._tensordict.del_(key[0])
+        # self.set(key[0], None)
+    elif key[0] in self._non_tensordict.keys():
+        self._non_tensordict[key[0]] = None
+    else:
+        raise KeyError(f"Key {key} could not be found in tensorclass {self}.")
+    return
 
 
 def _set_at_(self, key: NestedKey, value: Any, idx: IndexType):
@@ -722,14 +741,22 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:  # noqa: D417
     self._tensordict._batch_size_setter(new_size)
 
 
-def _state_dict(self) -> dict[str, Any]:
+def _state_dict(
+    self, destination=None, prefix="", keep_vars=False, flatten=False
+) -> dict[str, Any]:
     """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
-    state_dict = {"_tensordict": self._tensordict.state_dict()}
+    state_dict = {
+        "_tensordict": self._tensordict.state_dict(
+            destination=destination, prefix=prefix, keep_vars=keep_vars, flatten=flatten
+        )
+    }
     state_dict["_non_tensordict"] = copy(self._non_tensordict)
     return state_dict
 
 
-def _load_state_dict(self, state_dict: dict[str, Any]):
+def _load_state_dict(
+    self, state_dict: dict[str, Any], strict=True, assign=False, from_flatten=False
+):
     """Loads a state_dict attemptedly in-place on the destination tensorclass."""
     for key, item in state_dict.items():
         # keys will never be nested which facilitates everything, but let's
@@ -760,7 +787,9 @@ def _load_state_dict(self, state_dict: dict[str, Any]):
                         f"Key '{sub_key}' wasn't expected in the state-dict."
                     )
 
-            self._tensordict.load_state_dict(item)
+            self._tensordict.load_state_dict(
+                item, strict=strict, assign=assign, from_flatten=from_flatten
+            )
         else:
             raise KeyError(f"Key '{key}' wasn't expected in the state-dict.")
 
@@ -818,7 +847,7 @@ def __eq__(self, other: object) -> bool:
 
     """
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor, MemmapTensor)
+        other, (dict, numbers.Number, Tensor, _MemmapTensor)
     ):
         return False
     if is_tensorclass(other):
@@ -875,7 +904,7 @@ def __ne__(self, other: object) -> bool:
 
     """
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor, MemmapTensor)
+        other, (dict, numbers.Number, Tensor, _MemmapTensor)
     ):
         return True
     if is_tensorclass(other):

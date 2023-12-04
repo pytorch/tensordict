@@ -273,3 +273,17 @@ class set_skip_existing(_DecoratorContextManager):
 def skip_existing():
     """Returns whether or not existing entries in a tensordict should be re-computed by a module."""
     return _SKIP_EXISTING
+
+
+def _rebuild_buffer(data, requires_grad, backward_hooks):
+    buffer = Buffer(data, requires_grad)
+    # NB: This line exists only for backwards compatibility; the
+    # general expectation is that backward_hooks is an empty
+    # OrderedDict.  See Note [Don't serialize hooks]
+    buffer._backward_hooks = backward_hooks
+
+    return buffer
+
+
+# For backward compatibility in imports
+from tensordict.utils import Buffer  # noqa

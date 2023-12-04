@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import copy
 import pickle
+import unittest
 import warnings
 
 import pytest
@@ -18,15 +20,24 @@ from tensordict.nn import (
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModuleBase,
+    TensorDictParams,
     TensorDictSequential,
 )
 from tensordict.nn.common import TensorDictModule, TensorDictModuleWrapper
-from tensordict.nn.distributions import Delta, NormalParamExtractor, NormalParamWrapper
+from tensordict.nn.distributions import (
+    AddStateIndependentNormalScale,
+    Delta,
+    NormalParamExtractor,
+    NormalParamWrapper,
+)
+from tensordict.nn.distributions.composite import CompositeDistribution
+from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
-from tensordict.nn.utils import set_skip_existing, skip_existing
-from torch import nn
+from tensordict.nn.utils import Buffer, set_skip_existing, skip_existing
+from torch import distributions as d, nn
 from torch.distributions import Normal
+from torch.utils._pytree import tree_map
 
 try:
     import functorch  # noqa
@@ -144,8 +155,80 @@ class TestTDModule:
         )
         seq = TensorDictSequential(module, another_module)
 
-        seq.reset_parameters()
+        seq.reset_parameters_recursive()
         assert torch.all(old_param != net[0][0].weight.data)
+
+    @pytest.mark.parametrize(
+        "net",
+        [
+            nn.ModuleList([nn.Sequential(nn.Linear(1, 1), nn.ReLU())]),
+            nn.Linear(2, 1),
+            nn.Sequential(nn.Tanh(), nn.Linear(1, 1), nn.Linear(2, 1)),
+        ],
+    )
+    def test_reset_functional(self, net):
+        torch.manual_seed(0)
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        another_module = TensorDictModule(
+            nn.Conv2d(1, 1, 1, 1), in_keys=["in"], out_keys=["out"]
+        )
+        seq = TensorDictSequential(module, another_module)
+
+        params = TensorDict.from_module(seq)
+        old_params = params.clone(recurse=True)
+        new_params = params.clone(recurse=True)
+        returned_params = seq.reset_parameters_recursive(new_params)
+
+        weights_changed = new_params != old_params
+        for w in weights_changed.values(include_nested=True, leaves_only=True):
+            assert w.all(), f"Weights should have changed but did not for {w}"
+
+        module_params = TensorDict.from_module(seq)
+        overwrote_stateful_params = module_params != old_params
+        for p in overwrote_stateful_params.values(
+            include_nested=True, leaves_only=True
+        ):
+            assert not p.any(), f"Overwrote stateful weights from the module {p}"
+
+        returned_params_eq_inplace_updated_params = returned_params == new_params
+        for p in returned_params_eq_inplace_updated_params.values(
+            include_nested=True, leaves_only=True
+        ):
+            assert (
+                p.all()
+            ), f"Discrepancy between returned weights and those in-place updated {p}"
+
+    def test_reset_functional_called_once(self):
+        import unittest.mock
+
+        torch.manual_seed(0)
+        lin = nn.Linear(1, 1)
+        lin.reset_parameters = unittest.mock.Mock(return_value=None)
+        net = nn.ModuleList([nn.Sequential(lin, nn.ReLU())])
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        nested_module = TensorDictModule(module, in_keys=["in"], out_keys=["out"])
+        tripled_nested = TensorDictModule(
+            nested_module, in_keys=["in"], out_keys=["out"]
+        )
+
+        params = TensorDict.from_module(tripled_nested)
+        tripled_nested.reset_parameters_recursive(params)
+        lin.reset_parameters.assert_called_once()
+
+    def test_reset_extra_dims(self):
+        torch.manual_seed(0)
+        net = nn.Sequential(nn.Linear(1, 1), nn.ReLU())
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["mid"])
+        another_module = TensorDictModule(
+            nn.Linear(1, 1), in_keys=["mid"], out_keys=["out"]
+        )
+        seq = TensorDictSequential(module, another_module)
+
+        params = TensorDict.from_module(seq)
+        new_params = params.expand(2, 3, *params.shape).clone()
+        # Does not inherit from test case, no assertRaises :(
+        with pytest.raises(RuntimeError):
+            seq.reset_parameters_recursive(new_params)
 
     @pytest.mark.parametrize("lazy", [True, False])
     def test_stateful(self, lazy):
@@ -639,6 +722,19 @@ class TestTDModule:
         assert td_out.shape == torch.Size([10, 3])
         assert td_out.get("out").shape == torch.Size([10, 3, 4])
 
+    def test_deepcopy(self):
+        class DummyModule(nn.Linear):
+            some_attribute = "a"
+
+            def __deepcopy__(self, memodict=None):
+                return DummyModule(self.in_features, self.out_features)
+
+        tdmodule = TensorDictModule(DummyModule(1, 1), in_keys=["a"], out_keys=["b"])
+        with pytest.raises(AttributeError):
+            tdmodule.__deepcopy__
+        assert tdmodule.some_attribute == "a"
+        assert isinstance(copy.deepcopy(tdmodule), TensorDictModule)
+
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
         td = TensorDict({"a": torch.zeros(1, 1)}, 1)
@@ -1003,15 +1099,15 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1084,16 +1180,16 @@ class TestTDSequence:
         assert len(tdmodule) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 4
         del tdmodule[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1146,17 +1242,17 @@ class TestTDSequence:
         tdmodule[1] = tdmodule2
         tdmodule[2] = normal_params
         tdmodule[3] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params["module", "3"] = params["module", "4"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
+            params["module", "3"] = params["module", "4"]
         assert len(tdmodule) == 5
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 5
         del tdmodule[4]
-        del params["module", "4"]
+        with params.unlock_():
+            del params["module", "4"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1198,15 +1294,15 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -1258,16 +1354,16 @@ class TestTDSequence:
         assert len(tdmodule.module) == 4
         tdmodule[1] = tdmodule2
         tdmodule[2] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
         assert len(tdmodule) == 4
 
         assert hasattr(tdmodule.module, "__delitem__")
         assert len(tdmodule.module) == 4
         del tdmodule.module[3]
-        del params["module", "3"]
+        with params.unlock_():
+            del params["module", "3"]
         assert len(tdmodule.module) == 3
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1324,17 +1420,17 @@ class TestTDSequence:
         tdmodule[1] = tdmodule2
         tdmodule[2] = normal_params
         tdmodule[3] = prob_module
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params["module", "2"] = params["module", "3"]
-        params["module", "3"] = params["module", "4"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
+            params["module", "2"] = params["module", "3"]
+            params["module", "3"] = params["module", "4"]
         assert len(tdmodule) == 5
 
         assert hasattr(tdmodule.module, "__delitem__")
         assert len(tdmodule.module) == 5
         del tdmodule.module[4]
-        del params["module", "4"]
+        with params.unlock_():
+            del params["module", "4"]
         assert len(tdmodule.module) == 4
 
         assert hasattr(tdmodule.module, "__getitem__")
@@ -1375,15 +1471,15 @@ class TestTDSequence:
         assert hasattr(tdmodule, "__setitem__")
         assert len(tdmodule) == 3
         tdmodule[1] = tdmodule2
-        params.unlock_()
-        params["module", "1"] = params["module", "2"]
-        params.lock_()
+        with params.unlock_():
+            params["module", "1"] = params["module", "2"]
         assert len(tdmodule) == 3
 
         assert hasattr(tdmodule, "__delitem__")
         assert len(tdmodule) == 3
         del tdmodule[2]
-        del params["module", "2"]
+        with params.unlock_():
+            del params["module", "2"]
         assert len(tdmodule) == 2
 
         assert hasattr(tdmodule, "__getitem__")
@@ -2612,6 +2708,615 @@ def test_nested_keys_probabilistic_normal(log_prob_key):
         assert td_out[log_prob_key].shape == (3, 4, 1)
     else:
         assert td_out["sample_log_prob"].shape == (3, 4, 1)
+
+
+class TestEnsembleModule:
+    def test_init(self):
+        """Ensure that we correctly initialize copied weights s.t. they are not identical
+        to the original weights."""
+        torch.manual_seed(0)
+        module = TensorDictModule(
+            nn.Sequential(
+                nn.Linear(2, 3),
+                nn.ReLU(),
+                nn.Linear(3, 1),
+            ),
+            in_keys=["a"],
+            out_keys=["b"],
+        )
+        mod = EnsembleModule(module, num_copies=2)
+        for param in mod.params_td.values(True, True):
+            p0, p1 = param.unbind(0)
+            assert not torch.allclose(
+                p0, p1
+            ), f"Ensemble params were not initialized correctly {p0}, {p1}"
+
+    @pytest.mark.parametrize(
+        "net",
+        [
+            nn.Linear(1, 1),
+            nn.Sequential(nn.Linear(1, 1)),
+            nn.Sequential(nn.Linear(1, 1), nn.ReLU(), nn.Linear(1, 1)),
+        ],
+    )
+    def test_siso_forward(self, net):
+        """Ensure that forward works for a single input and output"""
+        module = TensorDictModule(
+            net,
+            in_keys=["bork"],
+            out_keys=["dork"],
+        )
+        mod = EnsembleModule(module, num_copies=2)
+        td = TensorDict({"bork": torch.randn(5, 1)}, batch_size=[5])
+        out = mod(td)
+        assert "dork" in out.keys(), "Ensemble forward failed to write keys"
+        assert out["dork"].shape == torch.Size(
+            [2, 5, 1]
+        ), "Ensemble forward failed to expand input"
+        outs = out["dork"].unbind(0)
+        assert not torch.allclose(outs[0], outs[1]), "Outputs should be different"
+
+    @pytest.mark.parametrize(
+        "net",
+        [
+            nn.Linear(1, 1),
+            nn.Sequential(nn.Linear(1, 1)),
+            nn.Sequential(nn.Linear(1, 1), nn.ReLU(), nn.Linear(1, 1)),
+        ],
+    )
+    def test_chained_ensembles(self, net):
+        """Ensure that the expand_input argument works"""
+        module = TensorDictModule(net, in_keys=["bork"], out_keys=["dork"])
+        next_module = TensorDictModule(
+            copy.deepcopy(net), in_keys=["dork"], out_keys=["spork"]
+        )
+        e0 = EnsembleModule(module, num_copies=4, expand_input=True)
+        e1 = EnsembleModule(next_module, num_copies=4, expand_input=False)
+        seq = TensorDictSequential(e0, e1)
+        td = TensorDict({"bork": torch.randn(5, 1)}, batch_size=[5])
+        out = seq(td)
+
+        for out_key in ["dork", "spork"]:
+            assert out_key in out.keys(), f"Ensemble forward failed to write {out_key}"
+            assert out[out_key].shape == torch.Size(
+                [4, 5, 1]
+            ), f"Ensemble forward failed to expand input for {out_key}"
+            same_outputs = torch.isclose(
+                out[out_key].repeat(4, 1, 1), out[out_key].repeat_interleave(4, dim=0)
+            ).reshape(4, 4, 5, 1)
+            mask_out_diags = torch.eye(4).logical_not()
+            assert not torch.any(
+                same_outputs[mask_out_diags]
+            ), f"Module ensemble outputs should be different for {out_key}"
+
+    def test_reset_once(self):
+        """Ensure we only call reset_parameters() once per ensemble member"""
+        lin = nn.Linear(1, 1)
+        lin.reset_parameters = unittest.mock.Mock()
+        module = TensorDictModule(
+            nn.Sequential(lin),
+            in_keys=["a"],
+            out_keys=["b"],
+        )
+        EnsembleModule(module, num_copies=2)
+        assert (
+            lin.reset_parameters.call_count == 2
+        ), f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
+
+
+class TestTensorDictParams:
+    def _get_params(self):
+        module = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 4))
+        params = TensorDict.from_module(module)
+        params.lock_()
+        return params
+
+    class CustomModule(nn.Module):
+        def __init__(self, *params):
+            super().__init__()
+            if len(params) == 1:
+                params = params[0]
+                self.params = params
+            else:
+                for i, p in enumerate(params):
+                    setattr(self, f"params{i}", p)
+
+    def test_td_params(self):
+        params = self._get_params()
+        p = TensorDictParams(params)
+        m = self.CustomModule(p)
+        assert (
+            TensorDict(dict(m.named_parameters()), [])
+            == TensorDict({"params": params.flatten_keys("_")}, []).flatten_keys(".")
+        ).all()
+
+        assert not m.params.is_locked
+        assert m.params._param_td.is_locked
+
+        assert (
+            m.params["0", "weight"] is not None
+        )  # assess that param can be accessed via nested indexing
+
+        # assert assignment
+        m.params["other"] = torch.randn(3)
+        assert isinstance(m.params["other"], nn.Parameter)
+        assert m.params["other"].requires_grad
+
+        # change that locking is unchanged
+        assert not m.params.is_locked
+        assert m.params._param_td.is_locked
+
+        assert m.params.other.requires_grad
+        del m.params["other"]
+
+        assert m.params["0", "weight"].requires_grad
+        assert (m.params == params).all()
+        assert (params == m.params).all()
+
+    def test_td_params_cast(self):
+        params = self._get_params()
+        p = TensorDictParams(params)
+        m = self.CustomModule(p)
+        print("m.children", list(m.children()))
+        for dtype in ("half", "double", "float"):
+            getattr(m, dtype)()
+            for p in params.values(True, True):
+                assert p.dtype == getattr(torch, dtype)
+
+    def test_td_params_tying(self):
+        params = self._get_params()
+        p1 = TensorDictParams(params)
+        p2 = TensorDictParams(params)
+        m = self.CustomModule(p1, p2)
+        for key in dict(m.named_parameters()).keys():
+            assert key.startswith("params0")
+
+    def test_td_params_post_hook(self):
+        hook = lambda self, x: x.data
+        td = TensorDict(
+            {
+                "a": {
+                    "b": {"c": torch.zeros((), requires_grad=True)},
+                    "d": torch.zeros((), requires_grad=True),
+                },
+                "e": torch.zeros((), requires_grad=True),
+            },
+            [],
+        )
+        param_td = TensorDictParams(td)
+        param_td.register_get_post_hook(hook)
+        assert all(p.requires_grad for p in td.values(True, True))
+        assert all(not p.requires_grad for p in param_td.values(True, True))
+        assert {p.data.data_ptr() for p in param_td.values(True, True)} == {
+            p.data.data_ptr() for p in td.values(True, True)
+        }
+        assert not param_td["e"].requires_grad
+        assert not param_td["a", "b", "c"].requires_grad
+        assert not param_td.get("e").requires_grad
+        assert not param_td.get(("a", "b", "c")).requires_grad
+
+    def test_tdparams_clone(self):
+        td = TensorDict(
+            {
+                "a": {
+                    "b": {"c": nn.Parameter(torch.zeros((), requires_grad=True))},
+                    "d": Buffer(torch.zeros((), requires_grad=False)),
+                },
+                "e": nn.Parameter(torch.zeros((), requires_grad=True)),
+                "f": Buffer(torch.zeros((), requires_grad=False)),
+            },
+            [],
+        )
+        td = TensorDictParams(td, no_convert=True)
+        tdclone = td.clone()
+        assert type(tdclone) == type(td)  # noqa
+        for key, val in tdclone.items(True, True):
+            assert type(val) == type(td.get(key))  # noqa
+            assert val.requires_grad == td.get(key).requires_grad
+            assert val.data_ptr() != td.get(key).data_ptr()
+            assert (val == td.get(key)).all()
+
+
+class TestCompositeDist:
+    def test_const(self):
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+        )
+        assert dist.batch_shape == params.shape
+        assert len(dist.dists) == 2
+        assert "cont" in dist.dists
+        assert ("nested", "disc") in dist.dists
+
+    def test_sample(self):
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+        )
+        sample = dist.sample()
+        assert sample.shape == params.shape
+        sample = dist.sample((4,))
+        assert sample.shape == torch.Size((4,) + params.shape)
+
+    def test_rsample(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": d.Normal,
+                ("nested", "disc"): d.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+        sample = dist.rsample()
+        assert sample.shape == params.shape
+        assert sample.requires_grad
+        sample = dist.rsample((4,))
+        assert sample.shape == torch.Size((4,) + params.shape)
+        assert sample.requires_grad
+
+    def test_log_prob(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "disc"): {"logits": torch.randn(3, 10, requires_grad=True)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": d.Normal,
+                ("nested", "disc"): d.RelaxedOneHotCategorical,
+            },
+            extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
+        )
+        sample = dist.rsample((4,))
+        sample = dist.log_prob(sample)
+        assert sample.get("cont_log_prob").requires_grad
+        assert sample.get(("nested", "disc_log_prob")).requires_grad
+
+    def test_cdf(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "cont"): {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params, distribution_map={"cont": d.Normal, ("nested", "cont"): d.Normal}
+        )
+        sample = dist.rsample((4,))
+        sample = dist.cdf(sample)
+        assert sample.get("cont_cdf").requires_grad
+        assert sample.get(("nested", "cont_cdf")).requires_grad
+
+    def test_icdf(self):
+        params = TensorDict(
+            {
+                "cont": {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+                ("nested", "cont"): {
+                    "loc": torch.randn(3, 4, requires_grad=True),
+                    "scale": torch.rand(3, 4, requires_grad=True),
+                },
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params, distribution_map={"cont": d.Normal, ("nested", "cont"): d.Normal}
+        )
+        sample = dist.rsample((4,))
+        sample = dist.cdf(sample)
+        sample = dist.icdf(sample)
+        assert sample.get("cont_icdf").requires_grad
+        assert sample.get(("nested", "cont_icdf")).requires_grad
+        torch.testing.assert_close(sample.get("cont"), sample.get("cont_icdf"))
+
+    @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.MEAN]
+    )
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    def test_prob_module(self, interaction, return_log_prob):
+        params = TensorDict(
+            {
+                "params": {
+                    "cont": {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                    ("nested", "cont"): {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                }
+            },
+            [3],
+        )
+        in_keys = ["params"]
+        out_keys = ["cont", ("nested", "cont")]
+        distribution_map = {"cont": d.Normal, ("nested", "cont"): d.Normal}
+        module = ProbabilisticTensorDictModule(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            distribution_class=CompositeDistribution,
+            distribution_kwargs={"distribution_map": distribution_map},
+            default_interaction_type=interaction,
+            return_log_prob=return_log_prob,
+        )
+        sample = module(params)
+        if return_log_prob:
+            assert "cont_log_prob" in sample.keys()
+            assert ("nested", "cont_log_prob") in sample.keys(True)
+        sample_clone = sample.clone()
+        lp = module.log_prob(sample_clone)
+        if return_log_prob:
+            torch.testing.assert_close(
+                lp,
+                sample.get("cont_log_prob").sum(-1)
+                + sample.get(("nested", "cont_log_prob")).sum(-1),
+            )
+        else:
+            torch.testing.assert_close(
+                lp,
+                sample_clone.get("cont_log_prob").sum(-1)
+                + sample_clone.get(("nested", "cont_log_prob")).sum(-1),
+            )
+
+    @pytest.mark.parametrize(
+        "interaction", [InteractionType.MODE, InteractionType.MEAN]
+    )
+    @pytest.mark.parametrize("return_log_prob", [True, False])
+    def test_prob_module_seq(self, interaction, return_log_prob):
+        params = TensorDict(
+            {
+                "params": {
+                    "cont": {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                    ("nested", "cont"): {
+                        "loc": torch.randn(3, 4, requires_grad=True),
+                        "scale": torch.rand(3, 4, requires_grad=True),
+                    },
+                }
+            },
+            [3],
+        )
+        in_keys = ["params"]
+        out_keys = ["cont", ("nested", "cont")]
+        distribution_map = {"cont": d.Normal, ("nested", "cont"): d.Normal}
+        backbone = TensorDictModule(lambda: None, in_keys=[], out_keys=[])
+        module = ProbabilisticTensorDictSequential(
+            backbone,
+            ProbabilisticTensorDictModule(
+                in_keys=in_keys,
+                out_keys=out_keys,
+                distribution_class=CompositeDistribution,
+                distribution_kwargs={"distribution_map": distribution_map},
+                default_interaction_type=interaction,
+                return_log_prob=return_log_prob,
+            ),
+        )
+        sample = module(params)
+        if return_log_prob:
+            assert "cont_log_prob" in sample.keys()
+            assert ("nested", "cont_log_prob") in sample.keys(True)
+        sample_clone = sample.clone()
+        lp = module.log_prob(sample_clone)
+        if return_log_prob:
+            torch.testing.assert_close(
+                lp,
+                sample.get("cont_log_prob").sum(-1)
+                + sample.get(("nested", "cont_log_prob")).sum(-1),
+            )
+        else:
+            torch.testing.assert_close(
+                lp,
+                sample_clone.get("cont_log_prob").sum(-1)
+                + sample_clone.get(("nested", "cont_log_prob")).sum(-1),
+            )
+
+
+class TestAddStateIndependentNormalScale:
+    def test_add_scale_basic(self, num_outputs=4):
+        module = nn.Linear(3, num_outputs)
+        module_normal = AddStateIndependentNormalScale(num_outputs)
+        tensor = torch.randn(3)
+        loc, scale = module_normal(module(tensor))
+        assert loc.shape == (num_outputs,)
+        assert scale.shape == (num_outputs,)
+        assert (scale > 0).all()
+
+    def test_add_scale_sequence(self, num_outputs=4):
+        module = nn.LSTM(3, num_outputs)
+        module_normal = AddStateIndependentNormalScale(num_outputs)
+        tensor = torch.randn(4, 2, 3)
+        loc, scale, others = module_normal(*module(tensor))
+        assert loc.shape == (4, 2, num_outputs)
+        assert scale.shape == (4, 2, num_outputs)
+        assert (scale > 0).all()
+
+
+class TestStateDict:
+    @pytest.mark.parametrize("detach", [True, False])
+    def test_sd_params(self, detach):
+        td = TensorDict({"1": 1, "2": 2, "3": {"3": 3}}, [])
+        td = TensorDictParams(td)
+        if detach:
+            sd = td.detach().clone().zero_().state_dict()
+        else:
+            sd = td.state_dict()
+            sd = tree_map(lambda t: t * 0 if isinstance(t, torch.Tensor) else t, sd)
+        # do some op to create a graph
+        td.apply(lambda x: x + 1)
+        # load the data
+        td.load_state_dict(sd)
+        # check that data has been loaded
+        print(sd)
+        assert (td == 0).all()
+
+    def test_sd_module(self):
+        td = TensorDict({"1": 1.0, "2": 2.0, "3": {"3": 3.0}}, [])
+        td = TensorDictParams(td)
+        module = nn.Linear(3, 4)
+        module.td = td
+
+        sd = module.state_dict()
+        assert "td.1" in sd
+        assert "td.3.3" in sd
+        sd = {k: v * 0 if isinstance(v, torch.Tensor) else v for k, v in sd.items()}
+
+        # load the data
+        module.load_state_dict(sd)
+
+        # check that data has been loaded
+        assert (module.td == 0).all()
+        for val in td.values(True, True):
+            assert isinstance(val, nn.Parameter)
+
+
+@pytest.mark.parametrize("as_module", [True, False])
+class TestToModule:
+    @property
+    def _transformer(self):
+        # we use transformer because it's deep, has buffers etc.
+        return nn.Transformer(d_model=8, dim_feedforward=8).eval()
+
+    @property
+    def _module_shared(self):
+        # a module with the same layer appearing twice
+        l0 = nn.Linear(8, 9)
+        l1 = nn.Linear(9, 8)
+        return nn.Sequential(
+            l0,
+            l1,
+            nn.Sequential(
+                l0,
+            ),
+        )
+
+    @property
+    def _tuple_x(self):
+        x = torch.randn(2, 2, 8)
+        return (x, x)
+
+    @property
+    def _x(self):
+        return (torch.randn(2, 2, 8),)
+
+    @pytest.mark.parametrize(
+        "module_name,input_name",
+        [["_module_shared", "_x"], ["_transformer", "_tuple_x"]],
+    )
+    def test_static(self, module_name, input_name, as_module):
+        torch.manual_seed(0)
+        module = getattr(self, module_name)
+        x = getattr(self, input_name)
+        params = TensorDict.from_module(module, as_module=as_module)
+        params0 = params.clone().apply(
+            lambda t, p: nn.Parameter(t * 0) if isinstance(p, nn.Parameter) else t * 0,
+            params,
+        )
+        y = module(*x)
+        params0.to_module(module)
+        y0 = module(*x)
+        params.to_module(module)
+        y1 = module(*x)
+        torch.testing.assert_close(y, y1)
+        assert (y0 == 0).all()
+        assert (y0 != y1).all()
+
+    @pytest.mark.parametrize(
+        "module_name,input_name",
+        [["_module_shared", "_x"], ["_transformer", "_tuple_x"]],
+    )
+    def test_cm(self, module_name, input_name, as_module):
+        torch.manual_seed(0)
+        module = getattr(self, module_name)
+        x = getattr(self, input_name)
+        params = TensorDict.from_module(module, as_module=as_module)
+        params0 = params.clone().apply(
+            lambda t, p: nn.Parameter(t * 0) if isinstance(p, nn.Parameter) else t * 0,
+            params,
+        )
+        y = module(*x)
+        with params0.to_module(module):
+            y0 = module(*x)
+            assert (params0 == TensorDict.from_module(module)).all()
+        y1 = module(*x)
+        torch.testing.assert_close(y, y1)
+        assert (y0 == 0).all()
+        assert (y0 != y1).all()
+        assert (TensorDict.from_module(module) == params).all()
+
+    @pytest.mark.parametrize(
+        "module_name,input_name",
+        [["_module_shared", "_x"], ["_transformer", "_tuple_x"]],
+    )
+    def test_cm_meta(self, module_name, input_name, as_module):
+        torch.manual_seed(0)
+        module = getattr(self, module_name)
+        x = getattr(self, input_name)
+        params = TensorDict.from_module(module, as_module=as_module)
+        params_meta = params.detach().to("meta")
+        y = module(*x)
+        with params_meta.to_module(module):
+            module_meta = copy.deepcopy(module)
+        y1 = module(*x)
+        with params.to_module(module_meta):
+            y2 = module_meta(*x)
+        torch.testing.assert_close(y, y1)
+        torch.testing.assert_close(y, y2)
+        assert (TensorDict.from_module(module) == params).all()
+
+    def test_params_detach(self, as_module):
+        class MyLinear(nn.Linear):
+            def __setattr__(self, key, value):
+                return super().__setattr__(key, value)
+
+        linear = MyLinear(3, 4)
+        params = TensorDict.from_module(linear, as_module=as_module)
+        # this will break if the parameters are not deleted before being set
+        with params.detach().to_module(linear):
+            linear(torch.randn(3))
+        assert len(list(linear.parameters())) == 2
+        assert (TensorDict.from_module(linear) == params).all()
 
 
 if __name__ == "__main__":

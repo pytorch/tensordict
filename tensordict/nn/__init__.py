@@ -10,13 +10,22 @@ from tensordict.nn.common import (
     TensorDictModuleBase,
     TensorDictModuleWrapper,
 )
-from tensordict.nn.distributions import NormalParamExtractor
+from tensordict.nn.distributions import (
+    AddStateIndependentNormalScale,
+    CompositeDistribution,
+    NormalParamExtractor,
+    OneHotCategorical,
+    rand_one_hot,
+    TruncatedNormal,
+)
+from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import (
     get_functional,
     is_functional,
     make_functional,
     repopulate_module,
 )
+from tensordict.nn.params import TensorDictParams
 from tensordict.nn.probabilistic import (
     InteractionType,
     ProbabilisticTensorDictModule,
@@ -48,5 +57,6 @@ __all__ = [
     "make_tensordict",
     "biased_softplus",
     "inv_softplus",
+    "TensorDictParams",
     "is_functional",
 ]
