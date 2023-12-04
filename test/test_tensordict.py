@@ -6752,6 +6752,19 @@ class TestMap:
             td_out_1["s"].sort().values,
         )
 
+    @staticmethod
+    def _set_2(td):
+        return td.set("2", 2)
+
+    def test_map_unbind(self):
+        td0 = TensorDict({"0": 0}, [])
+        td1 = TensorDict({"1": 1}, [])
+        td = torch.stack([td0, td1], 0)
+        td_out = td.map(self._set_2, chunksize=0, num_workers=4)
+        assert td_out[0]["0"] == 0
+        assert td_out[1]["1"] == 1
+        assert (td_out["2"] == 2).all()
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
