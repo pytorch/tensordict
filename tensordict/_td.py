@@ -1062,7 +1062,7 @@ class TensorDict(TensorDictBase):
                 "Cannot pass both batch_size and batch_dims to `from_dict`."
             )
 
-        batch_size_set = [] if batch_size is None else batch_size
+        batch_size_set = torch.Size(()) if batch_size is None else batch_size
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
                 # we don't know if another tensor of smaller size is coming
