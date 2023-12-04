@@ -33,6 +33,7 @@ except ImportError:
     _has_h5py = False
 
 import contextlib
+import platform
 
 from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
 from functorch import dim as ftdim
@@ -53,6 +54,8 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import multiprocessing as mp, nn
+
+_IS_OSX = platform.system() == "Darwin"
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -6650,6 +6653,7 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
+@pytest.mark.skipif(_IS_OSX, reason="Pool executionn in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
@@ -6757,6 +6761,8 @@ class TestMap:
         return td.set("2", 2)
 
     def test_map_unbind(self):
+        if mp.get_start_method(allow_none=True) is None:
+            mp.set_start_method("spawn")
         td0 = TensorDict({"0": 0}, [])
         td1 = TensorDict({"1": 1}, [])
         td = torch.stack([td0, td1], 0)
