@@ -33,6 +33,7 @@ except ImportError:
     _has_h5py = False
 
 import contextlib
+import platform
 
 from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
 from functorch import dim as ftdim
@@ -53,6 +54,8 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import multiprocessing as mp, nn
+
+_IS_OSX = platform.system() == "Darwin"
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -6650,6 +6653,7 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
+@pytest.mark.skipif(_IS_OSX, reason="Pool executionn in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
@@ -6751,6 +6755,21 @@ class TestMap:
             td_out_0["s"].sort().values,
             td_out_1["s"].sort().values,
         )
+
+    @staticmethod
+    def _set_2(td):
+        return td.set("2", 2)
+
+    def test_map_unbind(self):
+        if mp.get_start_method(allow_none=True) is None:
+            mp.set_start_method("spawn")
+        td0 = TensorDict({"0": 0}, [])
+        td1 = TensorDict({"1": 1}, [])
+        td = torch.stack([td0, td1], 0)
+        td_out = td.map(self._set_2, chunksize=0, num_workers=4)
+        assert td_out[0]["0"] == 0
+        assert td_out[1]["1"] == 1
+        assert (td_out["2"] == 2).all()
 
 
 if __name__ == "__main__":

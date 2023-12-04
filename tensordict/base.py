@@ -3185,8 +3185,12 @@ class TensorDictBase(MutableMapping):
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
                 If none is provided, the number of workers will be set to the
                 number of cpus available.
-            chunksize (int, optional): The size of each chunk of data. If none
-                is provided, the number of chunks will equate the number
+            chunksize (int, optional): The size of each chunk of data.
+                A ``chunksize`` of 0 will unbind the tensordict along the
+                desired dimension and restack it after the function is applied,
+                whereas ``chunksize>0`` will split the tensordict and call
+                :func:`torch.cat` on the resulting list of tensordicts.
+                If none is provided, the number of chunks will equate the number
                 of workers. For very large tensordicts, such large chunks
                 may not fit in memory for the operation to be done and
                 more chunks may be needed to make the operation practically
@@ -3280,9 +3284,12 @@ class TensorDictBase(MutableMapping):
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
-        chunksize = 1
-        imap = pool.imap(fn, self_split, chunksize)
-        out = torch.cat(list(imap), dim)
+        call_chunksize = 1
+        imap = pool.imap(fn, self_split, call_chunksize)
+        if chunksize == 0:
+            out = torch.stack(list(imap), dim)
+        else:
+            out = torch.cat(list(imap), dim)
         return out
 
     # Functorch compatibility

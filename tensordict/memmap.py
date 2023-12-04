@@ -561,8 +561,8 @@ class MemoryMappedTensor(torch.Tensor):
             out.parent_shape = self.parent_shape
         return out
 
-    @implement_for("torch", None, "2.0")  # noqa: F811
-    def __getitem__(self, item):
+    @implement_for("torch", None, "2.0")
+    def __getitem__(self, item):  # noqa: F811
         try:
             out = super().__getitem__(item)
         except ValueError as err:
