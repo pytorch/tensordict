@@ -1153,6 +1153,8 @@ def _split_tensordict(td, chunksize, num_chunks, num_workers, dim):
         num_chunks = min(td.shape[dim], num_chunks)
         return td.chunk(num_chunks, dim=dim)
     else:
+        if chunksize == 0:
+            return td.unbind(dim=dim)
         chunksize = min(td.shape[dim], chunksize)
         return td.split(chunksize, dim=dim)
 
