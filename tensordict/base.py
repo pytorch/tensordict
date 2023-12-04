@@ -2126,8 +2126,14 @@ class TensorDictBase(MutableMapping):
         if len(key) > 1:
             td._create_nested_tuple(key[1:])
 
-    def copy_(self, tensordict: T) -> T:
-        """See :obj:`TensorDictBase.update_`."""
+    def copy_(self, tensordict: T, non_blocking: bool = None) -> T:
+        """See :obj:`TensorDictBase.update_`.
+
+        The non-blocking argument will be ignored and is just present for
+        compatibility with :func:`torch.Tensor.copy_`.
+        """
+        if non_blocking is False:
+            raise ValueError("non_blocking=False isn't supported in TensorDict.")
         return self.update_(tensordict)
 
     def copy_at_(self, tensordict: T, idx: IndexType) -> T:
