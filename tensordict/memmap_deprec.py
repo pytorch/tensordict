@@ -526,7 +526,9 @@ class MemmapTensor:
     def numpy(self) -> np.ndarray:
         return self._tensor.numpy()
 
-    def copy_(self, other: torch.Tensor | MemmapTensor) -> MemmapTensor:
+    def copy_(
+        self, other: torch.Tensor | MemmapTensor, non_blocking: bool = False
+    ) -> MemmapTensor:
         if isinstance(other, MemmapTensor) and other.filename == self.filename:
             if not self.shape == other.shape:
                 raise ValueError(
