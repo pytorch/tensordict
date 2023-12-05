@@ -8,12 +8,14 @@ from __future__ import annotations
 import dataclasses
 import functools
 import inspect
+import json
 import numbers
 import re
 import sys
 import warnings
 from copy import copy
 from dataclasses import dataclass
+from pathlib import Path
 from textwrap import indent
 from typing import Any, Callable, Sequence, TypeVar
 
@@ -183,10 +185,13 @@ def tensorclass(cls: T) -> T:
     cls.unbind = _unbind
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
+    cls.memmap_ = _memmap
+    cls.memmap_like = _memmap_like
+    cls.load_memmap = classmethod(_load_memmap)
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
-        if inspect.ismethod(func):
+        if inspect.ismethod(func) and attr not in cls.__dict__:
             tdcls = func.__self__
             if issubclass(tdcls, TensorDictBase):  # detects classmethods
                 setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
@@ -333,6 +338,60 @@ def _from_tensordict_wrapper(expected_keys):
         return tc
 
     return wrapper
+
+
+def _memmap(self, prefix: str | None = None, copy_existing: bool = False):
+    if prefix is not None:
+        prefix = Path(prefix)
+        with open(prefix / "meta.json", "w") as f:
+            metadata = {"_type": str(self.__class__)}
+            for key, value in self._non_tensordict.items():
+                if (
+                    isinstance(value, (int, bool, str, float, dict, tuple, list))
+                    or value is None
+                ):
+                    metadata[key] = value
+            json.dump(metadata, f)
+        prefix = prefix / "_tensordict"
+    self._tensordict.memmap_(prefix=prefix, copy_existing=copy_existing)
+    return self
+
+
+def _memmap_like(self, prefix: str | None = None):
+    metadata = {"_type": str(self.__class__)}
+    for key, value in self._non_tensordict.items():
+        if (
+            isinstance(value, (int, bool, str, float, dict, tuple, list))
+            or value is None
+        ):
+            metadata[key] = value
+    if prefix is not None:
+        prefix = Path(prefix)
+        with open(prefix / "meta.json", "w") as f:
+            json.dump(metadata, f)
+        prefix = prefix / "_tensordict"
+    metadata.pop("_type")
+    td = self._tensordict.memmap_like(prefix=prefix)
+    return self.__class__._from_tensordict(td, metadata)
+
+
+def _load_memmap(cls, prefix: str):
+    prefix = Path(prefix)
+    with open(prefix / "meta.json", "r") as f:
+        metadata = json.load(f)
+        type_name = metadata.pop("_type")
+        if type_name != str(cls):
+            # try to get the type from register
+            for other_cls in tensordict_lib.base._ACCEPTED_CLASSES:
+                if str(other_cls) == type_name:
+                    return other_cls.load_memmap(prefix)
+            else:
+                raise RuntimeError(
+                    f"Could not find name '{type_name}' in {tensordict_lib.base._ACCEPTED_CLASSES}."
+                )
+        non_tensordict = copy(metadata)
+    td = TensorDict.load_memmap(prefix / "_tensordict")
+    return cls._from_tensordict(td, non_tensordict)
 
 
 def _getstate(self) -> dict[str, Any]:

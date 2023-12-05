@@ -1591,67 +1591,97 @@ def test_to_tensordict():
     assert ("y", "x") in ctd.keys(True)
 
 
-def test_memmap_():
-    @tensorclass
-    class MyClass:
-        x: torch.Tensor
-        z: str
-        y: "MyClass" = None
+class TestMemmap:
+    def test_memmap_(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            z: str
+            y: "MyClass" = None
 
-    c = MyClass(
-        torch.randn(3, 4),
-        "foo",
-        MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
-        batch_size=[3, 4],
-    )
+        c = MyClass(
+            torch.randn(3, 4),
+            "foo",
+            MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
+            batch_size=[3, 4],
+        )
 
-    cmemmap = c.memmap_()
-    assert cmemmap is c
-    assert isinstance(c.x, MemoryMappedTensor)
-    assert isinstance(c.y.x, MemoryMappedTensor)
-    assert c.z == "foo"
+        cmemmap = c.memmap_()
+        assert cmemmap is c
+        assert isinstance(c.x, MemoryMappedTensor)
+        assert isinstance(c.y.x, MemoryMappedTensor)
+        assert c.z == "foo"
 
+    def test_memmap_like(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            z: str
+            y: "MyClass" = None
 
-def test_memmap_like():
-    @tensorclass
-    class MyClass:
-        x: torch.Tensor
-        z: str
-        y: "MyClass" = None
+        c = MyClass(
+            torch.randn(3, 4),
+            "foo",
+            MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
+            batch_size=[3, 4],
+        )
 
-    c = MyClass(
-        torch.randn(3, 4),
-        "foo",
-        MyClass(torch.randn(3, 4, 5), "bar", None, batch_size=[3, 4, 5]),
-        batch_size=[3, 4],
-    )
+        cmemmap = c.memmap_like()
+        assert cmemmap is not c
+        assert cmemmap.y is not c.y
+        assert (cmemmap == 0).all()
+        assert isinstance(cmemmap.x, MemoryMappedTensor)
+        assert isinstance(cmemmap.y.x, MemoryMappedTensor)
+        assert cmemmap.z == "foo"
 
-    cmemmap = c.memmap_like()
-    assert cmemmap is not c
-    assert cmemmap.y is not c.y
-    assert (cmemmap == 0).all()
-    assert isinstance(cmemmap.x, MemoryMappedTensor)
-    assert isinstance(cmemmap.y.x, MemoryMappedTensor)
-    assert cmemmap.z == "foo"
+    def test_from_memmap(self, tmpdir):
+        td = TensorDict(
+            {
+                ("a", "b", "c"): 1,
+                ("a", "d"): 2,
+            },
+            [],
+        ).expand(10)
 
+        @tensorclass
+        class MyClass:
+            a: TensorDictBase
 
-def test_from_memmap(tmpdir):
-    td = TensorDict(
-        {
-            ("a", "b", "c"): 1,
-            ("a", "d"): 2,
-        },
-        [],
-    ).expand(10)
-    td.memmap_(tmpdir)
+        MyClass._from_tensordict(td).memmap_(tmpdir)
 
-    @tensorclass
-    class MyClass:
-        a: TensorDictBase
+        tc = MyClass.load_memmap(tmpdir)
+        assert isinstance(tc.a, TensorDict)
+        assert tc.batch_size == torch.Size([10])
 
-    tc = MyClass.load_memmap(tmpdir)
-    assert isinstance(tc.a, TensorDict)
-    assert tc.batch_size == torch.Size([10])
+    def test_load_scenarios(self, tmpdir):
+        @tensorclass
+        class MyClass:
+            X: torch.Tensor
+            td: TensorDict
+            integer: int
+            string: str
+            dictionary: dict
+
+        @tensorclass
+        class MyOtherClass:
+            Y: torch.Tensor
+
+        data = MyClass(
+            X=torch.randn(10, 3),
+            td=TensorDict({"y": torch.randn(10)}, batch_size=[10]),
+            integer=3,
+            string="a string",
+            dictionary={"some_data": "a"},
+            batch_size=[],
+        )
+
+        data.memmap_(tmpdir)
+        data2 = MyClass.load_memmap(tmpdir)
+        assert (data2 == data).all()
+        data.apply_(lambda x: x + 1)
+        assert (data2 == data).all()
+        data3 = MyOtherClass.load_memmap(tmpdir)
+        assert isinstance(data3, MyClass)
 
 
 def test_from_dict():

@@ -133,17 +133,18 @@ class MemoryMappedTensor(torch.Tensor):
 
         """
         if isinstance(input, MemoryMappedTensor):
-            if (
-                filename is None
-                or Path(filename).absolute() == Path(input._filename).absolute()
+            if filename is None or (
+                input._filename is not None
+                and filename is not None
+                and Path(filename).absolute() == Path(input.filename).absolute()
             ):
                 # either location was not specified, or memmap is already in the
                 # correct location, so just return the MemmapTensor unmodified
                 return input
-            elif (
-                not copy_existing
+            elif not copy_existing and (
+                input._filename is not None
                 and filename is not None
-                and Path(filename).absolute() != Path(input._filename).absolute()
+                and Path(filename).absolute() != Path(input.filename).absolute()
             ):
                 raise RuntimeError(
                     f"A filename was provided but the tensor already has a file associated "
