@@ -33,6 +33,7 @@ except ImportError:
     _has_h5py = False
 
 import contextlib
+import platform
 
 from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
 from functorch import dim as ftdim
@@ -53,6 +54,8 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import multiprocessing as mp, nn
+
+_IS_OSX = platform.system() == "Darwin"
 
 
 @pytest.mark.parametrize("device", get_available_devices())
@@ -1094,6 +1097,75 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert (td_1[key] == td[key]).all()
         else:
             for key in td.keys(True, True):
+                assert (td_c[key] + 1 != td[key]).any()
+                assert (td_1[key] == td[key] + 1).all()
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_apply_default(self, td_name, device, inplace):
+        if td_name in ("td_h5",):
+            pytest.skip("Cannot test assignment in persistent tensordict.")
+        td = getattr(self, td_name)(device)
+        td_c = td.to_tensordict()
+        if td_name in ("td_params",):
+            td.data.zero_()
+        else:
+            td.zero_()
+        with td.unlock_():
+            td["nested", "newkey"] = torch.zeros(td.shape)
+
+        def get_old_val(newval, oldval):
+            if oldval is not None:
+                return oldval
+            return newval
+
+        if inplace and td_name == "td_params":
+            with pytest.raises(ValueError, match="Failed to update"):
+                td.apply(get_old_val, td_c, inplace=inplace, default=None)
+            return
+        td_1 = td.apply(get_old_val, td_c, inplace=inplace, default=None)
+        if inplace:
+            for key in td.keys(True, True):
+                td_c_val = td_c.get(key, None)
+                if td_c_val is not None:
+                    assert (td_c[key] == td[key]).all()
+                else:
+                    assert key == ("nested", "newkey")
+                    assert (td_1[key] == 0).all()
+                assert (td_1[key] == td[key]).all()
+        else:
+            for key in td.keys(True, True):
+                td_c_val = td_c.get(key, None)
+                if td_c_val is not None:
+                    assert (td_c[key] == td_1[key]).all()
+                else:
+                    assert key == ("nested", "newkey")
+                    assert (td_1[key] == 0).all()
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_named_apply(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+        td_c = td.to_tensordict()
+
+        def named_plus(name, x):
+            if "a" in name:
+                return x + 1
+
+        if inplace and td_name == "td_params":
+            with pytest.raises(ValueError, match="Failed to update"):
+                td.named_apply(named_plus, inplace=inplace)
+            return
+        td_1 = td.named_apply(named_plus, inplace=inplace)
+        if inplace:
+            assert td_1 is td
+            for key in td_1.keys(True, True):
+                if "a" in key:
+                    assert (td_c[key] + 1 == td_1[key]).all()
+                else:
+                    assert (td_c[key] == td_1[key]).all()
+                assert (td_1[key] == td[key]).all()
+        else:
+            for key in td_1.keys(True, True):
+                assert "a" in key
                 assert (td_c[key] + 1 != td[key]).any()
                 assert (td_1[key] == td[key] + 1).all()
 
@@ -6581,6 +6653,7 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
+@pytest.mark.skipif(_IS_OSX, reason="Pool executionn in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
@@ -6682,6 +6755,21 @@ class TestMap:
             td_out_0["s"].sort().values,
             td_out_1["s"].sort().values,
         )
+
+    @staticmethod
+    def _set_2(td):
+        return td.set("2", 2)
+
+    def test_map_unbind(self):
+        if mp.get_start_method(allow_none=True) is None:
+            mp.set_start_method("spawn")
+        td0 = TensorDict({"0": 0}, [])
+        td1 = TensorDict({"1": 1}, [])
+        td = torch.stack([td0, td1], 0)
+        td_out = td.map(self._set_2, chunksize=0, num_workers=4)
+        assert td_out[0]["0"] == 0
+        assert td_out[1]["1"] == 1
+        assert (td_out["2"] == 2).all()
 
 
 if __name__ == "__main__":

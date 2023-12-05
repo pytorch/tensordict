@@ -295,6 +295,7 @@ class TensorDict(TensorDictBase):
                     if return_swap:
                         local_out = getattr(module, key)
                     # use specialized __setattr__ if needed
+                    delattr(module, key)
                     setattr(module, key, value)
             else:
                 if value.is_empty():
@@ -506,6 +507,8 @@ class TensorDict(TensorDictBase):
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
         **constructor_kwargs,
     ) -> T:
         if inplace:
@@ -534,8 +537,17 @@ class TensorDict(TensorDictBase):
             out.unlock_()
 
         for key, item in self.items():
-            _others = [_other._get_str(key, default=NO_DEFAULT) for _other in others]
             if not call_on_nested and _is_tensor_collection(item.__class__):
+                if default is not NO_DEFAULT:
+                    _others = [_other._get_str(key, default=None) for _other in others]
+                    _others = [
+                        self.empty() if _other is None else _other for _other in _others
+                    ]
+                else:
+                    _others = [
+                        _other._get_str(key, default=NO_DEFAULT) for _other in others
+                    ]
+
                 item_trsf = item._apply_nest(
                     fn,
                     *_others,
@@ -543,10 +555,16 @@ class TensorDict(TensorDictBase):
                     batch_size=batch_size,
                     device=device,
                     checked=checked,
+                    named=named,
+                    default=default,
                     **constructor_kwargs,
                 )
             else:
-                item_trsf = fn(item, *_others)
+                _others = [_other._get_str(key, default=default) for _other in others]
+                if named:
+                    item_trsf = fn(key, item, *_others)
+                else:
+                    item_trsf = fn(item, *_others)
             if item_trsf is not None:
                 if isinstance(self, _SubTensorDict):
                     out.set(key, item_trsf, inplace=inplace)
@@ -1270,7 +1288,8 @@ class TensorDict(TensorDictBase):
                 if best_attempt and _is_tensor_collection(dest.__class__):
                     dest.update(value, inplace=True)
                 else:
-                    dest.copy_(value)
+                    if dest is not value:
+                        dest.copy_(value, non_blocking=True)
             except KeyError as err:
                 raise err
             except Exception as err:

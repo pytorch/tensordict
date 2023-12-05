@@ -2126,8 +2126,14 @@ class TensorDictBase(MutableMapping):
         if len(key) > 1:
             td._create_nested_tuple(key[1:])
 
-    def copy_(self, tensordict: T) -> T:
-        """See :obj:`TensorDictBase.update_`."""
+    def copy_(self, tensordict: T, non_blocking: bool = None) -> T:
+        """See :obj:`TensorDictBase.update_`.
+
+        The non-blocking argument will be ignored and is just present for
+        compatibility with :func:`torch.Tensor.copy_`.
+        """
+        if non_blocking is False:
+            raise ValueError("non_blocking=False isn't supported in TensorDict.")
         return self.update_(tensordict)
 
     def copy_at_(self, tensordict: T, idx: IndexType) -> T:
@@ -2888,14 +2894,12 @@ class TensorDictBase(MutableMapping):
         device: torch.device | None = None,
         names: Sequence[str] | None = None,
         inplace: bool = False,
+        default: Any = NO_DEFAULT,
         **constructor_kwargs,
     ) -> T:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
 
-        The apply method will return an :class:`~tensordict.TensorDict` instance,
-        regardless of the input type. To keep the same type, one can execute
-
-          >>> out = td.clone(False).update(td.apply(...))
+        The callable signature must be ``Callable[Tuple[Tensor, ...], Optional[Union[Tensor, TensorDictBase]]]``.
 
         Args:
             fn (Callable): function to be applied to the tensors in the
@@ -2904,6 +2908,8 @@ class TensorDictBase(MutableMapping):
                 tensordict instances should have a structure matching the one
                 of self. The ``fn`` argument should receive as many
                 unnamed inputs as the number of tensordicts, including self.
+                If other tensordicts have missing entries, a default value
+                can be passed through the ``default`` keyword argument.
             batch_size (sequence of int, optional): if provided,
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
@@ -2913,6 +2919,9 @@ class TensorDictBase(MutableMapping):
                 batch_size is modified.
             inplace (bool, optional): if True, changes are made in-place.
                 Default is False. This is a keyword only argument.
+            default (Any, optional): default value for missing entries in the
+                other tensordicts. If not provided, missing entries will
+                raise a `KeyError`.
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
 
@@ -2925,11 +2934,40 @@ class TensorDictBase(MutableMapping):
             ...     "b": {"c": torch.ones(3)}},
             ...     batch_size=[3])
             >>> td_1 = td.apply(lambda x: x+1)
-            >>> assert (td["a"] == 0).all()
-            >>> assert (td["b", "c"] == 2).all()
+            >>> assert (td_1["a"] == 0).all()
+            >>> assert (td_1["b", "c"] == 2).all()
             >>> td_2 = td.apply(lambda x, y: x+y, td)
             >>> assert (td_2["a"] == -2).all()
             >>> assert (td_2["b", "c"] == 2).all()
+
+        .. note::
+            If ``None`` is returned by the function, the entry is ignored. This
+            can be used to filter the data in the tensordict:
+
+            >>> td = TensorDict({"1": 1, "2": 2, "b": {"2": 2, "1": 1}}, [])
+            >>> def filter(tensor):
+            ...     if tensor == 1:
+            ...         return tensor
+            >>> td.apply(filter)
+            TensorDict(
+                fields={
+                    1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+
+        .. note::
+            The apply method will return an :class:`~tensordict.TensorDict` instance,
+            regardless of the input type. To keep the same type, one can execute
+
+            >>> out = td.clone(False).update(td.apply(...))
+
 
         """
         return self._apply_nest(
@@ -2940,6 +2978,130 @@ class TensorDictBase(MutableMapping):
             names=names,
             inplace=inplace,
             checked=False,
+            default=default,
+            **constructor_kwargs,
+        )
+
+    def named_apply(
+        self,
+        fn: Callable,
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = None,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        default: Any = NO_DEFAULT,
+        **constructor_kwargs,
+    ) -> T:
+        """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new atensordict.
+
+        The callable signature must be ``Callable[Tuple[str, Tensor, ...], Optional[Union[Tensor, TensorDictBase]]]``.
+
+        Args:
+            fn (Callable): function to be applied to the (name, tensor) pairs in the
+                tensordict. For each leaf, only its leaf name will be used (not
+                the full `NestedKey`).
+            *others (TensorDictBase instances, optional): if provided, these
+                tensordict instances should have a structure matching the one
+                of self. The ``fn`` argument should receive as many
+                unnamed inputs as the number of tensordicts, including self.
+                If other tensordicts have missing entries, a default value
+                can be passed through the ``default`` keyword argument.
+            batch_size (sequence of int, optional): if provided,
+                the resulting TensorDict will have the desired batch_size.
+                The :obj:`batch_size` argument should match the batch_size after
+                the transformation. This is a keyword only argument.
+            device (torch.device, optional): the resulting device, if any.
+            names (list of str, optional): the new dimension names, in case the
+                batch_size is modified.
+            inplace (bool, optional): if True, changes are made in-place.
+                Default is False. This is a keyword only argument.
+            default (Any, optional): default value for missing entries in the
+                other tensordicts. If not provided, missing entries will
+                raise a `KeyError`.
+            **constructor_kwargs: additional keyword arguments to be passed to the
+                TensorDict constructor.
+
+        Returns:
+            a new tensordict with transformed_in tensors.
+
+        Example:
+            >>> td = TensorDict({
+            ...     "a": -torch.ones(3),
+            ...     "nested": {"a": torch.ones(3), "b": torch.zeros(3)}},
+            ...     batch_size=[3])
+            >>> def name_filter(name, tensor):
+            ...     if name == "a":
+            ...         return tensor
+            >>> td.named_apply(name_filter)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    nested: TensorDict(
+                        fields={
+                            a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+            >>> def name_filter(name, *tensors):
+            ...     if name == "a":
+            ...         r = 0
+            ...         for tensor in tensors:
+            ...             r = r + tensor
+            ...         return tensor
+            >>> out = td.named_apply(name_filter, td)
+            >>> print(out)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    nested: TensorDict(
+                        fields={
+                            a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+            >>> print(out["a"])
+            tensor([-1., -1., -1.])
+
+        .. note::
+            If ``None`` is returned by the function, the entry is ignored. This
+            can be used to filter the data in the tensordict:
+
+            >>> td = TensorDict({"1": 1, "2": 2, "b": {"2": 2, "1": 1}}, [])
+            >>> def name_filter(name, tensor):
+            ...     if name == "1":
+            ...         return tensor
+            >>> td.named_apply(name_filter)
+            TensorDict(
+                fields={
+                    1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            1: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+
+        """
+        return self._apply_nest(
+            fn,
+            *others,
+            batch_size=batch_size,
+            device=device,
+            names=names,
+            inplace=inplace,
+            checked=False,
+            default=default,
+            named=True,
             **constructor_kwargs,
         )
 
@@ -2954,6 +3116,8 @@ class TensorDictBase(MutableMapping):
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
         **constructor_kwargs,
     ) -> T:
         ...
@@ -2967,6 +3131,8 @@ class TensorDictBase(MutableMapping):
         names: Sequence[str] | None = None,
         inplace: bool = False,
         call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
         **constructor_kwargs,
     ) -> T:
         """A faster apply method.
@@ -2985,6 +3151,8 @@ class TensorDictBase(MutableMapping):
             inplace=inplace,
             checked=True,
             call_on_nested=call_on_nested,
+            named=named,
+            default=default,
             **constructor_kwargs,
         )
 
@@ -3017,8 +3185,12 @@ class TensorDictBase(MutableMapping):
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
                 If none is provided, the number of workers will be set to the
                 number of cpus available.
-            chunksize (int, optional): The size of each chunk of data. If none
-                is provided, the number of chunks will equate the number
+            chunksize (int, optional): The size of each chunk of data.
+                A ``chunksize`` of 0 will unbind the tensordict along the
+                desired dimension and restack it after the function is applied,
+                whereas ``chunksize>0`` will split the tensordict and call
+                :func:`torch.cat` on the resulting list of tensordicts.
+                If none is provided, the number of chunks will equate the number
                 of workers. For very large tensordicts, such large chunks
                 may not fit in memory for the operation to be done and
                 more chunks may be needed to make the operation practically
@@ -3112,9 +3284,12 @@ class TensorDictBase(MutableMapping):
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
-        chunksize = 1
-        imap = pool.imap(fn, self_split, chunksize)
-        out = torch.cat(list(imap), dim)
+        call_chunksize = 1
+        imap = pool.imap(fn, self_split, call_chunksize)
+        if chunksize == 0:
+            out = torch.stack(list(imap), dim)
+        else:
+            out = torch.cat(list(imap), dim)
         return out
 
     # Functorch compatibility
