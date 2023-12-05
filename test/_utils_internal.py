@@ -3,6 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import math
+import pathlib
+import shutil
 import tempfile
 
 import numpy as np
@@ -199,8 +201,13 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["sub_td2", device]]
 
+    temp_path_memmap = tempfile.TemporaryDirectory()
+
     def memmap_td(self, device):
-        return self.td(device).memmap_()
+        path = pathlib.Path(self.temp_path_memmap.name)
+        shutil.rmtree(path)
+        path.mkdir()
+        return self.td(device).memmap_(path)
 
     TYPES_DEVICES += [["memmap_td", torch.device("cpu")]]
     TYPES_DEVICES_NOLAZY += [["memmap_td", torch.device("cpu")]]

@@ -585,6 +585,7 @@ class MemoryMappedTensor(torch.Tensor):
 #####################
 # File handler
 # borrowed from mp.heap
+
 if sys.platform == "win32":
     import _winapi
 
@@ -647,8 +648,7 @@ else:
                 st = os.statvfs(d)
                 if st.f_bavail * st.f_frsize >= size:  # enough free space?
                     return d
-            tmpdir = util.get_temp_dir()
-            return tmpdir
+            return util.get_temp_dir()
 
     def _reduce_handler(handler):
         if handler.fd == -1:
