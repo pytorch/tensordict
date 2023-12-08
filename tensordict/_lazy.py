@@ -1883,7 +1883,7 @@ class LazyStackedTensorDict(TensorDictBase):
         """Ids of all tensordicts that need to be unlocked for this to be unlocked."""
         _lock_id = set()
         for tensordict in self.tensordicts:
-            _lock_id = _lock_id.union(tensordict._lock_id)
+            _lock_id = _lock_id.union(tensordict._lock_parents_weakrefs)
         _lock_id = _lock_id - {id(self)}
         return _lock_id
 

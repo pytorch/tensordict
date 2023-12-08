@@ -3948,21 +3948,21 @@ class TensorDictBase(MutableMapping):
         is_root = lock_ids is None
         if is_root:
             lock_ids = []
-        self._lock_id += lock_ids
+        self._lock_parents_weakrefs += lock_ids
         lock_ids.append(weakref.ref(self))
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value._propagate_lock(lock_ids)
 
     @property
-    def _lock_id(self):
+    def _lock_parents_weakrefs(self):
         _lock_id = self.__dict__.get("__lock_id", None)
         if _lock_id is None:
             _lock_id = self.__dict__["__lock_id"] = []
         return _lock_id
 
-    @_lock_id.setter
-    def _lock_id(self, value: list):
+    @_lock_parents_weakrefs.setter
+    def _lock_parents_weakrefs(self, value: list):
         self.__dict__["__lock_id"] = value
 
     @as_decorator("is_locked")
@@ -3974,15 +3974,17 @@ class TensorDictBase(MutableMapping):
 
     @erase_cache
     def _propagate_unlock(self):
-        for ref in self._lock_id:
+        for ref in self._lock_parents_weakrefs:
             obj = ref()
+            # check if the locked parent exists and if it's locked
             if obj is not None and obj.is_locked:
                 raise RuntimeError(
                     "Cannot unlock a tensordict that is part of a locked graph. "
                     "Unlock the root tensordict first. If the tensordict is part of multiple graphs, "
                     "group the graphs under a common tensordict an unlock this root. "
                 )
-        self._lock_id = []
+        # if we end up here, we can clear the graph associated with this td
+        self._lock_parents_weakrefs = []
         self._is_locked = False
 
         for value in self.values():
