@@ -3309,7 +3309,15 @@ class TensorDictBase(MutableMapping):
             array = array.item()
         if isinstance(array, list):
             array = np.asarray(array)
-        return torch.as_tensor(array, device=self.device)
+        if not isinstance(array, np.ndarray) and hasattr(array, 'numpy'):
+            # tf.Tensor with no shape can't be converted otherwise
+            array = array.numpy()
+        try:
+            return torch.as_tensor(array, device=self.device)
+        except Exception:
+            if hasattr(array, 'shape'):
+                return torch.full(array.shape, float("NaN"))
+            return torch.tensor(float('nan'))
 
     @abc.abstractmethod
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T:
@@ -3956,7 +3964,10 @@ class TensorDictBase(MutableMapping):
         _locked_tensordicts = []
         for value in self.values():
             if _is_tensor_collection(type(value)):
+                # add the received lock_ids (incl. self) to the tensordict's lock_ids
                 value._propagate_lock(lock_ids)
+                # add the child tensordict to the list of tensordicts to release
+                # from the current id at deletion
                 _locked_tensordicts.append(value)
         if is_root:
             self._locked_tensordicts = _locked_tensordicts
