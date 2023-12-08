@@ -3,7 +3,7 @@
 tensordict package
 ==================
 
-The `TensorDict` class simplifies the process of passing multiple tensors
+The :class:`~tensordict.TensorDict` class simplifies the process of passing multiple tensors
 from module to module by packing them in a dictionary-like object that inherits features from
 regular pytorch tensors.
 
@@ -20,17 +20,19 @@ regular pytorch tensors.
 Memory-mapped tensors
 ---------------------
 
-:obj:`tensordict` offers the :class:`~tensordict.MemoryMappedTensor` primitive which allows you to work
-with tensors stored in physical memory in a handy way. The main advantages of :class:`~tensordict.MemoryMappedTensor`
+`tensordict` offers the :class:`~tensordict.MemoryMappedTensor` primitive which allows you to work
+with tensors stored in physical memory in a handy way.
+The main advantages of :class:`~tensordict.MemoryMappedTensor`
 are its easiness of construction (no need to handle the storage of a tensor), the possibility to
 work with big contiguous data that would not fit in memory, an efficient (de)serialization across processes and
 efficient indexing of stored tensors.
 
-If all workers have access to the same storage, passing a :class:`~tensordict.MemoryMappedTensor`
+If all workers have access to the same storage (both in multiprocess and distributed
+settings), passing a :class:`~tensordict.MemoryMappedTensor`
 will just consist in passing a reference to a file on disk plus a bunch of
-extra meta-data for reconstructing it when sent across processes or workers on
-a same machine (both in multiprocess and distributed settings). The same goes
-with indexed memory-mapped tensors.
+extra meta-data for reconstructing it. The same goes with indexed memory-mapped
+tensors as long as the data-pointer of their storage is the same as the original
+one.
 
 Indexing memory-mapped tensors is much faster than loading several independent files from
 the disk and does not require to load the full content of the array in memory.
