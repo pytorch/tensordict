@@ -8,6 +8,7 @@ import functools
 import inspect
 import numbers
 import re
+import weakref
 from copy import copy
 from functools import wraps
 from typing import Any, Callable, Iterator, OrderedDict, Sequence
@@ -29,7 +30,6 @@ from tensordict.utils import (
     _LOCK_ERROR,
     as_decorator,
     Buffer,
-    erase_cache,
     IndexType,
     lock_blocked,
     NestedKey,
@@ -734,42 +734,23 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def shape(self) -> torch.Size:
         ...
 
-    def _propagate_lock(self, lock_ids=None):
+    def _propagate_lock(self, _lock_parents_weakrefs=None):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        is_root = lock_ids is None
+        is_root = _lock_parents_weakrefs is None
         if is_root:
-            lock_ids = set()
-        self._lock_id = self._lock_id.union(lock_ids)
-        lock_ids = lock_ids.union({id(self)})
+            _lock_parents_weakrefs = []
+        self._lock_parents_weakrefs += _lock_parents_weakrefs
+        _lock_parents_weakrefs.append(weakref.ref(self))
         _locked_tensordicts = []
         # we don't want to double-lock the _param_td attrbute which is locked by default
         if not self._param_td.is_locked:
-            self._param_td._propagate_lock(lock_ids)
+            self._param_td._propagate_lock(_lock_parents_weakrefs)
             _locked_tensordicts.append(self._param_td)
         if is_root:
             self._locked_tensordicts = _locked_tensordicts
         else:
             self._locked_tensordicts += _locked_tensordicts
-
-    @erase_cache
-    def _propagate_unlock(self, lock_ids=None):
-        if lock_ids is not None:
-            self._lock_id.difference_update(lock_ids)
-        else:
-            lock_ids = set()
-        self._is_locked = False
-
-        unlocked_tds = [self]
-        lock_ids.add(id(self))
-        self._locked_tensordicts = []
-
-        self._is_shared = False
-        self._is_memmap = False
-        if self._param_td.is_locked:
-            unlocked_tds.extend(self._param_td._propagate_unlock(lock_ids))
-
-        return unlocked_tds
 
     unlock_ = TensorDict.unlock_
     lock_ = TensorDict.lock_
