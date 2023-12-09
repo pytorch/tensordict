@@ -6081,12 +6081,6 @@ class TestLock:
                 ids.add(id(td))
         assert count == expected, {id(ref()) for ref in weakref_list}
 
-    @staticmethod
-    def check_td_not_in_weakref_list(weakref_list, item):
-        assert weakref.ref(item) not in weakref_list, {
-            id(ref()) for ref in weakref_list
-        }
-
     def test_nested_lock(self):
         td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
         td = td.lock_()

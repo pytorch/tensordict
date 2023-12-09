@@ -30,7 +30,6 @@ from tensordict.utils import (
     _LOCK_ERROR,
     as_decorator,
     Buffer,
-    erase_cache,
     IndexType,
     lock_blocked,
     NestedKey,
