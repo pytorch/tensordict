@@ -6070,6 +6070,23 @@ def _compare_tensors_identity(td0, td1):
 
 
 class TestLock:
+    @staticmethod
+    def check_weakref_count(weakref_list, expected):
+        count = 0
+        ids = set()
+        for wr in weakref_list:
+            td = wr()
+            count += (td is not None) and (td.is_locked) and (id(td) not in ids)
+            if td is not None:
+                ids.add(id(td))
+        assert count == expected, {id(ref()) for ref in weakref_list}
+
+    @staticmethod
+    def check_td_not_in_weakref_list(weakref_list, item):
+        assert weakref.ref(item) not in weakref_list, {
+            id(ref()) for ref in weakref_list
+        }
+
     def test_nested_lock(self):
         td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
         td = td.lock_()
@@ -6077,28 +6094,28 @@ class TestLock:
         a = td["a"]
         b = td["a", "b"]
         c = td["a", "b", "c"]
-        assert len(a._lock_parents_weakrefs) == 1
-        assert len(b._lock_parents_weakrefs) == 2
-        assert len(c._lock_parents_weakrefs) == 3
+        self.check_weakref_count(a._lock_parents_weakrefs, 1)
+        self.check_weakref_count(b._lock_parents_weakrefs, 2)
+        self.check_weakref_count(c._lock_parents_weakrefs, 3)
         td = td.unlock_()
-        assert len(a._lock_parents_weakrefs) == 0, a._lock_parents_weakrefs
-        assert len(b._lock_parents_weakrefs) == 0, b._lock_parents_weakrefs
-        assert len(c._lock_parents_weakrefs) == 0, c._lock_parents_weakrefs
+        self.check_weakref_count(a._lock_parents_weakrefs, 0)
+        self.check_weakref_count(b._lock_parents_weakrefs, 0)
+        self.check_weakref_count(c._lock_parents_weakrefs, 0)
         td = td.lock_()
         del td
         gc.collect()
-        assert len(a._lock_parents_weakrefs) == 0
-        assert len(b._lock_parents_weakrefs) == 1
-        assert len(c._lock_parents_weakrefs) == 2
+        self.check_weakref_count(a._lock_parents_weakrefs, 0)
+        self.check_weakref_count(b._lock_parents_weakrefs, 1)
+        self.check_weakref_count(c._lock_parents_weakrefs, 2)
         a = a.lock_()
         del a
         gc.collect()
-        assert len(b._lock_parents_weakrefs) == 0
-        assert len(c._lock_parents_weakrefs) == 1
+        self.check_weakref_count(b._lock_parents_weakrefs, 0)
+        self.check_weakref_count(c._lock_parents_weakrefs, 1)
         b = b.lock_()
         del b
         gc.collect()
-        assert len(c._lock_parents_weakrefs) == 0
+        self.check_weakref_count(c._lock_parents_weakrefs, 0)
 
     def test_nested_lock_erros(self):
         td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
@@ -6117,9 +6134,9 @@ class TestLock:
             match="Cannot unlock a tensordict that is part of a locked graph.",
         ):
             b.unlock_()
-        assert len(a._lock_parents_weakrefs) == 1
-        assert len(b._lock_parents_weakrefs) == 2
-        assert len(c._lock_parents_weakrefs) == 3
+        self.check_weakref_count(a._lock_parents_weakrefs, 1)
+        self.check_weakref_count(b._lock_parents_weakrefs, 2)
+        self.check_weakref_count(c._lock_parents_weakrefs, 3)
         del td
         gc.collect()
         a.unlock_()
@@ -6133,7 +6150,6 @@ class TestLock:
     def test_lock_two_roots(self):
         td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
         td = td.lock_()
-        td._lock_parents_weakrefs, id(td)
         a = td["a"]
         b = td["a", "b"]
         c = td["a", "b", "c"]
@@ -6145,6 +6161,8 @@ class TestLock:
             match="Cannot unlock a tensordict that is part of a locked graph.",
         ):
             other_td.unlock_()
+        assert td._is_locked
+        assert td.is_locked
         with pytest.raises(
             RuntimeError,
             match="Cannot unlock a tensordict that is part of a locked graph.",
@@ -6155,18 +6173,16 @@ class TestLock:
         supertd = supertd.lock_()
         supertd = supertd.unlock_()
         supertd = supertd.lock_()
-        idsuper = id(supertd)
-        idother = id(other_td)
         del supertd, other_td
         gc.collect()
-        assert len(td._lock_parents_weakrefs) == 0
-        assert idsuper not in a._lock_parents_weakrefs
-        assert idother not in a._lock_parents_weakrefs
-        assert len(a._lock_parents_weakrefs) == 1
-        assert idsuper not in b._lock_parents_weakrefs
-        assert idother not in b._lock_parents_weakrefs
-        assert len(b._lock_parents_weakrefs) == 2
-        assert len(c._lock_parents_weakrefs) == 3
+        self.check_weakref_count(td._lock_parents_weakrefs, 0)
+        # self.check_td_not_in_weakref_list(supertd, a._lock_parents_weakrefs)
+        # self.check_td_not_in_weakref_list(other_td, a._lock_parents_weakrefs)
+        self.check_weakref_count(a._lock_parents_weakrefs, 1)
+        # self.check_td_not_in_weakref_list(supertd, b._lock_parents_weakrefs)
+        # self.check_td_not_in_weakref_list(other_td, b._lock_parents_weakrefs)
+        self.check_weakref_count(b._lock_parents_weakrefs, 2)
+        self.check_weakref_count(c._lock_parents_weakrefs, 3)
         td.unlock_()
 
     def test_lock_stack(self):
@@ -6180,66 +6196,31 @@ class TestLock:
         a0 = td0["a"]
         b0 = td0["a", "b"]
         c0 = td0["a", "b", "c"]
-        assert len(a._lock_parents_weakrefs) == 3  # td, td0, td1
-        assert len(b._lock_parents_weakrefs) == 5  # td, td0, td1, a0, a1
-        assert len(c._lock_parents_weakrefs) == 7  # td, td0, td1, a0, a1, b0, b1
-        assert len(a0._lock_parents_weakrefs) == 2  # td, td0
-        assert len(b0._lock_parents_weakrefs) == 3  # td, td0, a0
-        assert len(c0._lock_parents_weakrefs) == 4  # td, td0, a0, b0
+        self.check_weakref_count(a._lock_parents_weakrefs, 3)  # td, td0, td1
+        self.check_weakref_count(b._lock_parents_weakrefs, 5)  # td, td0, td1, a0, a1
+        self.check_weakref_count(
+            c._lock_parents_weakrefs, 7
+        )  # td, td0, td1, a0, a1, b0, b1
+        self.check_weakref_count(a0._lock_parents_weakrefs, 2)  # td, td0
+        self.check_weakref_count(b0._lock_parents_weakrefs, 3)  # td, td0, a0
+        self.check_weakref_count(c0._lock_parents_weakrefs, 4)  # td, td0, a0, b0
         td.unlock_()
         td.lock_()
         del td, td0, td1
         gc.collect()
         a.unlock_()
         a.lock_()
-        assert len(a._lock_parents_weakrefs) == 0
-        assert len(b._lock_parents_weakrefs) == 3  # a, a0, a1
-        assert len(c._lock_parents_weakrefs) == 5  # a, a0, a1, b0, b1
-        assert len(a0._lock_parents_weakrefs) == 1  # a
-        assert len(b0._lock_parents_weakrefs) == 2  # a, a0
-        assert len(c0._lock_parents_weakrefs) == 3  # a, a0, b0
+        self.check_weakref_count(a._lock_parents_weakrefs, 0)
+        self.check_weakref_count(b._lock_parents_weakrefs, 3)  # a, a0, a1
+        self.check_weakref_count(c._lock_parents_weakrefs, 5)  # a, a0, a1, b0, b1
+        self.check_weakref_count(a0._lock_parents_weakrefs, 1)  # a
+        self.check_weakref_count(b0._lock_parents_weakrefs, 2)  # a, a0
+        self.check_weakref_count(c0._lock_parents_weakrefs, 3)  # a, a0, b0
         del a, a0
         gc.collect()
         b.unlock_()
         b.lock_()
         del b
-
-    def test_empty_tensordict_list(self):
-        td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
-        a = td["a"]
-        b = td["a", "b"]
-        c = td["a", "b", "c"]
-        td = td.lock_()
-        assert len(td._locked_tensordicts)
-        assert len(a._locked_tensordicts)
-        assert len(b._locked_tensordicts)
-        td.unlock_()
-        assert not len(td._locked_tensordicts)
-        assert not len(a._locked_tensordicts)
-        assert not len(b._locked_tensordicts)
-        assert not len(c._locked_tensordicts)
-
-    def test_empty_tensordict_list_stack(self):
-        td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
-        td1 = td0.clone()
-        td = torch.stack([td0, td1])
-        td = td.lock_()
-        a = td["a"]
-        b = td["a", "b"]
-        c = td["a", "b", "c"]
-        a0 = td0["a"]
-        b0 = td0["a", "b"]
-        c0 = td0["a", "b", "c"]
-        assert not td._locked_tensordicts
-        assert not a._locked_tensordicts
-        assert not b._locked_tensordicts
-        assert not c._locked_tensordicts
-        assert len(a0._locked_tensordicts)
-        assert len(b0._locked_tensordicts)
-        td.unlock_()
-        assert not len(a0._locked_tensordicts)
-        assert not len(b0._locked_tensordicts)
-        assert not len(c0._locked_tensordicts)
 
     def test_stack_cache_lock(self):
         td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])

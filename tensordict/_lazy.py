@@ -10,6 +10,8 @@ import numbers
 import os
 import re
 import textwrap
+import weakref
+from collections import defaultdict
 from copy import copy, deepcopy
 from pathlib import Path
 from textwrap import indent
@@ -1879,55 +1881,43 @@ class LazyStackedTensorDict(TensorDictBase):
             self.unlock_()
 
     @property
-    def _lock_id(self):
-        """Ids of all tensordicts that need to be unlocked for this to be unlocked."""
-        _lock_id = set()
+    def _lock_parents_weakrefs(self):
+        """Weakrefs of all tensordicts that need to be unlocked for this to be unlocked."""
+        _lock_parents_weakrefs = []
         for tensordict in self.tensordicts:
-            _lock_id = _lock_id.union(tensordict._lock_parents_weakrefs)
-        _lock_id = _lock_id - {id(self)}
-        return _lock_id
+            _lock_parents_weakrefs = (
+                _lock_parents_weakrefs + tensordict._lock_parents_weakrefs
+            )
+        _lock_parents_weakrefs = [
+            item for item in _lock_parents_weakrefs if item is not weakref.ref(self)
+        ]
+        return _lock_parents_weakrefs
 
-    def _propagate_lock(self, lock_ids=None):
+    def _propagate_lock(self, lock_parents_weakrefs=None):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        _locked_tensordicts = []
-        is_root = lock_ids is None
+        is_root = lock_parents_weakrefs is None
         if is_root:
-            lock_ids = set()
-        lock_ids = lock_ids.union({id(self)})
-        for dest in self.tensordicts:
-            dest._propagate_lock(lock_ids)
-            _locked_tensordicts.append(dest)
+            lock_parents_weakrefs = []
 
-    def _remove_lock(self, lock_id):
-        for td in self.tensordicts:
-            td._remove_lock(lock_id)
+        lock_parents_weakrefs = copy(lock_parents_weakrefs) + [weakref.ref(self)]
+        for dest in self.tensordicts:
+            dest._propagate_lock(lock_parents_weakrefs)
 
     @erase_cache
-    def _propagate_unlock(self, lock_ids=None):
+    def _propagate_unlock(self):
         # we can't set _is_locked to False because after it's unlocked, anything
         # can happen to a child tensordict.
         self._is_locked = None
-        if lock_ids is None:
-            lock_ids = set()
-
-        unlocked_tds = [self]
-        lock_ids.add(id(self))
-        for dest in self.tensordicts:
-            unlocked_tds.extend(dest._propagate_unlock(lock_ids))
-
+        sub_tds = defaultdict()
+        for child in self.tensordicts:
+            # we want to make sure that if the same child is present twice in the
+            # stack we won't iterate multiple times over it
+            sub_tds[id(child)] = child._propagate_unlock() + [child]
+        sub_tds = [item for value in sub_tds.values() for item in value]
         self._is_shared = False
         self._is_memmap = False
-        return unlocked_tds
-
-    def __del__(self):
-        if self._is_locked is None:
-            # then we can reliably say that this lazy stack is not part of
-            # the tensordicts graphs
-            return
-        # this can be a perf bottleneck
-        for td in self.tensordicts:
-            td._remove_lock(id(self))
+        return sub_tds
 
     def __repr__(self):
         fields = _td_fields(self)
