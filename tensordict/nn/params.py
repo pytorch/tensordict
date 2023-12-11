@@ -30,9 +30,10 @@ from tensordict.utils import (
     _LOCK_ERROR,
     as_decorator,
     Buffer,
+    erase_cache,
     IndexType,
     lock_blocked,
-    NestedKey, erase_cache,
+    NestedKey,
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
