@@ -2118,8 +2118,6 @@ class TestTensorDicts(TestTensorDictsBase):
             td.create_nested(("some", "nested", "key"))
 
             some = td.get("some")
-            if hasattr(some, "_source"):
-                print(some._source)
             nested = some.get("nested")
             _ = nested.get("key")
             assert td.get(("some", "nested", "key")).shape == td.shape
@@ -6666,7 +6664,6 @@ class TestMap:
             chunksize=1,
             max_tasks_per_child=5,
         )
-        print("got 1")
         generator.manual_seed(0)
         td_out_1 = td.map(
             TestMap.get_rand_incr,
@@ -6675,7 +6672,6 @@ class TestMap:
             chunksize=1,
             max_tasks_per_child=5,
         )
-        print("got 2")
         # we cannot know which worker picks which job, but since they will all have
         # a seed from 0 to 4 and produce 1 number each, we can chekc that
         # those numbers are exactly what we were expecting.
@@ -6710,7 +6706,6 @@ class TestMap:
             generator=generator,
             chunksize=1,
         )
-        print("got 1")
         generator.manual_seed(0)
         td_out_1 = td.map(
             TestMap.get_rand_incr,
@@ -6718,7 +6713,6 @@ class TestMap:
             generator=generator,
             chunksize=1,
         )
-        print("got 2")
         # we cannot know which worker picks which job, but since they will all have
         # a seed from 0 to 4 and produce 1 number each, we can chekc that
         # those numbers are exactly what we were expecting.

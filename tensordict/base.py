@@ -4001,6 +4001,7 @@ class TensorDictBase(MutableMapping):
                     "Cannot unlock a tensordict that is part of a locked graph. "
                     "Unlock the root tensordict first. If the tensordict is part of multiple graphs, "
                     "group the graphs under a common tensordict an unlock this root. "
+                    f"self: {self}, obj: {obj}"
                 )
         try:
             self._lock_parents_weakrefs = []
