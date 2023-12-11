@@ -234,8 +234,14 @@ class TensorDict(TensorDictBase):
 
     @staticmethod
     def from_module(
-        module: torch.nn.Module, as_module: bool = False, lock: bool = False
+        module: torch.nn.Module,
+        as_module: bool = False,
+        lock: bool = False,
+        use_state_dict: bool = False,
     ):
+        if use_state_dict:
+            return TensorDict(module.state_dict(), batch_size=[]).unflatten_keys(".")
+
         td_struct = TensorDict({}, [])
         for key, param in module.named_parameters(recurse=False):
             td_struct._set_str(key, param, validated=True, inplace=False)
@@ -262,7 +268,14 @@ class TensorDict(TensorDictBase):
         return True
 
     @as_decorator()
-    def to_module(self, module, return_swap: bool = True, swap_dest=None, memo=None):
+    def to_module(
+        self,
+        module,
+        return_swap: bool = True,
+        swap_dest=None,
+        memo=None,
+        use_state_dict: bool = False,
+    ):
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         __dict__ = module.__dict__
 
@@ -285,8 +298,36 @@ class TensorDict(TensorDictBase):
                 swap = swap_dest
             memo[id(module)] = swap
             _swap = {}
+        if use_state_dict:
+            # execute module's pre-hooks
+            state_dict = self.flatten_keys(".")
+            prefix = ""
+            strict = True
+            local_metadata = {}
+            missing_keys = []
+            unexpected_keys = []
+            error_msgs = []
+            for hook in module._load_state_dict_pre_hooks.values():
+                hook(
+                    state_dict,
+                    prefix,
+                    local_metadata,
+                    strict,
+                    missing_keys,
+                    unexpected_keys,
+                    error_msgs,
+                )
 
-        for key, value in self.items():
+            def convert_type(x, y):
+                if isinstance(y, torch.nn.Parameter):
+                    return torch.nn.Parameter(x)
+                return x
+
+            input = state_dict.unflatten_keys(".").apply(convert_type, self)
+        else:
+            input = self
+
+        for key, value in input.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
                 if module.__class__.__setattr__ is __base__setattr__:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
@@ -315,6 +356,7 @@ class TensorDict(TensorDictBase):
                         return_swap=return_swap,
                         swap_dest=local_dest,
                         memo=memo,
+                        use_state_dict=use_state_dict,
                     )
                 # we don't want to do this op more than once
                 if return_swap and (
