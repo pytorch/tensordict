@@ -1650,7 +1650,7 @@ class TensorDict(TensorDictBase):
             self._is_shared = False  # since they are mutually exclusive
             self._device = torch.device("cpu")
         dest._is_locked = True
-        return self
+        return dest
 
     @classmethod
     def load_memmap(cls, prefix: str) -> T:
