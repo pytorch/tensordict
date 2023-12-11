@@ -810,109 +810,6 @@ class TensorDict(TensorDictBase):
             for ss, bs in zip(split_sizes, batch_sizes)
         )
 
-    def memmap_like(
-        self,
-        prefix: str | None = None,
-        copy_existing: bool = False,
-        num_threads: int = 0,
-    ) -> T:
-        if num_threads > 1:
-            from concurrent.futures import ThreadPoolExecutor
-
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                futures = []
-                result = self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-                    executor=executor,
-                    futures=futures,
-                    inplace=False,
-                    like=True,
-                )
-                for future in futures:
-                    future.result()
-                return result
-        return self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-            inplace=False,
-            like=True,
-        )
-
-    # def memmap_like(self, prefix: str | None = None) -> T:
-    #     def save_metadata(data: TensorDictBase, filepath, metadata=None):
-    #         if metadata is None:
-    #             metadata = {}
-    #         metadata.update(
-    #             {
-    #                 "shape": list(data.shape),
-    #                 "device": str(data.device),
-    #                 "_type": str(data.__class__),
-    #             }
-    #         )
-    #         with open(filepath, "w") as json_metadata:
-    #             json.dump(metadata, json_metadata)
-    #
-    #     if prefix is not None:
-    #         prefix = Path(prefix)
-    #         if not prefix.exists():
-    #             os.makedirs(prefix, exist_ok=True)
-    #         metadata = {}
-    #     if not self.keys():
-    #         raise Exception(
-    #             "memmap_like() must be called when the TensorDict is (partially) "
-    #             "populated. Set a tensor first."
-    #         )
-    #     tensordict = TensorDict(
-    #         {},
-    #         self.batch_size,
-    #         device=self.device,
-    #         names=self.names if self._has_names() else None,
-    #     )
-    #     for key, value in self.items():
-    #         if _is_tensor_collection(value.__class__):
-    #             if prefix is not None:
-    #                 # ensure subdirectory exists
-    #                 os.makedirs(prefix / key, exist_ok=True)
-    #                 tensordict._set_str(
-    #                     key,
-    #                     value.memmap_like(
-    #                         prefix=prefix / key,
-    #                     ),
-    #                     inplace=False,
-    #                     validated=True,
-    #                 )
-    #             else:
-    #                 tensordict._set_str(
-    #                     key, value.memmap_like(), inplace=False, validated=True
-    #                 )
-    #             continue
-    #         else:
-    #             if prefix is not None:
-    #                 metadata[key] = {
-    #                     "dtype": str(value.dtype),
-    #                     "shape": value.shape,
-    #                     "device": str(value.device),
-    #                 }
-    #             tensordict._set_str(
-    #                 key,
-    #                 MemoryMappedTensor.empty_like(
-    #                     value,
-    #                     filename=str(prefix / f"{key}.memmap")
-    #                     if prefix is not None
-    #                     else None,
-    #                 ),
-    #                 inplace=False,
-    #                 validated=True,
-    #             )
-    #     tensordict._is_memmap = True
-    #     tensordict._is_shared = False
-    #     tensordict._device = torch.device("cpu")
-    #     tensordict.lock_()
-    #     if prefix is not None:
-    #         save_metadata(self, filepath=prefix / "meta.json", metadata=metadata)
-    #     return tensordict
-
     def masked_select(self, mask: Tensor) -> T:
         d = {}
         mask_expand = mask
@@ -1502,70 +1399,15 @@ class TensorDict(TensorDictBase):
             value.detach_()
         return self
 
-    def memmap_(
-        self,
-        prefix: str | None = None,
-        copy_existing: bool = False,
-        num_threads: int = 0,
-    ) -> T:
-        if num_threads > 1:
-            from concurrent.futures import ThreadPoolExecutor
-
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                futures = []
-                result = self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-                    executor=executor,
-                    futures=futures,
-                    inplace=True,
-                )
-                for future in futures:
-                    future.result()
-                return result
-        return self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-            inplace=True,
-        )
-
-    def memmap(
-        self,
-        prefix: str | None = None,
-        copy_existing: bool = False,
-        num_threads: int = 0,
-    ) -> T:
-        if num_threads > 1:
-            from concurrent.futures import ThreadPoolExecutor
-
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
-                futures = []
-                result = self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-                    executor=executor,
-                    futures=futures,
-                    inplace=False,
-                )
-                for future in futures:
-                    future.result()
-                return result
-        return self._memmap_(
-                    prefix=prefix,
-                    copy_existing=copy_existing,
-            inplace=False,
-        )
-
     def _memmap_(
         self,
-        prefix: str | None = None,
-        copy_existing: bool = False,
-        executor=None,
-        futures=None,
-        inplace=True,
-        like=False,
+        prefix: str | None,
+        copy_existing: bool,
+        executor,
+        futures,
+        inplace,
+        like,
     ) -> T:
-
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
                 metadata = {}
@@ -1588,39 +1430,41 @@ class TensorDict(TensorDictBase):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        dest = self if inplace else TensorDict({}, batch_size=self.batch_size, _is_memmap=True, _is_shared=False, names=self.names, device=torch.device("cpu"))
+        dest = (
+            self
+            if inplace
+            else TensorDict(
+                {},
+                batch_size=self.batch_size,
+                _is_memmap=True,
+                _is_shared=False,
+                names=self.names if self._has_names() else None,
+                device=torch.device("cpu"),
+            )
+        )
         for key, value in self.items():
-            if value.requires_grad:
-                raise Exception(
-                    "memmap is not compatible with gradients, one of Tensors has requires_grad equals True"
-                )
             if _is_tensor_collection(value.__class__):
-                if prefix is not None:
-                    # ensure subdirectory exists
-                    os.makedirs(prefix / key, exist_ok=True)
-                    dest._tensordict[key] = value._memmap_(
-                        prefix=prefix / key,
-                        copy_existing=copy_existing,
-                        executor=executor,
-                        futures=futures,
-                        inplace=inplace,like=like,
-                    )
-                else:
-                    dest._tensordict[key] = value._memmap_(
-                        executor=executor, futures=futures,inplace=inplace,like=like,
-                    )
+                dest._tensordict[key] = value._memmap_(
+                    prefix=prefix / key if prefix is not None else None,
+                    copy_existing=copy_existing,
+                    executor=executor,
+                    futures=futures,
+                    inplace=inplace,
+                    like=like,
+                )
                 continue
             else:
                 # user did specify location and memmap is in wrong place, so we copy
-                def _populate(dest=dest, value=value, key=key, copy_existing=copy_existing):
+                def _populate(
+                    dest=dest, value=value, key=key, copy_existing=copy_existing
+                ):
                     filename = None if prefix is None else str(prefix / f"{key}.memmap")
                     dest._tensordict[key] = MemoryMappedTensor.from_tensor(
-                        value,
+                        value.data if value.requires_grad else value,
                         filename=filename,
                         copy_existing=copy_existing,
                         existsok=True,
                         copy_data=not like,
-                        # copy_existing=copy_existing,
                     )
 
                 if executor is None:
@@ -1653,36 +1497,13 @@ class TensorDict(TensorDictBase):
         return dest
 
     @classmethod
-    def load_memmap(cls, prefix: str) -> T:
-        prefix = Path(prefix)
+    def _load_memmap(cls, prefix: str, metadata: dict) -> T:
+        if metadata["device"] == "None":
+            metadata["device"] = None
+        else:
+            metadata["device"] = torch.device(metadata["device"])
+        metadata["shape"] = torch.Size(metadata["shape"])
 
-        def load_metadata(filepath):
-            with open(filepath) as json_metadata:
-                metadata = json.load(json_metadata)
-                if metadata["_type"] != str(cls):
-                    # return early to load from another cls
-                    return metadata
-                if metadata["device"] == "None":
-                    metadata["device"] = None
-                else:
-                    metadata["device"] = torch.device(metadata["device"])
-                metadata["shape"] = torch.Size(metadata["shape"])
-                # if 'dtype' in metadata:
-                #     metadata.dtype = to
-            return metadata
-
-        metadata = load_metadata(prefix / "meta.json")
-        type_name = metadata["_type"]
-        if type_name != str(cls):
-            import tensordict
-
-            for other_cls in tensordict.base._ACCEPTED_CLASSES:
-                if str(other_cls) == type_name:
-                    return other_cls.load_memmap(prefix)
-            else:
-                raise RuntimeError(
-                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}."
-                )
         out = cls({}, batch_size=metadata.pop("shape"), device=metadata.pop("device"))
 
         for key, entry_metadata in metadata.items():
@@ -1698,14 +1519,15 @@ class TensorDict(TensorDictBase):
             ):
                 # invalid dict means
                 continue
-            out.set(
+            out._set_str(
                 key,
                 MemoryMappedTensor.from_filename(
                     dtype=_STRDTYPE2DTYPE[dtype],
                     shape=torch.Size(entry_metadata["shape"]),
                     filename=str(prefix / f"{key}.memmap"),
-                    # device=str(entry_metadata["device"]),
                 ),
+                validated=True,
+                inplace=False,
             )
         # iterate over folders and load them
         for path in prefix.iterdir():
@@ -2481,9 +2303,64 @@ class _SubTensorDict(TensorDictBase):
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
 
-    def memmap_(self, prefix: str | None = None, copy_existing: bool = False) -> T:
+    def memmap_(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
+    ) -> T:
         raise RuntimeError(
             "Converting a sub-tensordict values to memmap cannot be done."
+        )
+
+    def _memmap_(
+        self,
+        *,
+        prefix: str | None,
+        copy_existing: bool,
+        executor,
+        futures,
+        inplace,
+        like,
+    ) -> T:
+        if prefix is not None:
+
+            def save_metadata(prefix=prefix, self=self):
+                prefix = Path(prefix)
+                if not prefix.exists():
+                    os.makedirs(prefix, exist_ok=True)
+                with open(prefix / "meta.json", "w") as f:
+                    json.dump(
+                        {
+                            "_type": str(self.__class__),
+                            "index": _index_to_str(self.idx),
+                        },
+                        f,
+                    )
+
+            if executor is None:
+                save_metadata()
+            else:
+                futures.append(executor.submit(save_metadata))
+
+        _source = self._source._memmap_(
+            prefix=prefix / "_source" if prefix is not None else None,
+            copy_existing=copy_existing,
+            executor=executor,
+            futures=futures,
+            inplace=inplace,
+            like=like,
+        )
+        if not inplace:
+            result = _SubTensorDict(_source, idx=self.idx)
+        else:
+            result = self
+        return result
+
+    def _load_memmap(cls, prefix: Path, metadata: dict):
+        index = metadata["index"]
+        return _SubTensorDict(
+            TensorDict.load_memmap(prefix / "_source"), _str_to_index(index)
         )
 
     def share_memory_(self) -> T:
@@ -2763,6 +2640,35 @@ class _subtd_meta_deprec(abc.ABCMeta):
         return instance
 
 
+def _index_to_str(index):
+    if isinstance(index, tuple):
+        return tuple(_index_to_str(elt) for elt in index)
+    if isinstance(index, slice):
+        return ("slice", {"start": index.start, "stop": index.stop, "step": index.step})
+    if isinstance(index, range):
+        return ("range", {"start": index.start, "stop": index.stop, "step": index.step})
+    if isinstance(index, Tensor):
+        return ("tensor", index.tolist(), str(index.device))
+    return index
+
+
+def _str_to_index(index):
+    if isinstance(index, tuple):
+        if not len(index):
+            return index
+        if index[0] == "slice":
+            index = index[1]
+            return slice(index["start"], index["stop"], index["step"])
+        if index[0] == "range":
+            index = index[1]
+            return range(index["start"], index["stop"], index["step"])
+        if index[0] == "tensor":
+            index, device = index[1:]
+            return torch.tensor(index, device=device)
+        return tuple(_index_to_str(elt) for elt in index)
+    return index
+
+
 class SubTensorDict(_SubTensorDict, metaclass=_subtd_meta_deprec):
     """Deprecated public version of _SubTensorDict class.
 
@@ -2770,3 +2676,7 @@ class SubTensorDict(_SubTensorDict, metaclass=_subtd_meta_deprec):
     """
 
     ...
+
+
+_register_tensor_class(TensorDict)
+_register_tensor_class(_SubTensorDict)

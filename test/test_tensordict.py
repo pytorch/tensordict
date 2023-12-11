@@ -2618,27 +2618,51 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         _ = str(td)
 
-    def test_memmap_(self, td_name, device):
+    @pytest.mark.parametrize("use_dir", [True, False])
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_(self, td_name, device, use_dir, tmpdir, num_threads):
         td = getattr(self, td_name)(device)
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(
                 RuntimeError,
                 match="Converting a sub-tensordict values to memmap cannot be done",
             ):
-                td.memmap_()
+                td.memmap_(
+                    prefix=tmpdir if use_dir else None,
+                    num_threads=num_threads,
+                    copy_existing=True,
+                )
+            return
         elif td_name in ("td_h5", "td_params"):
             with pytest.raises(
                 RuntimeError,
                 match="Cannot build a memmap TensorDict in-place",
             ):
-                td.memmap_()
+                td.memmap_(
+                    prefix=tmpdir if use_dir else None,
+                    num_threads=num_threads,
+                    copy_existing=True,
+                )
+            return
         else:
-            td.memmap_()
+            td.memmap_(
+                prefix=tmpdir if use_dir else None,
+                num_threads=num_threads,
+                copy_existing=True,
+            )
             assert td.is_memmap()
+        if use_dir:
+            assert_allclose_td(TensorDict.load_memmap(tmpdir), td)
 
-    def test_memmap_like(self, td_name, device):
+    @pytest.mark.parametrize("use_dir", [True, False])
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_like(self, td_name, device, use_dir, tmpdir, num_threads):
         td = getattr(self, td_name)(device)
-        tdmemmap = td.memmap_like()
+        tdmemmap = td.memmap_like(
+            prefix=tmpdir if use_dir else None,
+            num_threads=num_threads,
+            copy_existing=True,
+        )
         assert tdmemmap is not td
         for key in td.keys(True):
             assert td[key] is not tdmemmap[key]
@@ -2676,8 +2700,6 @@ class TestTensorDicts(TestTensorDictsBase):
             metadata = json.load(file)
         if td_name in ("stacked_td", "nested_stacked_td"):
             assert metadata["shape"] == list(td.tensordicts[0].batch_size)
-        elif td_name in ("unsqueezed_td", "squeezed_td", "permute_td"):
-            assert metadata["shape"] == list(td._source.batch_size)
         else:
             assert metadata["shape"] == list(td.batch_size)
 

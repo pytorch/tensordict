@@ -518,24 +518,26 @@ class PersistentTensorDict(TensorDictBase):
         return self
 
     def memmap_(
-        self, prefix: str | None = None, copy_existing: bool = False
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
     ) -> PersistentTensorDict:
         raise RuntimeError(
             "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. Use `td.memmap()` instead."
         )
 
-    def memmap(
+    def _memmap_(
         self,
-        prefix: str | None = None,
-    ) -> TensorDict:
-        """Converts the PersistentTensorDict to a memmap equivalent."""
-        mm_like = self.memmap_like(prefix)
-        for key in self.keys(include_nested=True, leaves_only=True):
-            mm_val = mm_like[key]
-            mm_val._memmap_array[:] = self._get_array(key)
-        return mm_like
+        *,
+        prefix: str | None,
+        copy_existing: bool,
+        executor,
+        futures,
+        inplace,
+        like,
+    ) -> T:
 
-    def memmap_like(self, prefix: str | None = None) -> T:
         # re-implements this to make it faster using the meta-data
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
@@ -544,6 +546,7 @@ class PersistentTensorDict(TensorDictBase):
                 {
                     "shape": list(data.shape),
                     "device": str(data.device),
+                    "_type": str(self.__class__),
                 }
             )
             with open(filepath, "w") as json_metadata:
@@ -559,58 +562,78 @@ class PersistentTensorDict(TensorDictBase):
                 "memmap_like() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
-        tensordict = TensorDict(
-            {},
-            self.batch_size,
-            device=self.device,
-            names=self.names if self._has_names() else None,
+        dest = (
+            self
+            if inplace
+            else TensorDict(
+                {},
+                batch_size=self.batch_size,
+                _is_memmap=True,
+                _is_shared=False,
+                names=self.names if self._has_names() else None,
+                device=torch.device("cpu"),
+            )
         )
         for key, value in self._items_metadata():
             if not value["array"]:
-                value = self.get(key)
-                if prefix is not None:
-                    # ensure subdirectory exists
-                    os.makedirs(prefix / key, exist_ok=True)
-                    tensordict._set_str(
-                        key,
-                        value.memmap_like(
-                            prefix=prefix / key,
-                        ),
-                        inplace=False,
-                        validated=True,
-                    )
-                else:
-                    tensordict._set_str(
-                        key, value.memmap_like(), inplace=False, validated=True
-                    )
+                value = self._get_str(key)
+                dest._set_str(
+                    key,
+                    value._memmap_(
+                        prefix=prefix / key if prefix is not None else None,
+                        executor=executor,
+                        like=like,
+                        copy_existing=copy_existing,
+                        futures=futures,
+                        inplace=inplace,
+                    ),
+                    inplace=False,
+                    validated=True,
+                )
                 continue
             else:
+                value = self._get_str(key)
                 if prefix is not None:
                     metadata[key] = {
                         "dtype": str(value.dtype),
                         "shape": value.shape,
                         "device": str(value.device),
                     }
-                tensordict._set_str(
-                    key,
-                    MemoryMappedTensor.empty(
-                        value["shape"],
-                        # device="cpu",
-                        dtype=value["dtype"],
+
+                def _populate(
+                    tensordict=dest, key=key, value=value, prefix=prefix, like=like
+                ):
+                    val = MemoryMappedTensor.from_tensor(
+                        value,
                         filename=str(prefix / f"{key}.memmap")
                         if prefix is not None
                         else None,
-                    ),
-                    inplace=False,
-                    validated=True,
-                )
-        tensordict._is_memmap = True
-        tensordict._is_shared = False
-        tensordict._device = torch.device("cpu")
-        tensordict.lock_()
+                        copy_data=not like,
+                        copy_existing=copy_existing,
+                        existsok=True,
+                    )
+                    tensordict._set_str(
+                        key,
+                        val,
+                        inplace=False,
+                        validated=True,
+                    )
+
+                if executor is None:
+                    _populate()
+                else:
+                    futures.append(executor.submit(_populate))
+
         if prefix is not None:
-            save_metadata(self, prefix=prefix, metadata=metadata)
-        return tensordict
+            if executor is None:
+                save_metadata(dest, prefix / "meta.json", metadata)
+            else:
+                futures.append(
+                    executor.submit(save_metadata, dest, prefix / "meta.json", metadata)
+                )
+        return dest
+
+    _load_memmap = TensorDict._load_memmap
 
     def pin_memory(self):
         """Returns a new PersistentTensorDict where any given Tensor key returns a tensor with pin_memory=True.
