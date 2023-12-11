@@ -83,7 +83,14 @@ def test_serialize_model(benchmark, tmpdir):
     """Tests efficiency of saving weights as memmap tensors, including TD construction."""
     with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
         t = nn.Transformer()
-    benchmark(lambda: TensorDict.from_module(t).memmap_(tmpdir, num_threads=32))
+    benchmark(lambda: TensorDict.from_module(t).memmap(tmpdir, num_threads=32))
+
+
+def test_serialize_model_filesystem(benchmark):
+    """Tests efficiency of saving weights as memmap tensors in file system, including TD construction."""
+    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+        t = nn.Transformer()
+    benchmark(lambda: TensorDict.from_module(t).memmap(num_threads=32))
 
 
 def test_serialize_model_pickle(benchmark, tmpdir):
@@ -100,7 +107,16 @@ def test_serialize_weights(benchmark, tmpdir):
         t = nn.Transformer()
 
     weights = TensorDict.from_module(t)
-    benchmark(lambda: weights.memmap_(tmpdir, num_threads=32))
+    benchmark(lambda: weights.memmap(tmpdir, num_threads=32))
+
+
+def test_serialize_weights_filesystem(benchmark):
+    """Tests efficiency of saving weights as memmap tensors."""
+    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+        t = nn.Transformer()
+
+    weights = TensorDict.from_module(t)
+    benchmark(lambda: weights.memmap(num_threads=32))
 
 
 def test_serialize_weights_pickle(benchmark, tmpdir):
