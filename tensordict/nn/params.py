@@ -32,7 +32,7 @@ from tensordict.utils import (
     Buffer,
     IndexType,
     lock_blocked,
-    NestedKey,
+    NestedKey, erase_cache,
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
@@ -746,6 +746,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         if not self._param_td.is_locked:
             self._param_td._propagate_lock(_lock_parents_weakrefs)
 
+    @erase_cache
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
