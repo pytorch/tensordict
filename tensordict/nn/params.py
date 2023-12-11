@@ -6,20 +6,16 @@ from __future__ import annotations
 
 import functools
 import inspect
-import json
 import numbers
-import os
 import re
 import weakref
 from copy import copy
 from functools import wraps
-from pathlib import Path
 from typing import Any, Callable, Iterator, OrderedDict, Sequence
 
 import torch
 from functorch import dim as ftdim
 
-from tensordict import MemoryMappedTensor
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
