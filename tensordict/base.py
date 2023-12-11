@@ -9,6 +9,7 @@ import abc
 import collections
 import numbers
 import warnings
+import weakref
 from collections.abc import MutableMapping
 from copy import copy
 from textwrap import indent
@@ -141,10 +142,6 @@ class TensorDictBase(MutableMapping):
 
         """
         ...
-
-    def __del__(self):
-        for td in getattr(self, "_locked_tensordicts", ()):
-            td._remove_lock(id(self))
 
     def __repr__(self) -> str:
         fields = _td_fields(self)
@@ -3945,45 +3942,31 @@ class TensorDictBase(MutableMapping):
         else:
             self.unlock_()
 
-    def _propagate_lock(self, lock_ids=None):
+    def _propagate_lock(self, lock_parents_weakrefs=None):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        is_root = lock_ids is None
+        is_root = lock_parents_weakrefs is None
         if is_root:
-            lock_ids = set()
-        self._lock_id = self._lock_id.union(lock_ids)
-        lock_ids = lock_ids.union({id(self)})
-        _locked_tensordicts = []
+            lock_parents_weakrefs = []
+        self._lock_parents_weakrefs = (
+            self._lock_parents_weakrefs + lock_parents_weakrefs
+        )
+        lock_parents_weakrefs = copy(lock_parents_weakrefs) + [weakref.ref(self)]
         for value in self.values():
             if _is_tensor_collection(type(value)):
-                value._propagate_lock(lock_ids)
-                _locked_tensordicts.append(value)
-        if is_root:
-            self._locked_tensordicts = _locked_tensordicts
-        else:
-            self._locked_tensordicts += _locked_tensordicts
+                value._propagate_lock(lock_parents_weakrefs)
 
     @property
-    def _lock_id(self):
-        _lock_id = self.__dict__.get("__lock_id", None)
-        if _lock_id is None:
-            _lock_id = self.__dict__["__lock_id"] = set()
-        return _lock_id
+    def _lock_parents_weakrefs(self):
+        _lock_parents_weakrefs = self.__dict__.get("__lock_parents_weakrefs", None)
+        if _lock_parents_weakrefs is None:
+            self.__dict__["__lock_parents_weakrefs"] = []
+            _lock_parents_weakrefs = self.__dict__["__lock_parents_weakrefs"]
+        return _lock_parents_weakrefs
 
-    @_lock_id.setter
-    def _lock_id(self, value):
-        self.__dict__["__lock_id"] = value
-
-    @property
-    def _locked_tensordicts(self):
-        _locked_tensordicts = self.__dict__.get("__locked_tensordicts", None)
-        if _locked_tensordicts is None:
-            _locked_tensordicts = self.__dict__["__locked_tensordicts"] = []
-        return _locked_tensordicts
-
-    @_locked_tensordicts.setter
-    def _locked_tensordicts(self, value):
-        self.__dict__["__locked_tensordicts"] = value
+    @_lock_parents_weakrefs.setter
+    def _lock_parents_weakrefs(self, value: list):
+        self.__dict__["__lock_parents_weakrefs"] = value
 
     @as_decorator("is_locked")
     def lock_(self) -> T:
@@ -3992,42 +3975,50 @@ class TensorDictBase(MutableMapping):
         self._propagate_lock()
         return self
 
-    def _remove_lock(self, lock_id):
-        self._lock_id.discard(lock_id)
-        if self._locked_tensordicts:
-            for td in self._locked_tensordicts:
-                td._remove_lock(lock_id)
-
     @erase_cache
-    def _propagate_unlock(self, lock_ids=None):
-        if lock_ids is not None:
-            self._lock_id.difference_update(lock_ids)
-        else:
-            lock_ids = set()
+    def _propagate_unlock(self):
+        # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
-
-        unlocked_tds = [self]
-        lock_ids.add(id(self))
-        for value in self.values():
-            if _is_tensor_collection(type(value)):
-                unlocked_tds.extend(value._propagate_unlock(lock_ids))
-        self._locked_tensordicts = []
 
         self._is_shared = False
         self._is_memmap = False
-        return unlocked_tds
 
-    @as_decorator("is_locked")
-    def unlock_(self) -> T:
-        unlock_tds = self._propagate_unlock()
-        for td in unlock_tds:
-            if len(td._lock_id):
-                self.lock_()
+        sub_tds = []
+        for value in self.values():
+            if _is_tensor_collection(type(value)):
+                sub_tds.extend(value._propagate_unlock())
+                sub_tds.append(value)
+        return sub_tds
+
+    def _check_unlock(self):
+        for ref in self._lock_parents_weakrefs:
+            obj = ref()
+            # check if the locked parent exists and if it's locked
+            # we check _is_locked because it can be False or None in the case of Lazy stacks,
+            # but if we check obj.is_locked it will be True for this class.
+            if obj is not None and obj._is_locked:
                 raise RuntimeError(
                     "Cannot unlock a tensordict that is part of a locked graph. "
                     "Unlock the root tensordict first. If the tensordict is part of multiple graphs, "
                     "group the graphs under a common tensordict an unlock this root. "
+                    f"self: {self}, obj: {obj}"
                 )
+        try:
+            self._lock_parents_weakrefs = []
+        except AttributeError:
+            # Some tds (eg, LazyStack) have an automated way of creating the _lock_parents_weakref
+            pass
+
+    @as_decorator("is_locked")
+    def unlock_(self) -> T:
+        try:
+            sub_tds = self._propagate_unlock()
+            for sub_td in sub_tds:
+                sub_td._check_unlock()
+            self._check_unlock()
+        except RuntimeError as err:
+            self.lock_()
+            raise err
         return self
 
     # Conversion (device or dtype)
