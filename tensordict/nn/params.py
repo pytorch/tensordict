@@ -291,7 +291,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         else:
             func = _maybe_make_param_or_buffer
         self._param_td = _apply_leaves(self._param_td, lambda x: func(x))
-        self._lock = lock
+        self._lock_content = lock
         if lock:
             self._param_td.lock_()
         self._reset_params()
@@ -382,6 +382,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     ) -> TensorDictBase:
         ...
 
+    @lock_blocked
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
@@ -438,7 +439,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     ):
         raise RuntimeError(
             "Cannot call map on a TensorDictParams object. Convert it "
-            "to a detached tensordict first (``tensordict.data``) and call "
+            "to a detached tensordict first (through ``tensordict.data`` or ``tensordict.to_tensordict()``) and call "
             "map in a second time."
         )
 
@@ -737,20 +738,23 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _propagate_lock(self, _lock_parents_weakrefs=None):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        is_root = _lock_parents_weakrefs is None
-        if is_root:
+        if _lock_parents_weakrefs is None:
             _lock_parents_weakrefs = []
         self._lock_parents_weakrefs += _lock_parents_weakrefs
         _lock_parents_weakrefs.append(weakref.ref(self))
-        _locked_tensordicts = []
         # we don't want to double-lock the _param_td attrbute which is locked by default
         if not self._param_td.is_locked:
             self._param_td._propagate_lock(_lock_parents_weakrefs)
-            _locked_tensordicts.append(self._param_td)
-        if is_root:
-            self._locked_tensordicts = _locked_tensordicts
-        else:
-            self._locked_tensordicts += _locked_tensordicts
+
+    def _propagate_unlock(self):
+        # if we end up here, we can clear the graph associated with this td
+        self._is_locked = False
+
+        self._is_shared = False
+        self._is_memmap = False
+
+        if not self._lock_content:
+            return self._param_td._propagate_unlock()
 
     unlock_ = TensorDict.unlock_
     lock_ = TensorDict.lock_
