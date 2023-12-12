@@ -133,7 +133,7 @@ class MemoryMappedTensor(torch.Tensor):
 
         """
         if isinstance(input, MemoryMappedTensor):
-            if filename is None or (
+            if (filename is None and input._filename is None) or (
                 input._filename is not None
                 and filename is not None
                 and Path(filename).absolute() == Path(input.filename).absolute()
@@ -174,7 +174,7 @@ class MemoryMappedTensor(torch.Tensor):
                 size = torch.iinfo(input.dtype).bits // 8 * shape.numel()
             handler = _FileHandler(size)
             out = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
-            out = torch.reshape(out, shape)
+            out = out.view(shape)
             out = cls(out)
         else:
             handler = None

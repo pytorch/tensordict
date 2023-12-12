@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import abc
 import collections
+import json
 import numbers
 import warnings
 import weakref
 from collections.abc import MutableMapping
 from copy import copy
+from pathlib import Path
 from textwrap import indent
 from typing import (
     Any,
@@ -1525,8 +1527,25 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def memmap_(self, prefix: str | None = None, copy_existing: bool = False) -> T:
-        """Writes all tensors onto a corresponding memory-mapped Tensor.
+    def _memmap_(
+        self,
+        *,
+        prefix: str | None,
+        copy_existing: bool,
+        executor,
+        futures,
+        inplace,
+        like,
+    ) -> T:
+        ...
+
+    def memmap_(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
+    ) -> T:
+        """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
 
         Args:
             prefix (str): directory prefix where the memory-mapped tensors will
@@ -1550,10 +1569,92 @@ class TensorDictBase(MutableMapping):
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
-        ...
+        if num_threads > 1:
+            from concurrent.futures import ThreadPoolExecutor
 
-    @abc.abstractmethod
-    def memmap_like(self, prefix: str | None = None) -> T:
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                futures = []
+                result = self._memmap_(
+                    prefix=prefix,
+                    copy_existing=copy_existing,
+                    executor=executor,
+                    futures=futures,
+                    inplace=True,
+                    like=False,
+                )
+                for future in futures:
+                    future.result()
+                return result
+        return self._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            inplace=True,
+            futures=None,
+            executor=None,
+            like=False,
+        ).lock_()
+
+    def memmap(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
+    ) -> T:
+        """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
+
+        Args:
+            prefix (str): directory prefix where the memory-mapped tensors will
+                be stored. The directory tree structure will mimic the tensordict's.
+            copy_existing (bool): If False (default), an exception will be raised if an
+                entry in the tensordict is already a tensor stored on disk
+                with an associated file, but is not saved in the correct
+                location according to prefix.
+                If ``True``, any existing Tensor will be copied to the new location.
+
+        The TensorDict is then locked, meaning that any writing operations that
+        isn't in-place will throw an exception (eg, rename, set or remove an
+        entry).
+        Once the tensordict is unlocked, the memory-mapped attribute is turned to ``False``,
+        because cross-process identity is not guaranteed anymore.
+
+        Returns:
+            A new tensordict with the tensors stored on disk.
+
+        Note:
+            Serialising in this fashion might be slow with deeply nested tensordicts, so
+            it is not recommended to call this method inside a training loop.
+        """
+        if num_threads > 1:
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                futures = []
+                result = self._memmap_(
+                    prefix=prefix,
+                    copy_existing=copy_existing,
+                    executor=executor,
+                    futures=futures,
+                    inplace=False,
+                    like=False,
+                )
+                for future in futures:
+                    future.result()
+                return result
+        return self._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            inplace=False,
+            executor=None,
+            like=False,
+            futures=None,
+        ).lock_()
+
+    def memmap_like(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
+    ) -> T:
         """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
 
         Args:
@@ -1581,6 +1682,57 @@ class TensorDictBase(MutableMapping):
             >>> buffer = td.memmap_like("/path/to/dataset")
 
         """
+        if num_threads > 1:
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                futures = []
+                result = self._memmap_(
+                    prefix=prefix,
+                    copy_existing=copy_existing,
+                    executor=executor,
+                    futures=futures,
+                    inplace=False,
+                    like=True,
+                )
+                for future in futures:
+                    future.result()
+                return result
+        return self._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            inplace=False,
+            like=True,
+            executor=None,
+            futures=None,
+        ).lock_()
+
+    @classmethod
+    def load_memmap(cls, prefix: str | Path) -> T:
+        prefix = Path(prefix)
+
+        def load_metadata(filepath):
+            with open(filepath) as json_metadata:
+                metadata = json.load(json_metadata)
+            return metadata
+
+        metadata = load_metadata(prefix / "meta.json")
+        type_name = metadata["_type"]
+        if type_name != str(cls):
+            import tensordict
+
+            for other_cls in tensordict.base._ACCEPTED_CLASSES:
+                if str(other_cls) == type_name:
+                    return other_cls._load_memmap(prefix, metadata)
+            else:
+                raise RuntimeError(
+                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. Did you call _register_tensor_class(cls) on {type_name}?"
+                )
+        return cls._load_memmap(prefix, metadata)
+
+    @classmethod
+    @abc.abstractmethod
+    def _load_memmap(cls, prefix: Path, metadata: dict):
         ...
 
     # Key functionality: set, get, set_, set_at_, update, update_
