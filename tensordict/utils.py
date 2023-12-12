@@ -1750,3 +1750,47 @@ def _prune_selected_keys(keys_to_update, prefix):
     return tuple(
         key[1:] for key in keys_to_update if isinstance(key, tuple) and key[0] == prefix
     )
+
+
+def print_directory_tree(path, indent="", display_metadata=True):
+    """Prints the directory tree starting from the specified path.
+
+    Args:
+        path (str): The path of the directory to print.
+        indent (str): The current indentation level for formatting.
+        display_metadata (bool): if ``True``, metadata of the dir will be
+            displayed too.
+
+    """
+    if display_metadata:
+
+        def get_directory_size(path="."):
+            total_size = 0
+
+            for dirpath, _, filenames in os.walk(path):
+                for filename in filenames:
+                    file_path = os.path.join(dirpath, filename)
+                    total_size += os.path.getsize(file_path)
+
+            return total_size
+
+        def format_size(size):
+            # Convert size to a human-readable format
+            for unit in ["B", "KB", "MB", "GB", "TB"]:
+                if size < 1024.0:
+                    return f"{size:.2f} {unit}"
+                size /= 1024.0
+
+        total_size_bytes = get_directory_size(path)
+        formatted_size = format_size(total_size_bytes)
+        print(f"Directory size: {formatted_size}")
+
+    if os.path.isdir(path):
+        print(indent + os.path.basename(path) + "/")
+        indent += "    "
+        for item in os.listdir(path):
+            print_directory_tree(
+                os.path.join(path, item), indent=indent, display_metadata=False
+            )
+    else:
+        print(indent + os.path.basename(path))
