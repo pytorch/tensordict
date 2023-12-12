@@ -187,7 +187,13 @@ def tensorclass(cls: T) -> T:
     cls.state_dict = _state_dict
     cls.load_state_dict = _load_state_dict
     cls._memmap_ = _memmap_
+
+    # Memmap
+    cls.memmap_like = TensorDictBase.memmap_like
+    cls.memmap_ = TensorDictBase.memmap_
+    cls.memmap = TensorDictBase.memmap
     cls._load_memmap = classmethod(_load_memmap)
+    cls.load_memmap = classmethod(TensorDictBase.load_memmap)
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
