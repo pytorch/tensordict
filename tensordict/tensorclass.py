@@ -193,7 +193,7 @@ def tensorclass(cls: T) -> T:
     cls.memmap_ = TensorDictBase.memmap_
     cls.memmap = TensorDictBase.memmap
     cls._load_memmap = classmethod(_load_memmap)
-    cls.load_memmap = classmethod(TensorDictBase.load_memmap)
+    cls.load_memmap = TensorDictBase.load_memmap
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
