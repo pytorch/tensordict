@@ -6428,6 +6428,34 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
     TestTensorDictsBase.TYPES_DEVICES,
 )
 class TestTensorDictMP(TestTensorDictsBase):
+    # Tests sharing a locked tensordict
+    @staticmethod
+    def worker_lock(td, q):
+        assert td.is_locked
+        for val in td.values(True):
+            if is_tensor_collection(val):
+                assert val.is_locked
+                assert val._lock_parents_weakrefs
+        assert not td._lock_parents_weakrefs
+        q.put("succeeded")
+
+    def test_sharing_locked_td(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            pytest.skip("cannot lock sub-tds")
+        if td_name in ("td_h5",):
+            pytest.skip("h5 files should not be opened across different processes.")
+        q = mp.Queue(1)
+        try:
+            p = mp.Process(target=self.worker_lock, args=(td.lock_(), q))
+            p.start()
+            assert q.get(timeout=30) == "succeeded"
+        finally:
+            try:
+                p.join()
+            except AssertionError:
+                pass
+
     @staticmethod
     def add1(x):
         return x + 1

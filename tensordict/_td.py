@@ -1758,7 +1758,8 @@ class TensorDict(TensorDictBase):
         result = {
             key: val
             for key, val in self.__dict__.items()
-            if key not in ("_last_op", "_cache", "__last_op_queue")
+            if key
+            not in ("_last_op", "_cache", "__last_op_queue", "__lock_parents_weakrefs")
         }
         return result
 
@@ -1768,6 +1769,14 @@ class TensorDict(TensorDictBase):
         self._cache = None
         self.__last_op_queue = None
         self._last_op = None
+        if self._is_locked:
+            # this can cause avoidable overhead, as we will be locking the leaves
+            # then locking their parent, and the parent of the parent, every
+            # time re-locking tensordicts that have already been locked.
+            # To avoid this, we should lock only at the root, but it isn't easy
+            # to spot what the root is...
+            self._is_locked = False
+            self.lock_()
 
     # some custom methods for efficiency
     def items(

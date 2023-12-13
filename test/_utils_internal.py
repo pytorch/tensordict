@@ -126,7 +126,8 @@ class TestTensorDictsBase:
             batch_size=[4, 3, 2, 1],
             device=device,
         )
-        return torch.stack(list(td.unbind(1)), 1)
+        # we need to clone to avoid passing a views other tensors
+        return torch.stack([_td.clone() for _td in td.unbind(1)], 1)
 
     for device in get_available_devices():
         TYPES_DEVICES += [["nested_stacked_td", device]]
