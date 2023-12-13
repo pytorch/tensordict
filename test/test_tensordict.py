@@ -6451,7 +6451,10 @@ class TestTensorDictMP(TestTensorDictsBase):
             p.start()
             assert q.get(timeout=30) == "succeeded"
         finally:
-            p.join()
+            try:
+                p.join()
+            except AssertionError:
+                pass
 
     @staticmethod
     def add1(x):
