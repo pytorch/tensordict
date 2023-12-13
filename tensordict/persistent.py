@@ -125,6 +125,7 @@ class PersistentTensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
+    LOCKING = None
 
     def __init__(
         self,
@@ -147,7 +148,7 @@ class PersistentTensorDict(TensorDictBase):
         if backend != "h5":
             raise NotImplementedError
         if filename is not None and group is None:
-            self.file = h5py.File(filename, mode)
+            self.file = h5py.File(filename, mode, locking=self.LOCKING)
         elif group is not None:
             self.file = group
         else:
@@ -202,7 +203,7 @@ class PersistentTensorDict(TensorDictBase):
             A :class:`PersitentTensorDict` instance linked to the newly created file.
 
         """
-        file = h5py.File(filename, "w")
+        file = h5py.File(filename, "w", locking=cls.LOCKING)
         _has_batch_size = True
         if batch_size is None:
             if is_tensor_collection(input_dict):
@@ -931,7 +932,7 @@ class PersistentTensorDict(TensorDictBase):
                 )
                 tmpfile = tempfile.NamedTemporaryFile()
                 newfile = tmpfile.name
-            f_dest = h5py.File(newfile, "w")
+            f_dest = h5py.File(newfile, "w", locking=self.LOCKING)
             f_src = self.file
             for key in self.keys(include_nested=True, leaves_only=True):
                 key = self._process_key(key)
@@ -974,14 +975,25 @@ class PersistentTensorDict(TensorDictBase):
         state["file"] = None
         state["filename"] = filename
         state["group_name"] = group_name
+        state["__lock_parents_weakrefs"] = None
         return state
 
     def __setstate__(self, state):
-        state["file"] = h5py.File(state["filename"], mode=state["mode"])
+        state["file"] = h5py.File(
+            state["filename"], mode=state["mode"], locking=self.LOCKING
+        )
         if state["group_name"] != "/":
             state["file"] = state["file"][state["group_name"]]
         del state["group_name"]
         self.__dict__.update(state)
+        if self._is_locked:
+            # this can cause avoidable overhead, as we will be locking the leaves
+            # then locking their parent, and the parent of the parent, every
+            # time re-locking tensordicts that have already been locked.
+            # To avoid this, we should lock only at the root, but it isn't easy
+            # to spot what the root is...
+            self._is_locked = False
+            self.lock_()
 
     def _add_batch_dim(self, *, in_dim, vmap_level):
         raise RuntimeError("Persistent tensordicts cannot be used with vmap.")

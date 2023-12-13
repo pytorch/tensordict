@@ -273,12 +273,14 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["td_reset_bs", device]]
         TYPES_DEVICES_NOLAZY += [["td_reset_bs", device]]
 
+    temp_path_h5 = tempfile.TemporaryDirectory()
+
     def td_h5(
         self,
         device,
     ):
-        file = tempfile.NamedTemporaryFile()
-        filename = file.name
+        file = pathlib.Path(self.temp_path_h5.name) / "file.h5"
+        filename = str(file)
         td_h5 = PersistentTensorDict.from_dict(
             self.nested_td(device), filename=filename, device=device
         )
