@@ -2618,27 +2618,69 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         _ = str(td)
 
-    def test_memmap_(self, td_name, device):
+    @pytest.mark.parametrize("use_dir", [True, False])
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_(self, td_name, device, use_dir, tmpdir, num_threads):
         td = getattr(self, td_name)(device)
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(
                 RuntimeError,
                 match="Converting a sub-tensordict values to memmap cannot be done",
             ):
-                td.memmap_()
+                td.memmap_(
+                    prefix=tmpdir if use_dir else None,
+                    num_threads=num_threads,
+                    copy_existing=True,
+                )
+            return
         elif td_name in ("td_h5", "td_params"):
             with pytest.raises(
                 RuntimeError,
                 match="Cannot build a memmap TensorDict in-place",
             ):
-                td.memmap_()
+                td.memmap_(
+                    prefix=tmpdir if use_dir else None,
+                    num_threads=num_threads,
+                    copy_existing=True,
+                )
+            return
         else:
-            td.memmap_()
+            td.memmap_(
+                prefix=tmpdir if use_dir else None,
+                num_threads=num_threads,
+                copy_existing=True,
+            )
             assert td.is_memmap()
+        if use_dir:
+            assert_allclose_td(TensorDict.load_memmap(tmpdir), td)
 
-    def test_memmap_like(self, td_name, device):
+    @pytest.mark.parametrize("use_dir", [True, False])
+    @pytest.mark.parametrize("num_threads", [2])
+    def test_memmap_threads(self, td_name, device, use_dir, tmpdir, num_threads):
         td = getattr(self, td_name)(device)
-        tdmemmap = td.memmap_like()
+        tdmmap = td.memmap(
+            prefix=tmpdir if use_dir else None,
+            num_threads=num_threads,
+            copy_existing=True,
+        )
+        tdfuture = td.memmap(
+            prefix=tmpdir if use_dir else None,
+            num_threads=num_threads,
+            copy_existing=True,
+            return_early=True,
+        )
+        assert_allclose_td(td.cpu().detach(), tdmmap)
+        assert_allclose_td(td.cpu().detach(), tdfuture.result())
+
+    @pytest.mark.parametrize("use_dir", [True, False])
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_memmap_like(self, td_name, device, use_dir, tmpdir, num_threads):
+        td = getattr(self, td_name)(device)
+        tdmemmap = td.memmap_like(
+            prefix=tmpdir if use_dir else None,
+            num_threads=num_threads,
+            copy_existing=True,
+        )
         assert tdmemmap is not td
         for key in td.keys(True):
             assert td[key] is not tdmemmap[key]
@@ -2676,8 +2718,6 @@ class TestTensorDicts(TestTensorDictsBase):
             metadata = json.load(file)
         if td_name in ("stacked_td", "nested_stacked_td"):
             assert metadata["shape"] == list(td.tensordicts[0].batch_size)
-        elif td_name in ("unsqueezed_td", "squeezed_td", "permute_td"):
-            assert metadata["shape"] == list(td._source.batch_size)
         else:
             assert metadata["shape"] == list(td.batch_size)
 
@@ -6480,6 +6520,34 @@ def test_dense_stack_tds(stack_dim, nested_stack_dim):
     TestTensorDictsBase.TYPES_DEVICES,
 )
 class TestTensorDictMP(TestTensorDictsBase):
+    # Tests sharing a locked tensordict
+    @staticmethod
+    def worker_lock(td, q):
+        assert td.is_locked
+        for val in td.values(True):
+            if is_tensor_collection(val):
+                assert val.is_locked
+                assert val._lock_parents_weakrefs
+        assert not td._lock_parents_weakrefs
+        q.put("succeeded")
+
+    def test_sharing_locked_td(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name in ("sub_td", "sub_td2"):
+            pytest.skip("cannot lock sub-tds")
+        if td_name in ("td_h5",):
+            pytest.skip("h5 files should not be opened across different processes.")
+        q = mp.Queue(1)
+        try:
+            p = mp.Process(target=self.worker_lock, args=(td.lock_(), q))
+            p.start()
+            assert q.get(timeout=30) == "succeeded"
+        finally:
+            try:
+                p.join()
+            except AssertionError:
+                pass
+
     @staticmethod
     def add1(x):
         return x + 1

@@ -15,12 +15,14 @@ from typing import Any, Callable, Iterator, OrderedDict, Sequence
 
 import torch
 from functorch import dim as ftdim
+
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 
 from tensordict.base import (
     _is_tensor_collection,
+    _register_tensor_class,
     CompatibleType,
     NO_DEFAULT,
     T,
@@ -695,9 +697,18 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     def memmap_(
-        self, prefix: str | None = None, copy_existing: bool = False
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
     ) -> TensorDictBase:
-        raise RuntimeError("Cannot build a memmap TensorDict in-place.")
+        raise RuntimeError(
+            "Cannot build a memmap TensorDict in-place. Use memmap or memmap_like instead."
+        )
+
+    _memmap_ = TensorDict._memmap_
+
+    _load_memmap = TensorDict._load_memmap
 
     @_fallback_property
     def names(self):
@@ -849,7 +860,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_fallback
-    def memmap_like(self, prefix: str | None = None) -> T:
+    def memmap_like(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
+    ) -> T:
         ...
 
     @_fallback
@@ -1067,3 +1083,6 @@ def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
             "Consider calling tensordict.to_tensordict() first."
         ) from err
     return tdclone.data.apply_(lambda x: torch.empty_like(x, *args, **kwargs))
+
+
+_register_tensor_class(TensorDictParams)

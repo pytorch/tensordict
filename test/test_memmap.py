@@ -496,14 +496,16 @@ def test_filename(tmp_path):
     assert str(mt._filename) == str(tmp_path / "test.memmap")
 
     # memmap -> memmap keeps the filename
-    mt2 = MemoryMappedTensor.from_tensor(mt)
+    mt2 = MemoryMappedTensor.from_tensor(mt, filename=mt.filename)
     assert str(mt2._filename) == str(tmp_path / "test.memmap")
     assert mt2 is mt
 
-    # memmap -> memmap keeps the filename
-    mt3 = MemoryMappedTensor.from_tensor(mt, filename=tmp_path / "test.memmap")
-    assert str(mt3._filename) == str(tmp_path / "test.memmap")
-    assert mt3 is mt
+    # memmap -> memmap keeps id if no filename
+    mt0 = MemoryMappedTensor.from_tensor(
+        torch.zeros((), dtype=torch.float32).expand(10)
+    )
+    mt3 = MemoryMappedTensor.from_tensor(mt0)
+    assert mt3 is mt0
 
     # memmap -> memmap with a new filename
     with pytest.raises(RuntimeError, match="copy_existing"):

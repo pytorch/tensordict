@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import collections
+import concurrent.futures
 import dataclasses
 import inspect
 import math
@@ -1750,3 +1751,23 @@ def _prune_selected_keys(keys_to_update, prefix):
     return tuple(
         key[1:] for key in keys_to_update if isinstance(key, tuple) and key[0] == prefix
     )
+
+
+class TensorDictFuture:
+    """A custom future class for TensorDict multithreaded operations.
+
+    Args:
+        futures (list of futures): a list of concurrent.futures.Future objects to wait for.
+        resulting_td (TensorDictBase): instance that will result from the futures
+            completing.
+
+    """
+
+    def __init__(self, futures, resulting_td):
+        self.futures = futures
+        self.resulting_td = resulting_td
+
+    def result(self):
+        """Wait and returns the resulting tensordict."""
+        concurrent.futures.wait(self.futures)
+        return self.resulting_td
