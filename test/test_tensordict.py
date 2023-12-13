@@ -2655,6 +2655,24 @@ class TestTensorDicts(TestTensorDictsBase):
             assert_allclose_td(TensorDict.load_memmap(tmpdir), td)
 
     @pytest.mark.parametrize("use_dir", [True, False])
+    @pytest.mark.parametrize("num_threads", [2])
+    def test_memmap_threads(self, td_name, device, use_dir, tmpdir, num_threads):
+        td = getattr(self, td_name)(device)
+        tdmmap = td.memmap(
+            prefix=tmpdir if use_dir else None,
+            num_threads=num_threads,
+            copy_existing=True,
+        )
+        tdfuture = td.memmap(
+            prefix=tmpdir if use_dir else None,
+            num_threads=num_threads,
+            copy_existing=True,
+            return_early=True,
+        )
+        assert_allclose_td(td.cpu().detach(), tdmmap)
+        assert_allclose_td(td.cpu().detach(), tdfuture.result())
+
+    @pytest.mark.parametrize("use_dir", [True, False])
     @pytest.mark.parametrize("num_threads", [0, 2])
     def test_memmap_like(self, td_name, device, use_dir, tmpdir, num_threads):
         td = getattr(self, td_name)(device)
