@@ -1,4 +1,8 @@
 import argparse
+import os
+import pathlib
+import shutil
+import uuid
 from pathlib import Path
 
 import pytest
@@ -117,6 +121,19 @@ def test_serialize_weights_filesystem(benchmark):
 
     weights = TensorDict.from_module(t)
     benchmark(lambda: weights.memmap(num_threads=32))
+
+
+def test_serialize_weights_returnearly(benchmark, tmpdir):
+    """Tests efficiency of saving weights as memmap tensors, before writing is completed."""
+    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+        t = nn.Transformer()
+    datapath = pathlib.Path(tmpdir)
+    weights = TensorDict.from_module(t)
+    benchmark(
+        lambda: weights.memmap(
+            datapath / f"{uuid.uuid1()}", num_threads=32, return_early=True
+        )
+    )
 
 
 def test_serialize_weights_pickle(benchmark, tmpdir):

@@ -7,11 +7,15 @@ from __future__ import annotations
 
 import abc
 import collections
+import concurrent.futures
+import contextlib
 import json
 import numbers
 import warnings
 import weakref
 from collections.abc import MutableMapping
+
+from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from pathlib import Path
 from textwrap import indent
@@ -31,7 +35,6 @@ from typing import (
 
 import numpy as np
 import torch
-
 from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _is_tensorclass,
@@ -54,6 +57,7 @@ from tensordict.utils import (
     lock_blocked,
     NestedKey,
     prod,
+    TensorDictFuture,
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
@@ -1543,7 +1547,9 @@ class TensorDictBase(MutableMapping):
         self,
         prefix: str | None = None,
         copy_existing: bool = False,
+        *,
         num_threads: int = 0,
+        return_early: bool = False,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
 
@@ -1556,6 +1562,12 @@ class TensorDictBase(MutableMapping):
                 location according to prefix.
                 If ``True``, any existing Tensor will be copied to the new location.
 
+        Keyword Args:
+            num_threads (int, optional): the number of threads used to write the memmap
+                tensors. Defaults to `0`.
+            return_early (bool, optional): if ``True`` and ``num_threads>0``,
+                the method will return a future of the tensordict.
+
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
         entry).
@@ -1563,16 +1575,20 @@ class TensorDictBase(MutableMapping):
         because cross-process identity is not guaranteed anymore.
 
         Returns:
-            self.
+            self if ``return_early=False``, otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
 
         Note:
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
         if num_threads > 1:
-            from concurrent.futures import ThreadPoolExecutor
-
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            with (
+                ThreadPoolExecutor(max_workers=num_threads)
+                if not return_early
+                else contextlib.nullcontext()
+            ) as executor:
+                if return_early:
+                    executor = ThreadPoolExecutor(max_workers=num_threads)
                 futures = []
                 result = self._memmap_(
                     prefix=prefix,
@@ -1582,9 +1598,11 @@ class TensorDictBase(MutableMapping):
                     inplace=True,
                     like=False,
                 )
-                for future in futures:
-                    future.result()
-                return result
+                if not return_early:
+                    concurrent.futures.wait(futures)
+                    return result
+                else:
+                    return TensorDictFuture(futures, result)
         return self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -1598,7 +1616,9 @@ class TensorDictBase(MutableMapping):
         self,
         prefix: str | None = None,
         copy_existing: bool = False,
+        *,
         num_threads: int = 0,
+        return_early: bool = False,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
@@ -1611,6 +1631,12 @@ class TensorDictBase(MutableMapping):
                 location according to prefix.
                 If ``True``, any existing Tensor will be copied to the new location.
 
+        Keyword Args:
+            num_threads (int, optional): the number of threads used to write the memmap
+                tensors. Defaults to `0`.
+            return_early (bool, optional): if ``True`` and ``num_threads>0``,
+                the method will return a future of the tensordict.
+
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
         entry).
@@ -1618,16 +1644,21 @@ class TensorDictBase(MutableMapping):
         because cross-process identity is not guaranteed anymore.
 
         Returns:
-            A new tensordict with the tensors stored on disk.
+            A new tensordict with the tensors stored on disk if ``return_early=False``,
+            otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
 
         Note:
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
         if num_threads > 1:
-            from concurrent.futures import ThreadPoolExecutor
-
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            with (
+                ThreadPoolExecutor(max_workers=num_threads)
+                if not return_early
+                else contextlib.nullcontext()
+            ) as executor:
+                if return_early:
+                    executor = ThreadPoolExecutor(max_workers=num_threads)
                 futures = []
                 result = self._memmap_(
                     prefix=prefix,
@@ -1637,9 +1668,11 @@ class TensorDictBase(MutableMapping):
                     inplace=False,
                     like=False,
                 )
-                for future in futures:
-                    future.result()
-                return result
+                if not return_early:
+                    concurrent.futures.wait(futures)
+                    return result
+                else:
+                    return TensorDictFuture(futures, result)
         return self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -1653,13 +1686,26 @@ class TensorDictBase(MutableMapping):
         self,
         prefix: str | None = None,
         copy_existing: bool = False,
+        *,
         num_threads: int = 0,
+        return_early: bool = False,
     ) -> T:
         """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
 
         Args:
             prefix (str): directory prefix where the memory-mapped tensors will
                 be stored. The directory tree structure will mimic the tensordict's.
+            copy_existing (bool): If False (default), an exception will be raised if an
+                entry in the tensordict is already a tensor stored on disk
+                with an associated file, but is not saved in the correct
+                location according to prefix.
+                If ``True``, any existing Tensor will be copied to the new location.
+
+        Keyword Args:
+            num_threads (int, optional): the number of threads used to write the memmap
+                tensors. Defaults to `0`.
+            return_early (bool, optional): if ``True`` and ``num_threads>0``,
+                the method will return a future of the tensordict.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -1668,7 +1714,8 @@ class TensorDictBase(MutableMapping):
         because cross-process identity is not guaranteed anymore.
 
         Returns:
-            a new ``TensorDict`` instance with data stored as memory-mapped tensors.
+            A new ``TensorDict`` instance with data stored as memory-mapped tensors if ``return_early=False``,
+            otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
 
         .. note:: This is the recommended method to write a set of large buffers
             on disk, as :meth:`~.memmap_()` will copy the information, which can
@@ -1683,9 +1730,13 @@ class TensorDictBase(MutableMapping):
 
         """
         if num_threads > 1:
-            from concurrent.futures import ThreadPoolExecutor
-
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            with (
+                ThreadPoolExecutor(max_workers=num_threads)
+                if not return_early
+                else contextlib.nullcontext()
+            ) as executor:
+                if return_early:
+                    executor = ThreadPoolExecutor(max_workers=num_threads)
                 futures = []
                 result = self._memmap_(
                     prefix=prefix,
@@ -1695,9 +1746,11 @@ class TensorDictBase(MutableMapping):
                     inplace=False,
                     like=True,
                 )
-                for future in futures:
-                    future.result()
-                return result
+                if not return_early:
+                    concurrent.futures.wait(futures)
+                    return result
+                else:
+                    return TensorDictFuture(futures, result)
         return self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
