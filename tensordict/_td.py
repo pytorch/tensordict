@@ -232,34 +232,82 @@ class TensorDict(TensorDictBase):
                 for key, value in source.items():
                     self.set(key, value)
 
-    @staticmethod
+    @classmethod
     def from_module(
+        cls,
         module: torch.nn.Module,
         as_module: bool = False,
         lock: bool = False,
         use_state_dict: bool = False,
     ):
-        if use_state_dict:
-            return TensorDict(module.state_dict(), batch_size=[]).unflatten_keys(".")
+        result = cls._from_module(
+            module=module, as_module=as_module, use_state_dict=use_state_dict
+        )
+        if lock:
+            result.lock_()
+        return result
 
-        td_struct = TensorDict({}, [])
-        for key, param in module.named_parameters(recurse=False):
-            td_struct._set_str(key, param, validated=True, inplace=False)
-        for key, param in module.named_buffers(recurse=False):
-            td_struct._set_str(key, param, validated=True, inplace=False)
-        for key, mod in module.named_children():
-            td_struct._set_str(
-                key,
-                TensorDict.from_module(mod, as_module=False, lock=False),
-                validated=True,
-                inplace=False,
-            )
+    @classmethod
+    def _from_module(
+        cls,
+        module: torch.nn.Module,
+        as_module: bool = False,
+        use_state_dict: bool = False,
+        prefix="",
+    ):
+        destination = {}
+        if use_state_dict:
+            keep_vars = False
+            # do we need this feature atm?
+            local_metadata = {}
+            # if hasattr(destination, "_metadata"):
+            #     destination._metadata[prefix[:-1]] = local_metadata
+            for hook in module._state_dict_pre_hooks.values():
+                hook(module, prefix, keep_vars)
+            module._save_to_state_dict(destination, "", keep_vars)
+        else:
+            for name, param in module._parameters.items():
+                if param is None:
+                    continue
+                destination[name] = param
+            for name, buffer in module._buffers.items():
+                if buffer is None:
+                    continue
+                destination[name] = buffer
+
+        if use_state_dict:
+            for hook in module._state_dict_hooks.values():
+                hook_result = hook(module, destination, prefix, local_metadata)
+                if hook_result is not None:
+                    destination = hook_result
+        destination = TensorDict(destination, batch_size=[])
+        for name, submodule in module._modules.items():
+            if submodule is not None:
+                subtd = cls._from_module(
+                    module=submodule,
+                    as_module=as_module,
+                    use_state_dict=use_state_dict,
+                    prefix=prefix + name + ".",
+                )
+                destination._set_str(name, subtd, validated=True, inplace=False)
+        return destination
+
+        # td_struct = TensorDict({}, [])
+        # for key, param in module.named_parameters(recurse=False):
+        #     td_struct._set_str(key, param, validated=True, inplace=False)
+        # for key, param in module.named_buffers(recurse=False):
+        #     td_struct._set_str(key, param, validated=True, inplace=False)
+        # for key, mod in module.named_children():
+        #     td_struct._set_str(
+        #         key,
+        #         TensorDict.from_module(mod, as_module=False, lock=False),
+        #         validated=True,
+        #         inplace=False,
+        #     )
         if as_module:
             from tensordict.nn.params import TensorDictParams
 
             return TensorDictParams(td_struct, no_convert=True)
-        if lock:
-            td_struct.lock_()
         return td_struct
 
     def is_empty(self):

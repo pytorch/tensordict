@@ -6351,6 +6351,7 @@ def test_from_module_state_dict():
     params_reg = params_reg.select(*params_reg.keys(True, True))
 
     params_sd = TensorDict.from_module(net, use_state_dict=True)
+    params_sd = params_sd.select(*params_sd.keys(True, True))
     assert_allclose_td(params_sd, params_reg.apply(lambda x: x + 1))
 
     sd = net.state_dict()

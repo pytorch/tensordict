@@ -308,9 +308,13 @@ class TensorDictBase(MutableMapping):
         ...
 
     # Module interaction
-    @staticmethod
+    @classmethod
     def from_module(
-        module, as_module: bool = False, lock: bool = True, use_state_dict: bool = False
+        cls,
+        module,
+        as_module: bool = False,
+        lock: bool = True,
+        use_state_dict: bool = False,
     ):
         """Copies the params and buffers of a module in a tensordict.
 
