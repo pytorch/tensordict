@@ -8,18 +8,21 @@ import functools
 import inspect
 import numbers
 import re
+import weakref
 from copy import copy
 from functools import wraps
 from typing import Any, Callable, Iterator, OrderedDict, Sequence
 
 import torch
 from functorch import dim as ftdim
+
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 
 from tensordict.base import (
     _is_tensor_collection,
+    _register_tensor_class,
     CompatibleType,
     NO_DEFAULT,
     T,
@@ -291,7 +294,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         else:
             func = _maybe_make_param_or_buffer
         self._param_td = _apply_leaves(self._param_td, lambda x: func(x))
-        self._lock = lock
+        self._lock_content = lock
         if lock:
             self._param_td.lock_()
         self._reset_params()
@@ -382,6 +385,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     ) -> TensorDictBase:
         ...
 
+    @lock_blocked
     def update(
         self,
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
@@ -438,7 +442,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     ):
         raise RuntimeError(
             "Cannot call map on a TensorDictParams object. Convert it "
-            "to a detached tensordict first (``tensordict.data``) and call "
+            "to a detached tensordict first (through ``tensordict.data`` or ``tensordict.to_tensordict()``) and call "
             "map in a second time."
         )
 
@@ -693,9 +697,18 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     def memmap_(
-        self, prefix: str | None = None, copy_existing: bool = False
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
     ) -> TensorDictBase:
-        raise RuntimeError("Cannot build a memmap TensorDict in-place.")
+        raise RuntimeError(
+            "Cannot build a memmap TensorDict in-place. Use memmap or memmap_like instead."
+        )
+
+    _memmap_ = TensorDict._memmap_
+
+    _load_memmap = TensorDict._load_memmap
 
     @_fallback_property
     def names(self):
@@ -734,42 +747,27 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def shape(self) -> torch.Size:
         ...
 
-    def _propagate_lock(self, lock_ids=None):
+    def _propagate_lock(self, _lock_parents_weakrefs=None):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        is_root = lock_ids is None
-        if is_root:
-            lock_ids = set()
-        self._lock_id = self._lock_id.union(lock_ids)
-        lock_ids = lock_ids.union({id(self)})
-        _locked_tensordicts = []
+        if _lock_parents_weakrefs is None:
+            _lock_parents_weakrefs = []
+        self._lock_parents_weakrefs += _lock_parents_weakrefs
+        _lock_parents_weakrefs.append(weakref.ref(self))
         # we don't want to double-lock the _param_td attrbute which is locked by default
         if not self._param_td.is_locked:
-            self._param_td._propagate_lock(lock_ids)
-            _locked_tensordicts.append(self._param_td)
-        if is_root:
-            self._locked_tensordicts = _locked_tensordicts
-        else:
-            self._locked_tensordicts += _locked_tensordicts
+            self._param_td._propagate_lock(_lock_parents_weakrefs)
 
     @erase_cache
-    def _propagate_unlock(self, lock_ids=None):
-        if lock_ids is not None:
-            self._lock_id.difference_update(lock_ids)
-        else:
-            lock_ids = set()
+    def _propagate_unlock(self):
+        # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
-
-        unlocked_tds = [self]
-        lock_ids.add(id(self))
-        self._locked_tensordicts = []
 
         self._is_shared = False
         self._is_memmap = False
-        if self._param_td.is_locked:
-            unlocked_tds.extend(self._param_td._propagate_unlock(lock_ids))
 
-        return unlocked_tds
+        if not self._lock_content:
+            return self._param_td._propagate_unlock()
 
     unlock_ = TensorDict.unlock_
     lock_ = TensorDict.lock_
@@ -862,7 +860,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_fallback
-    def memmap_like(self, prefix: str | None = None) -> T:
+    def memmap_like(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
+    ) -> T:
         ...
 
     @_fallback
@@ -1080,3 +1083,6 @@ def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
             "Consider calling tensordict.to_tensordict() first."
         ) from err
     return tdclone.data.apply_(lambda x: torch.empty_like(x, *args, **kwargs))
+
+
+_register_tensor_class(TensorDictParams)

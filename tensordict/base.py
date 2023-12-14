@@ -7,10 +7,17 @@ from __future__ import annotations
 
 import abc
 import collections
+import concurrent.futures
+import contextlib
+import json
 import numbers
 import warnings
+import weakref
 from collections.abc import MutableMapping
+
+from concurrent.futures import ThreadPoolExecutor
 from copy import copy
+from pathlib import Path
 from textwrap import indent
 from typing import (
     Any,
@@ -28,7 +35,6 @@ from typing import (
 
 import numpy as np
 import torch
-
 from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _is_tensorclass,
@@ -51,6 +57,7 @@ from tensordict.utils import (
     lock_blocked,
     NestedKey,
     prod,
+    TensorDictFuture,
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
@@ -141,10 +148,6 @@ class TensorDictBase(MutableMapping):
 
         """
         ...
-
-    def __del__(self):
-        for td in getattr(self, "_locked_tensordicts", ()):
-            td._remove_lock(id(self))
 
     def __repr__(self) -> str:
         fields = _td_fields(self)
@@ -1528,8 +1531,27 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def memmap_(self, prefix: str | None = None, copy_existing: bool = False) -> T:
-        """Writes all tensors onto a corresponding memory-mapped Tensor.
+    def _memmap_(
+        self,
+        *,
+        prefix: str | None,
+        copy_existing: bool,
+        executor,
+        futures,
+        inplace,
+        like,
+    ) -> T:
+        ...
+
+    def memmap_(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        *,
+        num_threads: int = 0,
+        return_early: bool = False,
+    ) -> T:
+        """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
 
         Args:
             prefix (str): directory prefix where the memory-mapped tensors will
@@ -1540,6 +1562,12 @@ class TensorDictBase(MutableMapping):
                 location according to prefix.
                 If ``True``, any existing Tensor will be copied to the new location.
 
+        Keyword Args:
+            num_threads (int, optional): the number of threads used to write the memmap
+                tensors. Defaults to `0`.
+            return_early (bool, optional): if ``True`` and ``num_threads>0``,
+                the method will return a future of the tensordict.
+
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
         entry).
@@ -1547,21 +1575,67 @@ class TensorDictBase(MutableMapping):
         because cross-process identity is not guaranteed anymore.
 
         Returns:
-            self.
+            self if ``return_early=False``, otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
 
         Note:
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
-        ...
+        if num_threads > 1:
+            with (
+                ThreadPoolExecutor(max_workers=num_threads)
+                if not return_early
+                else contextlib.nullcontext()
+            ) as executor:
+                if return_early:
+                    executor = ThreadPoolExecutor(max_workers=num_threads)
+                futures = []
+                result = self._memmap_(
+                    prefix=prefix,
+                    copy_existing=copy_existing,
+                    executor=executor,
+                    futures=futures,
+                    inplace=True,
+                    like=False,
+                )
+                if not return_early:
+                    concurrent.futures.wait(futures)
+                    return result
+                else:
+                    return TensorDictFuture(futures, result)
+        return self._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            inplace=True,
+            futures=None,
+            executor=None,
+            like=False,
+        ).lock_()
 
-    @abc.abstractmethod
-    def memmap_like(self, prefix: str | None = None) -> T:
-        """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
+    def memmap(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        *,
+        num_threads: int = 0,
+        return_early: bool = False,
+    ) -> T:
+        """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
         Args:
             prefix (str): directory prefix where the memory-mapped tensors will
                 be stored. The directory tree structure will mimic the tensordict's.
+            copy_existing (bool): If False (default), an exception will be raised if an
+                entry in the tensordict is already a tensor stored on disk
+                with an associated file, but is not saved in the correct
+                location according to prefix.
+                If ``True``, any existing Tensor will be copied to the new location.
+
+        Keyword Args:
+            num_threads (int, optional): the number of threads used to write the memmap
+                tensors. Defaults to `0`.
+            return_early (bool, optional): if ``True`` and ``num_threads>0``,
+                the method will return a future of the tensordict.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -1570,7 +1644,78 @@ class TensorDictBase(MutableMapping):
         because cross-process identity is not guaranteed anymore.
 
         Returns:
-            a new ``TensorDict`` instance with data stored as memory-mapped tensors.
+            A new tensordict with the tensors stored on disk if ``return_early=False``,
+            otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
+
+        Note:
+            Serialising in this fashion might be slow with deeply nested tensordicts, so
+            it is not recommended to call this method inside a training loop.
+        """
+        if num_threads > 1:
+            with (
+                ThreadPoolExecutor(max_workers=num_threads)
+                if not return_early
+                else contextlib.nullcontext()
+            ) as executor:
+                if return_early:
+                    executor = ThreadPoolExecutor(max_workers=num_threads)
+                futures = []
+                result = self._memmap_(
+                    prefix=prefix,
+                    copy_existing=copy_existing,
+                    executor=executor,
+                    futures=futures,
+                    inplace=False,
+                    like=False,
+                )
+                if not return_early:
+                    concurrent.futures.wait(futures)
+                    return result
+                else:
+                    return TensorDictFuture(futures, result)
+        return self._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            inplace=False,
+            executor=None,
+            like=False,
+            futures=None,
+        ).lock_()
+
+    def memmap_like(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        *,
+        num_threads: int = 0,
+        return_early: bool = False,
+    ) -> T:
+        """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
+
+        Args:
+            prefix (str): directory prefix where the memory-mapped tensors will
+                be stored. The directory tree structure will mimic the tensordict's.
+            copy_existing (bool): If False (default), an exception will be raised if an
+                entry in the tensordict is already a tensor stored on disk
+                with an associated file, but is not saved in the correct
+                location according to prefix.
+                If ``True``, any existing Tensor will be copied to the new location.
+
+        Keyword Args:
+            num_threads (int, optional): the number of threads used to write the memmap
+                tensors. Defaults to `0`.
+            return_early (bool, optional): if ``True`` and ``num_threads>0``,
+                the method will return a future of the tensordict.
+
+        The TensorDict is then locked, meaning that any writing operations that
+        isn't in-place will throw an exception (eg, rename, set or remove an
+        entry).
+        Once the tensordict is unlocked, the memory-mapped attribute is turned to ``False``,
+        because cross-process identity is not guaranteed anymore.
+
+        Returns:
+            A new ``TensorDict`` instance with data stored as memory-mapped tensors if ``return_early=False``,
+            otherwise a :class:`~tensordict.utils.TensorDictFuture` instance.
 
         .. note:: This is the recommended method to write a set of large buffers
             on disk, as :meth:`~.memmap_()` will copy the information, which can
@@ -1584,6 +1729,63 @@ class TensorDictBase(MutableMapping):
             >>> buffer = td.memmap_like("/path/to/dataset")
 
         """
+        if num_threads > 1:
+            with (
+                ThreadPoolExecutor(max_workers=num_threads)
+                if not return_early
+                else contextlib.nullcontext()
+            ) as executor:
+                if return_early:
+                    executor = ThreadPoolExecutor(max_workers=num_threads)
+                futures = []
+                result = self._memmap_(
+                    prefix=prefix,
+                    copy_existing=copy_existing,
+                    executor=executor,
+                    futures=futures,
+                    inplace=False,
+                    like=True,
+                )
+                if not return_early:
+                    concurrent.futures.wait(futures)
+                    return result
+                else:
+                    return TensorDictFuture(futures, result)
+        return self._memmap_(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            inplace=False,
+            like=True,
+            executor=None,
+            futures=None,
+        ).lock_()
+
+    @classmethod
+    def load_memmap(cls, prefix: str | Path) -> T:
+        prefix = Path(prefix)
+
+        def load_metadata(filepath):
+            with open(filepath) as json_metadata:
+                metadata = json.load(json_metadata)
+            return metadata
+
+        metadata = load_metadata(prefix / "meta.json")
+        type_name = metadata["_type"]
+        if type_name != str(cls):
+            import tensordict
+
+            for other_cls in tensordict.base._ACCEPTED_CLASSES:
+                if str(other_cls) == type_name:
+                    return other_cls._load_memmap(prefix, metadata)
+            else:
+                raise RuntimeError(
+                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. Did you call _register_tensor_class(cls) on {type_name}?"
+                )
+        return cls._load_memmap(prefix, metadata)
+
+    @classmethod
+    @abc.abstractmethod
+    def _load_memmap(cls, prefix: Path, metadata: dict):
         ...
 
     # Key functionality: set, get, set_, set_at_, update, update_
@@ -3953,48 +4155,31 @@ class TensorDictBase(MutableMapping):
         else:
             self.unlock_()
 
-    def _propagate_lock(self, lock_ids=None):
+    def _propagate_lock(self, lock_parents_weakrefs=None):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        is_root = lock_ids is None
+        is_root = lock_parents_weakrefs is None
         if is_root:
-            lock_ids = set()
-        self._lock_id = self._lock_id.union(lock_ids)
-        lock_ids = lock_ids.union({id(self)})
-        _locked_tensordicts = []
+            lock_parents_weakrefs = []
+        self._lock_parents_weakrefs = (
+            self._lock_parents_weakrefs + lock_parents_weakrefs
+        )
+        lock_parents_weakrefs = copy(lock_parents_weakrefs) + [weakref.ref(self)]
         for value in self.values():
             if _is_tensor_collection(type(value)):
-                # add the received lock_ids (incl. self) to the tensordict's lock_ids
-                value._propagate_lock(lock_ids)
-                # add the child tensordict to the list of tensordicts to release
-                # from the current id at deletion
-                _locked_tensordicts.append(value)
-        if is_root:
-            self._locked_tensordicts = _locked_tensordicts
-        else:
-            self._locked_tensordicts += _locked_tensordicts
+                value._propagate_lock(lock_parents_weakrefs)
 
     @property
-    def _lock_id(self):
-        _lock_id = self.__dict__.get("__lock_id", None)
-        if _lock_id is None:
-            _lock_id = self.__dict__["__lock_id"] = set()
-        return _lock_id
+    def _lock_parents_weakrefs(self):
+        _lock_parents_weakrefs = self.__dict__.get("__lock_parents_weakrefs", None)
+        if _lock_parents_weakrefs is None:
+            self.__dict__["__lock_parents_weakrefs"] = []
+            _lock_parents_weakrefs = self.__dict__["__lock_parents_weakrefs"]
+        return _lock_parents_weakrefs
 
-    @_lock_id.setter
-    def _lock_id(self, value):
-        self.__dict__["__lock_id"] = value
-
-    @property
-    def _locked_tensordicts(self):
-        _locked_tensordicts = self.__dict__.get("__locked_tensordicts", None)
-        if _locked_tensordicts is None:
-            _locked_tensordicts = self.__dict__["__locked_tensordicts"] = []
-        return _locked_tensordicts
-
-    @_locked_tensordicts.setter
-    def _locked_tensordicts(self, value):
-        self.__dict__["__locked_tensordicts"] = value
+    @_lock_parents_weakrefs.setter
+    def _lock_parents_weakrefs(self, value: list):
+        self.__dict__["__lock_parents_weakrefs"] = value
 
     @as_decorator("is_locked")
     def lock_(self) -> T:
@@ -4003,42 +4188,50 @@ class TensorDictBase(MutableMapping):
         self._propagate_lock()
         return self
 
-    def _remove_lock(self, lock_id):
-        self._lock_id.discard(lock_id)
-        if self._locked_tensordicts:
-            for td in self._locked_tensordicts:
-                td._remove_lock(lock_id)
-
     @erase_cache
-    def _propagate_unlock(self, lock_ids=None):
-        if lock_ids is not None:
-            self._lock_id.difference_update(lock_ids)
-        else:
-            lock_ids = set()
+    def _propagate_unlock(self):
+        # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
-
-        unlocked_tds = [self]
-        lock_ids.add(id(self))
-        for value in self.values():
-            if _is_tensor_collection(type(value)):
-                unlocked_tds.extend(value._propagate_unlock(lock_ids))
-        self._locked_tensordicts = []
 
         self._is_shared = False
         self._is_memmap = False
-        return unlocked_tds
 
-    @as_decorator("is_locked")
-    def unlock_(self) -> T:
-        unlock_tds = self._propagate_unlock()
-        for td in unlock_tds:
-            if len(td._lock_id):
-                self.lock_()
+        sub_tds = []
+        for value in self.values():
+            if _is_tensor_collection(type(value)):
+                sub_tds.extend(value._propagate_unlock())
+                sub_tds.append(value)
+        return sub_tds
+
+    def _check_unlock(self):
+        for ref in self._lock_parents_weakrefs:
+            obj = ref()
+            # check if the locked parent exists and if it's locked
+            # we check _is_locked because it can be False or None in the case of Lazy stacks,
+            # but if we check obj.is_locked it will be True for this class.
+            if obj is not None and obj._is_locked:
                 raise RuntimeError(
                     "Cannot unlock a tensordict that is part of a locked graph. "
                     "Unlock the root tensordict first. If the tensordict is part of multiple graphs, "
                     "group the graphs under a common tensordict an unlock this root. "
+                    f"self: {self}, obj: {obj}"
                 )
+        try:
+            self._lock_parents_weakrefs = []
+        except AttributeError:
+            # Some tds (eg, LazyStack) have an automated way of creating the _lock_parents_weakref
+            pass
+
+    @as_decorator("is_locked")
+    def unlock_(self) -> T:
+        try:
+            sub_tds = self._propagate_unlock()
+            for sub_td in sub_tds:
+                sub_td._check_unlock()
+            self._check_unlock()
+        except RuntimeError as err:
+            self.lock_()
+            raise err
         return self
 
     # Conversion (device or dtype)

@@ -125,6 +125,7 @@ class PersistentTensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
+    LOCKING = None
 
     def __init__(
         self,
@@ -147,7 +148,7 @@ class PersistentTensorDict(TensorDictBase):
         if backend != "h5":
             raise NotImplementedError
         if filename is not None and group is None:
-            self.file = h5py.File(filename, mode)
+            self.file = h5py.File(filename, mode, locking=self.LOCKING)
         elif group is not None:
             self.file = group
         else:
@@ -202,7 +203,7 @@ class PersistentTensorDict(TensorDictBase):
             A :class:`PersitentTensorDict` instance linked to the newly created file.
 
         """
-        file = h5py.File(filename, "w")
+        file = h5py.File(filename, "w", locking=cls.LOCKING)
         _has_batch_size = True
         if batch_size is None:
             if is_tensor_collection(input_dict):
@@ -518,24 +519,26 @@ class PersistentTensorDict(TensorDictBase):
         return self
 
     def memmap_(
-        self, prefix: str | None = None, copy_existing: bool = False
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        num_threads: int = 0,
     ) -> PersistentTensorDict:
         raise RuntimeError(
             "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. Use `td.memmap()` instead."
         )
 
-    def memmap(
+    def _memmap_(
         self,
-        prefix: str | None = None,
-    ) -> TensorDict:
-        """Converts the PersistentTensorDict to a memmap equivalent."""
-        mm_like = self.memmap_like(prefix)
-        for key in self.keys(include_nested=True, leaves_only=True):
-            mm_val = mm_like[key]
-            mm_val._memmap_array[:] = self._get_array(key)
-        return mm_like
+        *,
+        prefix: str | None,
+        copy_existing: bool,
+        executor,
+        futures,
+        inplace,
+        like,
+    ) -> T:
 
-    def memmap_like(self, prefix: str | None = None) -> T:
         # re-implements this to make it faster using the meta-data
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
@@ -544,6 +547,7 @@ class PersistentTensorDict(TensorDictBase):
                 {
                     "shape": list(data.shape),
                     "device": str(data.device),
+                    "_type": str(self.__class__),
                 }
             )
             with open(filepath, "w") as json_metadata:
@@ -559,58 +563,78 @@ class PersistentTensorDict(TensorDictBase):
                 "memmap_like() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
-        tensordict = TensorDict(
-            {},
-            self.batch_size,
-            device=self.device,
-            names=self.names if self._has_names() else None,
+        dest = (
+            self
+            if inplace
+            else TensorDict(
+                {},
+                batch_size=self.batch_size,
+                _is_memmap=True,
+                _is_shared=False,
+                names=self.names if self._has_names() else None,
+                device=torch.device("cpu"),
+            )
         )
         for key, value in self._items_metadata():
             if not value["array"]:
-                value = self.get(key)
-                if prefix is not None:
-                    # ensure subdirectory exists
-                    os.makedirs(prefix / key, exist_ok=True)
-                    tensordict._set_str(
-                        key,
-                        value.memmap_like(
-                            prefix=prefix / key,
-                        ),
-                        inplace=False,
-                        validated=True,
-                    )
-                else:
-                    tensordict._set_str(
-                        key, value.memmap_like(), inplace=False, validated=True
-                    )
+                value = self._get_str(key)
+                dest._set_str(
+                    key,
+                    value._memmap_(
+                        prefix=prefix / key if prefix is not None else None,
+                        executor=executor,
+                        like=like,
+                        copy_existing=copy_existing,
+                        futures=futures,
+                        inplace=inplace,
+                    ),
+                    inplace=False,
+                    validated=True,
+                )
                 continue
             else:
+                value = self._get_str(key)
                 if prefix is not None:
                     metadata[key] = {
                         "dtype": str(value.dtype),
                         "shape": value.shape,
                         "device": str(value.device),
                     }
-                tensordict._set_str(
-                    key,
-                    MemoryMappedTensor.empty(
-                        value["shape"],
-                        # device="cpu",
-                        dtype=value["dtype"],
+
+                def _populate(
+                    tensordict=dest, key=key, value=value, prefix=prefix, like=like
+                ):
+                    val = MemoryMappedTensor.from_tensor(
+                        value,
                         filename=str(prefix / f"{key}.memmap")
                         if prefix is not None
                         else None,
-                    ),
-                    inplace=False,
-                    validated=True,
-                )
-        tensordict._is_memmap = True
-        tensordict._is_shared = False
-        tensordict._device = torch.device("cpu")
-        tensordict.lock_()
+                        copy_data=not like,
+                        copy_existing=copy_existing,
+                        existsok=True,
+                    )
+                    tensordict._set_str(
+                        key,
+                        val,
+                        inplace=False,
+                        validated=True,
+                    )
+
+                if executor is None:
+                    _populate()
+                else:
+                    futures.append(executor.submit(_populate))
+
         if prefix is not None:
-            save_metadata(self, prefix=prefix, metadata=metadata)
-        return tensordict
+            if executor is None:
+                save_metadata(dest, prefix / "meta.json", metadata)
+            else:
+                futures.append(
+                    executor.submit(save_metadata, dest, prefix / "meta.json", metadata)
+                )
+        return dest
+
+    _load_memmap = TensorDict._load_memmap
 
     def pin_memory(self):
         """Returns a new PersistentTensorDict where any given Tensor key returns a tensor with pin_memory=True.
@@ -908,7 +932,7 @@ class PersistentTensorDict(TensorDictBase):
                 )
                 tmpfile = tempfile.NamedTemporaryFile()
                 newfile = tmpfile.name
-            f_dest = h5py.File(newfile, "w")
+            f_dest = h5py.File(newfile, "w", locking=self.LOCKING)
             f_src = self.file
             for key in self.keys(include_nested=True, leaves_only=True):
                 key = self._process_key(key)
@@ -951,14 +975,25 @@ class PersistentTensorDict(TensorDictBase):
         state["file"] = None
         state["filename"] = filename
         state["group_name"] = group_name
+        state["__lock_parents_weakrefs"] = None
         return state
 
     def __setstate__(self, state):
-        state["file"] = h5py.File(state["filename"], mode=state["mode"])
+        state["file"] = h5py.File(
+            state["filename"], mode=state["mode"], locking=self.LOCKING
+        )
         if state["group_name"] != "/":
             state["file"] = state["file"][state["group_name"]]
         del state["group_name"]
         self.__dict__.update(state)
+        if self._is_locked:
+            # this can cause avoidable overhead, as we will be locking the leaves
+            # then locking their parent, and the parent of the parent, every
+            # time re-locking tensordicts that have already been locked.
+            # To avoid this, we should lock only at the root, but it isn't easy
+            # to spot what the root is...
+            self._is_locked = False
+            self.lock_()
 
     def _add_batch_dim(self, *, in_dim, vmap_level):
         raise RuntimeError("Persistent tensordicts cannot be used with vmap.")
