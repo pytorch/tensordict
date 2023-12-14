@@ -64,6 +64,7 @@ from tensordict.utils import (
     _sub_index,
     _unravel_key_to_tuple,
     as_decorator,
+    Buffer,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -290,25 +291,12 @@ class TensorDict(TensorDictBase):
                     prefix=prefix + name + ".",
                 )
                 destination._set_str(name, subtd, validated=True, inplace=False)
-        return destination
 
-        # td_struct = TensorDict({}, [])
-        # for key, param in module.named_parameters(recurse=False):
-        #     td_struct._set_str(key, param, validated=True, inplace=False)
-        # for key, param in module.named_buffers(recurse=False):
-        #     td_struct._set_str(key, param, validated=True, inplace=False)
-        # for key, mod in module.named_children():
-        #     td_struct._set_str(
-        #         key,
-        #         TensorDict.from_module(mod, as_module=False, lock=False),
-        #         validated=True,
-        #         inplace=False,
-        #     )
         if as_module:
             from tensordict.nn.params import TensorDictParams
 
-            return TensorDictParams(td_struct, no_convert=True)
-        return td_struct
+            return TensorDictParams(destination, no_convert=True)
+        return destination
 
     def is_empty(self):
         for _ in self._tensordict:
@@ -369,6 +357,8 @@ class TensorDict(TensorDictBase):
             def convert_type(x, y):
                 if isinstance(y, torch.nn.Parameter):
                     return torch.nn.Parameter(x)
+                if isinstance(y, Buffer):
+                    return Buffer(x)
                 return x
 
             input = state_dict.unflatten_keys(".").apply(convert_type, self)
@@ -2635,6 +2625,10 @@ class _TensorDictKeysView:
             tensordict = self.tensordict
         if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
             return tensordict._tensordict.items()
+        from tensordict.nn import TensorDictParams
+
+        if isinstance(tensordict, TensorDictParams):
+            return tensordict._param_td.items()
         if isinstance(tensordict, KeyedJaggedTensor):
             return tuple((key, tensordict[key]) for key in tensordict.keys())
         from tensordict._lazy import (
