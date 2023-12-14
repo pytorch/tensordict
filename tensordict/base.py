@@ -3511,15 +3511,15 @@ class TensorDictBase(MutableMapping):
             array = array.item()
         if isinstance(array, list):
             array = np.asarray(array)
-        if not isinstance(array, np.ndarray) and hasattr(array, 'numpy'):
+        if not isinstance(array, np.ndarray) and hasattr(array, "numpy"):
             # tf.Tensor with no shape can't be converted otherwise
             array = array.numpy()
         try:
             return torch.as_tensor(array, device=self.device)
         except Exception:
-            if hasattr(array, 'shape'):
+            if hasattr(array, "shape"):
                 return torch.full(array.shape, float("NaN"))
-            return torch.tensor(float('nan'))
+            return torch.tensor(float("nan"))
 
     @abc.abstractmethod
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T:
