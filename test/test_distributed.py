@@ -45,7 +45,7 @@ class TestDTensor:
     @classmethod
     def _make_tensordict(cls):
         module = MyDModule()
-        mesh = init_device_mesh(cls.device, (2,))
+        mesh = init_device_mesh(cls.device(), (2,))
 
         def shard_params(mod_name, mod, mesh):
             col_linear_placement = [Shard(0)]
