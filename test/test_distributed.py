@@ -59,7 +59,7 @@ class TestFSDP:
         return my_sharded_module
 
     @classmethod
-    def client(cls):
+    def client(cls, q):
         torch.distributed.init_process_group(
             "nccl",
             rank=1,
