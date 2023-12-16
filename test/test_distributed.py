@@ -55,8 +55,8 @@ class TestFSDP:
     def make_module(cls, device=None):
         with torch.device(f"cuda:{device}") if device is not None else torch.device("cuda"):
             my_module = cls.MyDModule()
-        print('sharding')
-        my_sharded_module = FSDP(my_module)
+            print('sharding')
+            my_sharded_module = FSDP(my_module, limit_all_gathers=False)
         return my_sharded_module
 
     @classmethod
@@ -67,7 +67,8 @@ class TestFSDP:
             world_size=2,
             init_method="tcp://localhost:10017",
         )
-        module = cls.make_module(1)
+        torch.cuda.set_device(1)
+        module = cls.make_module()
         print('module created on 1')
         q.put("done")
 
@@ -79,7 +80,8 @@ class TestFSDP:
             world_size=2,
             init_method="tcp://localhost:10017",
         )
-        module = cls.make_module(0)
+        torch.cuda.set_device(0)
+        module = cls.make_module()
         print('module created on 0')
         print('state dict')
         cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
