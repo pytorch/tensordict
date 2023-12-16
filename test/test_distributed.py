@@ -85,6 +85,7 @@ class TestFSDP:
         if rank==0:
             td.memmap(path)
             print('memmaped!')
+        dist.destroy_process_group()
 
     def test_fsdp_module(self, tmpdir):
         try:
