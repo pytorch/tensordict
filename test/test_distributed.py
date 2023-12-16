@@ -55,6 +55,7 @@ class TestFSDP:
     def make_module(cls, device=None):
         with torch.device(f"cuda:{device}") if device is not None else torch.device("cuda"):
             my_module = cls.MyDModule()
+        print('sharding')
         my_sharded_module = FSDP(my_module)
         return my_sharded_module
 
@@ -67,6 +68,7 @@ class TestFSDP:
             init_method="tcp://localhost:10017",
         )
         module = cls.make_module()
+        print('module created')
         q.put("done")
 
     @classmethod
@@ -78,8 +80,11 @@ class TestFSDP:
             init_method="tcp://localhost:10017",
         )
         module = cls.make_module()
+        print('module created')
         td = TensorDict.from_module(module, use_state_dict=True)
+        print('td created')
         td.memmap(path)
+        print('memmaped!')
         q.put("done")
 
     def test_fsdp_module(self, tmpdir):
