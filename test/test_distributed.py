@@ -15,20 +15,18 @@ from _pytest.fixtures import fixture
 from packaging.version import parse
 
 from tensordict import MemmapTensor, TensorDict
-from torch import distributed as dist, multiprocessing as mp
-from torch.distributed._tensor import Shard, distribute_module, init_device_mesh, distribute_tensor
-from torch import nn
+from torch import distributed as dist, multiprocessing as mp, nn
+from torch.distributed._tensor import (
+    DeviceMesh,
+    distribute_module,
+    distribute_tensor,
+    init_device_mesh,
+    Shard,
+)
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
 TIMEOUT = 100
 
-class MyDModule(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.fc1 = nn.Linear(8, 8)
-        self.fc2 = nn.Linear(8, 8)
-        self.relu = nn.ReLU()
-
-    def forward(self, input):
-        return self.relu(self.fc1(input) + self.fc2(input))
 
 @fixture
 def set_context():
@@ -37,15 +35,80 @@ def set_context():
     except Exception:
         print("context already set")
 
+
+@pytest.mark.skipif(not torch.cuda.device_count() >= 2, reason="not enough cuda devices")
+class TestFSDP:
+    class MyDModule(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc1 = nn.Linear(8, 8, bias=False)
+            self.fc2 = nn.Linear(8, 8, bias=False)
+            self.relu = nn.ReLU()
+            for p in self.parameters():
+                p.data.fill_(1.0)
+
+        def forward(self, input):
+            return self.relu(self.fc1(input) + self.fc2(input))
+
+    @classmethod
+    def make_module(cls, device_id):
+        my_module = cls.MyDModule()
+        my_sharded_module = FSDP(my_module, device_id=device_id)
+
+    @classmethod
+    def client(cls):
+        torch.distributed.init_process_group(
+            "nccl",
+            rank=1,
+            world_size=2,
+            init_method="tcp://localhost:10017",
+        )
+        module = cls.make_module(device_id=1)
+
+    @classmethod
+    def server(cls, path):
+        torch.distributed.init_process_group(
+            "nccl",
+            rank=0,
+            world_size=2,
+            init_method="tcp://localhost:10017",
+        )
+        module = cls.make_module(device_id=0)
+        td = TensorDict.from_module(module, use_state_dict=True)
+        td.memmap(path)
+
+    def test_fsdp_module(self, tmpdir):
+        server_worker = mp.Process(target=self.server, args=(tmpdir,))
+        client_worker = mp.Process(
+            target=self.client,
+        )
+
+        server_worker.start()
+        client_worker.start()
+        server_worker.join()
+        client_worker.join()
+        assert (TensorDict.load_memmap(tmpdir) == 1).all()
+
+
 class TestDTensor:
+    class MyDModule(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc1 = nn.Linear(8, 8, bias=False)
+            self.fc2 = nn.Linear(8, 8, bias=False)
+            self.relu = nn.ReLU()
+
+        def forward(self, input):
+            return self.relu(self.fc1(input) + self.fc2(input))
+
     @classmethod
     def device(cls):
         return "cuda" if torch.cuda.device_count() else "cpu"
 
     @classmethod
     def _make_tensordict(cls):
-        module = MyDModule()
-        mesh = init_device_mesh(cls.device(), (2,))
+        module = cls.MyDModule()
+        mesh = DeviceMesh(cls.device(), torch.arange(1, 3))
 
         def shard_params(mod_name, mod, mesh):
             col_linear_placement = [Shard(0)]
@@ -57,12 +120,7 @@ class TestDTensor:
                     )
                     mod.register_parameter(name, dist_param)
 
-
-        sharded_module = distribute_module(
-            module,
-            mesh,
-            partition_fn=shard_params
-            )
+        sharded_module = distribute_module(module, mesh, partition_fn=shard_params)
 
         return TensorDict.from_module(sharded_module)
 
@@ -70,12 +128,12 @@ class TestDTensor:
     def client(cls, queue):
         torch.distributed.init_process_group(
             "gloo" if cls.device() == "cpu" else "nccl",
-            rank=1,
-            world_size=2,
+            rank=2,
+            world_size=3,
             init_method="tcp://localhost:10017",
         )
         td = cls._make_tensordict()
-        print('weight on client', td['fc1', 'weight'])
+        td.apply(lambda t: t.full_tensor())
         msg = queue.get(timeout=TIMEOUT)
         assert msg == "done"
 
@@ -83,33 +141,54 @@ class TestDTensor:
     def server(cls, queue):
         torch.distributed.init_process_group(
             "gloo" if cls.device() == "cpu" else "nccl",
-            rank=0,
-            world_size=2,
+            rank=1,
+            world_size=3,
             init_method="tcp://localhost:10017",
         )
         td = cls._make_tensordict()
-        print('weight on server', td['fc1', 'weight'])
-        td.memmap()
-        print('memmaped!')
+        tdmemmap = td.memmap()
+        print("memmaped!")
+        for key, val in tdmemmap.items(True, True):
+            print(key, val)
         queue.put("yuppie")
+
+    @classmethod
+    def main(cls, main_queue, server_queue, client_queue):
+        torch.distributed.init_process_group(
+            "gloo" if cls.device() == "cpu" else "nccl",
+            rank=0,
+            world_size=3,
+            init_method="tcp://localhost:10017",
+        )
+        out = server_queue.get(timeout=TIMEOUT)
+        assert out == "yuppie"
+        # stop client
+        client_queue.put("done")
+        main_queue.put("completed")
 
     def test_dtensor(self, tmp_path):
         main_queue = mp.Queue(1)
+        server_queue = mp.Queue(1)
         client_queue = mp.Queue(1)
-        main_worker = mp.Process(target=type(self).server, args=(main_queue,))
-        secondary_worker = mp.Process(
-            target=type(self).client, args=(client_queue,),
+        main_worker = mp.Process(
+            target=self.main, args=(main_queue, server_queue, client_queue)
+        )
+        server_worker = mp.Process(target=self.server, args=(server_queue,))
+        client_worker = mp.Process(
+            target=self.client,
+            args=(client_queue,),
         )
 
         main_worker.start()
-        secondary_worker.start()
+        server_worker.start()
+        client_worker.start()
         try:
-            out = main_queue.get(timeout=TIMEOUT)
-            assert out == "yuppie"
-            client_queue.put("done")
+            assert main_queue.get(timeout=TIMEOUT) == "completed"
         finally:
             main_worker.join()
-            secondary_worker.join()
+            server_worker.join()
+            client_worker.join()
+
 
 class TestGather:
     @staticmethod
