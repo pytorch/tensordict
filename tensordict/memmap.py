@@ -22,6 +22,12 @@ from tensordict.utils import implement_for
 
 from torch.multiprocessing.reductions import ForkingPickler
 
+from torch import distributed as dist
+if dist.is_available():
+    from torch.distributed._tensor.api import DTensor
+else:
+    class DTensor(torch.Tensor):
+        ...
 
 class MemoryMappedTensor(torch.Tensor):
     """A Memory-mapped Tensor.
@@ -190,6 +196,9 @@ class MemoryMappedTensor(torch.Tensor):
         out.index = None
         out.parent_shape = input.shape
         if copy_data:
+            if isinstance(input, DTensor):
+                input = input.full_tensor()
+                print('full tensor', input)
             out.copy_(input)
         return out
 

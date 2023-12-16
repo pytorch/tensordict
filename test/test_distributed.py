@@ -16,9 +16,19 @@ from packaging.version import parse
 
 from tensordict import MemmapTensor, TensorDict
 from torch import distributed as dist, multiprocessing as mp
-
+from torch.distributed._tensor import Shard, distribute_module, init_device_mesh, distribute_tensor
+from torch import nn
 TIMEOUT = 100
 
+class MyDModule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(8, 8)
+        self.fc2 = nn.Linear(8, 8)
+        self.relu = nn.ReLU()
+
+    def forward(self, input):
+        return self.relu(self.fc1(input) + self.fc2(input))
 
 @fixture
 def set_context():
@@ -27,6 +37,75 @@ def set_context():
     except Exception:
         print("context already set")
 
+class TestDTensor:
+    @classmethod
+    def _make_tensordict(cls):
+        module = MyDModule()
+        mesh = init_device_mesh("cpu", (2,))
+
+        def shard_params(mod_name, mod, mesh):
+            col_linear_placement = [Shard(0)]
+            # shard fc1 and fc2
+            if isinstance(mod, nn.Linear):
+                for name, param in mod.named_parameters():
+                    dist_param = nn.Parameter(
+                        distribute_tensor(param, mesh, col_linear_placement)
+                    )
+                    mod.register_parameter(name, dist_param)
+
+
+        sharded_module = distribute_module(
+            module,
+            mesh,
+            partition_fn=shard_params
+            )
+
+        return TensorDict.from_module(sharded_module)
+
+    @classmethod
+    def client(cls, queue):
+        torch.distributed.init_process_group(
+            "gloo",
+            rank=1,
+            world_size=2,
+            init_method="tcp://localhost:10017",
+        )
+        td = cls._make_tensordict()
+        print('weight on client', td['fc1', 'weight'])
+        msg = queue.get(timeout=TIMEOUT)
+        assert msg == "done"
+
+    @classmethod
+    def server(cls, queue):
+        torch.distributed.init_process_group(
+            "gloo",
+            rank=0,
+            world_size=2,
+            init_method="tcp://localhost:10017",
+        )
+        td = cls._make_tensordict()
+        print('weight on server', td['fc1', 'weight'])
+        td.memmap()
+        print('memmaped!')
+        queue.put("yuppie")
+
+    def test_dtensor(self, tmp_path):
+        main_queue = mp.Queue(1)
+        client_queue = mp.Queue(1)
+        main_worker = mp.Process(target=type(self).server, args=(main_queue,))
+        secondary_worker = mp.Process(
+            target=type(self).client, args=(client_queue,),
+        )
+
+        main_worker.start()
+        secondary_worker.start()
+        try:
+            out = main_queue.get(timeout=TIMEOUT)
+            assert out == "yuppie"
+            client_queue.put("done")
+        finally:
+            main_worker.join()
+            secondary_worker.join()
 
 class TestGather:
     @staticmethod
