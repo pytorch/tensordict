@@ -81,6 +81,8 @@ class TestFSDP:
         )
         module = cls.make_module(0)
         print('module created on 0')
+        print('state dict')
+        print(module.state_dict())
         # td = TensorDict(module.state_dict(), []).unflatten_keys(".")
         # # td = TensorDict.from_module(module, use_state_dict=True)
         # print('td created')
