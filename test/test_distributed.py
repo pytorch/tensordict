@@ -83,6 +83,10 @@ class TestFSDP:
         q.put("done")
 
     def test_fsdp_module(self, tmpdir):
+        try:
+            mp.set_start_method("spawn")
+        except Exception:
+            print('start method already set to', mp.get_start_method())
         q = mp.Queue(2)
         server_worker = mp.Process(target=self.server, args=(tmpdir, q))
         client_worker = mp.Process(target=self.client, args=(q,))
