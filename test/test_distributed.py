@@ -64,6 +64,7 @@ class TestFSDP:
             rank=1,
             world_size=2,
             init_method="tcp://localhost:10017",
+            device_id=1,
         )
         module = cls.make_module()
 
@@ -74,6 +75,7 @@ class TestFSDP:
             rank=0,
             world_size=2,
             init_method="tcp://localhost:10017",
+            device_id=0,
         )
         module = cls.make_module()
         td = TensorDict.from_module(module, use_state_dict=True)
