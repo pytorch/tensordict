@@ -94,12 +94,7 @@ class TestFSDP:
             mp.set_start_method("spawn")
         except Exception:
             print('start method already set to', mp.get_start_method())
-        server_worker = mp.Process(target=self.worker, args=(0, tmpdir))
-        client_worker = mp.Process(target=self.worker, args=(1, tmpdir))
-        server_worker.start()
-        client_worker.start()
-        server_worker.join(timeout=TIMEOUT)
-        client_worker.join(timeout=TIMEOUT)
+        mp.spawn(target=self.worker, args=(tmpdir,))
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
 
