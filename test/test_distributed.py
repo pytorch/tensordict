@@ -60,7 +60,7 @@ class TestFSDP:
         return my_sharded_module
 
     @classmethod
-    def worker(cls, rank, path, q):
+    def worker(cls, rank, path):
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '10017'
 
