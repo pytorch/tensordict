@@ -94,7 +94,12 @@ class TestFSDP:
             mp.set_start_method("spawn")
         except Exception:
             print('start method already set to', mp.get_start_method())
-        mp.spawn(self.worker, args=(tmpdir,))
+        proc0 = mp.Process(target=self.worker, args=(0, tmpdir))
+        proc1 = mp.Process(target=self.worker, args=(1, tmpdir))
+        proc0.start()
+        proc1.start()
+        proc0.join(timeout=TIMEOUT)
+        proc1.join(timeout=TIMEOUT)
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
 
@@ -116,7 +121,7 @@ class TestDTensor:
     @classmethod
     def _make_tensordict(cls):
         module = cls.MyDModule()
-        mesh = DeviceMesh(cls.device(), torch.arange(1, 3))
+        mesh = DeviceMesh(cls.device(), torch.arange(2))
 
         def shard_params(mod_name, mod, mesh):
             col_linear_placement = [Shard(0)]
@@ -132,27 +137,12 @@ class TestDTensor:
 
         return TensorDict.from_module(sharded_module)
 
-    # @classmethod
-    # def client(cls, queue):
-    #     torch.distributed.init_process_group(
-    #         "gloo",
-    #         rank=2,
-    #         world_size=3,
-    #         init_method="tcp://localhost:10017",
-    #     )
-    #     td = cls._make_tensordict()
-    #     # TODO: we need this bit to call the gather on each worker
-    #     # but we don't want each worker to write a memmap!
-    #     td.apply(lambda t: t.full_tensor())
-    #     msg = queue.get(timeout=TIMEOUT)
-    #     assert msg == "done"
-
     @classmethod
     def worker(cls, rank, queue):
         torch.distributed.init_process_group(
             "gloo",
-            rank=1,
-            world_size=3,
+            rank=rank,
+            world_size=2,
             init_method="tcp://localhost:10017",
         )
         td = cls._make_tensordict()
@@ -168,40 +158,22 @@ class TestDTensor:
             td.apply(lambda t: t.full_tensor())
             queue.put("worker")
 
-    @classmethod
-    def main(cls, main_queue, server_queue, client_queue):
-        torch.distributed.init_process_group(
-            "nccl",
-            rank=0,
-            world_size=3,
-            init_method="tcp://localhost:10017",
-        )
-        out = server_queue.get(timeout=TIMEOUT)
-        assert out == "yuppie"
-        # stop client
-        client_queue.put("done")
-        main_queue.put("completed")
-
     def test_dtensor(self, tmp_path):
-        main_queue = mp.Queue(1)
+        try:
+            mp.set_start_method("spawn")
+        except Exception:
+            print('start method already set to', mp.get_start_method())
         server_queue = mp.Queue(1)
         client_queue = mp.Queue(1)
-        main_worker = mp.Process(
-            target=self.main, args=(main_queue, server_queue, client_queue)
-        )
-        server_worker = mp.Process(target=self.server, args=(server_queue,))
-        client_worker = mp.Process(
-            target=self.client,
-            args=(client_queue,),
-        )
+        server_worker = mp.Process(target=self.worker, args=(0, server_queue,))
+        client_worker = mp.Process(target=self.worker, args=(1, client_queue,))
 
-        main_worker.start()
         server_worker.start()
         client_worker.start()
         try:
-            assert main_queue.get(timeout=TIMEOUT) == "completed"
+            assert server_queue.get(timeout=TIMEOUT) == "memmaped"
+            assert client_queue.get(timeout=TIMEOUT) == "worker"
         finally:
-            main_worker.join()
             server_worker.join()
             client_worker.join()
 
