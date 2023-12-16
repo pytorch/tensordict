@@ -98,8 +98,10 @@ class TestFSDP:
 
         server_worker.start()
         client_worker.start()
-        for _ in range(2):
-            assert q.get(timeout=TIMEOUT) == "done"
+        assert q.get(timeout=TIMEOUT) == "done"
+        print('consumed')
+        assert q.get(timeout=TIMEOUT) == "done"
+        print('consumed')
         server_worker.join()
         client_worker.join()
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
@@ -148,6 +150,8 @@ class TestDTensor:
             init_method="tcp://localhost:10017",
         )
         td = cls._make_tensordict()
+        # TODO: we need this bit to call the gather on each worker
+        # but we don't want each worker to write a memmap!
         td.apply(lambda t: t.full_tensor())
         msg = queue.get(timeout=TIMEOUT)
         assert msg == "done"
