@@ -96,8 +96,8 @@ class TestFSDP:
         client_worker = mp.Process(target=self.worker, args=(1, tmpdir))
         server_worker.start()
         client_worker.start()
-        server_worker.join()
-        client_worker.join()
+        server_worker.join(timeout=TIMEOUT)
+        client_worker.join(timeout=TIMEOUT)
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
 
