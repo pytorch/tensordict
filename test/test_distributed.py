@@ -39,9 +39,13 @@ def set_context():
 
 class TestDTensor:
     @classmethod
+    def device(cls):
+        return "cuda" if torch.cuda.device_count() else "cpu"
+
+    @classmethod
     def _make_tensordict(cls):
         module = MyDModule()
-        mesh = init_device_mesh("cpu", (2,))
+        mesh = init_device_mesh(cls.device, (2,))
 
         def shard_params(mod_name, mod, mesh):
             col_linear_placement = [Shard(0)]
@@ -65,7 +69,7 @@ class TestDTensor:
     @classmethod
     def client(cls, queue):
         torch.distributed.init_process_group(
-            "gloo",
+            "gloo" if cls.device() == "cpu" else "nccl",
             rank=1,
             world_size=2,
             init_method="tcp://localhost:10017",
@@ -78,7 +82,7 @@ class TestDTensor:
     @classmethod
     def server(cls, queue):
         torch.distributed.init_process_group(
-            "gloo",
+            "gloo" if cls.device() == "cpu" else "nccl",
             rank=0,
             world_size=2,
             init_method="tcp://localhost:10017",
