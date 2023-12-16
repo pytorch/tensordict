@@ -75,15 +75,16 @@ class TestFSDP:
         print(f'module created on {rank}')
         dist.barrier()
         print('state dict')
-        cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-        with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
-            print(module.state_dict())
+        # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        # with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
+        #     print(module.state_dict())
 
         # td = TensorDict(module.state_dict(), []).unflatten_keys(".")
-        # # td = TensorDict.from_module(module, use_state_dict=True)
-        # print('td created')
-        # td.memmap(path)
-        # print('memmaped!')
+        td = TensorDict.from_module(module, use_state_dict=True)
+        print('td created')
+        if rank==0:
+            td.memmap(path)
+            print('memmaped!')
         q.put("done")
 
     def test_fsdp_module(self, tmpdir):
