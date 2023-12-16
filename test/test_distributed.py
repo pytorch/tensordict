@@ -94,7 +94,7 @@ class TestFSDP:
             mp.set_start_method("spawn")
         except Exception:
             print('start method already set to', mp.get_start_method())
-        mp.spawn(target=self.worker, args=(tmpdir,))
+        mp.spawn(self.worker, args=(tmpdir,))
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
 
@@ -111,7 +111,7 @@ class TestDTensor:
 
     @classmethod
     def device(cls):
-        return "cuda" if torch.cuda.device_count() else "cpu"
+        return "cpu"
 
     @classmethod
     def _make_tensordict(cls):
@@ -132,40 +132,46 @@ class TestDTensor:
 
         return TensorDict.from_module(sharded_module)
 
-    @classmethod
-    def client(cls, queue):
-        torch.distributed.init_process_group(
-            "gloo" if cls.device() == "cpu" else "nccl",
-            rank=2,
-            world_size=3,
-            init_method="tcp://localhost:10017",
-        )
-        td = cls._make_tensordict()
-        # TODO: we need this bit to call the gather on each worker
-        # but we don't want each worker to write a memmap!
-        td.apply(lambda t: t.full_tensor())
-        msg = queue.get(timeout=TIMEOUT)
-        assert msg == "done"
+    # @classmethod
+    # def client(cls, queue):
+    #     torch.distributed.init_process_group(
+    #         "gloo",
+    #         rank=2,
+    #         world_size=3,
+    #         init_method="tcp://localhost:10017",
+    #     )
+    #     td = cls._make_tensordict()
+    #     # TODO: we need this bit to call the gather on each worker
+    #     # but we don't want each worker to write a memmap!
+    #     td.apply(lambda t: t.full_tensor())
+    #     msg = queue.get(timeout=TIMEOUT)
+    #     assert msg == "done"
 
     @classmethod
-    def server(cls, queue):
+    def worker(cls, rank, queue):
         torch.distributed.init_process_group(
-            "gloo" if cls.device() == "cpu" else "nccl",
+            "gloo",
             rank=1,
             world_size=3,
             init_method="tcp://localhost:10017",
         )
         td = cls._make_tensordict()
-        tdmemmap = td.memmap()
-        print("memmaped!")
-        for key, val in tdmemmap.items(True, True):
-            print(key, val)
-        queue.put("yuppie")
+        if rank == 0:
+            tdmemmap = td.memmap()
+            print("memmaped!")
+            for key, val in tdmemmap.items(True, True):
+                print(key, val)
+            queue.put("memmaped")
+        else:
+            # TODO: we need this bit to call the gather on each worker
+            # but we don't want each worker to write a memmap!
+            td.apply(lambda t: t.full_tensor())
+            queue.put("worker")
 
     @classmethod
     def main(cls, main_queue, server_queue, client_queue):
         torch.distributed.init_process_group(
-            "gloo" if cls.device() == "cpu" else "nccl",
+            "nccl",
             rank=0,
             world_size=3,
             init_method="tcp://localhost:10017",
