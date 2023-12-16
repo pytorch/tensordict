@@ -67,7 +67,7 @@ class TestFSDP:
             world_size=2,
             init_method="tcp://localhost:10017",
         )
-        module = cls.make_module()
+        module = cls.make_module(1)
         print('module created on 1')
         q.put("done")
 
@@ -79,7 +79,7 @@ class TestFSDP:
             world_size=2,
             init_method="tcp://localhost:10017",
         )
-        module = cls.make_module()
+        module = cls.make_module(0)
         print('module created on 0')
         td = TensorDict(module.state_dict(), []).unflatten_keys(".")
         # td = TensorDict.from_module(module, use_state_dict=True)
