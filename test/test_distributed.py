@@ -56,7 +56,7 @@ class TestFSDP:
         with torch.device(f"cuda:{device}") if device is not None else torch.device("cuda"):
             my_module = cls.MyDModule()
             print('sharding')
-            my_sharded_module = FSDP(my_module, limit_all_gathers=False)
+            my_sharded_module = FSDP(my_module, device_id=device)
         return my_sharded_module
 
     @classmethod
@@ -68,7 +68,7 @@ class TestFSDP:
             init_method="tcp://localhost:10017",
         )
         torch.cuda.set_device(1)
-        module = cls.make_module()
+        module = cls.make_module(1)
         print('module created on 1')
         q.put("done")
 
@@ -81,12 +81,13 @@ class TestFSDP:
             init_method="tcp://localhost:10017",
         )
         torch.cuda.set_device(0)
-        module = cls.make_module()
+        module = cls.make_module(0)
         print('module created on 0')
         print('state dict')
-        cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-        with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
-            print(module.state_dict())
+        # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        # with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
+        #     print(module.state_dict())
+
         # td = TensorDict(module.state_dict(), []).unflatten_keys(".")
         # # td = TensorDict.from_module(module, use_state_dict=True)
         # print('td created')
