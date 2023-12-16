@@ -96,14 +96,15 @@ class TestFSDP:
         q1 = mp.Queue()
         server_worker = mp.Process(target=self.worker, args=(0, tmpdir, q0))
         client_worker = mp.Process(target=self.worker, args=(1, tmpdir, q1))
-
         server_worker.start()
         client_worker.start()
-        assert q1.get(timeout=TIMEOUT) == "done"
-        assert q0.get(timeout=TIMEOUT) == "done"
-        assert (TensorDict.load_memmap(tmpdir) == 1).all()
-        server_worker.join()
-        client_worker.join()
+        try:
+            assert q1.get(timeout=TIMEOUT) == "done"
+            assert q0.get(timeout=TIMEOUT) == "done"
+            assert (TensorDict.load_memmap(tmpdir) == 1).all()
+        finally:
+            server_worker.join()
+            client_worker.join()
 
 
 class TestDTensor:
