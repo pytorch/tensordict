@@ -61,6 +61,9 @@ class TestFSDP:
 
     @classmethod
     def client(cls, q):
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '10017'
+
         torch.distributed.init_process_group(
             "nccl",
             rank=1,
@@ -70,10 +73,14 @@ class TestFSDP:
         torch.cuda.set_device(1)
         module = cls.make_module(1)
         print('module created on 1')
+        dist.barrier()
         q.put("done")
 
     @classmethod
     def server(cls, path, q):
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '10017'
+
         torch.distributed.init_process_group(
             "nccl",
             rank=0,
@@ -83,6 +90,7 @@ class TestFSDP:
         torch.cuda.set_device(0)
         module = cls.make_module(0)
         print('module created on 0')
+        dist.barrier()
         print('state dict')
         cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
         with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
