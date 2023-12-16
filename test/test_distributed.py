@@ -7,6 +7,7 @@ import abc
 import argparse
 import os
 import sys
+import time
 
 import pytest
 import torch
@@ -67,9 +68,10 @@ class TestFSDP:
             device_id=1,
         )
         module = cls.make_module()
+        q.put("done")
 
     @classmethod
-    def server(cls, path):
+    def server(cls, path, q):
         torch.distributed.init_process_group(
             "nccl",
             rank=0,
@@ -80,15 +82,17 @@ class TestFSDP:
         module = cls.make_module()
         td = TensorDict.from_module(module, use_state_dict=True)
         td.memmap(path)
+        q.put("done")
 
     def test_fsdp_module(self, tmpdir):
-        server_worker = mp.Process(target=self.server, args=(tmpdir,))
-        client_worker = mp.Process(
-            target=self.client,
-        )
+        q = mp.Queue(2)
+        server_worker = mp.Process(target=self.server, args=(tmpdir, q))
+        client_worker = mp.Process(target=self.client, args=(q,))
 
         server_worker.start()
         client_worker.start()
+        for _ in range(2):
+            assert q.get() == "done"
         server_worker.join()
         client_worker.join()
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
