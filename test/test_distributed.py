@@ -52,8 +52,10 @@ class TestFSDP:
 
     @classmethod
     def make_module(cls, device_id):
-        my_module = cls.MyDModule()
+        with torch.device(f"cuda:{device_id}"):
+            my_module = cls.MyDModule()
         my_sharded_module = FSDP(my_module, device_id=device_id)
+        return my_sharded_module
 
     @classmethod
     def client(cls):
