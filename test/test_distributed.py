@@ -93,7 +93,7 @@ class TestFSDP:
         except Exception:
             print('start method already set to', mp.get_start_method())
         q0 = mp.Queue()
-        q1 = mp.Queue()maxsize=2)
+        q1 = mp.Queue()
         server_worker = mp.Process(target=self.worker, args=(0, tmpdir, q0))
         client_worker = mp.Process(target=self.worker, args=(1, tmpdir, q1))
 
