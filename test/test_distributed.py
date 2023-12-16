@@ -60,36 +60,19 @@ class TestFSDP:
         return my_sharded_module
 
     @classmethod
-    def client(cls, q):
+    def worker(cls, rank, path, q):
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '10017'
 
         torch.distributed.init_process_group(
             "nccl",
-            rank=1,
+            rank=rank,
             world_size=2,
             init_method="tcp://localhost:10017",
         )
-        torch.cuda.set_device(1)
-        module = cls.make_module(1)
-        print('module created on 1')
-        dist.barrier()
-        q.put("done")
-
-    @classmethod
-    def server(cls, path, q):
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '10017'
-
-        torch.distributed.init_process_group(
-            "nccl",
-            rank=0,
-            world_size=2,
-            init_method="tcp://localhost:10017",
-        )
-        torch.cuda.set_device(0)
-        module = cls.make_module(0)
-        print('module created on 0')
+        torch.cuda.set_device(rank)
+        module = cls.make_module(rank)
+        print(f'module created on {rank}')
         dist.barrier()
         print('state dict')
         cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
@@ -109,8 +92,8 @@ class TestFSDP:
         except Exception:
             print('start method already set to', mp.get_start_method())
         q = mp.Queue(2)
-        server_worker = mp.Process(target=self.server, args=(tmpdir, q))
-        client_worker = mp.Process(target=self.client, args=(q,))
+        server_worker = mp.Process(target=self.worker, args=(0, tmpdir, q))
+        client_worker = mp.Process(target=self.worker, args=(1, tmpdir, q))
 
         server_worker.start()
         client_worker.start()
