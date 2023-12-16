@@ -92,7 +92,7 @@ class TestFSDP:
         server_worker.start()
         client_worker.start()
         for _ in range(2):
-            assert q.get() == "done"
+            assert q.get(timeout=TIMEOUT) == "done"
         server_worker.join()
         client_worker.join()
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
