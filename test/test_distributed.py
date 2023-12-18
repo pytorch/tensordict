@@ -24,7 +24,11 @@ from torch.distributed._tensor import (
     init_device_mesh,
     Shard,
 )
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, FullStateDictConfig, StateDictType
+from torch.distributed.fsdp import (
+    FullStateDictConfig,
+    FullyShardedDataParallel as FSDP,
+    StateDictType,
+)
 
 TIMEOUT = 100
 
@@ -37,7 +41,9 @@ def set_context():
         print("context already set")
 
 
-@pytest.mark.skipif(not torch.cuda.device_count() >= 2, reason="not enough cuda devices")
+@pytest.mark.skipif(
+    not torch.cuda.device_count() >= 2, reason="not enough cuda devices"
+)
 class TestFSDP:
     class MyDModule(nn.Module):
         def __init__(self):
@@ -53,16 +59,18 @@ class TestFSDP:
 
     @classmethod
     def make_module(cls, device=None):
-        with torch.device(f"cuda:{device}") if device is not None else torch.device("cuda"):
+        with torch.device(f"cuda:{device}") if device is not None else torch.device(
+            "cuda"
+        ):
             my_module = cls.MyDModule()
-            print('sharding')
+            print("sharding")
             my_sharded_module = FSDP(my_module, device_id=device)
         return my_sharded_module
 
     @classmethod
     def worker(cls, rank, path):
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '10017'
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "10017"
 
         torch.distributed.init_process_group(
             "nccl",
@@ -72,28 +80,28 @@ class TestFSDP:
         )
         torch.cuda.set_device(rank)
         module = cls.make_module(rank)
-        print(f'module created on {rank}')
+        print(f"module created on {rank}")
         dist.barrier()
-        print('state dict')
+        print("state dict")
         # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
         # with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
         #     print(module.state_dict())
 
         # td = TensorDict(module.state_dict(), []).unflatten_keys(".")
         td = TensorDict.from_module(module, use_state_dict=True)
-        print('td created')
-        if rank==0:
+        print("td created")
+        if rank == 0:
             td.memmap(path)
-            print('memmaped!')
+            print("memmaped!")
         else:
-            print('passing')
+            print("passing")
         dist.destroy_process_group()
 
     def test_fsdp_module(self, tmpdir):
         try:
             mp.set_start_method("spawn")
         except Exception:
-            print('start method already set to', mp.get_start_method())
+            print("start method already set to", mp.get_start_method())
         proc0 = mp.Process(target=self.worker, args=(0, tmpdir))
         proc1 = mp.Process(target=self.worker, args=(1, tmpdir))
         proc0.start()
@@ -162,11 +170,23 @@ class TestDTensor:
         try:
             mp.set_start_method("spawn")
         except Exception:
-            print('start method already set to', mp.get_start_method())
+            print("start method already set to", mp.get_start_method())
         server_queue = mp.Queue(1)
         client_queue = mp.Queue(1)
-        server_worker = mp.Process(target=self.worker, args=(0, server_queue,))
-        client_worker = mp.Process(target=self.worker, args=(1, client_queue,))
+        server_worker = mp.Process(
+            target=self.worker,
+            args=(
+                0,
+                server_queue,
+            ),
+        )
+        client_worker = mp.Process(
+            target=self.worker,
+            args=(
+                1,
+                client_queue,
+            ),
+        )
 
         server_worker.start()
         client_worker.start()
