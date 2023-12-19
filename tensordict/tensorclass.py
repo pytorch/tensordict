@@ -11,6 +11,7 @@ import inspect
 import json
 import numbers
 import os
+import pickle
 import re
 import sys
 import warnings
@@ -26,6 +27,7 @@ import torch
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
+from tensordict.base import _register_tensor_class
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
 from tensordict.utils import (
@@ -33,6 +35,7 @@ from tensordict.utils import (
     _LOCK_ERROR,
     DeviceType,
     IndexType,
+    is_json_serializable,
     is_tensorclass,
     NestedKey,
 )
@@ -192,8 +195,8 @@ def tensorclass(cls: T) -> T:
     cls.memmap_like = TensorDictBase.memmap_like
     cls.memmap_ = TensorDictBase.memmap_
     cls.memmap = TensorDictBase.memmap
-    cls._load_memmap = classmethod(_load_memmap)
     cls.load_memmap = TensorDictBase.load_memmap
+    cls._load_memmap = classmethod(_load_memmap)
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
@@ -208,10 +211,7 @@ def tensorclass(cls: T) -> T:
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
-    tensordict_lib.base._ACCEPTED_CLASSES = (
-        *tensordict_lib.base._ACCEPTED_CLASSES,
-        cls,
-    )
+    _register_tensor_class(cls)
     return cls
 
 
@@ -254,6 +254,7 @@ def _init_wrapper(init: Callable) -> Callable:
         *args: Any,
         batch_size: Sequence[int] | torch.Size | int,
         device: DeviceType | None = None,
+        names: List[str] | None = None,
         **kwargs,
     ):
         for value, key in zip(args, self.__dataclass_fields__):
@@ -279,7 +280,11 @@ def _init_wrapper(init: Callable) -> Callable:
             )
 
         self._tensordict = TensorDict(
-            {}, batch_size=torch.Size(batch_size), device=device, _run_checks=False
+            {},
+            batch_size=torch.Size(batch_size),
+            device=device,
+            names=names,
+            _run_checks=False,
         )
         # To save non tensor data (Nested tensor classes also go here)
         self._non_tensordict = {}
@@ -288,6 +293,7 @@ def _init_wrapper(init: Callable) -> Callable:
     new_params = [
         inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY),
         inspect.Parameter("device", inspect.Parameter.KEYWORD_ONLY, default=None),
+        inspect.Parameter("names", inspect.Parameter.KEYWORD_ONLY, default=None),
     ]
     wrapper.__signature__ = init_sig.replace(parameters=params + new_params)
 
@@ -366,13 +372,16 @@ def _memmap_(
         def save_metadata(cls=cls, _non_tensordict=_non_tensordict, prefix=prefix):
             with open(prefix / "meta.json", "w") as f:
                 metadata = {"_type": str(cls)}
+                to_pickle = {}
                 for key, value in _non_tensordict.items():
-                    if (
-                        isinstance(value, (int, bool, str, float, dict, tuple, list))
-                        or value is None
-                    ):
+                    if is_json_serializable(value):
                         metadata[key] = value
+                    else:
+                        to_pickle[key] = value
                 json.dump(metadata, f)
+                if to_pickle:
+                    with open(prefix / "other.pickle", "wb") as pickle_file:
+                        pickle.dump(to_pickle, pickle_file)
 
         if executor is None:
             save_metadata()
@@ -400,6 +409,9 @@ def _memmap_(
 def _load_memmap(cls, prefix: Path, metadata: dict):
     del metadata["_type"]
     non_tensordict = copy(metadata)
+    if os.path.exists(prefix / "other.pickle"):
+        with open(prefix / "other.pickle", "rb") as pickle_file:
+            non_tensordict.update(pickle.load(pickle_file))
     td = TensorDict.load_memmap(prefix / "_tensordict")
     return cls._from_tensordict(td, non_tensordict)
 
@@ -1046,3 +1058,70 @@ def _unbind(self, dim: int):
         self._from_tensordict(td, non_tensordict=copy(self._non_tensordict))
         for td in self._tensordict.unbind(dim)
     )
+
+
+################
+# Custom classes
+# --------------
+
+
+@tensorclass
+class NonTensorData:
+    """A carrier for non-tensordict data.
+
+    This class can be used whenever non-tensor data needs to be carrier at
+    any level of a tensordict instance.
+
+    :class:`~tensordict.tensorclass.NonTensorData` instances can be created
+    explicitely or using :meth:`~tensordict.TensorDictBase.set_non_tensor`.
+
+    This class is serializable using :meth:`tensordict.TensorDictBase.memmap`
+    and related methods, and can be loaded through :meth:`~tensordict.TensorDictBase.load_memmap`.
+    If the content of the object is JSON-serializable, it will be serializsed in
+    the `meta.json` file in the directory pointed by the parent key of the `NoneTensorData`
+    object. If it isn't, serialization will fall back on pickle. This implies
+    that we assume that the content of this class is either json-serializable or
+    pickable, and it is the user responsibility to make sure that one of these
+    holds. We try to avoid pickling/unpickling objects for performance and security
+    reasons (as pickle can execute arbitrary code during loading).
+
+    Examples:
+        >>> # create an instance explicitly
+        >>> non_tensor = NonTensorData("a string!", batch_size=[]) # batch-size can be anything
+        >>> data = TensorDict({}, batch_size=[3])
+        >>> data.set_non_tensor(("nested", "key"), "a string!")
+        >>> assert isinstance(data.get(("nested", "key")), NonTensorData)
+        >>> assert data.get_non_tensor(("nested", "key")) == "a string!"
+        >>> # serialization
+        >>> class MyPickableClass:
+        ...     value = 10
+        >>> data.set_non_tensor("pickable", MyPickableClass())
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     data.memmap(tmpdir)
+        ...     loaded = TensorDict.load_memmap(tmpdir)
+        ...     # print directory path
+        ...     print_directory_tree(tmpdir)
+        Directory size: 511.00 B
+        tmp2cso9og_/
+            pickable/
+                _tensordict/
+                    meta.json
+                other.pickle
+                meta.json
+            nested/
+                key/
+                    _tensordict/
+                        meta.json
+                    meta.json
+                meta.json
+            meta.json
+        >>> assert loaded.get_non_tensor("pickable").value == 10
+
+    """
+
+    # Used to carry non-tensor data in a tensordict.
+    # The advantage of storing this in a tensorclass is that we don't need
+    # to patch tensordict with additional checks that will encur unwanted overhead
+    # and all the overhead falls back on this class.
+    data: Any

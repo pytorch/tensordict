@@ -1430,12 +1430,9 @@ def _expand_to_match_shape(
         )
     else:
         # tensordict
-        from tensordict import TensorDict
-
-        out = TensorDict(
-            {},
-            [*parent_batch_size, *_shape(tensor)[self_batch_dims:]],
-            device=self_device,
+        out = tensor.empty()
+        out.batch_size = torch.Size(
+            [*parent_batch_size, *_shape(tensor)[self_batch_dims:]]
         )
         return out
 
@@ -1771,3 +1768,21 @@ class TensorDictFuture:
         """Wait and returns the resulting tensordict."""
         concurrent.futures.wait(self.futures)
         return self.resulting_td
+
+
+def is_json_serializable(item):
+    if isinstance(item, dict):
+        for key, val in item.items():
+            # Per se, int, float and bool are serializable but not recoverable
+            # as such
+            if not isinstance(key, (str,)) or not is_json_serializable(val):
+                return False
+        else:
+            return True
+    if isinstance(item, (list, tuple, set)):
+        for val in item:
+            if not is_json_serializable(val):
+                return False
+        else:
+            return True
+    return isinstance(item, (str, int, float, bool)) or item is None

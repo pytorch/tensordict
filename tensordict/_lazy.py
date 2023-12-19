@@ -15,7 +15,7 @@ from collections import defaultdict
 from copy import copy, deepcopy
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterator, Sequence
+from typing import Any, Callable, Iterator, Sequence, Type
 
 import numpy as np
 import torch
@@ -1057,10 +1057,16 @@ class LazyStackedTensorDict(TensorDictBase):
         self._batch_size = new_size
 
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _LazyStackedTensorDictKeysView:
         keys = _LazyStackedTensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
         )
         return keys
 
@@ -2195,9 +2201,14 @@ class _CustomOpTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
-        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only)
+        return self._source.keys(
+            include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+        )
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = True
