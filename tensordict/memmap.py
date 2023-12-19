@@ -28,7 +28,7 @@ if dist.is_available():
     from torch.distributed._tensor.api import DTensor
 else:
 
-    class DTensor(torch.Tensor):
+    class DTensor(torch.Tensor):  #noqa: D101
         ...
 
 

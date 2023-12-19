@@ -7,7 +7,6 @@ import abc
 import argparse
 import os
 import sys
-import time
 
 import pytest
 import torch
@@ -21,13 +20,13 @@ from torch.distributed._tensor import (
     DeviceMesh,
     distribute_module,
     distribute_tensor,
-    init_device_mesh,
+    # init_device_mesh,
     Shard,
 )
 from torch.distributed.fsdp import (
-    FullStateDictConfig,
+    # FullStateDictConfig,
     FullyShardedDataParallel as FSDP,
-    StateDictType,
+    # StateDictType,
 )
 
 TIMEOUT = 100
