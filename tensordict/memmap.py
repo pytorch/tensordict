@@ -24,11 +24,14 @@ from torch import distributed as dist
 
 from torch.multiprocessing.reductions import ForkingPickler
 
-if dist.is_available():
-    from torch.distributed._tensor.api import DTensor
-else:
+try:
+    if dist.is_available():
+        from torch.distributed._tensor.api import DTensor
+    else:
+        raise ImportError
+except ImportError:
 
-    class DTensor(torch.Tensor):  #noqa: D101
+    class DTensor(torch.Tensor):  # noqa: D101
         ...
 
 
