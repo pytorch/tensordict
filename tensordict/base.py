@@ -2497,7 +2497,7 @@ class TensorDictBase(MutableMapping):
 
         """
         if is_leaf is None:
-            is_leaf = default_is_leaf
+            is_leaf = _default_is_leaf
 
         # check the conditions once only
         if include_nested and leaves_only:
@@ -2550,7 +2550,7 @@ class TensorDictBase(MutableMapping):
 
         """
         if is_leaf is None:
-            is_leaf = default_is_leaf
+            is_leaf = _default_is_leaf
         # check the conditions once only
         if include_nested and leaves_only:
             for k in self.keys():
@@ -4577,7 +4577,7 @@ def is_tensor_collection(datatype: type | Any) -> bool:
     return _is_tensor_collection(datatype)
 
 
-def default_is_leaf(cls: Type) -> bool:
+def _default_is_leaf(cls: Type) -> bool:
     from tensordict.tensorclass import NonTensorData
 
     if _is_tensor_collection(cls):

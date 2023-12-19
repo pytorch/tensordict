@@ -9,7 +9,7 @@ from __future__ import annotations
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, Callable, List, Type
+from typing import Any, Callable, Type
 
 from tensordict._td import _unravel_key_to_tuple
 from torch import multiprocessing as mp
@@ -29,7 +29,7 @@ import os
 import numpy as np
 import torch
 from tensordict._td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
-from tensordict.base import default_is_leaf, is_tensor_collection, T, TensorDictBase
+from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
@@ -421,7 +421,7 @@ class PersistentTensorDict(TensorDictBase):
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> _PersistentTDKeysView:
-        if is_leaf not in (None, default_is_leaf):
+        if is_leaf not in (None, _default_is_leaf):
             raise ValueError(
                 f"is_leaf {is_leaf} is not supported within tensordicts of type {type(self)}."
             )

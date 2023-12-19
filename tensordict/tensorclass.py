@@ -19,7 +19,7 @@ from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Sequence, TypeVar
+from typing import Any, Callable, List, Sequence, TypeVar
 
 import tensordict as tensordict_lib
 
@@ -32,10 +32,10 @@ from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
 from tensordict.utils import (
     _get_repr,
+    _is_json_serializable,
     _LOCK_ERROR,
     DeviceType,
     IndexType,
-    is_json_serializable,
     is_tensorclass,
     NestedKey,
 )
@@ -374,7 +374,7 @@ def _memmap_(
                 metadata = {"_type": str(cls)}
                 to_pickle = {}
                 for key, value in _non_tensordict.items():
-                    if is_json_serializable(value):
+                    if _is_json_serializable(value):
                         metadata[key] = value
                     else:
                         to_pickle[key] = value

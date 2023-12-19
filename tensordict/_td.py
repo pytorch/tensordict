@@ -23,11 +23,11 @@ import torch
 from functorch import dim as ftdim
 from tensordict.base import (
     _ACCEPTED_CLASSES,
+    _default_is_leaf,
     _is_tensor_collection,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
-    default_is_leaf,
     is_tensor_collection,
     NO_DEFAULT,
     T,
@@ -2521,13 +2521,13 @@ class _TensorDictKeysView:
         tensordict: T,
         include_nested: bool,
         leaves_only: bool,
-        is_leaf: func = None,
+        is_leaf: Callable[[Type], bool] = None,
     ) -> None:
         self.tensordict = tensordict
         self.include_nested = include_nested
         self.leaves_only = leaves_only
         if is_leaf is None:
-            is_leaf = default_is_leaf
+            is_leaf = _default_is_leaf
         self.is_leaf = is_leaf
 
     def __iter__(self) -> Iterable[str] | Iterable[tuple[str, ...]]:

@@ -1770,18 +1770,18 @@ class TensorDictFuture:
         return self.resulting_td
 
 
-def is_json_serializable(item):
+def _is_json_serializable(item):
     if isinstance(item, dict):
         for key, val in item.items():
             # Per se, int, float and bool are serializable but not recoverable
             # as such
-            if not isinstance(key, (str,)) or not is_json_serializable(val):
+            if not isinstance(key, (str,)) or not _is_json_serializable(val):
                 return False
         else:
             return True
     if isinstance(item, (list, tuple, set)):
         for val in item:
-            if not is_json_serializable(val):
+            if not _is_json_serializable(val):
                 return False
         else:
             return True
