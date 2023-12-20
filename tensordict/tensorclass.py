@@ -137,8 +137,6 @@ def tensorclass(cls: T) -> T:
         ):
             return NotImplemented
 
-        escape_conversion = func in (torch.stack,)
-
         if kwargs is None:
             kwargs = {}
 
@@ -149,9 +147,8 @@ def tensorclass(cls: T) -> T:
             tensorclass_instance = kwargs.get("input", kwargs["tensors"])
         if isinstance(tensorclass_instance, (tuple, list)):
             tensorclass_instance = tensorclass_instance[0]
-        if not escape_conversion:
-            args = tuple(_arg_to_tensordict(arg) for arg in args)
-            kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
+        args = tuple(_arg_to_tensordict(arg) for arg in args)
+        kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
 
         result = TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
         if isinstance(result, (list, tuple)):
@@ -159,9 +156,7 @@ def tensorclass(cls: T) -> T:
                 _from_tensordict_with_copy(tensorclass_instance, tensordict_result)
                 for tensordict_result in result
             )
-        if not escape_conversion:
-            return _from_tensordict_with_copy(tensorclass_instance, result)
-        return result
+        return _from_tensordict_with_copy(tensorclass_instance, result)
 
     cls = dataclass(cls)
     expected_keys = set(cls.__dataclass_fields__)
@@ -175,7 +170,8 @@ def tensorclass(cls: T) -> T:
     cls.__init__ = _init_wrapper(cls.__init__)
     cls._from_tensordict = classmethod(_from_tensordict_wrapper(expected_keys))
     cls.from_tensordict = cls._from_tensordict
-    cls.__torch_function__ = classmethod(__torch_function__)
+    if not hasattr(cls, "__torch_function__"):
+        cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
     cls.__getattribute__ = _getattribute_wrapper(cls.__getattribute__)
@@ -1322,3 +1318,43 @@ class NonTensorData:
         from tensordict._lazy import LazyStackedTensorDict
 
         return LazyStackedTensorDict(*list_of_non_tensor, stack_dim=dim)
+
+    def __torch_function__(
+        cls,
+        func: Callable,
+        types: tuple[type, ...],
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> Callable:
+        # A modified version of __torch_function__ to account for the different behaviour
+        # of stack, which should return lazy stacks of data of data does not match.
+        if func not in _TD_PASS_THROUGH or not all(
+            issubclass(t, (Tensor, cls)) for t in types
+        ):
+            return NotImplemented
+
+        escape_conversion = func in (torch.stack,)
+
+        if kwargs is None:
+            kwargs = {}
+
+        # get the output type from the arguments / keyword arguments
+        if len(args) > 0:
+            tensorclass_instance = args[0]
+        else:
+            tensorclass_instance = kwargs.get("input", kwargs["tensors"])
+        if isinstance(tensorclass_instance, (tuple, list)):
+            tensorclass_instance = tensorclass_instance[0]
+        if not escape_conversion:
+            args = tuple(_arg_to_tensordict(arg) for arg in args)
+            kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
+
+        result = TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
+        if isinstance(result, (list, tuple)):
+            return result.__class__(
+                _from_tensordict_with_copy(tensorclass_instance, tensordict_result)
+                for tensordict_result in result
+            )
+        if not escape_conversion:
+            return _from_tensordict_with_copy(tensorclass_instance, result)
+        return result
