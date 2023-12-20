@@ -16,7 +16,7 @@ from tensordict.functional import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import is_memmap, MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
-from tensordict.tensorclass import tensorclass
+from tensordict.tensorclass import NonTensorData, tensorclass
 from tensordict.utils import assert_allclose_td, is_batchedtensor, is_tensorclass
 
 try:
@@ -46,6 +46,7 @@ __all__ = [
     "PersistentTensorDict",
     "tensorclass",
     "dense_stack_tds",
+    "NonTensorData",
 ]
 
 # from tensordict._pytree import *

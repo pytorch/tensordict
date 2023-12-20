@@ -15,7 +15,7 @@ from collections import defaultdict
 from copy import copy, deepcopy
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterator, Sequence
+from typing import Any, Callable, Iterator, Sequence, Type
 
 import numpy as np
 import torch
@@ -183,11 +183,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 "at least one tensordict must be provided to "
                 "StackedTensorDict to be instantiated"
             )
-        if not isinstance(tensordicts[0], TensorDictBase):
-            raise TypeError(
-                f"Expected input to be TensorDictBase instance"
-                f" but got {type(tensordicts[0])} instead."
-            )
         if stack_dim < 0:
             raise RuntimeError(
                 f"stack_dim must be non negative, got stack_dim={stack_dim}"
@@ -196,7 +191,7 @@ class LazyStackedTensorDict(TensorDictBase):
         device = tensordicts[0].device
 
         for td in tensordicts[1:]:
-            if not isinstance(td, TensorDictBase):
+            if not is_tensor_collection(td):
                 raise TypeError(
                     "Expected all inputs to be TensorDictBase instances but got "
                     f"{type(td)} instead."
@@ -1057,10 +1052,16 @@ class LazyStackedTensorDict(TensorDictBase):
         self._batch_size = new_size
 
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _LazyStackedTensorDictKeysView:
         keys = _LazyStackedTensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
         )
         return keys
 
@@ -1970,6 +1971,7 @@ class LazyStackedTensorDict(TensorDictBase):
     unlock = _renamed_inplace_method(unlock_)
 
     __xor__ = TensorDict.__xor__
+    __or__ = TensorDict.__or__
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
     _convert_to_tensordict = TensorDict._convert_to_tensordict
@@ -2195,9 +2197,14 @@ class _CustomOpTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
-        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only)
+        return self._source.keys(
+            include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+        )
 
     def select(
         self, *keys: str, inplace: bool = False, strict: bool = True
@@ -2444,6 +2451,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return self._source.sorted_keys
 
     __xor__ = TensorDict.__xor__
+    __or__ = TensorDict.__or__
     __eq__ = TensorDict.__eq__
     __ne__ = TensorDict.__ne__
     __setitem__ = TensorDict.__setitem__
