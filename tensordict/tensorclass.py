@@ -1205,6 +1205,7 @@ class NonTensorData:
 
         old_eq = self.__class__.__eq__
         if old_eq is _eq:
+            # Patch only the first time a class is created
 
             @functools.wraps(_eq)
             def __eq__(self, other):
