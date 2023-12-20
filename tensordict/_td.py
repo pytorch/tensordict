@@ -15,7 +15,7 @@ from copy import copy
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterable, Iterator, List, Sequence
+from typing import Any, Callable, Iterable, Iterator, List, Sequence, Type
 from warnings import warn
 
 import numpy as np
@@ -23,6 +23,7 @@ import torch
 from functorch import dim as ftdim
 from tensordict.base import (
     _ACCEPTED_CLASSES,
+    _default_is_leaf,
     _is_tensor_collection,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
@@ -381,10 +382,34 @@ class TensorDict(TensorDictBase):
             )
         return True
 
+    def __or__(self, other: object) -> T | bool:
+        if _is_tensorclass(other):
+            return other | self
+        if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                raise KeyError(
+                    f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
+                )
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 | other.get(key)
+            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value | other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
     def __eq__(self, other: object) -> T | bool:
         if is_tensorclass(other):
             return other == self
-        if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
+        if isinstance(other, (dict,)):
+            other = self.empty(recurse=True).update(other)
+        if _is_tensor_collection(other.__class__):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -392,7 +417,7 @@ class TensorDict(TensorDictBase):
             d = {}
             for key, item1 in self.items():
                 d[key] = item1 == other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
         if isinstance(other, (numbers.Number, Tensor)):
             return TensorDict(
                 {key: value == other for key, value in self.items()},
@@ -1737,21 +1762,30 @@ class TensorDict(TensorDictBase):
         return out
 
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
         if not include_nested and not leaves_only:
             return self._tensordict.keys()
         else:
             return self._nested_keys(
-                include_nested=include_nested, leaves_only=leaves_only
+                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             )
 
     # @cache  # noqa: B019
     def _nested_keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
         return _TensorDictKeysView(
-            self, include_nested=include_nested, leaves_only=leaves_only
+            self,
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=is_leaf,
         )
 
     def __getstate__(self):
@@ -1780,21 +1814,31 @@ class TensorDict(TensorDictBase):
 
     # some custom methods for efficiency
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
             return self._tensordict.items()
         else:
-            return super().items(include_nested=include_nested, leaves_only=leaves_only)
+            return super().items(
+                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            )
 
     def values(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
             return self._tensordict.values()
         else:
             return super().values(
-                include_nested=include_nested, leaves_only=leaves_only
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=is_leaf,
             )
 
 
@@ -1947,8 +1991,13 @@ class _SubTensorDict(TensorDictBase):
                     parent.batch_size, value, self.batch_dims, self.device
                 )
                 for _key, _tensor in value.items():
-                    value_expand[_key] = _expand_to_match_shape(
-                        parent.batch_size, _tensor, self.batch_dims, self.device
+                    value_expand._set_str(
+                        _key,
+                        _expand_to_match_shape(
+                            parent.batch_size, _tensor, self.batch_dims, self.device
+                        ),
+                        inplace=inplace,
+                        validated=validated,
                     )
             else:
                 value_expand = torch.zeros(
@@ -1963,7 +2012,6 @@ class _SubTensorDict(TensorDictBase):
                     value_expand.share_memory_()
                 elif self.is_memmap():
                     value_expand = MemoryMappedTensor.from_tensor(value_expand)
-
             parent._set_str(key, value_expand, inplace=False, validated=validated)
 
         parent._set_at_str(key, value, self.idx, validated=validated)
@@ -2021,9 +2069,14 @@ class _SubTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
-        return self._source.keys(include_nested=include_nested, leaves_only=leaves_only)
+        return self._source.keys(
+            include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+        )
 
     def entry_class(self, key: NestedKey) -> type:
         source_type = type(self._source.get(key))
@@ -2058,6 +2111,14 @@ class _SubTensorDict(TensorDictBase):
         default: Tensor | str | None = NO_DEFAULT,
     ) -> CompatibleType:
         return self._source.get_at(key, self.idx, default=default)
+
+    def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
+        out = super()._get_non_tensor(key, default=default)
+        from tensordict.tensorclass import NonTensorData
+
+        if isinstance(out, _SubTensorDict) and isinstance(out._source, NonTensorData):
+            return out._source.data
+        return out
 
     def _get_str(self, key, default):
         if key in self.keys() and _is_tensor_collection(self.entry_class(key)):
@@ -2366,6 +2427,7 @@ class _SubTensorDict(TensorDictBase):
             result = self
         return result
 
+    @classmethod
     def _load_memmap(cls, prefix: Path, metadata: dict):
         index = metadata["index"]
         return _SubTensorDict(
@@ -2430,6 +2492,7 @@ class _SubTensorDict(TensorDictBase):
     __ne__ = TensorDict.__ne__
     __setitem__ = TensorDict.__setitem__
     __xor__ = TensorDict.__xor__
+    __or__ = TensorDict.__or__
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
     all = TensorDict.all
@@ -2495,10 +2558,14 @@ class _TensorDictKeysView:
         tensordict: T,
         include_nested: bool,
         leaves_only: bool,
+        is_leaf: Callable[[Type], bool] = None,
     ) -> None:
         self.tensordict = tensordict
         self.include_nested = include_nested
         self.leaves_only = leaves_only
+        if is_leaf is None:
+            is_leaf = _default_is_leaf
+        self.is_leaf = is_leaf
 
     def __iter__(self) -> Iterable[str] | Iterable[tuple[str, ...]]:
         if not self.include_nested:
@@ -2522,12 +2589,11 @@ class _TensorDictKeysView:
         for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
             cls = value.__class__
-            if self.include_nested and (
-                _is_tensor_collection(cls) or issubclass(cls, KeyedJaggedTensor)
-            ):
+            is_leaf = self.is_leaf(cls)
+            if self.include_nested and not is_leaf:
                 subkeys = tuple(self._iter_helper(value, prefix=full_key))
                 yield from subkeys
-            if not self.leaves_only or not _is_tensor_collection(cls):
+            if not self.leaves_only or is_leaf:
                 yield full_key
 
     def _combine_keys(self, prefix: tuple | None, key: str) -> tuple:
