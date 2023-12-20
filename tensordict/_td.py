@@ -1790,21 +1790,31 @@ class TensorDict(TensorDictBase):
 
     # some custom methods for efficiency
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
             return self._tensordict.items()
         else:
-            return super().items(include_nested=include_nested, leaves_only=leaves_only)
+            return super().items(
+                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            )
 
     def values(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
             return self._tensordict.values()
         else:
             return super().values(
-                include_nested=include_nested, leaves_only=leaves_only
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=is_leaf,
             )
 
 
@@ -1962,6 +1972,8 @@ class _SubTensorDict(TensorDictBase):
                         _expand_to_match_shape(
                             parent.batch_size, _tensor, self.batch_dims, self.device
                         ),
+                        inplace=inplace,
+                        validated=validated,
                     )
             else:
                 value_expand = torch.zeros(

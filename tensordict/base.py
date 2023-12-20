@@ -2507,7 +2507,9 @@ class TensorDictBase(MutableMapping):
                     yield from (
                         (_unravel_key_to_tuple((k, _key)), _val)
                         for _key, _val in val.items(
-                            include_nested=include_nested, leaves_only=leaves_only
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                            is_leaf=is_leaf,
                         )
                     )
                 else:
@@ -2520,7 +2522,9 @@ class TensorDictBase(MutableMapping):
                     yield from (
                         (_unravel_key_to_tuple((k, _key)), _val)
                         for _key, _val in val.items(
-                            include_nested=include_nested, leaves_only=leaves_only
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                            is_leaf=is_leaf,
                         )
                     )
         elif leaves_only:
@@ -2557,7 +2561,9 @@ class TensorDictBase(MutableMapping):
                 val = self._get_str(k, NO_DEFAULT)
                 if not is_leaf(val.__class__):
                     yield from val.values(
-                        include_nested=include_nested, leaves_only=leaves_only
+                        include_nested=include_nested,
+                        leaves_only=leaves_only,
+                        is_leaf=is_leaf,
                     )
                 else:
                     yield val
@@ -4155,6 +4161,8 @@ class TensorDictBase(MutableMapping):
                 is_shared=False)
             >>> model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
         """
+        if is_leaf is None:
+            is_leaf = _is_leaf_nontensor
         all_leaves = list(
             self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
         )
@@ -4578,8 +4586,14 @@ def is_tensor_collection(datatype: type | Any) -> bool:
 
 
 def _default_is_leaf(cls: Type) -> bool:
+    return not _is_tensor_collection(cls)
+
+
+def _is_leaf_nontensor(cls: Type) -> bool:
     from tensordict.tensorclass import NonTensorData
 
+    if issubclass(cls, KeyedJaggedTensor):
+        return False
     if _is_tensor_collection(cls):
         return issubclass(cls, NonTensorData)
-    return not issubclass(cls, KeyedJaggedTensor)
+    return issubclass(cls, torch.Tensor)

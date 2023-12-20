@@ -3021,20 +3021,38 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_casts(self, td_name, device):
         td = getattr(self, td_name)(device)
+        # exclude non-tensor data
+        is_leaf = lambda cls: issubclass(cls, torch.Tensor)
         tdfloat = td.float()
-        assert all(value.dtype is torch.float for value in tdfloat.values(True, True))
+        assert all(
+            value.dtype is torch.float
+            for value in tdfloat.values(True, True, is_leaf=is_leaf)
+        )
         tddouble = td.double()
-        assert all(value.dtype is torch.double for value in tddouble.values(True, True))
+        assert all(
+            value.dtype is torch.double
+            for value in tddouble.values(True, True, is_leaf=is_leaf)
+        )
         tdbfloat16 = td.bfloat16()
         assert all(
-            value.dtype is torch.bfloat16 for value in tdbfloat16.values(True, True)
+            value.dtype is torch.bfloat16
+            for value in tdbfloat16.values(True, True, is_leaf=is_leaf)
         )
         tdhalf = td.half()
-        assert all(value.dtype is torch.half for value in tdhalf.values(True, True))
+        assert all(
+            value.dtype is torch.half
+            for value in tdhalf.values(True, True, is_leaf=is_leaf)
+        )
         tdint = td.int()
-        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+        assert all(
+            value.dtype is torch.int
+            for value in tdint.values(True, True, is_leaf=is_leaf)
+        )
         tdint = td.type(torch.int)
-        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+        assert all(
+            value.dtype is torch.int
+            for value in tdint.values(True, True, is_leaf=is_leaf)
+        )
 
     def test_empty_like(self, td_name, device):
         if "sub_td" in td_name:
