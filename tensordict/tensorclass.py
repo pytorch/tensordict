@@ -1247,11 +1247,7 @@ class NonTensorData:
 
             @functools.wraps(_or)
             def __or__(self, other):
-                if not is_tensor_collection(other):
-                    return torch.full(
-                        self.batch_size, self.data | other, device=self.device
-                    )
-                elif isinstance(other, NonTensorData):
+                if isinstance(other, NonTensorData):
                     return torch.full(
                         self.batch_size, self.data | other.data, device=self.device
                     )
