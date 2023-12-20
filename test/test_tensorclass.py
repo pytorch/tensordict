@@ -88,7 +88,7 @@ def test_type():
 
 def test_signature():
     sig = inspect.signature(MyData)
-    assert list(sig.parameters) == ["X", "y", "z", "batch_size", "device"]
+    assert list(sig.parameters) == ["X", "y", "z", "batch_size", "device", "names"]
 
     with pytest.raises(TypeError, match="missing 3 required positional arguments"):
         MyData(batch_size=[10])
