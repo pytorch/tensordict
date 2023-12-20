@@ -3684,7 +3684,7 @@ class TensorDictBase(MutableMapping):
         except Exception:
             if hasattr(array, "shape"):
                 return torch.full(array.shape, float("NaN"))
-            return torch.tensor(float("nan"))
+            raise
 
     @abc.abstractmethod
     def _convert_to_tensordict(self, dict_value: dict[str, Any]) -> T:
