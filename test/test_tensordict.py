@@ -2211,7 +2211,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_to_dict_nested(self, td_name, device):
         def recursive_checker(cur_dict):
             for _, value in cur_dict.items():
-                if isinstance(value, TensorDict):
+                if is_tensor_collection(value):
                     return False
                 elif isinstance(value, dict) and not recursive_checker(value):
                     return False
@@ -2229,6 +2229,10 @@ class TestTensorDicts(TestTensorDictsBase):
         # Convert into dictionary and recursively check if the values are TensorDicts
         td_dict = td.to_dict()
         assert recursive_checker(td_dict)
+        if td_name == "td_with_non_tensor":
+            assert td_dict["data"]["non_tensor"] == "some text data"
+        # TODO: https://github.com/pytorch/tensordict/pull/594 will make this possible
+        # assert (TensorDict.from_dict(td_dict) == td).all()
 
     @pytest.mark.parametrize(
         "index", ["tensor1", "mask", "int", "range", "tensor2", "slice_tensor"]

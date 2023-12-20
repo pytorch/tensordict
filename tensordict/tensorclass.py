@@ -1118,6 +1118,13 @@ class NonTensorData:
             meta.json
         >>> assert loaded.get_non_tensor("pickable").value == 10
 
+    .. note:: if the data passed to :class:`NonTensorData` is a :class:`NonTensorData`
+        itself, the data from the nested object will be gathered.
+
+        >>> non_tensor = NonTensorData("a string!")
+        >>> non_tensor = NonTensorData(non_tensor)
+        >>> assert non_tensor.data == "a string!"
+
     """
 
     # Used to carry non-tensor data in a tensordict.
@@ -1125,3 +1132,11 @@ class NonTensorData:
     # to patch tensordict with additional checks that will encur unwanted overhead
     # and all the overhead falls back on this class.
     data: Any
+
+    def __post_init__(self):
+        if isinstance(self.data, NonTensorData):
+            self.data = self.data.data
+
+    def to_dict(self):
+        # override to_dict to return just the data
+        return self.data
