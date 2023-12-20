@@ -1295,7 +1295,7 @@ class NonTensorData:
 
     def empty(self, recurse=False):
         return NonTensorData(
-            data=None,
+            data=self.data,
             batch_size=self.batch_size,
             names=self.names if self._has_names() else None,
             device=self.device,
