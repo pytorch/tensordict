@@ -509,7 +509,7 @@ class PersistentTensorDict(TensorDictBase):
             return out
         return TensorDict(
             {},
-            device=torch.device("cpu"),
+            device=self.device,
             batch_size=self.batch_size,
             names=self.names if self._has_names() else None,
         )
