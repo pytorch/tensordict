@@ -841,6 +841,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def __xor__(self, other):
         ...
 
+    @_fallback
+    def __or__(self, other):
+        ...
+
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
 

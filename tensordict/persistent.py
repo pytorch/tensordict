@@ -498,6 +498,22 @@ class PersistentTensorDict(TensorDictBase):
     def device(self):
         return self._device
 
+    def empty(self, recurse=False) -> T:
+        if recurse:
+            out = self.empty(recurse=False)
+            for key, val in self.items():
+                if is_tensor_collection(val):
+                    out._set_str(
+                        key, val.empty(recurse=True), inplace=False, validated=True
+                    )
+            return out
+        return TensorDict(
+            {},
+            device=torch.device("cpu"),
+            batch_size=self.batch_size,
+            names=self.names if self._has_names() else None,
+        )
+
     def entry_class(self, key: NestedKey) -> type:
         entry_class = self._get_metadata(key)
         is_array = entry_class.get("array", None)
@@ -1017,6 +1033,7 @@ class PersistentTensorDict(TensorDictBase):
     __eq__ = TensorDict.__eq__
     __ne__ = TensorDict.__ne__
     __xor__ = TensorDict.__xor__
+    __or__ = TensorDict.__or__
     _apply_nest = TensorDict._apply_nest
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared

@@ -3073,7 +3073,10 @@ class TestTensorDicts(TestTensorDictsBase):
 
         td.apply_(lambda x: x + 1.0)
         assert type(td) is type(td_empty)
-        assert all(val.any() for val in (td != td_empty).values(True, True))
+        # exclude non tensor data
+        comp = td.filter_non_tensor_data() != td_empty.filter_non_tensor_data()
+        print(td.filter_non_tensor_data())
+        assert all(val.any() for val in comp.values(True, True))
 
     @pytest.mark.parametrize("nested", [False, True])
     def test_add_batch_dim_cache(self, td_name, device, nested):
@@ -6896,6 +6899,71 @@ class TestMap:
         assert td_out[0]["0"] == 0
         assert td_out[1]["1"] == 1
         assert (td_out["2"] == 2).all()
+
+
+# class TestNonTensorData:
+class TestNonTensorData:
+    @pytest.fixture
+    def non_tensor_data(self):
+        return TensorDict(
+            {
+                "1": 1,
+                "nested": {
+                    "int": NonTensorData(3, batch_size=[]),
+                    "str": NonTensorData("a string!", batch_size=[]),
+                    "bool": NonTensorData(True, batch_size=[]),
+                },
+            },
+            batch_size=[],
+        )
+
+    def test_nontensor_dict(self, non_tensor_data):
+        assert (
+            TensorDict.from_dict(non_tensor_data.to_dict()) == non_tensor_data
+        ).all()
+
+    def test_set(self, non_tensor_data):
+        non_tensor_data.set(("nested", "another_string"), "another string!")
+        assert (
+            non_tensor_data.get(("nested", "another_string")).data == "another string!"
+        )
+        assert (
+            non_tensor_data.get_non_tensor(("nested", "another_string"))
+            == "another string!"
+        )
+
+    def test_stack(self, non_tensor_data):
+        assert (
+            torch.stack([non_tensor_data, non_tensor_data], 0).get(("nested", "int"))
+            == NonTensorData(3, batch_size=[2])
+        ).all()
+        assert (
+            torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
+                ("nested", "int")
+            )
+            == 3
+        )
+        assert isinstance(
+            torch.stack([non_tensor_data, non_tensor_data], 0).get(("nested", "int")),
+            NonTensorData,
+        )
+        non_tensor_copy = non_tensor_data.clone()
+        non_tensor_copy.get(("nested", "int")).data = 4
+        assert isinstance(
+            torch.stack([non_tensor_data, non_tensor_copy], 0).get(("nested", "int")),
+            LazyStackedTensorDict,
+        )
+
+    def test_comparison(self, non_tensor_data):
+        non_tensor_data = non_tensor_data.exclude(("nested", "str"))
+        assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))
+        assert not (non_tensor_data ^ non_tensor_data).get_non_tensor(
+            ("nested", "bool")
+        )
+        assert (non_tensor_data == non_tensor_data).get_non_tensor(("nested", "bool"))
+        assert not (non_tensor_data != non_tensor_data).get_non_tensor(
+            ("nested", "bool")
+        )
 
 
 if __name__ == "__main__":

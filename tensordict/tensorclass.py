@@ -137,24 +137,31 @@ def tensorclass(cls: T) -> T:
         ):
             return NotImplemented
 
+        escape_conversion = func in (torch.stack,)
+
         if kwargs is None:
             kwargs = {}
 
         # get the output type from the arguments / keyword arguments
         if len(args) > 0:
-            tc = args[0]
+            tensorclass_instance = args[0]
         else:
-            tc = kwargs.get("input", kwargs["tensors"])
-        if isinstance(tc, (tuple, list)):
-            tc = tc[0]
+            tensorclass_instance = kwargs.get("input", kwargs["tensors"])
+        if isinstance(tensorclass_instance, (tuple, list)):
+            tensorclass_instance = tensorclass_instance[0]
+        if not escape_conversion:
+            args = tuple(_arg_to_tensordict(arg) for arg in args)
+            kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
 
-        args = tuple(_arg_to_tensordict(arg) for arg in args)
-        kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
-
-        res = TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
-        if isinstance(res, (list, tuple)):
-            return res.__class__(_from_tensordict_with_copy(tc, td) for td in res)
-        return _from_tensordict_with_copy(tc, res)
+        result = TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
+        if isinstance(result, (list, tuple)):
+            return result.__class__(
+                _from_tensordict_with_copy(tensorclass_instance, tensordict_result)
+                for tensordict_result in result
+            )
+        if not escape_conversion:
+            return _from_tensordict_with_copy(tensorclass_instance, result)
+        return result
 
     cls = dataclass(cls)
     expected_keys = set(cls.__dataclass_fields__)
@@ -1114,6 +1121,8 @@ def _unbind(self, dim: int):
 # Custom classes
 # --------------
 
+NONTENSOR_HANDLED_FUNCTIONS = []
+
 
 @tensorclass
 class NonTensorData:
@@ -1134,6 +1143,57 @@ class NonTensorData:
     pickable, and it is the user responsibility to make sure that one of these
     holds. We try to avoid pickling/unpickling objects for performance and security
     reasons (as pickle can execute arbitrary code during loading).
+
+    .. note:: if the data passed to :class:`NonTensorData` is a :class:`NonTensorData`
+        itself, the data from the nested object will be gathered.
+
+        >>> non_tensor = NonTensorData("a string!")
+        >>> non_tensor = NonTensorData(non_tensor)
+        >>> assert non_tensor.data == "a string!"
+
+    .. note:: Unlike other tensorclass classes, :class:`NonTensorData` supports
+        comparisons of two non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
+        :meth:`~.__xor__` or :meth:`~.__or__`. These operations return a tensor
+        of shape `batch_size`. For compatibility with `<a tensordict> == <float_number>`,
+        comparison with non-:class:`NonTensorData` will always return an empty
+        :class:`NonTensorData`.
+
+        >>> a = NonTensorData(True, batch_size=[])
+        >>> b = NonTensorData(True, batch_size=[])
+        >>> assert a == b
+        >>> assert not (a != b)
+        >>> assert not (a ^ b)
+        >>> assert a | b
+        >>> # The output is a tensor of shape batch-size
+        >>> a = NonTensorData(True, batch_size=[3])
+        >>> b = NonTensorData(True, batch_size=[3])
+        >>> print(a == b)
+        tensor([True, True, True])
+
+    .. note:: Stacking :class:`NonTensorData` instances results in either
+        a single :class:`NonTensorData` instance if all shapes match, or a
+        :class:`~tensordict.LazyStackedTensorDict` object if the content
+        mismatch. To get to this result, the content of the :class:`NonTensorData`
+        instances must be compared, which can be computationally intensive
+        depending on what this content is.
+
+        >>> data = torch.stack([NonTensorData(1, batch_size=[]) for _ in range(10)])
+        >>> data
+        NonTensorData(
+            data=1,
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)
+        >>> data = torch.stack([NonTensorData(i, batch_size=[3,]) for i in range(10)], 1)
+        >>> data[:, 0]
+        NonTensorData(
+            data=0,
+            batch_size=torch.Size([3]),
+            device=None,
+            is_shared=False)
+
+    .. note:: Non-tensor data can be filtered out from a tensordict using
+        :meth:`~tensordict.TensorDictBase.filter_non_tensor`.
 
     Examples:
         >>> # create an instance explicitly
@@ -1168,31 +1228,6 @@ class NonTensorData:
             meta.json
         >>> assert loaded.get_non_tensor("pickable").value == 10
 
-    .. note:: if the data passed to :class:`NonTensorData` is a :class:`NonTensorData`
-        itself, the data from the nested object will be gathered.
-
-        >>> non_tensor = NonTensorData("a string!")
-        >>> non_tensor = NonTensorData(non_tensor)
-        >>> assert non_tensor.data == "a string!"
-
-    .. note:: Unlike other tensorclass classes, :class:`NonTensorData` supports
-        comparisons of two non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
-        :meth:`~.__xor__` or :meth:`~.__or__`. These operations return a tensor
-        of shape `batch_size`. For compatibility with `<a tensordict> == <float_number>`,
-        comparison with non-:class:`NonTensorData` will always return an empty
-        :class:`NonTensorData`.
-
-        >>> a = NonTensorData(True, batch_size=[])
-        >>> b = NonTensorData(True, batch_size=[])
-        >>> assert a == b
-        >>> assert not (a != b)
-        >>> assert not (a ^ b)
-        >>> assert a | b
-        >>> # The output is a tensor of shape batch-size
-        >>> a = NonTensorData(True, batch_size=[3])
-        >>> b = NonTensorData(True, batch_size=[3])
-        >>> print(a == b)
-        tensor([True, True, True])
     """
 
     # Used to carry non-tensor data in a tensordict.
@@ -1207,6 +1242,9 @@ class NonTensorData:
 
         old_eq = self.__class__.__eq__
         if old_eq is _eq:
+            global NONTENSOR_HANDLED_FUNCTIONS
+            NONTENSOR_HANDLED_FUNCTIONS.extend(TD_HANDLED_FUNCTIONS)
+
             # Patch only the first time a class is created
 
             @functools.wraps(_eq)
@@ -1255,6 +1293,32 @@ class NonTensorData:
 
             self.__class__.__or__ = __or__
 
+    def empty(self, recurse=False):
+        return NonTensorData(
+            data=None,
+            batch_size=self.batch_size,
+            names=self.names if self._has_names() else None,
+            device=self.device,
+        )
+
     def to_dict(self):
         # override to_dict to return just the data
         return self.data
+
+    @classmethod
+    def _stack_non_tensor(cls, list_of_non_tensor, dim=0):
+        # checks have been performed previously, so we're sure the list is non-empty
+        first = list_of_non_tensor[0]
+        if all(data.data == first.data for data in list_of_non_tensor[1:]):
+            batch_size = list(first.batch_size)
+            batch_size.insert(dim, len(list_of_non_tensor))
+            return NonTensorData(
+                data=first.data,
+                batch_size=batch_size,
+                names=first.names if first._has_names() else None,
+                device=first.device,
+            )
+
+        from tensordict._lazy import LazyStackedTensorDict
+
+        return LazyStackedTensorDict(*list_of_non_tensor, stack_dim=dim)

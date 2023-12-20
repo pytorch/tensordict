@@ -142,6 +142,22 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
+    def __or__(self, other):
+        """OR operation over two tensordicts, for evey key.
+
+        The two tensordicts must have the same key set.
+
+        Args:
+            other (TensorDictBase, dict, or float): the value to compare against.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
     def __eq__(self, other: object) -> T:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
 
@@ -1946,6 +1962,18 @@ class TensorDictBase(MutableMapping):
         if isinstance(value, NonTensorData):
             return value.data
         return value
+
+    def filter_non_tensor_data(self) -> T:
+        """Filters out all non-tensor-data."""
+        from tensordict.tensorclass import NonTensorData
+
+        def _filter(x):
+            if not isinstance(x, NonTensorData):
+                if is_tensor_collection(x):
+                    return x.filter_non_tensor_data()
+                return x
+
+        return self._apply_nest(_filter, call_on_nested=True)
 
     def _convert_inplace(self, inplace, key):
         if inplace is not False:

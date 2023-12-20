@@ -382,10 +382,34 @@ class TensorDict(TensorDictBase):
             )
         return True
 
+    def __or__(self, other: object) -> T | bool:
+        if _is_tensorclass(other):
+            return other | self
+        if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                raise KeyError(
+                    f"keys in {self} and {other} mismatch, got {keys1} and {keys2}"
+                )
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 | other.get(key)
+            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value | other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
     def __eq__(self, other: object) -> T | bool:
         if is_tensorclass(other):
             return other == self
-        if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
+        if isinstance(other, (dict,)):
+            other = self.empty(recurse=True).update(other)
+        if _is_tensor_collection(other.__class__):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -2468,6 +2492,7 @@ class _SubTensorDict(TensorDictBase):
     __ne__ = TensorDict.__ne__
     __setitem__ = TensorDict.__setitem__
     __xor__ = TensorDict.__xor__
+    __or__ = TensorDict.__or__
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
     all = TensorDict.all
