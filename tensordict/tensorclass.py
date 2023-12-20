@@ -1176,9 +1176,11 @@ class NonTensorData:
         >>> assert non_tensor.data == "a string!"
 
     .. note:: Unlike other tensorclass classes, :class:`NonTensorData` supports
-        comparisons of the non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
+        comparisons of two non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
         :meth:`~.__xor__` or :meth:`~.__or__`. These operations return a tensor
-        of shape `batch_size`.
+        of shape `batch_size`. For compatibility with `<a tensordict> == <float_number>`,
+        comparison with non-:class:`NonTensorData` will always return an empty
+        :class:`NonTensorData`.
 
         >>> a = NonTensorData(True, batch_size=[])
         >>> b = NonTensorData(True, batch_size=[])
@@ -1209,11 +1211,7 @@ class NonTensorData:
 
             @functools.wraps(_eq)
             def __eq__(self, other):
-                if not is_tensor_collection(other):
-                    return torch.full(
-                        self.batch_size, self.data == other, device=self.device
-                    )
-                elif isinstance(other, NonTensorData):
+                if isinstance(other, NonTensorData):
                     return torch.full(
                         self.batch_size, self.data == other.data, device=self.device
                     )
@@ -1225,11 +1223,7 @@ class NonTensorData:
 
             @functools.wraps(_ne)
             def __ne__(self, other):
-                if not is_tensor_collection(other):
-                    return torch.full(
-                        self.batch_size, self.data != other, device=self.device
-                    )
-                elif isinstance(other, NonTensorData):
+                if isinstance(other, NonTensorData):
                     return torch.full(
                         self.batch_size, self.data != other.data, device=self.device
                     )
@@ -1241,11 +1235,7 @@ class NonTensorData:
 
             @functools.wraps(_xor)
             def __xor__(self, other):
-                if not is_tensor_collection(other):
-                    return torch.full(
-                        self.batch_size, self.data ^ other, device=self.device
-                    )
-                elif isinstance(other, NonTensorData):
+                if isinstance(other, NonTensorData):
                     return torch.full(
                         self.batch_size, self.data ^ other.data, device=self.device
                     )
