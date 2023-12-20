@@ -301,6 +301,7 @@ class TestTensorDictsBase:
         td = self.td(device)
         return td.set_non_tensor(
             ("data", "non_tensor"),
+            # this is allowed since nested NonTensorData are automatically unwrapped
             NonTensorData(
                 "some text data",
                 batch_size=td.batch_size,
