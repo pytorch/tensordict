@@ -179,8 +179,10 @@ def tensorclass(cls: T) -> T:
     cls.__setitem__ = _setitem
     cls.__repr__ = _repr
     cls.__len__ = _len
-    cls.__eq__ = __eq__
-    cls.__ne__ = __ne__
+    cls.__eq__ = _eq
+    cls.__ne__ = _ne
+    cls.__or__ = _or
+    cls.__xor__ = _xor
     cls.set = _set
     cls.set_at_ = _set_at_
     cls.del_ = _del_
@@ -877,7 +879,7 @@ def _load_state_dict(
     return self
 
 
-def __eq__(self, other: object) -> bool:
+def _eq(self, other: object) -> bool:
     """Compares the Tensor class object to another object for equality. However, the equality check for non-tensor data is not performed.
 
     Args:
@@ -938,7 +940,7 @@ def __eq__(self, other: object) -> bool:
     return _from_tensordict_with_none(self, tensor)
 
 
-def __ne__(self, other: object) -> bool:
+def _ne(self, other: object) -> bool:
     """Compare the Tensor class object to another object for inequality. However, the equality check for non-tensor data is not performed.
 
     Args:
@@ -992,6 +994,54 @@ def __ne__(self, other: object) -> bool:
         tensor = self._tensordict != other._tensordict
     else:
         tensor = self._tensordict != other
+    return _from_tensordict_with_none(self, tensor)
+
+
+def _or(self, other: object) -> bool:
+    """Compares the Tensor class object to another object for logical OR. However, the logical OR check for non-tensor data is not performed.
+
+    Args:
+        other: object to compare to this object. Can be a tensorclass, a
+            tensordict or any compatible type (int, float or tensor), in
+            which case the equality check will be propagated to the leaves.
+
+    Returns:
+        False if the objects are of different class types, Tensorclass of boolean
+        values for tensor attributes and None for non-tensor attributes
+
+    """
+    if not is_tensor_collection(other) and not isinstance(
+        other, (dict, numbers.Number, Tensor, _MemmapTensor)
+    ):
+        return False
+    if is_tensorclass(other):
+        tensor = self._tensordict | other._tensordict
+    else:
+        tensor = self._tensordict | other
+    return _from_tensordict_with_none(self, tensor)
+
+
+def _xor(self, other: object) -> bool:
+    """Compares the Tensor class object to another object for exclusive OR. However, the exclusive OR check for non-tensor data is not performed.
+
+    Args:
+        other: object to compare to this object. Can be a tensorclass, a
+            tensordict or any compatible type (int, float or tensor), in
+            which case the equality check will be propagated to the leaves.
+
+    Returns:
+        False if the objects are of different class types, Tensorclass of boolean
+        values for tensor attributes and None for non-tensor attributes
+
+    """
+    if not is_tensor_collection(other) and not isinstance(
+        other, (dict, numbers.Number, Tensor, _MemmapTensor)
+    ):
+        return False
+    if is_tensorclass(other):
+        tensor = self._tensordict ^ other._tensordict
+    else:
+        tensor = self._tensordict ^ other
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -1125,6 +1175,22 @@ class NonTensorData:
         >>> non_tensor = NonTensorData(non_tensor)
         >>> assert non_tensor.data == "a string!"
 
+    .. note:: Unlike other tensorclass classes, :class:`NonTensorData` supports
+        comparisons of the non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
+        :meth:`~.__xor__` or :meth:`~.__or__`. These operations return a tensor
+        of shape `batch_size`.
+
+        >>> a = NonTensorData(True, batch_size=[])
+        >>> b = NonTensorData(True, batch_size=[])
+        >>> assert a == b
+        >>> assert not (a != b)
+        >>> assert not (a ^ b)
+        >>> assert a | b
+        >>> # The output is a tensor of shape batch-size
+        >>> a = NonTensorData(True, batch_size=[3])
+        >>> b = NonTensorData(True, batch_size=[3])
+        >>> print(a == b)
+        tensor([True, True, True])
     """
 
     # Used to carry non-tensor data in a tensordict.
@@ -1136,6 +1202,72 @@ class NonTensorData:
     def __post_init__(self):
         if isinstance(self.data, NonTensorData):
             self.data = self.data.data
+
+        old_eq = self.__class__.__eq__
+        if old_eq is _eq:
+            print("upgrading")
+
+            @functools.wraps(_eq)
+            def __eq__(self, other):
+                if not is_tensor_collection(other):
+                    return torch.full(
+                        self.batch_size, self.data == other, device=self.device
+                    )
+                elif isinstance(other, NonTensorData):
+                    return torch.full(
+                        self.batch_size, self.data == other.data, device=self.device
+                    )
+                return old_eq(self, other)
+
+            self.__class__.__eq__ = __eq__
+
+            _ne = self.__class__.__ne__
+
+            @functools.wraps(_ne)
+            def __ne__(self, other):
+                if not is_tensor_collection(other):
+                    return torch.full(
+                        self.batch_size, self.data != other, device=self.device
+                    )
+                elif isinstance(other, NonTensorData):
+                    return torch.full(
+                        self.batch_size, self.data != other.data, device=self.device
+                    )
+                return _ne(self, other)
+
+            self.__class__.__ne__ = __ne__
+
+            _xor = self.__class__.__xor__
+
+            @functools.wraps(_xor)
+            def __xor__(self, other):
+                if not is_tensor_collection(other):
+                    return torch.full(
+                        self.batch_size, self.data ^ other, device=self.device
+                    )
+                elif isinstance(other, NonTensorData):
+                    return torch.full(
+                        self.batch_size, self.data ^ other.data, device=self.device
+                    )
+                return _xor(self, other)
+
+            self.__class__.__xor__ = __xor__
+
+            _or = self.__class__.__or__
+
+            @functools.wraps(_or)
+            def __or__(self, other):
+                if not is_tensor_collection(other):
+                    return torch.full(
+                        self.batch_size, self.data | other, device=self.device
+                    )
+                elif isinstance(other, NonTensorData):
+                    return torch.full(
+                        self.batch_size, self.data | other.data, device=self.device
+                    )
+                return _or(self, other)
+
+            self.__class__.__or__ = __or__
 
     def to_dict(self):
         # override to_dict to return just the data

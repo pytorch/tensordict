@@ -393,7 +393,7 @@ class TensorDict(TensorDictBase):
             d = {}
             for key, item1 in self.items():
                 d[key] = item1 == other.get(key)
-            return TensorDict(batch_size=self.batch_size, source=d, device=self.device)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
         if isinstance(other, (numbers.Number, Tensor)):
             return TensorDict(
                 {key: value == other for key, value in self.items()},
