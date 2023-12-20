@@ -61,10 +61,12 @@ def write_version_file(version):
         f.write(f"git_version = {repr(sha)}\n")
 
 
-def _get_pytorch_version():
+def _get_pytorch_version(is_nightly):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
-    return "torch"
+    if is_nightly:
+        return "torch>=2.2.0.dev"
+    return "torch>=2.1.0"
 
 
 def _get_packages():
@@ -152,7 +154,7 @@ def _main(argv):
     print(f"Building wheel {package_name}-{version}")
     print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
 
-    pytorch_package_dep = _get_pytorch_version()
+    pytorch_package_dep = _get_pytorch_version(is_nightly)
     print("-- PyTorch dependency:", pytorch_package_dep)
 
     long_description = (ROOT_DIR / "README.md").read_text()

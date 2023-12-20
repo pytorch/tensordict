@@ -15,6 +15,7 @@ import pytest
 import torch
 
 from tensordict.nn import TensorDictParams
+from tensordict.tensorclass import NonTensorData
 
 try:
     import torchsnapshot
@@ -35,7 +36,13 @@ except ImportError:
 import contextlib
 import platform
 
-from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
+from _utils_internal import (
+    decompose,
+    DummyPicklableClass,
+    get_available_devices,
+    prod,
+    TestTensorDictsBase,
+)
 from functorch import dim as ftdim
 
 from tensordict import LazyStackedTensorDict, make_tensordict, MemmapTensor, TensorDict
@@ -3014,20 +3021,38 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_casts(self, td_name, device):
         td = getattr(self, td_name)(device)
+        # exclude non-tensor data
+        is_leaf = lambda cls: issubclass(cls, torch.Tensor)
         tdfloat = td.float()
-        assert all(value.dtype is torch.float for value in tdfloat.values(True, True))
+        assert all(
+            value.dtype is torch.float
+            for value in tdfloat.values(True, True, is_leaf=is_leaf)
+        )
         tddouble = td.double()
-        assert all(value.dtype is torch.double for value in tddouble.values(True, True))
+        assert all(
+            value.dtype is torch.double
+            for value in tddouble.values(True, True, is_leaf=is_leaf)
+        )
         tdbfloat16 = td.bfloat16()
         assert all(
-            value.dtype is torch.bfloat16 for value in tdbfloat16.values(True, True)
+            value.dtype is torch.bfloat16
+            for value in tdbfloat16.values(True, True, is_leaf=is_leaf)
         )
         tdhalf = td.half()
-        assert all(value.dtype is torch.half for value in tdhalf.values(True, True))
+        assert all(
+            value.dtype is torch.half
+            for value in tdhalf.values(True, True, is_leaf=is_leaf)
+        )
         tdint = td.int()
-        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+        assert all(
+            value.dtype is torch.int
+            for value in tdint.values(True, True, is_leaf=is_leaf)
+        )
         tdint = td.type(torch.int)
-        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+        assert all(
+            value.dtype is torch.int
+            for value in tdint.values(True, True, is_leaf=is_leaf)
+        )
 
     def test_empty_like(self, td_name, device):
         if "sub_td" in td_name:
@@ -3198,6 +3223,67 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td["My", "father", "was"] == 0).all()
         td.update(other_td, keys_to_update=(("My", ("father",), "was"),))
         assert (td["My", "father", "was"] == 1).all()
+
+    def test_non_tensor_data(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        # check lock
+        if td_name not in ("sub_td", "sub_td2"):
+            with td.lock_(), pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+                td.set_non_tensor(("this", "will"), "fail")
+        # check set
+        with td.unlock_():
+            td.set(("this", "tensor"), torch.zeros(td.shape))
+            reached = False
+            with pytest.raises(
+                RuntimeError,
+                match="set_non_tensor is not compatible with the tensordict type",
+            ) if td_name in ("td_h5",) else contextlib.nullcontext():
+                td.set_non_tensor(("this", "will"), "succeed")
+                reached = True
+            if not reached:
+                return
+        # check get (for tensor)
+        assert (td.get_non_tensor(("this", "tensor")) == 0).all()
+        # check get (for non-tensor)
+        assert td.get_non_tensor(("this", "will")) == "succeed"
+        assert isinstance(td.get(("this", "will")), NonTensorData)
+
+    def test_non_tensor_data_flatten_keys(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            td.set(("this", "tensor"), torch.zeros(td.shape))
+            reached = False
+            with pytest.raises(
+                RuntimeError,
+                match="set_non_tensor is not compatible with the tensordict type",
+            ) if td_name in ("td_h5",) else contextlib.nullcontext():
+                td.set_non_tensor(("this", "will"), "succeed")
+                reached = True
+            if not reached:
+                return
+        td_flat = td.flatten_keys()
+        assert (td_flat.get("this.tensor") == 0).all()
+        assert td_flat.get_non_tensor("this.will") == "succeed"
+
+    def test_non_tensor_data_pickle(self, td_name, device, tmpdir):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            td.set(("this", "tensor"), torch.zeros(td.shape))
+            reached = False
+            with pytest.raises(
+                RuntimeError,
+                match="set_non_tensor is not compatible with the tensordict type",
+            ) if td_name in ("td_h5",) else contextlib.nullcontext():
+                td.set_non_tensor(("this", "will"), "succeed")
+                reached = True
+            if not reached:
+                return
+            td.set_non_tensor(("non", "json", "serializable"), DummyPicklableClass(10))
+        td.memmap(prefix=tmpdir, copy_existing=True)
+        loaded = TensorDict.load_memmap(tmpdir)
+        assert isinstance(loaded.get(("non", "json", "serializable")), NonTensorData)
+        assert loaded.get_non_tensor(("non", "json", "serializable")).value == 10
+        assert loaded.get_non_tensor(("this", "will")) == "succeed"
 
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])

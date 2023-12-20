@@ -9,7 +9,7 @@ from __future__ import annotations
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Type
 
 from tensordict._td import _unravel_key_to_tuple
 from torch import multiprocessing as mp
@@ -29,7 +29,7 @@ import os
 import numpy as np
 import torch
 from tensordict._td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
-from tensordict.base import is_tensor_collection, T, TensorDictBase
+from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
@@ -416,8 +416,15 @@ class PersistentTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _PersistentTDKeysView:
+        if is_leaf not in (None, _default_is_leaf):
+            raise ValueError(
+                f"is_leaf {is_leaf} is not supported within tensordicts of type {type(self)}."
+            )
         return _PersistentTDKeysView(
             tensordict=self,
             include_nested=include_nested,
@@ -888,6 +895,11 @@ class PersistentTensorDict(TensorDictBase):
                 )
             inplace = has_key
         return inplace
+
+    def _set_non_tensor(self, key: NestedKey, value: Any):
+        raise NotImplementedError(
+            f"set_non_tensor is not compatible with the tensordict type {type(self)}."
+        )
 
     def _set_str(self, key, value, *, inplace, validated):
         inplace = self._convert_inplace(inplace, key)

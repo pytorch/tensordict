@@ -11,7 +11,7 @@ import re
 import weakref
 from copy import copy
 from functools import wraps
-from typing import Any, Callable, Iterator, OrderedDict, Sequence
+from typing import Any, Callable, Iterator, OrderedDict, Sequence, Type
 
 import torch
 from functorch import dim as ftdim
@@ -21,6 +21,7 @@ from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 
 from tensordict.base import (
+    _default_is_leaf,
     _is_tensor_collection,
     _register_tensor_class,
     CompatibleType,
@@ -897,10 +898,15 @@ class TensorDictParams(TensorDictBase, nn.Module):
         return f"TensorDictParams(params={self._param_td})"
 
     def values(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> Iterator[CompatibleType]:
+        if is_leaf is None:
+            is_leaf = _default_is_leaf
         for v in self._param_td.values(include_nested, leaves_only):
-            if _is_tensor_collection(type(v)):
+            if not is_leaf(type(v)):
                 yield v
                 continue
             yield self._apply_get_post_hook(v)
@@ -961,10 +967,15 @@ class TensorDictParams(TensorDictBase, nn.Module):
         self.data.load_state_dict(data)
 
     def items(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> Iterator[CompatibleType]:
+        if is_leaf is None:
+            is_leaf = _default_is_leaf
         for k, v in self._param_td.items(include_nested, leaves_only):
-            if _is_tensor_collection(type(v)):
+            if not is_leaf(type(v)):
                 yield k, v
                 continue
             yield k, self._apply_get_post_hook(v)
