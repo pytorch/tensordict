@@ -158,7 +158,7 @@ class TestDTensor:
         )
         td = cls._make_tensordict()
         if rank == 0:
-            tdmemmap = td.memmap()
+            tdmemmap = td.memmap()  # noqa: F841
             # for key, val in tdmemmap.items(True, True):
             #     print(key, val)
             queue.put("memmaped")
