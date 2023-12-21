@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import timeit
 
 import torch
@@ -6,7 +11,7 @@ import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.prototype.fx import symbolic_trace
-
+import logging
 
 # modules for sequential benchmark
 class Net(nn.Module):
@@ -66,7 +71,7 @@ if __name__ == "__main__":
         batch_size=[32],
     )
 
-    print(
+    logging.info(
         "forward, TensorDictSequential",
         timeit.timeit(
             "module(tensordict)",
@@ -75,7 +80,7 @@ if __name__ == "__main__":
         ),
     )
 
-    print(
+    logging.info(
         "forward, GraphModule",
         timeit.timeit(
             "module(tensordict)",
@@ -94,7 +99,7 @@ if __name__ == "__main__":
     nested_graph_module = symbolic_trace(nested_tdmodule)
     tensordict = TensorDict({"input": torch.rand(32, 100)}, [32])
 
-    print(
+    logging.info(
         "nested_forward, TensorDictSequential",
         timeit.timeit(
             "module(tensordict)",
@@ -103,7 +108,7 @@ if __name__ == "__main__":
         ),
     )
 
-    print(
+    logging.info(
         "nested_forward, GraphModule",
         timeit.timeit(
             "module(tensordict)",

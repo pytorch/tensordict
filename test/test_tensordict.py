@@ -16,6 +16,8 @@ import torch
 
 from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import NonTensorData
+import logging
+
 
 try:
     import torchsnapshot
@@ -3075,7 +3077,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert type(td) is type(td_empty)
         # exclude non tensor data
         comp = td.filter_non_tensor_data() != td_empty.filter_non_tensor_data()
-        print(td.filter_non_tensor_data())
+        logging.info(td.filter_non_tensor_data())
         assert all(val.any() for val in comp.values(True, True))
 
     @pytest.mark.parametrize("nested", [False, True])
@@ -5048,12 +5050,12 @@ class TestLazyStackedTensorDict:
         from tensordict.nn import TensorDictModule  # noqa
         from torch import vmap
 
-        print("first call to vmap")
+        logging.info("first call to vmap")
         fun = vmap(lambda x: x)
         fun(td)
         td.zero_()
         # this value should be cached
-        print("second call to vmap")
+        logging.info("second call to vmap")
         std = fun(td)
         for value in std.values(True, True):
             assert (value == 0).all()
@@ -5067,11 +5069,11 @@ class TestLazyStackedTensorDict:
         from torch import vmap
 
         fun = vmap(lambda x: x)
-        print("first call to vmap")
+        logging.info("first call to vmap")
         fun(td)
         td.zero_()
         # this value should be cached
-        print("second call to vmap")
+        logging.info("second call to vmap")
         std = fun(td)
         for value in std.values(True, True):
             assert (value == 0).all()

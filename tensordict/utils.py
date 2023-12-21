@@ -8,6 +8,8 @@ import collections
 import concurrent.futures
 import dataclasses
 import inspect
+import logging
+
 import math
 import os
 
@@ -691,7 +693,7 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix=None):
+    def print(prefix=None):  # noqa: T202
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
@@ -701,7 +703,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            print(" -- ".join(strings))
+            logging.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
