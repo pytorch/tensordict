@@ -11,6 +11,7 @@ import sys
 import pytest
 import torch
 from _pytest.fixtures import fixture
+from packaging import version
 
 from packaging.version import parse
 
@@ -62,7 +63,6 @@ class TestFSDP:
             "cuda"
         ):
             my_module = cls.MyDModule()
-            print("sharding")
             my_sharded_module = FSDP(my_module, device_id=device)
         return my_sharded_module
 
@@ -79,21 +79,15 @@ class TestFSDP:
         )
         torch.cuda.set_device(rank)
         module = cls.make_module(rank)
-        print(f"module created on {rank}")
         dist.barrier()
-        print("state dict")
         # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
         # with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
         #     print(module.state_dict())
 
         # td = TensorDict(module.state_dict(), []).unflatten_keys(".")
         td = TensorDict.from_module(module, use_state_dict=True)
-        print("td created")
         if rank == 0:
             td.memmap(path)
-            print("memmaped!")
-        else:
-            print("passing")
         dist.destroy_process_group()
 
     def test_fsdp_module(self, tmpdir):
@@ -110,6 +104,16 @@ class TestFSDP:
         assert (TensorDict.load_memmap(tmpdir) == 1).all()
 
 
+# not using TorchVersion to make the comparison work with dev
+TORCH_VERSION = version.parse(
+    ".".join(map(str, version.parse(torch.__version__).release))
+)
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.2.0"),
+    reason=f"DTensor requires a more recent PyTorch (torch > 2.2.0, got {torch.__version__}).",
+)
 class TestDTensor:
     class MyDModule(nn.Module):
         def __init__(self):
@@ -155,9 +159,8 @@ class TestDTensor:
         td = cls._make_tensordict()
         if rank == 0:
             tdmemmap = td.memmap()
-            print("memmaped!")
-            for key, val in tdmemmap.items(True, True):
-                print(key, val)
+            # for key, val in tdmemmap.items(True, True):
+            #     print(key, val)
             queue.put("memmaped")
         else:
             # TODO: we need this bit to call the gather on each worker
