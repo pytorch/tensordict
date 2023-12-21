@@ -327,8 +327,14 @@ class TensorDictBase(MutableMapping):
         ...
 
     # Module interaction
-    @staticmethod
-    def from_module(module, as_module: bool = False, lock: bool = True):
+    @classmethod
+    def from_module(
+        cls,
+        module,
+        as_module: bool = False,
+        lock: bool = True,
+        use_state_dict: bool = False,
+    ):
         """Copies the params and buffers of a module in a tensordict.
 
         Args:
@@ -337,6 +343,12 @@ class TensorDictBase(MutableMapping):
                 within a :class:`torch.nn.Module`. Defaults to ``False``.
             lock (bool, optional): if ``True``, the resulting tensordict will be locked.
                 Defaults to ``True``.
+            use_state_dict (bool, optional): if ``True``, the state-dict from the
+                module will be used and unflattened into a TensorDict with
+                the tree structure of the model. Defaults to ``False``.
+                .. note::
+                  This is particularily useful when state-dict hooks have to be
+                  used.
 
         Examples:
             >>> from torch import nn

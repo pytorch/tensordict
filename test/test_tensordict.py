@@ -6420,6 +6420,81 @@ def test_from_module(memmap, params):
         assert set(td.parameters()) == set(net.parameters())
 
 
+def test_from_module_state_dict():
+    net = nn.Transformer(
+        d_model=16,
+        nhead=2,
+        num_encoder_layers=3,
+        dim_feedforward=12,
+    )
+
+    def adder(module, *args, **kwargs):
+        for p in module.parameters(recurse=False):
+            p.data += 1
+
+    def remover(module, *args, **kwargs):
+        for p in module.parameters(recurse=False):
+            p.data = p.data - 1
+
+    for module in net.modules():
+        module.register_state_dict_pre_hook(adder)
+        module._register_state_dict_hook(remover)
+    params_reg = TensorDict.from_module(net)
+    params_reg = params_reg.select(*params_reg.keys(True, True))
+
+    params_sd = TensorDict.from_module(net, use_state_dict=True)
+    params_sd = params_sd.select(*params_sd.keys(True, True))
+    assert_allclose_td(params_sd, params_reg.apply(lambda x: x + 1))
+
+    sd = net.state_dict()
+    assert_allclose_td(params_sd.flatten_keys("."), TensorDict(sd, []))
+
+
+def test_to_module_state_dict():
+    net0 = nn.Transformer(
+        d_model=16,
+        nhead=2,
+        num_encoder_layers=3,
+        dim_feedforward=12,
+    )
+    net1 = nn.Transformer(
+        d_model=16,
+        nhead=2,
+        num_encoder_layers=3,
+        dim_feedforward=12,
+    )
+
+    def hook(
+        module,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        for key, val in list(state_dict.items()):
+            state_dict[key] = val * 0
+
+    for module in net0.modules():
+        module._register_load_state_dict_pre_hook(hook, with_module=True)
+    for module in net1.modules():
+        module._register_load_state_dict_pre_hook(hook, with_module=True)
+
+    params_reg = TensorDict.from_module(net0)
+    params_reg.to_module(net0, use_state_dict=True)
+    params_reg = TensorDict.from_module(net0)
+
+    sd = net1.state_dict()
+    net1.load_state_dict(sd)
+    sd = net1.state_dict()
+
+    assert (params_reg == 0).all()
+    assert set(params_reg.flatten_keys(".").keys()) == set(sd.keys())
+    assert_allclose_td(params_reg.flatten_keys("."), TensorDict(sd, []))
+
+
 @pytest.mark.parametrize("batch_size", [None, [3, 4]])
 @pytest.mark.parametrize("batch_dims", [None, 1, 2])
 @pytest.mark.parametrize("device", get_available_devices())

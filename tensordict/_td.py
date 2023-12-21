@@ -65,6 +65,7 @@ from tensordict.utils import (
     _sub_index,
     _unravel_key_to_tuple,
     as_decorator,
+    Buffer,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -233,29 +234,70 @@ class TensorDict(TensorDictBase):
                 for key, value in source.items():
                     self.set(key, value)
 
-    @staticmethod
+    @classmethod
     def from_module(
-        module: torch.nn.Module, as_module: bool = False, lock: bool = False
+        cls,
+        module: torch.nn.Module,
+        as_module: bool = False,
+        lock: bool = False,
+        use_state_dict: bool = False,
     ):
-        td_struct = TensorDict({}, [])
-        for key, param in module.named_parameters(recurse=False):
-            td_struct._set_str(key, param, validated=True, inplace=False)
-        for key, param in module.named_buffers(recurse=False):
-            td_struct._set_str(key, param, validated=True, inplace=False)
-        for key, mod in module.named_children():
-            td_struct._set_str(
-                key,
-                TensorDict.from_module(mod, as_module=False, lock=False),
-                validated=True,
-                inplace=False,
-            )
+        result = cls._from_module(
+            module=module, as_module=as_module, use_state_dict=use_state_dict
+        )
+        if lock:
+            result.lock_()
+        return result
+
+    @classmethod
+    def _from_module(
+        cls,
+        module: torch.nn.Module,
+        as_module: bool = False,
+        use_state_dict: bool = False,
+        prefix="",
+    ):
+        destination = {}
+        if use_state_dict:
+            keep_vars = False
+            # do we need this feature atm?
+            local_metadata = {}
+            # if hasattr(destination, "_metadata"):
+            #     destination._metadata[prefix[:-1]] = local_metadata
+            for hook in module._state_dict_pre_hooks.values():
+                hook(module, prefix, keep_vars)
+            module._save_to_state_dict(destination, "", keep_vars)
+        else:
+            for name, param in module._parameters.items():
+                if param is None:
+                    continue
+                destination[name] = param
+            for name, buffer in module._buffers.items():
+                if buffer is None:
+                    continue
+                destination[name] = buffer
+
+        if use_state_dict:
+            for hook in module._state_dict_hooks.values():
+                hook_result = hook(module, destination, prefix, local_metadata)
+                if hook_result is not None:
+                    destination = hook_result
+        destination = TensorDict(destination, batch_size=[])
+        for name, submodule in module._modules.items():
+            if submodule is not None:
+                subtd = cls._from_module(
+                    module=submodule,
+                    as_module=as_module,
+                    use_state_dict=use_state_dict,
+                    prefix=prefix + name + ".",
+                )
+                destination._set_str(name, subtd, validated=True, inplace=False)
+
         if as_module:
             from tensordict.nn.params import TensorDictParams
 
-            return TensorDictParams(td_struct, no_convert=True)
-        if lock:
-            td_struct.lock_()
-        return td_struct
+            return TensorDictParams(destination, no_convert=True)
+        return destination
 
     def is_empty(self):
         for _ in self._tensordict:
@@ -263,7 +305,14 @@ class TensorDict(TensorDictBase):
         return True
 
     @as_decorator()
-    def to_module(self, module, return_swap: bool = True, swap_dest=None, memo=None):
+    def to_module(
+        self,
+        module,
+        return_swap: bool = True,
+        swap_dest=None,
+        memo=None,
+        use_state_dict: bool = False,
+    ):
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         __dict__ = module.__dict__
 
@@ -286,8 +335,38 @@ class TensorDict(TensorDictBase):
                 swap = swap_dest
             memo[id(module)] = swap
             _swap = {}
+        if use_state_dict:
+            # execute module's pre-hooks
+            state_dict = self.flatten_keys(".")
+            prefix = ""
+            strict = True
+            local_metadata = {}
+            missing_keys = []
+            unexpected_keys = []
+            error_msgs = []
+            for hook in module._load_state_dict_pre_hooks.values():
+                hook(
+                    state_dict,
+                    prefix,
+                    local_metadata,
+                    strict,
+                    missing_keys,
+                    unexpected_keys,
+                    error_msgs,
+                )
 
-        for key, value in self.items():
+            def convert_type(x, y):
+                if isinstance(y, torch.nn.Parameter):
+                    return torch.nn.Parameter(x)
+                if isinstance(y, Buffer):
+                    return Buffer(x)
+                return x
+
+            input = state_dict.unflatten_keys(".").apply(convert_type, self)
+        else:
+            input = self
+
+        for key, value in input.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
                 if module.__class__.__setattr__ is __base__setattr__:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
@@ -316,6 +395,7 @@ class TensorDict(TensorDictBase):
                         return_swap=return_swap,
                         swap_dest=local_dest,
                         memo=memo,
+                        use_state_dict=use_state_dict,
                     )
                 # we don't want to do this op more than once
                 if return_swap and (
@@ -2611,6 +2691,10 @@ class _TensorDictKeysView:
             tensordict = self.tensordict
         if isinstance(tensordict, TensorDict) or is_tensorclass(tensordict):
             return tensordict._tensordict.items()
+        from tensordict.nn import TensorDictParams
+
+        if isinstance(tensordict, TensorDictParams):
+            return tensordict._param_td.items()
         if isinstance(tensordict, KeyedJaggedTensor):
             return tuple((key, tensordict[key]) for key in tensordict.keys())
         from tensordict._lazy import (
