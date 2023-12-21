@@ -253,4 +253,5 @@ Here is an example:
     :toctree: generated/
     :template: td_template.rst
 
-    @tensorclass
+    tensorclass
+    NonTensorData

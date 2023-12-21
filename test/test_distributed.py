@@ -11,11 +11,24 @@ import sys
 import pytest
 import torch
 from _pytest.fixtures import fixture
+from packaging import version
 
 from packaging.version import parse
 
 from tensordict import MemmapTensor, TensorDict
-from torch import distributed as dist, multiprocessing as mp
+from torch import distributed as dist, multiprocessing as mp, nn
+from torch.distributed._tensor import (
+    DeviceMesh,
+    distribute_module,
+    distribute_tensor,
+    # init_device_mesh,
+    Shard,
+)
+from torch.distributed.fsdp import (
+    # FullStateDictConfig,
+    FullyShardedDataParallel as FSDP,
+    # StateDictType,
+)
 
 TIMEOUT = 100
 
@@ -26,6 +39,165 @@ def set_context():
         mp.set_start_method("spawn")
     except Exception:
         print("context already set")
+
+
+@pytest.mark.skipif(
+    not torch.cuda.device_count() >= 2, reason="not enough cuda devices"
+)
+class TestFSDP:
+    class MyDModule(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc1 = nn.Linear(8, 8, bias=False)
+            self.fc2 = nn.Linear(8, 8, bias=False)
+            self.relu = nn.ReLU()
+            for p in self.parameters():
+                p.data.fill_(1.0)
+
+        def forward(self, input):
+            return self.relu(self.fc1(input) + self.fc2(input))
+
+    @classmethod
+    def make_module(cls, device=None):
+        with torch.device(f"cuda:{device}") if device is not None else torch.device(
+            "cuda"
+        ):
+            my_module = cls.MyDModule()
+            my_sharded_module = FSDP(my_module, device_id=device)
+        return my_sharded_module
+
+    @classmethod
+    def worker(cls, rank, path):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "10017"
+
+        torch.distributed.init_process_group(
+            "nccl",
+            rank=rank,
+            world_size=2,
+            init_method="tcp://localhost:10017",
+        )
+        torch.cuda.set_device(rank)
+        module = cls.make_module(rank)
+        dist.barrier()
+        # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        # with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
+        #     print(module.state_dict())
+
+        # td = TensorDict(module.state_dict(), []).unflatten_keys(".")
+        td = TensorDict.from_module(module, use_state_dict=True)
+        if rank == 0:
+            td.memmap(path)
+        dist.destroy_process_group()
+
+    def test_fsdp_module(self, tmpdir):
+        try:
+            mp.set_start_method("spawn")
+        except Exception:
+            print("start method already set to", mp.get_start_method())
+        proc0 = mp.Process(target=self.worker, args=(0, tmpdir))
+        proc1 = mp.Process(target=self.worker, args=(1, tmpdir))
+        proc0.start()
+        proc1.start()
+        proc0.join(timeout=TIMEOUT)
+        proc1.join(timeout=TIMEOUT)
+        assert (TensorDict.load_memmap(tmpdir) == 1).all()
+
+
+# not using TorchVersion to make the comparison work with dev
+TORCH_VERSION = version.parse(
+    ".".join(map(str, version.parse(torch.__version__).release))
+)
+
+
+@pytest.mark.skipif(
+    TORCH_VERSION < version.parse("2.2.0"),
+    reason=f"DTensor requires a more recent PyTorch (torch > 2.2.0, got {torch.__version__}).",
+)
+class TestDTensor:
+    class MyDModule(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc1 = nn.Linear(8, 8, bias=False)
+            self.fc2 = nn.Linear(8, 8, bias=False)
+            self.relu = nn.ReLU()
+
+        def forward(self, input):
+            return self.relu(self.fc1(input) + self.fc2(input))
+
+    @classmethod
+    def device(cls):
+        return "cpu"
+
+    @classmethod
+    def _make_tensordict(cls):
+        module = cls.MyDModule()
+        mesh = DeviceMesh(cls.device(), torch.arange(2))
+
+        def shard_params(mod_name, mod, mesh):
+            col_linear_placement = [Shard(0)]
+            # shard fc1 and fc2
+            if isinstance(mod, nn.Linear):
+                for name, param in mod.named_parameters():
+                    dist_param = nn.Parameter(
+                        distribute_tensor(param, mesh, col_linear_placement)
+                    )
+                    mod.register_parameter(name, dist_param)
+
+        sharded_module = distribute_module(module, mesh, partition_fn=shard_params)
+
+        return TensorDict.from_module(sharded_module)
+
+    @classmethod
+    def worker(cls, rank, queue):
+        torch.distributed.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=2,
+            init_method="tcp://localhost:10017",
+        )
+        td = cls._make_tensordict()
+        if rank == 0:
+            tdmemmap = td.memmap()  # noqa: F841
+            # for key, val in tdmemmap.items(True, True):
+            #     print(key, val)
+            queue.put("memmaped")
+        else:
+            # TODO: we need this bit to call the gather on each worker
+            # but we don't want each worker to write a memmap!
+            td.apply(lambda t: t.full_tensor())
+            queue.put("worker")
+
+    def test_dtensor(self, tmp_path):
+        try:
+            mp.set_start_method("spawn")
+        except Exception:
+            print("start method already set to", mp.get_start_method())
+        server_queue = mp.Queue(1)
+        client_queue = mp.Queue(1)
+        server_worker = mp.Process(
+            target=self.worker,
+            args=(
+                0,
+                server_queue,
+            ),
+        )
+        client_worker = mp.Process(
+            target=self.worker,
+            args=(
+                1,
+                client_queue,
+            ),
+        )
+
+        server_worker.start()
+        client_worker.start()
+        try:
+            assert server_queue.get(timeout=TIMEOUT) == "memmaped"
+            assert client_queue.get(timeout=TIMEOUT) == "worker"
+        finally:
+            server_worker.join()
+            client_worker.join()
 
 
 class TestGather:

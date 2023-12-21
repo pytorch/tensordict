@@ -9,7 +9,7 @@ from __future__ import annotations
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Type
 
 from tensordict._td import _unravel_key_to_tuple
 from torch import multiprocessing as mp
@@ -29,7 +29,7 @@ import os
 import numpy as np
 import torch
 from tensordict._td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
-from tensordict.base import is_tensor_collection, T, TensorDictBase
+from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
@@ -416,8 +416,15 @@ class PersistentTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _PersistentTDKeysView:
+        if is_leaf not in (None, _default_is_leaf):
+            raise ValueError(
+                f"is_leaf {is_leaf} is not supported within tensordicts of type {type(self)}."
+            )
         return _PersistentTDKeysView(
             tensordict=self,
             include_nested=include_nested,
@@ -490,6 +497,22 @@ class PersistentTensorDict(TensorDictBase):
     @property
     def device(self):
         return self._device
+
+    def empty(self, recurse=False) -> T:
+        if recurse:
+            out = self.empty(recurse=False)
+            for key, val in self.items():
+                if is_tensor_collection(val):
+                    out._set_str(
+                        key, val.empty(recurse=True), inplace=False, validated=True
+                    )
+            return out
+        return TensorDict(
+            {},
+            device=self.device,
+            batch_size=self.batch_size,
+            names=self.names if self._has_names() else None,
+        )
 
     def entry_class(self, key: NestedKey) -> type:
         entry_class = self._get_metadata(key)
@@ -889,6 +912,11 @@ class PersistentTensorDict(TensorDictBase):
             inplace = has_key
         return inplace
 
+    def _set_non_tensor(self, key: NestedKey, value: Any):
+        raise NotImplementedError(
+            f"set_non_tensor is not compatible with the tensordict type {type(self)}."
+        )
+
     def _set_str(self, key, value, *, inplace, validated):
         inplace = self._convert_inplace(inplace, key)
         return self._set(key, value, inplace=inplace, validated=validated)
@@ -1005,6 +1033,7 @@ class PersistentTensorDict(TensorDictBase):
     __eq__ = TensorDict.__eq__
     __ne__ = TensorDict.__ne__
     __xor__ = TensorDict.__xor__
+    __or__ = TensorDict.__or__
     _apply_nest = TensorDict._apply_nest
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared

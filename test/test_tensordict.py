@@ -15,6 +15,7 @@ import pytest
 import torch
 
 from tensordict.nn import TensorDictParams
+from tensordict.tensorclass import NonTensorData
 
 try:
     import torchsnapshot
@@ -35,7 +36,13 @@ except ImportError:
 import contextlib
 import platform
 
-from _utils_internal import decompose, get_available_devices, prod, TestTensorDictsBase
+from _utils_internal import (
+    decompose,
+    DummyPicklableClass,
+    get_available_devices,
+    prod,
+    TestTensorDictsBase,
+)
 from functorch import dim as ftdim
 
 from tensordict import LazyStackedTensorDict, make_tensordict, MemmapTensor, TensorDict
@@ -2204,7 +2211,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_to_dict_nested(self, td_name, device):
         def recursive_checker(cur_dict):
             for _, value in cur_dict.items():
-                if isinstance(value, TensorDict):
+                if is_tensor_collection(value):
                     return False
                 elif isinstance(value, dict) and not recursive_checker(value):
                     return False
@@ -2222,6 +2229,9 @@ class TestTensorDicts(TestTensorDictsBase):
         # Convert into dictionary and recursively check if the values are TensorDicts
         td_dict = td.to_dict()
         assert recursive_checker(td_dict)
+        if td_name == "td_with_non_tensor":
+            assert td_dict["data"]["non_tensor"] == "some text data"
+        assert (TensorDict.from_dict(td_dict) == td).all()
 
     @pytest.mark.parametrize(
         "index", ["tensor1", "mask", "int", "range", "tensor2", "slice_tensor"]
@@ -3014,20 +3024,38 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_casts(self, td_name, device):
         td = getattr(self, td_name)(device)
+        # exclude non-tensor data
+        is_leaf = lambda cls: issubclass(cls, torch.Tensor)
         tdfloat = td.float()
-        assert all(value.dtype is torch.float for value in tdfloat.values(True, True))
+        assert all(
+            value.dtype is torch.float
+            for value in tdfloat.values(True, True, is_leaf=is_leaf)
+        )
         tddouble = td.double()
-        assert all(value.dtype is torch.double for value in tddouble.values(True, True))
+        assert all(
+            value.dtype is torch.double
+            for value in tddouble.values(True, True, is_leaf=is_leaf)
+        )
         tdbfloat16 = td.bfloat16()
         assert all(
-            value.dtype is torch.bfloat16 for value in tdbfloat16.values(True, True)
+            value.dtype is torch.bfloat16
+            for value in tdbfloat16.values(True, True, is_leaf=is_leaf)
         )
         tdhalf = td.half()
-        assert all(value.dtype is torch.half for value in tdhalf.values(True, True))
+        assert all(
+            value.dtype is torch.half
+            for value in tdhalf.values(True, True, is_leaf=is_leaf)
+        )
         tdint = td.int()
-        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+        assert all(
+            value.dtype is torch.int
+            for value in tdint.values(True, True, is_leaf=is_leaf)
+        )
         tdint = td.type(torch.int)
-        assert all(value.dtype is torch.int for value in tdint.values(True, True))
+        assert all(
+            value.dtype is torch.int
+            for value in tdint.values(True, True, is_leaf=is_leaf)
+        )
 
     def test_empty_like(self, td_name, device):
         if "sub_td" in td_name:
@@ -3045,7 +3073,10 @@ class TestTensorDicts(TestTensorDictsBase):
 
         td.apply_(lambda x: x + 1.0)
         assert type(td) is type(td_empty)
-        assert all(val.any() for val in (td != td_empty).values(True, True))
+        # exclude non tensor data
+        comp = td.filter_non_tensor_data() != td_empty.filter_non_tensor_data()
+        print(td.filter_non_tensor_data())
+        assert all(val.any() for val in comp.values(True, True))
 
     @pytest.mark.parametrize("nested", [False, True])
     def test_add_batch_dim_cache(self, td_name, device, nested):
@@ -3198,6 +3229,67 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td["My", "father", "was"] == 0).all()
         td.update(other_td, keys_to_update=(("My", ("father",), "was"),))
         assert (td["My", "father", "was"] == 1).all()
+
+    def test_non_tensor_data(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        # check lock
+        if td_name not in ("sub_td", "sub_td2"):
+            with td.lock_(), pytest.raises(RuntimeError, match=re.escape(_LOCK_ERROR)):
+                td.set_non_tensor(("this", "will"), "fail")
+        # check set
+        with td.unlock_():
+            td.set(("this", "tensor"), torch.zeros(td.shape))
+            reached = False
+            with pytest.raises(
+                RuntimeError,
+                match="set_non_tensor is not compatible with the tensordict type",
+            ) if td_name in ("td_h5",) else contextlib.nullcontext():
+                td.set_non_tensor(("this", "will"), "succeed")
+                reached = True
+            if not reached:
+                return
+        # check get (for tensor)
+        assert (td.get_non_tensor(("this", "tensor")) == 0).all()
+        # check get (for non-tensor)
+        assert td.get_non_tensor(("this", "will")) == "succeed"
+        assert isinstance(td.get(("this", "will")), NonTensorData)
+
+    def test_non_tensor_data_flatten_keys(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            td.set(("this", "tensor"), torch.zeros(td.shape))
+            reached = False
+            with pytest.raises(
+                RuntimeError,
+                match="set_non_tensor is not compatible with the tensordict type",
+            ) if td_name in ("td_h5",) else contextlib.nullcontext():
+                td.set_non_tensor(("this", "will"), "succeed")
+                reached = True
+            if not reached:
+                return
+        td_flat = td.flatten_keys()
+        assert (td_flat.get("this.tensor") == 0).all()
+        assert td_flat.get_non_tensor("this.will") == "succeed"
+
+    def test_non_tensor_data_pickle(self, td_name, device, tmpdir):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            td.set(("this", "tensor"), torch.zeros(td.shape))
+            reached = False
+            with pytest.raises(
+                RuntimeError,
+                match="set_non_tensor is not compatible with the tensordict type",
+            ) if td_name in ("td_h5",) else contextlib.nullcontext():
+                td.set_non_tensor(("this", "will"), "succeed")
+                reached = True
+            if not reached:
+                return
+            td.set_non_tensor(("non", "json", "serializable"), DummyPicklableClass(10))
+        td.memmap(prefix=tmpdir, copy_existing=True)
+        loaded = TensorDict.load_memmap(tmpdir)
+        assert isinstance(loaded.get(("non", "json", "serializable")), NonTensorData)
+        assert loaded.get_non_tensor(("non", "json", "serializable")).value == 10
+        assert loaded.get_non_tensor(("this", "will")) == "succeed"
 
 
 @pytest.mark.parametrize("device", [None, *get_available_devices()])
@@ -6882,6 +6974,71 @@ class TestMap:
         assert td_out[0]["0"] == 0
         assert td_out[1]["1"] == 1
         assert (td_out["2"] == 2).all()
+
+
+# class TestNonTensorData:
+class TestNonTensorData:
+    @pytest.fixture
+    def non_tensor_data(self):
+        return TensorDict(
+            {
+                "1": 1,
+                "nested": {
+                    "int": NonTensorData(3, batch_size=[]),
+                    "str": NonTensorData("a string!", batch_size=[]),
+                    "bool": NonTensorData(True, batch_size=[]),
+                },
+            },
+            batch_size=[],
+        )
+
+    def test_nontensor_dict(self, non_tensor_data):
+        assert (
+            TensorDict.from_dict(non_tensor_data.to_dict()) == non_tensor_data
+        ).all()
+
+    def test_set(self, non_tensor_data):
+        non_tensor_data.set(("nested", "another_string"), "another string!")
+        assert (
+            non_tensor_data.get(("nested", "another_string")).data == "another string!"
+        )
+        assert (
+            non_tensor_data.get_non_tensor(("nested", "another_string"))
+            == "another string!"
+        )
+
+    def test_stack(self, non_tensor_data):
+        assert (
+            torch.stack([non_tensor_data, non_tensor_data], 0).get(("nested", "int"))
+            == NonTensorData(3, batch_size=[2])
+        ).all()
+        assert (
+            torch.stack([non_tensor_data, non_tensor_data], 0).get_non_tensor(
+                ("nested", "int")
+            )
+            == 3
+        )
+        assert isinstance(
+            torch.stack([non_tensor_data, non_tensor_data], 0).get(("nested", "int")),
+            NonTensorData,
+        )
+        non_tensor_copy = non_tensor_data.clone()
+        non_tensor_copy.get(("nested", "int")).data = 4
+        assert isinstance(
+            torch.stack([non_tensor_data, non_tensor_copy], 0).get(("nested", "int")),
+            LazyStackedTensorDict,
+        )
+
+    def test_comparison(self, non_tensor_data):
+        non_tensor_data = non_tensor_data.exclude(("nested", "str"))
+        assert (non_tensor_data | non_tensor_data).get_non_tensor(("nested", "bool"))
+        assert not (non_tensor_data ^ non_tensor_data).get_non_tensor(
+            ("nested", "bool")
+        )
+        assert (non_tensor_data == non_tensor_data).get_non_tensor(("nested", "bool"))
+        assert not (non_tensor_data != non_tensor_data).get_non_tensor(
+            ("nested", "bool")
+        )
 
 
 if __name__ == "__main__":
