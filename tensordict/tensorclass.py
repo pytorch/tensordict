@@ -412,8 +412,8 @@ def _memmap_(
 
 
 def _load_memmap(cls, prefix: Path, metadata: dict):
-    del metadata["_type"]
     non_tensordict = copy(metadata)
+    del non_tensordict["_type"]
     if os.path.exists(prefix / "other.pickle"):
         with open(prefix / "other.pickle", "rb") as pickle_file:
             non_tensordict.update(pickle.load(pickle_file))
