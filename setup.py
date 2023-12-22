@@ -6,6 +6,7 @@
 import argparse
 import distutils.command.clean
 import glob
+import logging
 import os
 import shutil
 import subprocess
@@ -16,7 +17,6 @@ from typing import List
 
 from setuptools import find_packages, setup
 from torch.utils.cpp_extension import BuildExtension, CppExtension
-import logging
 
 ROOT_DIR = Path(__file__).parent.resolve()
 

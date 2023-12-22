@@ -5,6 +5,7 @@
 
 import abc
 import argparse
+import logging
 import os
 import sys
 
@@ -29,7 +30,6 @@ from torch.distributed.fsdp import (
     FullyShardedDataParallel as FSDP,
     # StateDictType,
 )
-import logging
 
 TIMEOUT = 100
 

@@ -17,12 +17,13 @@ Distributed data-loading with tensorclass
 
 import argparse
 import collections
+
+import logging
 import os
 import time
 from functools import wraps
 from pathlib import Path
 
-import logging
 import tenacity
 import torch
 import tqdm

@@ -5,11 +5,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from copy import deepcopy
 from typing import Any, Iterable
 
 from tensordict.nn.utils import set_skip_existing
-import logging
 
 _has_functorch = False
 try:

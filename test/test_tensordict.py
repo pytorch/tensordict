@@ -6,6 +6,7 @@
 import argparse
 import gc
 import json
+import logging
 import os
 import re
 import uuid
@@ -16,7 +17,6 @@ import torch
 
 from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import NonTensorData
-import logging
 
 
 try:
