@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import functools
 from typing import Any, Callable, Sequence, TypeVar
 
@@ -15,7 +16,8 @@ from tensordict._td import TensorDict
 
 from tensordict.base import NO_DEFAULT, TensorDictBase
 from tensordict.persistent import PersistentTensorDict
-from tensordict.utils import _check_keys, _ErrorInteceptor, DeviceType, lazy_legacy
+from tensordict.utils import _check_keys, _ErrorInteceptor, DeviceType, \
+    lazy_legacy, set_lazy_legacy
 from torch import Tensor
 
 T = TypeVar("T", bound="TensorDictBase")
@@ -356,20 +358,39 @@ def _stack(
             )
 
     # check that all tensordict match
-    keys = _check_keys(list_of_tensordicts)
 
     if out is None:
+        # We need to handle tensordicts with exclusive keys and tensordicts with
+        # mismatching shapes.
+        # The first case is handled within _check_keys which fails if keys
+        # don't match exactly.
+        # The second requires a check over the tensor shapes.
         device = list_of_tensordicts[0].device
-        if contiguous and not lazy_legacy():
+        if contiguous or not lazy_legacy():
+            try:
+                keys = _check_keys(list_of_tensordicts, strict=True)
+            except KeyError:
+                if not lazy_legacy() and not contiguous:
+                    with set_lazy_legacy(True):
+                        return _stack(list_of_tensordicts, dim=dim)
+                raise
+
             out = {}
             for key in keys:
+                out[key] = [_tensordict._get_str(key, default=None) for _tensordict in list_of_tensordicts]
+                tensor_shape = out[key][0].shape
+                for tensor in out[key][1:]:
+                    if tensor.shape != tensor_shape:
+                        with set_lazy_legacy(True):
+                            return _stack(list_of_tensordicts, dim=dim)
+            def stack_fn(key: str):
                 with _ErrorInteceptor(
                     key, "Attempted to stack tensors on different devices at key"
                 ):
-                    out[key] = torch.stack(
-                        [_tensordict.get(key) for _tensordict in list_of_tensordicts],
-                        dim,
-                    )
+                    out[key] = torch.stack(out[key], dim)
+
+            with concurrent.futures.ThreadPoolExecutor(32) as pool:
+                pool.map(stack_fn, out.keys())
 
             return TensorDict(
                 out,
@@ -385,6 +406,7 @@ def _stack(
                 stack_dim=dim,
             )
     else:
+        keys = _check_keys(list_of_tensordicts)
         batch_size = list(batch_size)
         batch_size.insert(dim, len(list_of_tensordicts))
         batch_size = torch.Size(batch_size)
