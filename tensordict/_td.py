@@ -526,7 +526,8 @@ class TensorDict(TensorDictBase):
                 )
                 return
 
-        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
+        # we must use any and because using Ellipsis in index can break with some indices
+        if index is Ellipsis or (isinstance(index, tuple) and any(idx is Ellipsis for idx in index)):
             index = convert_ellipsis_to_idx(index, self.batch_size)
 
         if isinstance(value, (TensorDictBase, dict)):
