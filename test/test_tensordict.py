@@ -5546,6 +5546,19 @@ class TestLazyStackedTensorDict:
         stack = torch.stack([td, td2])
         assert set(stack.keys(True, True)) == {"a"}
 
+    def test_best_intention_stack(self):
+        td0 = TensorDict({"a": 1, "b": TensorDict({"c": 2}, [])}, [])
+        td1 = TensorDict({"a": 1, "b": TensorDict({"d": 2}, [])}, [])
+        with set_lazy_legacy(False):
+            td = torch.stack([td0, td1])
+        assert isinstance(td, TensorDict)
+        assert isinstance(td.get("b"), LazyStackedTensorDict)
+        td1 = TensorDict({"a": 1, "b": TensorDict({"c": [2]}, [])}, [])
+        with set_lazy_legacy(False):
+            td = torch.stack([td0, td1])
+        assert isinstance(td, TensorDict)
+        assert isinstance(td.get("b"), LazyStackedTensorDict)
+
 
 @pytest.mark.skipif(
     not _has_torchsnapshot, reason=f"torchsnapshot not found: err={TORCHSNAPSHOT_ERR}"
