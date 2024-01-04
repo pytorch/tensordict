@@ -53,6 +53,7 @@ from tensordict.utils import (
     infer_size_impl,
     is_tensorclass,
     KeyedJaggedTensor,
+    lazy_legacy,
     lock_blocked,
     NestedKey,
 )
@@ -780,6 +781,13 @@ class LazyStackedTensorDict(TensorDictBase):
                     out.hook_out = self.hook_out
                     out.hook_in = self.hook_in
                     out._is_vmapped = self._is_vmapped
+                    incr = 0 if not self._is_vmapped else 1
+                    out._batch_size = (
+                        self._batch_size
+                        + out.batch_size[(len(self._batch_size) + incr) :]
+                    )
+                elif not lazy_legacy():
+                    # it must be a TensorDict
                     incr = 0 if not self._is_vmapped else 1
                     out._batch_size = (
                         self._batch_size
