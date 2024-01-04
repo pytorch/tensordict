@@ -6,6 +6,7 @@
 import argparse
 import distutils.command.clean
 import glob
+import logging
 import os
 import shutil
 import subprocess
@@ -61,10 +62,12 @@ def write_version_file(version):
         f.write(f"git_version = {repr(sha)}\n")
 
 
-def _get_pytorch_version():
+def _get_pytorch_version(is_nightly):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
-    return "torch"
+    if is_nightly:
+        return "torch>=2.2.0.dev"
+    return "torch>=2.1.0"
 
 
 def _get_packages():
@@ -84,13 +87,13 @@ class clean(distutils.command.clean.clean):
 
         # Remove tensordict extension
         for path in (ROOT_DIR / "tensordict").glob("**/*.so"):
-            print(f"removing '{path}'")
+            logging.info(f"removing '{path}'")
             path.unlink()
         # Remove build directory
         build_dirs = [ROOT_DIR / "build"]
         for path in build_dirs:
             if path.exists():
-                print(f"removing '{path}' (and everything under it)")
+                logging.info(f"removing '{path}' (and everything under it)")
                 shutil.rmtree(str(path), ignore_errors=True)
 
 
@@ -107,7 +110,7 @@ def get_extensions():
     }
     debug_mode = os.getenv("DEBUG", "0") == "1"
     if debug_mode:
-        print("Compiling in debug mode")
+        logging.info("Compiling in debug mode")
         extra_compile_args = {
             "cxx": [
                 "-O0",
@@ -149,11 +152,11 @@ def _main(argv):
     version = get_nightly_version() if is_nightly else get_version()
 
     write_version_file(version)
-    print(f"Building wheel {package_name}-{version}")
-    print(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
+    logging.info(f"Building wheel {package_name}-{version}")
+    logging.info(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
 
-    pytorch_package_dep = _get_pytorch_version()
-    print("-- PyTorch dependency:", pytorch_package_dep)
+    pytorch_package_dep = _get_pytorch_version(is_nightly)
+    logging.info("-- PyTorch dependency:", pytorch_package_dep)
 
     long_description = (ROOT_DIR / "README.md").read_text()
     sys.argv = [sys.argv[0], *unknown]

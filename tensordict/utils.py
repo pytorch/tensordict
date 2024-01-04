@@ -5,8 +5,11 @@
 from __future__ import annotations
 
 import collections
+import concurrent.futures
 import dataclasses
 import inspect
+import logging
+
 import math
 import os
 
@@ -690,7 +693,7 @@ class timeit:
         val[2] = N
 
     @staticmethod
-    def print(prefix=None):
+    def print(prefix=None):  # noqa: T202
         keys = list(timeit._REG)
         keys.sort()
         for name in keys:
@@ -700,7 +703,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            print(" -- ".join(strings))
+            logging.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -1429,12 +1432,9 @@ def _expand_to_match_shape(
         )
     else:
         # tensordict
-        from tensordict import TensorDict
-
-        out = TensorDict(
-            {},
-            [*parent_batch_size, *_shape(tensor)[self_batch_dims:]],
-            device=self_device,
+        out = tensor.empty()
+        out.batch_size = torch.Size(
+            [*parent_batch_size, *_shape(tensor)[self_batch_dims:]]
         )
         return out
 
@@ -1750,6 +1750,44 @@ def _prune_selected_keys(keys_to_update, prefix):
     return tuple(
         key[1:] for key in keys_to_update if isinstance(key, tuple) and key[0] == prefix
     )
+
+
+class TensorDictFuture:
+    """A custom future class for TensorDict multithreaded operations.
+
+    Args:
+        futures (list of futures): a list of concurrent.futures.Future objects to wait for.
+        resulting_td (TensorDictBase): instance that will result from the futures
+            completing.
+
+    """
+
+    def __init__(self, futures, resulting_td):
+        self.futures = futures
+        self.resulting_td = resulting_td
+
+    def result(self):
+        """Wait and returns the resulting tensordict."""
+        concurrent.futures.wait(self.futures)
+        return self.resulting_td
+
+
+def _is_json_serializable(item):
+    if isinstance(item, dict):
+        for key, val in item.items():
+            # Per se, int, float and bool are serializable but not recoverable
+            # as such
+            if not isinstance(key, (str,)) or not _is_json_serializable(val):
+                return False
+        else:
+            return True
+    if isinstance(item, (list, tuple, set)):
+        for val in item:
+            if not _is_json_serializable(val):
+                return False
+        else:
+            return True
+    return isinstance(item, (str, int, float, bool)) or item is None
 
 
 def print_directory_tree(path, indent="", display_metadata=True):

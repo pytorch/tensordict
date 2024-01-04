@@ -9,7 +9,7 @@ from __future__ import annotations
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Type
 
 from tensordict._td import _unravel_key_to_tuple
 from torch import multiprocessing as mp
@@ -29,7 +29,7 @@ import os
 import numpy as np
 import torch
 from tensordict._td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
-from tensordict.base import is_tensor_collection, T, TensorDictBase
+from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
@@ -125,6 +125,7 @@ class PersistentTensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
+    LOCKING = None
 
     def __init__(
         self,
@@ -147,7 +148,7 @@ class PersistentTensorDict(TensorDictBase):
         if backend != "h5":
             raise NotImplementedError
         if filename is not None and group is None:
-            self.file = h5py.File(filename, mode)
+            self.file = h5py.File(filename, mode, locking=self.LOCKING)
         elif group is not None:
             self.file = group
         else:
@@ -202,7 +203,7 @@ class PersistentTensorDict(TensorDictBase):
             A :class:`PersitentTensorDict` instance linked to the newly created file.
 
         """
-        file = h5py.File(filename, "w")
+        file = h5py.File(filename, "w", locking=cls.LOCKING)
         _has_batch_size = True
         if batch_size is None:
             if is_tensor_collection(input_dict):
@@ -415,8 +416,15 @@ class PersistentTensorDict(TensorDictBase):
 
     # @cache  # noqa: B019
     def keys(
-        self, include_nested: bool = False, leaves_only: bool = False
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> _PersistentTDKeysView:
+        if is_leaf not in (None, _default_is_leaf):
+            raise ValueError(
+                f"is_leaf {is_leaf} is not supported within tensordicts of type {type(self)}."
+            )
         return _PersistentTDKeysView(
             tensordict=self,
             include_nested=include_nested,
@@ -489,6 +497,22 @@ class PersistentTensorDict(TensorDictBase):
     @property
     def device(self):
         return self._device
+
+    def empty(self, recurse=False) -> T:
+        if recurse:
+            out = self.empty(recurse=False)
+            for key, val in self.items():
+                if is_tensor_collection(val):
+                    out._set_str(
+                        key, val.empty(recurse=True), inplace=False, validated=True
+                    )
+            return out
+        return TensorDict(
+            {},
+            device=self.device,
+            batch_size=self.batch_size,
+            names=self.names if self._has_names() else None,
+        )
 
     def entry_class(self, key: NestedKey) -> type:
         entry_class = self._get_metadata(key)
@@ -888,6 +912,11 @@ class PersistentTensorDict(TensorDictBase):
             inplace = has_key
         return inplace
 
+    def _set_non_tensor(self, key: NestedKey, value: Any):
+        raise NotImplementedError(
+            f"set_non_tensor is not compatible with the tensordict type {type(self)}."
+        )
+
     def _set_str(self, key, value, *, inplace, validated):
         inplace = self._convert_inplace(inplace, key)
         return self._set(key, value, inplace=inplace, validated=validated)
@@ -931,7 +960,7 @@ class PersistentTensorDict(TensorDictBase):
                 )
                 tmpfile = tempfile.NamedTemporaryFile()
                 newfile = tmpfile.name
-            f_dest = h5py.File(newfile, "w")
+            f_dest = h5py.File(newfile, "w", locking=self.LOCKING)
             f_src = self.file
             for key in self.keys(include_nested=True, leaves_only=True):
                 key = self._process_key(key)
@@ -974,14 +1003,25 @@ class PersistentTensorDict(TensorDictBase):
         state["file"] = None
         state["filename"] = filename
         state["group_name"] = group_name
+        state["__lock_parents_weakrefs"] = None
         return state
 
     def __setstate__(self, state):
-        state["file"] = h5py.File(state["filename"], mode=state["mode"])
+        state["file"] = h5py.File(
+            state["filename"], mode=state["mode"], locking=self.LOCKING
+        )
         if state["group_name"] != "/":
             state["file"] = state["file"][state["group_name"]]
         del state["group_name"]
         self.__dict__.update(state)
+        if self._is_locked:
+            # this can cause avoidable overhead, as we will be locking the leaves
+            # then locking their parent, and the parent of the parent, every
+            # time re-locking tensordicts that have already been locked.
+            # To avoid this, we should lock only at the root, but it isn't easy
+            # to spot what the root is...
+            self._is_locked = False
+            self.lock_()
 
     def _add_batch_dim(self, *, in_dim, vmap_level):
         raise RuntimeError("Persistent tensordicts cannot be used with vmap.")
@@ -993,6 +1033,7 @@ class PersistentTensorDict(TensorDictBase):
     __eq__ = TensorDict.__eq__
     __ne__ = TensorDict.__ne__
     __xor__ = TensorDict.__xor__
+    __or__ = TensorDict.__or__
     _apply_nest = TensorDict._apply_nest
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared

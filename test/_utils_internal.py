@@ -10,7 +10,7 @@ import tempfile
 import numpy as np
 import torch
 
-from tensordict import PersistentTensorDict, tensorclass, TensorDict
+from tensordict import NonTensorData, PersistentTensorDict, tensorclass, TensorDict
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import is_tensor_collection
@@ -126,7 +126,8 @@ class TestTensorDictsBase:
             batch_size=[4, 3, 2, 1],
             device=device,
         )
-        return torch.stack(list(td.unbind(1)), 1)
+        # we need to clone to avoid passing a views other tensors
+        return torch.stack([_td.clone() for _td in td.unbind(1)], 1)
 
     for device in get_available_devices():
         TYPES_DEVICES += [["nested_stacked_td", device]]
@@ -296,6 +297,23 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["td_params", device]]
         TYPES_DEVICES_NOLAZY += [["td_params", device]]
 
+    def td_with_non_tensor(self, device):
+        td = self.td(device)
+        return td.set_non_tensor(
+            ("data", "non_tensor"),
+            # this is allowed since nested NonTensorData are automatically unwrapped
+            NonTensorData(
+                "some text data",
+                batch_size=td.batch_size,
+                device=td.device,
+                names=td.names if td._has_names() else None,
+            ),
+        )
+
+    for device in get_available_devices():
+        TYPES_DEVICES += [["td_with_non_tensor", device]]
+        TYPES_DEVICES_NOLAZY += [["td_with_non_tensor", device]]
+
 
 def expand_list(list_of_tensors, *dims):
     n = len(list_of_tensors)
@@ -314,3 +332,11 @@ def decompose(td):
                 yield from decompose(v)
             else:
                 yield v
+
+
+class DummyPicklableClass:
+    def __init__(self, value):
+        self.value = value
+
+    def __eq__(self, other):
+        return self.value == other.value
