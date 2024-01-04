@@ -12,20 +12,48 @@ regular pytorch tensors.
     :toctree: generated/
     :template: td_template.rst
 
+    TensorDictBase
     TensorDict
     SubTensorDict
     LazyStackedTensorDict
     PersistentTensorDict
+    TensorDictParams
+
+TensorDict as a context manager
+-------------------------------
+
+:class:`~tensordict.TensorDict` can be used as a context manager in situations
+where an action has to be done and then undone. This include temporarily
+locking/unlocking a tensordict
+
+    >>> data.lock_()  # data.set will result in an exception
+    >>> with data.unlock_():
+    ...     data.set("key", value)
+    >>> assert data.is_locked()
+
+or to execute functional calls with a TensorDict instance containing the
+parameters and buffers of a model:
+
+    >>> params = TensorDict.from_module(module).clone()
+    >>> params.zero_()
+    >>> with params.to_module(module):
+    ...     y = module(x)
+
+In the first example, we can modify the tensordict `data` because we have
+temporarily unlocked it. In the second example, we populate the module with the
+parameters and buffers contained in the `params` tensordict instance, and reset
+the original parameters after this call is completed.
 
 Memory-mapped tensors
 ---------------------
 
-`tensordict` offers the :class:`~tensordict.MemoryMappedTensor` primitive which allows you to work
-with tensors stored in physical memory in a handy way.
+`tensordict` offers the :class:`~tensordict.MemoryMappedTensor` primitive which
+allows you to work with tensors stored in physical memory in a handy way.
 The main advantages of :class:`~tensordict.MemoryMappedTensor`
-are its easiness of construction (no need to handle the storage of a tensor), the possibility to
-work with big contiguous data that would not fit in memory, an efficient (de)serialization across processes and
-efficient indexing of stored tensors.
+are its easiness of construction (no need to handle the storage of a tensor),
+the possibility to work with big contiguous data that would not fit in memory,
+an efficient (de)serialization across processes and efficient indexing of
+stored tensors.
 
 If all workers have access to the same storage (both in multiprocess and distributed
 settings), passing a :class:`~tensordict.MemoryMappedTensor`
@@ -48,6 +76,7 @@ However, physical storage of PyTorch tensors should not be any different:
     :template: td_template.rst
 
     MemoryMappedTensor
+
 
 Utils
 -----

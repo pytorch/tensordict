@@ -68,6 +68,11 @@ def to_numpy(tensor: torch.Tensor | np.ndarray) -> np.ndarray:
 class MemmapTensor:
     """A torch.tensor interface with a np.memmap array.
 
+    .. warning::
+      MemmapTensor is kept for backward compatibility. We strongly encourage
+      users to rely on :class:`~tensordict.MemoryMappedTensor` rather than
+      ``MemmapTensor`` as this class is faster and more stable.
+
     A temporary file is created and cleared once the object is out-of-scope.
     This class is aimed at being used for data transfer in between processes
     and remote workers that have access to
@@ -75,9 +80,9 @@ class MemmapTensor:
     deserialization. It is possible to choose if the ownership is
     transferred upon serialization / deserialization: If ownership is not
     transferred (transfer_ownership=False, default), then the process where
-    the MemmapTensor was created will be responsible of clearing it once it
+    the MemmapTensor was created will be responsible for clearing it once it
     gets out of scope (in that process). Otherwise, the process that
-    deserialize the MemmapTensor will be responsible of clearing the files
+    deserialize the MemmapTensor will be responsible for clearing the files
     once the object is out of scope.
 
     Supports (almost) all tensor operations.

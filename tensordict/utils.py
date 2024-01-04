@@ -1821,14 +1821,14 @@ def print_directory_tree(path, indent="", display_metadata=True):
 
         total_size_bytes = get_directory_size(path)
         formatted_size = format_size(total_size_bytes)
-        print(f"Directory size: {formatted_size}")
+        logging.info(f"Directory size: {formatted_size}")
 
     if os.path.isdir(path):
-        print(indent + os.path.basename(path) + "/")
+        logging.info(indent + os.path.basename(path) + "/")
         indent += "    "
         for item in os.listdir(path):
             print_directory_tree(
                 os.path.join(path, item), indent=indent, display_metadata=False
             )
     else:
-        print(indent + os.path.basename(path))
+        logging.info(indent + os.path.basename(path))
