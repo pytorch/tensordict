@@ -2857,7 +2857,6 @@ class TestTensorDictParams:
         params = self._get_params()
         p = TensorDictParams(params)
         m = self.CustomModule(p)
-        print("m.children", list(m.children()))
         for dtype in ("half", "double", "float"):
             getattr(m, dtype)()
             for p in params.values(True, True):
@@ -3188,7 +3187,6 @@ class TestStateDict:
         # load the data
         td.load_state_dict(sd)
         # check that data has been loaded
-        print(sd)
         assert (td == 0).all()
 
     def test_sd_module(self):

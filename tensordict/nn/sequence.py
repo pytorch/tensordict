@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from copy import deepcopy
 from typing import Any, Iterable
 
@@ -16,7 +18,7 @@ try:
 
     _has_functorch = True
 except ImportError:
-    print(
+    logging.info(
         "failed to import functorch. TensorDict's features that do not require "
         "functional programming should work, but functionality and performance "
         "may be affected. Consider installing functorch and/or upgrating pytorch."
