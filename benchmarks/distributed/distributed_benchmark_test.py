@@ -77,8 +77,6 @@ def exec_distributed_test(rank_node):
                 break
             except RuntimeError:
                 time.sleep(0.1)
-                print("-", end="")
-        print("")
 
         def fill_tensordict(tensordict, idx):
             tensordict[idx] = TensorDict(

@@ -263,7 +263,7 @@ class TestIndexing:
         assert msg == "deleted"
         assert not os.path.isfile(filename)
         with pytest.raises(FileNotFoundError, match="No such file or directory"):
-            print(t + 1)
+            t + 1
         queue_out.put("done again")
         del queue_in, queue_out
 

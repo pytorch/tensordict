@@ -217,7 +217,7 @@ def print_trouble(prog, message, use_colors):
     error_text = "error:"
     if use_colors:
         error_text = bold_red(error_text)
-    logging.info(f"{prog}: {error_text} {message}", file=sys.stderr)
+    logging.error(f"{prog}: {error_text} {message}")
 
 
 def main():

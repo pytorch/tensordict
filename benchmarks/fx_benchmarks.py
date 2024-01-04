@@ -13,6 +13,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.prototype.fx import symbolic_trace
 
+
 # modules for sequential benchmark
 class Net(nn.Module):
     def __init__(self, input_size=100, hidden_size=50, output_size=10):
