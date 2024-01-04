@@ -554,7 +554,7 @@ class TensorDict(TensorDictBase):
                 if key in keys:
                     self._set_at_str(key, item, index, validated=False)
                 else:
-                    subtd.set(key, item)
+                    subtd.set(key, item, inplace=True)
         else:
             for key in self.keys():
                 self.set_at_(key, value, index)
