@@ -16,7 +16,7 @@ Using TensorDict for datasets
 import torch
 import torch.nn as nn
 
-from tensordict import TensorDict, MemoryMappedTensor
+from tensordict import MemoryMappedTensor, TensorDict
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
@@ -55,9 +55,8 @@ test_data = datasets.FashionMNIST(
 
 training_data_td = TensorDict(
     {
-        "images": MemoryMappedTensor.empty((
-            len(training_data),
-            *training_data[0][0].squeeze().shape),
+        "images": MemoryMappedTensor.empty(
+            (len(training_data), *training_data[0][0].squeeze().shape),
             dtype=torch.float32,
         ),
         "targets": MemoryMappedTensor.empty((len(training_data),), dtype=torch.int64),
@@ -67,8 +66,8 @@ training_data_td = TensorDict(
 )
 test_data_td = TensorDict(
     {
-        "images": MemoryMappedTensor.empty((
-            len(test_data), *test_data[0][0].squeeze().shape), dtype=torch.float32
+        "images": MemoryMappedTensor.empty(
+            (len(test_data), *test_data[0][0].squeeze().shape), dtype=torch.float32
         ),
         "targets": MemoryMappedTensor.empty((len(test_data),), dtype=torch.int64),
     },

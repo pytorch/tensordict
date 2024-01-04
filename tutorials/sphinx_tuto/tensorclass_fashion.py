@@ -68,8 +68,8 @@ class FashionMNISTData:
     @classmethod
     def from_dataset(cls, dataset, device=None):
         data = cls(
-            images=MemoryMappedTensor.empty((
-                len(dataset), *dataset[0][0].squeeze().shape), dtype=torch.float32
+            images=MemoryMappedTensor.empty(
+                (len(dataset), *dataset[0][0].squeeze().shape), dtype=torch.float32
             ),
             targets=MemoryMappedTensor.empty((len(dataset),), dtype=torch.int64),
             batch_size=[len(dataset)],

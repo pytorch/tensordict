@@ -50,7 +50,7 @@ Memory-mapped tensors
 `tensordict` offers the :class:`~tensordict.MemoryMappedTensor` primitive which
 allows you to work with tensors stored in physical memory in a handy way.
 The main advantages of :class:`~tensordict.MemoryMappedTensor`
-are its easiness of construction (no need to handle the storage of a tensor),
+are its ease of construction (no need to handle the storage of a tensor),
 the possibility to work with big contiguous data that would not fit in memory,
 an efficient (de)serialization across processes and efficient indexing of
 stored tensors.
