@@ -17,16 +17,21 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import is_memmap, MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
 from tensordict.tensorclass import NonTensorData, tensorclass
-from tensordict.utils import assert_allclose_td, is_batchedtensor, is_tensorclass
+from tensordict.utils import (
+    assert_allclose_td,
+    is_batchedtensor,
+    is_tensorclass,
+    lazy_legacy,
+    set_lazy_legacy,
+)
+from tensordict._pytree import *
+
+from tensordict._tensordict import unravel_key, unravel_key_list
 
 try:
     from tensordict.version import __version__
 except ImportError:
     __version__ = None
-
-from tensordict._pytree import *
-
-from tensordict._tensordict import unravel_key, unravel_key_list
 
 __all__ = [
     "LazyStackedTensorDict",
