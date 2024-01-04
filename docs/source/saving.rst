@@ -1,23 +1,201 @@
 Saving TensorDict and tensorclass objects
 =========================================
 
-While we can just save a tensordict with :obj:`torch.save(my_tensordict)`, this
+While we can just save a tensordict with :func:`~torch.save`, this
 will create a single file with the whole content of the data structure.
 One can easily imagine situations where this is sub-optimal!
 
-In general, we recommend using `torchsnapshot <https://github.com/pytorch/torchsnapshot>`_.
+TensorDict serialization API mainly relies on :class:`~tensordict.MemoryMappedTensor`
+which is used to write tensors independently on disk with a data structure
+that mimics the TensorDict's one.
+
+TensorDict's serialization speed can be an order of magnitude __faster__ than
+PyTorch's one with :func:`~torch.save`'s pickle reliance. This document explains
+how to create and interact with data stored on disk using TensorDict.
+
+Saving memmory-mapped TensorDicts
+---------------------------------
+
+When a tensordict is dumped as a mmap data structure, each entry corresponds
+to a single ``*.memmap`` file, and the directory structure is determined by the
+key structure: generally, nested keys correspond to sub-directories.
+
+Saving a data structure as a structured set of memory-mapped tensors has the following
+advantages:
+
+- The saved data can be partially loaded. If a large model is saved on disk but
+  only parts of its weights need to be loaded onto a module created in a separate
+  scripts, only these weights will be loaded in memory.
+- Saving data is safe: using the pickle library for serializing big data structures
+  can be unsafe as unpickling can execute any arbitrary code. TensorDict's loading
+  API only reads pre-selected fields from saved json files and memorybuffers
+  saved on disk.
+- Saving is fast: because the data is written in several independent files,
+  we can amortize the IO overhead by launching several concurrent threads that
+  each access a dedicated file on their own.
+- The structure of the saved data is apparent: the directory tree is indicative
+  of the data content.
+
+However, this approach also has some disadvantages:
+
+- Not every data type can be saved. :obj:`~tensordict.tensorclass` allows to save
+  any non-tensor data: if these data can be represented in a json file, a json
+  format will be used. Otherwise, non-tensor data will be saved independently
+  with :func:`~torch.save` as a fallback.
+  The :class:`~tensordict.NonTensorData` class can be used to represent non-tensor
+  data in a regular :class:`~tensordict.TensorDict` instance.
+
+tensordict's memory-mapped API relies on four core method:
+:meth:`~tensordict.TensorDictBase.memmap_`, :meth:`~tensordict.TensorDictBase.memmap`,
+:meth:`~tensordict.TensorDictBase.memmap_like` and :meth:`~tensordict.TensorDictBase.load_memmap`.
+
+The :meth:`~tensordict.TensorDictBase.memmap_` and :meth:`~tensordict.TensorDictBase.memmap`
+methods will write the data on disk with or without modifying the tensordict
+instance that contains the data. These methods can be used to serialize a model
+on disk (we use multiple threads to speed up serialization):
+
+  >>> model = nn.Transformer()
+  >>> weights = TensorDict.from_module(model)
+  >>> weights_disk = weights.memmap("/path/to/saved/dir", num_threads=32)
+  >>> new_weights = TensorDict.load_memmap("/path/to/saved/dir")
+  >>> assert (weights_disk == new_weights).all()
+
+The :meth:`~tensordict.TensorDictBase.memmap_like` is to be used when a dataset
+needs to be preallocated on disk, the typical usage being:
+
+  >>> def make_datum(): # used for illustration purposes
+  ...    return TensorDict({"image": torch.randint(255, (3, 64, 64)), "label": 0}, batch_size=[])
+  >>> dataset_size = 1_000_000
+  >>> datum = make_datum() # creates a single instance of a TensorDict datapoint
+  >>> data = datum.expand(dataset_size) # does NOT require more memory usage than datum, since it's only a view on datum!
+  >>> data_disk = data.memmap_like("/path/to/data")  # creates the two memory-mapped tensors on disk
+  >>> del data # data is not needed anymore
+
+As illustrated above, when converting entries of a :class:`~tensordict.TensorDict``
+to :class:`~tensordict.MemoryMappedTensor`, it is possible to control where
+the memory maps are saved on disk so that they persist and can
+be loaded at a later date. On the other hand, the file system can also be used.
+To use this, simply discard the ``prefix`` argument in the three serialization
+methods above.
+
+When a ``prefix`` is specified, the data structure follows the TensorDict's one:
+
+  >>> import torch
+  >>> from tensordict import TensorDict
+  >>> td = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
+  >>> td.memmap_(prefix="tensordict")
+
+yields the following directory structure
+
+.. code-block::
+
+  tensordict
+  ├── a.memmap
+  ├── b
+  │   ├── c.memmap
+  │   └── meta.json
+  └── meta.json
+
+The ``meta.json`` files contain all the releant information to rebuild the
+tensordict, such as device, batch-size, but also the tensordict subtypes.
+This means that :meth:`~tensordict.TensorDict.load_memmap` will be able to
+reconstruct complex nested structure where sub-tensordicts have different types
+than parents:
+
+  >>> from tensordict import TensorDict, tensorclass, TensorDictBase
+  >>> from tensordict.utils import print_directory_tree
+  >>> import torch
+  >>> import tempfile
+  >>> td_list = [TensorDict({"item": i}, batch_size=[]) for i in range(4)]
+  >>> @tensorclass
+  ... class MyClass:
+  ...     data: torch.Tensor
+  ...     metadata: str
+  >>> tc = MyClass(torch.randn(3), metadata="some text", batch_size=[])
+  >>> data = TensorDict({"td_list": torch.stack(td_list), "tensorclass": tc}, [])
+  >>> with tempfile.TemporaryDirectory() as tempdir:
+  ...     data.memmap_(tempdir)
+  ...
+  ...     loaded_data = TensorDictBase.load_memmap(tempdir)
+  ...     assert (loaded_data == data).all()
+  ...     print_directory_tree(tempdir)
+  tmpzy1jcaoq/
+      tensorclass/
+          _tensordict/
+              data.memmap
+              meta.json
+          meta.json
+      td_list/
+          0/
+              item.memmap
+              meta.json
+          1/
+              item.memmap
+              meta.json
+          3/
+              item.memmap
+              meta.json
+          2/
+              item.memmap
+              meta.json
+          meta.json
+      meta.json
+
+
+Handling existing :class:`~tensordict.MemoryMappedTensor`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If the :class:`~tensordict.TensorDict`` already contains
+:class:`~tensordict.MemoryMappedTensor` entries there are a few
+possible behaviours.
+
+- If ``prefix`` is not specified and :meth:`~tensordict.TensorDict.memmap` is called
+  twice, the resulting `TensorDict` will contain the same data as the orignal one.
+
+    >>> td = TensorDict({"a": 1}, [])
+    >>> td0 = td.memmap()
+    >>> td1 = td0.memmap()
+    >>> td0["a"] is td1["a"]
+    True
+
+- If ``prefix`` is specified and differs from the prefix of the existing
+  :class:`~tensordict.MemoryMappedTensor` instances, an exception is raised,
+  unless `copy_existing=True` is passed:
+
+    >>> with tempfile.TemporaryDirectory() as tmpdir_0:
+    ...     td0 = td.memmap(tmpdir_0)
+    ...     td0 = td.memmap(tmpdir_0)  # works, results are just overwritten
+    ...     with tempfile.TemporaryDirectory() as tmpdir_1:
+    ...         td1 = td0.memmap(tmpdir_1)
+    ...         td_load = TensorDict.load_memmap(tmpdir_1)  # works!
+    ...     assert (td_load == td).all()
+    ...     with tempfile.TemporaryDirectory() as tmpdir_1:
+    ...         td_load = TensorDict.load_memmap(tmpdir_1)  # breaks!
+
+  This feature is implemented to prevent users from inadvertently copy memorymapped
+  tensors from one location to another.
+
+TorchSnapshot compatibility
+---------------------------
+
+.. warning::
+  As torchsnapshot maintenance is being discontinued. As such, we won't be implementing
+  new features for tensordict compatibility with this library.
+
+TensorDict is compatible with `torchsnapshot <https://github.com/pytorch/torchsnapshot>`_,
+a PyTorch checkpointing library.
 TorchSnapshot will save each of your tensors independently, with a data structure that
 mimics the one of your tensordict or tensorclass. Moreover, TensorDict has naturally
 buit-in the tools necessary for saving and loading huge datasets on disk without
 loading the full tensors in memory: in other words, the combination tensordict + torchsnapshot
 makes it possible to load a tensor big as several hundreds of Gb onto a
-pre-allocated :obj:`MemmapTensor` without passing it in one chunk on RAM.
+pre-allocated :class:`~tensordict.MemmapTensor` without passing it in one chunk on RAM.
 
 There are two main use cases: saving and loading tensordicts that fit in memory,
-and saving and loading tensordicts stored on disk using MemmapTensors.
+and saving and loading tensordicts stored on disk using :class:`~tensordict.MemmapTensor`.
 
 General use case: in-memory loading
------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This method is suitable if your destination tensordict is not pre-allocated.
 This offers flexibility (you can load any tensordict onto your tensordict, you
@@ -64,7 +242,7 @@ Here is a full example:
 
 
 Saving and loading big-datasets
--------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If the dataset is too big to fit in memory, the above method could easily break.
 We take advantage of the capabilities of torchsnapshot to load the tensors in small chunks
@@ -172,92 +350,3 @@ Finally, tensorclass also supports this feature. The code is fairly similar to t
   >>> assert (tc_dest == tc).all()
   >>> assert (tc_dest.y.batch_size == tc.y.batch_size)
   >>> assert isinstance(tc_dest.y.x, MemmapTensor)
-
-Saving memmory-mapped TensorDicts
----------------------------------
-
-When converting entries of a ``TensorDict`` to ``MemmapTensor``, it is possible
-to control where the memory maps are saved on disk so that they persist and can
-be loaded at a later date. Simply specify a ``prefix`` when calling ``TensorDict.memmap_``. For example
-
-.. code-block:: Python
-
-  >>> import torch
-  >>> from tensordict import TensorDict
-  >>> td = TensorDict({"a": torch.rand(10), "b": {"c": torch.rand(10)}}, [10])
-  >>> td.memmap_(prefix="tensordict")
-
-yields the following directory structure
-
-.. code-block::
-
-  tensordict
-  ├── a.memmap
-  ├── a.meta.pt
-  ├── b
-  │   ├── c.memmap
-  │   ├── c.meta.pt
-  │   └── meta.pt
-  └── meta.pt
-
-Each key in the ``TensorDict`` corresponds to a single ``*.memmap`` file, with
-the directory structure determined by the key structure: nested keys correspond
-to sub-directories.
-
-.. note::
-
-  Because we must walk the nested directory structure, and write a file for
-  each entry, this is not a fast way to serialize the contents of the
-  ``TensorDict``, and hence should not be used for example inside a training
-  loop.
-
-To load the ``TensorDict`` from these files we can use
-``TensorDict.load_memmap``.
-
-.. code-block:: Python
-
-  >>> td2 = TensorDict.load_memmap(prefix="tensordict")
-  >>> td2
-  TensorDict(
-    fields={
-        a: MemmapTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False),
-        b: TensorDict(
-            fields={
-                c: MemmapTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([10]),
-            device=None,
-            is_shared=False)},
-    batch_size=torch.Size([10]),
-    device=None,
-    is_shared=False)
-
-Because all of the information to reconstruct nested items is contained in the
-corresponding subdirectory, we can also load just the nested ``TensorDict`` by
-loading from the sub-directory
-
-.. code-block:: Python
-
-  >>> td3 = TensorDict.load_memmap(prefix="tensordict/b")
-  TensorDict(
-    fields={
-        c: MemmapTensor(shape=torch.Size([10]), device=cpu, dtype=torch.float32, is_shared=False)},
-    batch_size=torch.Size([10]),
-    device=None,
-    is_shared=False)
-
-Handling existing ``MemmapTensors``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-If the ``TensorDict`` already has ``MemmapTensor`` entries, there are a few
-possible behaviours.
-
-- If ``prefix`` is not specified, ``memmap_`` does not modify any existing
-  ``MemmapTensors`` in the ``TensorDict``, they will keep their original
-  location on disk.
-- If ``prefix`` is specified, existing ``MemmapTensor`` entries are not
-  modified, and an error will be raised if they are not saved in a location
-  consistent with ``prefix`` and their key in the ``TensorDict``.
-- If ``prefix`` is specified, and the keyword argument ``copy_existing=True``
-  is set, then any existing ``MemmapTensor`` entries are left unmodified if
-  they already exist in the correct location, or are copied to the correct
-  location if they are not.
