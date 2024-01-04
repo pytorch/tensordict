@@ -276,9 +276,9 @@ if __name__ == "__main__":
         def __call__(self, x: ImageNetData):
             # move data to RAM
             if self.device.type == "cuda":
-                out = x.apply(lambda x: x.as_tensor()).pin_memory()
+                out = x.pin_memory()
             else:
-                out = x.apply(lambda x: x.as_tensor())
+                out = x
             if self.device:
                 # move data to gpu
                 out = out.to(self.device)
