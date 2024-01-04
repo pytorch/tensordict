@@ -320,7 +320,7 @@ first traced using :func:`~.symbolic_trace`.
 Distributions
 -------------
 
-.. py:currentmodule::tensordict.nn.distributions
+.. currentmodule:: tensordict.nn.distributions
 
 .. autosummary::
     :toctree: generated/

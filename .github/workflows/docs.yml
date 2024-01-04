@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - "*"
   workflow_dispatch:
 
 concurrency:
@@ -14,46 +17,126 @@ concurrency:
 
 jobs:
   build-docs:
-    runs-on: ubuntu-20.04
-    defaults:
-      run:
-        shell: bash -l {0}
-    steps:
-      - name: Checkout tensordict
-        uses: actions/checkout@v3
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v2
-        with:
-          activate-environment: build_docs
-          python-version: "3.9"
-      - name: Check Python version
-        run: |
-          python --version
-      - name: Install PyTorch
-        run: |
-          pip3 install pip --upgrade
-          pip3 install packaging
-          pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
-      - name: Install TensorDict
-        run: |
-          python -m pip install -e .
-      - name: Test tensordict installation
-        run: |
-          mkdir _tmp
-          cd _tmp
-          python -c "import tensordict"
-          cd ..
-      - name: Build the docset
-        working-directory: ./docs
-        run: |
-          python -m pip install -r requirements.txt
-          make docs
-      - name: Get output time
-        run: echo "The time was ${{ steps.build.outputs.time }}"
-      - name: Deploy
-        uses: JamesIves/github-pages-deploy-action@releases/v3
-        with:
-          ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: gh-pages # The branch the action should deploy to.
-          FOLDER: docs/build/html # The folder the action should deploy.
-          CLEAN: false
+    strategy:
+      matrix:
+        python_version: ["3.9"]
+        cuda_arch_version: ["12.1"]
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/tensordict
+      upload-artifact: docs
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      docker-image: "nvidia/cudagl:11.4.0-base"
+      timeout: 120
+      script: |
+        set -e
+        set -v
+        apt-get update && apt-get install -y git wget gcc g++
+        root_dir="$(pwd)"
+        conda_dir="${root_dir}/conda"
+        env_dir="${root_dir}/env"
+        os=Linux
+        
+        # 1. Install conda at ./conda
+        printf "* Installing conda\n"
+        wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
+        bash ./miniconda.sh -b -f -p "${conda_dir}"
+        eval "$(${conda_dir}/bin/conda shell.bash hook)"
+        printf "* Creating a test environment\n"
+        conda create --prefix "${env_dir}" -y python=3.8
+        printf "* Activating\n"
+        conda activate "${env_dir}"
+        
+        # 2. upgrade pip, ninja and packaging
+        apt-get install python3.8 python3-pip unzip -y
+        python3 -m pip install --upgrade pip
+        python3 -m pip install setuptools ninja packaging -U
+        
+        # 3. check python version
+        python3 --version
+        
+        # 4. Check git version
+        git version
+        
+        # 5. Install PyTorch
+        python3 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu --quiet --root-user-action=ignore
+        
+        # 6. Install tensordict
+        python3 setup.py develop
+        
+        # 7. Install requirements
+        python3 -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+        
+        # 8. Test tensordict installation
+        mkdir _tmp
+        cd _tmp
+        PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from tensordict import *"""
+        cd ..
+        
+        # 10. Build doc
+        cd ./docs
+        make docs
+        # PYOPENGL_PLATFORM=egl MUJOCO_GL=egl sphinx-build ./source _local_build
+        cd ..
+
+        cp -r docs/build/* "${RUNNER_ARTIFACT_DIR}"
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
+        if [[ ${{ github.event_name == 'pull_request' }} ]]; then
+          cp -r docs/build/* "${RUNNER_DOCS_DIR}"
+        fi
+
+  upload:
+    needs: build-docs
+    if: github.repository == 'pytorch/tensordict' && github.event_name == 'push' && 
+        ((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag')
+    permissions:
+      contents: write
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      repository: pytorch/tensordict
+      download-artifact: docs
+      ref: gh-pages
+      test-infra-ref: main
+      script: |
+        set -euo pipefail
+
+        REF_TYPE=${{ github.ref_type }}
+        REF_NAME=${{ github.ref_name }}
+
+        # TODO: adopt this behaviour
+        # if [[ "${REF_TYPE}" == branch ]]; then
+        #   TARGET_FOLDER="${REF_NAME}"
+        # elif [[ "${REF_TYPE}" == tag ]]; then
+        #   case "${REF_NAME}" in
+        #     *-rc*)
+        #       echo "Aborting upload since this is an RC tag: ${REF_NAME}"
+        #       exit 0
+        #       ;;
+        #     *)
+        #       # Strip the leading "v" as well as the trailing patch version. For example:
+        #       # 'v0.15.2' -> '0.15'
+        #       TARGET_FOLDER=$(echo "${REF_NAME}" | sed 's/v\([0-9]\+\)\.\([0-9]\+\)\.[0-9]\+/\1.\2/')
+        #       ;;
+        #   esac
+        # fi
+        TARGET_FOLDER="./"
+        echo "Target Folder: ${TARGET_FOLDER}"
+
+        # mkdir -p "${TARGET_FOLDER}"
+        # rm -rf "${TARGET_FOLDER}"/*
+        echo $(ls "${RUNNER_ARTIFACT_DIR}")
+        rsync -a "${RUNNER_ARTIFACT_DIR}"/ "${TARGET_FOLDER}"
+        git add "${TARGET_FOLDER}" || true
+
+        # if [[ "${TARGET_FOLDER}" == main ]]; then
+        #   mkdir -p _static
+        #   rm -rf _static/*
+        #   cp -r "${TARGET_FOLDER}"/_static/* _static
+        #   git add _static || true
+        # fi
+
+        git config user.name 'pytorchbot'
+        git config user.email 'soumith+bot@pytorch.org'
+        git config http.postBuffer 524288000
+        git commit -m "auto-generating sphinx docs" || true
+        git push
