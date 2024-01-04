@@ -16,7 +16,7 @@ Using TensorDict for datasets
 import torch
 import torch.nn as nn
 
-from tensordict import MemmapTensor, TensorDict
+from tensordict import TensorDict, MemoryMappedTensor
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
@@ -50,27 +50,27 @@ test_data = datasets.FashionMNIST(
 # batches of transformed data from disk rather than repeatedly load and transform
 # individual images.
 #
-# First we create the ``MemmapTensor`` containers.
+# First we create the :class:`~tensordict.MemoryMappedTensor` containers.
 
 
 training_data_td = TensorDict(
     {
-        "images": MemmapTensor(
+        "images": MemoryMappedTensor.empty((
             len(training_data),
-            *training_data[0][0].squeeze().shape,
+            *training_data[0][0].squeeze().shape),
             dtype=torch.float32,
         ),
-        "targets": MemmapTensor(len(training_data), dtype=torch.int64),
+        "targets": MemoryMappedTensor.empty((len(training_data),), dtype=torch.int64),
     },
     batch_size=[len(training_data)],
     device=device,
 )
 test_data_td = TensorDict(
     {
-        "images": MemmapTensor(
-            len(test_data), *test_data[0][0].squeeze().shape, dtype=torch.float32
+        "images": MemoryMappedTensor.empty((
+            len(test_data), *test_data[0][0].squeeze().shape), dtype=torch.float32
         ),
-        "targets": MemmapTensor(len(test_data), dtype=torch.int64),
+        "targets": MemoryMappedTensor.empty((len(test_data),), dtype=torch.int64),
     },
     batch_size=[len(test_data)],
     device=device,

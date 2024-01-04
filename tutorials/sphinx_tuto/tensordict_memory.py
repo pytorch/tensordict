@@ -102,9 +102,10 @@ or by utilizing memory maps.
 #
 # Memory-mapped Tensors
 # ---------------------
-# ``tensordict`` provides a class :class:`~.MemmapTensor` which allows us to store the
-# contents of a tensor on disk, while still supporting fast indexing and loading of the
-# contents in batches. See the `ImageNet Tutorial <./tensorclass_imagenet.html>`_ for an
+# ``tensordict`` provides a class :class:`~tensordict.MemoryMappedTensor`
+# which allows us to store the contents of a tensor on disk, while still
+# supporting fast indexing and loading of the contents in batches.
+# See the `ImageNet Tutorial <./tensorclass_imagenet.html>`_ for an
 # example of this in action.
 #
 # To convert the :class:`TensorDict` to a collection of memory-mapped tensors, use the
@@ -127,8 +128,9 @@ print(tensordict)
 ##############################################################################
 # Alternatively one can use the
 # :meth:`TensorDict.memmap_like <tensordict.TensorDict.memmap_like>` method. This will
-# create a new :class:`~.TensorDict` of the same structure with :class:`~.MemmapTensor`
-# values, however it will not copy the contents of the original tensors to the
+# create a new :class:`~.TensorDict` of the same structure with
+# :class:`~tensordict.MemoryMappedTensor` values, however it will not copy the
+# contents of the original tensors to the
 # memory-mapped tensors. This allows you to create the memory-mapped
 # :class:`~.TensorDict` and then populate it slowly, and hence should generally be
 # preferred to ``memmap_``.

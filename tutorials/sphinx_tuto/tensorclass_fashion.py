@@ -17,7 +17,7 @@ Using tensorclasses for datasets
 import torch
 import torch.nn as nn
 
-from tensordict import MemmapTensor
+from tensordict import MemoryMappedTensor
 from tensordict.prototype import tensorclass
 from torch.utils.data import DataLoader
 from torchvision import datasets
@@ -68,10 +68,10 @@ class FashionMNISTData:
     @classmethod
     def from_dataset(cls, dataset, device=None):
         data = cls(
-            images=MemmapTensor(
-                len(dataset), *dataset[0][0].squeeze().shape, dtype=torch.float32
+            images=MemoryMappedTensor.empty((
+                len(dataset), *dataset[0][0].squeeze().shape), dtype=torch.float32
             ),
-            targets=MemmapTensor(len(dataset), dtype=torch.int64),
+            targets=MemoryMappedTensor.empty((len(dataset),), dtype=torch.int64),
             batch_size=[len(dataset)],
             device=device,
         )
