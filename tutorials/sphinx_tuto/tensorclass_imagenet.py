@@ -173,7 +173,7 @@ if __name__ == "__main__":
             index1 = torch.randint(x.shape[-1] - self.w, (*batch, 1), device=x.device)
             index1 = index1 + torch.arange(self.w, device=x.device)
             index1 = (
-                index1.unsqueeze(1).unsqueeze(-2).expand((*batch, 3), self.h, self.w)
+                index1.unsqueeze(1).unsqueeze(-2).expand((*batch, 3, self.h, self.w))
             )
             return x.gather(-2, index0).gather(-1, index1)
 
