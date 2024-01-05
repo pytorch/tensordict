@@ -204,7 +204,7 @@ class MemoryMappedTensor(torch.Tensor):
         if copy_data:
             if isinstance(input, DTensor):
                 input = input.full_tensor()
-            out.copy_(input)
+            out.copy_(input, non_blocking=True)
         return out
 
     @property
