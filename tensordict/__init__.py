@@ -25,8 +25,8 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from tensordict._pytree import *
-
 from tensordict._tensordict import unravel_key, unravel_key_list
+from tensordict.nn import TensorDictParams
 
 try:
     from tensordict.version import __version__
@@ -53,5 +53,3 @@ __all__ = [
     "dense_stack_tds",
     "NonTensorData",
 ]
-
-# from tensordict._pytree import *

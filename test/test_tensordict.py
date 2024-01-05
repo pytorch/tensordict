@@ -1080,12 +1080,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_zero_(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        if td_name == "td_params":
-            with pytest.raises(
-                RuntimeError, match="a leaf Variable that requires grad"
-            ):
-                new_td = td.zero_()
-            return
         new_td = td.zero_()
         assert new_td is td
         for k in td.keys():
@@ -1581,10 +1575,6 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         td_squeeze = torch.squeeze(td, dim=None)
         tensor = torch.ones_like(td.get("a").squeeze())
-        if td_name == "td_params":
-            with pytest.raises(ValueError, match="Failed to update"):
-                td_squeeze.set_("a", tensor)
-            return
         td_squeeze.set_("a", tensor)
         assert (td_squeeze.get("a") == tensor).all()
         if td_name == "unsqueezed_td":
@@ -1688,10 +1678,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_update_at_(self, td_name, device):
         td = getattr(self, td_name)(device)
         td0 = td[1].clone().zero_()
-        if td_name == "td_params":
-            with pytest.raises(RuntimeError, match="a view of a leaf Variable"):
-                td.update_at_(td0, 0)
-            return
         td.update_at_(td0, 0)
         assert (td[0] == 0).all()
 
@@ -2323,10 +2309,6 @@ class TestTensorDicts(TestTensorDictsBase):
         ]
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(IndexError, match="storages of the indexed tensors"):
-                torch.stack(tds_list, 0, out=td)
-            return
-        if td_name == "td_params":
-            with pytest.raises(RuntimeError, match="arguments don't support automatic"):
                 torch.stack(tds_list, 0, out=td)
             return
         data_ptr_set_before = {val.data_ptr() for val in decompose(td)}
@@ -3068,10 +3050,6 @@ class TestTensorDicts(TestTensorDictsBase):
             # we do not call skip to avoid systematic skips in internal code base
             return
         td_empty = torch.empty_like(td)
-        if td_name == "td_params":
-            with pytest.raises(ValueError, match="Failed to update"):
-                td.apply_(lambda x: x + 1.0)
-            return
 
         td.apply_(lambda x: x + 1.0)
         assert type(td) is type(td_empty)
@@ -3103,11 +3081,6 @@ class TestTensorDicts(TestTensorDictsBase):
                 fun(td)
             return
         fun(td)
-
-        if td_name == "td_params":
-            with pytest.raises(RuntimeError, match="leaf Variable that requires grad"):
-                td.zero_()
-            return
 
         td.zero_()
         # this value should be cached
