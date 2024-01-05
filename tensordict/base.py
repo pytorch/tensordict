@@ -4017,8 +4017,11 @@ class TensorDictBase(MutableMapping):
     # Filling
     def zero_(self) -> T:
         """Zeros all tensors in the tensordict in-place."""
-        for key in self.keys():
-            self.fill_(key, 0)
+
+        def fn(item):
+            item.zero_()
+
+        self._fast_apply(fn=fn, call_on_nested=True)
         return self
 
     def fill_(self, key: NestedKey, value: float | bool) -> T:
