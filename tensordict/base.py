@@ -368,13 +368,25 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
+    @as_decorator()
     def to_module(
-        self, module: nn.Module, return_swap: bool = False, swap_dest=None, memo=None
+        self,
+        module: nn.Module,
+        *,
+        inplace: bool | None = None,
+        return_swap: bool = True,
+        swap_dest=None,
+        memo=None,
+        use_state_dict: bool = False,
     ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
 
         Args:
             module (nn.Module): a module to write the parameters into.
+
+        Keyword Args:
+            inplace (bool, optional): if ``True``, the parameters or tensors
+                in the module are updated in-place. Defaults to ``True``.
             return_swap (bool, optional): if ``True``, the old parameter configuration
                 will be returned. Defaults to ``False``.
             swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
@@ -383,6 +395,9 @@ class TensorDictBase(MutableMapping):
                 in the input module, a memo is used to avoid fetching the params
                 that have just been set. This argument should be ignored during
                 regular calls to `to_module`.
+            use_state_dict (bool, optional): if ``True``, state-dict API will be
+                used to load the parameters (including the state-dict hooks).
+                Defaults to ``False``.
 
         Examples:
             >>> from torch import nn

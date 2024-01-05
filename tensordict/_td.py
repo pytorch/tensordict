@@ -308,6 +308,8 @@ class TensorDict(TensorDictBase):
     def to_module(
         self,
         module,
+        *,
+        inplace: bool | None = None,
         return_swap: bool = True,
         swap_dest=None,
         memo=None,
@@ -336,6 +338,10 @@ class TensorDict(TensorDictBase):
             memo[id(module)] = swap
             _swap = {}
         if use_state_dict:
+            if inplace is not None:
+                raise RuntimeError(
+                    "inplace argument cannot be passed when use_state_dict=True."
+                )
             # execute module's pre-hooks
             state_dict = self.flatten_keys(".")
             prefix = ""
@@ -365,18 +371,27 @@ class TensorDict(TensorDictBase):
             input = state_dict.unflatten_keys(".").apply(convert_type, self)
         else:
             input = self
+            inplace = bool(inplace)
 
         for key, value in input.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
                 if module.__class__.__setattr__ is __base__setattr__:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
-                    local_out = _set_tensor_dict(__dict__, hooks, module, key, value)
+                    local_out = _set_tensor_dict(
+                        __dict__, hooks, module, key, value, inplace
+                    )
                 else:
                     if return_swap:
                         local_out = getattr(module, key)
-                    # use specialized __setattr__ if needed
-                    delattr(module, key)
-                    setattr(module, key, value)
+                    if not inplace:
+                        # use specialized __setattr__ if needed
+                        delattr(module, key)
+                        setattr(module, key, value)
+                    else:
+                        new_val = local_out
+                        if return_swap:
+                            local_out = local_out.clone()
+                        new_val.data.copy_(value.data)
             else:
                 if value.is_empty():
                     # if there is at least one key, we must populate the module.
@@ -392,6 +407,7 @@ class TensorDict(TensorDictBase):
                 else:
                     local_out = value.to_module(
                         child,
+                        inplace=inplace,
                         return_swap=return_swap,
                         swap_dest=local_dest,
                         memo=memo,
@@ -2769,7 +2785,12 @@ class _TensorDictKeysView:
 
 
 def _set_tensor_dict(  # noqa: F811
-    module_dict, hooks, module, name: str, tensor: torch.Tensor
+    module_dict,
+    hooks,
+    module,
+    name: str,
+    tensor: torch.Tensor,
+    inplace: bool,
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     was_buffer = False
@@ -2779,6 +2800,12 @@ def _set_tensor_dict(  # noqa: F811
         was_buffer = out is not None
     if out is None:
         out = module_dict.pop(name)
+    if inplace:
+        # swap tensor and out after updating out
+        out_tmp = out.clone()
+        out.data.copy_(tensor.data)
+        tensor = out
+        out = out_tmp
 
     if isinstance(tensor, torch.nn.Parameter):
         for hook in hooks:

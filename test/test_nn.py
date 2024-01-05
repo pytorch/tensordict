@@ -3242,19 +3242,41 @@ class TestToModule:
         "module_name,input_name",
         [["_module_shared", "_x"], ["_transformer", "_tuple_x"]],
     )
-    def test_static(self, module_name, input_name, as_module):
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_static(self, module_name, input_name, as_module, inplace):
         torch.manual_seed(0)
         module = getattr(self, module_name)
         x = getattr(self, input_name)
         params = TensorDict.from_module(module, as_module=as_module)
+        if inplace:
+            params = params.clone()
         params0 = params.clone().apply(
             lambda t, p: nn.Parameter(t * 0) if isinstance(p, nn.Parameter) else t * 0,
             params,
         )
         y = module(*x)
-        params0.to_module(module)
+        params0.to_module(module, inplace=inplace)
         y0 = module(*x)
-        params.to_module(module)
+        # check identities
+        for k, p1, p2 in zip(
+            params0.keys(True, True),
+            TensorDict.from_module(module).values(True, True),
+            params0.values(True, True),
+        ):
+            if inplace:
+                assert p1 is not p2, k
+            else:
+                assert p1 is p2, k
+        params.to_module(module, inplace=inplace)
+        # check identities
+        for p1, p2 in zip(
+            TensorDict.from_module(module).values(True, True),
+            params.values(True, True),
+        ):
+            if inplace:
+                assert p1 is not p2
+            else:
+                assert p1 is p2
         y1 = module(*x)
         torch.testing.assert_close(y, y1)
         assert (y0 == 0).all()
@@ -3264,7 +3286,8 @@ class TestToModule:
         "module_name,input_name",
         [["_module_shared", "_x"], ["_transformer", "_tuple_x"]],
     )
-    def test_cm(self, module_name, input_name, as_module):
+    @pytest.mark.parametrize("inplace", [True, False])
+    def test_cm(self, module_name, input_name, as_module, inplace):
         torch.manual_seed(0)
         module = getattr(self, module_name)
         x = getattr(self, input_name)
@@ -3274,9 +3297,20 @@ class TestToModule:
             params,
         )
         y = module(*x)
-        with params0.to_module(module):
+        with params0.to_module(module, inplace=inplace):
             y0 = module(*x)
             assert (params0 == TensorDict.from_module(module)).all()
+
+            # check identities
+            for p1, p2 in zip(
+                TensorDict.from_module(module).values(True, True),
+                params0.values(True, True),
+            ):
+                if inplace:
+                    assert p1 is not p2
+                else:
+                    assert p1 is p2
+
         y1 = module(*x)
         torch.testing.assert_close(y, y1)
         assert (y0 == 0).all()
