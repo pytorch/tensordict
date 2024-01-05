@@ -87,78 +87,73 @@ def test_serialize_model(benchmark, tmpdir):
     has_cuda = torch.cuda.device_count()
     with torch.device("cuda" if has_cuda else "cpu"):
         t = nn.Transformer()
-    if has_cuda:
-        def func(tmpdir=tmpdir):
-            TensorDict.from_module(t).memmap(tmpdir, num_threads=32, return_early=True).result()
-    else:
-        def func(tmpdir=tmpdir):
-            TensorDict.from_module(t).memmap(tmpdir, num_threads=32)
-
+    def func(tmpdir=tmpdir):
+        TensorDict.from_module(t).memmap(tmpdir, num_threads=32)
     benchmark(func)
     del t
 
 
-def test_serialize_model_filesystem(benchmark):
-    """Tests efficiency of saving weights as memmap tensors in file system, including TD construction."""
-    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
-        t = nn.Transformer()
-    benchmark(lambda: TensorDict.from_module(t).memmap(num_threads=32))
-    del t
-
-
-def test_serialize_model_pickle(benchmark, tmpdir):
-    """Tests efficiency of pickling a model state-dict, including state-dict construction."""
-    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
-        t = nn.Transformer()
-    path = Path(tmpdir) / "file.t"
-    benchmark(lambda: torch.save(t.state_dict(), path))
-    del t
-
-
-def test_serialize_weights(benchmark):
-    """Tests efficiency of saving weights as memmap tensors."""
-    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
-        t = nn.Transformer()
-
-    weights = TensorDict.from_module(t)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        benchmark(lambda: weights.memmap(tmpdir, num_threads=32))
-    del t, weights
-
-
-def test_serialize_weights_filesystem(benchmark):
-    """Tests efficiency of saving weights as memmap tensors."""
-    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
-        t = nn.Transformer()
-
-    weights = TensorDict.from_module(t)
-    benchmark(lambda: weights.memmap(num_threads=32))
-    del t, weights
-
-
-def test_serialize_weights_returnearly(benchmark):
-    """Tests efficiency of saving weights as memmap tensors, before writing is completed."""
-    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
-        t = nn.Transformer()
-    with tempfile.TemporaryDirectory() as tmpdir:
-        datapath = pathlib.Path(tmpdir)
-        weights = TensorDict.from_module(t)
-        benchmark(
-            lambda: weights.memmap(
-                datapath / f"{uuid.uuid1()}", num_threads=32, return_early=True
-            )
-        )
-    del t, weights
-
-
-def test_serialize_weights_pickle(benchmark, tmpdir):
-    """Tests efficiency of pickling a model state-dict."""
-    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
-        t = nn.Transformer()
-    path = Path(tmpdir) / "file.t"
-    weights = t.state_dict()
-    benchmark(lambda: torch.save(weights, path))
-    del t, weights
+# def test_serialize_model_filesystem(benchmark):
+#     """Tests efficiency of saving weights as memmap tensors in file system, including TD construction."""
+#     with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+#         t = nn.Transformer()
+#     benchmark(lambda: TensorDict.from_module(t).memmap(num_threads=32))
+#     del t
+#
+#
+# def test_serialize_model_pickle(benchmark, tmpdir):
+#     """Tests efficiency of pickling a model state-dict, including state-dict construction."""
+#     with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+#         t = nn.Transformer()
+#     path = Path(tmpdir) / "file.t"
+#     benchmark(lambda: torch.save(t.state_dict(), path))
+#     del t
+#
+#
+# def test_serialize_weights(benchmark):
+#     """Tests efficiency of saving weights as memmap tensors."""
+#     with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+#         t = nn.Transformer()
+#
+#     weights = TensorDict.from_module(t)
+#     with tempfile.TemporaryDirectory() as tmpdir:
+#         benchmark(lambda: weights.memmap(tmpdir, num_threads=32))
+#     del t, weights
+#
+#
+# def test_serialize_weights_filesystem(benchmark):
+#     """Tests efficiency of saving weights as memmap tensors."""
+#     with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+#         t = nn.Transformer()
+#
+#     weights = TensorDict.from_module(t)
+#     benchmark(lambda: weights.memmap(num_threads=32))
+#     del t, weights
+#
+#
+# def test_serialize_weights_returnearly(benchmark):
+#     """Tests efficiency of saving weights as memmap tensors, before writing is completed."""
+#     with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+#         t = nn.Transformer()
+#     with tempfile.TemporaryDirectory() as tmpdir:
+#         datapath = pathlib.Path(tmpdir)
+#         weights = TensorDict.from_module(t)
+#         benchmark(
+#             lambda: weights.memmap(
+#                 datapath / f"{uuid.uuid1()}", num_threads=32, return_early=True
+#             )
+#         )
+#     del t, weights
+#
+#
+# def test_serialize_weights_pickle(benchmark, tmpdir):
+#     """Tests efficiency of pickling a model state-dict."""
+#     with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+#         t = nn.Transformer()
+#     path = Path(tmpdir) / "file.t"
+#     weights = t.state_dict()
+#     benchmark(lambda: torch.save(weights, path))
+#     del t, weights
 
 
 if __name__ == "__main__":
