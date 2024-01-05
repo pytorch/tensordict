@@ -1,6 +1,5 @@
 import argparse
 import pathlib
-import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -88,6 +87,7 @@ def pause_when_exit():
     yield None
     time.sleep(0.5)
 
+
 def test_serialize_model(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors, including TD construction."""
     has_cuda = torch.cuda.device_count()
@@ -130,7 +130,6 @@ def test_serialize_weights(benchmark, tmpdir, pause_when_exit):
     del t, weights
 
 
-
 def test_serialize_weights_returnearly(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors, before writing is completed."""
     has_cuda = torch.cuda.device_count()
@@ -162,9 +161,15 @@ def test_serialize_weights_pickle(benchmark, tmpdir, pause_when_exit):
     benchmark(func)
     del t, weights
 
+
 def test_serialize_weights_filesystem(benchmark, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors."""
     has_cuda = torch.cuda.device_count()
+    if has_cuda:
+        pytest.skip(
+            "Multithreaded saving on filesystem with models on CUDA. "
+            "These should be first cast on CPU for safety."
+        )
     with torch.device("cuda" if has_cuda else "cpu"):
         t = nn.Transformer()
 
@@ -176,9 +181,15 @@ def test_serialize_weights_filesystem(benchmark, pause_when_exit):
     benchmark(func)
     del t, weights
 
+
 def test_serialize_model_filesystem(benchmark, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors in file system, including TD construction."""
     has_cuda = torch.cuda.device_count()
+    if has_cuda:
+        pytest.skip(
+            "Multithreaded saving on filesystem with models on CUDA. "
+            "These should be first cast on CPU for safety."
+        )
     with torch.device("cuda" if has_cuda else "cpu"):
         t = nn.Transformer()
 
