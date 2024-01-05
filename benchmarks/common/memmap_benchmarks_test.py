@@ -80,19 +80,22 @@ def test_memmaptd_index_op(benchmark, td_memmap):
         td_memmap,
     )
 
-
 def test_serialize_model(benchmark, tmpdir):
     """Tests efficiency of saving weights as memmap tensors, including TD construction."""
     with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
         t = nn.Transformer()
-    benchmark(lambda: TensorDict.from_module(t).memmap(tmpdir, num_threads=32))
-#
-#
-# def test_serialize_model_filesystem(benchmark):
-#     """Tests efficiency of saving weights as memmap tensors in file system, including TD construction."""
-#     with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
-#         t = nn.Transformer()
-#     benchmark(lambda: TensorDict.from_module(t).memmap(num_threads=32))
+    def func(tmpdir=tmpdir):
+        TensorDict.from_module(t).memmap(tmpdir, num_threads=32)
+    benchmark(func)
+    del t
+
+
+def test_serialize_model_filesystem(benchmark):
+    """Tests efficiency of saving weights as memmap tensors in file system, including TD construction."""
+    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+        t = nn.Transformer()
+    benchmark(lambda: TensorDict.from_module(t).memmap(num_threads=32))
+    del t
 
 
 def test_serialize_model_pickle(benchmark, tmpdir):
@@ -101,6 +104,7 @@ def test_serialize_model_pickle(benchmark, tmpdir):
         t = nn.Transformer()
     path = Path(tmpdir) / "file.t"
     benchmark(lambda: torch.save(t.state_dict(), path))
+    del t
 
 
 def test_serialize_weights(benchmark, tmpdir):
@@ -110,6 +114,7 @@ def test_serialize_weights(benchmark, tmpdir):
 
     weights = TensorDict.from_module(t)
     benchmark(lambda: weights.memmap(tmpdir, num_threads=32))
+    del t, weights
 
 
 def test_serialize_weights_filesystem(benchmark):
@@ -119,6 +124,7 @@ def test_serialize_weights_filesystem(benchmark):
 
     weights = TensorDict.from_module(t)
     benchmark(lambda: weights.memmap(num_threads=32))
+    del t, weights
 
 
 def test_serialize_weights_returnearly(benchmark, tmpdir):
@@ -132,6 +138,7 @@ def test_serialize_weights_returnearly(benchmark, tmpdir):
             datapath / f"{uuid.uuid1()}", num_threads=32, return_early=True
         )
     )
+    del t, weights
 
 
 def test_serialize_weights_pickle(benchmark, tmpdir):
@@ -141,7 +148,7 @@ def test_serialize_weights_pickle(benchmark, tmpdir):
     path = Path(tmpdir) / "file.t"
     weights = t.state_dict()
     benchmark(lambda: torch.save(weights, path))
-
+    del t, weights
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
