@@ -900,7 +900,16 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_fallback
     @as_decorator()
-    def to_module(self, module: nn.Module, return_swap: bool = False):
+    def to_module(
+        self,
+        module,
+        *,
+        inplace: bool = False,
+        return_swap: bool = True,
+        swap_dest=None,
+        memo=None,
+        use_state_dict: bool = False,
+    ):
         ...
 
     @_fallback
