@@ -100,18 +100,6 @@ def test_serialize_model(benchmark, tmpdir, pause_when_exit):
     benchmark(func)
     del t
 
-def test_serialize_model_filesystem(benchmark, pause_when_exit):
-    """Tests efficiency of saving weights as memmap tensors in file system, including TD construction."""
-    has_cuda = torch.cuda.device_count()
-    with torch.device("cuda" if has_cuda else "cpu"):
-        t = nn.Transformer()
-
-    def func(t=t):
-        TensorDict.from_module(t).memmap(num_threads=32)
-
-    benchmark(func)
-    del t
-
 
 def test_serialize_model_pickle(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of pickling a model state-dict, including state-dict construction."""
@@ -141,20 +129,6 @@ def test_serialize_weights(benchmark, tmpdir, pause_when_exit):
     benchmark(func)
     del t, weights
 
-
-def test_serialize_weights_filesystem(benchmark, pause_when_exit):
-    """Tests efficiency of saving weights as memmap tensors."""
-    has_cuda = torch.cuda.device_count()
-    with torch.device("cuda" if has_cuda else "cpu"):
-        t = nn.Transformer()
-
-    weights = TensorDict.from_module(t)
-
-    def func(weights=weights):
-        weights.memmap(num_threads=32)
-
-    benchmark(func)
-    del t, weights
 
 
 def test_serialize_weights_returnearly(benchmark, tmpdir, pause_when_exit):
@@ -187,6 +161,32 @@ def test_serialize_weights_pickle(benchmark, tmpdir, pause_when_exit):
 
     benchmark(func)
     del t, weights
+
+def test_serialize_weights_filesystem(benchmark, pause_when_exit):
+    """Tests efficiency of saving weights as memmap tensors."""
+    has_cuda = torch.cuda.device_count()
+    with torch.device("cuda" if has_cuda else "cpu"):
+        t = nn.Transformer()
+
+    weights = TensorDict.from_module(t)
+
+    def func(weights=weights):
+        weights.memmap(num_threads=32)
+
+    benchmark(func)
+    del t, weights
+
+def test_serialize_model_filesystem(benchmark, pause_when_exit):
+    """Tests efficiency of saving weights as memmap tensors in file system, including TD construction."""
+    has_cuda = torch.cuda.device_count()
+    with torch.device("cuda" if has_cuda else "cpu"):
+        t = nn.Transformer()
+
+    def func(t=t):
+        TensorDict.from_module(t).memmap(num_threads=32)
+
+    benchmark(func)
+    del t
 
 
 if __name__ == "__main__":
