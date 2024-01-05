@@ -186,6 +186,10 @@ class MemoryMappedTensor(torch.Tensor):
                 size = torch.iinfo(input.dtype).bits // 8 * shape.numel()
             handler = _FileHandler(size)
             out = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
+            if copy_data:
+                if isinstance(input, DTensor):
+                    input = input.full_tensor()
+                out.copy_(input.view(-1))
             out = out.view(shape)
             out = cls(out)
         else:
@@ -197,14 +201,15 @@ class MemoryMappedTensor(torch.Tensor):
                     str(filename), shared=True, dtype=input.dtype, size=shape.numel()
                 ).view(input.shape)
             )
+            if copy_data:
+                if isinstance(input, DTensor):
+                    input = input.full_tensor()
+                out.copy_(input)
+
         out._handler = handler
         out._filename = filename
         out.index = None
         out.parent_shape = input.shape
-        if copy_data:
-            if isinstance(input, DTensor):
-                input = input.full_tensor()
-            out.copy_(input)
         return out
 
     @property
