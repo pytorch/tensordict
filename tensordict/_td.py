@@ -823,15 +823,6 @@ class TensorDict(TensorDictBase):
         for _idx in range(self.batch_size[dim]):
             _idx = prefix + (_idx,)
             td = self._index_tensordict(_idx, new_batch_size=batch_size, names=names)
-            # td = TensorDict(
-            #     {key: tensor[_idx] for key, tensor in unbind_self_dict.items()},
-            #     batch_size=batch_size,
-            #     _run_checks=False,
-            #     device=self.device,
-            #     _is_memmap=False,
-            #     _is_shared=False,
-            #     names=names,
-            # )
             out.append(td)
             if self.is_shared():
                 td._is_shared = True
