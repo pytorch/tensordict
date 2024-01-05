@@ -213,6 +213,14 @@ def _carry_over(func):
     return new_func
 
 
+def _apply_on_data(func):
+    @wraps(func)
+    def new_func(self, *args, **kwargs):
+        return getattr(self.data, func.__name__)(*args, **kwargs)
+
+    return new_func
+
+
 class TensorDictParams(TensorDictBase, nn.Module):
     r"""Holds a TensorDictBase instance full of parameters.
 
@@ -428,10 +436,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
     ) -> TensorDictBase:
         ...
 
-    @_unlock_and_set
-    def apply_(self, fn: Callable, *others) -> TensorDictBase:
-        ...
-
     def map(
         self,
         fn: Callable,
@@ -514,9 +518,14 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def clone(self, recurse: bool = True) -> TensorDictBase:
         """Clones the TensorDictParams.
 
-        The effect of this call is different from a regular torch.Tensor.clone call
-        in that it will create a TensorDictParams instance with a new copy of the
-        parameters and buffers __detached__ from the current graph.
+        .. warning::
+            The effect of this call is different from a regular torch.Tensor.clone call
+            in that it will create a TensorDictParams instance with a new copy of the
+            parameters and buffers __detached__ from the current graph. For a
+            regular clone (ie, cloning leaf parameters onto a new tensor that
+            is part of the graph), simply call
+
+                >>> params.apply(torch.clone)
 
         See :meth:`tensordict.TensorDictBase.clone` for more info on the clone
         method.
@@ -650,10 +659,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_unlock_and_set
     def _create_nested_str(self, *args, **kwargs):
-        ...
-
-    @_fallback
-    def _stack_onto_(self, *args, **kwargs):
         ...
 
     @_fallback_property
@@ -983,6 +988,73 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 yield k, v
                 continue
             yield k, self._apply_get_post_hook(v)
+
+    @_apply_on_data
+    def zero_(self) -> T:
+        ...
+
+    @_apply_on_data
+    def fill_(self, key: NestedKey, value: float | bool) -> T:
+        ...
+
+    @_apply_on_data
+    def copy_(self, tensordict: T, non_blocking: bool = None) -> T:
+        ...
+
+    @_apply_on_data
+    def set_at_(self, key: NestedKey, value: CompatibleType, index: IndexType) -> T:
+        ...
+
+    @_apply_on_data
+    def set_(
+        self,
+        key: NestedKey,
+        item: CompatibleType,
+    ) -> T:
+        ...
+
+    @_apply_on_data
+    def _stack_onto_(
+        self,
+        list_item: list[CompatibleType],
+        dim: int,
+    ) -> T:
+        ...
+
+    @_apply_on_data
+    def _stack_onto_at_(
+        self,
+        key: str,
+        list_item: list[CompatibleType],
+        dim: int,
+        idx: IndexType,
+    ) -> T:
+        ...
+
+    @_apply_on_data
+    def update_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> T:
+        ...
+
+    @_apply_on_data
+    def update_at_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        idx: IndexType,
+        clone: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> T:
+        ...
+
+    @_apply_on_data
+    def apply_(self, fn: Callable, *others) -> T:
+        ...
 
     def _apply(self, fn, recurse=True):
         """Modifies torch.nn.Module._apply to work with Buffer class."""
