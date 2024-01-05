@@ -216,7 +216,8 @@ def _carry_over(func):
 def _apply_on_data(func):
     @wraps(func)
     def new_func(self, *args, **kwargs):
-        return getattr(self.data, func.__name__)(*args, **kwargs)
+        getattr(self.data, func.__name__)(*args, **kwargs)
+        return self
 
     return new_func
 
@@ -527,6 +528,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
                 >>> params.apply(torch.clone)
 
+        .. note::
+            If a parameter is duplicated in the tree, ``clone`` will preserve this
+            identity (ie, parameter tying is preserved).
+
         See :meth:`tensordict.TensorDictBase.clone` for more info on the clone
         method.
 
@@ -534,14 +539,21 @@ class TensorDictParams(TensorDictBase, nn.Module):
         if not recurse:
             return TensorDictParams(self._param_td.clone(False), no_convert=True)
 
-        def _clone(tensor):
+        memo = {}
+
+        def _clone(tensor, memo=memo):
+            result = memo.get(tensor, None)
+            if result is not None:
+                return result
+
             if isinstance(tensor, nn.Parameter):
-                tensor = nn.Parameter(
+                result = nn.Parameter(
                     tensor.data.clone(), requires_grad=tensor.requires_grad
                 )
             else:
-                tensor = Buffer(tensor.data.clone(), requires_grad=tensor.requires_grad)
-            return tensor
+                result = Buffer(tensor.data.clone(), requires_grad=tensor.requires_grad)
+            memo[tensor] = result
+            return result
 
         return TensorDictParams(self._param_td.apply(_clone), no_convert=True)
 
@@ -1169,7 +1181,7 @@ def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
             "cloned, preventing empty_like to be called. "
             "Consider calling tensordict.to_tensordict() first."
         ) from err
-    return tdclone.data.apply_(lambda x: torch.empty_like(x, *args, **kwargs))
+    return tdclone.apply_(lambda x: torch.empty_like(x, *args, **kwargs))
 
 
 _register_tensor_class(TensorDictParams)

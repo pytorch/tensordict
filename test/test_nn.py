@@ -2915,6 +2915,21 @@ class TestTensorDictParams:
             assert val.data_ptr() != td.get(key).data_ptr()
             assert (val == td.get(key)).all()
 
+    def test_tdparams_clone_tying(self):
+        c = nn.Parameter(torch.zeros((), requires_grad=True))
+        td = TensorDict(
+            {
+                "a": {
+                    "b": {"c": c},
+                },
+                "c": c,
+            },
+            [],
+        )
+        td = TensorDictParams(td, no_convert=True)
+        td_clone = td.clone()
+        assert td_clone["c"] is td_clone["a", "b", "c"]
+
     def test_inplace_ops(self):
         td = TensorDict(
             {
