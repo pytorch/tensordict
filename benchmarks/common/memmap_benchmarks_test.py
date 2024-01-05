@@ -1,6 +1,7 @@
 import argparse
 import pathlib
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -82,7 +83,12 @@ def test_memmaptd_index_op(benchmark, td_memmap):
     )
 
 
-def test_serialize_model(benchmark, tmpdir):
+@pytest.fixture(scope="function")
+def pause_when_exit():
+    yield None
+    time.sleep(0.5)
+
+def test_serialize_model(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors, including TD construction."""
     has_cuda = torch.cuda.device_count()
     with torch.device("cuda" if has_cuda else "cpu"):
@@ -94,8 +100,7 @@ def test_serialize_model(benchmark, tmpdir):
     benchmark(func)
     del t
 
-
-def test_serialize_model_filesystem(benchmark):
+def test_serialize_model_filesystem(benchmark, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors in file system, including TD construction."""
     has_cuda = torch.cuda.device_count()
     with torch.device("cuda" if has_cuda else "cpu"):
@@ -108,7 +113,7 @@ def test_serialize_model_filesystem(benchmark):
     del t
 
 
-def test_serialize_model_pickle(benchmark, tmpdir):
+def test_serialize_model_pickle(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of pickling a model state-dict, including state-dict construction."""
     has_cuda = torch.cuda.device_count()
     with torch.device("cuda" if has_cuda else "cpu"):
@@ -122,7 +127,7 @@ def test_serialize_model_pickle(benchmark, tmpdir):
     del t
 
 
-def test_serialize_weights(benchmark, tmpdir):
+def test_serialize_weights(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors."""
     has_cuda = torch.cuda.device_count()
     with torch.device("cuda" if has_cuda else "cpu"):
@@ -137,7 +142,7 @@ def test_serialize_weights(benchmark, tmpdir):
     del t, weights
 
 
-def test_serialize_weights_filesystem(benchmark):
+def test_serialize_weights_filesystem(benchmark, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors."""
     has_cuda = torch.cuda.device_count()
     with torch.device("cuda" if has_cuda else "cpu"):
@@ -152,7 +157,7 @@ def test_serialize_weights_filesystem(benchmark):
     del t, weights
 
 
-def test_serialize_weights_returnearly(benchmark, tmpdir):
+def test_serialize_weights_returnearly(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as memmap tensors, before writing is completed."""
     has_cuda = torch.cuda.device_count()
     with torch.device("cuda" if has_cuda else "cpu"):
@@ -168,7 +173,7 @@ def test_serialize_weights_returnearly(benchmark, tmpdir):
     del t, weights
 
 
-def test_serialize_weights_pickle(benchmark, tmpdir):
+def test_serialize_weights_pickle(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of pickling a model state-dict."""
     has_cuda = torch.cuda.device_count()
     with torch.device("cuda" if has_cuda else "cpu"):
