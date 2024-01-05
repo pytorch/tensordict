@@ -1562,6 +1562,9 @@ class TensorDict(TensorDictBase):
                 )
                 continue
             else:
+                if not value.is_cpu:
+                    # multithreaded memmap creation from cuda can fail
+                    value = value.to("cpu", non_blocking=True)
                 # user did specify location and memmap is in wrong place, so we copy
                 def _populate(
                     dest=dest, value=value, key=key, copy_existing=copy_existing
