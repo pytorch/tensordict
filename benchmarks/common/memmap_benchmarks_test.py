@@ -82,16 +82,19 @@ def test_memmaptd_index_op(benchmark, td_memmap):
     )
 
 
-def test_serialize_model(benchmark):
+def test_serialize_model(benchmark, tmpdir):
     """Tests efficiency of saving weights as memmap tensors, including TD construction."""
-    with torch.device("cuda" if torch.cuda.device_count() else "cpu"):
+    has_cuda = torch.cuda.device_count()
+    with torch.device("cuda" if has_cuda else "cpu"):
         t = nn.Transformer()
-    with tempfile.TemporaryDirectory() as tmpdir:
-
+    if has_cuda:
+        def func(tmpdir=tmpdir):
+            TensorDict.from_module(t).memmap(tmpdir, num_threads=32, return_early=True).result()
+    else:
         def func(tmpdir=tmpdir):
             TensorDict.from_module(t).memmap(tmpdir, num_threads=32)
 
-        benchmark(func)
+    benchmark(func)
     del t
 
 
