@@ -1478,18 +1478,18 @@ class TestGeneric:
         assert (
             repr(buffer)
             == """TensorDict(
-        fields={
-            agent.obs: TensorDict(
-                fields={
-                    image: Tensor(shape=torch.Size([5, 3, 4, 64]), device=cpu, dtype=torch.float32, is_shared=False),
-                    state: Tensor(shape=torch.Size([5, 3, 4, 3, 32, 32]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([5, 3, 4]),
-                device=None,
-                is_shared=False),
-            env.time: Tensor(shape=torch.Size([5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
-        batch_size=torch.Size([5, 3]),
-        device=None,
-        is_shared=False)"""
+    fields={
+        agent.obs: TensorDict(
+            fields={
+                image: Tensor(shape=torch.Size([5, 3, 4, 64]), device=cpu, dtype=torch.float32, is_shared=False),
+                state: Tensor(shape=torch.Size([5, 3, 4, 3, 32, 32]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([5, 3, 4]),
+            device=None,
+            is_shared=False),
+        env.time: Tensor(shape=torch.Size([5, 3, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+    batch_size=torch.Size([5, 3]),
+    device=None,
+    is_shared=False)"""
         )
         assert buffer.batch_size == torch.Size([B, N])
         assert buffer["agent.obs"].batch_size == torch.Size([B, N, T])
