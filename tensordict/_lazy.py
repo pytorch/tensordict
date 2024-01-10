@@ -786,14 +786,7 @@ class LazyStackedTensorDict(TensorDictBase):
                         self._batch_size
                         + out.batch_size[(len(self._batch_size) + incr) :]
                     )
-                elif not lazy_legacy():
-                    # it must be a TensorDict
-                    incr = 0 if not self._is_vmapped else 1
-                    out._batch_size = (
-                        self._batch_size
-                        + out.batch_size[(len(self._batch_size) + incr) :]
-                    )
-                else:
+                elif is_tensorclass(out):
                     # then it's a tensorclass
                     out._tensordict.hook_out = self.hook_out
                     out._tensordict.hook_in = self.hook_in
@@ -802,6 +795,13 @@ class LazyStackedTensorDict(TensorDictBase):
                     out._tensordict._batch_size = (
                         self._batch_size
                         + out._tensordict.batch_size[(len(self._batch_size) + incr) :]
+                    )
+                else:
+                    # it must be a TensorDict
+                    incr = 0 if not self._is_vmapped else 1
+                    out._batch_size = (
+                        self._batch_size
+                        + out.batch_size[(len(self._batch_size) + incr) :]
                     )
             elif self.hook_out is not None:
                 out = self.hook_out(out)
