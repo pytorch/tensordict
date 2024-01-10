@@ -960,7 +960,7 @@ class TensorDictBase(MutableMapping):
 
     @property
     def transpose(self):
-        """Returns a tensordit that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
+        """Returns a tensordict that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
 
         In-place or out-place modifications of the transposed tensordict will
         impact the original tensordict too as the memory is shared and the operations
@@ -985,21 +985,6 @@ class TensorDictBase(MutableMapping):
         ...
 
     def _legacy_transpose(self, dim0, dim1):
-        """Returns a tensordit that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
-
-        In-place or out-place modifications of the transposed tensordict will
-        impact the original tensordict too as the memory is shared and the operations
-        are mapped back on the original tensordict.
-
-        Examples:
-            >>> tensordict = TensorDict({"a": torch.randn(3, 4, 5)}, [3, 4])
-            >>> tensordict_transpose = tensordict.transpose(0, 1)
-            >>> print(tensordict_transpose.shape)
-            torch.Size([4, 3])
-            >>> tensordict_transpose.set("b",, torch.randn(4, 3))
-            >>> print(tensordict.get("b").shape)
-            torch.Size([3, 4])
-        """
         if dim0 < 0:
             dim0 = self.ndim + dim0
         if dim1 < 0:
@@ -3248,22 +3233,26 @@ class TensorDictBase(MutableMapping):
                 future.wait()
             return
 
-    def reduce(self, dst, op=dist.ReduceOp.SUM, async_op=False, return_premature=False):
+    def reduce(self, dst, op=None, async_op=False, return_premature=False):
         """Reduces the tensordict across all machines.
 
         Only the process with ``rank`` dst is going to receive the final result.
 
         """
+        if op is None:
+            op = dist.ReduceOp.SUM
         return self._reduce(dst, op, async_op, return_premature)
 
     def _reduce(
         self,
         dst,
-        op=dist.ReduceOp.SUM,
+        op=None,
         async_op=False,
         return_premature=False,
         _future_list=None,
     ):
+        if op is None:
+            op = dist.ReduceOp.SUM
         root = False
         if _future_list is None:
             _future_list = []

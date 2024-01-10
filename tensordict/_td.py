@@ -34,11 +34,6 @@ from tensordict.base import (
     TensorDictBase,
 )
 
-# from tensordict._memmap import (
-#     empty_like as empty_like_memmap,
-#     from_filename,
-#     from_tensor as from_tensor_memmap,
-# )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
@@ -1186,13 +1181,6 @@ class TensorDict(TensorDictBase):
             if num_boolean_dim:
                 names = [None] + names[num_boolean_dim:]
             else:
-                # def is_int(subidx):
-                #     if isinstance(subidx, Number):
-                #         return True
-                #     if isinstance(subidx, Tensor) and len(subidx.shape) == 0:
-                #         return True
-                #     return False
-
                 if not isinstance(idx, tuple):
                     idx = (idx,)
                 if len(idx) < self.ndim:
