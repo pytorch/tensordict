@@ -2050,7 +2050,6 @@ class TestTensorDicts(TestTensorDictsBase):
         assert type(td) is type(td_empty)
         # exclude non tensor data
         comp = td.filter_non_tensor_data() != td_empty.filter_non_tensor_data()
-        logging.info(td.filter_non_tensor_data())
         assert all(val.any() for val in comp.values(True, True))
 
     def test_enter_exit(self, td_name, device):

@@ -53,7 +53,6 @@ from tensordict.utils import (
     infer_size_impl,
     is_tensorclass,
     KeyedJaggedTensor,
-    lazy_legacy,
     lock_blocked,
     NestedKey,
 )
@@ -1542,6 +1541,7 @@ class LazyStackedTensorDict(TensorDictBase):
         like=False,
     ) -> T:
         if prefix is not None:
+            prefix = Path(prefix)
 
             def save_metadata(prefix=prefix, self=self):
                 prefix = Path(prefix)

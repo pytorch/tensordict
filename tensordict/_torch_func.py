@@ -24,11 +24,10 @@ from tensordict.utils import (
 )
 from torch import Tensor
 
-T = TypeVar("T", bound="TensorDictBase")
-
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
+T = TypeVar("T", bound="TensorDictBase")
 
 
 def implements_for_td(torch_function: Callable) -> Callable[[Callable], Callable]:

@@ -1183,7 +1183,7 @@ class TensorDict(TensorDictBase):
             else:
                 if not isinstance(idx, tuple):
                     idx = (idx,)
-                if len(idx) < self.ndim:
+                if len([_idx for _idx in idx if _idx is not None]) < self.ndim:
                     idx = (*idx, Ellipsis)
                 idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
                 # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
