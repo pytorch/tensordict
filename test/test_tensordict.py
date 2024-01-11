@@ -2688,7 +2688,7 @@ class TestTensorDicts(TestTensorDictsBase):
                 num_threads=num_threads,
                 copy_existing=True,
             )
-            assert td.is_memmap()
+            assert td.is_memmap(), (td, td._is_memmap)
         if use_dir:
             assert_allclose_td(TensorDict.load_memmap(tmpdir), td)
 

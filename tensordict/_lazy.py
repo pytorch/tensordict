@@ -37,7 +37,8 @@ from tensordict.base import (
 )
 from tensordict.memmap import MemoryMappedTensor as MemmapTensor
 from tensordict.utils import (
-    _broadcast_tensors,_check_keys,
+    _broadcast_tensors,
+    _check_keys,
     _getitem_batch_size,
     _is_number,
     _parse_to,
@@ -115,7 +116,7 @@ def _fails_exclusive_keys(func):
             raise RuntimeError(
                 f"the method {func.__name__} cannot complete when there are exclusive keys."
             )
-        return func(self, *args, **kwargs)
+        return getattr(TensorDictBase, func.__name__)(self, *args, **kwargs)
 
     return newfunc
 
@@ -244,7 +245,20 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @_fails_exclusive_keys
     def to_dict(self) -> dict[str, Any]:
-        return super().to_dict()
+        ...
+
+    @_fails_exclusive_keys
+    def flatten_keys(
+        self,
+        separator: str = ".",
+        inplace: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
+    ) -> T:
+        ...
+
+    @_fails_exclusive_keys
+    def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
+        ...
 
     @property
     def device(self) -> torch.device | None:
@@ -860,9 +874,9 @@ class LazyStackedTensorDict(TensorDictBase):
             lazy_stack = cls.lazy_stack(
                 [item._tensordict for item in items], dim=dim, out=out
             )
-            non_tensordict = [item._non_tensordict for item in items]
+            # we take the first non_tensordict by convention
             return type(items[0])._from_tensordict(
-                tensorict=lazy_stack, non_tensordict=non_tensordict
+                tensordict=lazy_stack, non_tensordict=items[0]._non_tensordict
             )
 
         batch_size = items[0].batch_size
@@ -1775,9 +1789,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             )
         if not inplace:
-            results = LazyStackedTensorDict.lazy_stack(
-                results, dim=self.stack_dim
-            )
+            results = LazyStackedTensorDict.lazy_stack(results, dim=self.stack_dim)
         else:
             results = self
         results._is_memmap = True
@@ -1820,77 +1832,24 @@ class LazyStackedTensorDict(TensorDictBase):
         if input_dict_or_td is self:
             # no op
             return self
+        if isinstance(input_dict_or_td, dict):
+            input_dict_or_td = TensorDict.from_dict(
+                input_dict_or_td, batch_size=self.batch_size
+            )
+
         if keys_to_update is not None:
             keys_to_update = unravel_key_list(keys_to_update)
             if len(keys_to_update) == 0:
                 return self
 
-        if (
-            isinstance(input_dict_or_td, LazyStackedTensorDict)
-            and input_dict_or_td.stack_dim == self.stack_dim
+        if input_dict_or_td.batch_size[self.stack_dim] != len(self.tensordicts):
+            raise ValueError("cannot update stacked tensordicts with different shapes.")
+        for td_dest, td_source in zip(
+            self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
         ):
-            if len(input_dict_or_td.tensordicts) != len(self.tensordicts):
-                raise ValueError(
-                    "cannot update stacked tensordicts with different shapes."
-                )
-            for td_dest, td_source in zip(
-                self.tensordicts, input_dict_or_td.tensordicts
-            ):
-                td_dest.update(
-                    td_source, clone=clone, keys_to_update=keys_to_update, **kwargs
-                )
-            return self
-
-        inplace = kwargs.get("inplace", False)
-        for key, value in input_dict_or_td.items():
-            if clone and hasattr(value, "clone"):
-                value = value.clone()
-            elif clone:
-                value = tree_map(torch.clone, value)
-            key = _unravel_key_to_tuple(key)
-            firstkey, subkey = key[0], key[1:]
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
-            ):
-                continue
-
-            if subkey:
-                # we must check that the target is not a leaf
-                target = self._get_str(firstkey, default=None)
-                if is_tensor_collection(target):
-                    sub_keys_to_update = _prune_selected_keys(keys_to_update, firstkey)
-                    target.update(
-                        {subkey: value},
-                        inplace=inplace,
-                        clone=clone,
-                        keys_to_update=sub_keys_to_update,
-                    )
-                elif target is None:
-                    self._set_tuple(key, value, inplace=inplace, validated=False)
-                else:
-                    raise TypeError(
-                        f"Type mismatch: self.get(key[0]) is {type(target)} but expected a tensor collection."
-                    )
-            else:
-                target = self._get_str(firstkey, default=None)
-                if is_tensor_collection(target) and (
-                    is_tensor_collection(value) or isinstance(value, dict)
-                ):
-                    sub_keys_to_update = _prune_selected_keys(keys_to_update, firstkey)
-                    target.update(
-                        value,
-                        inplace=inplace,
-                        clone=clone,
-                        keys_to_update=sub_keys_to_update,
-                    )
-                elif target is None or not is_tensor_collection(value):
-                    self._set_str(firstkey, value, inplace=inplace, validated=False)
-                else:
-                    raise TypeError(
-                        f"Type mismatch: self.get(key) is {type(target)} but value is of type {type(value)}."
-                    )
-
+            td_dest.update(
+                td_source, clone=clone, keys_to_update=keys_to_update, **kwargs
+            )
         return self
 
     def update_(
@@ -1902,30 +1861,12 @@ class LazyStackedTensorDict(TensorDictBase):
         if input_dict_or_td is self:
             # no op
             return self
-        if isinstance(input_dict_or_td, LazyStackedTensorDict):
-            if input_dict_or_td.stack_dim == self.stack_dim:
-                if not input_dict_or_td.shape[self.stack_dim] == len(self.tensordicts):
-                    raise ValueError(
-                        "cannot update stacked tensordicts with different shapes."
-                    )
-                for td_dest, td_source in zip(
-                    self.tensordicts, input_dict_or_td.tensordicts
-                ):
-                    td_dest.update_(td_source)
-                return self
-            else:
-                for i, td in enumerate(input_dict_or_td.tensordicts):
-                    idx = (slice(None),) * input_dict_or_td.stack_dim + (i,)
-                    self.update_at_(td, idx)
-        for key, value in input_dict_or_td.items():
-            if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
-                raise TypeError(
-                    f"Expected value to be one of types {_ACCEPTED_CLASSES} "
-                    f"but got {type(value)}"
-                )
-            if clone:
-                value = value.clone()
-            self.set_(key, value, **kwargs)
+        if input_dict_or_td.batch_size[self.stack_dim] != len(self.tensordicts):
+            raise ValueError("cannot update stacked tensordicts with different shapes.")
+        for td_dest, td_source in zip(
+            self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
+        ):
+            td_dest.update_(td_source, clone=clone, **kwargs)
         return self
 
     def update_at_(
@@ -1934,46 +1875,34 @@ class LazyStackedTensorDict(TensorDictBase):
         index: IndexType,
         clone: bool = False,
     ) -> T:
-        if isinstance(input_dict_or_td, TensorDictBase):
-            split_index = self._split_index(index)
-            converted_idx = split_index["index_dict"]
-            num_single = split_index["num_single"]
-            isinteger = split_index["isinteger"]
-            if isinteger:
-                # this will break if the index along the stack dim is [0] or :1 or smth
-                for i, _idx in converted_idx.items():
-                    self.tensordicts[i].update_at_(
-                        input_dict_or_td,
-                        _idx,
-                    )
-                return self
-            unbind_dim = self.stack_dim - num_single
-            for (i, _idx), _value in zip(
-                converted_idx.items(),
-                input_dict_or_td.unbind(unbind_dim),
-            ):
+        if not isinstance(input_dict_or_td, TensorDictBase):
+            input_dict_or_td = TensorDict.from_dict(
+                input_dict_or_td, batch_size=self.batch_size
+            )
+        split_index = self._split_index(index)
+        converted_idx = split_index["index_dict"]
+        num_single = split_index["num_single"]
+        isinteger = split_index["isinteger"]
+        if isinteger:
+            # this will break if the index along the stack dim is [0] or :1 or smth
+            for i, _idx in converted_idx.items():
                 self.tensordicts[i].update_at_(
-                    _value,
+                    input_dict_or_td,
                     _idx,
                 )
             return self
-        for key, value in input_dict_or_td.items():
-            if not isinstance(value, _ACCEPTED_CLASSES):
-                raise TypeError(
-                    f"Expected value to be one of types {_ACCEPTED_CLASSES} "
-                    f"but got {type(value)}"
-                )
-            if clone:
-                value = value.clone()
-            self.set_at_(key, value, index)
+        unbind_dim = self.stack_dim - num_single
+        for (i, _idx), _value in zip(
+            converted_idx.items(),
+            input_dict_or_td.unbind(unbind_dim),
+        ):
+            self.tensordicts[i].update_at_(
+                _value,
+                _idx,
+            )
         return self
 
     def rename_key_(self, old_key: str, new_key: str, safe: bool = False) -> T:
-        def sort_keys(element):
-            if isinstance(element, tuple):
-                return "_-|-_".join(element)
-            return element
-
         for td in self.tensordicts:
             td.rename_key_(old_key, new_key, safe=safe)
         return self
