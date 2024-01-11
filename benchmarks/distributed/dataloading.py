@@ -28,7 +28,7 @@ import tenacity
 import torch
 import tqdm
 
-from tensordict import MemmapTensor
+from tensordict import MemoryMappedTensor
 from tensordict.prototype import tensorclass
 from torch import multiprocessing as mp, nn
 from torch.distributed import rpc
@@ -109,12 +109,14 @@ class ImageNetData:
     @classmethod
     def from_dataset(cls, dataset):
         data = cls(
-            images=MemmapTensor(
-                len(dataset),
-                *dataset[0][0].squeeze().shape,
+            images=MemoryMappedTensor.empty(
+                (
+                    len(dataset),
+                    *dataset[0][0].squeeze().shape,
+                ),
                 dtype=torch.uint8,
             ),
-            targets=MemmapTensor(len(dataset), dtype=torch.int64),
+            targets=MemoryMappedTensor.empty(len(dataset), dtype=torch.int64),
             batch_size=[len(dataset)],
         )
         # locks the tensorclass and ensures that is_memmap will return True.
@@ -139,12 +141,14 @@ class ImageNetData:
         import torchsnapshot
 
         data = cls(
-            images=MemmapTensor(
-                len(dataset),
-                *dataset[0][0].squeeze().shape,
+            images=MemoryMappedTensor.empty(
+                (
+                    len(dataset),
+                    *dataset[0][0].squeeze().shape,
+                ),
                 dtype=torch.uint8,
             ),
-            targets=MemmapTensor(len(dataset), dtype=torch.int64),
+            targets=MemoryMappedTensor(len(dataset), dtype=torch.int64),
             batch_size=[len(dataset)],
         )
         # locks the tensorclass and ensures that is_memmap will return True.
