@@ -16,7 +16,7 @@ from packaging import version
 
 from packaging.version import parse
 
-from tensordict import MemmapTensor, TensorDict
+from tensordict import MemoryMappedTensor, TensorDict
 from torch import distributed as dist, multiprocessing as mp, nn
 from torch.distributed._tensor import (
     DeviceMesh,
@@ -215,7 +215,7 @@ class TestGather:
             {
                 ("a", "b"): torch.randn(2),
                 "c": torch.randn(2),
-                ("d", "e", "f"): MemmapTensor.from_tensor(
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(
                     torch.randn(2, 2), filename=memmap_filename
                 ),
             },
@@ -237,7 +237,7 @@ class TestGather:
                 {
                     ("a", "b"): torch.zeros(2),
                     "c": torch.zeros(2),
-                    ("d", "e", "f"): MemmapTensor.from_tensor(torch.zeros(2, 2)),
+                    ("d", "e", "f"): MemoryMappedTensor.from_tensor(torch.zeros(2, 2)),
                 },
                 [2],
             )
@@ -287,7 +287,7 @@ class TestReduce:
             {
                 ("a", "b"): torch.ones(2),
                 "c": torch.ones(2),
-                ("d", "e", "f"): MemmapTensor.from_tensor(
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(
                     torch.ones(2, 2), filename=memmap_filename
                 ),
             },
@@ -310,7 +310,7 @@ class TestReduce:
                 {
                     ("a", "b"): torch.ones(2),
                     "c": torch.ones(2),
-                    ("d", "e", "f"): MemmapTensor.from_tensor(torch.ones(2, 2)),
+                    ("d", "e", "f"): MemoryMappedTensor.from_tensor(torch.ones(2, 2)),
                 },
                 [2],
             )
@@ -378,34 +378,40 @@ class SendBase:
         raise NotImplementedError
 
     @classmethod
-    def client(cls, pseudo_rand):
+    def client(cls, pseudo_rand, group):
         torch.distributed.init_process_group(
             "gloo",
             rank=1,
             world_size=2,
             init_method="tcp://localhost:10017",
         )
+        if group is not None:
+            group = dist.new_group(group)
         td = cls.make_td(ones=True)
-        td.send(0, pseudo_rand=pseudo_rand)
+        td.send(0, pseudo_rand=pseudo_rand, group=group)
 
     @classmethod
-    def server(cls, queue, pseudo_rand):
+    def server(cls, queue, pseudo_rand, group):
         torch.distributed.init_process_group(
             "gloo",
             rank=0,
             world_size=2,
             init_method="tcp://localhost:10017",
         )
+        if group is not None:
+            group = dist.new_group(group)
         td = cls.make_td(ones=False)
-        td.recv(1, pseudo_rand=pseudo_rand)
+        td.recv(1, pseudo_rand=pseudo_rand, group=group)
         assert (td == 1).all()
         queue.put("yuppie")
 
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
-    def test_send(self, pseudo_rand, set_context):
+    @pytest.mark.parametrize("group", [[0, 1], None])
+    @pytest.mark.parametrize("pseudo_rand", [True, False])
+    def test_send(self, pseudo_rand, group, set_context):
         queue = mp.Queue(1)
-        main_worker = mp.Process(target=type(self).server, args=(queue, pseudo_rand))
-        secondary_worker = mp.Process(target=type(self).client, args=(pseudo_rand,))
+        main_worker = mp.Process(target=self.server, args=(queue, pseudo_rand, group))
+        secondary_worker = mp.Process(target=self.client, args=(pseudo_rand, group))
 
         main_worker.start()
         secondary_worker.start()
@@ -417,7 +423,6 @@ class SendBase:
             secondary_worker.join()
 
 
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestSend(SendBase):
     """Test send for tensordict as root."""
 
@@ -431,7 +436,7 @@ class TestSend(SendBase):
             {
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -439,7 +444,6 @@ class TestSend(SendBase):
         return td
 
 
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestSendLazyStackRoot(SendBase):
     """Test send for lazy-stack as root."""
 
@@ -453,7 +457,7 @@ class TestSendLazyStackRoot(SendBase):
             {
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -466,7 +470,6 @@ class TestSendLazyStackRoot(SendBase):
         return td
 
 
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestSendLazyStackNest(SendBase):
     """Test send for tensordict as root with lazy stacked field."""
 
@@ -480,7 +483,7 @@ class TestSendLazyStackNest(SendBase):
             {
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -505,7 +508,7 @@ class iRecvBase:
         raise NotImplementedError
 
     @classmethod
-    def client(cls, pseudo_rand):
+    def client(cls, pseudo_rand, group):
         torch.distributed.init_process_group(
             "gloo",
             rank=1,
@@ -513,10 +516,12 @@ class iRecvBase:
             init_method="tcp://localhost:10017",
         )
         td = cls.make_td(ones=True)
-        td.send(0, pseudo_rand=pseudo_rand)
+        if group is not None:
+            group = dist.new_group(group)
+        td.send(0, pseudo_rand=pseudo_rand, group=group)
 
     @classmethod
-    def server(cls, queue, return_premature, pseudo_rand):
+    def server(cls, queue, return_premature, pseudo_rand, group):
         torch.distributed.init_process_group(
             "gloo",
             rank=0,
@@ -524,20 +529,28 @@ class iRecvBase:
             init_method="tcp://localhost:10017",
         )
         td = cls.make_td(ones=False)
-        out = td.irecv(1, return_premature=return_premature, pseudo_rand=pseudo_rand)
+        if group is not None:
+            group = dist.new_group(group)
+        out = td.irecv(
+            1, return_premature=return_premature, pseudo_rand=pseudo_rand, group=group
+        )
         if return_premature:
             for fut in out:
                 fut.wait()
         assert (td == 1).all()
         queue.put("yuppie")
 
+    @pytest.mark.parametrize("group", [None, [0, 1]])
+    @pytest.mark.parametrize("pseudo_rand", [True, False])
     @pytest.mark.parametrize("return_premature", [True, False])
-    def test_irecv(self, pseudo_rand, return_premature, set_context):
+    def test_irecv(self, pseudo_rand, return_premature, set_context, group):
         queue = mp.Queue(1)
         main_worker = mp.Process(
-            target=type(self).server, args=(queue, return_premature, pseudo_rand)
+            target=type(self).server, args=(queue, return_premature, pseudo_rand, group)
         )
-        secondary_worker = mp.Process(target=type(self).client, args=(pseudo_rand,))
+        secondary_worker = mp.Process(
+            target=type(self).client, args=(pseudo_rand, group)
+        )
 
         main_worker.start()
         secondary_worker.start()
@@ -549,7 +562,6 @@ class iRecvBase:
             secondary_worker.join()
 
 
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiRecv(iRecvBase):
     @staticmethod
     def make_td(ones):
@@ -562,14 +574,13 @@ class TestiRecv(iRecvBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
         return td
 
 
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiRecvLazyStackRoot(iRecvBase):
     @staticmethod
     def make_td(ones):
@@ -582,7 +593,7 @@ class TestiRecvLazyStackRoot(iRecvBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -593,7 +604,6 @@ class TestiRecvLazyStackRoot(iRecvBase):
         return td
 
 
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiRecvLazyStackNest(iRecvBase):
     @staticmethod
     def make_td(ones):
@@ -606,7 +616,7 @@ class TestiRecvLazyStackNest(iRecvBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -630,7 +640,7 @@ class iSendBase:
         raise NotImplementedError
 
     @classmethod
-    def client(cls, pseudo_rand):
+    def client(cls, pseudo_rand, group):
         torch.distributed.init_process_group(
             "gloo",
             rank=1,
@@ -639,10 +649,12 @@ class iSendBase:
         )
 
         td = cls.make_td(True)
-        td.isend(0, pseudo_rand=pseudo_rand)
+        if group is not None:
+            group = dist.new_group(group)
+        td.isend(0, pseudo_rand=pseudo_rand, group=group)
 
     @classmethod
-    def server(cls, queue, pseudo_rand):
+    def server(cls, queue, pseudo_rand, group):
         torch.distributed.init_process_group(
             "gloo",
             rank=0,
@@ -650,15 +662,23 @@ class iSendBase:
             init_method="tcp://localhost:10017",
         )
         td = cls.make_td(False)
-        td.recv(1, pseudo_rand=pseudo_rand)
+        if group is not None:
+            group = dist.new_group(group)
+        td.recv(1, pseudo_rand=pseudo_rand, group=group)
         assert (td == 1).all()
         queue.put("yuppie")
 
+    @pytest.mark.parametrize("group", [[0, 1], None])
+    @pytest.mark.parametrize("pseudo_rand", [True, False])
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
-    def test_isend(self, pseudo_rand, set_context):
+    def test_isend(self, pseudo_rand, set_context, group):
         queue = mp.Queue(1)
-        main_worker = mp.Process(target=type(self).server, args=(queue, pseudo_rand))
-        secondary_worker = mp.Process(target=type(self).client, args=(pseudo_rand,))
+        main_worker = mp.Process(
+            target=type(self).server, args=(queue, pseudo_rand, group)
+        )
+        secondary_worker = mp.Process(
+            target=type(self).client, args=(pseudo_rand, group)
+        )
 
         main_worker.start()
         secondary_worker.start()
@@ -673,7 +693,6 @@ class iSendBase:
             secondary_worker.join()
 
 
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiSend(iSendBase):
     @staticmethod
     def make_td(ones):
@@ -686,14 +705,13 @@ class TestiSend(iSendBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
         return td
 
 
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiSendLazyStackRoot(iSendBase):
     @staticmethod
     def make_td(ones):
@@ -706,7 +724,7 @@ class TestiSendLazyStackRoot(iSendBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -717,7 +735,6 @@ class TestiSendLazyStackRoot(iSendBase):
         return td
 
 
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiSendLazyStackNest(iSendBase):
     @staticmethod
     def make_td(ones):
@@ -730,7 +747,7 @@ class TestiSendLazyStackNest(iSendBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
