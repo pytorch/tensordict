@@ -2851,11 +2851,17 @@ class TensorDictBase(MutableMapping):
         ...
 
     # Distributed functionality
-    def gather_and_stack(self, dst: int) -> T | None:
+    def gather_and_stack(
+        self, dst: int, group: "dist.ProcessGroup" | None = None
+    ) -> T | None:
         """Gathers tensordicts from various workers and stacks them onto self in the destination worker.
 
         Args:
             dst (int): the rank of the destination worker where :func:`gather_and_stack` will be called.
+            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
+                will be used for communication. Otherwise, the default process group
+                will be used.
+                Defaults to ``None``.
 
         Example:
             >>> from torch import multiprocessing as mp
@@ -2906,24 +2912,37 @@ class TensorDictBase(MutableMapping):
             ...     secondary_worker.join()
         """
         output = (
-            [None for _ in range(dist.get_world_size())]
-            if dst == dist.get_rank()
+            [None for _ in range(dist.get_world_size(group=group))]
+            if dst == dist.get_rank(group=group)
             else None
         )
-        dist.gather_object(self, output, dst=dst)
-        if dst == dist.get_rank():
+        dist.gather_object(self, output, dst=dst, group=group)
+        if dst == dist.get_rank(group=group):
             # remove self from output
             output = [item for i, item in enumerate(output) if i != dst]
             self.update(torch.stack(output, 0), inplace=True)
             return self
         return None
 
-    def send(self, dst: int, init_tag: int = 0, pseudo_rand: bool = False) -> None:
+    def send(
+        self,
+        dst: int,
+        *,
+        group: "dist.ProcessGroup" | None = None,
+        init_tag: int = 0,
+        pseudo_rand: bool = False,
+    ) -> None:  # noqa: D417
         """Sends the content of a tensordict to a distant worker.
 
         Args:
             dst (int): the rank of the destination worker where the content
                 should be sent.
+
+        Keyword Args:
+            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
+                will be used for communication. Otherwise, the default process group
+                will be used.
+                Defaults to ``None``.
             init_tag (int): the initial tag to be used to mark the tensors.
                 Note that this will be incremented by as much as the number of
                 tensors contained in the TensorDict.
@@ -2992,15 +3011,21 @@ class TensorDictBase(MutableMapping):
             ...     secondary_worker.join()
 
         """
-        self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
+        self._send(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
 
-    def _send(self, dst: int, _tag: int = -1, pseudo_rand: bool = False) -> int:
+    def _send(
+        self,
+        dst: int,
+        _tag: int = -1,
+        pseudo_rand: bool = False,
+        group: "dist.ProcessGroup" | None = None,
+    ) -> int:
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
             if isinstance(value, Tensor):
                 pass
             elif _is_tensor_collection(value.__class__):
-                _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand)
+                _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
                 continue
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
@@ -3008,17 +3033,30 @@ class TensorDictBase(MutableMapping):
                 _tag += 1
             else:
                 _tag = int_generator(_tag + 1)
-            dist.send(value, dst=dst, tag=_tag)
+            dist.send(value, dst=dst, tag=_tag, group=group)
 
         return _tag
 
-    def recv(self, src: int, init_tag: int = 0, pseudo_rand: bool = False) -> int:
+    def recv(
+        self,
+        src: int,
+        *,
+        group: "dist.ProcessGroup" | None = None,
+        init_tag: int = 0,
+        pseudo_rand: bool = False,
+    ) -> int:  # noqa: D417
         """Receives the content of a tensordict and updates content with it.
 
         Check the example in the `send` method for context.
 
         Args:
             src (int): the rank of the source worker.
+
+        Keyword Args:
+            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
+                will be used for communication. Otherwise, the default process group
+                will be used.
+                Defaults to ``None``.
             init_tag (int): the ``init_tag`` used by the source worker.
             pseudo_rand (bool): if True, the sequence of tags will be pseudo-
                 random, allowing to send multiple data from different nodes
@@ -3027,17 +3065,22 @@ class TensorDictBase(MutableMapping):
                 slow down the runtime of your algorithm.
                 This value must match the one passed to :func:`send`.
                 Defaults to ``False``.
-
         """
-        return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand)
+        return self._recv(src, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
 
-    def _recv(self, src: int, _tag: int = -1, pseudo_rand: bool = False) -> int:
+    def _recv(
+        self,
+        src: int,
+        _tag: int = -1,
+        pseudo_rand: bool = False,
+        group: "dist.ProcessGroup" | None = None,
+    ) -> int:
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
             if isinstance(value, Tensor):
                 pass
             elif _is_tensor_collection(value.__class__):
-                _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
+                _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
                 continue
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
@@ -3045,17 +3088,30 @@ class TensorDictBase(MutableMapping):
                 _tag += 1
             else:
                 _tag = int_generator(_tag + 1)
-            dist.recv(value, src=src, tag=_tag)
+            dist.recv(value, src=src, tag=_tag, group=group)
             self._set_str(key, value, inplace=True, validated=True)
 
         return _tag
 
-    def isend(self, dst: int, init_tag: int = 0, pseudo_rand: bool = False) -> int:
+    def isend(
+        self,
+        dst: int,
+        *,
+        group: "dist.ProcessGroup" | None = None,
+        init_tag: int = 0,
+        pseudo_rand: bool = False,
+    ) -> int:  # noqa: D417
         """Sends the content of the tensordict asynchronously.
 
         Args:
             dst (int): the rank of the destination worker where the content
                 should be sent.
+
+        Keyword Args:
+            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
+                will be used for communication. Otherwise, the default process group
+                will be used.
+                Defaults to ``None``.
             init_tag (int): the initial tag to be used to mark the tensors.
                 Note that this will be incremented by as much as the number of
                 tensors contained in the TensorDict.
@@ -3128,7 +3184,7 @@ class TensorDictBase(MutableMapping):
             ...     secondary_worker.join()
 
         """
-        return self._isend(dst, init_tag - 1, pseudo_rand=pseudo_rand)
+        return self._isend(dst, _tag=init_tag - 1, pseudo_rand=pseudo_rand, group=group)
 
     def _isend(
         self,
@@ -3136,6 +3192,7 @@ class TensorDictBase(MutableMapping):
         _tag: int = -1,
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
+        group: "dist.ProcessGroup" | None = None,
     ) -> int:
         root = False
         if _futures is None:
@@ -3145,7 +3202,11 @@ class TensorDictBase(MutableMapping):
             value = self._get_str(key, NO_DEFAULT)
             if _is_tensor_collection(value.__class__):
                 _tag = value._isend(
-                    dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures
+                    dst,
+                    _tag=_tag,
+                    pseudo_rand=pseudo_rand,
+                    _futures=_futures,
+                    group=group,
                 )
                 continue
             elif isinstance(value, Tensor):
@@ -3156,7 +3217,7 @@ class TensorDictBase(MutableMapping):
                 _tag += 1
             else:
                 _tag = int_generator(_tag + 1)
-            _future = dist.isend(value, dst=dst, tag=_tag)
+            _future = dist.isend(value, dst=dst, tag=_tag, group=group)
             _futures.append(_future)
         if root:
             for _future in _futures:
@@ -3166,6 +3227,8 @@ class TensorDictBase(MutableMapping):
     def irecv(
         self,
         src: int,
+        *,
+        group: "dist.ProcessGroup" | None = None,
         return_premature: bool = False,
         init_tag: int = 0,
         pseudo_rand: bool = False,
@@ -3176,6 +3239,12 @@ class TensorDictBase(MutableMapping):
 
         Args:
             src (int): the rank of the source worker.
+
+        Keyword Args:
+            group (torch.distributed.ProcessGroup, optional): if set, the specified process group
+                will be used for communication. Otherwise, the default process group
+                will be used.
+                Defaults to ``None``.
             return_premature (bool): if ``True``, returns a list of futures to wait
                 upon until the tensordict is updated. Defaults to ``False``,
                 i.e. waits until update is completed withing the call.
@@ -3193,7 +3262,11 @@ class TensorDictBase(MutableMapping):
                 upon until the tensordict is updated.
         """
         return self._irecv(
-            src, return_premature, _tag=init_tag - 1, pseudo_rand=pseudo_rand
+            src,
+            return_premature=return_premature,
+            _tag=init_tag - 1,
+            pseudo_rand=pseudo_rand,
+            group=group,
         )
 
     def _irecv(
@@ -3203,6 +3276,7 @@ class TensorDictBase(MutableMapping):
         _tag: int = -1,
         _future_list: list[torch.Future] = None,
         pseudo_rand: bool = False,
+        group: "dist.ProcessGroup" | None = None,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
         root = False
         if _future_list is None:
@@ -3217,6 +3291,7 @@ class TensorDictBase(MutableMapping):
                     _tag=_tag,
                     _future_list=_future_list,
                     pseudo_rand=pseudo_rand,
+                    group=group,
                 )
                 continue
             elif isinstance(value, Tensor):
@@ -3227,7 +3302,7 @@ class TensorDictBase(MutableMapping):
                 _tag += 1
             else:
                 _tag = int_generator(_tag + 1)
-            _future_list.append(dist.irecv(value, src=src, tag=_tag))
+            _future_list.append(dist.irecv(value, src=src, tag=_tag, group=group))
         if not root:
             return _tag, _future_list
         elif return_premature:
@@ -3237,7 +3312,14 @@ class TensorDictBase(MutableMapping):
                 future.wait()
             return
 
-    def reduce(self, dst, op=None, async_op=False, return_premature=False):
+    def reduce(
+        self,
+        dst,
+        op=None,
+        async_op=False,
+        return_premature=False,
+        group=None,
+    ):
         """Reduces the tensordict across all machines.
 
         Only the process with ``rank`` dst is going to receive the final result.
@@ -3245,7 +3327,7 @@ class TensorDictBase(MutableMapping):
         """
         if op is None:
             op = dist.ReduceOp.SUM
-        return self._reduce(dst, op, async_op, return_premature)
+        return self._reduce(dst, op, async_op, return_premature, group=group)
 
     def _reduce(
         self,
@@ -3254,6 +3336,7 @@ class TensorDictBase(MutableMapping):
         async_op=False,
         return_premature=False,
         _future_list=None,
+        group=None,
     ):
         if op is None:
             op = dist.ReduceOp.SUM
@@ -3275,7 +3358,9 @@ class TensorDictBase(MutableMapping):
                 pass
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
-            _future_list.append(dist.reduce(value, dst=dst, op=op, async_op=async_op))
+            _future_list.append(
+                dist.reduce(value, dst=dst, op=op, async_op=async_op, group=group)
+            )
         if not root:
             return _future_list
         elif async_op and return_premature:
@@ -3325,6 +3410,8 @@ class TensorDictBase(MutableMapping):
                 unnamed inputs as the number of tensordicts, including self.
                 If other tensordicts have missing entries, a default value
                 can be passed through the ``default`` keyword argument.
+
+        Keyword Args:
             batch_size (sequence of int, optional): if provided,
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
