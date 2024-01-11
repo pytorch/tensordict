@@ -15,10 +15,11 @@ from collections import defaultdict
 from copy import copy, deepcopy
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterator, Sequence, Type
+from typing import Any, Callable, Iterator, Optional, Sequence, Type
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from functorch import dim as ftdim
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
@@ -1407,9 +1408,9 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return any(value.any() for value in self.tensordicts)
 
-    def _send(self, dst: int, _tag: int = -1, pseudo_rand: bool = False) -> int:
+    def _send(self, dst: int, _tag: int = -1, pseudo_rand: bool = False, group: Optional[dist.ProcessGroup] = None) -> int:
         for td in self.tensordicts:
-            _tag = td._send(dst, _tag=_tag, pseudo_rand=pseudo_rand)
+            _tag = td._send(dst, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
         return _tag
 
     def _isend(
@@ -1418,6 +1419,7 @@ class LazyStackedTensorDict(TensorDictBase):
         _tag: int = -1,
         _futures: list[torch.Future] | None = None,
         pseudo_rand: bool = False,
+        group: Optional[dist.ProcessGroup] = None,
     ) -> int:
         if _futures is None:
             is_root = True
@@ -1425,7 +1427,7 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             is_root = False
         for td in self.tensordicts:
-            _tag = td._isend(dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures)
+            _tag = td._isend(dst, _tag=_tag, pseudo_rand=pseudo_rand, _futures=_futures, group=group)
         if is_root:
             for future in _futures:
                 future.wait()
@@ -1443,6 +1445,7 @@ class LazyStackedTensorDict(TensorDictBase):
         _tag: int = -1,
         _future_list: list[torch.Future] = None,
         pseudo_rand: bool = False,
+        group: Optional[dist.ProcessGroup] = None,
     ) -> tuple[int, list[torch.Future]] | list[torch.Future] | None:
         root = False
         if _future_list is None:
@@ -1455,6 +1458,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 _tag=_tag,
                 _future_list=_future_list,
                 pseudo_rand=pseudo_rand,
+                group=group,
             )
 
         if not root:
