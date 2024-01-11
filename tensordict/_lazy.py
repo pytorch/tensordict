@@ -25,7 +25,6 @@ from functorch import dim as ftdim
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.base import (
-    _ACCEPTED_CLASSES,
     _is_tensor_collection,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
@@ -42,7 +41,6 @@ from tensordict.utils import (
     _getitem_batch_size,
     _is_number,
     _parse_to,
-    _prune_selected_keys,
     _renamed_inplace_method,
     _shape,
     _td_fields,
@@ -60,7 +58,6 @@ from tensordict.utils import (
     NestedKey,
 )
 from torch import Tensor
-from torch.utils._pytree import tree_map
 
 _has_functorch = False
 try:
@@ -868,7 +865,10 @@ class LazyStackedTensorDict(TensorDictBase):
 
         if all(isinstance(item, torch.Tensor) for item in items):
             return torch.stack(items, dim=dim, out=out)
-        if all(is_tensorclass(item) and type(item) == type(items[0]) for item in items):
+        if all(
+            is_tensorclass(item) and type(item) == type(items[0])  # noqa: E721
+            for item in items
+        ):
             if all(isinstance(tensordict, NonTensorData) for tensordict in items):
                 return NonTensorData._stack_non_tensor(items, dim=dim)
             lazy_stack = cls.lazy_stack(
@@ -923,7 +923,6 @@ class LazyStackedTensorDict(TensorDictBase):
         dim: int = 0,
         out: T | None = None,
         strict: bool = False,
-        contiguous: bool = False,
     ) -> T:
         """Stacks tensors or tensordicts densly if possible, or onto a LazyStackedTensorDict otherwise.
 
@@ -966,12 +965,12 @@ class LazyStackedTensorDict(TensorDictBase):
             device = items[0].device
             if any(device != item.device for item in items[1:]):
                 device = None
+            if any(isinstance(item, LazyStackedTensorDict) and item._has_exclusive_keys for item in items):
+                return LazyStackedTensorDict(*items, stack_dim=dim)
             try:
                 keys = _check_keys(items, strict=True)
             except KeyError:
-                if not contiguous:
-                    return LazyStackedTensorDict(*items, stack_dim=dim)
-                raise
+                return LazyStackedTensorDict(*items, stack_dim=dim)
 
             out = {}
             for key in keys:
@@ -982,7 +981,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     if tensor_shape is None:
                         tensor_shape = tensor.shape
                     elif tensor.shape != tensor_shape:
-                        return LazyStackedTensorDict(*items, stack_dim=dim, out=out)
+                        return LazyStackedTensorDict(*items, stack_dim=dim)
                     out[key].append(tensor)
 
             def stack_fn(key_values):
