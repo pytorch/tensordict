@@ -16,7 +16,7 @@ from packaging import version
 
 from packaging.version import parse
 
-from tensordict import MemmapTensor, TensorDict
+from tensordict import MemoryMappedTensor, TensorDict
 from torch import distributed as dist, multiprocessing as mp, nn
 from torch.distributed._tensor import (
     DeviceMesh,
@@ -215,7 +215,7 @@ class TestGather:
             {
                 ("a", "b"): torch.randn(2),
                 "c": torch.randn(2),
-                ("d", "e", "f"): MemmapTensor.from_tensor(
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(
                     torch.randn(2, 2), filename=memmap_filename
                 ),
             },
@@ -237,7 +237,7 @@ class TestGather:
                 {
                     ("a", "b"): torch.zeros(2),
                     "c": torch.zeros(2),
-                    ("d", "e", "f"): MemmapTensor.from_tensor(torch.zeros(2, 2)),
+                    ("d", "e", "f"): MemoryMappedTensor.from_tensor(torch.zeros(2, 2)),
                 },
                 [2],
             )
@@ -287,7 +287,7 @@ class TestReduce:
             {
                 ("a", "b"): torch.ones(2),
                 "c": torch.ones(2),
-                ("d", "e", "f"): MemmapTensor.from_tensor(
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(
                     torch.ones(2, 2), filename=memmap_filename
                 ),
             },
@@ -310,7 +310,7 @@ class TestReduce:
                 {
                     ("a", "b"): torch.ones(2),
                     "c": torch.ones(2),
-                    ("d", "e", "f"): MemmapTensor.from_tensor(torch.ones(2, 2)),
+                    ("d", "e", "f"): MemoryMappedTensor.from_tensor(torch.ones(2, 2)),
                 },
                 [2],
             )
@@ -406,6 +406,8 @@ class SendBase:
         queue.put("yuppie")
 
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
+    @pytest.mark.parametrize("group", [[0, 1], None])
+    @pytest.mark.parametrize("pseudo_rand", [True, False])
     def test_send(self, pseudo_rand, group, set_context):
         queue = mp.Queue(1)
         main_worker = mp.Process(target=self.server, args=(queue, pseudo_rand, group))
@@ -421,8 +423,6 @@ class SendBase:
             secondary_worker.join()
 
 
-@pytest.mark.parametrize("group", [[0, 1], None])
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestSend(SendBase):
     """Test send for tensordict as root."""
 
@@ -436,7 +436,7 @@ class TestSend(SendBase):
             {
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -444,8 +444,6 @@ class TestSend(SendBase):
         return td
 
 
-@pytest.mark.parametrize("group", [[0, 1], None])
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestSendLazyStackRoot(SendBase):
     """Test send for lazy-stack as root."""
 
@@ -459,7 +457,7 @@ class TestSendLazyStackRoot(SendBase):
             {
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -472,8 +470,6 @@ class TestSendLazyStackRoot(SendBase):
         return td
 
 
-@pytest.mark.parametrize("group", [[0, 1], None])
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestSendLazyStackNest(SendBase):
     """Test send for tensordict as root with lazy stacked field."""
 
@@ -487,7 +483,7 @@ class TestSendLazyStackNest(SendBase):
             {
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -544,6 +540,8 @@ class iRecvBase:
         assert (td == 1).all()
         queue.put("yuppie")
 
+    @pytest.mark.parametrize("group", [None, [0, 1]])
+    @pytest.mark.parametrize("pseudo_rand", [True, False])
     @pytest.mark.parametrize("return_premature", [True, False])
     def test_irecv(self, pseudo_rand, return_premature, set_context, group):
         queue = mp.Queue(1)
@@ -564,8 +562,6 @@ class iRecvBase:
             secondary_worker.join()
 
 
-@pytest.mark.parametrize("group", [[0, 1], None])
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiRecv(iRecvBase):
     @staticmethod
     def make_td(ones):
@@ -578,15 +574,13 @@ class TestiRecv(iRecvBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
         return td
 
 
-@pytest.mark.parametrize("group", [[0, 1], None])
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiRecvLazyStackRoot(iRecvBase):
     @staticmethod
     def make_td(ones):
@@ -599,7 +593,7 @@ class TestiRecvLazyStackRoot(iRecvBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -610,8 +604,6 @@ class TestiRecvLazyStackRoot(iRecvBase):
         return td
 
 
-@pytest.mark.parametrize("group", [[0, 1], None])
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiRecvLazyStackNest(iRecvBase):
     @staticmethod
     def make_td(ones):
@@ -624,7 +616,7 @@ class TestiRecvLazyStackNest(iRecvBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -676,6 +668,8 @@ class iSendBase:
         assert (td == 1).all()
         queue.put("yuppie")
 
+    @pytest.mark.parametrize("group", [[0, 1], None])
+    @pytest.mark.parametrize("pseudo_rand", [True, False])
     @pytest.mark.flaky(reruns=5, reruns_delay=5)
     def test_isend(self, pseudo_rand, set_context, group):
         queue = mp.Queue(1)
@@ -699,8 +693,6 @@ class iSendBase:
             secondary_worker.join()
 
 
-@pytest.mark.parametrize("group", [[0, 1], None])
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiSend(iSendBase):
     @staticmethod
     def make_td(ones):
@@ -713,15 +705,13 @@ class TestiSend(iSendBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
         return td
 
 
-@pytest.mark.parametrize("group", [[0, 1], None])
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiSendLazyStackRoot(iSendBase):
     @staticmethod
     def make_td(ones):
@@ -734,7 +724,7 @@ class TestiSendLazyStackRoot(iSendBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
@@ -745,8 +735,6 @@ class TestiSendLazyStackRoot(iSendBase):
         return td
 
 
-@pytest.mark.parametrize("group", [[0, 1], None])
-@pytest.mark.parametrize("pseudo_rand", [True, False])
 class TestiSendLazyStackNest(iSendBase):
     @staticmethod
     def make_td(ones):
@@ -759,7 +747,7 @@ class TestiSendLazyStackNest(iSendBase):
                 ("a", "b"): fun(2),
                 "c": fun(2, 3),
                 "_": fun(2, 1, 5),
-                ("d", "e", "f"): MemmapTensor.from_tensor(fun(2, 2)),
+                ("d", "e", "f"): MemoryMappedTensor.from_tensor(fun(2, 2)),
             },
             [2],
         )
