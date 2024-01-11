@@ -3091,7 +3091,7 @@ class TensorDictBase(MutableMapping):
             if isinstance(value, Tensor):
                 pass
             elif _is_tensor_collection(value.__class__):
-                _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand)
+                _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
                 continue
             else:
                 raise NotImplementedError(f"Type {type(value)} is not supported.")
