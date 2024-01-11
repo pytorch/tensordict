@@ -1624,7 +1624,11 @@ class TensorDictBase(MutableMapping):
                 # we create an empty copy of self
                 # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
                 # if both are in filesystem
-                input = self.apply(lambda x: torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape))
+                input = self.apply(
+                    lambda x: torch.empty((), device=x.device, dtype=x.dtype).expand(
+                        x.shape
+                    )
+                )
                 result = input._memmap_(
                     prefix=prefix,
                     copy_existing=copy_existing,

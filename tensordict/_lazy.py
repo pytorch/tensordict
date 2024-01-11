@@ -13,6 +13,7 @@ import textwrap
 import weakref
 from collections import defaultdict
 from copy import copy, deepcopy
+from functools import wraps
 from pathlib import Path
 from textwrap import indent
 from typing import Any, Callable, Iterator, Sequence, Type
@@ -105,6 +106,18 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             in tensordict.get(item[0]).keys(self.include_nested, self.leaves_only)
             for tensordict in self.tensordict.tensordicts
         )
+
+
+def _fails_exclusive_keys(func):
+    @wraps(func)
+    def newfunc(self, *args, **kwargs):
+        if self._has_exclusive_keys:
+            raise RuntimeError(
+                f"the method {func.__name__} cannot complete when there are exclusive keys."
+            )
+        return func(self, *args, **kwargs)
+
+    return newfunc
 
 
 class LazyStackedTensorDict(TensorDictBase):
@@ -216,13 +229,29 @@ class LazyStackedTensorDict(TensorDictBase):
             raise RuntimeError("batch_size does not match self.batch_size.")
 
     @property
+    @cache
+    def _has_exclusive_keys(self):
+        keys = None
+        for td in self.tensordicts:
+            _keys = set(td.keys(True, True))
+            if keys is None:
+                keys = _keys
+            else:
+                if keys != _keys:
+                    return True
+        else:
+            return False
+
+    @_fails_exclusive_keys
+    def to_dict(self) -> dict[str, Any]:
+        return super().to_dict()
+
+    @property
     def device(self) -> torch.device | None:
         # devices might have changed, so we check that they're all the same
         device_set = {td.device for td in self.tensordicts}
         if len(device_set) != 1:
-            raise RuntimeError(
-                f"found multiple devices in {self.__class__.__name__}:" f" {device_set}"
-            )
+            return None
         device = self.tensordicts[0].device
         return device
 
@@ -606,33 +635,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 for (i, _idx), _value in zip(converted_idx.items(), value_unbind):
                     self_idx = (slice(None),) * split_index["mask_loc"] + (i,)
                     self[self_idx]._set_at_str(key, _value, _idx, validated=validated)
-
-        # # it may be the case that we can't get the value
-        # # because it can't be stacked.
-        # # self[index]._set_str(key, value, validated=validated, inplace=True)
-        # # return self
-        # split_index = self._split_index(index)
-        # converted_idx = split_index["index_dict"]
-        # num_single = split_index["num_single"]
-        # isinteger = split_index["isinteger"]
-        # if isinteger:
-        #     for (i, _idx) in converted_idx.items():
-        #         if _idx:
-        #             self.tensordicts[i]._set_at_str(
-        #                 key, value, _idx, validated=validated
-        #             )
-        #         else:
-        #             self.tensordicts[i]._set_str(
-        #                 key,
-        #                 value,
-        #                 validated=validated,
-        #                 inplace=True,
-        #             )
-        #     return self
-        # unbind_dim = self.stack_dim - num_single
-        # for (i, _idx), _value in zip(converted_idx.items(), value.unbind(unbind_dim)):
-        #     self.tensordicts[i]._set_at_str(key, _value, _idx, validated=validated)
-        # return self
 
     def _set_at_tuple(self, key, value, idx, *, validated):
         if len(key) == 1:
