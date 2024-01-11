@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from tensordict import MemmapTensor, TensorDict
+from tensordict import MemoryMappedTensor, TensorDict
 from torch import nn
 
 
@@ -25,9 +25,9 @@ def tensor():
     return torch.zeros(3, 4, 5)
 
 
-@pytest.fixture(params=get_available_devices())
+@pytest.fixture(params=[torch.device("cpu")])
 def memmap_tensor(request):
-    return MemmapTensor(3, 4, 5, device=request.param)
+    return MemoryMappedTensor.zeros((3, 4, 5))
 
 
 @pytest.fixture
@@ -37,14 +37,14 @@ def td_memmap():
     ).memmap_()
 
 
-@pytest.mark.parametrize("device", get_available_devices())
+@pytest.mark.parametrize("device", [torch.device("cpu")])
 def test_creation(benchmark, device):
-    benchmark(MemmapTensor, 3, 4, 5, device=device)
+    benchmark(MemoryMappedTensor.empty, (3, 4, 5))
 
 
 def test_creation_from_tensor(benchmark, tensor):
     benchmark(
-        MemmapTensor.from_tensor,
+        MemoryMappedTensor.from_tensor,
         tensor,
     )
 
