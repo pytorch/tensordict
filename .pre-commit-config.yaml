@@ -31,7 +31,7 @@ repos:
           - flake8-print==5.0.0
 
   - repo: https://github.com/PyCQA/pydocstyle
-    rev: 6.1.1
+    rev: 6.3.0
     hooks:
       - id: pydocstyle
         files: ^tensordict/
