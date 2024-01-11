@@ -47,7 +47,7 @@ from _utils_internal import (
 )
 from functorch import dim as ftdim
 
-from tensordict import LazyStackedTensorDict, make_tensordict, MemmapTensor, TensorDict
+from tensordict import LazyStackedTensorDict, make_tensordict, TensorDict
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
@@ -1633,7 +1633,7 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "memmap_td" and device.type != "cpu":
             with pytest.raises(
                 RuntimeError,
-                match="MemmapTensor with non-cpu device are not supported in vmap ops",
+                match="MemoryMappedTensor with non-cpu device are not supported in vmap ops",
             ):
                 fun(td)
             return
@@ -1729,7 +1729,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (tdt == td).all()
         elif "memmap" in td_name:
             with pytest.raises(
-                RuntimeError, match="can only be called with MemmapTensors stored"
+                RuntimeError, match="can only be called with MemoryMappedTensors stored"
             ):
                 td.as_tensor()
         else:
@@ -2353,8 +2353,8 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_getitem_nestedtuple(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        assert isinstance(td[(("a",))], (MemmapTensor, torch.Tensor))
-        assert isinstance(td.get((("a",))), (MemmapTensor, torch.Tensor))
+        assert isinstance(td[(("a",))], torch.Tensor)
+        assert isinstance(td.get((("a",))), torch.Tensor)
 
     def test_getitem_range(self, td_name, device):
         torch.manual_seed(1)
@@ -2377,7 +2377,7 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_getitem_string(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        assert isinstance(td["a"], (MemmapTensor, torch.Tensor))
+        assert isinstance(td["a"], torch.Tensor)
 
     @pytest.mark.parametrize(
         "idx",
@@ -3202,10 +3202,6 @@ class TestTensorDicts(TestTensorDictsBase):
         assert "a" not in td.keys()
 
         z = td.get("z")
-        if isinstance(a, MemmapTensor):
-            a = a._tensor
-        if isinstance(z, MemmapTensor):
-            z = z._tensor
         torch.testing.assert_close(a, z)
 
         new_z = torch.randn_like(z)
