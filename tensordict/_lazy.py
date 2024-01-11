@@ -37,7 +37,7 @@ from tensordict.base import (
 )
 from tensordict.memmap import MemoryMappedTensor as MemmapTensor
 from tensordict.utils import (
-    _broadcast_tensors,
+    _broadcast_tensors,_check_keys,
     _getitem_batch_size,
     _is_number,
     _parse_to,
@@ -229,7 +229,7 @@ class LazyStackedTensorDict(TensorDictBase):
             raise RuntimeError("batch_size does not match self.batch_size.")
 
     @property
-    @cache
+    @cache  # noqa: B019
     def _has_exclusive_keys(self):
         keys = None
         for td in self.tensordicts:
@@ -736,9 +736,8 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             for td in self.tensordicts:
                 out.append(td.unbind(new_dim))
-            from tensordict._torch_func import _stack
 
-            return tuple(_stack(vals, new_stack_dim) for vals in zip(*out))
+            return tuple(self.lazy_stack(vals, new_stack_dim) for vals in zip(*out))
 
     def _stack_onto_(
         self,
@@ -774,10 +773,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 # then we consider this default as non-stackable and return prematurly
                 return default
         try:
-            out = torch.stack(tensors, self.stack_dim)
+            out = self.lazy_stack(tensors, self.stack_dim)
             if _is_tensor_collection(out.__class__):
-                if self._td_dim_name is not None:
-                    out._td_dim_name = self._td_dim_name
                 if isinstance(out, LazyStackedTensorDict):
                     # then it's a LazyStackedTD
                     out.hook_out = self.hook_out
@@ -788,6 +785,8 @@ class LazyStackedTensorDict(TensorDictBase):
                         self._batch_size
                         + out.batch_size[(len(self._batch_size) + incr) :]
                     )
+                    if self._td_dim_name is not None:
+                        out._td_dim_name = self._td_dim_name
                 elif is_tensorclass(out):
                     # then it's a tensorclass
                     out._tensordict.hook_out = self.hook_out
@@ -798,13 +797,10 @@ class LazyStackedTensorDict(TensorDictBase):
                         self._batch_size
                         + out._tensordict.batch_size[(len(self._batch_size) + incr) :]
                     )
+                    if self._td_dim_name is not None:
+                        out._tensordict._td_dim_name = self._td_dim_name
                 else:
-                    # it must be a TensorDict
-                    incr = 0 if not self._is_vmapped else 1
-                    out._batch_size = (
-                        self._batch_size
-                        + out.batch_size[(len(self._batch_size) + incr) :]
-                    )
+                    raise RuntimeError
             elif self.hook_out is not None:
                 out = self.hook_out(out)
             return out
@@ -842,10 +838,199 @@ class LazyStackedTensorDict(TensorDictBase):
                     f" for key '{key[1:]}' in tensordict:\n{self}."
                 )
 
+    @classmethod
+    def lazy_stack(
+        cls,
+        items: Sequence[TensorDictBase],
+        dim: int = 0,
+        device: DeviceType | None = None,
+        out: T | None = None,
+    ) -> T:
+        """Stacks tensordicts in a LazyStackedTensorDict."""
+        if not items:
+            raise RuntimeError("items cannot be empty")
+
+        from .tensorclass import NonTensorData
+
+        if all(isinstance(item, torch.Tensor) for item in items):
+            return torch.stack(items, dim=dim, out=out)
+        if all(is_tensorclass(item) and type(item) == type(items[0]) for item in items):
+            if all(isinstance(tensordict, NonTensorData) for tensordict in items):
+                return NonTensorData._stack_non_tensor(items, dim=dim)
+            lazy_stack = cls.lazy_stack(
+                [item._tensordict for item in items], dim=dim, out=out
+            )
+            non_tensordict = [item._non_tensordict for item in items]
+            return type(items[0])._from_tensordict(
+                tensorict=lazy_stack, non_tensordict=non_tensordict
+            )
+
+        batch_size = items[0].batch_size
+        if dim < 0:
+            dim = len(batch_size) + dim + 1
+
+        for td in items[1:]:
+            if td.batch_size != items[0].batch_size:
+                raise RuntimeError(
+                    "stacking tensordicts requires them to have congruent batch sizes, "
+                    f"got td1.batch_size={td.batch_size} and td2.batch_size="
+                    f"{items[0].batch_size}"
+                )
+
+        if out is None:
+            # We need to handle tensordicts with exclusive keys and tensordicts with
+            # mismatching shapes.
+            # The first case is handled within _check_keys which fails if keys
+            # don't match exactly.
+            # The second requires a check over the tensor shapes.
+            return LazyStackedTensorDict(*items, stack_dim=dim)
+        else:
+            batch_size = list(batch_size)
+            batch_size.insert(dim, len(items))
+            batch_size = torch.Size(batch_size)
+
+            if out.batch_size != batch_size:
+                raise RuntimeError(
+                    "out.batch_size and stacked batch size must match, "
+                    f"got out.batch_size={out.batch_size} and batch_size"
+                    f"={batch_size}"
+                )
+
+            try:
+                out._stack_onto_(items, dim)
+            except KeyError as err:
+                raise err
+        return out
+
+    @classmethod
+    def maybe_dense_stack(
+        cls,
+        items: Sequence[TensorDictBase],
+        dim: int = 0,
+        out: T | None = None,
+        strict: bool = False,
+        contiguous: bool = False,
+    ) -> T:
+        """Stacks tensors or tensordicts densly if possible, or onto a LazyStackedTensorDict otherwise.
+
+        Examples:
+            >>> td0 = TensorDict({"a": 0}, [])
+            >>> td1 = TensorDict({"b": 0}, [])
+            >>> LazyStackedTensorDict.maybe_dense_stack([td0, td0])  # returns a TensorDict with shape [2]
+            >>> LazyStackedTensorDict.maybe_dense_stack([td0, td1])  # returns a LazyStackedTensorDict with shape [2]
+            >>> LazyStackedTensorDict.maybe_dense_stack(list(torch.randn(2)))  # returns a torch.Tensor with shape [2]
+        """
+        if not items:
+            raise RuntimeError("items cannot be empty")
+
+        from .tensorclass import NonTensorData
+
+        if all(isinstance(item, torch.Tensor) for item in items):
+            return torch.stack(items, dim=dim, out=out)
+
+        if all(isinstance(tensordict, NonTensorData) for tensordict in items):
+            return NonTensorData._stack_non_tensor(items, dim=dim)
+
+        batch_size = items[0].batch_size
+        if dim < 0:
+            dim = len(batch_size) + dim + 1
+
+        for td in items[1:]:
+            if td.batch_size != items[0].batch_size:
+                raise RuntimeError(
+                    "stacking tensordicts requires them to have congruent batch sizes, "
+                    f"got td1.batch_size={td.batch_size} and td2.batch_size="
+                    f"{items[0].batch_size}"
+                )
+
+        if out is None:
+            # We need to handle tensordicts with exclusive keys and tensordicts with
+            # mismatching shapes.
+            # The first case is handled within _check_keys which fails if keys
+            # don't match exactly.
+            # The second requires a check over the tensor shapes.
+            device = items[0].device
+            if any(device != item.device for item in items[1:]):
+                device = None
+            try:
+                keys = _check_keys(items, strict=True)
+            except KeyError:
+                if not contiguous:
+                    return LazyStackedTensorDict(*items, stack_dim=dim)
+                raise
+
+            out = {}
+            for key in keys:
+                out[key] = []
+                tensor_shape = None
+                for _tensordict in items:
+                    tensor = _tensordict._get_str(key, default=NO_DEFAULT)
+                    if tensor_shape is None:
+                        tensor_shape = tensor.shape
+                    elif tensor.shape != tensor_shape:
+                        return LazyStackedTensorDict(*items, stack_dim=dim, out=out)
+                    out[key].append(tensor)
+
+            def stack_fn(key_values):
+                key, values = key_values
+                return cls.maybe_dense_stack(values, dim)
+
+            out = {key: stack_fn((key, value)) for key, value in out.items()}
+
+            is_locked = any(item.is_locked for item in items)
+            result = TensorDict(
+                out,
+                batch_size=LazyStackedTensorDict._compute_batch_size(
+                    batch_size, dim, len(items)
+                ),
+                device=device,
+                _run_checks=False,
+            )
+            if is_locked:
+                return result.lock_()
+            return result
+        else:
+            keys = _check_keys(items)
+            batch_size = list(batch_size)
+            batch_size.insert(dim, len(items))
+            batch_size = torch.Size(batch_size)
+
+            if out.batch_size != batch_size:
+                raise RuntimeError(
+                    "out.batch_size and stacked batch size must match, "
+                    f"got out.batch_size={out.batch_size} and batch_size"
+                    f"={batch_size}"
+                )
+
+            out_keys = set(out.keys())
+            if strict:
+                in_keys = set(keys)
+                if len(out_keys - in_keys) > 0:
+                    raise RuntimeError(
+                        "The output tensordict has keys that are missing in the "
+                        "tensordict that has to be written: {out_keys - in_keys}. "
+                        "As per the call to `stack(..., strict=True)`, this "
+                        "is not permitted."
+                    )
+                elif len(in_keys - out_keys) > 0:
+                    raise RuntimeError(
+                        "The resulting tensordict has keys that are missing in "
+                        f"its destination: {in_keys - out_keys}. As per the call "
+                        "to `stack(..., strict=True)`, this is not permitted."
+                    )
+
+            try:
+                out._stack_onto_(items, dim)
+            except KeyError as err:
+                raise err
+        return out
+
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
-            td = torch.stack([td.cpu().as_tensor() for td in self.tensordicts], 0)
+            td = LazyStackedTensorDict.lazy_stack(
+                [td.cpu().as_tensor() for td in self.tensordicts], 0
+            )
         else:
             td = self
         if in_dim < 0:
@@ -1307,7 +1492,7 @@ class LazyStackedTensorDict(TensorDictBase):
                         else:
                             out.append(self.tensordicts[i][_idx])
                             out[-1] = out[-1].squeeze(cat_dim)
-                return torch.stack(out, cat_dim)
+                return LazyStackedTensorDict.lazy_stack(out, cat_dim)
             else:
                 for i, _idx in converted_idx.items():
                     self_idx = (slice(None),) * split_index["mask_loc"] + (i,)
@@ -1315,7 +1500,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 return torch.cat(out, cat_dim)
         elif is_nd_tensor:
             new_stack_dim = self.stack_dim - num_single + num_none
-            return torch.stack(
+            return LazyStackedTensorDict.lazy_stack(
                 [self[idx] for idx in converted_idx.values()], new_stack_dim
             )
         else:
@@ -1335,7 +1520,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 new_stack_dim = self.stack_dim - num_single + num_none - num_squash
                 for i, _idx in converted_idx.items():
                     out.append(self.tensordicts[i][_idx])
-                out = torch.stack(out, new_stack_dim)
+                out = LazyStackedTensorDict.lazy_stack(out, new_stack_dim)
                 out._td_dim_name = self._td_dim_name
                 return out
 
@@ -1349,9 +1534,9 @@ class LazyStackedTensorDict(TensorDictBase):
             for i, td in enumerate(self.tensordicts):
                 idx = (slice(None),) * self.stack_dim + (i,)
                 out.append(other[idx] == td)
-            return torch.stack(out, self.stack_dim)
+            return LazyStackedTensorDict.maybe_dense_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
-            return torch.stack(
+            return LazyStackedTensorDict.maybe_dense_stack(
                 [td == other for td in self.tensordicts],
                 self.stack_dim,
             )
@@ -1367,9 +1552,9 @@ class LazyStackedTensorDict(TensorDictBase):
             for i, td in enumerate(self.tensordicts):
                 idx = (slice(None),) * self.stack_dim + (i,)
                 out.append(other[idx] != td)
-            return torch.stack(out, self.stack_dim)
+            return LazyStackedTensorDict.maybe_dense_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
-            return torch.stack(
+            return LazyStackedTensorDict.maybe_dense_stack(
                 [td != other for td in self.tensordicts],
                 self.stack_dim,
             )
@@ -1590,7 +1775,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             )
         if not inplace:
-            results = torch.stack(results, dim=self.stack_dim)
+            results = LazyStackedTensorDict.lazy_stack(
+                results, dim=self.stack_dim
+            )
         else:
             results = self
         results._is_memmap = True
@@ -1620,7 +1807,7 @@ class LazyStackedTensorDict(TensorDictBase):
             self.tensordicts = tensordicts
             self.stack_dim = stack_dim
             return self
-        return torch.stack(tensordicts, stack_dim)
+        return LazyStackedTensorDict.maybe_dense_stack(tensordicts, dim=stack_dim)
 
     def update(
         self,
@@ -1802,7 +1989,7 @@ class LazyStackedTensorDict(TensorDictBase):
             and other.shape[: self.stack_dim] == self.shape[: self.stack_dim]
         ):
             other = other.unbind(self.stack_dim)
-            result = torch.stack(
+            result = LazyStackedTensorDict.maybe_dense_stack(
                 [
                     td.where(cond, _other, pad=pad)
                     for td, cond, _other in zip(self.tensordicts, condition, other)
@@ -1810,7 +1997,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.stack_dim,
             )
         else:
-            result = torch.stack(
+            result = LazyStackedTensorDict.maybe_dense_stack(
                 [
                     td.where(cond, other, pad=pad)
                     for td, cond in zip(self.tensordicts, condition)

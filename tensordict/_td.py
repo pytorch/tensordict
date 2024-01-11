@@ -546,17 +546,23 @@ class TensorDict(TensorDictBase):
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = self.empty(recurse=True)[index].update(value)
+                value = self.from_dict(value, batch_size=indexed_bs)
+                # value = self.empty(recurse=True)[index].update(value)
             if value.batch_size != indexed_bs:
-                # try to expand on the left (broadcasting)
-                try:
+                if value.shape == indexed_bs[-len(value.shape):]:
+                    # try to expand on the left (broadcasting)
                     value = value.expand(indexed_bs)
-                except RuntimeError as err:
-                    raise RuntimeError(
-                        f"indexed destination TensorDict batch size is {indexed_bs} "
-                        f"(batch_size = {self.batch_size}, index={index}), "
-                        f"which differs from the source batch size {value.batch_size}"
-                    ) from err
+                else:
+                    try:
+                        # copy and change batch_size if can't be expanded
+                        value = value.copy()
+                        value.batch_size = indexed_bs
+                    except RuntimeError as err:
+                        raise RuntimeError(
+                            f"indexed destination TensorDict batch size is {indexed_bs} "
+                            f"(batch_size = {self.batch_size}, index={index}), "
+                            f"which differs from the source batch size {value.batch_size}"
+                        ) from err
 
             keys = set(self.keys())
             if any(key not in keys for key in value.keys()):

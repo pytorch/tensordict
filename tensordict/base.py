@@ -2349,11 +2349,6 @@ class TensorDictBase(MutableMapping):
                 for ktu in keys_to_update
             ):
                 continue
-            # if not isinstance(value, _accepted_classes):
-            #     raise TypeError(
-            #         f"Expected value to be one of types {_accepted_classes} "
-            #         f"but got {type(value)}"
-            #     )
             if clone:
                 value = value.clone()
             self.set_((firstkey, *nextkeys), value)
