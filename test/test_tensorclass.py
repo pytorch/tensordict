@@ -372,7 +372,7 @@ def test_setitem():
 
 def test_setitem_memmap():
     # regression test PR #203
-    # We should be able to set tensors items with MemmapTensors and viceversa
+    # We should be able to set tensors items with MemoryMappedTensors and viceversa
     @tensorclass
     class MyDataMemMap1:
         x: torch.Tensor
