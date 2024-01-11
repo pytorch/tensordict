@@ -245,6 +245,16 @@ class LazyStackedTensorDict(TensorDictBase):
         ...
 
     @_fails_exclusive_keys
+    def state_dict(
+        self,
+        destination=None,
+        prefix="",
+        keep_vars=False,
+        flatten=False,
+    ) -> OrderedDict[str, Any]:
+        ...
+
+    @_fails_exclusive_keys
     def flatten_keys(
         self,
         separator: str = ".",
@@ -1203,6 +1213,12 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return out
 
+    def empty(self, recurse=False) -> T:
+        return LazyStackedTensorDict(
+            *[td.empty(recurse=recurse) for td in self.tensordicts],
+            stack_dim=self.stack_dim,
+        )
+
     def clone(self, recurse: bool = True) -> T:
         if recurse:
             # This could be optimized using copy but we must be careful with
@@ -1379,7 +1395,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if inplace:
             self.tensordicts = tensordicts
             return self
-        return torch.stack(tensordicts, dim=self.stack_dim)
+        return LazyStackedTensorDict(*tensordicts, stack_dim=self.stack_dim)
 
     def __setitem__(self, index: IndexType, value: T) -> T:
         if isinstance(index, (tuple, str)):
@@ -1544,9 +1560,8 @@ class LazyStackedTensorDict(TensorDictBase):
             other = TensorDict.from_dict(other)
         if _is_tensor_collection(other.__class__):
             out = []
-            for i, td in enumerate(self.tensordicts):
-                idx = (slice(None),) * self.stack_dim + (i,)
-                out.append(other[idx] == td)
+            for td0, td1 in zip(self.tensordicts, other.unbind(self.stack_dim)):
+                out.append(td0 == td1)
             return LazyStackedTensorDict.maybe_dense_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
             return LazyStackedTensorDict.maybe_dense_stack(
