@@ -990,6 +990,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 out[key] = []
                 tensor_shape = None
                 for _tensordict in items:
+                    # TODO: this can break if the tensor cannot be stacked and _tensordict is a lazy stack itself
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
                     if tensor_shape is None:
                         tensor_shape = tensor.shape
@@ -1562,14 +1563,15 @@ class LazyStackedTensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other == self
         if isinstance(other, (dict,)):
-            other = TensorDict.from_dict(other)
+            # we may want to broadcast it instead
+            other = TensorDict.from_dict(other, batch_size=self.batch_size)
         if _is_tensor_collection(other.__class__):
             out = []
             for td0, td1 in zip(self.tensordicts, other.unbind(self.stack_dim)):
                 out.append(td0 == td1)
-            return LazyStackedTensorDict.maybe_dense_stack(out, self.stack_dim)
+            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
-            return LazyStackedTensorDict.maybe_dense_stack(
+            return LazyStackedTensorDict.lazy_stack(
                 [td == other for td in self.tensordicts],
                 self.stack_dim,
             )
@@ -1579,19 +1581,55 @@ class LazyStackedTensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other != self
         if isinstance(other, (dict,)):
-            other = TensorDict.from_dict(other)
+            # we may want to broadcast it instead
+            other = TensorDict.from_dict(other, batch_size=self.batch_size)
         if _is_tensor_collection(other.__class__):
             out = []
-            for i, td in enumerate(self.tensordicts):
-                idx = (slice(None),) * self.stack_dim + (i,)
-                out.append(other[idx] != td)
-            return LazyStackedTensorDict.maybe_dense_stack(out, self.stack_dim)
+            for td, _other in zip(self.tensordicts, other.unbind(self.stack_dim)):
+                out.append(_other != td)
+            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
-            return LazyStackedTensorDict.maybe_dense_stack(
+            return LazyStackedTensorDict.lazy_stack(
                 [td != other for td in self.tensordicts],
                 self.stack_dim,
             )
         return True
+
+    def __xor__(self, other):
+        if is_tensorclass(other):
+            return other == self
+        if isinstance(other, (dict,)):
+            # we may want to broadcast it instead
+            other = TensorDict.from_dict(other, batch_size=self.batch_size)
+        if _is_tensor_collection(other.__class__):
+            out = []
+            for td0, td1 in zip(self.tensordicts, other.unbind(self.stack_dim)):
+                out.append(td0 ^ td1)
+            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return LazyStackedTensorDict.lazy_stack(
+                [td ^ other for td in self.tensordicts],
+                self.stack_dim,
+            )
+        return False
+
+    def __or__(self, other):
+        if is_tensorclass(other):
+            return other == self
+        if isinstance(other, (dict,)):
+            # we may want to broadcast it instead
+            other = TensorDict.from_dict(other, batch_size=self.batch_size)
+        if _is_tensor_collection(other.__class__):
+            out = []
+            for td0, td1 in zip(self.tensordicts, other.unbind(self.stack_dim)):
+                out.append(td0 | td1)
+            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return LazyStackedTensorDict.lazy_stack(
+                [td | other for td in self.tensordicts],
+                self.stack_dim,
+            )
+        return False
 
     def all(self, dim: int = None) -> bool | TensorDictBase:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
@@ -2176,8 +2214,6 @@ class LazyStackedTensorDict(TensorDictBase):
     unlock_ = TensorDictBase.unlock_
     unlock = _renamed_inplace_method(unlock_)
 
-    __xor__ = TensorDict.__xor__
-    __or__ = TensorDict.__or__
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
     _convert_to_tensordict = TensorDict._convert_to_tensordict
