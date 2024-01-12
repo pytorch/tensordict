@@ -16,7 +16,7 @@ from copy import copy, deepcopy
 from functools import wraps
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterator, Sequence, Type
+from typing import Any, Callable, Iterator, OrderedDict, Sequence, Type
 
 import numpy as np
 import torch
@@ -975,7 +975,10 @@ class LazyStackedTensorDict(TensorDictBase):
             device = items[0].device
             if any(device != item.device for item in items[1:]):
                 device = None
-            if any(isinstance(item, LazyStackedTensorDict) and item._has_exclusive_keys for item in items):
+            if any(
+                isinstance(item, LazyStackedTensorDict) and item._has_exclusive_keys
+                for item in items
+            ):
                 return LazyStackedTensorDict(*items, stack_dim=dim)
             try:
                 keys = _check_keys(items, strict=True)
@@ -1084,6 +1087,8 @@ class LazyStackedTensorDict(TensorDictBase):
         out = td.copy()
 
         def hook_out(tensor, in_dim=in_dim, vmap_level=vmap_level):
+            if _is_tensor_collection(type(tensor)):
+                return tensor._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
             return _add_batch_dim(tensor, in_dim, vmap_level)
 
         n = len(td.tensordicts)
@@ -1843,6 +1848,10 @@ class LazyStackedTensorDict(TensorDictBase):
         keys_to_update: Sequence[NestedKey] | None = None,
         **kwargs: Any,
     ) -> T:
+        # This implementation of update is compatible with exclusive keys
+        # as well as vmapped lazy stacks.
+        # We iterate over the tensordicts rather than iterating over the keys,
+        # which requires stacking and unbinding but is also not robust to missing keys.
         if input_dict_or_td is self:
             # no op
             return self
@@ -1856,15 +1865,54 @@ class LazyStackedTensorDict(TensorDictBase):
             if len(keys_to_update) == 0:
                 return self
 
-        if input_dict_or_td.batch_size[self.stack_dim] != len(self.tensordicts):
-            raise ValueError("cannot update stacked tensordicts with different shapes.")
+        if (
+            isinstance(input_dict_or_td, LazyStackedTensorDict)
+            and input_dict_or_td.stack_dim == self.stack_dim
+        ):
+            if len(input_dict_or_td.tensordicts) != len(self.tensordicts):
+                raise ValueError(
+                    "cannot update stacked tensordicts with different shapes."
+                )
+            for td_dest, td_source in zip(
+                self.tensordicts, input_dict_or_td.tensordicts
+            ):
+                td_dest.update(
+                    td_source, clone=clone, keys_to_update=keys_to_update, **kwargs
+                )
+            return self
+
+        if self.hook_in is not None:
+            self_upd = self.hook_in(self)
+            input_dict_or_td = self.hook_in(input_dict_or_td)
+        else:
+            self_upd = self
+        # Then we can decompose the tensordict along its stack dim
+        if input_dict_or_td.ndim <= self_upd.stack_dim or input_dict_or_td.batch_size[
+            self_upd.stack_dim
+        ] != len(self_upd.tensordicts):
+            try:
+                # if the batch-size does not permit unbinding, let's first try to reset the batch-size.
+                input_dict_or_td = input_dict_or_td.copy()
+                batch_size = self_upd.batch_size
+                if self_upd.hook_out is not None:
+                    batch_size = list(batch_size)
+                    batch_size.insert(self_upd.stack_dim, len(self_upd.tensordicts))
+                input_dict_or_td.batch_size = batch_size
+            except RuntimeError as err:
+                raise ValueError(
+                    "cannot update stacked tensordicts with different shapes."
+                ) from err
         for td_dest, td_source in zip(
-            self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
+            self_upd.tensordicts, input_dict_or_td.unbind(self_upd.stack_dim)
         ):
             td_dest.update(
                 td_source, clone=clone, keys_to_update=keys_to_update, **kwargs
             )
-        return self
+        if self.hook_out is not None:
+            self_upd = self.hook_out(self_upd)
+        else:
+            self_upd = self
+        return self_upd
 
     def update_(
         self,
