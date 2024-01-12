@@ -1566,8 +1566,22 @@ class LazyStackedTensorDict(TensorDictBase):
             # we may want to broadcast it instead
             other = TensorDict.from_dict(other, batch_size=self.batch_size)
         if _is_tensor_collection(other.__class__):
+            if other.batch_size != self.batch_size:
+                if self.ndim < other.ndim:
+                    self_expand = self.expand(other.batch_size)
+                elif self.ndim > other.ndim:
+                    other = other.expand(self.batch_size)
+                    self_expand = self
+                else:
+                    raise RuntimeError(
+                        f"Could not compare tensordicts with shapes {self.shape} and {other.shape}"
+                    )
+            else:
+                self_expand = self
             out = []
-            for td0, td1 in zip(self.tensordicts, other.unbind(self.stack_dim)):
+            for td0, td1 in zip(
+                self_expand.tensordicts, other.unbind(self_expand.stack_dim)
+            ):
                 out.append(td0 == td1)
             return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
@@ -1584,9 +1598,23 @@ class LazyStackedTensorDict(TensorDictBase):
             # we may want to broadcast it instead
             other = TensorDict.from_dict(other, batch_size=self.batch_size)
         if _is_tensor_collection(other.__class__):
+            if other.batch_size != self.batch_size:
+                if self.ndim < other.ndim:
+                    self_expand = self.expand(other.batch_size)
+                elif self.ndim > other.ndim:
+                    other = other.expand(self.batch_size)
+                    self_expand = self
+                else:
+                    raise RuntimeError(
+                        f"Could not compare tensordicts with shapes {self.shape} and {other.shape}"
+                    )
+            else:
+                self_expand = self
             out = []
-            for td, _other in zip(self.tensordicts, other.unbind(self.stack_dim)):
-                out.append(_other != td)
+            for td0, td1 in zip(
+                self_expand.tensordicts, other.unbind(self_expand.stack_dim)
+            ):
+                out.append(td0 != td1)
             return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
             return LazyStackedTensorDict.lazy_stack(
@@ -1602,8 +1630,22 @@ class LazyStackedTensorDict(TensorDictBase):
             # we may want to broadcast it instead
             other = TensorDict.from_dict(other, batch_size=self.batch_size)
         if _is_tensor_collection(other.__class__):
+            if other.batch_size != self.batch_size:
+                if self.ndim < other.ndim:
+                    self_expand = self.expand(other.batch_size)
+                elif self.ndim > other.ndim:
+                    other = other.expand(self.batch_size)
+                    self_expand = self
+                else:
+                    raise RuntimeError(
+                        f"Could not compare tensordicts with shapes {self.shape} and {other.shape}"
+                    )
+            else:
+                self_expand = self
             out = []
-            for td0, td1 in zip(self.tensordicts, other.unbind(self.stack_dim)):
+            for td0, td1 in zip(
+                self_expand.tensordicts, other.unbind(self_expand.stack_dim)
+            ):
                 out.append(td0 ^ td1)
             return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
@@ -1620,8 +1662,22 @@ class LazyStackedTensorDict(TensorDictBase):
             # we may want to broadcast it instead
             other = TensorDict.from_dict(other, batch_size=self.batch_size)
         if _is_tensor_collection(other.__class__):
+            if other.batch_size != self.batch_size:
+                if self.ndim < other.ndim:
+                    self_expand = self.expand(other.batch_size)
+                elif self.ndim > other.ndim:
+                    other = other.expand(self.batch_size)
+                    self_expand = self
+                else:
+                    raise RuntimeError(
+                        f"Could not compare tensordicts with shapes {self.shape} and {other.shape}"
+                    )
+            else:
+                self_expand = self
             out = []
-            for td0, td1 in zip(self.tensordicts, other.unbind(self.stack_dim)):
+            for td0, td1 in zip(
+                self_expand.tensordicts, other.unbind(self_expand.stack_dim)
+            ):
                 out.append(td0 | td1)
             return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
