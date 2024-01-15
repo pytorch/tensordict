@@ -34,11 +34,6 @@ from tensordict.base import (
     TensorDictBase,
 )
 
-# from tensordict._memmap import (
-#     empty_like as empty_like_memmap,
-#     from_filename,
-#     from_tensor as from_tensor_memmap,
-# )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
@@ -551,17 +546,23 @@ class TensorDict(TensorDictBase):
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = self.empty(recurse=True)[index].update(value)
+                value = TensorDict.from_dict(value, batch_size=indexed_bs)
+                # value = self.empty(recurse=True)[index].update(value)
             if value.batch_size != indexed_bs:
-                # try to expand on the left (broadcasting)
-                try:
+                if value.shape == indexed_bs[-len(value.shape) :]:
+                    # try to expand on the left (broadcasting)
                     value = value.expand(indexed_bs)
-                except RuntimeError as err:
-                    raise RuntimeError(
-                        f"indexed destination TensorDict batch size is {indexed_bs} "
-                        f"(batch_size = {self.batch_size}, index={index}), "
-                        f"which differs from the source batch size {value.batch_size}"
-                    ) from err
+                else:
+                    try:
+                        # copy and change batch_size if can't be expanded
+                        value = value.copy()
+                        value.batch_size = indexed_bs
+                    except RuntimeError as err:
+                        raise RuntimeError(
+                            f"indexed destination TensorDict batch size is {indexed_bs} "
+                            f"(batch_size = {self.batch_size}, index={index}), "
+                            f"which differs from the source batch size {value.batch_size}"
+                        ) from err
 
             keys = set(self.keys())
             if any(key not in keys for key in value.keys()):
@@ -1186,16 +1187,9 @@ class TensorDict(TensorDictBase):
             if num_boolean_dim:
                 names = [None] + names[num_boolean_dim:]
             else:
-                # def is_int(subidx):
-                #     if isinstance(subidx, Number):
-                #         return True
-                #     if isinstance(subidx, Tensor) and len(subidx.shape) == 0:
-                #         return True
-                #     return False
-
                 if not isinstance(idx, tuple):
                     idx = (idx,)
-                if len(idx) < self.ndim:
+                if len([_idx for _idx in idx if _idx is not None]) < self.ndim:
                     idx = (*idx, Ellipsis)
                 idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
                 # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
@@ -2230,6 +2224,13 @@ class _SubTensorDict(TensorDictBase):
         if input_dict_or_td is self:
             # no op
             return self
+        from ._lazy import LazyStackedTensorDict
+
+        if isinstance(self._source, LazyStackedTensorDict):
+            if self._source._has_exclusive_keys:
+                raise RuntimeError(
+                    "Cannot use _SubTensorDict.update with a LazyStackedTensorDict that has exclusive keys."
+                )
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self

@@ -960,7 +960,7 @@ class TensorDictBase(MutableMapping):
 
     @property
     def transpose(self):
-        """Returns a tensordit that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
+        """Returns a tensordict that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
 
         In-place or out-place modifications of the transposed tensordict will
         impact the original tensordict too as the memory is shared and the operations
@@ -985,21 +985,6 @@ class TensorDictBase(MutableMapping):
         ...
 
     def _legacy_transpose(self, dim0, dim1):
-        """Returns a tensordit that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
-
-        In-place or out-place modifications of the transposed tensordict will
-        impact the original tensordict too as the memory is shared and the operations
-        are mapped back on the original tensordict.
-
-        Examples:
-            >>> tensordict = TensorDict({"a": torch.randn(3, 4, 5)}, [3, 4])
-            >>> tensordict_transpose = tensordict.transpose(0, 1)
-            >>> print(tensordict_transpose.shape)
-            torch.Size([4, 3])
-            >>> tensordict_transpose.set("b",, torch.randn(4, 3))
-            >>> print(tensordict.get("b").shape)
-            torch.Size([3, 4])
-        """
         if dim0 < 0:
             dim0 = self.ndim + dim0
         if dim1 < 0:
@@ -1784,7 +1769,15 @@ class TensorDictBase(MutableMapping):
                 if return_early:
                     executor = ThreadPoolExecutor(max_workers=num_threads)
                 futures = []
-                result = self._memmap_(
+                # we create an empty copy of self
+                # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
+                # if both are in filesystem
+                input = self.apply(
+                    lambda x: torch.empty((), device=x.device, dtype=x.dtype).expand(
+                        x.shape
+                    )
+                )
+                result = input._memmap_(
                     prefix=prefix,
                     copy_existing=copy_existing,
                     executor=executor,
@@ -1797,7 +1790,10 @@ class TensorDictBase(MutableMapping):
                     return result
                 else:
                     return TensorDictFuture(futures, result)
-        return self._memmap_(
+        input = self.apply(
+            lambda x: torch.empty((), device=x.device, dtype=x.dtype).expand(x.shape)
+        )
+        return input._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
             inplace=False,
@@ -2356,11 +2352,6 @@ class TensorDictBase(MutableMapping):
                 for ktu in keys_to_update
             ):
                 continue
-            # if not isinstance(value, _accepted_classes):
-            #     raise TypeError(
-            #         f"Expected value to be one of types {_accepted_classes} "
-            #         f"but got {type(value)}"
-            #     )
             if clone:
                 value = value.clone()
             self.set_((firstkey, *nextkeys), value)
@@ -3326,7 +3317,7 @@ class TensorDictBase(MutableMapping):
     def reduce(
         self,
         dst,
-        op=dist.ReduceOp.SUM,
+        op=None,
         async_op=False,
         return_premature=False,
         group=None,
@@ -3336,17 +3327,21 @@ class TensorDictBase(MutableMapping):
         Only the process with ``rank`` dst is going to receive the final result.
 
         """
+        if op is None:
+            op = dist.ReduceOp.SUM
         return self._reduce(dst, op, async_op, return_premature, group=group)
 
     def _reduce(
         self,
         dst,
-        op=dist.ReduceOp.SUM,
+        op=None,
         async_op=False,
         return_premature=False,
         _future_list=None,
         group=None,
     ):
+        if op is None:
+            op = dist.ReduceOp.SUM
         root = False
         if _future_list is None:
             _future_list = []

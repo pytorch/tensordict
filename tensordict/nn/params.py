@@ -205,6 +205,8 @@ def _carry_over(func):
     @wraps(func)
     def new_func(self, *args, **kwargs):
         out = getattr(self._param_td, name)(*args, **kwargs)
+        if out is self._param_td:
+            return self
         if not isinstance(out, TensorDictParams):
             out = TensorDictParams(out, no_convert=True)
             out.no_convert = self.no_convert
