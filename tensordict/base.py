@@ -2415,7 +2415,7 @@ class TensorDictBase(MutableMapping):
                 for ktu in keys_to_update
             ):
                 continue
-            if not isinstance(value, tuple(_ACCEPTED_CLASSES)):
+            if not isinstance(value, _ACCEPTED_CLASSES):
                 raise TypeError(
                     f"Expected value to be one of types {_ACCEPTED_CLASSES} "
                     f"but got {type(value)}"
@@ -3809,11 +3809,13 @@ class TensorDictBase(MutableMapping):
 
     # Validation and checks
     def _convert_to_tensor(self, array: np.ndarray) -> Tensor:
-        if isinstance(array, np.bool_):
+        if isinstance(array, (float, int, np.ndarray, bool)):
+            pass
+        elif isinstance(array, np.bool_):
             array = array.item()
-        if isinstance(array, list):
+        elif isinstance(array, list):
             array = np.asarray(array)
-        if not isinstance(array, np.ndarray) and hasattr(array, "numpy"):
+        elif hasattr(array, "numpy"):
             # tf.Tensor with no shape can't be converted otherwise
             array = array.numpy()
         try:
@@ -3875,13 +3877,11 @@ class TensorDictBase(MutableMapping):
         check_shape: bool = True,
     ) -> CompatibleType | dict[str, CompatibleType]:
         cls = type(value)
-        is_tc = _is_tensor_collection(cls)
-        if is_tc or issubclass(cls, tuple(_ACCEPTED_CLASSES)):
-            pass
-        elif issubclass(cls, dict):
+        is_tc = None
+        if issubclass(cls, dict):
             value = self._convert_to_tensordict(value)
             is_tc = True
-        else:
+        elif not issubclass(cls, _ACCEPTED_CLASSES):
             try:
                 value = self._convert_to_tensor(value)
             except ValueError as err:
@@ -3890,9 +3890,15 @@ class TensorDictBase(MutableMapping):
                     f" numeric scalars and tensors. Got {type(value)}"
                 ) from err
         batch_size = self.batch_size
-        batch_dims = len(batch_size)
-        if check_shape and batch_size and _shape(value)[:batch_dims] != batch_size:
+        check_shape = check_shape and self.batch_size
+        if (
+            check_shape
+            and batch_size
+            and _shape(value)[: self.batch_dims] != batch_size
+        ):
             # if TensorDict, let's try to map it to the desired shape
+            if is_tc is None:
+                is_tc = _is_tensor_collection(cls)
             if is_tc:
                 # we must clone the value before not to corrupt the data passed to set()
                 value = value.clone(recurse=False)
@@ -3905,11 +3911,15 @@ class TensorDictBase(MutableMapping):
         device = self.device
         if device is not None and value.device != device:
             value = value.to(device, non_blocking=True)
-        if is_tc and check_shape:
+        if check_shape:
+            if is_tc is None:
+                is_tc = _is_tensor_collection(cls)
+            if not is_tc:
+                return value
             has_names = self._has_names()
             # we do our best to match the dim names of the value and the
             # container.
-            if has_names and value.names[:batch_dims] != self.names:
+            if has_names and value.names[: self.batch_dims] != self.names:
                 # we clone not to corrupt the value
                 value = value.clone(False).refine_names(*self.names)
             elif not has_names and value._has_names():
@@ -4692,15 +4702,17 @@ class TensorDictBase(MutableMapping):
         return self._fast_apply(lambda x: x.detach())
 
 
-_ACCEPTED_CLASSES = {
+_ACCEPTED_CLASSES = (
     Tensor,
     TensorDictBase,
-}
+)
 
 
 def _register_tensor_class(cls):
     global _ACCEPTED_CLASSES
+    _ACCEPTED_CLASSES = set(_ACCEPTED_CLASSES)
     _ACCEPTED_CLASSES.add(cls)
+    _ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
 
 
 def _is_tensor_collection(datatype):
