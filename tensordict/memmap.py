@@ -120,6 +120,7 @@ class MemoryMappedTensor(torch.Tensor):
         existsok=False,
         copy_existing=False,
         copy_data=True,
+        shape=None,
     ):
         """Creates a MemoryMappedTensor with the same content as another tensor.
 
@@ -137,12 +138,14 @@ class MemoryMappedTensor(torch.Tensor):
                 an existing file. Defaults to ``False``.
             copy_existing (bool, optional): if ``True`` and the provided input
                 is a MemoryMappedTensor with an associated filename, copying
-                the content to the new location is permitted. Otherwise an
-                exception is thown. This behaviour exists to prevent
-                unadvertedly duplicating data on disk.
+                the content to the new location is permitted. Otherwise, an
+                exception is thrown. This behaviour exists to prevent
+                inadvertently duplicating data on disk.
             copy_data (bool, optional): if ``True``, the content of the tensor
                 will be copied on the storage. Defaults to ``True``.
-
+            shape (torch.Size or torch.Tensor): a shape to override the tensor
+                shape. If a tensor is passed, it must represent the nested shapes of a
+                nested tensor.
         """
         if isinstance(input, MemoryMappedTensor):
             if (filename is None and input._filename is None) or (
@@ -171,36 +174,62 @@ class MemoryMappedTensor(torch.Tensor):
             raise RuntimeError(
                 "MemoryMappedTensor.from_tensor is incompatible with tensor.requires_grad."
             )
-        shape = input.shape
+        if shape is None:
+            shape = input.shape
+            shape_numel = shape.numel()
+        elif isinstance(shape, torch.Tensor):
+            shape_numel = shape.prod(-1).sum()
+        else:
+            shape_numel = torch.Size(shape).numel()
         if filename is None:
             if input.dtype.is_floating_point:
-                size = torch.finfo(input.dtype).bits // 8 * shape.numel()
+                size = torch.finfo(input.dtype).bits // 8 * shape_numel
             elif input.dtype.is_complex:
                 raise ValueError(
                     "Complex-valued tensors are not supported by MemoryMappedTensor."
                 )
             elif input.dtype == torch.bool:
-                size = shape.numel()
+                size = shape_numel
             else:
                 # assume integer
-                size = torch.iinfo(input.dtype).bits // 8 * shape.numel()
+                size = torch.iinfo(input.dtype).bits // 8 * shape_numel
             handler = _FileHandler(size)
             out = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
-            out = out.view(shape)
+            if isinstance(shape, torch.Tensor):
+                offsets = torch.nn.functional.pad(shape.prod(-1).cumsum(-1)[:-1], [1, 0])
+                out = torch._nested_view_from_buffer(
+                    torch.frombuffer(
+                        memoryview(buf), dtype=input.dtype
+                    ),
+                    shape,
+                    nested_strides=torch.ones_like(shape),
+                    offsets=offsets,
+                )
+            else:
+                out = out.view(shape)
             out = cls(out)
         else:
             handler = None
             if not existsok and os.path.exists(str(filename)):
                 raise RuntimeError(f"The file {filename} already exists.")
-            out = cls(
-                torch.from_file(
-                    str(filename), shared=True, dtype=input.dtype, size=shape.numel()
-                ).view(input.shape)
-            )
+            out = torch.from_file(
+                    str(filename), shared=True, dtype=input.dtype, size=shape_numel
+                )
+            if isinstance(shape, torch.Tensor):
+                offsets = torch.nn.functional.pad(shape.prod(-1).cumsum(-1)[:-1], [1, 0])
+                out = torch._nested_view_from_buffer(
+                    out,
+                    shape,
+                    nested_strides=torch.ones_like(shape),
+                    offsets=offsets,
+                )
+            else:
+                out = out.view(shape)
+            out = cls(out)
         out._handler = handler
         out._filename = filename
         out.index = None
-        out.parent_shape = input.shape
+        out.parent_shape = shape
         if copy_data:
             if isinstance(input, DTensor):
                 input = input.full_tensor()
@@ -417,6 +446,38 @@ class MemoryMappedTensor(torch.Tensor):
         return result
 
     @classmethod
+    def empty_nested(cls, *args, **kwargs):
+        # noqa: D417
+        """Creates a tensor with empty content, specific shape, dtype and filename.
+
+        Args:
+            shape (nested_shape): the shapes of the tensors.
+
+        Keyword Args:
+            dtype (torch.dtype): the dtype of the tensor.
+            device (torch.device): the device of the tensor. Only `None` and `"cpu"`
+                are accepted, any other device will raise an exception.
+            filename (path or equivalent): the path to the file, if any. If none
+                is provided, a handler is used.
+        """
+        shape = kwargs.pop("shape", args[0])
+        args = (torch.Size([]), *args)
+        _, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
+        if device is not None:
+            device = torch.device(device)
+            if device.type != "cpu":
+                raise RuntimeError("Only CPU tensors are supported.")
+        result = torch.zeros((), dtype=dtype, device=device)
+        if shape:
+            if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
+                shape = torch.Size(shape[0])
+            else:
+                shape = torch.Size(shape)
+            result = result.expand(shape)
+        result = cls.from_tensor(result, filename=filename)
+        return result
+
+    @classmethod
     @overload
     def full(cls, *size, fill_value, dtype=None, device=None, filename=None):
         ...
@@ -464,7 +525,9 @@ class MemoryMappedTensor(torch.Tensor):
         Args:
             filename (path or equivalent): the path to the file.
             dtype (torch.dtype): the dtype of the tensor.
-            shape (integers or torch.Size): the shape of the tensor.
+            shape (torch.Size or torch.Tensor): the shape of the tensor. If
+                a tensor is provided, it is assumed that the tensor is a nested_tensor
+                instance.
             index (torch-compatible index type): an index to use to build the
                 tensor.
 
@@ -490,13 +553,15 @@ class MemoryMappedTensor(torch.Tensor):
         Args:
             handler (compatible file handler): the handler for the tensor.
             dtype (torch.dtype): the dtype of the tensor.
-            shape (integers or torch.Size): the shape of the tensor.
+            shape (torch.Size or torch.Tensor): the shape of the tensor. If
+                a tensor is provided, it is assumed that the tensor is a nested_tensor
+                instance.
             index (torch-compatible index type): an index to use to build the
                 tensor.
 
         """
-        shape = torch.Size(shape)
         out = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
+        shape = torch.Size(shape)
         out = torch.reshape(out, shape)
         if index is not None:
             out = out[index]
