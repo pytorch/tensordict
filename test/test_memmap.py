@@ -29,7 +29,7 @@ TIMEOUT = 100
 )
 @pytest.mark.parametrize("shape", [[2], [1, 2]])
 def test_memmap_data_type(dtype, shape):
-    """Test that MemmapTensor can be created with a given data type and shape."""
+    """Test that MemoryMappedTensor can be created with a given data type and shape."""
     t = torch.tensor([1, 0], dtype=dtype).reshape(shape)
     m = MemoryMappedTensor.from_tensor(t)
     assert m.dtype == t.dtype
@@ -68,7 +68,7 @@ def test_memmap_new(index):
 @pytest.mark.parametrize("device", get_available_devices())
 def test_memmap_same_device_as_tensor(device):
     """
-    Created MemmapTensor should be on the same device as the input tensor.
+    Created MemoryMappedTensor should be on the same device as the input tensor.
     Check if device is correct when .to(device) is called.
     """
     t = torch.tensor([1], device=device)
@@ -78,7 +78,7 @@ def test_memmap_same_device_as_tensor(device):
 
 @pytest.mark.parametrize("device", get_available_devices())
 def test_memmap_create_on_same_device(device):
-    """Test if the device arg for MemmapTensor init is respected."""
+    """Test if the device arg for MemoryMappedTensor init is respected."""
     with pytest.raises(ValueError) if device.type != "cpu" else nullcontext():
         MemoryMappedTensor([3, 4], device=device)
     # assert m.device == torch.device(device)
@@ -90,7 +90,7 @@ def test_memmap_create_on_same_device(device):
 @pytest.mark.parametrize("shape", [[3, 4]])
 def test_memmap_zero_value(value, shape):
     """
-    Test if all entries are zeros when MemmapTensor is created with size.
+    Test if all entries are zeros when MemoryMappedTensor is created with size.
     """
     device = "cpu"
     value = value.to(device)

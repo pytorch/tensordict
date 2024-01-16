@@ -121,7 +121,6 @@ class TestKJT:
             weights=weights2,
         )
         out = setitem_keyedjaggedtensor(jag_tensor, [0, 2], sub_jag_tensor)
-        print(out["index_0"].to_padded_dense())
 
     @pytest.mark.parametrize("index", [[0, 2], range(2)])
     def test_setindex_td_same(self, index):
@@ -157,8 +156,7 @@ class TestKJT:
             weights=weights2,
         )
         td.set_at_("b", sub_jag_tensor, range(2))
-        out = td["b"]
-        print(out["index_0"].to_padded_dense())
+        td["b"]
 
 
 if __name__ == "__main__":

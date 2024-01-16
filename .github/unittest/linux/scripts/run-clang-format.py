@@ -34,6 +34,7 @@ A diff output is produced and a sensible exit code is returned.
 import argparse
 import difflib
 import fnmatch
+import logging
 import multiprocessing
 import os
 import signal
@@ -216,7 +217,7 @@ def print_trouble(prog, message, use_colors):
     error_text = "error:"
     if use_colors:
         error_text = bold_red(error_text)
-    print(f"{prog}: {error_text} {message}", file=sys.stderr)
+    logging.error(f"{prog}: {error_text} {message}")
 
 
 def main():

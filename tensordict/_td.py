@@ -34,11 +34,6 @@ from tensordict.base import (
     TensorDictBase,
 )
 
-# from tensordict._memmap import (
-#     empty_like as empty_like_memmap,
-#     from_filename,
-#     from_tensor as from_tensor_memmap,
-# )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
@@ -308,6 +303,8 @@ class TensorDict(TensorDictBase):
     def to_module(
         self,
         module,
+        *,
+        inplace: bool | None = None,
         return_swap: bool = True,
         swap_dest=None,
         memo=None,
@@ -336,6 +333,10 @@ class TensorDict(TensorDictBase):
             memo[id(module)] = swap
             _swap = {}
         if use_state_dict:
+            if inplace is not None:
+                raise RuntimeError(
+                    "inplace argument cannot be passed when use_state_dict=True."
+                )
             # execute module's pre-hooks
             state_dict = self.flatten_keys(".")
             prefix = ""
@@ -365,18 +366,27 @@ class TensorDict(TensorDictBase):
             input = state_dict.unflatten_keys(".").apply(convert_type, self)
         else:
             input = self
+            inplace = bool(inplace)
 
         for key, value in input.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
                 if module.__class__.__setattr__ is __base__setattr__:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
-                    local_out = _set_tensor_dict(__dict__, hooks, module, key, value)
+                    local_out = _set_tensor_dict(
+                        __dict__, hooks, module, key, value, inplace
+                    )
                 else:
                     if return_swap:
                         local_out = getattr(module, key)
-                    # use specialized __setattr__ if needed
-                    delattr(module, key)
-                    setattr(module, key, value)
+                    if not inplace:
+                        # use specialized __setattr__ if needed
+                        delattr(module, key)
+                        setattr(module, key, value)
+                    else:
+                        new_val = local_out
+                        if return_swap:
+                            local_out = local_out.clone()
+                        new_val.data.copy_(value.data)
             else:
                 if value.is_empty():
                     # if there is at least one key, we must populate the module.
@@ -392,6 +402,7 @@ class TensorDict(TensorDictBase):
                 else:
                     local_out = value.to_module(
                         child,
+                        inplace=inplace,
                         return_swap=return_swap,
                         swap_dest=local_dest,
                         memo=memo,
@@ -526,23 +537,32 @@ class TensorDict(TensorDictBase):
                 )
                 return
 
-        if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
+        # we must use any and because using Ellipsis in index can break with some indices
+        if index is Ellipsis or (
+            isinstance(index, tuple) and any(idx is Ellipsis for idx in index)
+        ):
             index = convert_ellipsis_to_idx(index, self.batch_size)
 
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = self.empty(recurse=True)[index].update(value)
+                value = TensorDict.from_dict(value, batch_size=indexed_bs)
+                # value = self.empty(recurse=True)[index].update(value)
             if value.batch_size != indexed_bs:
-                # try to expand on the left (broadcasting)
-                try:
+                if value.shape == indexed_bs[-len(value.shape) :]:
+                    # try to expand on the left (broadcasting)
                     value = value.expand(indexed_bs)
-                except RuntimeError as err:
-                    raise RuntimeError(
-                        f"indexed destination TensorDict batch size is {indexed_bs} "
-                        f"(batch_size = {self.batch_size}, index={index}), "
-                        f"which differs from the source batch size {value.batch_size}"
-                    ) from err
+                else:
+                    try:
+                        # copy and change batch_size if can't be expanded
+                        value = value.copy()
+                        value.batch_size = indexed_bs
+                    except RuntimeError as err:
+                        raise RuntimeError(
+                            f"indexed destination TensorDict batch size is {indexed_bs} "
+                            f"(batch_size = {self.batch_size}, index={index}), "
+                            f"which differs from the source batch size {value.batch_size}"
+                        ) from err
 
             keys = set(self.keys())
             if any(key not in keys for key in value.keys()):
@@ -551,7 +571,7 @@ class TensorDict(TensorDictBase):
                 if key in keys:
                     self._set_at_str(key, item, index, validated=False)
                 else:
-                    subtd.set(key, item)
+                    subtd.set(key, item, inplace=True)
         else:
             for key in self.keys():
                 self.set_at_(key, value, index)
@@ -820,15 +840,6 @@ class TensorDict(TensorDictBase):
         for _idx in range(self.batch_size[dim]):
             _idx = prefix + (_idx,)
             td = self._index_tensordict(_idx, new_batch_size=batch_size, names=names)
-            # td = TensorDict(
-            #     {key: tensor[_idx] for key, tensor in unbind_self_dict.items()},
-            #     batch_size=batch_size,
-            #     _run_checks=False,
-            #     device=self.device,
-            #     _is_memmap=False,
-            #     _is_shared=False,
-            #     names=names,
-            # )
             out.append(td)
             if self.is_shared():
                 td._is_shared = True
@@ -1176,16 +1187,9 @@ class TensorDict(TensorDictBase):
             if num_boolean_dim:
                 names = [None] + names[num_boolean_dim:]
             else:
-                # def is_int(subidx):
-                #     if isinstance(subidx, Number):
-                #         return True
-                #     if isinstance(subidx, Tensor) and len(subidx.shape) == 0:
-                #         return True
-                #     return False
-
                 if not isinstance(idx, tuple):
                     idx = (idx,)
-                if len(idx) < self.ndim:
+                if len([_idx for _idx in idx if _idx is not None]) < self.ndim:
                     idx = (*idx, Ellipsis)
                 idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
                 # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
@@ -2220,6 +2224,13 @@ class _SubTensorDict(TensorDictBase):
         if input_dict_or_td is self:
             # no op
             return self
+        from ._lazy import LazyStackedTensorDict
+
+        if isinstance(self._source, LazyStackedTensorDict):
+            if self._source._has_exclusive_keys:
+                raise RuntimeError(
+                    "Cannot use _SubTensorDict.update with a LazyStackedTensorDict that has exclusive keys."
+                )
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
@@ -2766,7 +2777,12 @@ class _TensorDictKeysView:
 
 
 def _set_tensor_dict(  # noqa: F811
-    module_dict, hooks, module, name: str, tensor: torch.Tensor
+    module_dict,
+    hooks,
+    module,
+    name: str,
+    tensor: torch.Tensor,
+    inplace: bool,
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     was_buffer = False
@@ -2776,6 +2792,12 @@ def _set_tensor_dict(  # noqa: F811
         was_buffer = out is not None
     if out is None:
         out = module_dict.pop(name)
+    if inplace:
+        # swap tensor and out after updating out
+        out_tmp = out.clone()
+        out.data.copy_(tensor.data)
+        tensor = out
+        out = out_tmp
 
     if isinstance(tensor, torch.nn.Parameter):
         for hook in hooks:

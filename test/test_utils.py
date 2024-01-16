@@ -124,7 +124,6 @@ def test_make_cache_key():
     V = torch.zeros(2)
     args = (1, (2, 3), Q)
     kwargs = {"a": V, "b": "c", "d": ("e", "f")}
-    print(_make_cache_key(args, kwargs))
     assert _make_cache_key(args, kwargs) == (
         (1, (2, 3), id(Q)),
         (("a", id(V)), ("b", "c"), ("d", ("e", "f"))),

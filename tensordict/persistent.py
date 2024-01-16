@@ -514,6 +514,11 @@ class PersistentTensorDict(TensorDictBase):
             names=self.names if self._has_names() else None,
         )
 
+    def zero_(self) -> T:
+        for key in self.keys():
+            self.fill_(key, 0)
+        return self
+
     def entry_class(self, key: NestedKey) -> type:
         entry_class = self._get_metadata(key)
         is_array = entry_class.get("array", None)

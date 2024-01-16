@@ -1,17 +1,17 @@
-.. currentmodule:: tensordict.prototype
+.. currentmodule:: tensordict
 
-tensorclass prototype
-=====================
+tensorclass
+===========
 
-The :obj:`@tensorclass` decorator helps you build custom classes that inherit the
-behaviour from :obj:`TensorDict` while being able to restrict the possible entries
-to a predefined set or implement custom methods for your class.
-Like :obj:`TensorDict`, :obj:`@tensorclass` supports nesting, indexing, reshaping,
-item assignment. It also supports tensor operations like clone, squeeze, cat, split and many more.
-:obj:`@tensorclass` allows non-tensor entries,
-however all the tensor operations are strictly restricted to tensor attributes. One
-needs to implement their custom methods for non-tensor data. It is important to note that
-:obj:`@tensorclass` does not enforce strict type matching
+The ``@tensorclass`` decorator helps you build custom classes that inherit the
+behaviour from :class:`~tensordict.TensorDict` while being able to restrict
+the possible entries to a predefined set or implement custom methods for your class.
+Like :class:`~tensordict.TensorDict`, ``@tensorclass`` supports nesting, indexing, reshaping,
+item assignment. It also supports tensor operations like clone, squeeze, cat,
+split and many more. ``@tensorclass`` allows non-tensor entries,
+however all the tensor operations are strictly restricted to tensor attributes.
+One needs to implement their custom methods for non-tensor data.
+It is important to note that ``@tensorclass`` does not enforce strict type matching
 
 .. code-block::
 
@@ -27,7 +27,6 @@ needs to implement their custom methods for non-tensor data. It is important to 
   ...     intdata: torch.Tensor
   ...     non_tensordata: str
   ...     nested: Optional[MyData] = None
-  ...     # sparse_data: Optional[KeyedJaggedTensor] = None
   ...
   ...     def check_nested(self):
   ...         assert self.nested is not None
@@ -71,7 +70,7 @@ needs to implement their custom methods for non-tensor data. It is important to 
     is_shared=False)
 
 
-:obj:`@tensorclass` supports indexing. Internally the tensor objects gets indexed,
+``@tensorclass`` supports indexing. Internally the tensor objects gets indexed,
 however the non-tensor data remains the same
 
 .. code-block::
@@ -93,7 +92,7 @@ however the non-tensor data remains the same
      device=None,
      is_shared=False)
 
-:obj:`@tensorclass` also supports setting and resetting attributes, even for nested objects.
+``@tensorclass`` also supports setting and resetting attributes, even for nested objects.
 
 .. code-block::
 
@@ -123,7 +122,7 @@ however the non-tensor data remains the same
   >>> print("data.nested.non_tensordata:", repr(data.nested.non_tensordata))
   data.nested.non_tensordata: 'nested_test_changed'
 
-:obj:`@tensorclass` supports multiple torch operations over the shape and device
+``@tensorclass`` supports multiple torch operations over the shape and device
 of its content, such as `stack`, `cat`, `reshape` or `to(device)`. To get
 a full list of the supported operations, check the tensordict documentation.
 
@@ -150,9 +149,28 @@ Here is an example:
      device=None,
      is_shared=False)
 
+Serialization
+~~~~~~~~~~~~~
+
+Saving a tensorclass instance can be achieved with the `memmap` method.
+The saving strategy is as follows: tensor data will be saved using memory-mapped
+tensors, and non-tensor data that can be serialized using a json format will
+be saved as such. Other data types will be saved using :func:`~torch.save`, which
+relies on `pickle`.
+
+Deserializing a `tensorclass` can be done via :meth:`~tensordict.TensorDict.load_memmap`.
+The instance created will have the same type as the one saved provided that
+the `tensorclass` is available in the working environment:
+
+  >>> data.memmap("path/to/saved/directory")
+  >>> data_loaded = TensorDict.load_memmap("path/to/saved/directory")
+  >>> assert isinstance(data_loaded, type(data))
+
+
 Edge cases
 ~~~~~~~~~~
-:obj:`@tensorclass` supports equality and inequality operators, even for
+
+``@tensorclass`` supports equality and inequality operators, even for
 nested objects. Note that the non-tensor/ meta data is not validated.
 This will return a tensor class object with boolean values for
 tensor attributes and None for non-tensor attributes
@@ -178,7 +196,7 @@ Here is an example:
      device=None,
      is_shared=False)
 
-:obj:`@tensorclass` supports setting an item. However, while setting an item
+``@tensorclass`` supports setting an item. However, while setting an item
 the identity check of non-tensor / meta data is done instead of equality to
 avoid performance issues. User needs to make sure that the non-tensor data
 of an item matches with the object to avoid discrepancies.
@@ -194,7 +212,7 @@ thrown
   >>> data[0] = data2[0]
   UserWarning: Meta data at 'non_tensordata' may or may not be equal, this may result in undefined behaviours
 
-Even though :obj:`@tensorclass` supports torch functions like cat and stack, the
+Even though ``@tensorclass`` supports torch functions like cat and stack, the
 non-tensor / meta data is not validated. The torch operation is performed on the
 tensor data and while returning the output, the non-tensor / meta data of the first
 tensor class object is considered. User needs to make sure that all the
@@ -223,9 +241,9 @@ Here is an example:
       device=None,
       is_shared=False)
 
-:obj:`@tensorclass` also supports pre-allocation, you can initialize
+``@tensorclass`` also supports pre-allocation, you can initialize
 the object with attributes being None and later set them. Note that while
-initializing, internally the None attributes will be saved as non-tensor / meta data
+initializing, internally the ``None`` attributes will be saved as non-tensor / meta data
 and while resetting, based on the type of the value of the attribute,
 it will be saved as either tensor data or non-tensor / meta  data
 

@@ -17,6 +17,8 @@ Distributed data-loading with tensorclass
 
 import argparse
 import collections
+
+import logging
 import os
 import time
 from functools import wraps
@@ -26,7 +28,7 @@ import tenacity
 import torch
 import tqdm
 
-from tensordict import MemmapTensor
+from tensordict import MemoryMappedTensor
 from tensordict.prototype import tensorclass
 from torch import multiprocessing as mp, nn
 from torch.distributed import rpc
@@ -107,12 +109,14 @@ class ImageNetData:
     @classmethod
     def from_dataset(cls, dataset):
         data = cls(
-            images=MemmapTensor(
-                len(dataset),
-                *dataset[0][0].squeeze().shape,
+            images=MemoryMappedTensor.empty(
+                (
+                    len(dataset),
+                    *dataset[0][0].squeeze().shape,
+                ),
                 dtype=torch.uint8,
             ),
-            targets=MemmapTensor(len(dataset), dtype=torch.int64),
+            targets=MemoryMappedTensor.empty(len(dataset), dtype=torch.int64),
             batch_size=[len(dataset)],
         )
         # locks the tensorclass and ensures that is_memmap will return True.
@@ -137,23 +141,25 @@ class ImageNetData:
         import torchsnapshot
 
         data = cls(
-            images=MemmapTensor(
-                len(dataset),
-                *dataset[0][0].squeeze().shape,
+            images=MemoryMappedTensor.empty(
+                (
+                    len(dataset),
+                    *dataset[0][0].squeeze().shape,
+                ),
                 dtype=torch.uint8,
             ),
-            targets=MemmapTensor(len(dataset), dtype=torch.int64),
+            targets=MemoryMappedTensor(len(dataset), dtype=torch.int64),
             batch_size=[len(dataset)],
         )
         # locks the tensorclass and ensures that is_memmap will return True.
         data.memmap_()
         t0 = time.time()
-        print("loading...", end="\t")
+        logging.info("loading...", end="\t")
         snapshot = torchsnapshot.Snapshot(path=path)
         sd = dict(data.state_dict())
         app_state = {"state": torchsnapshot.StateDict(data=sd)}
         snapshot.restore(app_state=app_state)
-        print(f"done! Took: {time.time()-t0:4.4f}s")
+        logging.info(f"done! Took: {time.time()-t0:4.4f}s")
         return data
 
     def save(self, path):
@@ -299,7 +305,7 @@ class DummyTrainerNode:
             )
 
     def train(self) -> None:
-        print("train")
+        logging.info("train")
         len_data = self.data.shape[0]
         pbar = tqdm.tqdm(total=len_data)
 
@@ -344,7 +350,7 @@ class DummyTrainerNode:
             if iteration >= self.world_size:
                 total += batch.shape[0]
         t = time.time() - t0
-        print(f"time spent: {t:4.4f}s, Rate: {total/t} fps")
+        logging.info(f"time spent: {t:4.4f}s, Rate: {total/t} fps")
         return {"time": t, "rate": total / t}
 
     def create_data_nodes(self, data):
@@ -358,14 +364,14 @@ class DummyTrainerNode:
         reraise=True,
     )
     def create_data_node(self, node, local_transform) -> rpc.RRef:
-        print(f"Creating DataNode object on remote node {node}")
+        logging.info(f"Creating DataNode object on remote node {node}")
         data_info = rpc.get_worker_info(f"{DATA_NODE}_{node}")
         data_rref = rpc.remote(
             data_info,
             DataNode,
             args=(node, BATCH_SIZE, self.single_gpu, local_transform),
         )
-        print(f"Connected to data node {data_info}")
+        logging.info(f"Connected to data node {data_info}")
         time.sleep(5)
         self.datanodes.append(data_rref)
 
@@ -389,7 +395,7 @@ class DataNode:
         single_gpu: bool = False,
         make_transform: bool = True,
     ):
-        print("Creating DataNode object")
+        logging.info("Creating DataNode object")
         self.rank = rank
         self.id = rpc.get_worker_info().id
         self.single_gpu = single_gpu
@@ -422,10 +428,10 @@ class DataNode:
         self.collate = Collate(self.collate_transform, device=device)
         self.initialized = False
         self.count = 0
-        print("done!")
+        logging.info("done!")
 
     def set_data(self, data):
-        print("initializing")
+        logging.info("initializing")
         self.initialized = True
         self.data: ImageNetData = data
 
@@ -471,7 +477,7 @@ def init_rpc(
         rpc_backend_options=options,
     )
 
-    print(f"Initialised {name}")
+    logging.info(f"Initialised {name}")
 
 
 def shutdown():
@@ -491,7 +497,7 @@ def func(rank, world_size, args, train_data_tc, single_gpu, trainer_transform):
         import wandb
 
         if not args.wandb_key:
-            print("no wandb key provided, using it offline")
+            logging.info("no wandb key provided, using it offline")
             mode = "offline"
         else:
             mode = "online"
@@ -512,14 +518,14 @@ def func(rank, world_size, args, train_data_tc, single_gpu, trainer_transform):
                     rate = stats["rate"]
                 wandb.log(stats, step=i)
             wandb.log({"min time": min_time, "max_rate": rate})
-            print(f"FINAL: time spent: {min_time:4.4f}s, Rate: {rate} fps")
+            logging.info(f"FINAL: time spent: {min_time:4.4f}s, Rate: {rate} fps")
 
 
 if __name__ == "__main__":
     try:
         mp.set_start_method("spawn")
     except Exception as err:
-        print(f"Could not start mp with spawn method. Error: {err}")
+        logging.info(f"Could not start mp with spawn method. Error: {err}")
 
     args = parser.parse_args()
     world_size = args.world_size
@@ -532,7 +538,7 @@ if __name__ == "__main__":
 
     names = [TRAINER_NODE, *[f"{DATA_NODE}_{rank}" for rank in range(1, world_size)]]
 
-    print("preparing data")
+    logging.info("preparing data")
     data_dir = Path("/datasets01_ontap/imagenet_full_size/061417/")
     train_data_raw = datasets.ImageFolder(
         root=data_dir / "train",
@@ -545,15 +551,15 @@ if __name__ == "__main__":
     ]
 
     if load_path:
-        print("loading...", end="\t")
+        logging.info("loading...", end="\t")
         train_data_tc = ImageNetData.load(train_data_raw, load_path)
-        print("done")
+        logging.info("done")
     else:
         train_data_tc = ImageNetData.from_dataset(train_data_raw)
         if save_path:
-            print("saving...", end="\t")
+            logging.info("saving...", end="\t")
             train_data_tc.save(save_path)
-            print("done")
+            logging.info("done")
 
     with mp.Pool(world_size) as pool:
         pool.starmap(

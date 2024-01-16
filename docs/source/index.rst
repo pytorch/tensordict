@@ -6,9 +6,11 @@
 Welcome to the TensorDict Documentation!
 ========================================
 
-`TensorDict` is a dictionary-like class that inherits properties from tensors, such as indexing, shape operations, casting to device etc.
+`TensorDict` is a dictionary-like class that inherits properties from tensors,
+such as indexing, shape operations, casting to device etc.
 
-The main purpose of TensorDict is to make code-bases more *readable* and *modular* by abstracting away tailored operations:
+The main purpose of TensorDict is to make code-bases more *readable* and *modular*
+by abstracting away tailored operations:
 
   >>> for i, tensordict in enumerate(dataset):
   ...     # the model reads and writes tensordicts
@@ -19,7 +21,8 @@ The main purpose of TensorDict is to make code-bases more *readable* and *modula
   ...     optimizer.zero_grad()
 
 With this level of abstraction, one can recycle a training loop for highly heterogeneous task.
-Each individual step of the training loop (data collection and transform, model prediction, loss computation etc.)
+Each individual step of the training loop (data collection and transform, model
+prediction, loss computation etc.)
 can be tailored to the use case at hand without impacting the others.
 For instance, the above example can be easily used across classification and segmentation tasks, among many others.
 
