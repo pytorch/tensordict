@@ -1171,44 +1171,74 @@ class TestGeneric:
         assert (tensordict["a", "b", "d"] == 1).all()
         assert tensordict.get(("a", "b", "d")) is tensor2
 
-    def test_shared_inheritance(self):
-        td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
-        td.share_memory_()
+    @pytest.mark.parametrize("lazy_leg", [True, False])
+    @pytest.mark.parametrize("shared", [True, False])
+    def test_shared_inheritance(self, shared, lazy_leg):
+        with set_lazy_legacy(lazy_leg):
+            if shared:
 
-        td0, *_ = td.unbind(1)
-        assert td0.is_shared()
+                def assert_shared(td0):
+                    assert td0.is_shared()
+                    assert td0.is_locked
 
-        td0, *_ = td.split(1, 0)
-        assert td0.is_shared()
+            else:
 
-        td0 = td.exclude("a")
-        assert td0.is_shared()
+                def assert_shared(td0):
+                    assert td0.is_memmap()
+                    assert td0.is_locked
 
-        td0 = td.select("a")
-        assert td0.is_shared()
+            td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
+            if shared:
+                td.share_memory_()
+            else:
+                td.memmap_()
 
-        td.unlock_()
-        td0 = td.rename_key_("a", "a.a")
-        assert not td0.is_shared()
-        td.share_memory_()
+            # We do not propagate these anymore because it requires locking the tensordicts, which is expensive
+            # td0, *_ = td.unbind(1)
+            # assert_shared(td0)
+            #
+            # td0, *_ = td.split(1, 0)
+            # assert_shared(td0)
 
-        td0 = td.unflatten_keys(".")
-        assert td0.is_shared()
+            td0 = td.exclude("a")
+            assert_shared(td0)
 
-        td0 = td.flatten_keys(".")
-        assert td0.is_shared()
+            td0 = td.select("a")
+            assert_shared(td0)
 
-        td0 = td.view(-1)
-        assert td0.is_shared()
+            with td.unlock_():
+                td0 = td.rename_key_("a", "a.a")
+            if not shared:
+                assert not td0.is_memmap()
+            else:
+                assert not td0.is_shared()
+            assert td.is_locked
+            if not shared:
+                assert not td.is_memmap()
+            else:
+                assert not td.is_shared()
+            if shared:
+                td.share_memory_()
+            else:
+                td.memmap_()
 
-        td0 = td.permute(1, 0)
-        assert td0.is_shared()
+            td0 = td.unflatten_keys(".")
+            assert_shared(td0)
 
-        td0 = td.unsqueeze(0)
-        assert td0.is_shared()
+            td0 = td.flatten_keys(".")
+            assert_shared(td0)
 
-        td0 = td0.squeeze(0)
-        assert td0.is_shared()
+            td0 = td.view(-1)
+            assert_shared(td0)
+
+            td0 = td.permute(1, 0)
+            assert_shared(td0)
+
+            td0 = td.unsqueeze(0)
+            assert_shared(td0)
+
+            td0 = td0.squeeze(0)
+            assert_shared(td0)
 
     def test_setitem_nested(self):
         tensor = torch.randn(4, 5, 6, 7)
@@ -3316,40 +3346,49 @@ class TestTensorDicts(TestTensorDictsBase):
             assert len(list(td2.keys())) == 0
 
     def test_set_lazy_legacy(self, td_name, device):
-        def test_not_id():
+        if td_name in ("sub_td", "sub_td2", "td_h5", "squeezed_td", "unsqueezed_td", "permute_td", "transpose_td", "nested_stacked_td", "stacked_td"):
+            raiser = pytest.raises(RuntimeError)
+        else:
+            raiser = contextlib.nullcontext()
+
+        def test_not_id(td, td_name=td_name, raiser=raiser):
             # view
-            if td_name not in ("sub_td", "sub_td2", "permute_td"):
+            with raiser:
                 td_view = td.view(-1).view(td.shape)
                 if td_name in ("td_params",):
                     assert isinstance(td_view, TensorDict)
                 else:
                     assert td_view is not td
             # permute
-            td_perm = td.permute(3, 2, 1, 0).permute(3, 2, 1, 0)
-            if td_perm in ("td_params",):
-                assert isinstance(td_view, TensorDict)
-            else:
-                assert td_perm is not td
+            with raiser:
+                td_perm = td.permute(3, 2, 1, 0).permute(3, 2, 1, 0)
+                if td_perm in ("td_params",):
+                    assert isinstance(td_view, TensorDict)
+                else:
+                    assert td_perm is not td
             # transpose
-            td_trsp = td.transpose(-1, -2).transpose(-2, -1)
-            if td_name in ("td_params",):
-                assert isinstance(td_view, TensorDict)
-            else:
-                assert td_trsp is not td
+            with raiser if "stack" not in td_name else contextlib.nullcontext():
+                td_trsp = td.transpose(-1, -2).transpose(-2, -1)
+                if td_name in ("td_params",):
+                    assert isinstance(td_view, TensorDict)
+                else:
+                    assert td_trsp is not td
             # squeeze
-            td_squeeze = td.squeeze(-1).unsqueeze(-1)
-            if td_name in ("td_params",):
-                assert isinstance(td_view, TensorDict)
-            else:
-                assert td_squeeze is not td
+            with raiser:
+                td_squeeze = td.squeeze(-1).unsqueeze(-1)
+                if td_name in ("td_params",):
+                    assert isinstance(td_view, TensorDict)
+                else:
+                    assert td_squeeze is not td
             # unsqueeze
-            td_unsqueeze = td.unsqueeze(-1).squeeze(-1)
-            if td_name in ("td_params",):
-                assert isinstance(td_view, TensorDict)
-            else:
-                assert td_unsqueeze is not td
+            with raiser:
+                td_unsqueeze = td.unsqueeze(-1).squeeze(-1)
+                if td_name in ("td_params",):
+                    assert isinstance(td_view, TensorDict)
+                else:
+                    assert td_unsqueeze is not td
 
-        def test_id():
+        def test_id(td, td_name=td_name):
             # view
             td_view = td.view(-1).view(td.shape)
             if td_name in ("td_params",):
@@ -3390,12 +3429,12 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         with set_lazy_legacy(True):
             assert lazy_legacy()
-            test_id()
+            test_id(td)
             with set_lazy_legacy(False):
                 assert not lazy_legacy()
-                test_not_id()
+                test_not_id(td)
             assert lazy_legacy()
-            test_id()
+            test_id(td)
 
     def test_set_nested_batch_size(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -3946,7 +3985,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td2 = td.to_tensordict()
         assert (td2 == td).all()
 
-    def test_transpose(self, td_name, device):
+    def test_transpose_legacy(self, td_name, device):
         td = getattr(self, td_name)(device)
         tdt = td.transpose(0, 1)
         assert tdt.shape == torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
@@ -3968,6 +4007,28 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td.transpose(0, 0)._param_td is td._param_td
         else:
             assert td.transpose(0, 0) is td
+        with pytest.raises(
+            ValueError, match="The provided dimensions are incompatible"
+        ):
+            td.transpose(-5, -6)
+        with pytest.raises(
+            ValueError, match="The provided dimensions are incompatible"
+        ):
+            tdt.transpose(-5, -6)
+
+    def test_transpose(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdt = td.transpose(0, 1)
+        assert tdt.shape == torch.Size([td.shape[1], td.shape[0], *td.shape[2:]])
+        for key, value in tdt.items(True):
+            assert value.shape == torch.Size(
+                [td.get(key).shape[1], td.get(key).shape[0], *td.get(key).shape[2:]]
+            )
+        tdt = td.transpose(-1, -2)
+        for key, value in tdt.items(True):
+            assert value.shape == td.get(key).transpose(2, 3).shape
+        with td.unlock_():
+            tdt.set(("some", "transposed", "tensor"), torch.zeros(tdt.shape))
         with pytest.raises(
             ValueError, match="The provided dimensions are incompatible"
         ):

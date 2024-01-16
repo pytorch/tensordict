@@ -1472,9 +1472,10 @@ def _clone_value(value, recurse: bool):
     from tensordict.base import _is_tensor_collection
 
     if recurse:
+        # this is not a problem for locked tds as we will not lock it
         return value.clone()
     elif _is_tensor_collection(value.__class__):
-        return value.clone(recurse=False)
+        return value._clone(recurse=False)
     else:
         return value
 
