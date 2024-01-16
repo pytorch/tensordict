@@ -566,7 +566,8 @@ class PersistentTensorDict(TensorDictBase):
         inplace,
         like,
     ) -> T:
-
+        if inplace:
+            raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
         # re-implements this to make it faster using the meta-data
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
@@ -591,16 +592,13 @@ class PersistentTensorDict(TensorDictBase):
                 "memmap_like() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
-        dest = (
-            self
-            if inplace
-            else TensorDict(
+        dest = TensorDict(
                 {},
                 batch_size=self.batch_size,
                 names=self.names if self._has_names() else None,
                 device=torch.device("cpu"),
             )
-        )
+        dest._is_memmap = True
         for key, value in self._items_metadata():
             if not value["array"]:
                 value = self._get_str(key)
@@ -658,8 +656,6 @@ class PersistentTensorDict(TensorDictBase):
                 futures.append(
                     executor.submit(save_metadata, dest, prefix / "meta.json", metadata)
                 )
-        dest._is_memmap = True
-        dest.lock_()
         return dest
 
     _load_memmap = TensorDict._load_memmap
