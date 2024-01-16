@@ -37,7 +37,6 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
-    _clone_value,
     _expand_to_match_shape,
     _get_item,
     _get_leaf_tensordict,
@@ -1772,15 +1771,7 @@ class TensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def clone(self, recurse: bool = True) -> T:
-        return TensorDict(
-            source={key: _clone_value(value, recurse) for key, value in self.items()},
-            batch_size=self.batch_size,
-            device=self.device,
-            names=copy(self._td_dim_names),
-            _run_checks=False,
-            _is_shared=self.is_shared() if not recurse else False,
-            _is_memmap=self.is_memmap() if not recurse else False,
-        )
+        return self._fast_apply(lambda x: x.clone(), call_on_nested=False)
 
     def contiguous(self) -> T:
         if not self.is_contiguous():
@@ -1858,7 +1849,7 @@ class TensorDict(TensorDictBase):
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             )
 
-    # @cache  # noqa: B019
+    @cache  # noqa: B019
     def _nested_keys(
         self,
         include_nested: bool = False,
