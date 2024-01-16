@@ -2522,8 +2522,6 @@ class _CustomOpTensorDict(TensorDictBase):
             batch_size=self.batch_size,
             device=self.device,
             _run_checks=False,
-            _is_memmap=self.is_memmap(),
-            _is_shared=self.is_shared(),
         ).exclude(*keys, inplace=True)
 
     def clone(self, recurse: bool = True) -> T:

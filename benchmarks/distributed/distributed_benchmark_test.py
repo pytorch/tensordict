@@ -10,7 +10,7 @@ import time
 import pytest
 import torch
 
-from tensordict import MemoryMappedTensor, TensorDict
+from tensordict import TensorDict
 from torch.distributed import rpc
 
 MAIN_NODE = "Main"
@@ -66,15 +66,12 @@ def exec_distributed_test(rank_node):
             # create a tensordict is 1Gb big, stored on disk, assuming that both nodes have access to /tmp/
             tensordict = TensorDict(
                 {
-                    "memmap": MemoryMappedTensor.empty(
-                        (1000, 640, 640, 3),
-                        dtype=torch.uint8,
-                        filename=tmpdir / "mmap.memmap",
+                    "memmap": torch.empty((), dtype=torch.uint8).expand(
+                        (1000, 640, 640, 3)
                     )
                 },
                 [1000],
-                _is_memmap=True,
-            )
+            ).memmap_(tmpdir, copy_existing=False)
             assert tensordict.is_memmap()
 
             while True:
