@@ -3346,7 +3346,17 @@ class TestTensorDicts(TestTensorDictsBase):
             assert len(list(td2.keys())) == 0
 
     def test_set_lazy_legacy(self, td_name, device):
-        if td_name in ("sub_td", "sub_td2", "td_h5", "squeezed_td", "unsqueezed_td", "permute_td", "transpose_td", "nested_stacked_td", "stacked_td"):
+        if td_name in (
+            "sub_td",
+            "sub_td2",
+            "td_h5",
+            "squeezed_td",
+            "unsqueezed_td",
+            "permute_td",
+            "transpose_td",
+            "nested_stacked_td",
+            "stacked_td",
+        ):
             raiser = pytest.raises(RuntimeError)
         else:
             raiser = contextlib.nullcontext()

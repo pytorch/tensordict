@@ -2283,7 +2283,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if dim1 == dim0 + 1:
                 return LazyStackedTensorDict(*self.tensordicts, stack_dim=dim1)
             return LazyStackedTensorDict(
-                *map(lambda td: td.transpose(dim0, dim1 - 1), self.tensordicts),
+                *(td.transpose(dim0, dim1 - 1) for td in self.tensordicts),
                 stack_dim=dim1,
             )
         elif dim1 == self.stack_dim:
@@ -2292,14 +2292,14 @@ class LazyStackedTensorDict(TensorDictBase):
             if dim0 + 1 == dim1:
                 return LazyStackedTensorDict(*self.tensordicts, stack_dim=dim0)
             return LazyStackedTensorDict(
-                *map(lambda td: td.transpose(dim0 + 1, dim1), self.tensordicts),
+                *(td.transpose(dim0 + 1, dim1) for td in self.tensordicts),
                 stack_dim=dim0,
             )
         else:
             dim0 = dim0 if dim0 < self.stack_dim else dim0 - 1
             dim1 = dim1 if dim1 < self.stack_dim else dim1 - 1
             return LazyStackedTensorDict(
-                *map(lambda td: td.transpose(dim0, dim1), self.tensordicts),
+                *(td.transpose(dim0, dim1) for td in self.tensordicts),
                 stack_dim=self.stack_dim,
             )
 
@@ -2485,7 +2485,6 @@ class _CustomOpTensorDict(TensorDictBase):
             return self._set_str(key[0], value, inplace=inplace, validated=validated)
         source = self._source._get_str(key[0], None)
         if source is None:
-            print("self", self)
             source = self._source._create_nested_str(key[0])
         nested = type(self)(
             source,
