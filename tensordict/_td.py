@@ -1813,18 +1813,17 @@ class TensorDict(TensorDictBase):
                     subkey = []
                 else:
                     key, subkey = key[0], key[1:]
-                try:
-                    source[key] = self.get(key)
-                    if len(subkey):
-                        if keys_to_select is None:
-                            # delay creation of defaultdict
-                            keys_to_select = defaultdict(list)
-                        keys_to_select[key].append(subkey)
-                except KeyError as err:
-                    if not strict:
-                        continue
-                    else:
-                        raise KeyError(f"select failed to get key {key}") from err
+
+                val = self._get_str(key, default=None if not strict else NO_DEFAULT)
+                if val is None:
+                    continue
+                source[key] = val
+                if len(subkey):
+                    if keys_to_select is None:
+                        # delay creation of defaultdict
+                        keys_to_select = defaultdict(list)
+                    keys_to_select[key].append(subkey)
+
             if keys_to_select is not None:
                 for key, val in keys_to_select.items():
                     source[key] = source[key].select(
