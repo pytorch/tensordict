@@ -597,8 +597,6 @@ class PersistentTensorDict(TensorDictBase):
             else TensorDict(
                 {},
                 batch_size=self.batch_size,
-                _is_memmap=True,
-                _is_shared=False,
                 names=self.names if self._has_names() else None,
                 device=torch.device("cpu"),
             )
@@ -660,6 +658,8 @@ class PersistentTensorDict(TensorDictBase):
                 futures.append(
                     executor.submit(save_metadata, dest, prefix / "meta.json", metadata)
                 )
+        dest._is_memmap = True
+        dest.lock_()
         return dest
 
     _load_memmap = TensorDict._load_memmap

@@ -70,7 +70,6 @@ from tensordict.utils import (
     KeyedJaggedTensor,
     lock_blocked,
     NestedKey,
-    unravel_key,
     unravel_key_list,
 )
 from torch import Tensor
