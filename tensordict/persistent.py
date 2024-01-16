@@ -156,7 +156,7 @@ class PersistentTensorDict(TensorDictBase):
                 f"Either group or filename must be provided, and not both. Got group={group} and filename={filename}."
             )
         self._batch_size = torch.Size(batch_size)
-        self._device = device
+        self._device = torch.device(device) if device is not None else None
         self._is_shared = False
         self._is_memmap = False
         self.kwargs = kwargs
@@ -568,6 +568,7 @@ class PersistentTensorDict(TensorDictBase):
     ) -> T:
         if inplace:
             raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
+
         # re-implements this to make it faster using the meta-data
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
@@ -593,11 +594,11 @@ class PersistentTensorDict(TensorDictBase):
                 "populated. Set a tensor first."
             )
         dest = TensorDict(
-                {},
-                batch_size=self.batch_size,
-                names=self.names if self._has_names() else None,
-                device=torch.device("cpu"),
-            )
+            {},
+            batch_size=self.batch_size,
+            names=self.names if self._has_names() else None,
+            device=torch.device("cpu"),
+        )
         dest._is_memmap = True
         for key, value in self._items_metadata():
             if not value["array"]:

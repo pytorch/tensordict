@@ -43,6 +43,7 @@ from tensordict.utils import (
     _get_leaf_tensordict,
     _get_shape_from_args,
     _getitem_batch_size,
+    _index_preserve_data_ptr,
     _is_number,
     _is_shared,
     _is_tensorclass,
@@ -777,13 +778,20 @@ class TensorDict(TensorDictBase):
                 )
             else:
                 source[key] = _get_item(item, index)
-        return TensorDict(
+        result = TensorDict(
             source=source,
             batch_size=batch_size,
             device=self.device,
             names=names,
             _run_checks=False,
         )
+        if self.is_memmap() and _index_preserve_data_ptr(index):
+            result._is_memmap = True
+            result.lock_()
+        elif self.is_shared() and _index_preserve_data_ptr(index):
+            result._is_shared = True
+            result.lock_()
+        return result
 
     def expand(self, *args, **kwargs) -> T:
         tensordict_dims = self.batch_dims

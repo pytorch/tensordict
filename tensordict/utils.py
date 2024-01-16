@@ -1833,3 +1833,15 @@ def print_directory_tree(path, indent="", display_metadata=True):
             )
     else:
         logging.info(indent + os.path.basename(path))
+
+
+def _index_preserve_data_ptr(index):
+    if isinstance(index, tuple):
+        return all(_index_preserve_data_ptr(idx) for idx in index)
+    if index in (None, Ellipsis):
+        return True
+    if isinstance(index, int):
+        return True
+    if isinstance(index, slice) and (index.start == 0 or index.start is None):
+        return True
+    return False

@@ -4031,11 +4031,15 @@ class TensorDictBase(MutableMapping):
                 del target[key]
         return target
 
-    def _maybe_set_shared_attributes(self, result):
+    def _maybe_set_shared_attributes(self, result, lock=False):
         if self.is_shared():
             result._is_shared = True
+            if lock:
+                result.lock_()
         elif self.is_memmap():
             result._is_memmap = True
+            if lock:
+                result.lock_()
 
     def to_tensordict(self) -> T:
         """Returns a regular TensorDict instance from the TensorDictBase.
@@ -4058,7 +4062,7 @@ class TensorDictBase(MutableMapping):
             names=self.names if self._has_names() else None,
         )
 
-    def clone(self, recurse: bool = True) -> T:
+    def clone(self, recurse: bool = True, **kwargs) -> T:
         """Clones a TensorDictBase subclass instance onto a new TensorDictBase subclass of the same type.
 
         To create a TensorDict instance from any other TensorDictBase subtype, call the :meth:`~.to_tensordict` method
@@ -4070,7 +4074,7 @@ class TensorDictBase(MutableMapping):
                 tree structure will be copied. Defaults to ``True``.
 
         """
-        result = self._clone(recurse=recurse)
+        result = self._clone(recurse=recurse, **kwargs)
         if not recurse and (result.is_shared() or result.is_memmap()):
             result.lock_()
         return result
