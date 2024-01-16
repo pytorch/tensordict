@@ -37,6 +37,7 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
+    _clone_value,
     _expand_to_match_shape,
     _get_item,
     _get_leaf_tensordict,
@@ -741,8 +742,6 @@ class TensorDict(TensorDictBase):
             dict_value,
             batch_size=self.batch_size,
             device=self.device,
-            _is_shared=self._is_shared,
-            _is_memmap=self._is_memmap,
         )
 
     def _index_tensordict(
@@ -783,8 +782,6 @@ class TensorDict(TensorDictBase):
             device=self.device,
             names=names,
             _run_checks=False,
-            _is_shared=self.is_shared(),
-            _is_memmap=self.is_memmap(),
         )
 
     def expand(self, *args, **kwargs) -> T:
@@ -1540,8 +1537,6 @@ class TensorDict(TensorDictBase):
             else TensorDict(
                 {},
                 batch_size=self.batch_size,
-                _is_memmap=True,
-                _is_shared=False,
                 names=self.names if self._has_names() else None,
                 device=torch.device("cpu"),
             )
