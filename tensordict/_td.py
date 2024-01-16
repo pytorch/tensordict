@@ -70,6 +70,7 @@ from tensordict.utils import (
     KeyedJaggedTensor,
     lock_blocked,
     NestedKey,
+    unravel_key,
     unravel_key_list,
 )
 from torch import Tensor
@@ -1798,18 +1799,16 @@ class TensorDict(TensorDictBase):
                     subkey = []
                 else:
                     key, subkey = key[0], key[1:]
-                try:
-                    source[key] = self.get(key)
-                    if len(subkey):
-                        if keys_to_select is None:
-                            # delay creation of defaultdict
-                            keys_to_select = defaultdict(list)
-                        keys_to_select[key].append(subkey)
-                except KeyError as err:
-                    if not strict:
-                        continue
-                    else:
-                        raise KeyError(f"select failed to get key {key}") from err
+
+                val = self._get_str(key, default=None if not strict else NO_DEFAULT)
+                if val is None:
+                    continue
+                source[key] = val
+                if len(subkey):
+                    if keys_to_select is None:
+                        # delay creation of defaultdict
+                        keys_to_select = defaultdict(list)
+                    keys_to_select[key].append(subkey)
             if keys_to_select is not None:
                 for key, val in keys_to_select.items():
                     source[key] = source[key].select(
@@ -1828,6 +1827,41 @@ class TensorDict(TensorDictBase):
             self._tensordict = out._tensordict
             return self
         return out
+
+    def exclude(self, *keys: str, inplace: bool = False) -> T:
+        # faster than Base.exclude
+        if not len(keys):
+            return self.copy()
+        if not inplace:
+            _tensordict = copy(self._tensordict)
+        else:
+            _tensordict = self._tensordict
+        keys_to_exclude = None
+        for key in keys:
+            key = unravel_key(key)
+            if isinstance(key, str):
+                _tensordict.pop(key, None)
+            else:
+                if keys_to_exclude is None:
+                    # delay creation of defaultdict
+                    keys_to_exclude = defaultdict(list)
+                keys_to_exclude[key[0]].append(key[1:])
+        if keys_to_exclude is not None:
+            for key, cur_keys in keys_to_exclude.items():
+                val = _tensordict.get(key, None)
+                if val is not None:
+                    val = val.exclude(*cur_keys, inplace=inplace)
+                if not inplace:
+                    _tensordict[key] = val
+        if inplace:
+            return self
+        return TensorDict(
+            _tensordict,
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self.names if self._has_names() else None,
+            _run_checks=False,
+        )
 
     def keys(
         self,
