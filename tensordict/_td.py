@@ -1771,7 +1771,13 @@ class TensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def clone(self, recurse: bool = True) -> T:
-        return self._fast_apply(lambda x: x.clone(), call_on_nested=False)
+        if recurse:
+            def func(x):
+                return x.clone()
+        else:
+            def func(x):
+                return x
+        return self._fast_apply(func, call_on_nested=False)
 
     def contiguous(self) -> T:
         if not self.is_contiguous():
