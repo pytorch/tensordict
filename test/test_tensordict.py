@@ -2848,6 +2848,7 @@ class TestTensorDicts(TestTensorDictsBase):
         for key in td.keys(True):
             assert td[key] is not tdmemmap[key]
         assert (tdmemmap == 0).all()
+        assert tdmemmap.is_memmap()
 
     def test_memmap_prefix(self, td_name, device, tmp_path):
         if td_name == "memmap_td":
@@ -6158,6 +6159,7 @@ class TestNamedDims(TestTensorDictsBase):
         )
         tdm = td.memmap_like(prefix=tmpdir)
         assert tdm.names == ["a", "b", "c", "d"]
+        assert tdm.is_memmap()
 
     def test_memmap_td(self):
         td = self.memmap_td("cpu")

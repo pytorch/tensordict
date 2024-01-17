@@ -1735,6 +1735,7 @@ class TestMemmap:
         assert isinstance(cmemmap.x, MemoryMappedTensor)
         assert isinstance(cmemmap.y.x, MemoryMappedTensor)
         assert cmemmap.z == "foo"
+        assert cmemmap.is_memmap()
 
 
 class TestNesting:
