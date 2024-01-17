@@ -5744,19 +5744,20 @@ class TestLazyStackedTensorDict:
         assert "e" in td.keys()  # now all tds have the key c
         td.get("e")
 
-    def test_stack_memmap(self):
-        td = TensorDict({"a": [[1, 2]], "b": {"c": [[3, 4]]}}, [1, 2]).memmap_()
-        tdstack = torch.stack([td, td])
-        td_select = tdstack.select()
-        td_exclude = tdstack.exclude(*tdstack.keys(True))
-        td_exclude2 = tdstack.exclude(*tdstack.keys(True, True))
-        assert td_select.is_memmap()
-        assert td_select.is_locked
-        assert td_exclude.is_memmap()
-        assert td_exclude.is_locked
-        assert td_exclude2.is_memmap()
-        assert td_exclude2.is_locked
-        assert all(_td.is_locked for _td in td_exclude2.values(True))
+    # deprecated behaviour
+    # def test_stack_memmap(self):
+    #     td = TensorDict({"a": [[1, 2]], "b": {"c": [[3, 4]]}}, [1, 2]).memmap_()
+    #     tdstack = torch.stack([td, td])
+    #     td_select = tdstack.select()
+    #     td_exclude = tdstack.exclude(*tdstack.keys(True))
+    #     td_exclude2 = tdstack.exclude(*tdstack.keys(True, True))
+    #     assert td_select.is_memmap()
+    #     assert td_select.is_locked
+    #     assert td_exclude.is_memmap()
+    #     assert td_exclude.is_locked
+    #     assert td_exclude2.is_memmap()
+    #     assert td_exclude2.is_locked
+    #     assert all(_td.is_locked for _td in td_exclude2.values(True))
 
     @pytest.mark.parametrize("unsqueeze_dim", [0, 1, -1, -2])
     def test_stack_unsqueeze(self, unsqueeze_dim):
