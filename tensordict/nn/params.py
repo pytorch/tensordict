@@ -791,9 +791,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
 
-        self._is_shared = False
-        self._is_memmap = False
-
         if not self._lock_content:
             return self._param_td._propagate_unlock()
 
