@@ -1856,8 +1856,11 @@ class TensorDict(TensorDictBase):
             names=copy(self._td_dim_names),
             _run_checks=False,
         )
-        if not recurse:
-            self._maybe_set_shared_attributes(result)
+        # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
+        # This may be undesirable, not sure if this should be the default behaviour
+        # (one usually does a copy to modify it).
+        # if not recurse:
+        #     self._maybe_set_shared_attributes(result)
         return result
 
     def contiguous(self) -> T:
@@ -1922,7 +1925,11 @@ class TensorDict(TensorDictBase):
         if inplace:
             self._tensordict = result._tensordict
             return self
-        self._maybe_set_shared_attributes(result)
+        # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
+        # This may be undesirable, not sure if this should be the default behaviour
+        # (one usually does a copy to modify it).
+        # if set_shared:
+        #     self._maybe_set_shared_attributes(result)
         return result
 
     def _exclude(self, *keys: str, inplace: bool = False, set_shared: bool = True) -> T:
@@ -1961,8 +1968,11 @@ class TensorDict(TensorDictBase):
             names=self.names if self._has_names() else None,
             _run_checks=False,
         )
-        if set_shared:
-            self._maybe_set_shared_attributes(result)
+        # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
+        # This may be undesirable, not sure if this should be the default behaviour
+        # (one usually does a copy to modify it).
+        # if set_shared:
+        #     self._maybe_set_shared_attributes(result)
         return result
 
     def keys(
