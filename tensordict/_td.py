@@ -1928,7 +1928,7 @@ class TensorDict(TensorDictBase):
     def _exclude(self, *keys: str, inplace: bool = False, set_shared: bool = True) -> T:
         # faster than Base.exclude
         if not len(keys):
-            return self.copy()
+            return self.copy() if not inplace else self
         if not inplace:
             _tensordict = copy(self._tensordict)
         else:
