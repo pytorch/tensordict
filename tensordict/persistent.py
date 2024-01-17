@@ -156,7 +156,7 @@ class PersistentTensorDict(TensorDictBase):
                 f"Either group or filename must be provided, and not both. Got group={group} and filename={filename}."
             )
         self._batch_size = torch.Size(batch_size)
-        self._device = device
+        self._device = torch.device(device) if device is not None else None
         self._is_shared = False
         self._is_memmap = False
         self.kwargs = kwargs
@@ -566,6 +566,8 @@ class PersistentTensorDict(TensorDictBase):
         inplace,
         like,
     ) -> T:
+        if inplace:
+            raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
 
         # re-implements this to make it faster using the meta-data
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
@@ -591,18 +593,13 @@ class PersistentTensorDict(TensorDictBase):
                 "memmap_like() must be called when the TensorDict is (partially) "
                 "populated. Set a tensor first."
             )
-        dest = (
-            self
-            if inplace
-            else TensorDict(
-                {},
-                batch_size=self.batch_size,
-                _is_memmap=True,
-                _is_shared=False,
-                names=self.names if self._has_names() else None,
-                device=torch.device("cpu"),
-            )
+        dest = TensorDict(
+            {},
+            batch_size=self.batch_size,
+            names=self.names if self._has_names() else None,
+            device=torch.device("cpu"),
         )
+        dest._is_memmap = True
         for key, value in self._items_metadata():
             if not value["array"]:
                 value = self._get_str(key)
@@ -744,7 +741,7 @@ class PersistentTensorDict(TensorDictBase):
         target_td = self._get_str(key)
         return target_td
 
-    def select(
+    def _select(
         self, *keys: str, inplace: bool = False, strict: bool = True
     ) -> PersistentTensorDict:
         raise NotImplementedError(
@@ -752,7 +749,7 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
-    def exclude(self, *keys: str, inplace: bool = False) -> PersistentTensorDict:
+    def _exclude(self, *keys: str, inplace: bool = False) -> PersistentTensorDict:
         raise NotImplementedError(
             "Cannot call exclude on a PersistentTensorDict. "
             "Create a regular tensordict first using the `to_tensordict` method."
@@ -953,7 +950,7 @@ class PersistentTensorDict(TensorDictBase):
             self._nested_tensordicts[key].names = td._td_dim_names
             self._nested_tensordicts[key]._set_metadata(td)
 
-    def clone(self, recurse: bool = True, newfile=None) -> PersistentTensorDict:
+    def _clone(self, recurse: bool = True, newfile=None) -> PersistentTensorDict:
         if recurse:
             # this should clone the h5 to a new location indicated by newfile
             if newfile is None:
@@ -1035,6 +1032,35 @@ class PersistentTensorDict(TensorDictBase):
         # not accessible
         ...
 
+    def _view(self, *args, **kwargs):
+        raise RuntimeError(
+            "Cannot call `view` on a persistent tensordict. Call `reshape` instead."
+        )
+
+    def _transpose(self, dim0, dim1):
+        raise RuntimeError(
+            "Cannot call `transpose` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        )
+
+    def _permute(
+        self,
+        *args,
+        **kwargs,
+    ):
+        raise RuntimeError(
+            "Cannot call `permute` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        )
+
+    def _squeeze(self, dim=None):
+        raise RuntimeError(
+            "Cannot call `squeeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        )
+
+    def _unsqueeze(self, dim):
+        raise RuntimeError(
+            "Cannot call `unsqueeze` on a persistent tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        )
+
     __eq__ = TensorDict.__eq__
     __ne__ = TensorDict.__ne__
     __xor__ = TensorDict.__xor__
@@ -1052,9 +1078,6 @@ class PersistentTensorDict(TensorDictBase):
     split = TensorDict.split
     to_module = TensorDict.to_module
     unbind = TensorDict.unbind
-    _view = TensorDict._view
-    _permute = TensorDict._permute
-    _transpose = TensorDict._transpose
     _get_names_idx = TensorDict._get_names_idx
 
 

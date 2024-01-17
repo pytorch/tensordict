@@ -43,6 +43,7 @@ from tensordict.utils import (
     _get_leaf_tensordict,
     _get_shape_from_args,
     _getitem_batch_size,
+    _index_preserve_data_ptr,
     _is_number,
     _is_shared,
     _is_tensorclass,
@@ -70,6 +71,7 @@ from tensordict.utils import (
     KeyedJaggedTensor,
     lock_blocked,
     NestedKey,
+    unravel_key,
     unravel_key_list,
 )
 from torch import Tensor
@@ -183,6 +185,8 @@ class TensorDict(TensorDictBase):
     """
 
     _td_dim_names = None
+    _is_shared = False
+    _is_memmap = False
 
     def __init__(
         self,
@@ -191,11 +195,7 @@ class TensorDict(TensorDictBase):
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
         _run_checks: bool = True,
-        _is_shared: bool | None = False,
-        _is_memmap: bool | None = False,
     ) -> None:
-        self._is_shared = _is_shared
-        self._is_memmap = _is_memmap
         if device is not None and isinstance(device, (int, str)):
             device = torch.device(device)
         self._device = device
@@ -211,8 +211,6 @@ class TensorDict(TensorDictBase):
                             batch_size=self._batch_size,
                             device=self._device,
                             _run_checks=_run_checks,
-                            _is_shared=_is_shared,
-                            _is_memmap=_is_memmap,
                         )
                     _tensordict[key] = value
             self._td_dim_names = names
@@ -746,8 +744,6 @@ class TensorDict(TensorDictBase):
             dict_value,
             batch_size=self.batch_size,
             device=self.device,
-            _is_shared=self._is_shared,
-            _is_memmap=self._is_memmap,
         )
 
     def _index_tensordict(
@@ -782,15 +778,20 @@ class TensorDict(TensorDictBase):
                 )
             else:
                 source[key] = _get_item(item, index)
-        return TensorDict(
+        result = TensorDict(
             source=source,
             batch_size=batch_size,
             device=self.device,
             names=names,
             _run_checks=False,
-            _is_shared=self.is_shared(),
-            _is_memmap=self.is_memmap(),
         )
+        if self._is_memmap and _index_preserve_data_ptr(index):
+            result._is_memmap = True
+            result.lock_()
+        elif self._is_shared and _index_preserve_data_ptr(index):
+            result._is_shared = True
+            result.lock_()
+        return result
 
     def expand(self, *args, **kwargs) -> T:
         tensordict_dims = self.batch_dims
@@ -837,14 +838,11 @@ class TensorDict(TensorDictBase):
         out = []
         # unbind_self_dict = {key: tensor.unbind(dim) for key, tensor in self.items()}
         prefix = (slice(None),) * dim
+
         for _idx in range(self.batch_size[dim]):
             _idx = prefix + (_idx,)
             td = self._index_tensordict(_idx, new_batch_size=batch_size, names=names)
             out.append(td)
-            if self.is_shared():
-                td._is_shared = True
-            elif self.is_memmap():
-                td._is_memmap = True
         return tuple(out)
 
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
@@ -957,7 +955,9 @@ class TensorDict(TensorDictBase):
         def _view(tensor):
             return tensor.view((*shape, *tensor.shape[batch_dims:]))
 
-        return self._fast_apply(_view, batch_size=shape, call_on_nested=True)
+        result = self._fast_apply(_view, batch_size=shape, call_on_nested=True)
+        self._maybe_set_shared_attributes(result)
+        return result
 
     def reshape(
         self,
@@ -978,17 +978,6 @@ class TensorDict(TensorDictBase):
         return self._fast_apply(_reshape, batch_size=shape, call_on_nested=True)
 
     def _transpose(self, dim0, dim1):
-        if dim0 < 0:
-            dim0 = self.ndim + dim0
-        if dim1 < 0:
-            dim1 = self.ndim + dim1
-        if dim0 < 0 or dim1 < 0:
-            raise ValueError(
-                "The provided dimensions are incompatible with the tensordict batch-size."
-            )
-        if dim0 == dim1:
-            return self
-
         def _transpose(tensor):
             return tensor.transpose(dim0, dim1)
 
@@ -997,9 +986,11 @@ class TensorDict(TensorDictBase):
         v1 = batch_size[dim1]
         batch_size[dim1] = v0
         batch_size[dim0] = v1
-        return self._fast_apply(
+        result = self._fast_apply(
             _transpose, batch_size=torch.Size(batch_size), call_on_nested=True
         )
+        self._maybe_set_shared_attributes(result)
+        return result
 
     def _permute(self, *args, **kwargs):
         dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
@@ -1036,7 +1027,95 @@ class TensorDict(TensorDictBase):
         batch_size = [batch_size[p] for p in dims_list] + list(
             batch_size[len(dims_list) :]
         )
-        return self._fast_apply(_permute, batch_size=batch_size, call_on_nested=True)
+        result = self._fast_apply(_permute, batch_size=batch_size, call_on_nested=True)
+        self._maybe_set_shared_attributes(result)
+        return result
+
+    def _squeeze(self, dim=None):
+        batch_size = self.batch_size
+        if dim is None:
+            names = list(self.names)
+            batch_size, names = zip(
+                *[(size, name) for size, name in zip(batch_size, names) if size != 1]
+            )
+            batch_size = torch.Size(batch_size)
+            if batch_size == self.batch_size:
+                return self
+
+            # we only want to squeeze dimensions lower than the batch dim, and view
+            # is the perfect op for this
+            def _squeeze(tensor):
+                return tensor.view(*batch_size, *tensor.shape[self.batch_dims :])
+
+            return self._fast_apply(
+                _squeeze,
+                batch_size=batch_size,
+                names=names,
+                inplace=False,
+                call_on_nested=True,
+            )
+        # make the dim positive
+        if dim < 0:
+            newdim = self.batch_dims + dim
+        else:
+            newdim = dim
+
+        if (newdim >= self.batch_dims) or (newdim < 0):
+            raise RuntimeError(
+                f"squeezing is allowed for dims comprised between "
+                f"`-td.batch_dims` and `td.batch_dims - 1` only. Got "
+                f"dim={dim} with a batch size of {self.batch_size}."
+            )
+        if batch_size[dim] != 1:
+            return self
+        batch_size = list(batch_size)
+        batch_size.pop(dim)
+        batch_size = list(batch_size)
+        names = list(self.names)
+        names.pop(dim)
+
+        result = self._fast_apply(
+            lambda x: x.squeeze(newdim),
+            batch_size=batch_size,
+            names=names,
+            inplace=False,
+            call_on_nested=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        return result
+
+    def _unsqueeze(self, dim):
+        # make the dim positive
+        if dim < 0:
+            newdim = self.batch_dims + dim + 1
+        else:
+            newdim = dim
+
+        if (newdim > self.batch_dims) or (newdim < 0):
+            raise RuntimeError(
+                f"unsqueezing is allowed for dims comprised between "
+                f"`-td.batch_dims - 1` and `td.batch_dims` only. Got "
+                f"dim={dim} with a batch size of {self.batch_size}."
+            )
+        batch_size = list(self.batch_size)
+        batch_size.insert(newdim, 1)
+        batch_size = torch.Size(batch_size)
+
+        names = copy(self.names)
+        names.insert(dim, None)
+
+        def _unsqueeze(tensor):
+            return tensor.unsqueeze(newdim)
+
+        result = self._fast_apply(
+            _unsqueeze,
+            batch_size=batch_size,
+            names=names,
+            inplace=False,
+            call_on_nested=True,
+        )
+        self._maybe_set_shared_attributes(result)
+        return result
 
     @classmethod
     def from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
@@ -1535,7 +1614,7 @@ class TensorDict(TensorDictBase):
             if not prefix.exists():
                 os.makedirs(prefix, exist_ok=True)
             metadata = {}
-        if inplace and self.is_shared() and self.device.type == "cpu":
+        if inplace and self._is_shared:
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
@@ -1545,8 +1624,6 @@ class TensorDict(TensorDictBase):
             else TensorDict(
                 {},
                 batch_size=self.batch_size,
-                _is_memmap=True,
-                _is_shared=False,
                 names=self.names if self._has_names() else None,
                 device=torch.device("cpu"),
             )
@@ -1771,16 +1848,17 @@ class TensorDict(TensorDictBase):
     def is_contiguous(self) -> bool:
         return all([value.is_contiguous() for _, value in self.items()])
 
-    def clone(self, recurse: bool = True) -> T:
-        return TensorDict(
+    def _clone(self, recurse: bool = True) -> T:
+        result = TensorDict(
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
             names=copy(self._td_dim_names),
             _run_checks=False,
-            _is_shared=self.is_shared() if not recurse else False,
-            _is_memmap=self.is_memmap() if not recurse else False,
         )
+        if not recurse:
+            self._maybe_set_shared_attributes(result)
+        return result
 
     def contiguous(self) -> T:
         if not self.is_contiguous():
@@ -1795,12 +1873,12 @@ class TensorDict(TensorDictBase):
                 source={},
                 names=self._td_dim_names,
                 _run_checks=False,
-                _is_memmap=False,
-                _is_shared=False,
             )
         return super().empty(recurse=recurse)
 
-    def select(self, *keys: NestedKey, inplace: bool = False, strict: bool = True) -> T:
+    def _select(
+        self, *keys: NestedKey, inplace: bool = False, strict: bool = True
+    ) -> T:
         if inplace and self.is_locked:
             raise RuntimeError(_LOCK_ERROR)
 
@@ -1812,38 +1890,73 @@ class TensorDict(TensorDictBase):
                     subkey = []
                 else:
                     key, subkey = key[0], key[1:]
-                try:
-                    source[key] = self.get(key)
-                    if len(subkey):
-                        if keys_to_select is None:
-                            # delay creation of defaultdict
-                            keys_to_select = defaultdict(list)
-                        keys_to_select[key].append(subkey)
-                except KeyError as err:
-                    if not strict:
-                        continue
-                    else:
-                        raise KeyError(f"select failed to get key {key}") from err
+
+                val = self._get_str(key, default=None if not strict else NO_DEFAULT)
+                if val is None:
+                    continue
+                source[key] = val
+                if len(subkey):
+                    if keys_to_select is None:
+                        # delay creation of defaultdict
+                        keys_to_select = defaultdict(list)
+                    keys_to_select[key].append(subkey)
+
             if keys_to_select is not None:
                 for key, val in keys_to_select.items():
-                    source[key] = source[key].select(
+                    source[key] = source[key]._select(
                         *val, strict=strict, inplace=inplace
                     )
 
-        out = TensorDict(
+        result = TensorDict(
             device=self.device,
             batch_size=self.batch_size,
             source=source,
             # names=self.names if self._has_names() else None,
             names=self._td_dim_names,
             _run_checks=False,
-            _is_memmap=self._is_memmap,
-            _is_shared=self._is_shared,
         )
         if inplace:
-            self._tensordict = out._tensordict
+            self._tensordict = result._tensordict
             return self
-        return out
+        self._maybe_set_shared_attributes(result)
+        return result
+
+    def _exclude(self, *keys: str, inplace: bool = False) -> T:
+        # faster than Base.exclude
+        if not len(keys):
+            return self.copy()
+        if not inplace:
+            _tensordict = copy(self._tensordict)
+        else:
+            _tensordict = self._tensordict
+        keys_to_exclude = None
+        for key in keys:
+            key = unravel_key(key)
+            if isinstance(key, str):
+                _tensordict.pop(key, None)
+            else:
+                if keys_to_exclude is None:
+                    # delay creation of defaultdict
+                    keys_to_exclude = defaultdict(list)
+                keys_to_exclude[key[0]].append(key[1:])
+        if keys_to_exclude is not None:
+            for key, cur_keys in keys_to_exclude.items():
+                val = _tensordict.get(key, None)
+                if val is not None:
+                    val = val._exclude(*cur_keys, inplace=inplace)
+                if not inplace:
+                    _tensordict[key] = val
+        if inplace:
+            return self
+        result = TensorDict(
+            _tensordict,
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self.names if self._has_names() else None,
+            _run_checks=False,
+        )
+        self._maybe_set_shared_attributes(result)
+        return result
 
     def keys(
         self,
@@ -1858,7 +1971,7 @@ class TensorDict(TensorDictBase):
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             )
 
-    # @cache  # noqa: B019
+    @cache  # noqa: B019
     def _nested_keys(
         self,
         include_nested: bool = False,
@@ -1929,8 +2042,6 @@ class TensorDict(TensorDictBase):
 class _SubTensorDict(TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
-    _is_shared = False
-    _is_memmap = False
     _lazy = True
     _inplace_set = True
     _safe = False
@@ -1966,6 +2077,15 @@ class _SubTensorDict(TensorDictBase):
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
 
+    # These attributes should never be set
+    @property
+    def _is_shared(self):
+        return self._source._is_shared
+
+    @property
+    def _is_memmap(self):
+        return self._source._is_memmap
+
     @staticmethod
     def _convert_ellipsis(idx, shape):
         if any(_idx is Ellipsis for _idx in idx):
@@ -1984,11 +2104,6 @@ class _SubTensorDict(TensorDictBase):
                     new_idx.append(_idx)
             return tuple(new_idx)
         return idx
-
-    def exclude(self, *keys: str, inplace: bool = False) -> T:
-        if inplace:
-            return super().exclude(*keys, inplace=True)
-        return self.to_tensordict().exclude(*keys, inplace=True)
 
     @property
     def batch_size(self) -> torch.Size:
@@ -2092,9 +2207,9 @@ class _SubTensorDict(TensorDictBase):
                     dtype=value.dtype,
                     device=self.device,
                 )
-                if self.is_shared() and self.device.type == "cpu":
+                if self._is_shared:
                     value_expand.share_memory_()
-                elif self.is_memmap():
+                elif self._is_memmap:
                     value_expand = MemoryMappedTensor.from_tensor(value_expand)
             parent._set_str(key, value_expand, inplace=False, validated=validated)
 
@@ -2353,7 +2468,7 @@ class _SubTensorDict(TensorDictBase):
         self._source = self._source.del_(key)
         return self
 
-    def clone(self, recurse: bool = True) -> _SubTensorDict:
+    def _clone(self, recurse: bool = True) -> _SubTensorDict:
         """Clones the _SubTensorDict.
 
         Args:
@@ -2398,7 +2513,7 @@ class _SubTensorDict(TensorDictBase):
         """
         if not recurse:
             return _SubTensorDict(
-                source=self._source.clone(recurse=False), idx=self.idx
+                source=self._source._clone(recurse=False), idx=self.idx
             )
         return self.to_tensordict()
 
@@ -2416,11 +2531,15 @@ class _SubTensorDict(TensorDictBase):
             _run_checks=False,
         )
 
-    def select(self, *keys: str, inplace: bool = False, strict: bool = True) -> T:
+    def _select(self, *keys: str, inplace: bool = False, strict: bool = True) -> T:
         if inplace:
-            self._source = self._source.select(*keys, strict=strict)
-            return self
-        return self._source.select(*keys, strict=strict)[self.idx]
+            raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
+        return self.to_tensordict()._select(*keys, inplace=False, strict=strict)
+
+    def _exclude(self, *keys: str, inplace: bool = False) -> T:
+        if inplace:
+            raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
+        return self.to_tensordict()._exclude(*keys, inplace=False)
 
     def expand(self, *args: int, inplace: bool = False) -> T:
         if len(args) == 1 and isinstance(args[0], Sequence):
@@ -2573,8 +2692,9 @@ class _SubTensorDict(TensorDictBase):
         pass
 
     def _create_nested_str(self, key):
-        out = self.empty()
-        self._set_str(key, out, inplace=False, validated=True)
+        # this may fail with a sub-sub tensordict
+        out = self._source.empty()
+        self._source._set_str(key, out, inplace=False, validated=True)
         # the id of out changes
         return self._get_str(key, default=NO_DEFAULT)
 
@@ -2594,9 +2714,35 @@ class _SubTensorDict(TensorDictBase):
     split = TensorDict.split
     to_module = TensorDict.to_module
     unbind = TensorDict.unbind
-    _permute = TensorDict._permute
-    _transpose = TensorDict._transpose
-    _view = TensorDict._view
+
+    def _view(self, *args, **kwargs):
+        raise RuntimeError(
+            "Cannot call `view` on a sub-tensordict. Call `reshape` instead."
+        )
+
+    def _transpose(self, dim0, dim1):
+        raise RuntimeError(
+            "Cannot call `transpose` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        )
+
+    def _permute(
+        self,
+        *args,
+        **kwargs,
+    ):
+        raise RuntimeError(
+            "Cannot call `permute` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        )
+
+    def _squeeze(self, dim=None):
+        raise RuntimeError(
+            "Cannot call `squeeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        )
+
+    def _unsqueeze(self, dim):
+        raise RuntimeError(
+            "Cannot call `unsqueeze` on a sub-tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        )
 
     _add_batch_dim = TensorDict._add_batch_dim
 

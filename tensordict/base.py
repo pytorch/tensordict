@@ -596,8 +596,7 @@ class TensorDictBase(MutableMapping):
     def unsqueeze(self, dim: int) -> T:
         ...
 
-    @property
-    def unsqueeze(self):
+    def unsqueeze(self, *args, **kwargs):
         """Unsqueezes all tensors for a dimension comprised in between `-td.batch_dims` and `td.batch_dims` and returns them in a new tensordict.
 
         Args:
@@ -614,40 +613,16 @@ class TensorDictBase(MutableMapping):
             torch.Size([3, 1, 4, 2])
         """
         if lazy_legacy():
-            return self._legacy_unsqueeze
+            return self._legacy_unsqueeze(*args, **kwargs)
         else:
-            return self._unsqueeze
+            result = self._unsqueeze(*args, **kwargs)
+            if result._is_memmap or result._is_shared:
+                result.lock_()
+            return result
 
+    @abc.abstractmethod
     def _unsqueeze(self, dim):
-        # make the dim positive
-        if dim < 0:
-            newdim = self.batch_dims + dim + 1
-        else:
-            newdim = dim
-
-        if (newdim > self.batch_dims) or (newdim < 0):
-            raise RuntimeError(
-                f"unsqueezing is allowed for dims comprised between "
-                f"`-td.batch_dims - 1` and `td.batch_dims` only. Got "
-                f"dim={dim} with a batch size of {self.batch_size}."
-            )
-        batch_size = list(self.batch_size)
-        batch_size.insert(newdim, 1)
-        batch_size = torch.Size(batch_size)
-
-        names = copy(self.names)
-        names.insert(dim, None)
-
-        def _unsqueeze(tensor):
-            return tensor.unsqueeze(newdim)
-
-        return self._fast_apply(
-            _unsqueeze,
-            batch_size=batch_size,
-            names=names,
-            inplace=False,
-            call_on_nested=True,
-        )
+        ...
 
     def _legacy_unsqueeze(self, dim: int) -> T:
         if dim < 0:
@@ -673,8 +648,7 @@ class TensorDictBase(MutableMapping):
     def squeeze(self, dim: int | None = None) -> T:
         ...
 
-    @property
-    def squeeze(self):
+    def squeeze(self, *args, **kwargs):
         """Squeezes all tensors for a dimension in between `-self.batch_dims+1` and `self.batch_dims-1` and returns them in a new tensordict.
 
         Args:
@@ -694,60 +668,16 @@ class TensorDictBase(MutableMapping):
 
         """
         if lazy_legacy():
-            return self._legacy_squeeze
+            return self._legacy_squeeze(*args, **kwargs)
         else:
-            return self._squeeze
+            result = self._squeeze(*args, **kwargs)
+            if result._is_memmap or result._is_shared:
+                result.lock_()
+            return result
 
+    @abc.abstractmethod
     def _squeeze(self, dim=None):
-        batch_size = self.batch_size
-        if dim is None:
-            names = list(self.names)
-            batch_size, names = zip(
-                *[(size, name) for size, name in zip(batch_size, names) if size != 1]
-            )
-            batch_size = torch.Size(batch_size)
-            if batch_size == self.batch_size:
-                return self
-
-            # we only want to squeeze dimensions lower than the batch dim, and view
-            # is the perfect op for this
-            def _squeeze(tensor):
-                return tensor.view(*batch_size, *tensor.shape[self.batch_dims :])
-
-            return self._fast_apply(
-                _squeeze,
-                batch_size=batch_size,
-                names=names,
-                inplace=False,
-                call_on_nested=True,
-            )
-        # make the dim positive
-        if dim < 0:
-            newdim = self.batch_dims + dim
-        else:
-            newdim = dim
-
-        if (newdim >= self.batch_dims) or (newdim < 0):
-            raise RuntimeError(
-                f"squeezing is allowed for dims comprised between "
-                f"`-td.batch_dims` and `td.batch_dims - 1` only. Got "
-                f"dim={dim} with a batch size of {self.batch_size}."
-            )
-        if batch_size[dim] != 1:
-            return self
-        batch_size = list(batch_size)
-        batch_size.pop(dim)
-        batch_size = list(batch_size)
-        names = list(self.names)
-        names.pop(dim)
-
-        return self._fast_apply(
-            lambda x: x.squeeze(newdim),
-            batch_size=batch_size,
-            names=names,
-            inplace=False,
-            call_on_nested=True,
-        )
+        ...
 
     def _legacy_squeeze(self, dim: int | None = None) -> T:
         from tensordict._lazy import _SqueezedTensorDict
@@ -903,8 +833,11 @@ class TensorDictBase(MutableMapping):
     ) -> T:
         ...
 
-    @property
-    def view(self):
+    def view(
+        self,
+        *shape: int,
+        size: list | tuple | torch.Size | None = None,
+    ):
         """Returns a tensordict with views of the tensors according to a new shape, compatible with the tensordict batch_size.
 
         Args:
@@ -926,9 +859,12 @@ class TensorDictBase(MutableMapping):
 
         """
         if lazy_legacy():
-            return self._legacy_view
+            return self._legacy_view(*shape, size=size)
         else:
-            return self._view
+            result = self._view(size=size) if size is not None else self._view(*shape)
+            if result._is_shared or result._is_memmap:
+                result.lock_()
+            return result
 
     def _legacy_view(
         self,
@@ -954,12 +890,7 @@ class TensorDictBase(MutableMapping):
             inv_op_kwargs={"size": self.batch_size},
         )
 
-    @overload
     def transpose(self, dim0, dim1):
-        ...
-
-    @property
-    def transpose(self):
         """Returns a tensordict that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
 
         In-place or out-place modifications of the transposed tensordict will
@@ -976,9 +907,24 @@ class TensorDictBase(MutableMapping):
             torch.Size([3, 4])
         """
         if lazy_legacy():
-            return self._legacy_transpose
+            return self._legacy_transpose(dim0, dim1)
         else:
-            return self._transpose
+            ndim = self.ndim
+            if dim0 < 0:
+                dim0 = ndim + dim0
+            if dim1 < 0:
+                dim1 = ndim + dim1
+            if dim0 < 0 or dim1 < 0 or dim0 >= ndim or dim1 >= ndim:
+                raise ValueError(
+                    "dim0 and dim1 must be within the range of the number of dimensions."
+                )
+            dim0, dim1 = min(dim0, dim1), max(dim0, dim1)
+            if dim0 == dim1:
+                return self
+            result = self._transpose(dim0, dim1)
+            if result._is_shared or result._is_memmap:
+                result.lock_()
+            return result
 
     @abc.abstractmethod
     def _transpose(self, dim0, dim1):
@@ -1013,8 +959,7 @@ class TensorDictBase(MutableMapping):
     def permute(self, dims: list | tuple):
         ...
 
-    @property
-    def permute(self):
+    def permute(self, *args, **kwargs):
         """Returns a view of a tensordict with the batch dimensions permuted according to dims.
 
         Args:
@@ -1056,9 +1001,12 @@ class TensorDictBase(MutableMapping):
                 op=permute(dims=[1, 0]))
         """
         if lazy_legacy():
-            return self._legacy_permute
+            return self._legacy_permute(*args, **kwargs)
         else:
-            return self._permute
+            result = self._permute(*args, **kwargs)
+            if result._is_shared or result._is_memmap:
+                result.lock_()
+            return result
 
     @abc.abstractmethod
     def _permute(
@@ -3963,9 +3911,8 @@ class TensorDictBase(MutableMapping):
         return self
 
     # Clone, select, exclude, empty
-    @abc.abstractmethod
     def select(self, *keys: str, inplace: bool = False, strict: bool = True) -> T:
-        """Selects the keys of the tensordict and returns an new tensordict with only the selected keys.
+        """Selects the keys of the tensordict and returns a new tensordict with only the selected keys.
 
         The values are not copied: in-place modifications a tensor of either
         of the original or new tensordict will result in a change in both
@@ -3974,22 +3921,126 @@ class TensorDictBase(MutableMapping):
         Args:
             *keys (str): keys to select
             inplace (bool): if True, the tensordict is pruned in place.
-                Default is :obj:`False`.
+                Default is ``False``.
             strict (bool, optional): whether selecting a key that is not present
                 will return an error or not. Default: :obj:`True`.
 
         Returns:
-            A new tensordict with the selected keys only.
+            A new tensordict (or the same if ``inplace=True``) with the selected keys only.
 
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": 0, "b": {"c": 1, "d": 2}}, [])
+            >>> td.select("a", ("b", "c"))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.select("a", "b")
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.select("this key does not exist", strict=False)
+            TensorDict(
+                fields={
+                },
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
         """
+        result = self._select(*keys, inplace=inplace, strict=strict)
+        if not inplace and (result._is_memmap or result._is_shared):
+            result.lock_()
+        return result
+
+    @abc.abstractmethod
+    def _select(self, *keys: str, inplace: bool = False, strict: bool = True) -> T:
         ...
 
     def exclude(self, *keys: str, inplace: bool = False) -> T:
+        """Excludes the keys of the tensordict and returns a new tensordict without these entries.
+
+        The values are not copied: in-place modifications a tensor of either
+        of the original or new tensordict will result in a change in both
+        tensordicts.
+
+        Args:
+            *keys (str): keys to exclude.
+            inplace (bool): if True, the tensordict is pruned in place.
+                Default is ``False``.
+
+        Returns:
+            A new tensordict (or the same if ``inplace=True``) without the excluded entries.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": 0, "b": {"c": 1, "d": 2}}, [])
+            >>> td.exclude("a", ("b", "c"))
+            TensorDict(
+                fields={
+                    b: TensorDict(
+                        fields={
+                            d: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> td.exclude("a", "b")
+            TensorDict(
+                fields={
+                },
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+
+        """
+        result = self._exclude(*keys, inplace=inplace)
+        if not inplace and (result._is_memmap or result._is_shared):
+            result.lock_()
+        return result
+
+    @abc.abstractmethod
+    def _exclude(
+        self,
+        *keys: str,
+        inplace: bool = False,
+    ) -> T:
         target = self if inplace else self.clone(recurse=False)
         for key in keys:
             if key in self.keys(True):
                 del target[key]
         return target
+
+    def _maybe_set_shared_attributes(self, result, lock=False):
+        # We must use _is_shared to avoid having issues with CUDA tensordicts
+        if self._is_shared:
+            result._is_shared = True
+            if lock:
+                result.lock_()
+        elif self._is_memmap:
+            result._is_memmap = True
+            if lock:
+                result.lock_()
 
     def to_tensordict(self) -> T:
         """Returns a regular TensorDict instance from the TensorDictBase.
@@ -4012,8 +4063,7 @@ class TensorDictBase(MutableMapping):
             names=self.names if self._has_names() else None,
         )
 
-    @abc.abstractmethod
-    def clone(self, recurse: bool = True) -> T:
+    def clone(self, recurse: bool = True, **kwargs) -> T:
         """Clones a TensorDictBase subclass instance onto a new TensorDictBase subclass of the same type.
 
         To create a TensorDict instance from any other TensorDictBase subtype, call the :meth:`~.to_tensordict` method
@@ -4025,6 +4075,13 @@ class TensorDictBase(MutableMapping):
                 tree structure will be copied. Defaults to ``True``.
 
         """
+        result = self._clone(recurse=recurse, **kwargs)
+        if not recurse and (result._is_shared or result._is_memmap):
+            result.lock_()
+        return result
+
+    @abc.abstractmethod
+    def _clone(self, recurse: bool = False):
         ...
 
     def copy(self):
@@ -4117,9 +4174,9 @@ class TensorDictBase(MutableMapping):
 
         """
         if not recurse:
-            return self.select()
+            return self.select().unlock_()
         # simply exclude the leaves
-        return self.exclude(*self.keys(True, True))
+        return self.exclude(*self.keys(True, True)).unlock_()
 
     # Filling
     def zero_(self) -> T:
@@ -4361,10 +4418,9 @@ class TensorDictBase(MutableMapping):
                 result._set_str(
                     leaf_flat, self.get(leaf), validated=True, inplace=False
                 )
-            shared = result._is_shared = self._is_shared
-            mmap = result._is_memmap = self._is_memmap
-            if shared or mmap:
-                result._is_locked = True
+            self._maybe_set_shared_attributes(result)
+            if result._is_shared or result._is_memmap:
+                result.lock_()
             return result
 
     @cache  # noqa: B019
@@ -4454,7 +4510,12 @@ class TensorDictBase(MutableMapping):
 
         """
         if not inplace:
-            return self.copy().unflatten_keys(separator=separator, inplace=True)
+            result = self._clone(recurse=False).unflatten_keys(
+                separator=separator, inplace=True
+            )
+            if self._is_shared or self._is_memmap:
+                result.lock_()
+            return result
         else:
             for key in list(self.keys()):
                 if separator in key:

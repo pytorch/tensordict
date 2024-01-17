@@ -1472,9 +1472,10 @@ def _clone_value(value, recurse: bool):
     from tensordict.base import _is_tensor_collection
 
     if recurse:
+        # this is not a problem for locked tds as we will not lock it
         return value.clone()
     elif _is_tensor_collection(value.__class__):
-        return value.clone(recurse=False)
+        return value._clone(recurse=False)
     else:
         return value
 
@@ -1832,3 +1833,15 @@ def print_directory_tree(path, indent="", display_metadata=True):
             )
     else:
         logging.info(indent + os.path.basename(path))
+
+
+def _index_preserve_data_ptr(index):
+    if isinstance(index, tuple):
+        return all(_index_preserve_data_ptr(idx) for idx in index)
+    if index in (None, Ellipsis):
+        return True
+    if isinstance(index, int):
+        return True
+    if isinstance(index, slice) and (index.start == 0 or index.start is None):
+        return True
+    return False

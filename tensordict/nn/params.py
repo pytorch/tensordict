@@ -518,7 +518,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
             return self
         return TensorDictParams(params)
 
-    def clone(self, recurse: bool = True) -> TensorDictBase:
+    def _clone(self, recurse: bool = True) -> TensorDictBase:
         """Clones the TensorDictParams.
 
         .. warning::
@@ -539,7 +539,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
         """
         if not recurse:
-            return TensorDictParams(self._param_td.clone(False), no_convert=True)
+            return TensorDictParams(self._param_td._clone(False), no_convert=True)
 
         memo = {}
 
@@ -739,7 +739,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_unlock_and_set
-    def select(self, *args, **kwargs):
+    def _select(self, *args, **kwargs):
         ...
 
     @_fallback
@@ -763,6 +763,14 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def is_memmap(self) -> bool:
         ...
 
+    @property
+    def _is_shared(self) -> bool:
+        return self._param_td._is_shared
+
+    @property
+    def _is_memmap(self) -> bool:
+        return self._param_td._is_memmap
+
     @_fallback_property
     def shape(self) -> torch.Size:
         ...
@@ -782,9 +790,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
-
-        self._is_shared = False
-        self._is_memmap = False
 
         if not self._lock_content:
             return self._param_td._propagate_unlock()
@@ -809,7 +814,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_unlock_and_set(inplace=True)
-    def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+    def _exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
         ...
 
     @_carry_over
