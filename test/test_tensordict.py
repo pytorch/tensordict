@@ -2620,6 +2620,11 @@ class TestTensorDicts(TestTensorDictsBase):
                 del td[key]
             td.lock_()
         else:
+            if td_name in (
+                "sub_td", "sub_td2", "permute_td", "squeezed_td",
+                "unsqueezed_td"):
+                # we can't call select inplace on these guys so we exit here
+                return
             with td.unlock_() if td.is_locked else contextlib.nullcontext():
                 td = td.select(inplace=True)
         for key, item in td_clone.items(True):
