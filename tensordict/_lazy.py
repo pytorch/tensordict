@@ -184,8 +184,6 @@ class LazyStackedTensorDict(TensorDictBase):
         hook_in: callable | None = None,
         batch_size: Sequence[int] | None = None,  # TODO: remove
     ) -> None:
-        self._is_shared = False
-        self._is_memmap = False
         self._is_locked = None
 
         # sanity check
@@ -225,6 +223,15 @@ class LazyStackedTensorDict(TensorDictBase):
         self.hook_in = hook_in
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
+
+    # These attributes should never be set
+    @property
+    def _is_shared(self):
+        return all(td._is_shared for td in self._tensordicts)
+
+    @property
+    def _is_memmap(self):
+        return all(td._is_memmap for td in self._tensordicts)
 
     @property
     @cache  # noqa: B019
@@ -1858,7 +1865,6 @@ class LazyStackedTensorDict(TensorDictBase):
     def share_memory_(self) -> T:
         for td in self.tensordicts:
             td.share_memory_()
-        self._is_shared = True
         self.lock_()
         return self
 
@@ -1909,8 +1915,6 @@ class LazyStackedTensorDict(TensorDictBase):
             results = LazyStackedTensorDict.lazy_stack(results, dim=self.stack_dim)
         else:
             results = self
-        results._is_memmap = True
-        results._is_shared = False
         results._device = torch.device("cpu")
         return results
 
@@ -2226,8 +2230,6 @@ class LazyStackedTensorDict(TensorDictBase):
             # stack we won't iterate multiple times over it
             sub_tds[id(child)] = child._propagate_unlock() + [child]
         sub_tds = [item for value in sub_tds.values() for item in value]
-        self._is_shared = False
-        self._is_memmap = False
         return sub_tds
 
     def __repr__(self):
@@ -2353,8 +2355,6 @@ class _CustomOpTensorDict(TensorDictBase):
         inv_op_kwargs: dict | None = None,
         batch_size: Sequence[int] | None = None,
     ) -> None:
-        self._is_shared = source.is_shared()
-        self._is_memmap = source.is_memmap()
 
         if not isinstance(source, TensorDictBase):
             raise TypeError(
@@ -2369,6 +2369,15 @@ class _CustomOpTensorDict(TensorDictBase):
         self._batch_size = None
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
+
+    # These attributes should never be set
+    @property
+    def _is_shared(self):
+        return self._source._is_shared
+
+    @property
+    def _is_memmap(self):
+        return self._source._is_memmap
 
     def is_empty(self) -> bool:
         return self._source.is_empty()
@@ -2752,7 +2761,6 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def share_memory_(self) -> _CustomOpTensorDict:
         self._source.share_memory_()
-        self._is_shared = True
         self.lock_()
         return self
 

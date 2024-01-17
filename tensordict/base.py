@@ -4032,7 +4032,8 @@ class TensorDictBase(MutableMapping):
         return target
 
     def _maybe_set_shared_attributes(self, result, lock=False):
-        if self.is_shared():
+        # We must use _is_shared to avoid having issues with CUDA tensordicts
+        if self._is_shared:
             result._is_shared = True
             if lock:
                 result.lock_()
@@ -4513,7 +4514,7 @@ class TensorDictBase(MutableMapping):
             result = self._clone(recurse=False).unflatten_keys(
                 separator=separator, inplace=True
             )
-            if self.is_shared() or self.is_memmap():
+            if self._is_shared or self._is_memmap:
                 result.lock_()
             return result
         else:

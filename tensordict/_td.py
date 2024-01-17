@@ -785,10 +785,10 @@ class TensorDict(TensorDictBase):
             names=names,
             _run_checks=False,
         )
-        if self.is_memmap() and _index_preserve_data_ptr(index):
+        if self._is_memmap and _index_preserve_data_ptr(index):
             result._is_memmap = True
             result.lock_()
-        elif self.is_shared() and _index_preserve_data_ptr(index):
+        elif self._is_shared and _index_preserve_data_ptr(index):
             result._is_shared = True
             result.lock_()
         return result
@@ -2042,8 +2042,6 @@ class TensorDict(TensorDictBase):
 class _SubTensorDict(TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
-    _is_shared = False
-    _is_memmap = False
     _lazy = True
     _inplace_set = True
     _safe = False
@@ -2078,6 +2076,15 @@ class _SubTensorDict(TensorDictBase):
 
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
+
+    # These attributes should never be set
+    @property
+    def _is_shared(self):
+        return self._source._is_shared
+
+    @property
+    def _is_memmap(self):
+        return self._source._is_memmap
 
     @staticmethod
     def _convert_ellipsis(idx, shape):
