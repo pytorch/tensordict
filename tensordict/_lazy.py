@@ -1390,28 +1390,33 @@ class LazyStackedTensorDict(TensorDictBase):
             return out
 
     def _select(
-        self, *keys: str, inplace: bool = False, strict: bool = False
+        self,
+        *keys: str,
+        inplace: bool = False,
+        strict: bool = False,
+        set_shared: bool = True,
     ) -> LazyStackedTensorDict:
         # the following implementation keeps the hidden keys in the tensordicts
         tensordicts = [
-            td._select(*keys, inplace=inplace, strict=strict) for td in self.tensordicts
+            td._select(*keys, inplace=inplace, strict=strict, set_shared=set_shared)
+            for td in self.tensordicts
         ]
         if inplace:
             return self
         result = LazyStackedTensorDict(*tensordicts, stack_dim=self.stack_dim)
-        self._maybe_set_shared_attributes(result)
         return result
 
-    def _exclude(self, *keys: str, inplace: bool = False) -> LazyStackedTensorDict:
+    def _exclude(
+        self, *keys: str, inplace: bool = False, set_shared: bool = True
+    ) -> LazyStackedTensorDict:
         tensordicts = [
-            tensordict._exclude(*keys, inplace=inplace)
+            tensordict._exclude(*keys, inplace=inplace, set_shared=set_shared)
             for tensordict in self.tensordicts
         ]
         if inplace:
             self.tensordicts = tensordicts
             return self
         result = LazyStackedTensorDict(*tensordicts, stack_dim=self.stack_dim)
-        self._maybe_set_shared_attributes(result)
         return result
 
     def __setitem__(self, index: IndexType, value: T) -> T:
@@ -2372,10 +2377,12 @@ class _CustomOpTensorDict(TensorDictBase):
 
     # These attributes should never be set
     @property
+    @cache  # noqa
     def _is_shared(self):
         return self._source._is_shared
 
     @property
+    @cache  # noqa
     def _is_memmap(self):
         return self._source._is_memmap
 
@@ -2568,16 +2575,26 @@ class _CustomOpTensorDict(TensorDictBase):
         )
 
     def _select(
-        self, *keys: str, inplace: bool = False, strict: bool = True
+        self,
+        *keys: str,
+        inplace: bool = False,
+        strict: bool = True,
+        set_shared: bool = True,
     ) -> _CustomOpTensorDict:
         if inplace:
             raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
-        return self.to_tensordict()._select(*keys, inplace=False, strict=strict)
+        return self.to_tensordict()._select(
+            *keys, inplace=False, strict=strict, set_shared=set_shared
+        )
 
-    def _exclude(self, *keys: str, inplace: bool = False) -> _CustomOpTensorDict:
+    def _exclude(
+        self, *keys: str, inplace: bool = False, set_shared: bool = True
+    ) -> _CustomOpTensorDict:
         if inplace:
             raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
-        return self.to_tensordict()._exclude(*keys, inplace=False)
+        return self.to_tensordict()._exclude(
+            *keys, inplace=False, set_shared=set_shared
+        )
 
     def _clone(self, recurse: bool = True) -> T:
         """Clones the Lazy TensorDict.

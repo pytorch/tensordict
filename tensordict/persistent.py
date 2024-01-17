@@ -749,7 +749,9 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
-    def _exclude(self, *keys: str, inplace: bool = False) -> PersistentTensorDict:
+    def _exclude(
+        self, *keys: str, inplace: bool = False, set_shared: bool = True
+    ) -> PersistentTensorDict:
         raise NotImplementedError(
             "Cannot call exclude on a PersistentTensorDict. "
             "Create a regular tensordict first using the `to_tensordict` method."
