@@ -3972,7 +3972,13 @@ class TensorDictBase(MutableMapping):
         return result
 
     @abc.abstractmethod
-    def _select(self, *keys: str, inplace: bool = False, strict: bool = True) -> T:
+    def _select(
+        self,
+        *keys: str,
+        inplace: bool = False,
+        strict: bool = True,
+        set_shared: bool = True,
+    ) -> T:
         ...
 
     def exclude(self, *keys: str, inplace: bool = False) -> T:
@@ -4024,12 +4030,9 @@ class TensorDictBase(MutableMapping):
         self,
         *keys: str,
         inplace: bool = False,
+        set_shared: bool = True,
     ) -> T:
-        target = self if inplace else self.clone(recurse=False)
-        for key in keys:
-            if key in self.keys(True):
-                del target[key]
-        return target
+        ...
 
     def _maybe_set_shared_attributes(self, result, lock=False):
         # We must use _is_shared to avoid having issues with CUDA tensordicts
@@ -4174,9 +4177,9 @@ class TensorDictBase(MutableMapping):
 
         """
         if not recurse:
-            return self.select().unlock_()
+            return self._select(set_shared=False)
         # simply exclude the leaves
-        return self.exclude(*self.keys(True, True)).unlock_()
+        return self._exclude(*self.keys(True, True), set_shared=False)
 
     # Filling
     def zero_(self) -> T:

@@ -2068,6 +2068,15 @@ class TestTensorDicts(TestTensorDictsBase):
         del td["a"]
         assert "a" not in td.keys()
 
+    def test_empty(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_empty = td.empty()
+        assert not td_empty.is_locked
+        assert td_empty.shape == td.shape
+        assert td_empty.names == td.names
+        assert td_empty.device == td.device
+        td_empty.set("a", torch.zeros(()).expand(td.shape))
+
     def test_empty_like(self, td_name, device):
         if "sub_td" in td_name:
             # we do not call skip to avoid systematic skips in internal code base
@@ -5724,6 +5733,20 @@ class TestLazyStackedTensorDict:
         td["e"] = torch.randn(2, 4)
         assert "e" in td.keys()  # now all tds have the key c
         td.get("e")
+
+    def test_stack_memmap(self):
+        td = TensorDict({"a": [[1, 2]], "b": {"c": [[3, 4]]}}, [1, 2]).memmap_()
+        tdstack = torch.stack([td, td])
+        td_select = tdstack.select()
+        td_exclude = tdstack.exclude(*tdstack.keys(True))
+        td_exclude2 = tdstack.exclude(*tdstack.keys(True, True))
+        assert td_select.is_memmap()
+        assert td_select.is_locked
+        assert td_exclude.is_memmap()
+        assert td_exclude.is_locked
+        assert td_exclude2.is_memmap()
+        assert td_exclude2.is_locked
+        assert all(_td.is_locked for _td in td_exclude2.values(True))
 
     @pytest.mark.parametrize("unsqueeze_dim", [0, 1, -1, -2])
     def test_stack_unsqueeze(self, unsqueeze_dim):

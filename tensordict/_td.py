@@ -1877,7 +1877,11 @@ class TensorDict(TensorDictBase):
         return super().empty(recurse=recurse)
 
     def _select(
-        self, *keys: NestedKey, inplace: bool = False, strict: bool = True
+        self,
+        *keys: NestedKey,
+        inplace: bool = False,
+        strict: bool = True,
+        set_shared: bool = True,
     ) -> T:
         if inplace and self.is_locked:
             raise RuntimeError(_LOCK_ERROR)
@@ -1904,7 +1908,7 @@ class TensorDict(TensorDictBase):
             if keys_to_select is not None:
                 for key, val in keys_to_select.items():
                     source[key] = source[key]._select(
-                        *val, strict=strict, inplace=inplace
+                        *val, strict=strict, inplace=inplace, set_shared=set_shared
                     )
 
         result = TensorDict(
@@ -1921,7 +1925,7 @@ class TensorDict(TensorDictBase):
         self._maybe_set_shared_attributes(result)
         return result
 
-    def _exclude(self, *keys: str, inplace: bool = False) -> T:
+    def _exclude(self, *keys: str, inplace: bool = False, set_shared: bool = True) -> T:
         # faster than Base.exclude
         if not len(keys):
             return self.copy()
@@ -1943,7 +1947,9 @@ class TensorDict(TensorDictBase):
             for key, cur_keys in keys_to_exclude.items():
                 val = _tensordict.get(key, None)
                 if val is not None:
-                    val = val._exclude(*cur_keys, inplace=inplace)
+                    val = val._exclude(
+                        *cur_keys, inplace=inplace, set_shared=set_shared
+                    )
                 if not inplace:
                     _tensordict[key] = val
         if inplace:
@@ -1955,7 +1961,8 @@ class TensorDict(TensorDictBase):
             names=self.names if self._has_names() else None,
             _run_checks=False,
         )
-        self._maybe_set_shared_attributes(result)
+        if set_shared:
+            self._maybe_set_shared_attributes(result)
         return result
 
     def keys(
@@ -2531,15 +2538,25 @@ class _SubTensorDict(TensorDictBase):
             _run_checks=False,
         )
 
-    def _select(self, *keys: str, inplace: bool = False, strict: bool = True) -> T:
+    def _select(
+        self,
+        *keys: str,
+        inplace: bool = False,
+        strict: bool = True,
+        set_shared: bool = True,
+    ) -> T:
         if inplace:
             raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
-        return self.to_tensordict()._select(*keys, inplace=False, strict=strict)
+        return self.to_tensordict()._select(
+            *keys, inplace=False, strict=strict, set_shared=set_shared
+        )
 
-    def _exclude(self, *keys: str, inplace: bool = False) -> T:
+    def _exclude(self, *keys: str, inplace: bool = False, set_shared: bool = True) -> T:
         if inplace:
             raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
-        return self.to_tensordict()._exclude(*keys, inplace=False)
+        return self.to_tensordict()._exclude(
+            *keys, inplace=False, set_shared=set_shared
+        )
 
     def expand(self, *args: int, inplace: bool = False) -> T:
         if len(args) == 1 and isinstance(args[0], Sequence):

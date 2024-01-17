@@ -814,7 +814,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_unlock_and_set(inplace=True)
-    def _exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+    def _exclude(
+        self, *keys: str, inplace: bool = False, set_shared: bool = True
+    ) -> TensorDictBase:
         ...
 
     @_carry_over
