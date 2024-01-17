@@ -4421,7 +4421,8 @@ class TensorDictBase(MutableMapping):
                 result._set_str(
                     leaf_flat, self.get(leaf), validated=True, inplace=False
                 )
-            self._maybe_set_shared_attributes(result)
+            # Uncomment if you want key operations to propagate the shared status
+            # self._maybe_set_shared_attributes(result)
             if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
@@ -4516,7 +4517,7 @@ class TensorDictBase(MutableMapping):
             result = self._clone(recurse=False).unflatten_keys(
                 separator=separator, inplace=True
             )
-            if self._is_shared or self._is_memmap:
+            if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
         else:

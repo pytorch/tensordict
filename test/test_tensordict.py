@@ -1177,11 +1177,19 @@ class TestGeneric:
         with set_lazy_legacy(lazy_leg):
             if shared:
 
+                def assert_not_shared(td0):
+                    assert not td0.is_shared()
+                    assert not td0.is_locked
+
                 def assert_shared(td0):
                     assert td0.is_shared()
                     assert td0.is_locked
 
             else:
+
+                def assert_not_shared(td0):
+                    assert not td0.is_memmap()
+                    assert not td0.is_locked
 
                 def assert_shared(td0):
                     assert td0.is_memmap()
@@ -1193,18 +1201,12 @@ class TestGeneric:
             else:
                 td.memmap_()
 
-            # We do not propagate these anymore because it requires locking the tensordicts, which is expensive
-            # td0, *_ = td.unbind(1)
-            # assert_shared(td0)
-            #
-            # td0, *_ = td.split(1, 0)
-            # assert_shared(td0)
-
+            # Key-based operations propagate the shared status
             td0 = td.exclude("a")
-            assert_shared(td0)
+            assert_not_shared(td0)
 
             td0 = td.select("a")
-            assert_shared(td0)
+            assert_not_shared(td0)
 
             with td.unlock_():
                 td0 = td.rename_key_("a", "a.a")
@@ -1223,9 +1225,16 @@ class TestGeneric:
                 td.memmap_()
 
             td0 = td.unflatten_keys(".")
-            assert_shared(td0)
+            assert_not_shared(td0)
 
             td0 = td.flatten_keys(".")
+            assert_not_shared(td0)
+
+            # Shape operations propagate the shared status
+            td0, *_ = td.unbind(1)
+            assert_shared(td0)
+
+            td0, *_ = td.split(1, 0)
             assert_shared(td0)
 
             td0 = td.view(-1)
