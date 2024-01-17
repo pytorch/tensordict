@@ -2574,9 +2574,7 @@ class _CustomOpTensorDict(TensorDictBase):
             raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
         return self.to_tensordict()._select(*keys, inplace=False, strict=strict)
 
-    def _exclude(
-        self, *keys: str, inplace: bool = False
-    ) -> _CustomOpTensorDict:
+    def _exclude(self, *keys: str, inplace: bool = False) -> _CustomOpTensorDict:
         if inplace:
             raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
         return self.to_tensordict()._exclude(*keys, inplace=False)
@@ -2791,6 +2789,10 @@ class _CustomOpTensorDict(TensorDictBase):
     @erase_cache
     def _propagate_lock(self, lock_ids):
         return self._source._propagate_lock(lock_ids)
+
+    @erase_cache
+    def _propagate_unlock(self):
+        return self._source._propagate_unlock()
 
     lock = _renamed_inplace_method(lock_)
     unlock = _renamed_inplace_method(unlock_)

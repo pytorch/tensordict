@@ -2533,14 +2533,12 @@ class _SubTensorDict(TensorDictBase):
 
     def _select(
         self, *keys: str, inplace: bool = False, strict: bool = True
-    ) -> _CustomOpTensorDict:
+    ) -> T:
         if inplace:
             raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
         return self.to_tensordict()._select(*keys, inplace=False, strict=strict)
 
-    def _exclude(
-        self, *keys: str, inplace: bool = False
-    ) -> _CustomOpTensorDict:
+    def _exclude(self, *keys: str, inplace: bool = False) -> T:
         if inplace:
             raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
         return self.to_tensordict()._exclude(*keys, inplace=False)

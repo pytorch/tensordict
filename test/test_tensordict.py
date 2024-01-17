@@ -2044,8 +2044,10 @@ class TestTensorDicts(TestTensorDictsBase):
             _ = nested.get("key")
             assert td.get(("some", "nested", "key")).shape == td.shape
             assert is_tensor_collection(td.get(("some", "nested", "key")))
+            del td["root"]
         if td_name in ("sub_td", "sub_td2"):
             return
+
         with td.lock_(), pytest.raises(RuntimeError):
             td.create_nested("root")
 
@@ -2180,7 +2182,12 @@ class TestTensorDicts(TestTensorDictsBase):
         )
 
         if td_name in (
-        "sub_td", "sub_td2", "permute_td", "squeezed_td", "unsqueezed_td"):
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "squeezed_td",
+            "unsqueezed_td",
+        ):
             with pytest.raises(RuntimeError, match="Cannot call exclude"):
                 td.exclude("a", inplace=True)
             return
@@ -2301,12 +2308,15 @@ class TestTensorDicts(TestTensorDictsBase):
                 td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
             return
         else:
-            if inplace and td_name in ("sub_td", "sub_td2", "squeezed_td", "unsqueezed_td", "permute_td"):
+            if inplace and td_name in (
+                "sub_td",
+                "sub_td2",
+                "squeezed_td",
+                "unsqueezed_td",
+                "permute_td",
+            ):
                 with pytest.raises(RuntimeError, match="Cannot call exclude"):
-                    td_flatten = td.flatten_keys(
-                        inplace=inplace,
-                        separator=separator
-                        )
+                    td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
                 return
             td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
         for value in td_flatten.values():
@@ -2621,8 +2631,12 @@ class TestTensorDicts(TestTensorDictsBase):
             td.lock_()
         else:
             if td_name in (
-                "sub_td", "sub_td2", "permute_td", "squeezed_td",
-                "unsqueezed_td"):
+                "sub_td",
+                "sub_td2",
+                "permute_td",
+                "squeezed_td",
+                "unsqueezed_td",
+            ):
                 # we can't call select inplace on these guys so we exit here
                 return
             with td.unlock_() if td.is_locked else contextlib.nullcontext():
@@ -3328,7 +3342,12 @@ class TestTensorDicts(TestTensorDictsBase):
             keys += [("my_nested_td", "inner")]
 
         if inplace and td_name in (
-        "sub_td", "sub_td2", "permute_td", "squeezed_td", "unsqueezed_td"):
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "squeezed_td",
+            "unsqueezed_td",
+        ):
             with pytest.raises(RuntimeError, match="Cannot call select"):
                 td.select(*keys, strict=strict, inplace=inplace)
             return
@@ -4120,12 +4139,15 @@ class TestTensorDicts(TestTensorDictsBase):
                 ):
                     td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
                 return
-            if inplace and td_name in ("sub_td", "sub_td2", "permute_td", "squeezed_td", "unsqueezed_td"):
+            if inplace and td_name in (
+                "sub_td",
+                "sub_td2",
+                "permute_td",
+                "squeezed_td",
+                "unsqueezed_td",
+            ):
                 with pytest.raises(RuntimeError, match="Cannot call exclude"):
-                    td_flatten = td.flatten_keys(
-                        inplace=inplace,
-                        separator=separator
-                        )
+                    td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
                 return
 
             td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
