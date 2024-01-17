@@ -1177,11 +1177,19 @@ class TestGeneric:
         with set_lazy_legacy(lazy_leg):
             if shared:
 
+                def assert_not_shared(td0):
+                    assert not td0.is_shared()
+                    assert not td0.is_locked
+
                 def assert_shared(td0):
                     assert td0.is_shared()
                     assert td0.is_locked
 
             else:
+
+                def assert_not_shared(td0):
+                    assert not td0.is_memmap()
+                    assert not td0.is_locked
 
                 def assert_shared(td0):
                     assert td0.is_memmap()
@@ -1193,18 +1201,12 @@ class TestGeneric:
             else:
                 td.memmap_()
 
-            # We do not propagate these anymore because it requires locking the tensordicts, which is expensive
-            # td0, *_ = td.unbind(1)
-            # assert_shared(td0)
-            #
-            # td0, *_ = td.split(1, 0)
-            # assert_shared(td0)
-
+            # Key-based operations propagate the shared status
             td0 = td.exclude("a")
-            assert_shared(td0)
+            assert_not_shared(td0)
 
             td0 = td.select("a")
-            assert_shared(td0)
+            assert_not_shared(td0)
 
             with td.unlock_():
                 td0 = td.rename_key_("a", "a.a")
@@ -1223,9 +1225,16 @@ class TestGeneric:
                 td.memmap_()
 
             td0 = td.unflatten_keys(".")
-            assert_shared(td0)
+            assert_not_shared(td0)
 
             td0 = td.flatten_keys(".")
+            assert_not_shared(td0)
+
+            # Shape operations propagate the shared status
+            td0, *_ = td.unbind(1)
+            assert_shared(td0)
+
+            td0, *_ = td.split(1, 0)
             assert_shared(td0)
 
             td0 = td.view(-1)
@@ -5735,19 +5744,20 @@ class TestLazyStackedTensorDict:
         assert "e" in td.keys()  # now all tds have the key c
         td.get("e")
 
-    def test_stack_memmap(self):
-        td = TensorDict({"a": [[1, 2]], "b": {"c": [[3, 4]]}}, [1, 2]).memmap_()
-        tdstack = torch.stack([td, td])
-        td_select = tdstack.select()
-        td_exclude = tdstack.exclude(*tdstack.keys(True))
-        td_exclude2 = tdstack.exclude(*tdstack.keys(True, True))
-        assert td_select.is_memmap()
-        assert td_select.is_locked
-        assert td_exclude.is_memmap()
-        assert td_exclude.is_locked
-        assert td_exclude2.is_memmap()
-        assert td_exclude2.is_locked
-        assert all(_td.is_locked for _td in td_exclude2.values(True))
+    # deprecated behaviour
+    # def test_stack_memmap(self):
+    #     td = TensorDict({"a": [[1, 2]], "b": {"c": [[3, 4]]}}, [1, 2]).memmap_()
+    #     tdstack = torch.stack([td, td])
+    #     td_select = tdstack.select()
+    #     td_exclude = tdstack.exclude(*tdstack.keys(True))
+    #     td_exclude2 = tdstack.exclude(*tdstack.keys(True, True))
+    #     assert td_select.is_memmap()
+    #     assert td_select.is_locked
+    #     assert td_exclude.is_memmap()
+    #     assert td_exclude.is_locked
+    #     assert td_exclude2.is_memmap()
+    #     assert td_exclude2.is_locked
+    #     assert all(_td.is_locked for _td in td_exclude2.values(True))
 
     @pytest.mark.parametrize("unsqueeze_dim", [0, 1, -1, -2])
     def test_stack_unsqueeze(self, unsqueeze_dim):
