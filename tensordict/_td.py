@@ -2531,9 +2531,7 @@ class _SubTensorDict(TensorDictBase):
             _run_checks=False,
         )
 
-    def _select(
-        self, *keys: str, inplace: bool = False, strict: bool = True
-    ) -> T:
+    def _select(self, *keys: str, inplace: bool = False, strict: bool = True) -> T:
         if inplace:
             raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
         return self.to_tensordict()._select(*keys, inplace=False, strict=strict)

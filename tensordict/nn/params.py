@@ -763,6 +763,14 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def is_memmap(self) -> bool:
         ...
 
+    @property
+    def _is_shared(self) -> bool:
+        return self._param_td._is_shared
+
+    @property
+    def _is_memmap(self) -> bool:
+        return self._param_td._is_memmap
+
     @_fallback_property
     def shape(self) -> torch.Size:
         ...
