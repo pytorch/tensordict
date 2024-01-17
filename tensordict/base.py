@@ -616,7 +616,7 @@ class TensorDictBase(MutableMapping):
             return self._legacy_unsqueeze(*args, **kwargs)
         else:
             result = self._unsqueeze(*args, **kwargs)
-            if result.is_memmap() or result.is_shared():
+            if result._is_memmap or result._is_shared:
                 result.lock_()
             return result
 
@@ -671,7 +671,7 @@ class TensorDictBase(MutableMapping):
             return self._legacy_squeeze(*args, **kwargs)
         else:
             result = self._squeeze(*args, **kwargs)
-            if result.is_memmap() or result.is_shared():
+            if result._is_memmap or result._is_shared:
                 result.lock_()
             return result
 
@@ -862,7 +862,7 @@ class TensorDictBase(MutableMapping):
             return self._legacy_view(*shape, size=size)
         else:
             result = self._view(size=size) if size is not None else self._view(*shape)
-            if result.is_shared() or result.is_memmap():
+            if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
 
@@ -922,7 +922,7 @@ class TensorDictBase(MutableMapping):
             if dim0 == dim1:
                 return self
             result = self._transpose(dim0, dim1)
-            if result.is_shared() or result.is_memmap():
+            if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
 
@@ -1004,7 +1004,7 @@ class TensorDictBase(MutableMapping):
             return self._legacy_permute(*args, **kwargs)
         else:
             result = self._permute(*args, **kwargs)
-            if result.is_shared() or result.is_memmap():
+            if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
 
@@ -4037,7 +4037,7 @@ class TensorDictBase(MutableMapping):
             result._is_shared = True
             if lock:
                 result.lock_()
-        elif self.is_memmap():
+        elif self._is_memmap:
             result._is_memmap = True
             if lock:
                 result.lock_()
@@ -4076,7 +4076,7 @@ class TensorDictBase(MutableMapping):
 
         """
         result = self._clone(recurse=recurse, **kwargs)
-        if not recurse and (result.is_shared() or result.is_memmap()):
+        if not recurse and (result._is_shared or result._is_memmap):
             result.lock_()
         return result
 

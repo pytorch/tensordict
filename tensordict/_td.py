@@ -1614,7 +1614,7 @@ class TensorDict(TensorDictBase):
             if not prefix.exists():
                 os.makedirs(prefix, exist_ok=True)
             metadata = {}
-        if inplace and self.is_shared() and self.device.type == "cpu":
+        if inplace and self._is_shared:
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
@@ -2207,9 +2207,9 @@ class _SubTensorDict(TensorDictBase):
                     dtype=value.dtype,
                     device=self.device,
                 )
-                if self.is_shared() and self.device.type == "cpu":
+                if self._is_shared:
                     value_expand.share_memory_()
-                elif self.is_memmap():
+                elif self._is_memmap:
                     value_expand = MemoryMappedTensor.from_tensor(value_expand)
             parent._set_str(key, value_expand, inplace=False, validated=validated)
 
