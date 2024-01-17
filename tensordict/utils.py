@@ -1838,6 +1838,7 @@ def print_directory_tree(path, indent="", display_metadata=True):
 def _index_preserve_data_ptr(index):
     if isinstance(index, tuple):
         return all(_index_preserve_data_ptr(idx) for idx in index)
+    # we can't use a list comprehension here because it fails with tensor indices
     if index is None or index is Ellipsis:
         return True
     if isinstance(index, int):
