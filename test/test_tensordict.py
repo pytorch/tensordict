@@ -2179,6 +2179,12 @@ class TestTensorDicts(TestTensorDictsBase):
             and "a" not in td2.clone().keys()
         )
 
+        if td_name in (
+        "sub_td", "sub_td2", "permute_td", "squeezed_td", "unsqueezed_td"):
+            with pytest.raises(RuntimeError, match="Cannot call exclude"):
+                td.exclude("a", inplace=True)
+            return
+
         with td.unlock_():
             td2 = td.exclude("a", inplace=True)
         assert td2 is td
@@ -3316,6 +3322,11 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name in ("nested_stacked_td", "nested_td"):
             keys += [("my_nested_td", "inner")]
 
+        if inplace and td_name in (
+        "sub_td", "sub_td2", "permute_td", "squeezed_td", "unsqueezed_td"):
+            with pytest.raises(RuntimeError, match="Cannot call select"):
+                td.select(*keys, strict=strict, inplace=inplace)
+            return
         with td.unlock_() if td.is_locked else contextlib.nullcontext():
             td2 = td.select(*keys, strict=strict, inplace=inplace)
         if inplace:
