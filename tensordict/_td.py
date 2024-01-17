@@ -2531,21 +2531,19 @@ class _SubTensorDict(TensorDictBase):
             _run_checks=False,
         )
 
-    def _select(self, *keys: str, inplace: bool = False, strict: bool = True) -> T:
+    def _select(
+        self, *keys: str, inplace: bool = False, strict: bool = True
+    ) -> _CustomOpTensorDict:
         if inplace:
-            self._source = self._source._select(*keys, strict=strict)
-            return self
-        result = self._source._select(*keys, strict=strict)._get_sub_tensordict(
-            self.idx
-        )
-        return result
+            raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
+        return self.to_tensordict()._select(*keys, inplace=False, strict=strict)
 
-    def _exclude(self, *keys: str, inplace: bool = False) -> T:
+    def _exclude(
+        self, *keys: str, inplace: bool = False
+    ) -> _CustomOpTensorDict:
         if inplace:
-            self._source = self._source._exclude(*keys)
-            return self
-        result = self._source._exclude(*keys)._get_sub_tensordict(self.idx)
-        return result
+            raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
+        return self.to_tensordict()._exclude(*keys, inplace=False)
 
     def expand(self, *args: int, inplace: bool = False) -> T:
         if len(args) == 1 and isinstance(args[0], Sequence):

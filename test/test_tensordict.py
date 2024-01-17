@@ -2295,6 +2295,13 @@ class TestTensorDicts(TestTensorDictsBase):
                 td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
             return
         else:
+            if inplace and td_name in ("sub_td", "sub_td2", "squeezed_td", "unsqueezed_td", "permute_td"):
+                with pytest.raises(RuntimeError, match="Cannot call exclude"):
+                    td_flatten = td.flatten_keys(
+                        inplace=inplace,
+                        separator=separator
+                        )
+                return
             td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
         for value in td_flatten.values():
             assert not isinstance(value, TensorDictBase)
@@ -4097,6 +4104,14 @@ class TestTensorDicts(TestTensorDictsBase):
                 ):
                     td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
                 return
+            if inplace and td_name in ("sub_td", "sub_td2", "permute_td", "squeezed_td", "unsqueezed_td"):
+                with pytest.raises(RuntimeError, match="Cannot call exclude"):
+                    td_flatten = td.flatten_keys(
+                        inplace=inplace,
+                        separator=separator
+                        )
+                return
+
             td_flatten = td.flatten_keys(inplace=inplace, separator=separator)
             td_unflatten = td_flatten.unflatten_keys(
                 inplace=inplace, separator=separator

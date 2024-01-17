@@ -227,11 +227,11 @@ class LazyStackedTensorDict(TensorDictBase):
     # These attributes should never be set
     @property
     def _is_shared(self):
-        return all(td._is_shared for td in self._tensordicts)
+        return all(td._is_shared for td in self.tensordicts)
 
     @property
     def _is_memmap(self):
-        return all(td._is_memmap for td in self._tensordicts)
+        return all(td._is_memmap for td in self.tensordicts)
 
     @property
     @cache  # noqa: B019
@@ -2571,23 +2571,15 @@ class _CustomOpTensorDict(TensorDictBase):
         self, *keys: str, inplace: bool = False, strict: bool = True
     ) -> _CustomOpTensorDict:
         if inplace:
-            self._source._select(*keys, inplace=inplace, strict=strict)
-            return self
-        self_copy = copy(self)
-        self_copy._source = self_copy._source._select(*keys, strict=strict)
-        self._maybe_set_shared_attributes(self_copy)
-        return self_copy
+            raise RuntimeError("Cannot call select inplace on a lazy tensordict.")
+        return self.to_tensordict()._select(*keys, inplace=False, strict=strict)
 
     def _exclude(
-        self, *keys: str, inplace: bool = False, strict: bool = True
+        self, *keys: str, inplace: bool = False
     ) -> _CustomOpTensorDict:
         if inplace:
-            self._source._exclude(*keys, inplace=inplace)
-            return self
-        self_copy = copy(self)
-        self_copy._source = self_copy._source._exclude(*keys)
-        self._maybe_set_shared_attributes(self_copy)
-        return self_copy
+            raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
+        return self.to_tensordict()._exclude(*keys, inplace=False)
 
     def _clone(self, recurse: bool = True) -> T:
         """Clones the Lazy TensorDict.
@@ -2615,7 +2607,7 @@ class _CustomOpTensorDict(TensorDictBase):
     def contiguous(self) -> T:
         if self.is_contiguous():
             return self
-        return self.to(TensorDict)
+        return self._fast_apply(lambda x: x.contiguous())
 
     def rename_key_(
         self, old_key: str, new_key: str, safe: bool = False
