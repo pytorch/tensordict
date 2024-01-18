@@ -846,13 +846,12 @@ class TensorDict(TensorDictBase):
 
         tds = tuple(empty() for _ in range(self.batch_size[dim]))
 
-        def unbind(key_val, tds=tds):
-            key, val = key_val
+        def unbind(key, val, tds=tds):
             for td, _val in zip(tds, val.unbind(dim)):
                 td._set_str(key, _val, validated=True, inplace=False)
 
-        with ThreadPoolExecutor(max_workers=16) as executor:
-            executor.map(unbind, self.items())
+        for key, val in self.items():
+            unbind(key, val)
         return tds
 
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
