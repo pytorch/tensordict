@@ -846,7 +846,8 @@ class TensorDict(TensorDictBase):
         def unbind(key, val, tds=tds):
             unbound = (
                 val.unbind(dim)
-                if not _is_tensor_collection(type(val))
+                if not isinstance(val, TensorDictBase)
+                # tensorclass is also unbound using plain unbind
                 else val._unbind(dim)
             )
             for td, _val in zip(tds, unbound):
