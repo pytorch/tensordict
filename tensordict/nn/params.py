@@ -564,7 +564,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_fallback
-    def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
+    def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         ...
 
     @_fallback

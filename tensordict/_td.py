@@ -827,23 +827,40 @@ class TensorDict(TensorDictBase):
             _expand, batch_size=shape, call_on_nested=True, names=names
         )
 
-    def unbind(self, dim: int) -> tuple[T, ...]:
-        if dim < 0:
-            dim = self.batch_dims + dim
+    def _unbind(self, dim: int):
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
         names = None
         if self._has_names():
             names = copy(self.names)
             names = [name for i, name in enumerate(names) if i != dim]
-        out = []
-        # unbind_self_dict = {key: tensor.unbind(dim) for key, tensor in self.items()}
-        prefix = (slice(None),) * dim
+        device = self.device
 
-        for _idx in range(self.batch_size[dim]):
-            _idx = prefix + (_idx,)
-            td = self._index_tensordict(_idx, new_batch_size=batch_size, names=names)
-            out.append(td)
-        return tuple(out)
+        is_shared = self._is_shared
+        is_memmap = self._is_memmap
+
+        def empty():
+            result = TensorDict(
+                {}, batch_size=batch_size, names=names, _run_checks=False, device=device
+            )
+            result._is_shared = is_shared
+            result._is_memmap = is_memmap
+            return result
+
+        tds = tuple(empty() for _ in range(self.batch_size[dim]))
+
+        def unbind(key, val, tds=tds):
+            unbound = (
+                val.unbind(dim)
+                if not isinstance(val, TensorDictBase)
+                # tensorclass is also unbound using plain unbind
+                else val._unbind(dim)
+            )
+            for td, _val in zip(tds, unbound):
+                td._set_str(key, _val, validated=True, inplace=False)
+
+        for key, val in self.items():
+            unbind(key, val)
+        return tds
 
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
         # we must use slices to keep the storage of the tensors
@@ -2745,7 +2762,7 @@ class _SubTensorDict(TensorDictBase):
     reshape = TensorDict.reshape
     split = TensorDict.split
     to_module = TensorDict.to_module
-    unbind = TensorDict.unbind
+    _unbind = TensorDict._unbind
 
     def _view(self, *args, **kwargs):
         raise RuntimeError(
