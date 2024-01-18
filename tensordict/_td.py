@@ -835,10 +835,15 @@ class TensorDict(TensorDictBase):
             names = [name for i, name in enumerate(names) if i != dim]
         device = self.device
 
+        is_shared = self._is_shared
+        is_memmap = self._is_memmap
+
         def empty():
             result = TensorDict(
                 {}, batch_size=batch_size, names=names, _run_checks=False, device=device
             )
+            result._is_shared = is_shared
+            result._is_memmap = is_memmap
             return result
 
         tds = tuple(empty() for _ in range(self.batch_size[dim]))
