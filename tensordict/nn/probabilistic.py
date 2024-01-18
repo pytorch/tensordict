@@ -204,7 +204,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         ...     TensorDictModule,
         ... )
         >>> from tensordict.nn.distributions import NormalParamExtractor
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict(
         ...     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3]
@@ -225,8 +224,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         >>> td_module = ProbabilisticTensorDictSequential(
         ...     module, normal_params, prob_module
         ... )
-        >>> params = make_functional(td_module, funs_to_decorate=["forward", "get_dist", "log_prob"])
-        >>> _ = td_module(td, params=params)
+        >>> params = TensorDict.from_module(td_module)
+        >>> with params.to_module(td_module):
+        ...     _ = td_module(td)
         >>> print(td)
         TensorDict(
             fields={
@@ -240,13 +240,17 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
-        >>> dist = td_module.get_dist(td, params=params)
+        >>> with params.to_module(td_module):
+        ...     dist = td_module.get_dist(td)
         >>> print(dist)
         Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4]))
         >>> # we can also apply the module to the TensorDict with vmap
         >>> from torch import vmap
         >>> params = params.expand(4)
-        >>> td_vmap = vmap(td_module, (None, 0))(td, params)
+        >>> def func(td, params):
+        ...     with params.to_module(td_module):
+        ...         return td_module(td)
+        >>> td_vmap = vmap(func, (None, 0))(td, params)
         >>> print(td_vmap)
         TensorDict(
             fields={

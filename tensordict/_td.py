@@ -188,6 +188,7 @@ class TensorDict(TensorDictBase):
     _is_shared = False
     _is_memmap = False
 
+    @torch.compiler.disable
     def __init__(
         self,
         source: T | dict[str, CompatibleType],
@@ -298,6 +299,7 @@ class TensorDict(TensorDictBase):
         return True
 
     @as_decorator()
+    @torch.compiler.disable
     def to_module(
         self,
         module,

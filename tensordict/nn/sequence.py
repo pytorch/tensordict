@@ -38,10 +38,6 @@ __all__ = ["TensorDictSequential"]
 class TensorDictSequential(TensorDictModule):
     """A sequence of TensorDictModules.
 
-    By default, :class:`TensorDictSequential` subclasses are always functional,
-    meaning that they support the ``td_module(input, params=params)`` function
-    call signature.
-
     Similarly to :obj:`nn.Sequence` which passes a tensor through a chain of mappings that read and write a single tensor
     each, this module will read and write over a tensordict by querying each of the input modules.
     When calling a :obj:`TensorDictSequencial` instance with a functional module, it is expected that the parameter lists (and
@@ -92,7 +88,6 @@ class TensorDictSequential(TensorDictModule):
         ...     TensorDictSequential,
         ... )
         >>> from tensordict.nn.distributions import NormalParamExtractor
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
         >>> net1 = torch.nn.Linear(4, 8)
@@ -115,8 +110,9 @@ class TensorDictSequential(TensorDictModule):
         ...    module=module2, in_keys=["hidden"], out_keys=["output"]
         ... )
         >>> td_module = TensorDictSequential(td_module1, td_module2)
-        >>> params = make_functional(td_module)
-        >>> _ = td_module(td, params=params)
+        >>> params = TensorDict.from_module(td_module)
+        >>> with params.to_module(td_module):
+        ...     _ = td_module(td)
         >>> print(td)
         TensorDict(
             fields={
@@ -134,7 +130,10 @@ class TensorDictSequential(TensorDictModule):
     In the vmap case:
         >>> from torch import vmap
         >>> params = params.expand(4)
-        >>> td_vmap = vmap(td_module, (None, 0))(td, params)
+        >>> def func(td, params):
+        ...     with params.to_module(td_module):
+        ...         return td_module(td)
+        >>> td_vmap = vmap(func, (None, 0))(td, params)
         >>> print(td_vmap)
         TensorDict(
             fields={

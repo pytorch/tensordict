@@ -200,6 +200,7 @@ class TensorDictBase(MutableMapping):
             "`key in tensordict.keys()` instead."
         )
 
+    @torch.compiler.disable
     def __getitem__(self, index: IndexType) -> T:
         """Indexes all tensors according to the provided index.
 
@@ -1789,6 +1790,7 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    @torch.compiler.disable
     def set(
         self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
     ) -> T:
@@ -2056,6 +2058,7 @@ class TensorDictBase(MutableMapping):
                 _KEY_ERROR.format(key, self.__class__.__name__, sorted(self.keys()))
             )
 
+    @torch.compiler.disable
     def get(
         self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
@@ -2441,6 +2444,7 @@ class TensorDictBase(MutableMapping):
         """See :obj:`TensorDictBase.update_at_`."""
         return self.update_at_(tensordict, idx)
 
+    @torch.compiler.disable
     def is_empty(self) -> bool:
         """Checks if the tensordict contains any leaf."""
         for _ in self.keys(True, True):

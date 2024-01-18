@@ -6,14 +6,17 @@
 from __future__ import annotations
 
 import inspect
+import os
 import re
 import types
 import warnings
 from copy import deepcopy
+from distutils.util import strtobool
 from functools import wraps
 from typing import Any, Callable, Iterable
 
 import torch
+from tensordict._contextlib import _DecoratorContextManager
 from tensordict._pytree import PYTREE_REGISTERED_TDS
 
 from tensordict._td import TensorDict
@@ -28,6 +31,40 @@ try:
 except ImportError:
     # old torch version, passing
     pass
+
+
+AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
+
+
+def _auto_make_functional():
+    global AUTO_MAKE_FUNCTIONAL
+    return AUTO_MAKE_FUNCTIONAL
+
+
+class _set_auto_make_functional(_DecoratorContextManager):
+    def __init__(self, mode):
+        self.mode = mode
+
+    def __call__(self, func):
+        @wraps(func)
+        def new_func(*args, **kwargs):
+            with self:
+                return func(*args, **kwargs)
+
+        return new_func
+
+    def clone(self):
+        return self.__class__(self.mode)
+
+    def __enter__(self):
+        global AUTO_MAKE_FUNCTIONAL
+        self._saved_mode = AUTO_MAKE_FUNCTIONAL
+        AUTO_MAKE_FUNCTIONAL = self.mode
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        global AUTO_MAKE_FUNCTIONAL
+        AUTO_MAKE_FUNCTIONAL = self._saved_mode
+
 
 __base__setattr__ = nn.Module.__setattr__
 
