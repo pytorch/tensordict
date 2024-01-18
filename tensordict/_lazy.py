@@ -757,7 +757,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.stack_dim if dim > self.stack_dim else self.stack_dim - 1
             )
             for td in self.tensordicts:
-                out.append(td.unbind(new_dim))
+                out.append(td._unbind(new_dim))
 
             return tuple(self.lazy_stack(vals, new_stack_dim) for vals in zip(*out))
 
