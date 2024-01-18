@@ -18,7 +18,6 @@ from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.functional import make_tensordict
 
 from tensordict.nn.functional_modules import (
-    _auto_make_functional,
     _swap_state,
     extract_weights_and_buffers,
     is_functional,
@@ -26,7 +25,11 @@ from tensordict.nn.functional_modules import (
     repopulate_module,
 )
 
-from tensordict.nn.utils import set_skip_existing
+from tensordict.nn.utils import (
+    _auto_make_functional,
+    _dispatch_td_nn_modules,
+    set_skip_existing,
+)
 from tensordict.utils import implement_for, NestedKey
 from torch import nn, Tensor
 
@@ -239,9 +242,14 @@ class dispatch:
                     "named 'tensordict'."
                 )
             break
+        if not _dispatch_td_nn_modules():
+            return func
 
         @functools.wraps(func)
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
+
+            if not _dispatch_td_nn_modules():
+                return func(*args, **kwargs)
 
             source = self.source
             if isinstance(source, str):

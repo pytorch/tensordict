@@ -32,13 +32,14 @@ from tensordict.nn.distributions import (
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
-from tensordict.nn.functional_modules import (
-    _set_auto_make_functional,
-    is_functional,
-    make_functional,
-)
+from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
-from tensordict.nn.utils import Buffer, set_skip_existing, skip_existing
+from tensordict.nn.utils import (
+    _set_auto_make_functional,
+    Buffer,
+    set_skip_existing,
+    skip_existing,
+)
 from torch import distributions as d, nn
 from torch.distributions import Normal
 from torch.utils._pytree import tree_map

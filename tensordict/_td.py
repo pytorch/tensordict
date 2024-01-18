@@ -188,7 +188,7 @@ class TensorDict(TensorDictBase):
     _is_shared = False
     _is_memmap = False
 
-    @torch.compiler.disable
+    @torch.compiler.disable()
     def __init__(
         self,
         source: T | dict[str, CompatibleType],
@@ -299,7 +299,7 @@ class TensorDict(TensorDictBase):
         return True
 
     @as_decorator()
-    @torch.compiler.disable
+    @torch.compiler.disable()
     def to_module(
         self,
         module,
@@ -429,6 +429,7 @@ class TensorDict(TensorDictBase):
                 swap.update(_swap)
         return swap
 
+    @torch.compiler.disable()
     def __ne__(self, other: object) -> T | bool:
         if _is_tensorclass(other):
             return other != self
@@ -495,6 +496,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
+    @torch.compiler.disable()
     def __eq__(self, other: object) -> T | bool:
         if is_tensorclass(other):
             return other == self
