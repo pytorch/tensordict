@@ -11,6 +11,7 @@ import json
 import numbers
 import os
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from numbers import Number
 from pathlib import Path
@@ -835,15 +836,24 @@ class TensorDict(TensorDictBase):
         if self._has_names():
             names = copy(self.names)
             names = [name for i, name in enumerate(names) if i != dim]
-        out = []
-        # unbind_self_dict = {key: tensor.unbind(dim) for key, tensor in self.items()}
-        prefix = (slice(None),) * dim
+        device = self.device
 
-        for _idx in range(self.batch_size[dim]):
-            _idx = prefix + (_idx,)
-            td = self._index_tensordict(_idx, new_batch_size=batch_size, names=names)
-            out.append(td)
-        return tuple(out)
+        def empty():
+            result = TensorDict(
+                {}, batch_size=batch_size, names=names, _run_checks=False, device=device
+            )
+            return result
+
+        tds = tuple(empty() for _ in range(self.batch_size[dim]))
+
+        def unbind(key_val, tds=tds):
+            key, val = key_val
+            for td, _val in zip(tds, val.unbind(dim)):
+                td._set_str(key, _val, validated=True, inplace=False)
+
+        with ThreadPoolExecutor(max_workers=16) as executor:
+            executor.map(unbind, self.items())
+        return tds
 
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
         # we must use slices to keep the storage of the tensors
