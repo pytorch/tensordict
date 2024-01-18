@@ -11,7 +11,6 @@ import json
 import numbers
 import os
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from numbers import Number
 from pathlib import Path
@@ -828,9 +827,7 @@ class TensorDict(TensorDictBase):
             _expand, batch_size=shape, call_on_nested=True, names=names
         )
 
-    def unbind(self, dim: int) -> tuple[T, ...]:
-        if dim < 0:
-            dim = self.batch_dims + dim
+    def _unbind(self, dim: int):
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
         names = None
         if self._has_names():
@@ -847,7 +844,12 @@ class TensorDict(TensorDictBase):
         tds = tuple(empty() for _ in range(self.batch_size[dim]))
 
         def unbind(key, val, tds=tds):
-            for td, _val in zip(tds, val.unbind(dim)):
+            unbound = (
+                val.unbind(dim)
+                if not _is_tensor_collection(type(val))
+                else val._unbind(dim)
+            )
+            for td, _val in zip(tds, unbound):
                 td._set_str(key, _val, validated=True, inplace=False)
 
         for key, val in self.items():
@@ -2754,7 +2756,7 @@ class _SubTensorDict(TensorDictBase):
     reshape = TensorDict.reshape
     split = TensorDict.split
     to_module = TensorDict.to_module
-    unbind = TensorDict.unbind
+    _unbind = TensorDict._unbind
 
     def _view(self, *args, **kwargs):
         raise RuntimeError(

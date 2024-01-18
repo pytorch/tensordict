@@ -746,13 +746,7 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim=stack_dim,
         )
 
-    def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
-        if dim < 0:
-            dim = self.batch_dims + dim
-        if dim < 0 or dim >= self.ndim:
-            raise ValueError(
-                f"Cannot unbind along dimension {dim} with batch size {self.batch_size}."
-            )
+    def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         if dim == self.stack_dim:
             return tuple(self.tensordicts)
         else:
@@ -2869,7 +2863,7 @@ class _CustomOpTensorDict(TensorDictBase):
     all = TensorDict.all
     any = TensorDict.any
     expand = TensorDict.expand
-    unbind = TensorDict.unbind
+    _unbind = TensorDict._unbind
     _get_names_idx = TensorDict._get_names_idx
 
 

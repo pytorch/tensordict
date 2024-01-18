@@ -543,7 +543,6 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
-    @abc.abstractmethod
     def unbind(self, dim: int) -> tuple[T, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
 
@@ -558,6 +557,21 @@ class TensorDictBase(MutableMapping):
             tensor([4, 5, 6, 7])
 
         """
+        batch_dims = self.batch_dims
+        if dim < -batch_dims or dim >= batch_dims:
+            raise RuntimeError(
+                f"the dimension provided ({dim}) is beyond the tensordict dimensions ({self.ndim})."
+            )
+        if dim < 0:
+            dim = batch_dims + dim
+        results = self._unbind(dim)
+        if self._is_memmap or self._is_shared:
+            for result in results:
+                result.lock_()
+        return results
+
+    @abc.abstractmethod
+    def _unbind(self, dim: int) -> tuple[T, ...]:
         ...
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
