@@ -1441,12 +1441,14 @@ def _expand_to_match_shape(
 
 def _set_max_batch_size(source: T, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
+    from tensordict import NonTensorData
+
     tensor_data = list(source.values())
 
     for val in tensor_data:
         from tensordict.base import _is_tensor_collection
 
-        if _is_tensor_collection(val.__class__):
+        if _is_tensor_collection(val.__class__) and not isinstance(val, NonTensorData):
             _set_max_batch_size(val, batch_dims=batch_dims)
     batch_size = []
     if not tensor_data:  # when source is empty

@@ -42,6 +42,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _proc_init,
     _prune_selected_keys,
+    _set_max_batch_size,
     _shape,
     _split_tensordict,
     _td_fields,
@@ -325,6 +326,31 @@ class TensorDictBase(MutableMapping):
 
         """
         ...
+
+    def auto_batch_size_(self, batch_dims: int | None = None) -> T:
+        """Sets the maximum batch-size for the tensordict, up to an optional batch_dims.
+
+        Args:
+            batch_dims (int, optional): if provided, the batch-size will be at
+                most ``batch_dims`` long.
+
+        Returns:
+            self
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict({"a": torch.randn(3, 4, 5), "b": {"c": torch.randn(3, 4, 6)}}, batch_size=[])
+            >>> td.auto_batch_size_()
+            >>> print(td.batch_size)
+            torch.Size([3, 4])
+            >>> td.auto_batch_size_(batch_dims=1)
+            >>> print(td.batch_size)
+            torch.Size([3])
+
+        """
+        _set_max_batch_size(self, batch_dims)
+        return self
 
     # Module interaction
     @classmethod

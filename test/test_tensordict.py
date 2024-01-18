@@ -1784,6 +1784,23 @@ class TestTensorDicts(TestTensorDictsBase):
         ):
             assert td
 
+    def test_auto_batch_size_(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        batch_size = td.batch_size
+        error = None
+        try:
+            td.batch_size = []
+        except Exception as err:
+            error = err
+        if error is not None:
+            with pytest.raises(type(error)):
+                td.auto_batch_size_()
+            return
+        td.auto_batch_size_()
+        assert td.batch_size[: len(batch_size)] == batch_size
+        td.auto_batch_size_(1)
+        assert len(td.batch_size) == 1
+
     def test_broadcast(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
