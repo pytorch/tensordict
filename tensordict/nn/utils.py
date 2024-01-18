@@ -307,7 +307,7 @@ class _set_auto_make_functional(_DecoratorContextManager):
         self.mode = mode
 
     def __call__(self, func):
-        @wraps(func)
+        @functools.wraps(func)
         def new_func(*args, **kwargs):
             with self:
                 return func(*args, **kwargs)
