@@ -3097,6 +3097,12 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td.get_non_tensor(("this", "will")) == "succeed"
         assert isinstance(td.get(("this", "will")), NonTensorData)
 
+        with td.unlock_():
+            td["this", "other", "tensor"] = "success"
+            assert td["this", "other", "tensor"] == "success"
+            assert isinstance(td.get(("this", "other", "tensor")), NonTensorData)
+            assert td.get_non_tensor(("this", "other", "tensor")) == "success"
+
     def test_non_tensor_data_flatten_keys(self, td_name, device):
         td = getattr(self, td_name)(device)
         with td.unlock_():
