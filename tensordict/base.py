@@ -207,6 +207,9 @@ class TensorDictBase(MutableMapping):
         The index can be a (nested) key or any valid shape index given the
         tensordict batch size.
 
+        If the index is a nested key and the result is a :class:`~tensordict.NonTensorData`
+        object, the content of the non-tensor is returned.
+
         Examples:
             >>> td = TensorDict({"root": torch.arange(2), ("nested", "entry"): torch.arange(2)}, [2])
             >>> td["root"]
@@ -232,7 +235,13 @@ class TensorDictBase(MutableMapping):
             # _unravel_key_to_tuple will return an empty tuple if the index isn't a NestedKey
             idx_unravel = _unravel_key_to_tuple(index)
             if idx_unravel:
-                return self._get_tuple(idx_unravel, NO_DEFAULT)
+                result = self._get_tuple(idx_unravel, NO_DEFAULT)
+                from .tensorclass import NonTensorData
+
+                if isinstance(result, NonTensorData):
+                    return result.data
+                return result
+
         if (istuple and not index) or (not istuple and index is Ellipsis):
             # empty tuple returns self
             return self

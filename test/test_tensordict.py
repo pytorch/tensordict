@@ -2872,7 +2872,13 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         assert tdmemmap is not td
         for key in td.keys(True):
-            assert td[key] is not tdmemmap[key]
+            v1 = td[key]
+            v2 = tdmemmap[key]
+            if isinstance(v1, str):
+                # non-tensor data storing strings share the same id in python
+                assert v1 is v2
+            else:
+                assert v1 is not v2
         assert (tdmemmap == 0).all()
         assert tdmemmap.is_memmap()
 
@@ -3096,6 +3102,12 @@ class TestTensorDicts(TestTensorDictsBase):
         # check get (for non-tensor)
         assert td.get_non_tensor(("this", "will")) == "succeed"
         assert isinstance(td.get(("this", "will")), NonTensorData)
+
+        with td.unlock_():
+            td["this", "other", "tensor"] = "success"
+            assert td["this", "other", "tensor"] == "success"
+            assert isinstance(td.get(("this", "other", "tensor")), NonTensorData)
+            assert td.get_non_tensor(("this", "other", "tensor")) == "success"
 
     def test_non_tensor_data_flatten_keys(self, td_name, device):
         td = getattr(self, td_name)(device)

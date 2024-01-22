@@ -1443,17 +1443,22 @@ def _set_max_batch_size(source: T, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
     from tensordict import NonTensorData
 
-    tensor_data = list(source.values())
+    tensor_data = [val for val in source.values() if not isinstance(val, NonTensorData)]
 
     for val in tensor_data:
         from tensordict.base import _is_tensor_collection
 
-        if _is_tensor_collection(val.__class__) and not isinstance(val, NonTensorData):
+        if _is_tensor_collection(val.__class__):
             _set_max_batch_size(val, batch_dims=batch_dims)
+
     batch_size = []
     if not tensor_data:  # when source is empty
-        source.batch_size = batch_size
-        return
+        if batch_dims:
+            source.batch_size = source.batch_size[:batch_dims]
+            return source
+        else:
+            return source
+
     curr_dim = 0
     while True:
         if tensor_data[0].dim() > curr_dim:
