@@ -2872,7 +2872,13 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         assert tdmemmap is not td
         for key in td.keys(True):
-            assert td[key] is not tdmemmap[key]
+            v1 = td[key]
+            v2 = tdmemmap[key]
+            if isinstance(v1, str):
+                # non-tensor data storing strings share the same id in python
+                assert v1 is v2
+            else:
+                assert v1 is not v2
         assert (tdmemmap == 0).all()
         assert tdmemmap.is_memmap()
 
