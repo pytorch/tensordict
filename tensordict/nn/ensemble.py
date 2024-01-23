@@ -8,7 +8,6 @@ import warnings
 import torch
 from tensordict import TensorDict
 from tensordict.nn.common import TensorDictBase, TensorDictModuleBase
-from tensordict.nn.functional_modules import make_functional
 
 from tensordict.nn.params import TensorDictParams
 
@@ -76,16 +75,20 @@ class EnsembleModule(TensorDictModuleBase):
         super().__init__()
         self.in_keys = module.in_keys
         self.out_keys = module.out_keys
-        params_td = make_functional(module).expand(num_copies).to_tensordict()
+        params_td = TensorDict.from_module(module).expand(num_copies).to_tensordict()
 
         self.module = module
         if expand_input:
-            self.vmapped_forward = torch.vmap(self.module, (None, 0))
+            self.vmapped_forward = torch.vmap(self._func_module_call, (None, 0))
         else:
-            self.vmapped_forward = torch.vmap(self.module, 0)
+            self.vmapped_forward = torch.vmap(self._func_module_call, 0)
 
         self.reset_parameters_recursive(params_td)
         self.params_td = TensorDictParams(params_td)
+
+    def _func_module_call(self, input, params):
+        with params.to_module(self.module):
+            return self.module(input)
 
     def forward(self, tensordict: TensorDict) -> TensorDict:
         return self.vmapped_forward(tensordict, self.params_td)

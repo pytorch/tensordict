@@ -7,12 +7,20 @@ from __future__ import annotations
 
 import functools
 import inspect
+import os
+from distutils.util import strtobool
 from typing import Any, Callable
 
 import torch
 from torch import nn
 
+AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "True"))
+
+
+DISPATCH_TDNN_MODULES = strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
+
 __all__ = ["mappings", "inv_softplus", "biased_softplus"]
+
 _SKIP_EXISTING = False
 
 from tensordict._contextlib import _DecoratorContextManager
@@ -287,3 +295,47 @@ def _rebuild_buffer(data, requires_grad, backward_hooks):
 
 # For backward compatibility in imports
 from tensordict.utils import Buffer  # noqa
+
+
+def _auto_make_functional():
+    global AUTO_MAKE_FUNCTIONAL
+    return AUTO_MAKE_FUNCTIONAL
+
+
+class _set_auto_make_functional(_DecoratorContextManager):
+    def __init__(self, mode):
+        self.mode = mode
+
+    def clone(self):
+        return self.__class__(self.mode)
+
+    def __enter__(self):
+        global AUTO_MAKE_FUNCTIONAL
+        self._saved_mode = AUTO_MAKE_FUNCTIONAL
+        AUTO_MAKE_FUNCTIONAL = self.mode
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        global AUTO_MAKE_FUNCTIONAL
+        AUTO_MAKE_FUNCTIONAL = self._saved_mode
+
+
+def _dispatch_td_nn_modules():
+    global DISPATCH_TDNN_MODULES
+    return DISPATCH_TDNN_MODULES
+
+
+class _set_dispatch_td_nn_modules(_DecoratorContextManager):
+    def __init__(self, mode):
+        self.mode = mode
+
+    def clone(self):
+        return self.__class__(self.mode)
+
+    def __enter__(self):
+        global DISPATCH_TDNN_MODULES
+        self._saved_mode = DISPATCH_TDNN_MODULES
+        DISPATCH_TDNN_MODULES = self.mode
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        global DISPATCH_TDNN_MODULES
+        DISPATCH_TDNN_MODULES = self._saved_mode
