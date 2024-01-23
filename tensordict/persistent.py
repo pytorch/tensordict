@@ -1079,7 +1079,7 @@ class PersistentTensorDict(TensorDictBase):
     reshape = TensorDict.reshape
     split = TensorDict.split
     to_module = TensorDict.to_module
-    unbind = TensorDict.unbind
+    _unbind = TensorDict._unbind
     _get_names_idx = TensorDict._get_names_idx
 
 

@@ -1784,6 +1784,23 @@ class TestTensorDicts(TestTensorDictsBase):
         ):
             assert td
 
+    def test_auto_batch_size_(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        batch_size = td.batch_size
+        error = None
+        try:
+            td.batch_size = []
+        except Exception as err:
+            error = err
+        if error is not None:
+            with pytest.raises(type(error)):
+                td.auto_batch_size_()
+            return
+        td.auto_batch_size_()
+        assert td.batch_size[: len(batch_size)] == batch_size
+        td.auto_batch_size_(1)
+        assert len(td.batch_size) == 1
+
     def test_broadcast(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -2855,7 +2872,13 @@ class TestTensorDicts(TestTensorDictsBase):
         )
         assert tdmemmap is not td
         for key in td.keys(True):
-            assert td[key] is not tdmemmap[key]
+            v1 = td[key]
+            v2 = tdmemmap[key]
+            if isinstance(v1, str):
+                # non-tensor data storing strings share the same id in python
+                assert v1 is v2
+            else:
+                assert v1 is not v2
         assert (tdmemmap == 0).all()
         assert tdmemmap.is_memmap()
 
@@ -3079,6 +3102,12 @@ class TestTensorDicts(TestTensorDictsBase):
         # check get (for non-tensor)
         assert td.get_non_tensor(("this", "will")) == "succeed"
         assert isinstance(td.get(("this", "will")), NonTensorData)
+
+        with td.unlock_():
+            td["this", "other", "tensor"] = "success"
+            assert td["this", "other", "tensor"] == "success"
+            assert isinstance(td.get(("this", "other", "tensor")), NonTensorData)
+            assert td.get_non_tensor(("this", "other", "tensor")) == "success"
 
     def test_non_tensor_data_flatten_keys(self, td_name, device):
         td = getattr(self, td_name)(device)

@@ -27,7 +27,7 @@ import torch
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-from tensordict.base import _register_tensor_class
+from tensordict.base import _ACCEPTED_CLASSES, _register_tensor_class
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
 from tensordict.utils import (
@@ -1305,7 +1305,17 @@ class NonTensorData:
     def _stack_non_tensor(cls, list_of_non_tensor, dim=0):
         # checks have been performed previously, so we're sure the list is non-empty
         first = list_of_non_tensor[0]
-        if all(data.data == first.data for data in list_of_non_tensor[1:]):
+
+        def _check_equal(a, b):
+            if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
+                return (a == b).all()
+            try:
+                iseq = a == b
+            except Exception:
+                iseq = False
+            return iseq
+
+        if all(_check_equal(data.data, first.data) for data in list_of_non_tensor[1:]):
             batch_size = list(first.batch_size)
             batch_size.insert(dim, len(list_of_non_tensor))
             return NonTensorData(

@@ -746,13 +746,7 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim=stack_dim,
         )
 
-    def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
-        if dim < 0:
-            dim = self.batch_dims + dim
-        if dim < 0 or dim >= self.ndim:
-            raise ValueError(
-                f"Cannot unbind along dimension {dim} with batch size {self.batch_size}."
-            )
+    def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         if dim == self.stack_dim:
             return tuple(self.tensordicts)
         else:
@@ -763,7 +757,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.stack_dim if dim > self.stack_dim else self.stack_dim - 1
             )
             for td in self.tensordicts:
-                out.append(td.unbind(new_dim))
+                out.append(td._unbind(new_dim))
 
             return tuple(self.lazy_stack(vals, new_stack_dim) for vals in zip(*out))
 
@@ -1521,7 +1515,12 @@ class LazyStackedTensorDict(TensorDictBase):
         if isinstance(index, (tuple, str)):
             index_key = _unravel_key_to_tuple(index)
             if index_key:
-                return self._get_tuple(index_key, NO_DEFAULT)
+                result = self._get_tuple(index_key, NO_DEFAULT)
+                from .tensorclass import NonTensorData
+
+                if isinstance(result, NonTensorData):
+                    return result.data
+                return result
         split_index = self._split_index(index)
         converted_idx = split_index["index_dict"]
         isinteger = split_index["isinteger"]
@@ -1533,22 +1532,22 @@ class LazyStackedTensorDict(TensorDictBase):
         if has_bool:
             mask_unbind = split_index["individual_masks"]
             cat_dim = split_index["mask_loc"] - num_single
-            out = []
+            result = []
             if mask_unbind[0].ndim == 0:
                 # we can return a stack
                 for (i, _idx), mask in zip(converted_idx.items(), mask_unbind):
                     if mask.any():
                         if mask.all() and self.tensordicts[i].ndim == 0:
-                            out.append(self.tensordicts[i])
+                            result.append(self.tensordicts[i])
                         else:
-                            out.append(self.tensordicts[i][_idx])
-                            out[-1] = out[-1].squeeze(cat_dim)
-                return LazyStackedTensorDict.lazy_stack(out, cat_dim)
+                            result.append(self.tensordicts[i][_idx])
+                            result[-1] = result[-1].squeeze(cat_dim)
+                return LazyStackedTensorDict.lazy_stack(result, cat_dim)
             else:
                 for i, _idx in converted_idx.items():
                     self_idx = (slice(None),) * split_index["mask_loc"] + (i,)
-                    out.append(self[self_idx][_idx])
-                return torch.cat(out, cat_dim)
+                    result.append(self[self_idx][_idx])
+                return torch.cat(result, cat_dim)
         elif is_nd_tensor:
             new_stack_dim = self.stack_dim - num_single + num_none
             return LazyStackedTensorDict.lazy_stack(
@@ -1562,18 +1561,18 @@ class LazyStackedTensorDict(TensorDictBase):
                 ) in (
                     converted_idx.items()
                 ):  # for convenience but there's only one element
-                    out = self.tensordicts[i]
+                    result = self.tensordicts[i]
                     if _idx is not None and _idx != ():
-                        out = out[_idx]
-                    return out
+                        result = result[_idx]
+                    return result
             else:
-                out = []
+                result = []
                 new_stack_dim = self.stack_dim - num_single + num_none - num_squash
                 for i, _idx in converted_idx.items():
-                    out.append(self.tensordicts[i][_idx])
-                out = LazyStackedTensorDict.lazy_stack(out, new_stack_dim)
-                out._td_dim_name = self._td_dim_name
-                return out
+                    result.append(self.tensordicts[i][_idx])
+                result = LazyStackedTensorDict.lazy_stack(result, new_stack_dim)
+                result._td_dim_name = self._td_dim_name
+                return result
 
     def __eq__(self, other):
         if is_tensorclass(other):
@@ -2869,7 +2868,7 @@ class _CustomOpTensorDict(TensorDictBase):
     all = TensorDict.all
     any = TensorDict.any
     expand = TensorDict.expand
-    unbind = TensorDict.unbind
+    _unbind = TensorDict._unbind
     _get_names_idx = TensorDict._get_names_idx
 
 

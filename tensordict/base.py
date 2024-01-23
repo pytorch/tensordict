@@ -42,6 +42,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _proc_init,
     _prune_selected_keys,
+    _set_max_batch_size,
     _shape,
     _split_tensordict,
     _td_fields,
@@ -207,6 +208,9 @@ class TensorDictBase(MutableMapping):
         The index can be a (nested) key or any valid shape index given the
         tensordict batch size.
 
+        If the index is a nested key and the result is a :class:`~tensordict.NonTensorData`
+        object, the content of the non-tensor is returned.
+
         Examples:
             >>> td = TensorDict({"root": torch.arange(2), ("nested", "entry"): torch.arange(2)}, [2])
             >>> td["root"]
@@ -232,7 +236,13 @@ class TensorDictBase(MutableMapping):
             # _unravel_key_to_tuple will return an empty tuple if the index isn't a NestedKey
             idx_unravel = _unravel_key_to_tuple(index)
             if idx_unravel:
-                return self._get_tuple(idx_unravel, NO_DEFAULT)
+                result = self._get_tuple(idx_unravel, NO_DEFAULT)
+                from .tensorclass import NonTensorData
+
+                if isinstance(result, NonTensorData):
+                    return result.data
+                return result
+
         if (istuple and not index) or (not istuple and index is Ellipsis):
             # empty tuple returns self
             return self
@@ -326,6 +336,31 @@ class TensorDictBase(MutableMapping):
 
         """
         ...
+
+    def auto_batch_size_(self, batch_dims: int | None = None) -> T:
+        """Sets the maximum batch-size for the tensordict, up to an optional batch_dims.
+
+        Args:
+            batch_dims (int, optional): if provided, the batch-size will be at
+                most ``batch_dims`` long.
+
+        Returns:
+            self
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td = TensorDict({"a": torch.randn(3, 4, 5), "b": {"c": torch.randn(3, 4, 6)}}, batch_size=[])
+            >>> td.auto_batch_size_()
+            >>> print(td.batch_size)
+            torch.Size([3, 4])
+            >>> td.auto_batch_size_(batch_dims=1)
+            >>> print(td.batch_size)
+            torch.Size([3])
+
+        """
+        _set_max_batch_size(self, batch_dims)
+        return self
 
     # Module interaction
     @classmethod
@@ -544,7 +579,6 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
-    @abc.abstractmethod
     def unbind(self, dim: int) -> tuple[T, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
 
@@ -559,6 +593,21 @@ class TensorDictBase(MutableMapping):
             tensor([4, 5, 6, 7])
 
         """
+        batch_dims = self.batch_dims
+        if dim < -batch_dims or dim >= batch_dims:
+            raise RuntimeError(
+                f"the dimension provided ({dim}) is beyond the tensordict dimensions ({self.ndim})."
+            )
+        if dim < 0:
+            dim = batch_dims + dim
+        results = self._unbind(dim)
+        if self._is_memmap or self._is_shared:
+            for result in results:
+                result.lock_()
+        return results
+
+    @abc.abstractmethod
+    def _unbind(self, dim: int) -> tuple[T, ...]:
         ...
 
     def chunk(self, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:

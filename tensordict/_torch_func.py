@@ -13,7 +13,7 @@ import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 
-from tensordict.base import NO_DEFAULT, TensorDictBase
+from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
@@ -95,12 +95,18 @@ def _gather(
         names = input.names if input._has_names() else None
 
         return TensorDict(
-            {key: _gather_tensor(value) for key, value in input.items()},
+            {
+                key: _gather_tensor(value)
+                for key, value in input.items(is_leaf=_is_leaf_nontensor)
+            },
             batch_size=index.shape,
             names=names,
         )
     TensorDict(
-        {key: _gather_tensor(value, out[key]) for key, value in input.items()},
+        {
+            key: _gather_tensor(value, out.get(key))
+            for key, value in input.items(is_leaf=_is_leaf_nontensor)
+        },
         batch_size=index.shape,
     )
     return out
