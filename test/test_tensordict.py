@@ -144,7 +144,9 @@ class TestGeneric:
             td.set("d", torch.randn(3, 4, 2))
 
         # test that lazy tds return an exception
-        td_stack = stack_td([TensorDict({"a": torch.randn(3)}, [3]) for _ in range(2)])
+        td_stack = LazyStackedTensorDict.lazy_stack(
+            [TensorDict({"a": torch.randn(3)}, [3]) for _ in range(2)]
+        )
         with pytest.raises(
             RuntimeError,
             match=re.escape(
@@ -166,15 +168,16 @@ class TestGeneric:
         subtd.to_tensordict().batch_size = [3, 2]
 
         td = TensorDict({"a": torch.randn(3, 4)}, [3, 4])
-        td_u = td.unsqueeze(0)
-        with pytest.raises(
-            RuntimeError,
-            match=re.escape(
-                "modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
-            ),
-        ):
-            td_u.batch_size = [1]
-        td_u.to_tensordict().batch_size = [1]
+        with set_lazy_legacy(True):
+            td_u = td.unsqueeze(0)
+            with pytest.raises(
+                RuntimeError,
+                match=re.escape(
+                    "modifying the batch size of a lazy representation of a tensordict is not permitted. Consider instantiating the tensordict first by calling `td = td.to_tensordict()` before resetting the batch size."
+                ),
+            ):
+                td_u.batch_size = [1]
+            td_u.to_tensordict().batch_size = [1]
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_cat_td(self, device):
