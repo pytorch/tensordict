@@ -6,13 +6,13 @@
 from __future__ import annotations
 
 import functools
+import logging
 from typing import Any, Callable, Sequence, TypeVar
 
 import torch
 
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
@@ -367,6 +367,21 @@ def _stack(
             )
 
     # check that all tensordict match
+    # Read lazy_legacy
+    _lazy_legacy = lazy_legacy(allow_none=True)
+    if _lazy_legacy is None:
+        logging.warning(
+            "You did not define if torch.stack was to return a dense or lazy "
+            "stack of tensordicts. Up until v0.3 included, a lazy stack was returned. "
+            "From v0.4 onward, a dense stack will be returned and to build a "
+            "lazy stack, an explicit call to LazyStackedTensorDict.lazy_stack will be required. "
+            "To silence this warning, choose one of the following options: \n"
+            "- set the LAZY_LEGACY_OP to 'True' (recommended) or 'False' depending on "
+            "the behaviour you want to use. "
+            "- set the decorator/context manager tensordict.set_lazy_legacy(True) (recommended) around "
+            "the function or code block where stack is used. "
+            "- Use LazyStackedTensorDict.lazy_stack if it is a lazy stack that you wish to use."
+        )
 
     if out is None:
         # We need to handle tensordicts with exclusive keys and tensordicts with

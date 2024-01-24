@@ -31,6 +31,7 @@ from _utils_internal import get_available_devices
 from tensordict import (
     assert_allclose_td,
     is_tensorclass,
+    lazy_legacy,
     LazyStackedTensorDict,
     MemoryMappedTensor,
     tensorclass,
@@ -828,13 +829,14 @@ class TestTensorClass:
         batch_size = [3, 4]
         data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
         data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
-        stacked_tc = data.permute(1, 0)
-        assert stacked_tc.X.shape == torch.Size([4, 3, 5])
-        assert stacked_tc.y.X.shape == torch.Size([4, 3, 5])
-        assert stacked_tc.shape == torch.Size([4, 3])
-        assert (stacked_tc.X == 1).all()
-        assert isinstance(stacked_tc._tensordict, _PermutedTensorDict)
-        assert stacked_tc.z == stacked_tc.y.z == z
+        permuted_data = data.permute(1, 0)
+        assert permuted_data.X.shape == torch.Size([4, 3, 5])
+        assert permuted_data.y.X.shape == torch.Size([4, 3, 5])
+        assert permuted_data.shape == torch.Size([4, 3])
+        assert (permuted_data.X == 1).all()
+        if lazy_legacy():
+            assert isinstance(permuted_data._tensordict, _PermutedTensorDict)
+        assert permuted_data.z == permuted_data.y.z == z
 
     def test_pickle(
         self,
@@ -1344,9 +1346,8 @@ class TestTensorClass:
         assert squeeze_tc.y.X.shape == torch.Size([4, 5])
         assert squeeze_tc.z == squeeze_tc.y.z == z
 
-    def test_stack(
-        self,
-    ):
+    @pytest.mark.parametrize("lazy", [True, False])
+    def test_stack(self, lazy):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -1360,15 +1361,19 @@ class TestTensorClass:
         data1 = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
         data2 = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
 
-        stacked_tc = torch.stack([data1, data2], 0)
+        if lazy:
+            stacked_tc = LazyStackedTensorDict.lazy_stack([data1, data2], 0)
+        else:
+            stacked_tc = torch.stack([data1, data2], 0)
         assert type(stacked_tc) is type(data1)
         assert isinstance(stacked_tc.y, type(data1.y))
         assert stacked_tc.X.shape == torch.Size([2, 3, 4, 5])
         assert stacked_tc.y.X.shape == torch.Size([2, 3, 4, 5])
         assert (stacked_tc.X == 1).all()
         assert (stacked_tc.y.X == 1).all()
-        assert isinstance(stacked_tc._tensordict, LazyStackedTensorDict)
-        assert isinstance(stacked_tc.y._tensordict, LazyStackedTensorDict)
+        if lazy_legacy() or lazy:
+            assert isinstance(stacked_tc._tensordict, LazyStackedTensorDict)
+            assert isinstance(stacked_tc.y._tensordict, LazyStackedTensorDict)
         assert stacked_tc.z == stacked_tc.y.z == z
 
         # Testing negative scenarios
@@ -1635,13 +1640,14 @@ class TestTensorClass:
         batch_size = [3, 4]
         data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
         data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
-        stacked_tc = data.view(-1)
-        assert stacked_tc.X.shape == torch.Size([12, 5])
-        assert stacked_tc.y.X.shape == torch.Size([12, 5])
-        assert stacked_tc.shape == torch.Size([12])
-        assert (stacked_tc.X == 1).all()
-        assert isinstance(stacked_tc._tensordict, _ViewedTensorDict)
-        assert stacked_tc.z == stacked_tc.y.z == z
+        viewed_td = data.view(-1)
+        assert viewed_td.X.shape == torch.Size([12, 5])
+        assert viewed_td.y.X.shape == torch.Size([12, 5])
+        assert viewed_td.shape == torch.Size([12])
+        assert (viewed_td.X == 1).all()
+        if lazy_legacy():
+            assert isinstance(viewed_td._tensordict, _ViewedTensorDict)
+        assert viewed_td.z == viewed_td.y.z == z
 
 
 class TestMemmap:

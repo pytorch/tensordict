@@ -6,7 +6,7 @@
 import warnings
 
 import torch
-from tensordict import TensorDict
+from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.nn.common import TensorDictBase, TensorDictModuleBase
 
 from tensordict.nn.params import TensorDictParams
@@ -114,7 +114,7 @@ class EnsembleModule(TensorDictModuleBase):
             for params_copy in parameters.unbind(0):
                 self.reset_parameters_recursive(params_copy)
                 params_pointers.append(params_copy)
-            return torch.stack(params_pointers, -1)
+            return LazyStackedTensorDict.lazy_stack(params_pointers, -1)
         else:
             # In case the user has added other neural networks to the EnsembleModule
             # besides those in self.module

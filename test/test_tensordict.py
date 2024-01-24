@@ -482,6 +482,10 @@ class TestGeneric:
         "td_type", ["tensordict", "view", "unsqueeze", "squeeze", "stack"]
     )
     @pytest.mark.parametrize("update", [True, False])
+    # getting values from lazy tensordicts in non-lazy contexts messes things up
+    # so we set it to True. When we'll deprecate lazy tensordicts, we will just
+    # remove this decorator
+    @set_lazy_legacy(True)
     def test_filling_empty_tensordict(self, device, td_type, update):
         if td_type == "tensordict":
             td = TensorDict({}, batch_size=[16], device=device)
@@ -2085,6 +2089,10 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_device.device == torch.device("cuda")
         assert td_back.device == torch.device("cpu")
 
+    # getting values from lazy tensordicts in non-lazy contexts messes things up
+    # so we set it to True. When we'll deprecate lazy tensordicts, we will just
+    # remove this decorator
+    @set_lazy_legacy(True)
     def test_create_nested(self, td_name, device):
         td = getattr(self, td_name)(device)
         with td.unlock_():
@@ -2652,6 +2660,10 @@ class TestTensorDicts(TestTensorDictsBase):
                 continue
             assert val.names[: td.ndim] == [str(-i) for i in range(td.ndim)]
 
+    # getting values from lazy tensordicts in non-lazy contexts messes things up
+    # so we set it to True. When we'll deprecate lazy tensordicts, we will just
+    # remove this decorator
+    @set_lazy_legacy(True)
     def test_lock_nested(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name in ("sub_td", "sub_td2") and td.is_locked:

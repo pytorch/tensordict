@@ -1691,7 +1691,8 @@ def _getitem_batch_size(batch_size, index):
 
 
 # Lazy classes control (legacy feature)
-_LAZY_OP = strtobool(os.environ.get("LAZY_LEGACY_OP", "False"))
+_DEFAULT_LAZY_OP = False
+_LAZY_OP = os.environ.get("LAZY_LEGACY_OP", None)
 
 
 class set_lazy_legacy(_DecoratorContextManager):
@@ -1728,10 +1729,14 @@ class set_lazy_legacy(_DecoratorContextManager):
         os.environ["LAZY_LEGACY_OP"] = str(_LAZY_OP)
 
 
-def lazy_legacy():
+def lazy_legacy(allow_none=False):
     """Returns `True` if lazy representations will be used for selected methods."""
     global _LAZY_OP
-    return _LAZY_OP
+    if _LAZY_OP is None and allow_none:
+        return None
+    elif _LAZY_OP is None:
+        return _DEFAULT_LAZY_OP
+    return strtobool(_LAZY_OP) if isinstance(_LAZY_OP, str) else _LAZY_OP
 
 
 def _legacy_lazy(func):
