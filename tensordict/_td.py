@@ -1034,7 +1034,14 @@ class TensorDict(TensorDictBase):
         batch_size = [batch_size[p] for p in dims_list] + list(
             batch_size[len(dims_list) :]
         )
-        result = self._fast_apply(_permute, batch_size=batch_size, call_on_nested=True)
+        if self._has_names():
+            names = self.names
+            names = [names[i] for i in dims_list]
+        else:
+            names = None
+        result = self._fast_apply(
+            _permute, batch_size=batch_size, call_on_nested=True, names=names
+        )
         self._maybe_set_shared_attributes(result)
         return result
 
@@ -1109,7 +1116,7 @@ class TensorDict(TensorDictBase):
         batch_size = torch.Size(batch_size)
 
         names = copy(self.names)
-        names.insert(dim, None)
+        names.insert(newdim, None)
 
         def _unsqueeze(tensor):
             return tensor.unsqueeze(newdim)

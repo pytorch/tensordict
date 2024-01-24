@@ -2355,8 +2355,8 @@ class LazyStackedTensorDict(TensorDictBase):
             result._td_dim_name = result._td_dim_name
         else:
             result = self
-            for dim in self.batch_size:
-                if dim == 1:
+            for dim in range(self.batch_dims - 1, -1, -1):
+                if self.batch_size[dim] == 1:
                     result = result.squeeze(dim)
         return result
 
