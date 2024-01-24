@@ -333,13 +333,13 @@ class TestGeneric:
             {"a": torch.zeros(*batch_size, 4), "b": torch.zeros(*batch_size, 2)},
             batch_size,
         )
-        td_lazy = torch.stack([td0, td1], dim=nested_stack_dim)
+        td_lazy = LazyStackedTensorDict.lazy_stack([td0, td1], dim=nested_stack_dim)
         td_container = TensorDict({"lazy": td_lazy}, td_lazy.batch_size)
         td_container_clone = td_container.clone()
         td_container_clone.apply_(lambda x: x + 1)
 
         assert td_lazy.stack_dim == nested_stack_dim
-        td_stack = torch.stack([td_container, td_container_clone], dim=stack_dim)
+        td_stack = LazyStackedTensorDict.lazy_stack([td_container, td_container_clone], dim=stack_dim)
         assert td_stack.stack_dim == stack_dim
 
         assert isinstance(td_stack, LazyStackedTensorDict)
@@ -490,7 +490,7 @@ class TestGeneric:
         elif td_type == "squeeze":
             td = TensorDict({}, batch_size=[16, 1], device=device).squeeze(-1)
         elif td_type == "stack":
-            td = torch.stack([TensorDict({}, [], device=device) for _ in range(16)], 0)
+            td = LazyStackedTensorDict.lazy_stack([TensorDict({}, [], device=device) for _ in range(16)], 0)
         else:
             raise NotImplementedError
 
@@ -1070,7 +1070,7 @@ class TestGeneric:
     ):
         a = TensorDict({"a": [1]}, [])
         b = TensorDict({"b": [1]}, [])
-        c = torch.stack([a, b])
+        c = LazyStackedTensorDict.lazy_stack([a, b])
         c = c.expand(10, 2)
         if like:
             d = c.memmap_like(prefix=tmpdir)
@@ -3069,7 +3069,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
         td1[key] = torch.randn(*td1.shape, 2)
         td2[key] = torch.randn(*td1.shape, 3)
-        td_stack = torch.stack([td1, td2], dim)
+        td_stack = LazyStackedTensorDict.lazy_stack([td1, td2], dim)
         # get will fail
         with pytest.raises(
             RuntimeError, match="Found more than one unique shape in the tensors"
@@ -4040,13 +4040,13 @@ class TestTensorDicts(TestTensorDictsBase):
                 td1.apply_(lambda x: x.zero_() + 1)
 
         td_out = td.unsqueeze(1).expand(td.shape[0], 2, *td.shape[1:]).clone()
-        td_stack = torch.stack([td0, td1], 1)
+        td_stack = LazyStackedTensorDict.lazy_stack([td0, td1], 1)
         if td_name == "td_params":
             with pytest.raises(RuntimeError, match="out.batch_size and stacked"):
-                torch.stack([td0, td1], 0, out=td_out)
+                LazyStackedTensorDict.lazy_stack([td0, td1], 0, out=td_out)
             return
         data_ptr_set_before = {val.data_ptr() for val in decompose(td_out)}
-        torch.stack([td0, td1], 1, out=td_out)
+        LazyStackedTensorDict.lazy_stack([td0, td1], 1, out=td_out)
         data_ptr_set_after = {val.data_ptr() for val in decompose(td_out)}
         assert data_ptr_set_before == data_ptr_set_after
         assert (td_stack == td_out).all()
@@ -4059,7 +4059,7 @@ class TestTensorDicts(TestTensorDictsBase):
         tds_list = [getattr(self, td_name)(device) for _ in range(3)]
         if td_name == "td_params":
             with pytest.raises(RuntimeError, match="arguments don't support automatic"):
-                torch.stack(tds_list, 0, out=td)
+                LazyStackedTensorDict.lazy_stack(tds_list, 0, out=td)
             return
         data_ptr_set_before = {val.data_ptr() for val in decompose(td)}
         stacked_td = stack_td(tds_list, 0, out=td)
@@ -4089,11 +4089,11 @@ class TestTensorDicts(TestTensorDictsBase):
         ]
         if td_name in ("sub_td", "sub_td2"):
             with pytest.raises(IndexError, match="storages of the indexed tensors"):
-                torch.stack(tds_list, 0, out=td)
+                LazyStackedTensorDict.lazy_stack(tds_list, 0, out=td)
             return
         data_ptr_set_before = {val.data_ptr() for val in decompose(td)}
 
-        stacked_td = torch.stack(tds_list, 0, out=td)
+        stacked_td = LazyStackedTensorDict.lazy_stack(tds_list, 0, out=td)
         data_ptr_set_after = {val.data_ptr() for val in decompose(td)}
         assert data_ptr_set_before == data_ptr_set_after
         assert stacked_td.batch_size == td.batch_size
@@ -4477,6 +4477,9 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td == 1).all()
 
     @pytest.mark.parametrize("clone", [True, False])
+    # This is needed because update in lazy permute/view etc does not behave correctly when
+    # legacy is False. When these classes will be deprecated, we can just remove the decorator
+    @set_lazy_legacy(True)
     def test_update(self, td_name, device, clone):
         td = getattr(self, td_name)(device)
         td.unlock_()  # make sure that the td is not locked
@@ -4527,6 +4530,9 @@ class TestTensorDicts(TestTensorDictsBase):
         td.update_at_(td0, 0)
         assert (td[0] == 0).all()
 
+    # This is needed because update in lazy permute/view etc does not behave correctly when
+    # legacy is False. When these classes will be deprecated, we can just remove the decorator
+    @set_lazy_legacy(True)
     def test_update_select(self, td_name, device):
         if td_name in ("memmap_td",):
             pytest.skip(reason="update not possible with memory-mapped td")
@@ -5147,7 +5153,7 @@ class TestTensorDictRepr:
         assert repr(stacked_td) == expected
 
     def test_repr_stacked_het(self, device, dtype):
-        stacked_td = torch.stack(
+        stacked_td = LazyStackedTensorDict.lazy_stack(
             [
                 TensorDict(
                     {
@@ -5755,9 +5761,9 @@ class TestLazyStackedTensorDict:
     def test_lazy_indexing(self, pos1, pos2, pos3):
         torch.manual_seed(0)
         td_leaf_1 = TensorDict({"a": torch.ones(2, 3)}, [])
-        inner = torch.stack([td_leaf_1] * 4, 0)
-        middle = torch.stack([inner] * 3, 0)
-        outer = torch.stack([middle] * 2, 0)
+        inner = LazyStackedTensorDict.lazy_stack([td_leaf_1] * 4, 0)
+        middle = LazyStackedTensorDict.lazy_stack([inner] * 3, 0)
+        outer = LazyStackedTensorDict.lazy_stack([middle] * 2, 0)
         outer_dense = outer.to_tensordict()
         ref_tensor = torch.zeros(2, 3, 4)
         pos1 = self._idx_list[pos1]
@@ -5775,7 +5781,7 @@ class TestLazyStackedTensorDict:
     def test_lazy_mask_indexing(self, stack_dim, mask_dim, single_mask_dim, device):
         torch.manual_seed(0)
         td = TensorDict({"a": torch.zeros(9, 10, 11)}, [9, 10, 11], device=device)
-        td = torch.stack(
+        td = LazyStackedTensorDict.lazy_stack(
             [
                 td,
                 td.apply(lambda x: x + 1),
@@ -5812,7 +5818,7 @@ class TestLazyStackedTensorDict:
     def test_lazy_mask_setitem(self, stack_dim, mask_dim, single_mask_dim, device):
         torch.manual_seed(0)
         td = TensorDict({"a": torch.zeros(9, 10, 11)}, [9, 10, 11], device=device)
-        td = torch.stack(
+        td = LazyStackedTensorDict.lazy_stack(
             [
                 td,
                 td.apply(lambda x: x + 1),
@@ -6110,21 +6116,6 @@ class TestLazyStackedTensorDict:
         td["e"] = torch.randn(2, 4)
         assert "e" in td.keys()  # now all tds have the key c
         td.get("e")
-
-    # deprecated behaviour
-    # def test_stack_memmap(self):
-    #     td = TensorDict({"a": [[1, 2]], "b": {"c": [[3, 4]]}}, [1, 2]).memmap_()
-    #     tdstack = torch.stack([td, td])
-    #     td_select = tdstack.select()
-    #     td_exclude = tdstack.exclude(*tdstack.keys(True))
-    #     td_exclude2 = tdstack.exclude(*tdstack.keys(True, True))
-    #     assert td_select.is_memmap()
-    #     assert td_select.is_locked
-    #     assert td_exclude.is_memmap()
-    #     assert td_exclude.is_locked
-    #     assert td_exclude2.is_memmap()
-    #     assert td_exclude2.is_locked
-    #     assert all(_td.is_locked for _td in td_exclude2.values(True))
 
     @pytest.mark.parametrize("unsqueeze_dim", [0, 1, -1, -2])
     def test_stack_unsqueeze(self, unsqueeze_dim):
