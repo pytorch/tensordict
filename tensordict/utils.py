@@ -1691,7 +1691,7 @@ def _getitem_batch_size(batch_size, index):
 
 
 # Lazy classes control (legacy feature)
-_LAZY_OP = strtobool(os.environ.get("LAZY_LEGACY_OP", "True"))
+_LAZY_OP = strtobool(os.environ.get("LAZY_LEGACY_OP", "False"))
 
 
 class set_lazy_legacy(_DecoratorContextManager):

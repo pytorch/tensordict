@@ -1027,16 +1027,6 @@ class TensorDict(TensorDictBase):
         if np.array_equal(dims_list, range(len(dims_list))):
             return self
 
-        # min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
-        # seen = [False for dim in range(max_dim + 1)]
-        # for idx in dims_list:
-        #     if idx < min_dim or idx > max_dim:
-        #         raise IndexError(
-        #             f"dimension out of range (expected to be in range of [{min_dim}, {max_dim}], but got {idx})"
-        #         )
-        #     if seen[idx]:
-        #         raise RuntimeError("repeated dim in permute")
-        #     seen[idx] = True
         def _permute(tensor):
             return tensor.permute(*dims_list, *range(len(dims_list), tensor.ndim))
 

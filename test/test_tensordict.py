@@ -931,6 +931,7 @@ class TestGeneric:
         assert torch.sum(t["a"]) == torch.Tensor([0])
 
     @pytest.mark.parametrize("device", get_available_devices())
+    @set_lazy_legacy(True)
     def test_permute_applied_twice(self, device):
         torch.manual_seed(1)
         d = {
@@ -3178,6 +3179,7 @@ class TestTensorDicts(TestTensorDictsBase):
         with pytest.raises(RuntimeError):
             pad(td, [0])
 
+    @set_lazy_legacy(True)
     def test_permute_applied_twice(self, td_name, device):
         torch.manual_seed(0)
         tensordict = getattr(self, td_name)(device)
@@ -3219,6 +3221,31 @@ class TestTensorDicts(TestTensorDictsBase):
                 )
                 assert torch.permute(tensordict, p).permute(inv_p) is tensordict
                 assert torch.permute(tensordict, p).permute(other_p) is not tensordict
+
+    @set_lazy_legacy(False)
+    def test_permute_decorator(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec, td.unlock_().permute(1, 0, 3, 2) as tdt:
+            if not tdt.requires_grad:
+                tdt.apply_(lambda x: x * 0 + 1)
+            else:
+                tdt.apply(lambda x: x.data.mul_(0).add_(1))
+        if is_lazy:
+            return
+        assert (td == 1).all()
 
     @pytest.mark.skipif(
         torch.cuda.device_count() == 0, reason="No cuda device detected"
@@ -3848,6 +3875,29 @@ class TestTensorDicts(TestTensorDictsBase):
                                 expected_inner_tensor_size
                             )
 
+    @set_lazy_legacy(True)
+    def test_squeeze_legacy(self, td_name, device, squeeze_dim=-1):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        with td.unlock_():  # make sure that the td is not locked
+            td_squeeze = torch.squeeze(td, dim=-1)
+            tensor_squeeze_dim = td.batch_dims + squeeze_dim
+            tensor = torch.ones_like(td.get("a").squeeze(tensor_squeeze_dim))
+            if td_name in ("sub_td", "sub_td2"):
+                td_squeeze.set_("a", tensor)
+            else:
+                td_squeeze.set("a", tensor)
+            assert td.batch_size[squeeze_dim] == 1
+            assert (td_squeeze.get("a") == tensor).all()
+            assert (td.get("a") == tensor.unsqueeze(tensor_squeeze_dim)).all()
+            if td_name != "unsqueezed_td":
+                assert _compare_tensors_identity(td_squeeze.unsqueeze(squeeze_dim), td)
+            else:
+                assert td_squeeze is td._source
+            assert (td_squeeze.get("a") == 1).all()
+            assert (td.get("a") == 1).all()
+
+    @set_lazy_legacy(False)
     def test_squeeze(self, td_name, device, squeeze_dim=-1):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -3868,6 +3918,31 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert td_squeeze is td._source
             assert (td_squeeze.get("a") == 1).all()
             assert (td.get("a") == 1).all()
+
+    @set_lazy_legacy(False)
+    def test_squeeze_decorator(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec, td.unlock_().squeeze(-1) as tdt:
+            if not tdt.requires_grad:
+                tdt.apply_(lambda x: x * 0 + 1)
+            else:
+                tdt.apply(lambda x: x.data.mul_(0).add_(1))
+        if is_lazy:
+            return
+        assert (td == 1).all()
 
     def test_squeeze_with_none(self, td_name, device, squeeze_dim=None):
         torch.manual_seed(1)
@@ -4085,6 +4160,7 @@ class TestTensorDicts(TestTensorDictsBase):
         td2 = td.to_tensordict()
         assert (td2 == td).all()
 
+    @set_lazy_legacy(True)
     def test_transpose_legacy(self, td_name, device):
         td = getattr(self, td_name)(device)
         tdt = td.transpose(0, 1)
@@ -4116,6 +4192,7 @@ class TestTensorDicts(TestTensorDictsBase):
         ):
             tdt.transpose(-5, -6)
 
+    @set_lazy_legacy(False)
     def test_transpose(self, td_name, device):
         td = getattr(self, td_name)(device)
         tdt = td.transpose(0, 1)
@@ -4130,13 +4207,40 @@ class TestTensorDicts(TestTensorDictsBase):
         with td.unlock_():
             tdt.set(("some", "transposed", "tensor"), torch.zeros(tdt.shape))
         with pytest.raises(
-            ValueError, match="The provided dimensions are incompatible"
+            ValueError,
+            match="dim0 and dim1 must be within the range of the number of dimensions",
         ):
             td.transpose(-5, -6)
         with pytest.raises(
-            ValueError, match="The provided dimensions are incompatible"
+            ValueError,
+            match="dim0 and dim1 must be within the range of the number of dimensions",
         ):
             tdt.transpose(-5, -6)
+
+    @set_lazy_legacy(False)
+    def test_transpose_decorator(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec, td.unlock_().transpose(0, 1) as tdt:
+            if not tdt.requires_grad:
+                tdt.apply_(lambda x: x * 0 + 1)
+            else:
+                tdt.apply(lambda x: x.data.mul_(0).add_(1))
+        if is_lazy:
+            return
+        assert (td == 1).all()
 
     @pytest.mark.parametrize("dim", range(4))
     def test_unbind(self, td_name, device, dim):
@@ -4218,6 +4322,26 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not td.is_memmap()
 
     @pytest.mark.parametrize("squeeze_dim", [0, 1])
+    @set_lazy_legacy(True)
+    def test_unsqueeze_legacy(self, td_name, device, squeeze_dim):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        with td.unlock_():  # make sure that the td is not locked
+            td_unsqueeze = torch.unsqueeze(td, dim=squeeze_dim)
+            tensor = torch.ones_like(td.get("a").unsqueeze(squeeze_dim))
+            if td_name in ("sub_td", "sub_td2"):
+                td_unsqueeze.set_("a", tensor)
+            else:
+                td_unsqueeze.set("a", tensor)
+        assert (td_unsqueeze.get("a") == tensor).all()
+        assert (td.get("a") == tensor.squeeze(squeeze_dim)).all()
+        # the tensors should match
+        assert _compare_tensors_identity(td_unsqueeze.squeeze(squeeze_dim), td)
+        assert (td_unsqueeze.get("a") == 1).all()
+        assert (td.get("a") == 1).all()
+
+    @pytest.mark.parametrize("squeeze_dim", [0, 1])
+    @set_lazy_legacy(False)
     def test_unsqueeze(self, td_name, device, squeeze_dim):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -4234,6 +4358,31 @@ class TestTensorDicts(TestTensorDictsBase):
         assert _compare_tensors_identity(td_unsqueeze.squeeze(squeeze_dim), td)
         assert (td_unsqueeze.get("a") == 1).all()
         assert (td.get("a") == 1).all()
+
+    @set_lazy_legacy(False)
+    def test_unsqueeze_decorator(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Make it dense")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec, td.unlock_().unsqueeze(2) as tdt:
+            if not tdt.requires_grad:
+                tdt.apply_(lambda x: x * 0 + 1)
+            else:
+                tdt.apply(lambda x: x.data.mul_(0).add_(1))
+        if is_lazy:
+            return
+        assert (td == 1).all()
 
     @pytest.mark.parametrize("clone", [True, False])
     def test_update(self, td_name, device, clone):
@@ -4358,6 +4507,33 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (sub_td == 2).all()
         assert (td[index] == 2).all()
 
+    @set_lazy_legacy(True)
+    def test_view_legacy(self, td_name, device):
+        if td_name in ("permute_td", "sub_td2"):
+            pytest.skip("view incompatible with stride / permutation")
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        with td.unlock_():  # make sure that the td is not locked
+            td_view = td.view(-1)
+            tensor = td.get("a")
+            tensor = tensor.view(-1, tensor.numel() // prod(td.batch_size))
+            tensor = torch.ones_like(tensor)
+            if td_name == "sub_td":
+                td_view.set_("a", tensor)
+            else:
+                td_view.set("a", tensor)
+            assert (td_view.get("a") == tensor).all()
+            assert (td.get("a") == tensor.view(td.get("a").shape)).all()
+            if td_name in ("td_params",):
+                assert td_view.view(td.shape)._param_td is td._param_td
+                assert td_view.view(*td.shape)._param_td is td._param_td
+            else:
+                assert td_view.view(td.shape) is td
+                assert td_view.view(*td.shape) is td
+            assert (td_view.get("a") == 1).all()
+            assert (td.get("a") == 1).all()
+
+    @set_lazy_legacy(False)
     def test_view(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
             pytest.skip("view incompatible with stride / permutation")
@@ -4382,6 +4558,33 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert td_view.view(*td.shape) is td
             assert (td_view.get("a") == 1).all()
             assert (td.get("a") == 1).all()
+
+    @set_lazy_legacy(False)
+    def test_view_decorator(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+            "stacked_td",
+            "nested_stacked_td",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Cannot call `view`")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec, td.unlock_().view(-1) as tdt:
+            if not tdt.requires_grad:
+                tdt.apply_(lambda x: x * 0 + 1)
+            else:
+                tdt.apply(lambda x: x.data.mul_(0).add_(1))
+        if is_lazy or "stack" in td_name:
+            return
+        assert (td == 1).all()
 
     def test_where(self, td_name, device):
         torch.manual_seed(1)

@@ -38,6 +38,7 @@ import numpy as np
 import torch
 from tensordict.utils import (
     _GENERIC_NESTED_ERR,
+    _get_shape_from_args,
     _is_tensorclass,
     _KEY_ERROR,
     _proc_init,
@@ -645,6 +646,7 @@ class TensorDictBase(MutableMapping):
     def unsqueeze(self, dim: int) -> T:
         ...
 
+    @as_decorator()
     def unsqueeze(self, *args, **kwargs):
         """Unsqueezes all tensors for a dimension comprised in between `-td.batch_dims` and `td.batch_dims` and returns them in a new tensordict.
 
@@ -660,6 +662,19 @@ class TensorDictBase(MutableMapping):
             torch.Size([3, 1, 4])
             >>> td.get("x").shape
             torch.Size([3, 1, 4, 2])
+
+        This operation can be used as a context manager too. Changes to the original
+        tensordict will occur out-place, i.e. the content of the original tensors
+        will not be altered. This also assumes that the tensordict is not locked
+        (otherwise, unlocking the tensordict is necessary).
+
+            >>> td = TensorDict({
+            ...     'x': torch.arange(24).reshape(3, 4, 2),
+            ... }, batch_size=[3, 4])
+            >>> with td.unsqueeze(-2) as tds:
+            ...     tds.set("y", torch.zeros(3, 1, 4))
+            >>> assert td.get("y").shape == [3, 4]
+
         """
         if lazy_legacy():
             return self._legacy_unsqueeze(*args, **kwargs)
@@ -697,6 +712,7 @@ class TensorDictBase(MutableMapping):
     def squeeze(self, dim: int | None = None) -> T:
         ...
 
+    @as_decorator()
     def squeeze(self, *args, **kwargs):
         """Squeezes all tensors for a dimension in between `-self.batch_dims+1` and `self.batch_dims-1` and returns them in a new tensordict.
 
@@ -709,11 +725,24 @@ class TensorDictBase(MutableMapping):
             >>> td = TensorDict({
             ...     'x': torch.arange(24).reshape(3, 1, 4, 2),
             ... }, batch_size=[3, 1, 4])
-            >>> td = td.unsqueeze()
+            >>> td = td.squeeze()
             >>> td.shape
             torch.Size([3, 4])
             >>> td.get("x").shape
             torch.Size([3, 4, 2])
+
+        This operation can be used as a context manager too. Changes to the original
+        tensordict will occur out-place, i.e. the content of the original tensors
+        will not be altered. This also assumes that the tensordict is not locked
+        (otherwise, unlocking the tensordict is necessary). This functionality is
+        *not* compatible with implicit squeezing.
+
+            >>> td = TensorDict({
+            ...     'x': torch.arange(24).reshape(3, 1, 4, 2),
+            ... }, batch_size=[3, 1, 4])
+            >>> with td.squeeze(1) as tds:
+            ...     tds.set("y", torch.zeros(3, 4))
+            >>> assert td.get("y").shape == [3, 1, 4]
 
         """
         if lazy_legacy():
@@ -882,6 +911,7 @@ class TensorDictBase(MutableMapping):
     ) -> T:
         ...
 
+    @as_decorator()
     def view(
         self,
         *shape: int,
@@ -939,6 +969,7 @@ class TensorDictBase(MutableMapping):
             inv_op_kwargs={"size": self.batch_size},
         )
 
+    @as_decorator()
     def transpose(self, dim0, dim1):
         """Returns a tensordict that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
 
@@ -1008,6 +1039,7 @@ class TensorDictBase(MutableMapping):
     def permute(self, dims: list | tuple):
         ...
 
+    @as_decorator()
     def permute(self, *args, **kwargs):
         """Returns a view of a tensordict with the batch dimensions permuted according to dims.
 
@@ -3948,7 +3980,38 @@ class TensorDictBase(MutableMapping):
                 return self.unlock_()
             elif last_op == self.__class__.unlock_.__name__:
                 return self.lock_()
-            if last_op == self.__class__.to_module.__name__:
+            elif last_op == self.__class__.transpose.__name__:
+                dim0, dim1 = args
+                return out.update(self.transpose(dim0, dim1))
+            elif last_op == self.__class__.permute.__name__:
+                dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
+                dims_list = [dim if dim >= 0 else self.ndim + dim for dim in dims_list]
+                # inverse map
+                inv_dims_list = np.argsort(dims_list)
+                return out.update(self.permute(inv_dims_list))
+            elif last_op == self.__class__.view.__name__:
+                return out.update(self.view(out.shape))
+            elif last_op == self.__class__.unsqueeze.__name__:
+                if args:
+                    (dim,) = args
+                elif kwargs:
+                    dim = kwargs["dim"]
+                else:
+                    raise RuntimeError(
+                        "Cannot use td.unsqueeze() as a decorator if the dimension is implicit."
+                    )
+                return out.update(self.squeeze(dim))
+            elif last_op == self.__class__.squeeze.__name__:
+                if args:
+                    (dim,) = args
+                elif kwargs:
+                    dim = kwargs["dim"]
+                else:
+                    raise RuntimeError(
+                        "Cannot use td.squeeze() as a decorator if the dimension is implicit."
+                    )
+                return out.update(self.unsqueeze(dim))
+            elif last_op == self.__class__.to_module.__name__:
                 if is_tensor_collection(out):
                     return self.to_module(*args, **kwargs, swap_dest=out)
                 else:
