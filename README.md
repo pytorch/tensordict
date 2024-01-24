@@ -30,7 +30,8 @@
 
 [**Installation**](#installation) | [**General features**](#general) |
 [**Tensor-like features**](#tensor-like-features) |  [**Distributed capabilities**](#distributed-capabilities) |
-[**TensorDict for functional programming using FuncTorch**](#tensordict-for-functional-programming-using-functorch) |
+[**TensorDict for functional programming**](#tensordict-for-functional-programming) |
+[**TensorDict for parameter serialization](#tensordict-for-parameter-serialization) |
 [**Lazy preallocation**](#lazy-preallocation) | [**Nesting TensorDicts**](#nesting-tensordicts) | [**TensorClass**](#tensorclass)
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors,
@@ -75,6 +76,25 @@ live on a dedicated device, which will send each tensor that is written there:
 ... }, batch_size=[3, 4], device="cuda:0")
 >>> tensordict["key 3"] = torch.randn(3, 4, device="cpu")
 >>> assert tensordict["key 3"].device is torch.device("cuda:0")
+```
+
+But that is not all, you can also store nested values in a tensordict:
+```python
+>>> tensordict["nested", "key"] = torch.zeros(3, 4) # the batch-size must match
+```
+and any nested tuple structure will be unravelled to make it easy to code reading and
+writing ops programmatically:
+```python
+>>> tensordict["nested", ("supernested", ("key",))] = torch.zeros(3, 4) # the batch-size must match
+>>> assert (tensordict["nested", "supernested", "key"] == 0).all()
+```
+
+You can also store non-tensor data in tensordicts:
+
+```python
+>>> data = TensorDict({"a-tensor": torch.randn(1, 2)}, batch_size=[1, 2])
+>>> data["non-tensor"] = "a string!"
+>>> assert data["non-tensor"] == "a string!"
 ```
 
 ### Tensor-like features
@@ -126,6 +146,13 @@ If a functionality is missing, it is easy to call it using `apply()` or `apply_(
 ```python
 tensordict_uniform = tensordict.apply(lambda tensor: tensor.uniform_())
 ```
+
+``apply()`` can also be great to filter a tensordict, for instance:
+```python
+data = TensorDict({"a": 1.0, "b": 1}, [])
+data_float = data.apply(lambda x: x if x.dtype == torch.float else None) # contains only the "a" key
+```
+
 ### Distributed capabilities
 
 Complex data structures can be cumbersome to synchronize in distributed settings.
@@ -146,39 +173,61 @@ When nodes share a common scratch space, the
 can be used
 to seamlessly send, receive and read a huge amount of data.
 
-### TensorDict for functional programming using FuncTorch
+### TensorDict for functional programming
 
 We also provide an API to use TensorDict in conjunction with [FuncTorch](https://pytorch.org/functorch).
 For instance, TensorDict makes it easy to concatenate model weights to do model ensembling:
 ```python
 >>> from torch import nn
 >>> from tensordict import TensorDict
->>> from tensordict.nn import make_functional
 >>> import torch
 >>> from torch import vmap
 >>> layer1 = nn.Linear(3, 4)
 >>> layer2 = nn.Linear(4, 4)
 >>> model = nn.Sequential(layer1, layer2)
+>>> params = TensorDict.from_module(model)
 >>> # we represent the weights hierarchically
 >>> weights1 = TensorDict(layer1.state_dict(), []).unflatten_keys(".")
 >>> weights2 = TensorDict(layer2.state_dict(), []).unflatten_keys(".")
->>> params = make_functional(model)
 >>> assert (params == TensorDict({"0": weights1, "1": weights2}, [])).all()
 >>> # Let's use our functional module
 >>> x = torch.randn(10, 3)
->>> out = model(x, params=params)  # params is the last arg (or kwarg)
+>>> with params.to_module(model):
+...     out = model(x)
 >>> # an ensemble of models: we stack params along the first dimension...
 >>> params_stack = torch.stack([params, params], 0)
 >>> # ... and use it as an input we'd like to pass through the model
->>> y = vmap(model, (None, 0))(x, params_stack)
+>>> def func(x, params):
+...     with params.to_module(model):
+...         return model(x)
+>>> y = vmap(func, (None, 0))(x, params_stack)
 >>> print(y.shape)
 torch.Size([2, 10, 4])
 ```
 
-Moreover, tensordict modules are compatible with `torch.fx` and `torch.compile`,
+Moreover, tensordict modules are compatible with `torch.fx` and (soon) `torch.compile`,
 which means that you can get the best of both worlds: a codebase that is
 both readable and future-proof as well as efficient and portable!
 
+### TensorDict for parameter serialization
+
+TensorDict offers an API for parameter serialization that can be >3x faster than
+regular calls to `torch.save(state_dict)`. Moreover, because tensors will be saved
+independently on disk, you can deserialized your checkpoint on an arbitrary slice
+of the model.
+
+```python
+>>> model = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 3))
+>>> params = TensorDict.from_module(model)
+>>> params.memmap("/path/to/saved/folder/", num_threads=16)  # adjust num_threads for speed
+>>> # load params
+>>> params = TensorDict.load_memmap("/path/to/saved/folder/", num_threads=16)
+>>> params.to_module(model)  # load onto model
+>>> params["0"].to_module(model[0])  # load on a slice of the model
+>>> # in the latter case we could also have loaded only the slice we needed
+>>> params0 = TensorDict.load_memmap("/path/to/saved/folder/0", num_threads=16)
+>>> params0.to_module(model[0])  # load on a slice of the model
+```
 
 ### Lazy preallocation
 
