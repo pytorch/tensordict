@@ -3667,6 +3667,7 @@ class TensorDictBase(MutableMapping):
         pool: mp.Pool | None = None,
         generator: torch.Generator | None = None,
         max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
     ):
         """Maps a function to splits of the tensordict across one dimension.
 
@@ -3731,6 +3732,8 @@ class TensorDictBase(MutableMapping):
             max_tasks_per_child (int, optional): the maximum number of jobs picked
                 by every child process. Defaults to ``None``, i.e., no restriction
                 on the number of jobs.
+            worker_threads (int, optional): the number of threads for the workers.
+                Defaults to ``1``.
 
         Examples:
             >>> import torch
@@ -3771,7 +3774,7 @@ class TensorDictBase(MutableMapping):
             with mp.Pool(
                 processes=num_workers,
                 initializer=_proc_init,
-                initargs=(seed, queue),
+                initargs=(seed, queue, worker_threads),
                 maxtasksperchild=max_tasks_per_child,
             ) as pool:
                 return self.map(

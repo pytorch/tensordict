@@ -1744,12 +1744,13 @@ def _legacy_lazy(func):
 
 
 # Process initializer for map
-def _proc_init(base_seed, queue):
+def _proc_init(base_seed, queue, num_threads):
     worker_id = queue.get(timeout=10)
     seed = base_seed + worker_id
     torch.manual_seed(seed)
     np_seed = _generate_state(base_seed, worker_id)
     np.random.seed(np_seed)
+    torch.set_num_threads(num_threads)
 
 
 def _prune_selected_keys(keys_to_update, prefix):
