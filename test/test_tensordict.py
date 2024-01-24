@@ -4535,12 +4535,28 @@ class TestTensorDicts(TestTensorDictsBase):
 
     @set_lazy_legacy(False)
     def test_view(self, td_name, device):
-        if td_name in ("permute_td", "sub_td2"):
-            pytest.skip("view incompatible with stride / permutation")
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+            "stacked_td",
+            "nested_stacked_td",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Cannot call `view`")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         with td.unlock_():  # make sure that the td is not locked
-            td_view = td.view(-1)
+            with error_dec:
+                td_view = td.view(-1)
+            if is_lazy:
+                return
             tensor = td.get("a")
             tensor = tensor.view(-1, tensor.numel() // prod(td.batch_size))
             tensor = torch.ones_like(tensor)
@@ -4549,15 +4565,8 @@ class TestTensorDicts(TestTensorDictsBase):
             else:
                 td_view.set("a", tensor)
             assert (td_view.get("a") == tensor).all()
-            assert (td.get("a") == tensor.view(td.get("a").shape)).all()
-            if td_name in ("td_params",):
-                assert td_view.view(td.shape)._param_td is td._param_td
-                assert td_view.view(*td.shape)._param_td is td._param_td
-            else:
-                assert td_view.view(td.shape) is td
-                assert td_view.view(*td.shape) is td
+
             assert (td_view.get("a") == 1).all()
-            assert (td.get("a") == 1).all()
 
     @set_lazy_legacy(False)
     def test_view_decorator(self, td_name, device):
@@ -5108,7 +5117,7 @@ class TestTensorDictsRequiresGrad:
         return self.td(device)[0]
 
     def stacked_td(self, device):
-        return stack_td([self.td(device) for _ in range(2)], 0)
+        return LazyStackedTensorDict.lazy_stack([self.td(device) for _ in range(2)], 0)
 
     def sub_td(self, device):
         return self.td(device)._get_sub_tensordict(0)
@@ -5131,11 +5140,30 @@ class TestTensorDictsRequiresGrad:
         td = getattr(self, td_name)(device)
         assert torch.squeeze(td, dim=-1).get("b").requires_grad
 
+    @set_lazy_legacy(False)
     def test_view(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td_view = td.view(-1)
-        assert td_view.get("b").requires_grad
+
+        is_lazy = td_name in (
+            "sub_td",
+            "sub_td2",
+            "permute_td",
+            "unsqueezed_td",
+            "squeezed_td",
+            "td_h5",
+            "stacked_td",
+            "nested_stacked_td",
+        )
+        error_dec = (
+            pytest.raises(RuntimeError, match="Cannot call `view`")
+            if is_lazy
+            else contextlib.nullcontext()
+        )
+        with error_dec:
+            td_view = td.view(-1)
+        if not is_lazy:
+            assert td_view.get("b").requires_grad
 
     def td(self, device):
         return TensorDict(
@@ -5153,6 +5181,7 @@ class TestTensorDictsRequiresGrad:
         td.batch_size = torch.Size([3, 1])
         return td
 
+    @set_lazy_legacy(True)
     def unsqueezed_td(self, device):
         return self.td(device).unsqueeze(0)
 
