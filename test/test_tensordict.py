@@ -274,7 +274,7 @@ class TestGeneric:
 
         td1 = TensorDict({}, [5], device="cuda:0")
         td2 = TensorDict({}, [5], device="cuda:0")
-        stackedtd = stack_td([td1, td2], 0)
+        stackedtd = LazyStackedTensorDict.lazy_stack([td1, td2], 0)
         stackedtd.set("a", torch.randn(2, 5, 1))
         assert stackedtd.get("a").device == device
         assert td1.get("a").device == device
