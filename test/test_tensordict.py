@@ -339,7 +339,9 @@ class TestGeneric:
         td_container_clone.apply_(lambda x: x + 1)
 
         assert td_lazy.stack_dim == nested_stack_dim
-        td_stack = LazyStackedTensorDict.lazy_stack([td_container, td_container_clone], dim=stack_dim)
+        td_stack = LazyStackedTensorDict.lazy_stack(
+            [td_container, td_container_clone], dim=stack_dim
+        )
         assert td_stack.stack_dim == stack_dim
 
         assert isinstance(td_stack, LazyStackedTensorDict)
@@ -490,7 +492,9 @@ class TestGeneric:
         elif td_type == "squeeze":
             td = TensorDict({}, batch_size=[16, 1], device=device).squeeze(-1)
         elif td_type == "stack":
-            td = LazyStackedTensorDict.lazy_stack([TensorDict({}, [], device=device) for _ in range(16)], 0)
+            td = LazyStackedTensorDict.lazy_stack(
+                [TensorDict({}, [], device=device) for _ in range(16)], 0
+            )
         else:
             raise NotImplementedError
 
@@ -4057,14 +4061,18 @@ class TestTensorDicts(TestTensorDictsBase):
             else:
                 td1.apply_(lambda x: x.zero_() + 1)
 
-        is_lazy = td_name in (
-            "sub_td",
-            "sub_td2",
-            "permute_td",
-            "unsqueezed_td",
-            "squeezed_td",
-            "td_h5",
-        ) and not lazy_legacy()
+        is_lazy = (
+            td_name
+            in (
+                "sub_td",
+                "sub_td2",
+                "permute_td",
+                "unsqueezed_td",
+                "squeezed_td",
+                "td_h5",
+            )
+            and not lazy_legacy()
+        )
         error_dec = (
             pytest.raises(RuntimeError, match="Make it dense")
             if is_lazy
@@ -5706,7 +5714,10 @@ class TestLazyStackedTensorDict:
         td = TensorDict(
             {"a": torch.rand(3, 4, 5), ("b", "c"): torch.rand(3, 4, 5)}, [3, 4, 5]
         )
-        td = TensorDict({"parent": LazyStackedTensorDict.lazy_stack([td, td.clone()], 0)}, [2, 3, 4, 5])
+        td = TensorDict(
+            {"parent": LazyStackedTensorDict.lazy_stack([td, td.clone()], 0)},
+            [2, 3, 4, 5],
+        )
         from tensordict.nn import TensorDictModule  # noqa
         from torch import vmap
 
@@ -6065,7 +6076,9 @@ class TestLazyStackedTensorDict:
             },
             [3],
         )
-        td = TensorDict({"parent": LazyStackedTensorDict.lazy_stack([td0, td1], 0)}, [2])
+        td = TensorDict(
+            {"parent": LazyStackedTensorDict.lazy_stack([td0, td1], 0)}, [2]
+        )
         td2 = td.clone()
         tdapply = td.apply(lambda x, y: x + y, td2)
         assert isinstance(tdapply["parent", "a", "b"], LazyStackedTensorDict)
@@ -6190,7 +6203,9 @@ class TestLazyStackedTensorDict:
             device=device,
         )
 
-        tds = LazyStackedTensorDict.lazy_stack(list(tensordict.unbind(stack_dim)), stack_dim)
+        tds = LazyStackedTensorDict.lazy_stack(
+            list(tensordict.unbind(stack_dim)), stack_dim
+        )
 
         for item, expected_shape in (
             ((2, 2), torch.Size([5])),
@@ -6315,7 +6330,9 @@ class TestLazyStackedTensorDict:
             },
             [3],
         )
-        td = TensorDict({"parent": LazyStackedTensorDict.lazy_stack([td0, td1], 0)}, [2])
+        td = TensorDict(
+            {"parent": LazyStackedTensorDict.lazy_stack([td0, td1], 0)}, [2]
+        )
 
         td_void = TensorDict(
             {
@@ -7469,7 +7486,9 @@ class TestNonTensorData:
 
     def test_stack(self, non_tensor_data):
         assert (
-            LazyStackedTensorDict.lazy_stack([non_tensor_data, non_tensor_data], 0).get(("nested", "int"))
+            LazyStackedTensorDict.lazy_stack([non_tensor_data, non_tensor_data], 0).get(
+                ("nested", "int")
+            )
             == NonTensorData(3, batch_size=[2])
         ).all()
         assert (
