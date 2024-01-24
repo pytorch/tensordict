@@ -1971,7 +1971,8 @@ class TensorDict(TensorDictBase):
                 if keys_to_exclude is None:
                     # delay creation of defaultdict
                     keys_to_exclude = defaultdict(list)
-                keys_to_exclude[key[0]].append(key[1:])
+                if key[0] in self._tensordict:
+                    keys_to_exclude[key[0]].append(key[1:])
         if keys_to_exclude is not None:
             for key, cur_keys in keys_to_exclude.items():
                 val = _tensordict.get(key, None)
@@ -1979,8 +1980,8 @@ class TensorDict(TensorDictBase):
                     val = val._exclude(
                         *cur_keys, inplace=inplace, set_shared=set_shared
                     )
-                if not inplace:
-                    _tensordict[key] = val
+                    if not inplace:
+                        _tensordict[key] = val
         if inplace:
             return self
         result = TensorDict(
