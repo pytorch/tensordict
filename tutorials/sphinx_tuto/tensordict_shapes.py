@@ -118,16 +118,36 @@ torch.testing.assert_close(slices[0]["a"], tensordict["a"][:, 0])
 #
 # Stacking ``TensorDict``
 # ^^^^^^^^^^^^^^^^^^^^^^^
-# By default, stacking is done in a lazy fashion, returning a
-# :class:`LazyStackedTensorDict` object. In this case values are only stacked on-demand
-# when they are accessed. This in cases where you have a large :class:`~.TensorDict` with
-# many entries, and you don't need to stack all of them.
+# Stacking can done lazily or contiguously. A lazy stack is just a list of tensordicts
+# presented as a stack of tensordicts. It allows users to carry a bag of tensordicts
+# with different content shape, device or key sets. Another advantage is that
+# the stack operation can be expensive, and if only a small subset of keys is required,
+# a lazy stack will be much faster than a proper stack.
+# It relies on the :class:`~tensordict.LazyStackedTensorDict` class.
+# In this case, values will only be stacked on-demand when they are accessed.
+
+from tensordict import LazyStackedTensorDict
 
 cloned_tensordict = tensordict.clone()
-# no stacking happens on the next line
-stacked_tensordict = torch.stack([tensordict, cloned_tensordict], dim=0)
+stacked_tensordict = LazyStackedTensorDict.lazy_stack(
+    [tensordict, cloned_tensordict], dim=0
+)
 print(stacked_tensordict)
 
+# Previously, torch.stack was always returning a lazy stack. For consistency with
+# the regular PyTorch API, this behaviour will soon be adapted to deliver only
+# dense tensordicts. To control which behaviour you are relying on, you can use
+# the :func:`~tensordict.utils.set_lazy_legacy` decorator/context manager:
+
+from tensordict.utils import set_lazy_legacy
+
+with set_lazy_legacy(True):  # old behaviour
+    lazy_stack = torch.stack([tensordict, cloned_tensordict])
+assert isinstance(lazy_stack, LazyStackedTensorDict)
+
+with set_lazy_legacy(False):  # new behaviour
+    dense_stack = torch.stack([tensordict, cloned_tensordict])
+assert isinstance(dense_stack, TensorDict)
 ##############################################################################
 # If we index a :class:`~.LazyStackedTensorDict` along the stacking dimension we recover
 # the original :class:`~.TensorDict`.
@@ -187,14 +207,8 @@ torch.testing.assert_close(exp_tensordict["a"][0], exp_tensordict["a"][1])
 # Squeezing and Unsqueezing ``TensorDict``
 # ----------------------------------------
 # We can squeeze or unsqueeze the contents of a :class:`~.TensorDict` with the
-# :meth:`TensorDict.squeeze <tensordict.TensorDict.squeeze>` and
-# :meth:`TensorDict.unsqueeze <tensordict.TensorDict.unsqueeze>` methods. These
-# operations are both lazy, and return
-# :class:`_SqueezedTensorDict <tensordict.tensordict._SqueezedTensorDict>` and
-# :class:`_UnsqueezedTensorDict <tensordict.tensordict._UnsqueezedTensorDict>`
-# respectively. Like in the case of stacking and :class:`~.LazyStackedTensorDict`, the
-# squeezing or unsqueezing is only performed when we try to access an entry.
-
+# :meth:`~tensordict.TensorDictBase.squeeze` and
+# :meth:`~tensordict.TensorDictBase.unsqueeze` methods.
 
 tensordict = TensorDict({"a": torch.rand(3, 1, 4)}, [3, 1, 4])
 squeezed_tensordict = tensordict.squeeze()
@@ -207,20 +221,18 @@ print(unsqueezed_tensordict)
 
 ##############################################################################
 # .. note::
+#    Until now, operations like :meth:`~tensordict.TensorDictBase.unsqueeze`,
+#    :meth:`~tensordict.TensorDictBase.squeeze`, :meth:`~tensordict.TensorDictBase.view`,
+#    :meth:`~tensordict.TensorDictBase.permute`, :meth:`~tensordict.TensorDictBase.transpose`
+#    were all returning a lazy version of these operations (ie, a container where the original
+#    tensordict was stored and where the operations was applied every time a key was accessed).
+#    This behaviour will be deprecated in the future and can be already controlled via the
+#    :func:`~tensordict.utils.set_lazy_legacy` function:
 #
-#    If you are likely to repeated access the same entry in the squeezed or unsqueezed
-#    tensordict, then it may be beneficial to first convert to a regular
-#    :class:`~.TensorDict` using :meth:`.to_tensordict()`
-#
-#    .. code-block::
-#
-#       tensordict = TensorDict({"a": torch.rand(3, 1, 4)}, [3, 1, 4])
-#       squeezed_tensordict = tensordict.squeeze().to_tensordict()
-#       assert isinstance(squeezed_tensordict, TensorDict)
-#       assert squeezed_tensordict.batch_size == torch.Size([3, 1, 4])
-#
-#    In this case, ``squeezed_tensordict`` is a regular :class:`TensorDict` containing
-#    the squeezed tensors.
+#       >>> with set_lazy_legacy(True):
+#       ...     lazy_unsqueeze = tensordict.unsqueeze(0)
+#       >>> with set_lazy_legacy(False):
+#       ...     dense_unsqueeze = tensordict.unsqueeze(0)
 #
 # Bear in mind that as ever, these methods apply only to the batch dimensions. Any non
 # batch dimensions of the entries will be unaffected
@@ -262,6 +274,28 @@ permuted_tensordict = tensordict.permute([1, 0])
 
 assert permuted_tensordict["a"].shape == torch.Size([4, 3])
 assert permuted_tensordict["b"].shape == torch.Size([4, 3, 5])
+
+##############################################################################
+# Using tensordicts as decorators
+# -------------------------------
+#
+# For a bunch of reversible operations, tensordicts can be used as decorators.
+# These operations include :meth:`~tensordict.TensorDictBase.to_module` for functional
+# calls, :meth:`~tensordict.TensorDictBase.unlock_` and :meth:`~tensordict.TensorDictBase.lock_`
+# or shape operations such as :meth:`~tensordict.TensorDictBase.view`, :meth:`~tensordict.TensorDictBase.permute`
+# :meth:`~tensordict.TensorDictBase.transpose`, :meth:`~tensordict.TensorDictBase.squeeze` and
+# :meth:`~tensordict.TensorDictBase.unsqueeze`.
+# Here is a quick example with the ``transpose`` function:
+
+tensordict = TensorDict({"a": torch.rand(3, 4), "b": torch.rand(3, 4, 5)}, [3, 4])
+
+with tensordict.transpose(1, 0) as tdt:
+    tdt.set("c", torch.ones(4, 3))  # we have permuted the dims
+
+# the ``"c"`` entry is now in the tensordict we used as decorator:
+#
+
+assert (tensordict.get("c") == 1).all()
 
 ##############################################################################
 # Gathering values in ``TensorDict``

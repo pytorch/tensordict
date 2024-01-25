@@ -38,6 +38,7 @@ from tensordict.memmap import MemoryMappedTensor as MemmapTensor
 from tensordict.utils import (
     _broadcast_tensors,
     _check_keys,
+    _get_shape_from_args,
     _getitem_batch_size,
     _is_number,
     _parse_to,
@@ -2314,19 +2315,70 @@ class LazyStackedTensorDict(TensorDictBase):
         *args,
         **kwargs,
     ):
-        raise RuntimeError(
-            "Cannot call `permute` on a lazy stacked tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
+        dims_list = [dim if dim >= 0 else self.ndim + dim for dim in dims_list]
+        dims_list_sort = np.argsort(dims_list)
+        # find the new stack dim
+        stack_dim = dims_list_sort[self.stack_dim]
+        # remove that dim from the dims_list
+        dims_list = [
+            d if d < self.stack_dim else d - 1 for d in dims_list if d != self.stack_dim
+        ]
+        result = LazyStackedTensorDict.lazy_stack(
+            [td.permute(dims_list) for td in self.tensordicts], stack_dim
         )
+        result._td_dim_name = self._td_dim_name
+        return result
 
     def _squeeze(self, dim=None):
-        raise RuntimeError(
-            "Cannot call `squeeze` on a lazy stacked tensordict. Make it dense before calling this method by calling `to_tensordict`."
-        )
+        if dim is not None:
+            new_dim = dim
+            if new_dim < 0:
+                new_dim = self.batch_dims + new_dim
+            if new_dim > self.batch_dims - 1 or new_dim < 0:
+                raise RuntimeError(
+                    f"The dim provided to squeeze is incompatible with the tensordict shape: dim={dim} and batch_size={self.batch_size}."
+                )
+            dim = new_dim
+            if self.batch_size[dim] != 1:
+                return self
+            if dim == self.stack_dim:
+                return self.tensordicts[0]
+            if dim > self.stack_dim:
+                dim = dim - 1
+                stack_dim = self.stack_dim
+            else:
+                stack_dim = self.stack_dim - 1
+            result = LazyStackedTensorDict.lazy_stack(
+                [td.squeeze(dim) for td in self.tensordicts], stack_dim
+            )
+            result._td_dim_name = result._td_dim_name
+        else:
+            result = self
+            for dim in range(self.batch_dims - 1, -1, -1):
+                if self.batch_size[dim] == 1:
+                    result = result.squeeze(dim)
+        return result
 
     def _unsqueeze(self, dim):
-        raise RuntimeError(
-            "Cannot call `unsqueeze` on a lazy stacked tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        new_dim = dim
+        if new_dim < 0:
+            new_dim = self.batch_dims + new_dim + 1
+        if new_dim > self.batch_dims or new_dim < 0:
+            raise RuntimeError(
+                f"The dim provided to unsqueeze is incompatible with the tensordict shape: dim={dim} and batch_size={self.batch_size}."
+            )
+        dim = new_dim
+        if dim > self.stack_dim:
+            dim = dim - 1
+            stack_dim = self.stack_dim
+        else:
+            stack_dim = self.stack_dim + 1
+        result = LazyStackedTensorDict.lazy_stack(
+            [td.unsqueeze(dim) for td in self.tensordicts], stack_dim
         )
+        result._td_dim_name = result._td_dim_name
+        return result
 
     lock_ = TensorDictBase.lock_
     lock = _renamed_inplace_method(lock_)

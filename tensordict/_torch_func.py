@@ -6,13 +6,14 @@
 from __future__ import annotations
 
 import functools
+
+import warnings
 from typing import Any, Callable, Sequence, TypeVar
 
 import torch
 
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
@@ -23,7 +24,6 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import Tensor
-
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
@@ -367,6 +367,25 @@ def _stack(
             )
 
     # check that all tensordict match
+    # Read lazy_legacy
+    _lazy_legacy = lazy_legacy(allow_none=True)
+    if _lazy_legacy is None:
+        warnings.warn(
+            """You did not define if torch.stack was to return a dense or lazy
+stack of tensordicts. Up until v0.3 included, a lazy stack was returned.
+From v0.4 onward, a dense stack will be returned and to build a
+lazy stack, an explicit call to LazyStackedTensorDict.lazy_stack will be required.
+To silence this warning, choose one of the following options:
+- set the LAZY_LEGACY_OP to 'True' (recommended) or 'False' depending on
+  the behaviour you want to use. Another way to achieve this is to call
+  `tensordict.set_lazy_legacy(True).set()` at the beginning of your script.
+- set the decorator/context manager `tensordict.set_lazy_legacy(True)` (recommended) around
+  the function or code block where stack is used.
+- Use `LazyStackedTensorDict.lazy_stack()` if it is a lazy stack that you wish to use.""",
+            category=DeprecationWarning,
+        )
+        # get default
+        _lazy_legacy = lazy_legacy()
 
     if out is None:
         # We need to handle tensordicts with exclusive keys and tensordicts with
@@ -375,11 +394,11 @@ def _stack(
         # don't match exactly.
         # The second requires a check over the tensor shapes.
         device = list_of_tensordicts[0].device
-        if contiguous or not lazy_legacy():
+        if contiguous or not _lazy_legacy:
             try:
                 keys = _check_keys(list_of_tensordicts, strict=True)
             except KeyError:
-                if not lazy_legacy() and not contiguous:
+                if not _lazy_legacy and not contiguous:
                     with set_lazy_legacy(True):
                         return _stack(list_of_tensordicts, dim=dim)
                 raise

@@ -1027,16 +1027,6 @@ class TensorDict(TensorDictBase):
         if np.array_equal(dims_list, range(len(dims_list))):
             return self
 
-        # min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
-        # seen = [False for dim in range(max_dim + 1)]
-        # for idx in dims_list:
-        #     if idx < min_dim or idx > max_dim:
-        #         raise IndexError(
-        #             f"dimension out of range (expected to be in range of [{min_dim}, {max_dim}], but got {idx})"
-        #         )
-        #     if seen[idx]:
-        #         raise RuntimeError("repeated dim in permute")
-        #     seen[idx] = True
         def _permute(tensor):
             return tensor.permute(*dims_list, *range(len(dims_list), tensor.ndim))
 
@@ -1044,7 +1034,14 @@ class TensorDict(TensorDictBase):
         batch_size = [batch_size[p] for p in dims_list] + list(
             batch_size[len(dims_list) :]
         )
-        result = self._fast_apply(_permute, batch_size=batch_size, call_on_nested=True)
+        if self._has_names():
+            names = self.names
+            names = [names[i] for i in dims_list]
+        else:
+            names = None
+        result = self._fast_apply(
+            _permute, batch_size=batch_size, call_on_nested=True, names=names
+        )
         self._maybe_set_shared_attributes(result)
         return result
 
@@ -1119,7 +1116,7 @@ class TensorDict(TensorDictBase):
         batch_size = torch.Size(batch_size)
 
         names = copy(self.names)
-        names.insert(dim, None)
+        names.insert(newdim, None)
 
         def _unsqueeze(tensor):
             return tensor.unsqueeze(newdim)
