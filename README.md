@@ -83,7 +83,7 @@ But that is not all, you can also store nested values in a tensordict:
 >>> tensordict["nested", "key"] = torch.zeros(3, 4) # the batch-size must match
 ```
 and any nested tuple structure will be unravelled to make it easy to read code and
-writing ops programmatically:
+write ops programmatically:
 ```python
 >>> tensordict["nested", ("supernested", ("key",))] = torch.zeros(3, 4) # the batch-size must match
 >>> assert (tensordict["nested", "supernested", "key"] == 0).all()
