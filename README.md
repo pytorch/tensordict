@@ -213,7 +213,7 @@ both readable and future-proof as well as efficient and portable!
 
 TensorDict offers an API for parameter serialization that can be >3x faster than
 regular calls to `torch.save(state_dict)`. Moreover, because tensors will be saved
-independently on disk, you can deserialized your checkpoint on an arbitrary slice
+independently on disk, you can deserialize your checkpoint on an arbitrary slice
 of the model.
 
 ```python
