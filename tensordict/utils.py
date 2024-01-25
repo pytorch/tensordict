@@ -1717,6 +1717,9 @@ class set_lazy_legacy(_DecoratorContextManager):
         return self.__class__(self.mode)
 
     def __enter__(self) -> None:
+        self.set()
+
+    def set(self) -> None:
         global _LAZY_OP
         self._old_mode = _LAZY_OP
         _LAZY_OP = bool(self.mode)
