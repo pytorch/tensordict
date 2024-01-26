@@ -376,10 +376,10 @@ stack of tensordicts. Up until v0.3 included, a lazy stack was returned.
 From v0.4 onward, a dense stack will be returned and to build a
 lazy stack, an explicit call to LazyStackedTensorDict.lazy_stack will be required.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP to 'True' (recommended) or 'False' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(True).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(True)` (recommended) around
+  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
+- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
   the function or code block where stack is used.
 - Use `LazyStackedTensorDict.lazy_stack()` if it is a lazy stack that you wish to use.""",
             category=DeprecationWarning,

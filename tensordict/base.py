@@ -682,11 +682,11 @@ class TensorDictBase(MutableMapping):
 version of the unsqueezed tensordict. Up until v0.3 included, a lazy unsqueezed tensordict was returned.
 From v0.4 onward, a dense unsqueeze will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP to 'True' (recommended) or 'False' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(True).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(True)` (recommended) around
-  the function or code block where stack is used.
+  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
+- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
+  the function or code block where unsqueeze is used.
 
 To temporarily unsqueeze a tensordict you can still user unsqueeze() as a context manager (see docstrings).
 """,
@@ -771,11 +771,11 @@ To temporarily unsqueeze a tensordict you can still user unsqueeze() as a contex
 version of the squeezed tensordict. Up until v0.3 included, a lazy squeezed tensordict was returned.
 From v0.4 onward, a dense squeeze will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP to 'True' (recommended) or 'False' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(True).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(True)` (recommended) around
-  the function or code block where stack is used.
+  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
+- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
+  the function or code block where squeeze is used.
 
 To temporarily squeeze a tensordict you can still user squeeze() as a context manager (see docstrings).
 """,
@@ -983,11 +983,11 @@ To temporarily squeeze a tensordict you can still user squeeze() as a context ma
 version of the viewed tensordict. Up until v0.3 included, a lazy view of the tensordict was returned.
 From v0.4 onward, a proper view will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP to 'True' (recommended) or 'False' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(True).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(True)` (recommended) around
-  the function or code block where stack is used.
+  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
+- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
+  the function or code block where view is used.
 
 To temporarily view a tensordict you can still user view() as a context manager (see docstrings).
 """,
@@ -1052,11 +1052,11 @@ To temporarily view a tensordict you can still user view() as a context manager 
 version of the transposed tensordict. Up until v0.3 included, a lazy transpose of the tensordict was returned.
 From v0.4 onward, a proper transpose will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP to 'True' (recommended) or 'False' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(True).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(True)` (recommended) around
-  the function or code block where stack is used.
+  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
+- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
+  the function or code block where transpose is used.
 
 To temporarily transpose a tensordict you can still user transpose() as a context manager (see docstrings).
 """,
@@ -1167,11 +1167,11 @@ To temporarily transpose a tensordict you can still user transpose() as a contex
 version of the permuted tensordict. Up until v0.3 included, a lazy permute of the tensordict was returned.
 From v0.4 onward, a proper permute will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP to 'True' (recommended) or 'False' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(True).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(True)` (recommended) around
-  the function or code block where stack is used.
+  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
+- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
+  the function or code block where permute is used.
 
 To temporarily permute a tensordict you can still user permute() as a context manager (see docstrings).
 """,
