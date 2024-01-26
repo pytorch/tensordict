@@ -686,7 +686,7 @@ To silence this warning, choose one of the following options:
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where stack is used.
+  the function or code block where unsqueeze is used.
 
 To temporarily unsqueeze a tensordict you can still user unsqueeze() as a context manager (see docstrings).
 """,
@@ -775,7 +775,7 @@ To silence this warning, choose one of the following options:
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where stack is used.
+  the function or code block where squeeze is used.
 
 To temporarily squeeze a tensordict you can still user squeeze() as a context manager (see docstrings).
 """,
@@ -987,7 +987,7 @@ To silence this warning, choose one of the following options:
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where stack is used.
+  the function or code block where view is used.
 
 To temporarily view a tensordict you can still user view() as a context manager (see docstrings).
 """,
@@ -1056,7 +1056,7 @@ To silence this warning, choose one of the following options:
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where stack is used.
+  the function or code block where transpose is used.
 
 To temporarily transpose a tensordict you can still user transpose() as a context manager (see docstrings).
 """,
@@ -1171,7 +1171,7 @@ To silence this warning, choose one of the following options:
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where stack is used.
+  the function or code block where permute is used.
 
 To temporarily permute a tensordict you can still user permute() as a context manager (see docstrings).
 """,
