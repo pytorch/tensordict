@@ -780,7 +780,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def _get_str(
         self,
         key: NestedKey,
-        default: str | CompatibleType = NO_DEFAULT,
+        default: Any = NO_DEFAULT,
     ) -> CompatibleType:
         # we can handle the case where the key is a tuple of length 1
         tensors = []
@@ -1155,7 +1155,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def get_nestedtensor(
         self,
         key: NestedKey,
-        default: str | CompatibleType = NO_DEFAULT,
+        default: Any = NO_DEFAULT,
     ) -> CompatibleType:
         """Returns a nested tensor when stacking cannot be achieved.
 
@@ -1386,7 +1386,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _select(
         self,
-        *keys: str,
+        *keys: NestedKey,
         inplace: bool = False,
         strict: bool = False,
         set_shared: bool = True,
@@ -1402,7 +1402,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return result
 
     def _exclude(
-        self, *keys: str, inplace: bool = False, set_shared: bool = True
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> LazyStackedTensorDict:
         tensordicts = [
             tensordict._exclude(*keys, inplace=inplace, set_shared=set_shared)
@@ -1840,9 +1840,7 @@ class LazyStackedTensorDict(TensorDictBase):
             raise error
         return self
 
-    def pop(
-        self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         # using try/except for get/del is suboptimal, but
         # this is faster that checkink if key in self keys
         key = _unravel_key_to_tuple(key)
@@ -2071,7 +2069,9 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return self
 
-    def rename_key_(self, old_key: str, new_key: str, safe: bool = False) -> T:
+    def rename_key_(
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
+    ) -> T:
         for td in self.tensordicts:
             td.rename_key_(old_key, new_key, safe=safe)
         return self
@@ -2627,7 +2627,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def _select(
         self,
-        *keys: str,
+        *keys: NestedKey,
         inplace: bool = False,
         strict: bool = True,
         set_shared: bool = True,
@@ -2639,7 +2639,7 @@ class _CustomOpTensorDict(TensorDictBase):
         )
 
     def _exclude(
-        self, *keys: str, inplace: bool = False, set_shared: bool = True
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> _CustomOpTensorDict:
         if inplace:
             raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
@@ -2676,7 +2676,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return self._fast_apply(lambda x: x.contiguous())
 
     def rename_key_(
-        self, old_key: str, new_key: str, safe: bool = False
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> _CustomOpTensorDict:
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
@@ -2998,7 +2998,6 @@ class _SqueezedTensorDict(_CustomOpTensorDict):
 
     def _stack_onto_(
         self,
-        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> T:
@@ -3224,7 +3223,6 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
     def _stack_onto_(
         self,
-        # key: str,
         list_item: list[CompatibleType],
         dim: int,
     ) -> T:

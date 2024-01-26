@@ -1343,7 +1343,7 @@ def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
     return f"{cls.__name__}({s})"
 
 
-def _make_repr(key: str, item, tensordict: T) -> str:
+def _make_repr(key: NestedKey, item, tensordict: T) -> str:
     from tensordict.base import _is_tensor_collection
 
     if _is_tensor_collection(type(item)):

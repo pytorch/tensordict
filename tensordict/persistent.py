@@ -282,7 +282,7 @@ class PersistentTensorDict(TensorDictBase):
     _get_tuple = get
 
     def get_at(
-        self, key: str, idx: IndexType, default: CompatibleType = NO_DEFAULT
+        self, key: NestedKey, idx: IndexType, default: CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
         array = self._get_array(key, default)
         if isinstance(array, (h5py.Dataset,)):
@@ -705,7 +705,7 @@ class PersistentTensorDict(TensorDictBase):
         return out
 
     def rename_key_(
-        self, old_key: str, new_key: str, safe: bool = False
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> PersistentTensorDict:
         old_key = self._process_key(old_key)
         new_key = self._process_key(new_key)
@@ -715,7 +715,7 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f"key {new_key} already present in TensorDict.") from err
         return self
 
-    def fill_(self, key: str, value: float | bool) -> TensorDictBase:
+    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         """Fills a tensor pointed by the key with the a given value.
 
         Args:
@@ -742,7 +742,7 @@ class PersistentTensorDict(TensorDictBase):
         return target_td
 
     def _select(
-        self, *keys: str, inplace: bool = False, strict: bool = True
+        self, *keys: NestedKey, inplace: bool = False, strict: bool = True
     ) -> PersistentTensorDict:
         raise NotImplementedError(
             "Cannot call select on a PersistentTensorDict. "
@@ -750,7 +750,7 @@ class PersistentTensorDict(TensorDictBase):
         )
 
     def _exclude(
-        self, *keys: str, inplace: bool = False, set_shared: bool = True
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> PersistentTensorDict:
         raise NotImplementedError(
             "Cannot call exclude on a PersistentTensorDict. "
@@ -817,8 +817,8 @@ class PersistentTensorDict(TensorDictBase):
 
     def _set(
         self,
-        key: str,
-        value,
+        key: NestedKey,
+        value: Any,
         inplace: bool = False,
         idx=None,
         validated=False,

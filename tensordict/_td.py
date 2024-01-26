@@ -1489,7 +1489,9 @@ class TensorDict(TensorDictBase):
         return self
 
     @lock_blocked
-    def rename_key_(self, old_key: str, new_key: str, safe: bool = False) -> T:
+    def rename_key_(
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
+    ) -> T:
         # these checks are not perfect, tuples that are not tuples of strings or empty
         # tuples could go through but (1) it will raise an error anyway and (2)
         # those checks are expensive when repeated often.
@@ -1951,7 +1953,9 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
-    def _exclude(self, *keys: str, inplace: bool = False, set_shared: bool = True) -> T:
+    def _exclude(
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
+    ) -> T:
         # faster than Base.exclude
         if not len(keys):
             return self.copy() if not inplace else self
@@ -2184,7 +2188,7 @@ class _SubTensorDict(TensorDictBase):
     def device(self, value: DeviceType) -> None:
         self._source.device = value
 
-    def _preallocate(self, key: str, value: CompatibleType) -> T:
+    def _preallocate(self, key: NestedKey, value: CompatibleType) -> T:
         return self._source.set(key, value)
 
     def _convert_inplace(self, inplace, key):
@@ -2570,7 +2574,7 @@ class _SubTensorDict(TensorDictBase):
 
     def _select(
         self,
-        *keys: str,
+        *keys: NestedKey,
         inplace: bool = False,
         strict: bool = True,
         set_shared: bool = True,
@@ -2581,7 +2585,9 @@ class _SubTensorDict(TensorDictBase):
             *keys, inplace=False, strict=strict, set_shared=set_shared
         )
 
-    def _exclude(self, *keys: str, inplace: bool = False, set_shared: bool = True) -> T:
+    def _exclude(
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
+    ) -> T:
         if inplace:
             raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
         return self.to_tensordict()._exclude(
@@ -2604,7 +2610,7 @@ class _SubTensorDict(TensorDictBase):
         return self._source.is_memmap()
 
     def rename_key_(
-        self, old_key: str, new_key: str, safe: bool = False
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> _SubTensorDict:
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
@@ -2880,7 +2886,7 @@ class _TensorDictKeysView:
             if not self.leaves_only or is_leaf:
                 yield full_key
 
-    def _combine_keys(self, prefix: tuple | None, key: str) -> tuple:
+    def _combine_keys(self, prefix: tuple | None, key: NestedKey) -> tuple:
         if prefix is not None:
             return prefix + (key,)
         return (key,)
