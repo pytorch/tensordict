@@ -2213,7 +2213,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     def _stack_onto_at_(
         self,
-        key: str,
+        key: NestedKey,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,
@@ -2225,9 +2225,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             "before calling __getindex__ and stack."
         )
 
-    def _default_get(
-        self, key: str, default: str | CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
+    def _default_get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         if default is not NO_DEFAULT:
             return default
         else:
@@ -2236,9 +2234,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 _KEY_ERROR.format(key, self.__class__.__name__, sorted(self.keys()))
             )
 
-    def get(
-        self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
+    def get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         """Gets the value stored with the input key.
 
         Args:
@@ -2952,7 +2948,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         return out
 
     @abc.abstractmethod
-    def rename_key_(self, old_key: str, new_key: str, safe: bool = False) -> T:
+    def rename_key_(
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
+    ) -> T:
         """Renames a key with a new string and returns the same tensordict with the updated key name.
 
         Args:
@@ -4125,7 +4123,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         return self
 
     # Clone, select, exclude, empty
-    def select(self, *keys: str, inplace: bool = False, strict: bool = True) -> T:
+    def select(self, *keys: NestedKey, inplace: bool = False, strict: bool = True) -> T:
         """Selects the keys of the tensordict and returns a new tensordict with only the selected keys.
 
         The values are not copied: in-place modifications a tensor of either
@@ -4188,14 +4186,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     @abc.abstractmethod
     def _select(
         self,
-        *keys: str,
+        *keys: NestedKey,
         inplace: bool = False,
         strict: bool = True,
         set_shared: bool = True,
     ) -> T:
         ...
 
-    def exclude(self, *keys: str, inplace: bool = False) -> T:
+    def exclude(self, *keys: NestedKey, inplace: bool = False) -> T:
         """Excludes the keys of the tensordict and returns a new tensordict without these entries.
 
         The values are not copied: in-place modifications a tensor of either
@@ -4242,7 +4240,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     @abc.abstractmethod
     def _exclude(
         self,
-        *keys: str,
+        *keys: NestedKey,
         inplace: bool = False,
         set_shared: bool = True,
     ) -> T:
