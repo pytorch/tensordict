@@ -1345,7 +1345,7 @@ class LazyStackedTensorDict(TensorDictBase):
         call_on_nested: bool = False,
         default: Any = NO_DEFAULT,
         named: bool = False,
-        complete_names: bool = False,
+        nested_keys: bool = False,
         prefix: tuple = (),
         **constructor_kwargs,
     ) -> T:
@@ -1369,7 +1369,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     call_on_nested=call_on_nested,
                     default=default,
                     named=named,
-                    complete_names=complete_names,
+                    nested_keys=nested_keys,
                     prefix=prefix,
                     **constructor_kwargs,
                 )
@@ -1384,7 +1384,7 @@ class LazyStackedTensorDict(TensorDictBase):
                         call_on_nested=call_on_nested,
                         default=default,
                         named=named,
-                        complete_names=complete_names,
+                        nested_keys=nested_keys,
                         prefix=prefix + (i,),
                     )
                     for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
