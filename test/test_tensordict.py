@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+
+import functools
 import gc
 import json
 import logging
@@ -17,7 +19,6 @@ import torch
 
 from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import NonTensorData
-
 
 try:
     import torchsnapshot
@@ -2999,7 +3000,11 @@ class TestTensorDicts(TestTensorDictsBase):
         if inplace:
             assert td_1 is td
             for key in td_1.keys(True, True):
-                if "a" in key:
+                if isinstance(key, tuple):
+                    subkey = key[-1]
+                else:
+                    subkey = key
+                if "a" in subkey:
                     assert (td_c[key] + 1 == td_1[key]).all()
                 else:
                     assert (td_c[key] == td_1[key]).all()
@@ -3009,6 +3014,26 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert "a" in key
                 assert (td_c[key] + 1 != td[key]).any()
                 assert (td_1[key] == td[key] + 1).all()
+
+    def test_named_apply_complete(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        # "a" conflicts with root key with the same name
+        td.set(("some", "a"), td.get(list(td.keys())[0]))
+        keys_complete = set()
+        keys_not_complete = set()
+
+        def count(name, value, keys):
+            keys.add(name)
+
+        td.named_apply(
+            functools.partial(count, keys=keys_complete), complete_names=True
+        )
+        td.named_apply(
+            functools.partial(count, keys=keys_not_complete), complete_names=False
+        )
+        assert len(keys_complete) == len(list(td.keys(True, True)))
+        assert len(keys_complete) > len(keys_not_complete)
 
     def test_nested_dict_init(self, td_name, device):
         torch.manual_seed(1)
