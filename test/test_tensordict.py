@@ -3026,9 +3026,7 @@ class TestTensorDicts(TestTensorDictsBase):
         def count(name, value, keys):
             keys.add(name)
 
-        td.named_apply(
-            functools.partial(count, keys=keys_complete), nested_keys=True
-        )
+        td.named_apply(functools.partial(count, keys=keys_complete), nested_keys=True)
         td.named_apply(
             functools.partial(count, keys=keys_not_complete), nested_keys=False
         )
