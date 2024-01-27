@@ -3616,6 +3616,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         self,
         fn: Callable,
         *others: T,
+        nested_keys: bool = False,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = None,
         names: Sequence[str] | None = None,
@@ -3637,6 +3638,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 unnamed inputs as the number of tensordicts, including self.
                 If other tensordicts have missing entries, a default value
                 can be passed through the ``default`` keyword argument.
+            nested_keys (bool, optional): if ``True``, the complete path
+                to the leaf will be used. Defaults to ``False``, i.e. only the last
+                string is passed to the function.
             batch_size (sequence of int, optional): if provided,
                 the resulting TensorDict will have the desired batch_size.
                 The :obj:`batch_size` argument should match the batch_size after
@@ -3732,6 +3736,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             checked=False,
             default=default,
             named=True,
+            nested_keys=nested_keys,
             **constructor_kwargs,
         )
 
@@ -3748,6 +3753,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         call_on_nested: bool = False,
         default: Any = NO_DEFAULT,
         named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
         **constructor_kwargs,
     ) -> T:
         ...
@@ -3763,6 +3770,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         call_on_nested: bool = False,
         default: Any = NO_DEFAULT,
         named: bool = False,
+        nested_keys: bool = False,
         **constructor_kwargs,
     ) -> T:
         """A faster apply method.
@@ -3783,6 +3791,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             call_on_nested=call_on_nested,
             named=named,
             default=default,
+            nested_keys=nested_keys,
             **constructor_kwargs,
         )
 

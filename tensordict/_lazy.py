@@ -289,6 +289,11 @@ class LazyStackedTensorDict(TensorDictBase):
         for t in self.tensordicts:
             t.device = value
 
+    def clear_device_(self) -> T:
+        for td in self.tensordicts:
+            td.clear_device_()
+        return self
+
     @property
     def batch_size(self) -> torch.Size:
         return self._batch_size
@@ -1340,6 +1345,8 @@ class LazyStackedTensorDict(TensorDictBase):
         call_on_nested: bool = False,
         default: Any = NO_DEFAULT,
         named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
         **constructor_kwargs,
     ) -> T:
         if inplace:
@@ -1362,6 +1369,8 @@ class LazyStackedTensorDict(TensorDictBase):
                     call_on_nested=call_on_nested,
                     default=default,
                     named=named,
+                    nested_keys=nested_keys,
+                    prefix=prefix,
                     **constructor_kwargs,
                 )
             others = (other.unbind(self.stack_dim) for other in others)
@@ -1375,8 +1384,10 @@ class LazyStackedTensorDict(TensorDictBase):
                         call_on_nested=call_on_nested,
                         default=default,
                         named=named,
+                        nested_keys=nested_keys,
+                        prefix=prefix + (i,),
                     )
-                    for td, *oth in zip(self.tensordicts, *others)
+                    for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
                 ),
                 stack_dim=self.stack_dim,
             )

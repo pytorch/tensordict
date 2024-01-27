@@ -632,6 +632,8 @@ class TensorDict(TensorDictBase):
         call_on_nested: bool = False,
         default: Any = NO_DEFAULT,
         named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
         **constructor_kwargs,
     ) -> T:
         if inplace:
@@ -679,13 +681,18 @@ class TensorDict(TensorDictBase):
                     device=device,
                     checked=checked,
                     named=named,
+                    nested_keys=nested_keys,
                     default=default,
+                    prefix=prefix + (key,),
                     **constructor_kwargs,
                 )
             else:
                 _others = [_other._get_str(key, default=default) for _other in others]
                 if named:
-                    item_trsf = fn(key, item, *_others)
+                    if nested_keys:
+                        item_trsf = fn(unravel_key(prefix + (key,)), item, *_others)
+                    else:
+                        item_trsf = fn(key, item, *_others)
                 else:
                     item_trsf = fn(item, *_others)
             if item_trsf is not None:
