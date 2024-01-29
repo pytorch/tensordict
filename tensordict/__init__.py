@@ -22,6 +22,7 @@ from tensordict.utils import (
     is_batchedtensor,
     is_tensorclass,
     lazy_legacy,
+    NestedKey,
     set_lazy_legacy,
 )
 from tensordict._pytree import *
@@ -48,6 +49,7 @@ __all__ = [
     "is_batchedtensor",
     "is_tensor_collection",
     "pad",
+    "NestedKey",
     "PersistentTensorDict",
     "tensorclass",
     "dense_stack_tds",
