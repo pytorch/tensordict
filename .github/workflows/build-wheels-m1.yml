@@ -34,7 +34,7 @@ jobs:
 #      pre-script: .github/scripts/pre_build_script_m1.sh
       post-script: ""
       package-name: tensordict
-      runner-type: macos-m1-12
+      runner-type: macos-m1-stable
       smoke-test-script: ""
       trigger-event: ${{ github.event_name }}
       env-var-script: .github/scripts/m1_script.sh
