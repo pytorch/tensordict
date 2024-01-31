@@ -7489,7 +7489,7 @@ class TestMap:
             mp.set_start_method("spawn")
         # Tests that we can return None values
         # Also tests that MemoryMapped id is kepts using multiprocessing
-        data = TensorDict({"tensor": torch.zeros(10)}, []).memmap_()
+        data = TensorDict({"tensor": torch.zeros(10)}, [10]).memmap_()
         data.map(self._assert_is_memmap, chunksize=chunksize)
 
 
