@@ -7479,6 +7479,19 @@ class TestMap:
         assert td_out[1]["1"] == 1
         assert (td_out["2"] == 2).all()
 
+    @staticmethod
+    def _assert_is_memmap(data):
+        assert isinstance(data["tensor"], MemoryMappedTensor)
+
+    @pytest.mark.parametrize("chunksize", [0, 5])
+    def test_map_inplace(self, chunksize):
+        if mp.get_start_method(allow_none=True) is None:
+            mp.set_start_method("spawn")
+        # Tests that we can return None values
+        # Also tests that MemoryMapped id is kept using multiprocessing
+        data = TensorDict({"tensor": torch.zeros(10)}, [10]).memmap_()
+        data.map(self._assert_is_memmap, chunksize=chunksize, num_workers=2)
+
 
 # class TestNonTensorData:
 class TestNonTensorData:
