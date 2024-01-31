@@ -7364,7 +7364,6 @@ class TestFCD(TestTensorDictsBase):
             assert y.dims == (d0,)
             assert y._tensor.shape[0] == param_batch
 
-
 @pytest.mark.skipif(_IS_OSX, reason="Pool executionn in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
@@ -7478,6 +7477,18 @@ class TestMap:
         assert td_out[0]["0"] == 0
         assert td_out[1]["1"] == 1
         assert (td_out["2"] == 2).all()
+
+    @staticmethod
+    def _assert_is_memmap(data):
+        assert isinstance(data['tensor'], MemoryMappedTensor)
+    @pytest.mark.parametrize("chunksize", [0, 5])
+    def test_map_inplace(self, chunksize):
+        if mp.get_start_method(allow_none=True) is None:
+            mp.set_start_method("spawn")
+        # Tests that we can return None values
+        # Also tests that MemoryMapped id is kepts using multiprocessing
+        data = TensorDict({"tensor": torch.zeros(10)}, []).memmap_()
+        data.map(self._assert_is_memmap, chunksize=chunksize)
 
 
 # class TestNonTensorData:
