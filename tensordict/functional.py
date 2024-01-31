@@ -115,10 +115,11 @@ def pad_sequence(
         raise RuntimeError("list_of_tensordicts cannot be empty")
     # check that all tensordict match
     if return_mask:
-        list_of_tensordicts = [
-            td.clone(False).set("mask", torch.ones(td.shape, dtype=torch.bool))
-            for td in list_of_tensordicts
-        ]
+        for key in _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True):
+            list_of_tensordicts = [
+                td.clone(False).set(f"{key}_mask", torch.ones(td.get(key).shape[0], dtype=torch.bool))
+                for td in list_of_tensordicts
+            ]
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
     shape = max(len(td) for td in list_of_tensordicts)
     if shape == 0:
