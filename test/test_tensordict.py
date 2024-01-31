@@ -7490,7 +7490,7 @@ class TestMap:
         # Tests that we can return None values
         # Also tests that MemoryMapped id is kept using multiprocessing
         data = TensorDict({"tensor": torch.zeros(10)}, [10]).memmap_()
-        data.map(self._assert_is_memmap, chunksize=chunksize)
+        data.map(self._assert_is_memmap, chunksize=chunksize, num_workers=2)
 
 
 # class TestNonTensorData:
