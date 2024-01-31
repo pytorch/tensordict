@@ -36,6 +36,7 @@ from tensordict.utils import (
     _KEY_ERROR,
     _LOCK_ERROR,
     _parse_to,
+    _proc_init,
     _split_tensordict,
     cache,
     expand_right,
@@ -684,11 +685,28 @@ class PersistentTensorDict(TensorDictBase):
         chunksize: int = None,
         num_chunks: int = None,
         pool: mp.Pool = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
     ):
         if pool is None:
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
-            with mp.Pool(num_workers) as pool:
+            if generator is None:
+                generator = torch.Generator()
+            seed = (
+                torch.empty((), dtype=torch.int64).random_(generator=generator).item()
+            )
+
+            queue = mp.Queue(maxsize=num_workers)
+            for i in range(num_workers):
+                queue.put(i)
+            with mp.Pool(
+                processes=num_workers,
+                initializer=_proc_init,
+                initargs=(seed, queue, worker_threads),
+                maxtasksperchild=max_tasks_per_child,
+            ) as pool:
                 return self.map(fn, dim=dim, chunksize=chunksize, pool=pool)
         num_workers = pool._processes
         dim_orig = dim

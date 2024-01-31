@@ -445,6 +445,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         chunksize: int = None,
         num_chunks: int = None,
         pool: mp.Pool = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
     ):
         raise RuntimeError(
             "Cannot call map on a TensorDictParams object. Convert it "

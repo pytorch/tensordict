@@ -9,6 +9,7 @@ import abc
 import collections
 import concurrent.futures
 import contextlib
+import importlib
 import json
 import numbers
 import warnings
@@ -3806,6 +3807,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         generator: torch.Generator | None = None,
         max_tasks_per_child: int | None = None,
         worker_threads: int = 1,
+        pbar: bool = False,
     ):
         """Maps a function to splits of the tensordict across one dimension.
 
@@ -3872,6 +3874,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 on the number of jobs.
             worker_threads (int, optional): the number of threads for the workers.
                 Defaults to ``1``.
+            pbar (bool, optional): if ``True``, a progress bar will be displayed.
+                Requires tqdm to be available. Defaults to ``False``.
 
         Examples:
             >>> import torch
@@ -3916,7 +3920,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 maxtasksperchild=max_tasks_per_child,
             ) as pool:
                 return self.map(
-                    fn, dim=dim, chunksize=chunksize, num_chunks=num_chunks, pool=pool
+                    fn,
+                    dim=dim,
+                    chunksize=chunksize,
+                    num_chunks=num_chunks,
+                    pool=pool,
+                    pbar=pbar,
                 )
         num_workers = pool._processes
         dim_orig = dim
@@ -3928,11 +3937,24 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
         call_chunksize = 1
         imap = pool.imap(fn, self_split, call_chunksize)
-        if chunksize == 0:
-            out = torch.stack(list(imap), dim)
-        else:
-            out = torch.cat(list(imap), dim)
-        return out
+        if pbar and importlib.util.find_spec("tqdm", None) is not None:
+            import tqdm
+
+            imap = tqdm.tqdm(imap, total=len(self_split))
+
+        imaplist = []
+        for item in imap:
+            if item is not None:
+                imaplist.append(item)
+        del imap
+
+        # support inplace modif
+        if imaplist:
+            if chunksize == 0:
+                out = torch.stack(imaplist, dim)
+            else:
+                out = torch.cat(imaplist, dim)
+            return out
 
     # Functorch compatibility
     @abc.abstractmethod
