@@ -40,10 +40,10 @@ in distributed settings.
 
 The main purpose of TensorDict is to make code-bases more _readable_ and _modular_ by abstracting away tailored operations:
 ```python
-for i, tensordict in enumerate(dataset):
+for i, data in enumerate(dataset):
     # the model reads and writes tensordicts
-    tensordict = model(tensordict)
-    loss = loss_module(tensordict)
+    data = model(data)
+    loss = loss_module(data)
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()
@@ -61,7 +61,7 @@ A tensordict is primarily defined by its `batch_size` (or `shape`) and its key-v
 ```python
 >>> from tensordict import TensorDict
 >>> import torch
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
 ... }, batch_size=[3, 4])
@@ -70,23 +70,24 @@ The `batch_size` and the first dimensions of each of the tensors must be complia
 The tensors can be of any dtype and device. Optionally, one can restrict a tensordict to
 live on a dedicated device, which will send each tensor that is written there:
 ```python
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
 ... }, batch_size=[3, 4], device="cuda:0")
->>> tensordict["key 3"] = torch.randn(3, 4, device="cpu")
->>> assert tensordict["key 3"].device is torch.device("cuda:0")
+>>> data["key 3"] = torch.randn(3, 4, device="cpu")
+>>> assert data["key 3"].device is torch.device("cuda:0")
 ```
 
 But that is not all, you can also store nested values in a tensordict:
 ```python
->>> tensordict["nested", "key"] = torch.zeros(3, 4) # the batch-size must match
+>>> data["nested", "key"] = torch.zeros(3, 4) # the batch-size must match
 ```
 and any nested tuple structure will be unravelled to make it easy to read code and
 write ops programmatically:
 ```python
->>> tensordict["nested", ("supernested", ("key",))] = torch.zeros(3, 4) # the batch-size must match
->>> assert (tensordict["nested", "supernested", "key"] == 0).all()
+>>> data["nested", ("supernested", ("key",))] = torch.zeros(3, 4) # the batch-size must match
+>>> assert (data["nested", "supernested", "key"] == 0).all()
+>>> assert (("nested",), "supernested", (("key",),)) in data.keys(include_nested=True)  # this works too!
 ```
 
 You can also store non-tensor data in tensordicts:
@@ -102,11 +103,11 @@ You can also store non-tensor data in tensordicts:
 TensorDict objects can be indexed exactly like tensors. The resulting of indexing
 a TensorDict is another TensorDict containing tensors indexed along the required dimension:
 ```python
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
 ... }, batch_size=[3, 4])
->>> sub_tensordict = tensordict[..., :2]
+>>> sub_tensordict = data[..., :2]
 >>> assert sub_tensordict.shape == torch.Size([3, 2])
 >>> assert sub_tensordict["key 1"].shape == torch.Size([3, 2, 5])
 ```
@@ -127,15 +128,15 @@ Similarly, one can build tensordicts by stacking or concatenating single tensord
 
 TensorDict instances can also be reshaped, viewed, squeezed and unsqueezed:
 ```python
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
 ... }, batch_size=[3, 4])
->>> print(tensordict.view(-1))
+>>> print(data.view(-1))
 torch.Size([12])
->>> print(tensordict.reshape(-1))
+>>> print(data.reshape(-1))
 torch.Size([12])
->>> print(tensordict.unsqueeze(-1))
+>>> print(data.unsqueeze(-1))
 torch.Size([3, 4, 1])
 ```
 
@@ -144,13 +145,14 @@ clone them, update them in-place or not, split them, unbind them, expand them et
 
 If a functionality is missing, it is easy to call it using `apply()` or `apply_()`:
 ```python
-tensordict_uniform = tensordict.apply(lambda tensor: tensor.uniform_())
+tensordict_uniform = data.apply(lambda tensor: tensor.uniform_())
 ```
 
 ``apply()`` can also be great to filter a tensordict, for instance:
 ```python
-data = TensorDict({"a": 1.0, "b": 1}, [])
+data = TensorDict({"a": torch.tensor(1.0, dtype=torch.float), "b": torch.tensor(1, dtype=torch.int64)}, [])
 data_float = data.apply(lambda x: x if x.dtype == torch.float else None) # contains only the "a" key
+assert "b" not in data_float
 ```
 
 ### Distributed capabilities
@@ -209,7 +211,7 @@ Moreover, tensordict modules are compatible with `torch.fx` and (soon) `torch.co
 which means that you can get the best of both worlds: a codebase that is
 both readable and future-proof as well as efficient and portable!
 
-### TensorDict for parameter serialization
+### TensorDict for parameter serialization and building datasets
 
 TensorDict offers an API for parameter serialization that can be >3x faster than
 regular calls to `torch.save(state_dict)`. Moreover, because tensors will be saved
@@ -229,6 +231,46 @@ of the model.
 >>> params0.to_module(model[0])  # load on a slice of the model
 ```
 
+The same functionality can be used to access data in a dataset stored on disk.
+Soring a single contiguous tensor on disk accessed through the `tensordict.MemoryMappedTensor`
+primitive and reading slices of it is not only **much** faster than loading
+single files one at a time but it's also easier and safer (because there is no pickling
+or third-party library involved):
+
+```python
+# allocate memory of the dataset on disk
+data = TensorDict({
+    "images": torch.zeros((128, 128, 3), dtype=torch.uint8),
+    "labels": torch.zeros((), dtype=torch.int)}, batch_size=[])
+data = data.expand(1000000)
+data = data.memmap_like("/path/to/dataset")
+# ==> Fill your dataset here
+# Let's get 3 items of our dataset:
+data[torch.tensor([1, 10000, 500000])]  # This is much faster than loading the 3 images independently
+```
+
+### Preprocessing with TensorDict.map
+
+Preprocessing huge contiguous (or not!) datasets can be done via `TensorDict.map`
+which will dispatch a task to various workers:
+
+```python
+import torch
+from tensordict import TensorDict, MemoryMappedTensor
+import tempfile
+
+def process_data(data):
+    images = data.get("images").flip(-2).clone()
+    labels = data.get("labels") // 10
+    # we update the td inplace
+    data.set_("images", images)  # flip image
+    data.set_("labels", labels)  # cluster labels
+
+if __name__ == "__main__":
+    # create data_preproc here
+    data_preproc = data.map(process_data, num_workers=4, chunksize=0, pbar=True)  # process 1 images at a time
+```
+
 ### Lazy preallocation
 
 Pre-allocating tensors can be cumbersome and hard to scale if the list of preallocated
@@ -236,21 +278,21 @@ items varies according to the script configuration. TensorDict solves this in an
 Assume you are working with a function `foo() -> TensorDict`, e.g.
 ```python
 def foo():
-    tensordict = TensorDict({}, batch_size=[])
-    tensordict["a"] = torch.randn(3)
-    tensordict["b"] = TensorDict({"c": torch.zeros(2)}, batch_size=[])
-    return tensordict
+    data = TensorDict({}, batch_size=[])
+    data["a"] = torch.randn(3)
+    data["b"] = TensorDict({"c": torch.zeros(2)}, batch_size=[])
+    return data
 ```
 and you would like to call this function repeatedly. You could do this in two ways.
 The first would simply be to stack the calls to the function:
 ```python
-tensordict = torch.stack([foo() for _ in range(N)])
+data = torch.stack([foo() for _ in range(N)])
 ```
 However, you could also choose to preallocate the tensordict:
 ```python
-tensordict = TensorDict({}, batch_size=[N])
+data = TensorDict({}, batch_size=[N])
 for i in range(N):
-    tensordict[i] = foo()
+    data[i] = foo()
 ```
 which also results in a tensordict (when `N = 10`)
 ```
@@ -282,16 +324,16 @@ batch size.
 We can switch easily between hierarchical and flat representations.
 For instance, the following code will result in a single-level tensordict with keys `"key 1"` and `"key 2.sub-key"`:
 ```python
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": TensorDict({"sub-key": torch.randn(3, 4, 5, 6)}, batch_size=[3, 4, 5])
 ... }, batch_size=[3, 4])
->>> tensordict_flatten = tensordict.flatten_keys(separator=".")
+>>> tensordict_flatten = data.flatten_keys(separator=".")
 ```
 
 Accessing nested tensordicts can be achieved with a single index:
 ```python
->>> sub_value = tensordict["key 2", "sub-key"]
+>>> sub_value = data["key 2", "sub-key"]
 ```
 
 ## TensorClass
