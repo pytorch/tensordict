@@ -632,6 +632,8 @@ class TensorDict(TensorDictBase):
         call_on_nested: bool = False,
         default: Any = NO_DEFAULT,
         named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
         **constructor_kwargs,
     ) -> T:
         if inplace:
@@ -679,13 +681,18 @@ class TensorDict(TensorDictBase):
                     device=device,
                     checked=checked,
                     named=named,
+                    nested_keys=nested_keys,
                     default=default,
+                    prefix=prefix + (key,),
                     **constructor_kwargs,
                 )
             else:
                 _others = [_other._get_str(key, default=default) for _other in others]
                 if named:
-                    item_trsf = fn(key, item, *_others)
+                    if nested_keys:
+                        item_trsf = fn(unravel_key(prefix + (key,)), item, *_others)
+                    else:
+                        item_trsf = fn(key, item, *_others)
                 else:
                     item_trsf = fn(item, *_others)
             if item_trsf is not None:
@@ -1027,16 +1034,6 @@ class TensorDict(TensorDictBase):
         if np.array_equal(dims_list, range(len(dims_list))):
             return self
 
-        # min_dim, max_dim = -self.batch_dims, self.batch_dims - 1
-        # seen = [False for dim in range(max_dim + 1)]
-        # for idx in dims_list:
-        #     if idx < min_dim or idx > max_dim:
-        #         raise IndexError(
-        #             f"dimension out of range (expected to be in range of [{min_dim}, {max_dim}], but got {idx})"
-        #         )
-        #     if seen[idx]:
-        #         raise RuntimeError("repeated dim in permute")
-        #     seen[idx] = True
         def _permute(tensor):
             return tensor.permute(*dims_list, *range(len(dims_list), tensor.ndim))
 
@@ -1044,7 +1041,14 @@ class TensorDict(TensorDictBase):
         batch_size = [batch_size[p] for p in dims_list] + list(
             batch_size[len(dims_list) :]
         )
-        result = self._fast_apply(_permute, batch_size=batch_size, call_on_nested=True)
+        if self._has_names():
+            names = self.names
+            names = [names[i] for i in dims_list]
+        else:
+            names = None
+        result = self._fast_apply(
+            _permute, batch_size=batch_size, call_on_nested=True, names=names
+        )
         self._maybe_set_shared_attributes(result)
         return result
 
@@ -1119,7 +1123,7 @@ class TensorDict(TensorDictBase):
         batch_size = torch.Size(batch_size)
 
         names = copy(self.names)
-        names.insert(dim, None)
+        names.insert(newdim, None)
 
         def _unsqueeze(tensor):
             return tensor.unsqueeze(newdim)
@@ -1492,7 +1496,9 @@ class TensorDict(TensorDictBase):
         return self
 
     @lock_blocked
-    def rename_key_(self, old_key: str, new_key: str, safe: bool = False) -> T:
+    def rename_key_(
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
+    ) -> T:
         # these checks are not perfect, tuples that are not tuples of strings or empty
         # tuples could go through but (1) it will raise an error anyway and (2)
         # those checks are expensive when repeated often.
@@ -1954,7 +1960,9 @@ class TensorDict(TensorDictBase):
         #     self._maybe_set_shared_attributes(result)
         return result
 
-    def _exclude(self, *keys: str, inplace: bool = False, set_shared: bool = True) -> T:
+    def _exclude(
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
+    ) -> T:
         # faster than Base.exclude
         if not len(keys):
             return self.copy() if not inplace else self
@@ -1971,7 +1979,8 @@ class TensorDict(TensorDictBase):
                 if keys_to_exclude is None:
                     # delay creation of defaultdict
                     keys_to_exclude = defaultdict(list)
-                keys_to_exclude[key[0]].append(key[1:])
+                if key[0] in self._tensordict:
+                    keys_to_exclude[key[0]].append(key[1:])
         if keys_to_exclude is not None:
             for key, cur_keys in keys_to_exclude.items():
                 val = _tensordict.get(key, None)
@@ -1979,8 +1988,8 @@ class TensorDict(TensorDictBase):
                     val = val._exclude(
                         *cur_keys, inplace=inplace, set_shared=set_shared
                     )
-                if not inplace:
-                    _tensordict[key] = val
+                    if not inplace:
+                        _tensordict[key] = val
         if inplace:
             return self
         result = TensorDict(
@@ -2186,7 +2195,7 @@ class _SubTensorDict(TensorDictBase):
     def device(self, value: DeviceType) -> None:
         self._source.device = value
 
-    def _preallocate(self, key: str, value: CompatibleType) -> T:
+    def _preallocate(self, key: NestedKey, value: CompatibleType) -> T:
         return self._source.set(key, value)
 
     def _convert_inplace(self, inplace, key):
@@ -2572,7 +2581,7 @@ class _SubTensorDict(TensorDictBase):
 
     def _select(
         self,
-        *keys: str,
+        *keys: NestedKey,
         inplace: bool = False,
         strict: bool = True,
         set_shared: bool = True,
@@ -2583,7 +2592,9 @@ class _SubTensorDict(TensorDictBase):
             *keys, inplace=False, strict=strict, set_shared=set_shared
         )
 
-    def _exclude(self, *keys: str, inplace: bool = False, set_shared: bool = True) -> T:
+    def _exclude(
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
+    ) -> T:
         if inplace:
             raise RuntimeError("Cannot call exclude inplace on a lazy tensordict.")
         return self.to_tensordict()._exclude(
@@ -2606,7 +2617,7 @@ class _SubTensorDict(TensorDictBase):
         return self._source.is_memmap()
 
     def rename_key_(
-        self, old_key: str, new_key: str, safe: bool = False
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> _SubTensorDict:
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
@@ -2882,7 +2893,7 @@ class _TensorDictKeysView:
             if not self.leaves_only or is_leaf:
                 yield full_key
 
-    def _combine_keys(self, prefix: tuple | None, key: str) -> tuple:
+    def _combine_keys(self, prefix: tuple | None, key: NestedKey) -> tuple:
         if prefix is not None:
             return prefix + (key,)
         return (key,)

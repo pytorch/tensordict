@@ -54,7 +54,7 @@ jobs:
       fail-fast: false
     uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
     with:
-      runner: macos-m1-12
+      runner: macos-m1-stable
       repository: pytorch/tensordict
       timeout: 120
       script: |

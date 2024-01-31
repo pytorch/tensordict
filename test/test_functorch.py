@@ -308,8 +308,8 @@ class TestVmap:
         )
         td0 = TensorDict({key: [1.0]}, [1])
         td1 = TensorDict({key: [2.0]}, [1])
-        x = torch.stack([td0, td0.clone()], stack_dim)
-        y = torch.stack([td1, td1.clone()], stack_dim)
+        x = LazyStackedTensorDict.lazy_stack([td0, td0.clone()], stack_dim)
+        y = LazyStackedTensorDict.lazy_stack([td1, td1.clone()], stack_dim)
         if lock_x:
             x.lock_()
         if lock_y:

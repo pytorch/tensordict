@@ -427,15 +427,13 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @lock_blocked
     @_unlock_and_set
-    def pop(
-        self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         ...
 
     @lock_blocked
     @_unlock_and_set
     def rename_key_(
-        self, old_key: str, new_key: str, safe: bool = False
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> TensorDictBase:
         ...
 
@@ -488,9 +486,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_get_post_hook
     @_fallback
-    def get(
-        self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
+    def get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         ...
 
     @_get_post_hook
@@ -815,7 +811,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_unlock_and_set(inplace=True)
     def _exclude(
-        self, *keys: str, inplace: bool = False, set_shared: bool = True
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> TensorDictBase:
         ...
 
@@ -1054,7 +1050,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     @_apply_on_data
     def _stack_onto_at_(
         self,
-        key: str,
+        key: NestedKey,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,
