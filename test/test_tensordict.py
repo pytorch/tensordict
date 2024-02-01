@@ -777,8 +777,9 @@ class TestGeneric:
     def test_is_empty(self):
         assert TensorDict({"a": {"b": {}}}, []).is_empty()
         assert not TensorDict(
-            {"a": {"b": {}, "c": NonTensorData("a string!")}}, []
+            {"a": {"b": {}, "c": NonTensorData("a string!", batch_size=[])}}, []
         ).is_empty()
+        assert not TensorDict({"a": {"b": {}, "c": 1}}, []).is_empty()
 
     def test_keys_view(self):
         tensor = torch.randn(4, 5, 6, 7)

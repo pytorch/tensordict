@@ -1611,12 +1611,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     elif "." in key:
                         raise RuntimeError(DOT_ERROR)
                 return self.update(self_flatten.unflatten_keys("."))
-        # copy since we'll be using pop
-        state_dict = copy(state_dict)
-        self.batch_size = state_dict.pop("__batch_size")
-        device = state_dict.pop("__device", None)
-        if device is not None and self.device is not None and device != self.device:
-            raise RuntimeError("Loading data from another device is not yet supported.")
+
         if strict and set(state_dict.keys()) != set(self.keys()):
             set_sd = set(state_dict.keys())
             set_td = set(self.keys())
@@ -1625,7 +1620,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             # or if the local tensordicts are empty, we can skip
             def check_is_empty(target, key):
                 item = target.get(key)
-                if is_tensor_collection(item) and not item.is_empty():
+                if not is_tensor_collection(item) or (
+                    is_tensor_collection(item) and not item.is_empty()
+                ):
                     return False
                 return True
 
@@ -1636,6 +1633,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     "Cannot load state-dict because the key sets don't match: got "
                     f"state_dict extra keys \n{set_sd - set_td}\n and tensordict extra keys\n{set_td - set_sd}\n"
                 )
+
+        # copy since we'll be using pop
+        state_dict = copy(state_dict)
+
+        self.batch_size = state_dict.pop("__batch_size")
+        device = state_dict.pop("__device", None)
+        if device is not None and self.device is not None and device != self.device:
+            raise RuntimeError("Loading data from another device is not yet supported.")
 
         for key, item in state_dict.items():
             if isinstance(item, dict):
