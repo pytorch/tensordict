@@ -1,3 +1,3 @@
 #!/bin/bash
 
-export BUILD_VERSION=0.3.0
+export BUILD_VERSION=0.4.0
