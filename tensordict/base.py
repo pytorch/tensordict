@@ -1617,6 +1617,24 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         device = state_dict.pop("__device", None)
         if device is not None and self.device is not None and device != self.device:
             raise RuntimeError("Loading data from another device is not yet supported.")
+        if strict and set(state_dict.keys()) != set(self.keys()):
+            set_sd = set(state_dict.keys())
+            set_td = set(self.keys())
+            # if there are keys in state-dict that point to an empty tensordict
+            # or if the local tensordicts are empty, we can skip
+            def check_is_empty(target, key):
+                item = target.get(key)
+                if is_tensor_collection(item) and not item.is_empty():
+                    return False
+                return True
+
+            if not all(check_is_empty(self, key) for key in set_td - set_sd) or not all(
+                check_is_empty(state_dict, key) for key in set_sd - set_td
+            ):
+                raise RuntimeError(
+                    "Cannot load state-dict because the key sets don't match: got "
+                    f"state_dict extra keys \n{set_sd - set_td}\n and tensordict extra keys\n{set_td - set_sd}\n"
+                )
 
         for key, item in state_dict.items():
             if isinstance(item, dict):
@@ -1631,13 +1649,6 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 )
             else:
                 self.set(key, item, inplace=not assign)
-        if strict and set(state_dict.keys()) != set(self.keys()):
-            set_sd = set(state_dict.keys())
-            set_td = set(self.keys())
-            raise RuntimeError(
-                "Cannot load state-dict because the key sets don't match: got "
-                f"state_dict extra keys \n{set_sd - set_td}\n and tensordict extra keys\n{set_td - set_sd}\n"
-            )
         return self
 
     def is_shared(self) -> bool:
