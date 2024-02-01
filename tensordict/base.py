@@ -1620,6 +1620,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         if strict and set(state_dict.keys()) != set(self.keys()):
             set_sd = set(state_dict.keys())
             set_td = set(self.keys())
+
             # if there are keys in state-dict that point to an empty tensordict
             # or if the local tensordicts are empty, we can skip
             def check_is_empty(target, key):
