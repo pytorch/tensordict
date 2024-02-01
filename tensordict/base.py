@@ -1612,6 +1612,11 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                         raise RuntimeError(DOT_ERROR)
                 return self.update(self_flatten.unflatten_keys("."))
 
+        # copy since we'll be using pop
+        state_dict = copy(state_dict)
+        batch_size = state_dict.pop("__batch_size")
+        device = state_dict.pop("__device", None)
+
         if strict and set(state_dict.keys()) != set(self.keys()):
             set_sd = set(state_dict.keys())
             set_td = set(self.keys())
@@ -1634,11 +1639,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     f"state_dict extra keys \n{set_sd - set_td}\n and tensordict extra keys\n{set_td - set_sd}\n"
                 )
 
-        # copy since we'll be using pop
-        state_dict = copy(state_dict)
-
-        self.batch_size = state_dict.pop("__batch_size")
-        device = state_dict.pop("__device", None)
+        self.batch_size = batch_size
         if device is not None and self.device is not None and device != self.device:
             raise RuntimeError("Loading data from another device is not yet supported.")
 
