@@ -1858,12 +1858,14 @@ def isin(tensordict, reference_tensordict, key, dim=0, invert=False):
     reference_tensordict have the same batch size and contain the specified key, otherwise it will raise an error.
 
     Args:
-    - tensordict (TensorDict): Input TensorDict.
-    - target_tensordict (TensorDict): Target TensorDict against which to test.
-    - key (str): The key to test.
+        tensordict (TensorDict): Input TensorDict.
+        target_tensordict (TensorDict): Target TensorDict against which to test.
+        key (str): The key to test.
+        dim (int): The dimension along which to test.
+        invert (bool): If True, the values in the output tensor are inverted.
 
     Returns:
-    - indices (Tensor):
+        indices (Tensor):
     """
 
     # Check key is present in both tensordict and reference_tensordict
