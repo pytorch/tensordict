@@ -1697,7 +1697,7 @@ class TestGeneric:
     def test_update_(self, stack, todict):
         def make(val, todict=False, stack=False):
             if todict:
-                return make(val, stack=stack).todict()
+                return make(val, stack=stack).to_dict()
             if stack:
                 return LazyStackedTensorDict.lazy_stack([make(val), make(val)])
             return TensorDict({"a": {"b": val, "c": {}}, "d": {"e": val, "f": val}}, [])
