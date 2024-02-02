@@ -1850,6 +1850,43 @@ def print_directory_tree(path, indent="", display_metadata=True):
     else:
         logging.info(indent + os.path.basename(path))
 
+def isin(tensordict, reference_tensordict, key, dim=0):
+    """Finds rows from the target tensor that are present in the reference tensor.
+
+    Args:
+    - tensordict (TensorDict): Reference TensorDict of shape (N, M).
+    - target_tensordict (TensorDict): Target TensorDict of shape (L, M).
+    - key (str): Key of the tensor to remove rows from.
+
+    Returns:
+    - TensorDict: Filtered target TensorDict containing rows not present in the reference tensor.
+    """
+    # Check key is present in both tensordict and reference_tensordict
+    if key not in tensordict.keys(include_nested=True):
+        raise ValueError(f"Key '{key}' not found in tensordict")
+    if key not in reference_tensordict.keys(include_nested=True):
+        raise ValueError(f"Key '{key}' not found in reference_tensordict")
+
+    # Check that both TensorDicts have the same batch size
+    if tensordict.batch_size != reference_tensordict.batch_size:
+        raise ValueError(f"Batch size of tensordict and reference_tensordict do not match")
+
+    # Check that dim is not too large
+    if dim >= len(tensordict.betch_size):
+        raise ValueError(f"dim must be less than the number of dimensions in the tensordict")
+
+    reference_tensor = reference_tensordict.get(key)
+    target_tensor = tensordict.get(key)
+    N = reference_tensor.shape[0]
+
+    cat_data = torch.cat([reference_tensor, target_tensor], dim=0)
+    _, unique_indices = torch.unique(cat_data, dim=0, sorted=True, return_inverse=True)
+
+    common_indices = torch.isin(
+        unique_indices[N:], unique_indices[:N], assume_unique=True
+    )
+
+    return common_indices
 
 def _index_preserve_data_ptr(index):
     if isinstance(index, tuple):
