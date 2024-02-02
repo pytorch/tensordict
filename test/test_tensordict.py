@@ -6452,9 +6452,7 @@ class TestSnapshot:
         assert td_dest["b"].batch_size == td_plain["b"].batch_size
         assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
 
-    def test_update(
-        self
-    ):
+    def test_update(self):
         tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         state = {"state": tensordict}
         tensordict.memmap_()
