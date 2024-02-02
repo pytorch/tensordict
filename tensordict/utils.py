@@ -1850,7 +1850,14 @@ def print_directory_tree(path, indent="", display_metadata=True):
     else:
         logging.info(indent + os.path.basename(path))
 
-def isin(tensordict: TensorDictBase, reference_tensordict: TensorDictBase, key: str, dim: int=0, invert: bool=False):
+
+def isin(
+    tensordict: TensorDictBase,
+    reference_tensordict: TensorDictBase,
+    key: str,
+    dim: int = 0,
+    invert: bool = False,
+):
     """Tests if each element of 'key' in tensordict 'dim' is also present in the reference_tensordict.
 
     This function returns a boolean tensor of length  ´tensordict.batch_size[dim]´ that is True for elements in
@@ -1866,7 +1873,7 @@ def isin(tensordict: TensorDictBase, reference_tensordict: TensorDictBase, key: 
             not in reference_tensordict. Default: False
 
     Returns:
-        indices (Tensor): A boolean tensor of length ´tensordict.batch_size[dim]´ that is True for elements in
+        out (Tensor): A boolean tensor of length ´tensordict.batch_size[dim]´ that is True for elements in
             'key' that are also present in the reference_tensordict or False if invert is True.
 
     Examples:
@@ -1888,7 +1895,6 @@ def isin(tensordict: TensorDictBase, reference_tensordict: TensorDictBase, key: 
         >>> expected_in_reference = torch.tensor([True, True, True, False])
         >>> assert torch.equal(in_reference, expected_in_reference)
     """
-
     # Check key is present in both tensordict and reference_tensordict
     if key not in tensordict.keys(include_nested=True):
         raise ValueError(f"Key '{key}' not found in tensordict")
@@ -1897,7 +1903,9 @@ def isin(tensordict: TensorDictBase, reference_tensordict: TensorDictBase, key: 
 
     # Check that both TensorDicts have the same batch size
     if tensordict.batch_size != reference_tensordict.batch_size:
-        raise ValueError(f"Batch size of tensordict and reference_tensordict do not match")
+        raise ValueError(
+            "Batch size of tensordict and reference_tensordict do not match"
+        )
 
     # Check that dim is valid
     if dim >= len(tensordict.betch_size):
@@ -1913,15 +1921,14 @@ def isin(tensordict: TensorDictBase, reference_tensordict: TensorDictBase, key: 
     # Find the common indices
     cat_data = torch.cat([reference_tensor, target_tensor], dim=0)
     _, unique_indices = torch.unique(cat_data, dim=0, sorted=True, return_inverse=True)
-    out = torch.isin(
-        unique_indices[N:], unique_indices[:N], assume_unique=True
-    )
+    out = torch.isin(unique_indices[N:], unique_indices[:N], assume_unique=True)
 
     # Invert if necessary
     if invert:
         out = ~out
 
     return out
+
 
 def _index_preserve_data_ptr(index):
     if isinstance(index, tuple):
