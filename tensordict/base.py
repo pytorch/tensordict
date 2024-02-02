@@ -2474,12 +2474,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
             def inplace_update(name, dest, source):
                 if source is None:
+                    print(f'key {name} not in source')
                     return dest
                 name = _unravel_key_to_tuple(name)
                 for key in keys_to_update:
                     if key == name[: len(key)]:
                         return dest.copy_(source, non_blocking=True)
                 else:
+                    print(f'did not find {name} in {keys_to_update}')
                     return dest
 
         else:
