@@ -188,12 +188,12 @@ def test_isin(key, dim, invert):
 
         assert torch.equal(in_ref, expected_in_ref)
 
-    with pytest.raises(
-        KeyError,
-        match="The number of dimensions in the batch size of the tensordict and reference_tensordict must be the same.",
-    ):
-        td.batch_size = []
-        isin(td, td_ref, key, dim, invert)
+        with pytest.raises(
+            ValueError,
+            match="The number of dimensions in the batch size of the tensordict and reference_tensordict must be the same.",
+        ):
+            td.batch_size = []
+            isin(td, td_ref, key, dim, invert)
 
 
 if __name__ == "__main__":
