@@ -1850,17 +1850,22 @@ def print_directory_tree(path, indent="", display_metadata=True):
     else:
         logging.info(indent + os.path.basename(path))
 
-def isin(tensordict, reference_tensordict, key, dim=0):
-    """Finds rows from the target tensor that are present in the reference tensor.
+def isin(tensordict, reference_tensordict, key, dim=0, invert=False):
+    """Tests if each element of 'key' in tensordict 'dim' is also present in the reference_tensordict.
+
+    This function returns a boolean tensor of length  ´tensordict.batch_size[dim]´ that is True for elements in
+    'key' that are also present in the reference_tensordict. This function assumes that both tensordict and
+    reference_tensordict have the same batch size and contain the specified key, otherwise it will raise an error.
 
     Args:
-    - tensordict (TensorDict): Reference TensorDict of shape (N, M).
-    - target_tensordict (TensorDict): Target TensorDict of shape (L, M).
-    - key (str): Key of the tensor to remove rows from.
+    - tensordict (TensorDict): Input TensorDict.
+    - target_tensordict (TensorDict): Target TensorDict against which to test.
+    - key (str): The key to test.
 
     Returns:
-    - TensorDict: Filtered target TensorDict containing rows not present in the reference tensor.
+    - indices (Tensor):
     """
+
     # Check key is present in both tensordict and reference_tensordict
     if key not in tensordict.keys(include_nested=True):
         raise ValueError(f"Key '{key}' not found in tensordict")
@@ -1871,9 +1876,11 @@ def isin(tensordict, reference_tensordict, key, dim=0):
     if tensordict.batch_size != reference_tensordict.batch_size:
         raise ValueError(f"Batch size of tensordict and reference_tensordict do not match")
 
-    # Check that dim is not too large
+    # Check that dim is valid
     if dim >= len(tensordict.betch_size):
-        raise ValueError(f"dim must be less than the number of dimensions in the tensordict")
+        raise ValueError(
+            f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{tensordict.batch_size}'."
+        )
 
     reference_tensor = reference_tensordict.get(key)
     target_tensor = tensordict.get(key)
@@ -1885,6 +1892,9 @@ def isin(tensordict, reference_tensordict, key, dim=0):
     common_indices = torch.isin(
         unique_indices[N:], unique_indices[:N], assume_unique=True
     )
+
+    out = torch.zeros_like(target_tensor, dtype=torch.bool)
+    out[common_indices] = True
 
     return common_indices
 
