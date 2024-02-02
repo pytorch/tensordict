@@ -1868,6 +1868,25 @@ def isin(tensordict: TensorDictBase, reference_tensordict: TensorDictBase, key: 
     Returns:
         indices (Tensor): A boolean tensor of length ´tensordict.batch_size[dim]´ that is True for elements in
             'key' that are also present in the reference_tensordict or False if invert is True.
+
+    Examples:
+        >>> tensordict = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [10, 20], [50, 60]]),
+        ...     },
+        ...     batch_size=[4],
+        ... )
+        >>> reference_tensordict = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [10, 11, 12]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
+        ...     },
+        ...     batch_size=[3],
+        ... )
+        >>> in_reference = is_in_reference(tensordict, reference_tensordict, key="tensor1")
+        >>> expected_in_reference = torch.tensor([True, True, True, False])
+        >>> assert torch.equal(in_reference, expected_in_reference)
     """
 
     # Check key is present in both tensordict and reference_tensordict
@@ -1886,21 +1905,23 @@ def isin(tensordict: TensorDictBase, reference_tensordict: TensorDictBase, key: 
             f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{tensordict.batch_size}'."
         )
 
+    # Get the data
     reference_tensor = reference_tensordict.get(key)
     target_tensor = tensordict.get(key)
     N = reference_tensor.shape[0]
 
+    # Find the common indices
     cat_data = torch.cat([reference_tensor, target_tensor], dim=0)
     _, unique_indices = torch.unique(cat_data, dim=0, sorted=True, return_inverse=True)
-
-    common_indices = torch.isin(
+    out = torch.isin(
         unique_indices[N:], unique_indices[:N], assume_unique=True
     )
 
-    out = torch.zeros_like(target_tensor, dtype=torch.bool)
-    out[common_indices] = True
+    # Invert if necessary
+    if invert:
+        out = ~out
 
-    return common_indices
+    return out
 
 def _index_preserve_data_ptr(index):
     if isinstance(index, tuple):
