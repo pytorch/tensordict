@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Sequence
+import warnings
 
 import torch
 
@@ -77,6 +78,7 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
 
 def pad_sequence(
     list_of_tensordicts: Sequence[T],
+    batch_first: bool | None = None,
     pad_dim: int = 0,
     padding_value: float = 0.0,
     out: T | None = None,
@@ -119,6 +121,12 @@ def pad_sequence(
             device=None,
             is_shared=False)
     """
+    if batch_first is not None:
+        warnings.warn(
+            "The batch_first argument is deprecated and will be removed in a future release. The output will always be batch_first.",
+            category=DeprecationWarning,
+        )
+
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
