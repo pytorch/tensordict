@@ -1897,9 +1897,9 @@ def isin(
     """
     # Check key is present in both tensordict and reference_tensordict
     if key not in tensordict.keys(include_nested=True):
-        raise ValueError(f"Key '{key}' not found in tensordict")
+        raise KeyError(f"Key '{key}' not found in tensordict.")
     if key not in reference_tensordict.keys(include_nested=True):
-        raise ValueError(f"Key '{key}' not found in reference_tensordict")
+        raise KeyError(f"Key '{key}' not found in reference_tensordict.")
 
     # Check that both TensorDicts have the same number of dimensions
     if len(tensordict.batch_size) != len(reference_tensordict.batch_size):

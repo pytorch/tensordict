@@ -8,13 +8,13 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from tensordict import unravel_key, unravel_key_list
+from tensordict import TensorDict, unravel_key, unravel_key_list
 from tensordict._tensordict import _unravel_key_to_tuple
-
 from tensordict.utils import (
     _getitem_batch_size,
     _make_cache_key,
     convert_ellipsis_to_idx,
+    isin,
 )
 
 
@@ -149,6 +149,51 @@ def test_unravel_key_to_tuple():
     assert keys_out == [("a",), ("b",), ("c", "d")]
     assert not _unravel_key_to_tuple(("a", (1,), ("b",)))
     assert not _unravel_key_to_tuple(("a", (slice(None),), ("b",)))
+
+
+@pytest.mark.parametrize("key", ("tensor1", "tensor3"))
+@pytest.mark.parametrize("dim", (0, 1))
+@pytest.mark.parametrize("invert", (True, False))
+def test_isin(key, dim, invert):
+    td = TensorDict(
+        {
+            "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
+            "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
+        },
+        batch_size=[4],
+    )
+    td_ref = TensorDict(
+        {
+            "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [10, 11, 12]]),
+            "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
+        },
+        batch_size=[3],
+    )
+
+    if key == "tensor3":
+        with pytest.raises(KeyError, match=f"Key '{key}' not found in tensordict."):
+            isin(td, td_ref, key, dim, invert)
+    elif dim == 1:
+        with pytest.raises(
+            ValueError,
+            match="The specified dimension '1' is invalid for a TensorDict with batch size .*.",
+        ):
+            isin(td, td_ref, key, dim, invert)
+    else:
+        in_ref = isin(td, td_ref, key, dim, invert)
+
+        expected_in_ref = torch.tensor([True, True, True, False])
+        if invert:
+            expected_in_ref = ~expected_in_ref
+
+        assert torch.equal(in_ref, expected_in_ref)
+
+    with pytest.raises(
+        KeyError,
+        match="The number of dimensions in the batch size of the tensordict and reference_tensordict must be the same.",
+    ):
+        td.batch_size = []
+        isin(td, td_ref, key, dim, invert)
 
 
 if __name__ == "__main__":
