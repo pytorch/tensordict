@@ -1873,12 +1873,12 @@ def remove_duplicates(
     'dim' and removes elements in the same indices in all other tensors within the TensorDict.
 
     Args:
-        - tensordict (TensorDict): The TensorDict containing potentially duplicate elements.
-        - key (str): The key of the tensor along which duplicate elements should be identified and removed.
-        - dim (int): The dimension along which duplicate elements should be identified and removed.
+        tensordict (TensorDictBase): The TensorDict containing potentially duplicate elements.
+        key (str): The key of the tensor along which duplicate elements should be identified and removed.
+        dim (int): The dimension along which duplicate elements should be identified and removed.
 
     Returns:
-        - TensorDict: TensorDict with removed elements.
+        TensorDictBase: tensordict with removed elements.
 
     Example:
         >>> tensordict = TensorDict(
