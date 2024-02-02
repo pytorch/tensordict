@@ -1867,7 +1867,7 @@ def _index_preserve_data_ptr(index):
 def remove_duplicates(
     tensordict: TensorDictBase, key: str, dim: int = 0
 ) -> TensorDictBase:
-    """Removes indices in the TensorDict duplicated in 'key' along the specified dimension.
+    """Removes indices duplicated in 'key' along the specified dimension.
 
     This method detects duplicate elements in the tensor associated with the specified 'key' along the specified
     'dim' and removes elements in the same indices in all other tensors within the TensorDict.
