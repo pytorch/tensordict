@@ -1887,7 +1887,6 @@ def remove_duplicates(
         ...         "tensor2": torch.tensor([[10, 20], [30, 40], [10, 20], [50, 60]]),
         ...     }
         ... )
-        >>> key_to_remove_duplicates = "tensor1"
         >>> output_tensordict = remove_duplicate_elements(tensordict, key="tensor1", dim=0)
         >>> expected_output = TensorDict(
         ...     {
