@@ -6453,7 +6453,7 @@ class TestSnapshot:
         assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
 
     def test_update(
-        self,
+        self
     ):
         tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         state = {"state": tensordict}
@@ -6465,7 +6465,7 @@ class TestSnapshot:
         del tensordict
 
         snapshot = torchsnapshot.Snapshot(path=path)
-        tensordict2 = TensorDict({}, [])
+        tensordict2 = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         target_state = {"state": tensordict2}
         snapshot.restore(app_state=target_state)
         assert (td_plain == tensordict2).all()
