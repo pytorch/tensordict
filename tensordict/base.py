@@ -2475,6 +2475,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             def inplace_update(name, dest, source):
                 if source is None:
                     return dest
+                name = _unravel_key_to_tuple(name)
                 for key in keys_to_update:
                     if key == name[: len(key)]:
                         return dest.copy_(source, non_blocking=True)
