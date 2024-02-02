@@ -1692,6 +1692,35 @@ class TestGeneric:
             td_unbind[0].batch_size == td[:, 0].batch_size
         ), f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
 
+    @pytest.mark.parametrize("stack", [True, False])
+    @pytest.mark.parametrize("todict", [True, False])
+    def test_update_(self, stack, todict):
+        def make(val, todict=False, stack=False):
+            if todict:
+                return make(val, stack=stack).todict()
+            if stack:
+                return LazyStackedTensorDict.lazy_stack([make(val), make(val)])
+            return TensorDict({"a": {"b": val, "c": {}}, "d": {"e": val, "f": val}}, [])
+
+        td1 = make(1, stack=stack)
+        td2 = make(2, stack=stack, todict=todict)
+
+        # plain update_
+        td1.update_(td2)
+        assert (td1 == 2).all()
+
+        td1 = make(1, stack=stack)
+        for key in (("a",), "a"):
+            td1.update_(td2, keys_to_update=[key])
+            assert (td1.select("a") == 2).all()
+            assert (td1.exclude("a") == 1).all()
+
+        td1 = make(1, stack=stack)
+        for key in (("a", "b"), (("a",), ((("b"),),))):
+            td1.update_(td2, keys_to_update=[key])
+            assert (td1.select(("a", "b")) == 2).all()
+            assert (td1.exclude(("a", "b")) == 1).all()
+
     def test_update_nested_dict(self):
         t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
         assert ("a", "d") in t.keys(include_nested=True)
