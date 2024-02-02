@@ -1884,7 +1884,7 @@ def remove_duplicates(
         >>> tensordict = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
-        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [10, 20], [50, 60]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
         ...     }
         ... )
         >>> output_tensordict = remove_duplicate_elements(tensordict, key="tensor1", dim=0)
