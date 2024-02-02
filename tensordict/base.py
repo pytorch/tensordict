@@ -1623,16 +1623,30 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
             # if there are keys in state-dict that point to an empty tensordict
             # or if the local tensordicts are empty, we can skip
+            def _is_empty_dict(sd, key=None):
+                if key is not None:
+                    if not isinstance(sd[key], dict):
+                        return False
+                    return _is_empty_dict(sd[key])
+                for key, item in sd.items():
+                    if key in ("__batch_size", "__device"):
+                        continue
+                    if isinstance(item, dict):
+                        if not _is_empty_dict(item):
+                            return False
+                        continue
+                    return False
+                else:
+                    return True
+
             def check_is_empty(target, key):
                 item = target.get(key)
-                if not is_tensor_collection(item) or (
-                    is_tensor_collection(item) and not item.is_empty()
-                ):
+                if not is_tensor_collection(item) or not item.is_empty():
                     return False
                 return True
 
             if not all(check_is_empty(self, key) for key in set_td - set_sd) or not all(
-                check_is_empty(state_dict, key) for key in set_sd - set_td
+                _is_empty_dict(state_dict, key) for key in set_sd - set_td
             ):
                 raise RuntimeError(
                     "Cannot load state-dict because the key sets don't match: got "
