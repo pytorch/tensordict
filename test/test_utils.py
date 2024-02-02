@@ -154,7 +154,7 @@ def test_unravel_key_to_tuple():
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3"))
 @pytest.mark.parametrize("dim", (0, 1))
-def test_remove_duplicates(sample_tensordict, key, dim):
+def test_remove_duplicates(key, dim):
     input_tensordict = TensorDict(
         {
             "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -165,13 +165,13 @@ def test_remove_duplicates(sample_tensordict, key, dim):
 
     if key == "tensor3":
         with pytest.raises(
-            ValueError, match=f"The key '{key}' does not exist in the TensorDict."
+            KeyError, match=f"The key '{key}' does not exist in the TensorDict."
         ):
             remove_duplicates(input_tensordict, key, dim)
     elif dim == 1:
         with pytest.raises(
             ValueError,
-            match=f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{input_tensordict.batch_size}'.",
+            match=f"The specified dimension '1' is invalid for a TensorDict with batch size .*.",
         ):
             remove_duplicates(input_tensordict, key, dim)
     else:
