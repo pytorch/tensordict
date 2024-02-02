@@ -888,33 +888,63 @@ class TestGeneric:
         assert torch.equal(padded_td["a"], expected_a)
         padded_td._check_batch_size()
 
-    @pytest.mark.parametrize("batch_first", [True, False])
+    @pytest.mark.parametrize("pad_dim", [0, 1])
     @pytest.mark.parametrize("make_mask", [True, False])
-    def test_pad_sequence(self, batch_first, make_mask):
-        list_td = [
-            TensorDict({"a": torch.ones((2,)), ("b", "c"): torch.ones((2, 3))}, [2]),
-            TensorDict({"a": torch.ones((4,)), ("b", "c"): torch.ones((4, 3))}, [4]),
-        ]
-        padded_td = pad_sequence(
-            list_td, batch_first=batch_first, return_mask=make_mask
-        )
-        if batch_first:
-            assert padded_td.shape == torch.Size([2, 4])
-            assert padded_td["a"].shape == torch.Size([2, 4])
-            assert padded_td["a"][0, -1] == 0
+    def test_pad_sequence(self, pad_dim, make_mask):
+        if pad_dim == 0:
+            list_td = [
+                TensorDict(
+                    {"a": torch.ones((2, 8, 8)), ("b", "c"): torch.ones((2, 3))}, [2]
+                ),
+                TensorDict(
+                    {"a": torch.ones((4, 8, 8)), ("b", "c"): torch.ones((4, 3))}, [4]
+                ),
+            ]
+            padded_td = pad_sequence(list_td, pad_dim=pad_dim, return_mask=make_mask)
+            assert padded_td.shape == torch.Size([2])
+            assert padded_td["a"].shape == torch.Size([2, 4, 8, 8])
+            assert padded_td["a"][0, -1, -1, -1] == 0
             assert padded_td["b", "c"].shape == torch.Size([2, 4, 3])
             assert padded_td["b", "c"][0, -1, 0] == 0
+            if make_mask:
+                padded_td_without_masks = pad_sequence(
+                    list_td, pad_dim=pad_dim, return_mask=False
+                )
+                assert "masks" in padded_td.keys()
+                assert set(
+                    padded_td_without_masks.keys(include_nested=True, leaves_only=True)
+                ) == set(padded_td["masks"].keys(include_nested=True, leaves_only=True))
+                assert not padded_td["masks", "a"].all()
+                assert not padded_td["masks", "b", "c"].all()
+            else:
+                assert "masks" not in padded_td.keys()
         else:
-            assert padded_td.shape == torch.Size([4, 2])
-            assert padded_td["a"].shape == torch.Size([4, 2])
-            assert padded_td["a"][-1, 0] == 0
-            assert padded_td["b", "c"].shape == torch.Size([4, 2, 3])
-            assert padded_td["b", "c"][-1, 0, 0] == 0
-        if make_mask:
-            assert "mask" in padded_td.keys()
-            assert not padded_td["mask"].all()
-        else:
-            assert "mask" not in padded_td.keys()
+            list_td = [
+                TensorDict(
+                    {"a": torch.ones((6, 3, 8)), ("b", "c"): torch.ones((6, 3))}, []
+                ),
+                TensorDict(
+                    {"a": torch.ones((6, 5, 8)), ("b", "c"): torch.ones((6, 7))}, []
+                ),
+            ]
+            padded_td = pad_sequence(list_td, pad_dim=pad_dim, return_mask=make_mask)
+            assert padded_td.shape == torch.Size([2])
+            assert padded_td["a"].shape == torch.Size([2, 6, 5, 8])
+            assert padded_td["a"][0, -1, -1, -1] == 0
+            assert padded_td["b", "c"].shape == torch.Size([2, 6, 7])
+            assert padded_td["b", "c"][0, 0, -1] == 0
+            if make_mask:
+                padded_td_without_masks = pad_sequence(
+                    list_td, pad_dim=pad_dim, return_mask=False
+                )
+                assert "masks" in padded_td.keys()
+                assert set(
+                    padded_td_without_masks.keys(include_nested=True, leaves_only=True)
+                ) == set(padded_td["masks"].keys(include_nested=True, leaves_only=True))
+                assert not padded_td["masks", "a"].all()
+                assert not padded_td["masks", "b", "c"].all()
+            else:
+                assert "masks" not in padded_td.keys()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_permute(self, device):

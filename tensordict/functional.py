@@ -77,7 +77,7 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
 
 def pad_sequence(
     list_of_tensordicts: Sequence[T],
-    batch_first: bool = True,
+    pad_dim: int = 0,
     padding_value: float = 0.0,
     out: T | None = None,
     device: DeviceType | None = None,
@@ -87,77 +87,92 @@ def pad_sequence(
 
     Args:
         list_of_tensordicts (List[TensorDictBase]): the list of instances to pad and stack.
-        batch_first (bool, optional): the ``batch_first`` correspondant of :func:`torch.nn.utils.rnn.pad_sequence`.
-            Defaults to ``True``.
+        pad_dim (int, optional): the ``pad_dim`` indicates the dimension to pad all the keys in the tensordict.
+            Defaults to ``0``.
         padding_value (number, optional): the padding value. Defaults to ``0.0``.
         out (TensorDictBase, optional): if provided, the destination where the data will be
             written.
         device (device compatible type, optional): if provded, the device where the
             TensorDict output will be created.
-        return_mask (bool, optional): if ``True``, a "mask" entry will be returned.
-            It contains the mask of valid values in the stacked tensordict.
+        return_mask (bool, optional): if ``True``, a "masks" entry will be returned.
+            It contains a tensordict with the same structure as the stacked tensordict where every key contains the mask of valid values with size ``torch.Size([batch_size, max_seq_length])``.
 
     Examples:
         >>> list_td = [
-        ...     TensorDict({"a": torch.zeros((3,))}, []),
-        ...     TensorDict({"a": torch.zeros((4,))}, []),
+        ...     TensorDict({"a": torch.zeros((3,8)), "b": torch.zeros((6,8))}, []),
+        ...     TensorDict({"a": torch.zeros((5,8)), "b": torch.zeros((6,8))}, []),
         ...     ]
-        >>> padded_td = pad_sequence(list_td)
+        >>> padded_td = pad_sequence(list_td, return_mask=True)
         >>> print(padded_td)
         TensorDict(
             fields={
-                a: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-            batch_size=torch.Size([]),
+                a: Tensor(shape=torch.Size([2, 4, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                b: Tensor(shape=torch.Size([2, 5, 8]), device=cpu, dtype=torch.float32, is_shared=False),
+                masks: TensorDict(
+                    fields={
+                        a: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.bool, is_shared=False),
+                        b: Tensor(shape=torch.Size([2, 6]), device=cpu, dtype=torch.bool, is_shared=False)},
+                    batch_size=torch.Size([2]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([2]),
             device=None,
             is_shared=False)
     """
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
+
     # check that all tensordict match
     if return_mask:
-        for key in _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True):
+        for key in _check_keys(
+            list_of_tensordicts, leaves_only=True, include_nested=True
+        ):
             list_of_tensordicts = [
-                td.clone(False).set(f"{key}_mask", torch.ones(td.get(key).shape[0], dtype=torch.bool))
+                td.clone(False).set(
+                    tuple(["masks"] + list(key)),
+                    torch.ones(td.get(key).shape[pad_dim], dtype=torch.bool),
+                )
                 for td in list_of_tensordicts
             ]
+
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
-    shape = max(len(td) for td in list_of_tensordicts)
-    if shape == 0:
-        shape = [
-            len(list_of_tensordicts),
-        ]
-    elif batch_first:
-        shape = [len(list_of_tensordicts), shape]
-    else:
-        shape = [shape, len(list_of_tensordicts)]
+    shape = [
+        len(list_of_tensordicts),
+    ]
+
     if out is None:
         out = TensorDict(
             {}, batch_size=torch.Size(shape), device=device, _run_checks=False
         )
-        for key in keys:
-            try:
-                out.set(
+        set_func = out.set
+    else:
+        set_func = out.set_
+    for key in keys:
+        try:
+            if key[0] != "masks":
+                set_func(
+                    key,
+                    torch.nn.utils.rnn.pad_sequence(
+                        [
+                            td.get(key).transpose(0, pad_dim)
+                            for td in list_of_tensordicts
+                        ],
+                        batch_first=True,
+                        padding_value=padding_value,
+                    ).transpose(1, pad_dim + 1),
+                )
+            else:
+                set_func(
                     key,
                     torch.nn.utils.rnn.pad_sequence(
                         [td.get(key) for td in list_of_tensordicts],
-                        batch_first=batch_first,
+                        batch_first=True,
                         padding_value=padding_value,
                     ),
                 )
-            except Exception as err:
-                raise RuntimeError(f"pad_sequence failed for key {key}") from err
-        return out
-    else:
-        for key in keys:
-            out.set_(
-                key,
-                torch.nn.utils.rnn.pad_sequence(
-                    [td.get(key) for td in list_of_tensordicts],
-                    batch_first=batch_first,
-                    padding_value=padding_value,
-                ),
-            )
-        return out
+        except Exception as err:
+            raise RuntimeError(f"pad_sequence failed for key {key}") from err
+    return out
 
 
 def merge_tensordicts(*tensordicts: T) -> T:
