@@ -1850,7 +1850,7 @@ def print_directory_tree(path, indent="", display_metadata=True):
     else:
         logging.info(indent + os.path.basename(path))
 
-def isin(tensordict, reference_tensordict, key, dim=0, invert=False):
+def isin(tensordict: TensorDictBase, reference_tensordict: TensorDictBase, key: str, dim: int=0, invert: bool=False):
     """Tests if each element of 'key' in tensordict 'dim' is also present in the reference_tensordict.
 
     This function returns a boolean tensor of length  ´tensordict.batch_size[dim]´ that is True for elements in
@@ -1858,14 +1858,16 @@ def isin(tensordict, reference_tensordict, key, dim=0, invert=False):
     reference_tensordict have the same batch size and contain the specified key, otherwise it will raise an error.
 
     Args:
-        tensordict (TensorDict): Input TensorDict.
-        target_tensordict (TensorDict): Target TensorDict against which to test.
+        tensordict (TensorDictBase): Input TensorDict.
+        reference_tensordict (TensorDictBase): Target TensorDict against which to test.
         key (str): The key to test.
-        dim (int): The dimension along which to test.
-        invert (bool): If True, the values in the output tensor are inverted.
+        dim (int): The dimension along which to test. Default: 0
+        invert (bool):  If True, inverts the boolean return tensor, resulting in True values for elements
+            not in reference_tensordict. Default: False
 
     Returns:
-        indices (Tensor):
+        indices (Tensor): A boolean tensor of length ´tensordict.batch_size[dim]´ that is True for elements in
+            'key' that are also present in the reference_tensordict or False if invert is True.
     """
 
     # Check key is present in both tensordict and reference_tensordict
