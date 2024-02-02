@@ -1877,21 +1877,21 @@ def isin(
             'key' that are also present in the reference_tensordict or False if invert is True.
 
     Examples:
-        >>> tensordict = TensorDict(
+        >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
-        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [10, 20], [50, 60]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
         ...     },
         ...     batch_size=[4],
         ... )
-        >>> reference_tensordict = TensorDict(
+        >>> td_ref = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [10, 11, 12]]),
         ...         "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
         ...     },
         ...     batch_size=[3],
         ... )
-        >>> in_reference = is_in_reference(tensordict, reference_tensordict, key="tensor1")
+        >>> in_reference = is_in_reference(td, td_ref, key="tensor1")
         >>> expected_in_reference = torch.tensor([True, True, True, False])
         >>> assert torch.equal(in_reference, expected_in_reference)
     """
@@ -1901,14 +1901,14 @@ def isin(
     if key not in reference_tensordict.keys(include_nested=True):
         raise ValueError(f"Key '{key}' not found in reference_tensordict")
 
-    # Check that both TensorDicts have the same batch size
-    if tensordict.batch_size != reference_tensordict.batch_size:
+    # Check that both TensorDicts have the same number of dimensions
+    if len(tensordict.batch_size) != len(reference_tensordict.batch_size):
         raise ValueError(
-            "Batch size of tensordict and reference_tensordict do not match"
+            "The number of dimensions in the batch size of the tensordict and reference_tensordict must be the same."
         )
 
     # Check that dim is valid
-    if dim >= len(tensordict.betch_size):
+    if dim >= len(tensordict.batch_size):
         raise ValueError(
             f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{tensordict.batch_size}'."
         )
