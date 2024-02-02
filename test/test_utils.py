@@ -8,13 +8,14 @@ import argparse
 import numpy as np
 import pytest
 import torch
-from tensordict import unravel_key, unravel_key_list
+from tensordict import TensorDict, unravel_key, unravel_key_list
 from tensordict._tensordict import _unravel_key_to_tuple
 
 from tensordict.utils import (
     _getitem_batch_size,
     _make_cache_key,
     convert_ellipsis_to_idx,
+    remove_duplicates,
 )
 
 
@@ -149,6 +150,43 @@ def test_unravel_key_to_tuple():
     assert keys_out == [("a",), ("b",), ("c", "d")]
     assert not _unravel_key_to_tuple(("a", (1,), ("b",)))
     assert not _unravel_key_to_tuple(("a", (slice(None),), ("b",)))
+
+
+@pytest.mark.parametrize("key", ("tensor1", "tensor3"))
+@pytest.mark.parametrize("dim", (0, 1))
+def test_remove_duplicates(sample_tensordict, key, dim):
+    input_tensordict = TensorDict(
+        {
+            "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
+            "tensor2": torch.tensor([[10, 20], [30, 40], [10, 20], [50, 60]]),
+        },
+        batch_size=[4],
+    )
+
+    if key == "tensor3":
+        with pytest.raises(
+            ValueError, match=f"The key '{key}' does not exist in the TensorDict."
+        ):
+            remove_duplicates(input_tensordict, key, dim)
+    elif dim == 1:
+        with pytest.raises(
+            ValueError,
+            match=f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{input_tensordict.batch_size}'.",
+        ):
+            remove_duplicates(input_tensordict, key, dim)
+    else:
+        output_tensordict = remove_duplicates(input_tensordict, key, dim)
+
+        # Assert
+        expected_output = TensorDict(
+            {
+                "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
+                "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
+            },
+            batch_size=[3],
+        )
+        for key in output_tensordict.keys():
+            assert torch.equal(output_tensordict[key], expected_output[key])
 
 
 if __name__ == "__main__":

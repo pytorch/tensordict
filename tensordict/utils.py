@@ -1862,3 +1862,66 @@ def _index_preserve_data_ptr(index):
     if isinstance(index, slice) and (index.start == 0 or index.start is None):
         return True
     return False
+
+
+def remove_duplicates(
+    tensordict: TensorDictBase, key: str, dim: int = 0
+) -> TensorDictBase:
+    """Removes indices in the TensorDict duplicated in 'key' along the specified dimension.
+
+    This method detects duplicate elements in the tensor associated with the specified 'key' along the specified
+    'dim' and removes elements in the same indices in all other tensors within the TensorDict.
+
+    Args:
+        - tensordict (TensorDict): The TensorDict containing potentially duplicate elements.
+        - key (str): The key of the tensor along which duplicate elements should be identified and removed.
+        - dim (int): The dimension along which duplicate elements should be identified and removed.
+
+    Returns:
+        - TensorDict: TensorDict with removed elements.
+
+    Example:
+        >>> tensordict = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [10, 20], [50, 60]]),
+        ...     }
+        ... )
+        >>> key_to_remove_duplicates = "tensor1"
+        >>> output_tensordict = remove_duplicate_elements(tensordict, key="tensor1", dim=0)
+        >>> expected_output = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
+        ...     },
+        ...     batch_size=[3],
+        ... )
+        >>> for key in output_tensordict.keys():
+        ...     assert torch.equal(output_tensordict[key], expected_output[key])
+    """
+    # Check if the key is a TensorDict
+    if key not in tensordict.keys(include_nested=True):
+        raise KeyError(f"The key '{key}' does not exist in the TensorDict.")
+
+    # Check dim is valid
+    if dim >= len(tensordict.batch_size):
+        raise ValueError(
+            f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{tensordict.batch_size}'."
+        )
+
+    # Get indices of unique elements (e.g. [0, 1, 0, 2])
+    tensor = tensordict.get(key)
+    _, unique_indices, counts = torch.unique(
+        tensor, dim=dim, sorted=True, return_inverse=True, return_counts=True
+    )
+
+    # Find first occurrence of each index  (e.g. [0, 1, 3])
+    _, unique_indices_sorted = torch.sort(unique_indices, stable=True)
+    cum_sum = counts.cumsum(0)
+    cum_sum = torch.cat((torch.tensor([0]), cum_sum[:-1]))
+    first_indices = unique_indices_sorted[cum_sum]
+
+    # Remove duplicate elements in the TensorDict
+    unique_tensordict = tensordict[first_indices]
+
+    return unique_tensordict
