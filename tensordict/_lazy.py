@@ -2040,7 +2040,10 @@ class LazyStackedTensorDict(TensorDictBase):
             # no op
             return self
         if not is_tensor_collection(input_dict_or_td):
-            input_dict_or_td = TensorDict.from_dict(input_dict_or_td)
+            input_dict_or_td = TensorDict.from_dict(input_dict_or_td, batch_dims=batch_dims)
+            print("built", input_dict_or_td)
+            if input_dict_or_td.batch_dims <= self.stack_dims:
+                raise RuntimeError(f"{input_dict_or_td} does not have enough dims.")
         if input_dict_or_td.batch_size[self.stack_dim] != len(self.tensordicts):
             raise ValueError("cannot update stacked tensordicts with different shapes.")
         for td_dest, td_source in zip(
