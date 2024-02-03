@@ -2543,6 +2543,29 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_index.is_shared() is td.is_shared()
         assert td_index.device == td.device
 
+    @pytest.mark.parametrize("npy", [False, True])
+    def test_index_tensor_nd_names(self, td_name, device, npy):
+        td = getattr(self, td_name)(device)
+        names = ("a", "b", "c", "d")
+        try:
+            td.refine_names(*names)
+        except RuntimeError:
+            names = td.names
+        tensor_example = torch.zeros(()).expand(td.shape)
+        assert td.names == list(names)
+        index = torch.tensor([[0, 1, 2], [1, 2, 0], [2, 0, 1]])
+        if npy:
+            index = index.numpy()
+        td_idx = td[:, index]
+        assert tensor_example[:, index].shape == td_idx.shape
+        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        td_idx = td[0, index]
+        assert tensor_example[0, index].shape == td_idx.shape
+        assert td_idx.names == [names[1], names[1], *names[2:]]
+        td_idx = td[..., index, :, :]
+        assert tensor_example[..., index, :, :].shape == td_idx.shape
+        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+
     def test_inferred_view_size(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
             pytest.skip("view incompatible with stride / permutation")

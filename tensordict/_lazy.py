@@ -560,6 +560,16 @@ class LazyStackedTensorDict(TensorDictBase):
                             selected_td_idx = range(self.shape[i])
                             split_dim = cursor - num_single
                             mask_loc = i
+                    else:
+                        # we know idx is not a single integer, so it must have
+                        # a dimension. We play with num_single, reducing it
+                        # by the number of dims of idx: if idx has 3 dims, our
+                        # indexed tensor will have 2 more dimensions, going in
+                        # the opposite direction of indexing with a single integer,
+                        # smth[torch.tensor(1)].ndim = smth.ndim-1
+                        # smth[torch.tensor([1])].ndim = smth.ndim
+                        # smth[torch.tensor([[1]])].ndim = smth.ndim+1
+                        num_single -= idx.ndim - 1
                     out.append(idx)
                 else:
                     raise TypeError(f"Invalid index type: {type(idx)}.")
@@ -1562,9 +1572,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 return torch.cat(result, cat_dim)
         elif is_nd_tensor:
             new_stack_dim = self.stack_dim - num_single + num_none
-            return LazyStackedTensorDict.lazy_stack(
+            out = LazyStackedTensorDict.lazy_stack(
                 [self[idx] for idx in converted_idx.values()], new_stack_dim
             )
+            out._td_dim_name = self._td_dim_name
+            return out
         else:
             if isinteger:
                 for (
@@ -1578,8 +1590,17 @@ class LazyStackedTensorDict(TensorDictBase):
                         result = result[_idx]
                     return result
             else:
+                print(
+                    "last case",
+                    self.stack_dim,
+                    converted_idx,
+                    num_single,
+                    num_none,
+                    num_squash,
+                )
                 result = []
                 new_stack_dim = self.stack_dim - num_single + num_none - num_squash
+                print("new_stack_dim", new_stack_dim)
                 for i, _idx in converted_idx.items():
                     result.append(self.tensordicts[i][_idx])
                 result = LazyStackedTensorDict.lazy_stack(result, new_stack_dim)
