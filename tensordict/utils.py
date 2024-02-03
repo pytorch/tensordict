@@ -1466,8 +1466,11 @@ def _set_max_batch_size(source: T, batch_dims=None):
         else:
             source.batch_size = batch_size
             return
-        for tensor in tensor_data[1:]:
-            if tensor.dim() <= curr_dim or tensor.size(curr_dim) != curr_dim_size:
+        for leaf in tensor_data[1:]:
+            # if we have a nested empty tensordict we can modify its batch size at will
+            if _is_tensor_collection(type(leaf)) and leaf.is_empty():
+                continue
+            if (leaf.dim() <= curr_dim) or (leaf.size(curr_dim) != curr_dim_size):
                 source.batch_size = batch_size
                 return
         if batch_dims is None or len(batch_size) < batch_dims:
