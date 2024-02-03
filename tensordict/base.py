@@ -2501,18 +2501,40 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
-            keys_to_update = unravel_key_list(keys_to_update)
-        for key, value in input_dict_or_td.items():
-            firstkey, *nextkeys = _unravel_key_to_tuple(key)
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
-            ):
-                continue
-            if clone:
-                value = value.clone()
-            self.set_((firstkey, *nextkeys), value)
-        return self
+            keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
+        if keys_to_update:
+
+            def inplace_update(name, dest, source):
+                if source is None:
+                    return dest
+                name = _unravel_key_to_tuple(name)
+                for key in keys_to_update:
+                    if key == name[: len(key)]:
+                        return dest.copy_(source, non_blocking=True)
+                else:
+                    return dest
+
+        else:
+
+            def inplace_update(name, dest, source):
+                if source is None:
+                    return dest
+                return dest.copy_(source, non_blocking=True)
+
+        if not is_tensor_collection(input_dict_or_td):
+            from tensordict import TensorDict
+
+            input_dict_or_td = TensorDict.from_dict(
+                input_dict_or_td, batch_dims=self.batch_dims
+            )
+        return self._apply_nest(
+            inplace_update,
+            input_dict_or_td,
+            nested_keys=True,
+            default=None,
+            inplace=True,
+            named=True,
+        )
 
     def update_at_(
         self,
