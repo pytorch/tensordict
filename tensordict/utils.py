@@ -1874,7 +1874,7 @@ def remove_duplicates(
 
     Args:
         tensordict (TensorDictBase): The TensorDict containing potentially duplicate elements.
-        key (str): The key of the tensor along which duplicate elements should be identified and removed.
+        key (NestedKey): The key of the tensor along which duplicate elements should be identified and removed.
         dim (int): The dimension along which duplicate elements should be identified and removed. Default: 0.
 
     Returns:
