@@ -184,7 +184,7 @@ def test_remove_duplicates(key, dim):
     elif dim != 0:
         with pytest.raises(
             ValueError,
-            match="The specified dimension '1' is invalid for a TensorDict with batch size .*.",
+            match=f"The specified dimension '{dim}' is invalid for a TensorDict with batch size .*.",
         ):
             remove_duplicates(input_tensordict, key, dim)
     else:
