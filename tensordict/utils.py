@@ -1865,7 +1865,10 @@ def _index_preserve_data_ptr(index):
 
 
 def remove_duplicates(
-    tensordict: TensorDictBase, key: NestedKey, dim: int = 0, return_indices: bool = False
+    tensordict: TensorDictBase,
+    key: NestedKey,
+    dim: int = 0,
+    return_indices: bool = False,
 ) -> TensorDictBase:
     """Removes indices duplicated in `key` along the specified dimension.
 
