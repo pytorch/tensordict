@@ -154,7 +154,7 @@ def test_unravel_key_to_tuple():
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3", "next"))
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
-def test_remove_duplicates(key, dim):
+def test_remove_duplicates_1dim(key, dim):
     input_tensordict = TensorDict(
         {
             "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -206,6 +206,39 @@ def test_remove_duplicates(key, dim):
             batch_size=[3],
         )
         assert (output_tensordict == expected_output).all()
+
+
+@pytest.mark.parametrize("dim", (0, 1, -1, -2))
+def test_remove_duplicates_2dims(dim):
+    key = "tensor1"
+    input_tensordict = TensorDict(
+        {
+            "tensor1": torch.ones(4, 4),
+            "tensor2": torch.ones(4, 4),
+        },
+        batch_size=[4, 4],
+    )
+
+    output_tensordict = remove_duplicates(input_tensordict, key, dim)
+
+    if dim in (0, -2):
+        expected_output = TensorDict(
+            {
+                "tensor1": torch.ones(4, 1),
+                "tensor2": torch.ones(4, 1),
+            },
+            batch_size=[4, 1],
+        )
+    else:
+        expected_output = TensorDict(
+            {
+                "tensor1": torch.ones(4, 1),
+                "tensor2": torch.ones(4, 1),
+            },
+            batch_size=[4, 1],
+        )
+
+    assert (output_tensordict == expected_output).all()
 
 
 if __name__ == "__main__":

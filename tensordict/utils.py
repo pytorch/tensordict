@@ -1932,5 +1932,5 @@ def remove_duplicates(
 
     # Remove duplicate elements in the TensorDict
     unique_tensordict = tensordict[(slice(None),) * dim + (first_indices,)]
-    
+
     return unique_tensordict
