@@ -1912,7 +1912,8 @@ def remove_duplicates(
         raise KeyError(f"The key '{key}' does not point to a tensor in the TensorDict.")
 
     # Check dim is valid
-    if dim >= len(tensordict.batch_size):
+    batch_dims = len(tensordict.batch_size)
+    if dim >= batch_dims or dim <= -batch_dims:
         raise ValueError(
             f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{tensordict.batch_size}'."
         )
