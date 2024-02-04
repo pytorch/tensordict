@@ -1895,8 +1895,7 @@ def remove_duplicates(
         ...     },
         ...     batch_size=[3],
         ... )
-        >>> for key in output_tensordict.keys():
-        ...     assert torch.equal(output_tensordict[key], expected_output[key])
+        >>> assert (tensordict == expected_output).all()
     """
     # Check if the key is a TensorDict
     if key not in tensordict.keys(include_nested=True):
