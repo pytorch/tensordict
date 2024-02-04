@@ -1909,9 +1909,7 @@ def remove_duplicates(
 
     # Check that the key points to a tensor
     if not isinstance(tensordict.get(key), torch.Tensor):
-        raise ValueError(
-            f"The key '{key}' does not point to a tensor in the TensorDict."
-        )
+        raise KeyError(f"The key '{key}' does not point to a tensor in the TensorDict.")
 
     # Check dim is valid
     if dim >= len(tensordict.batch_size):

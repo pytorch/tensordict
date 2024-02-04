@@ -152,13 +152,20 @@ def test_unravel_key_to_tuple():
     assert not _unravel_key_to_tuple(("a", (slice(None),), ("b",)))
 
 
-@pytest.mark.parametrize("key", ("tensor1", "tensor3"))
+@pytest.mark.parametrize("key", ("tensor1", "tensor3", "next"))
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
 def test_remove_duplicates(key, dim):
     input_tensordict = TensorDict(
         {
             "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
             "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
+            "next": TensorDict(
+                {
+                    "tensor3": torch.tensor([[0], [1], [2], [3]]),
+                    "tensor4": torch.tensor([[10], [11], [12], [13]]),
+                },
+                batch_size=[4],
+            ),
         },
         batch_size=[4],
     )
@@ -166,6 +173,12 @@ def test_remove_duplicates(key, dim):
     if key == "tensor3":
         with pytest.raises(
             KeyError, match=f"The key '{key}' does not exist in the TensorDict."
+        ):
+            remove_duplicates(input_tensordict, key, dim)
+    elif key == "next":
+        with pytest.raises(
+            ValueError,
+            match=f"The key '{key}' does not point to a tensor in the TensorDict.",
         ):
             remove_duplicates(input_tensordict, key, dim)
     elif dim == 1:
@@ -182,6 +195,13 @@ def test_remove_duplicates(key, dim):
             {
                 "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
                 "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
+                "next": TensorDict(
+                    {
+                        "tensor3": torch.tensor([[0], [1], [3]]),
+                        "tensor4": torch.tensor([[10], [11], [13]]),
+                    },
+                    batch_size=[4],
+                ),
             },
             batch_size=[3],
         )
