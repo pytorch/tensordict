@@ -5918,12 +5918,12 @@ class TestLazyStackedTensorDict:
         middle = LazyStackedTensorDict.lazy_stack([inner] * 3, 0)
         outer = LazyStackedTensorDict.lazy_stack([middle] * 2, 0)
         outer_dense = outer.to_tensordict()
-        ref_tensor = torch.zeros(2, 3, 4)
         pos1 = self._idx_list[pos1]
         pos2 = self._idx_list[pos2]
         pos3 = self._idx_list[pos3]
         index = (pos1, pos2, pos3)
         result = outer[index]
+        ref_tensor = torch.zeros(outer.shape)
         assert result.batch_size == ref_tensor[index].shape, index
         assert result.batch_size == outer_dense[index].shape, index
 

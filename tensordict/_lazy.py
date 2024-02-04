@@ -532,10 +532,9 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 if _is_number(idx) and cursor < self.stack_dim:
                     num_single += 1
-                if isinstance(
+                if _is_number(idx) or isinstance(
                     idx,
                     (
-                        int,
                         ftdim.Dim,
                         slice,
                         list,
@@ -560,7 +559,7 @@ class LazyStackedTensorDict(TensorDictBase):
                             selected_td_idx = range(self.shape[i])
                             split_dim = cursor - num_single
                             mask_loc = i
-                    else:
+                    elif cursor < self.stack_dim:
                         # we know idx is not a single integer, so it must have
                         # a dimension. We play with num_single, reducing it
                         # by the number of dims of idx: if idx has 3 dims, our
@@ -1590,17 +1589,8 @@ class LazyStackedTensorDict(TensorDictBase):
                         result = result[_idx]
                     return result
             else:
-                print(
-                    "last case",
-                    self.stack_dim,
-                    converted_idx,
-                    num_single,
-                    num_none,
-                    num_squash,
-                )
                 result = []
                 new_stack_dim = self.stack_dim - num_single + num_none - num_squash
-                print("new_stack_dim", new_stack_dim)
                 for i, _idx in converted_idx.items():
                     result.append(self.tensordicts[i][_idx])
                 result = LazyStackedTensorDict.lazy_stack(result, new_stack_dim)
