@@ -1309,6 +1309,9 @@ class TensorDict(TensorDictBase):
                         idx_to_take.append(None)
                     elif _is_number(_idx):
                         count += 1
+                    elif isinstance(_idx, (torch.Tensor, np.ndarray)):
+                        idx_to_take.extend([count] * _idx.ndim)
+                        count += 1
                     else:
                         idx_to_take.append(count)
                         count += 1
