@@ -170,18 +170,23 @@ def test_remove_duplicates_1dim(key, dim):
         batch_size=[4],
     )
 
+    # Test for non-existent key
     if key == "tensor3":
         with pytest.raises(
             KeyError, match=f"The key '{key}' does not exist in the TensorDict."
         ):
             remove_duplicates(input_tensordict, key, dim)
+
+    # Test for non-leaf key
     elif key == "next":
         with pytest.raises(
             KeyError,
             match=f"The key '{key}' does not point to a tensor in the TensorDict.",
         ):
             remove_duplicates(input_tensordict, key, dim)
-    elif dim != 0:
+
+    # Test for invalid dimension
+    elif dim in (1, -2):
         with pytest.raises(
             ValueError,
             match=f"The specified dimension '{dim}' is invalid for a TensorDict with batch size .*.",
@@ -189,8 +194,6 @@ def test_remove_duplicates_1dim(key, dim):
             remove_duplicates(input_tensordict, key, dim)
     else:
         output_tensordict = remove_duplicates(input_tensordict, key, dim)
-
-        # Assert
         expected_output = TensorDict(
             {
                 "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
@@ -224,10 +227,10 @@ def test_remove_duplicates_2dims(dim):
     if dim in (0, -2):
         expected_output = TensorDict(
             {
-                "tensor1": torch.ones(4, 1),
-                "tensor2": torch.ones(4, 1),
+                "tensor1": torch.ones(1, 4),
+                "tensor2": torch.ones(1, 4),
             },
-            batch_size=[4, 1],
+            batch_size=[1, 4],
         )
     else:
         expected_output = TensorDict(

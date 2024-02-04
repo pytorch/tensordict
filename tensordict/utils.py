@@ -1865,7 +1865,7 @@ def _index_preserve_data_ptr(index):
 
 
 def remove_duplicates(
-    tensordict: TensorDictBase, key: str, dim: int = 0
+    tensordict: TensorDictBase, key: NestedKey, dim: int = 0, return_indices: bool = False
 ) -> TensorDictBase:
     """Removes indices duplicated in `key` along the specified dimension.
 
@@ -1880,10 +1880,14 @@ def remove_duplicates(
             must be one of the leaf keys within the TensorDict, pointing to a tensor and not to another TensorDict.
         dim (int): The dimension along which duplicate elements should be identified and removed. It must be one of
             the dimensions within the batch size of the input TensorDict. Defaults to ``0``.
+        return_indices (bool, optional): If ``True``, the indices of the unique elements in the input tensor will be
+            returned as well. Defaults to ``False``.
 
     Returns:
-        TensorDictBase: input tensordict with the indices corrsponding to duplicated elements in tensor `key` along
-        dimension `dim` removed.
+        unique_tensordict (TensorDictBase): input tensordict with the indices corrsponding to duplicated elements
+            in tensor `key` along dimension `dim` removed.
+        unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
+            input tensordict for the specified `key` along the specified `dim`. Only provided if return_index is True.
 
     Example:
         >>> tensordict = TensorDict(
@@ -1913,10 +1917,14 @@ def remove_duplicates(
 
     # Check dim is valid
     batch_dims = len(tensordict.batch_size)
-    if dim >= batch_dims or dim <= -batch_dims:
+    if dim >= batch_dims or dim < -batch_dims:
         raise ValueError(
             f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{tensordict.batch_size}'."
         )
+
+    # Convert negative dimension to its positive equivalent
+    if dim < 0:
+        dim = batch_dims + dim
 
     # Get indices of unique elements (e.g. [0, 1, 0, 2])
     tensor = tensordict.get(key)
@@ -1932,5 +1940,8 @@ def remove_duplicates(
 
     # Remove duplicate elements in the TensorDict
     unique_tensordict = tensordict[(slice(None),) * dim + (first_indices,)]
+
+    if return_indices:
+        return unique_tensordict, unique_indices
 
     return unique_tensordict
