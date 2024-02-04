@@ -293,7 +293,16 @@ class TensorDict(TensorDictBase):
         return destination
 
     def is_empty(self):
-        for _ in self._tensordict:
+        from tensordict import NonTensorData
+
+        for _, item in self._tensordict.items():
+            # we need to check if item is empty
+            if (
+                _is_tensor_collection(type(item))
+                and not isinstance(item, NonTensorData)
+                and item.is_empty()
+            ):
+                continue
             return False
         return True
 

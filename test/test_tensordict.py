@@ -774,6 +774,13 @@ class TestGeneric:
         assert td.view(3, 4) is td
         assert td.view(-1, 12).shape == torch.Size([1, 12])
 
+    def test_is_empty(self):
+        assert TensorDict({"a": {"b": {}}}, []).is_empty()
+        assert not TensorDict(
+            {"a": {"b": {}, "c": NonTensorData("a string!", batch_size=[])}}, []
+        ).is_empty()
+        assert not TensorDict({"a": {"b": {}, "c": 1}}, []).is_empty()
+
     def test_keys_view(self):
         tensor = torch.randn(4, 5, 6, 7)
         sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
@@ -812,6 +819,16 @@ class TestGeneric:
 
         assert leaves == set()
         assert leaves_nested == {("a", "b", "c")}
+
+    def test_load_state_dict_incomplete(self):
+        data = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, [])
+        sd = TensorDict({"d": 0}, []).state_dict()
+        data.load_state_dict(sd, strict=True)
+        assert data["d"] == 0
+        sd = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, []).state_dict()
+        data = TensorDict({"d": 0}, [])
+        data.load_state_dict(sd, strict=True)
+        assert data["d"] == 1
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mask_td(self, device):
@@ -1674,6 +1691,35 @@ class TestGeneric:
         assert (
             td_unbind[0].batch_size == td[:, 0].batch_size
         ), f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
+
+    @pytest.mark.parametrize("stack", [True, False])
+    @pytest.mark.parametrize("todict", [True, False])
+    def test_update_(self, stack, todict):
+        def make(val, todict=False, stack=False):
+            if todict:
+                return make(val, stack=stack).to_dict()
+            if stack:
+                return LazyStackedTensorDict.lazy_stack([make(val), make(val)])
+            return TensorDict({"a": {"b": val, "c": {}}, "d": {"e": val, "f": val}}, [])
+
+        td1 = make(1, stack=stack)
+        td2 = make(2, stack=stack, todict=todict)
+
+        # plain update_
+        td1.update_(td2)
+        assert (td1 == 2).all()
+
+        td1 = make(1, stack=stack)
+        for key in (("a",), "a"):
+            td1.update_(td2, keys_to_update=[key])
+            assert (td1.select("a") == 2).all()
+            assert (td1.exclude("a") == 1).all()
+
+        td1 = make(1, stack=stack)
+        for key in (("a", "b"), (("a",), ((("b"),),))):
+            td1.update_(td2, keys_to_update=[key])
+            assert (td1.select(("a", "b")) == 2).all()
+            assert (td1.exclude(("a", "b")) == 1).all()
 
     def test_update_nested_dict(self):
         t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
@@ -6458,9 +6504,7 @@ class TestSnapshot:
         assert td_dest["b"].batch_size == td_plain["b"].batch_size
         assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
 
-    def test_update(
-        self,
-    ):
+    def test_update(self):
         tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         state = {"state": tensordict}
         tensordict.memmap_()
@@ -6471,7 +6515,7 @@ class TestSnapshot:
         del tensordict
 
         snapshot = torchsnapshot.Snapshot(path=path)
-        tensordict2 = TensorDict({}, [])
+        tensordict2 = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         target_state = {"state": tensordict2}
         snapshot.restore(app_state=target_state)
         assert (td_plain == tensordict2).all()
