@@ -153,7 +153,7 @@ def test_unravel_key_to_tuple():
 
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3", "next"))
-@pytest.mark.parametrize("dim", (-1))
+@pytest.mark.parametrize("dim", (0, 1, -1, -2))
 def test_remove_duplicates(key, dim):
     input_tensordict = TensorDict(
         {
@@ -181,7 +181,7 @@ def test_remove_duplicates(key, dim):
             match=f"The key '{key}' does not point to a tensor in the TensorDict.",
         ):
             remove_duplicates(input_tensordict, key, dim)
-    elif dim == 1:
+    elif dim != 0:
         with pytest.raises(
             ValueError,
             match="The specified dimension '1' is invalid for a TensorDict with batch size .*.",
@@ -189,6 +189,7 @@ def test_remove_duplicates(key, dim):
             remove_duplicates(input_tensordict, key, dim)
     else:
         output_tensordict = remove_duplicates(input_tensordict, key, dim)
+
         # Assert
         expected_output = TensorDict(
             {
