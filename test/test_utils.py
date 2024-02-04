@@ -153,7 +153,7 @@ def test_unravel_key_to_tuple():
 
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3"))
-@pytest.mark.parametrize("dim", (0, 1))
+@pytest.mark.parametrize("dim", (0, 1, -1, -2))
 def test_remove_duplicates(key, dim):
     input_tensordict = TensorDict(
         {
