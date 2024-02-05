@@ -1829,7 +1829,10 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_apply_filter(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         assert td.apply(lambda x: None, filter_empty=False) is not None
-        assert td.apply(lambda x: None, filter_empty=True) is None
+        if td_name != "td_with_non_tensor":
+            assert td.apply(lambda x: None, filter_empty=True) is None
+        else:
+            assert td.apply(lambda x: None, filter_empty=True) is not None
 
     @pytest.mark.parametrize("inplace", [False, True])
     def test_apply_other(self, td_name, device, inplace):
@@ -4209,6 +4212,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_stack == td_out).all()
 
     @pytest.mark.filterwarnings("error")
+    @set_lazy_legacy(True)
     def test_stack_subclasses_on_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)

@@ -3614,8 +3614,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 raise a `KeyError`.
             filter_empty (bool, optional): if ``True``, empty tensordicts will be
                 filtered out. This also comes with a lower computational cost as
-                empty data structures won't be created and destroyed. Defaults to
-                ``False`` for backward compatibility.
+                empty data structures won't be created and destroyed. Non-tensor data
+                is considered as a leaf and thereby will be kept in the tensordict even
+                if left untouched by the function.
+                Defaults to ``False`` for backward compatibility.
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
 
