@@ -364,6 +364,11 @@
 <h1>Welcome to the TensorDict Documentation!<a class="headerlink" href="#welcome-to-the-tensordict-documentation" title="Permalink to this heading">¶</a></h1>
 <p><cite>TensorDict</cite> is a dictionary-like class that inherits properties from tensors,
 such as indexing, shape operations, casting to device etc.</p>
+<p>You can install tensordict directly from PyPI (see more about installation
+instructions in the dedicated section below):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ pip install tensordict
+</pre></div>
+</div>
 <p>The main purpose of TensorDict is to make code-bases more <em>readable</em> and <em>modular</em>
 by abstracting away tailored operations:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">tensordict</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">dataset</span><span class="p">):</span>
@@ -380,6 +385,23 @@ Each individual step of the training loop (data collection and transform, model
 prediction, loss computation etc.)
 can be tailored to the use case at hand without impacting the others.
 For instance, the above example can be easily used across classification and segmentation tasks, among many others.</p>
+</section>
+<section id="installation">
+<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this heading">¶</a></h1>
+<p>Tensordict releases are synced with PyTorch, so make sure you always enjoy the latest
+features of the library with the <a class="reference external" href="https://pytorch.org/get-started/locally/">most recent version of PyTorch</a> (although core features
+are guaranteed to be backward compatible with pytorch&gt;=1.13).
+Nightly releases can be installed via</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ pip install tensordict-nightly
+</pre></div>
+</div>
+<p>or via a <cite>git clone</cite> if you’re willing to contribute to the library:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ cd path/to/root
+$ git clone https://github.com/pytorch/tensordict
+$ cd tensordict
+$ python setup.py develop
+</pre></div>
+</div>
 </section>
 <section id="tutorials">
 <h1>Tutorials<a class="headerlink" href="#tutorials" title="Permalink to this heading">¶</a></h1>
@@ -539,6 +561,7 @@ For instance, the above example can be easily used across classification and seg
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">Welcome to the TensorDict Documentation!</a></li>
+<li><a class="reference internal" href="#installation">Installation</a></li>
 <li><a class="reference internal" href="#tutorials">Tutorials</a><ul>
 <li><a class="reference internal" href="#basics">Basics</a></li>
 <li><a class="reference internal" href="#tensordict-nn">tensordict.nn</a></li>
