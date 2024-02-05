@@ -1,0 +1,6 @@
+﻿tensordict.nn.set\_interaction\_mode
+====================================
+
+.. currentmodule:: tensordict.nn
+
+.. autoclass:: set_interaction_mode

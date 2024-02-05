@@ -1,0 +1,6 @@
+﻿tensordict.nn.dispatch\_kwargs
+==============================
+
+.. currentmodule:: tensordict.nn
+
+.. autofunction:: dispatch_kwargs

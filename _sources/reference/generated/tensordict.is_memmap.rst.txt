@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+is_memmap
+=========
+
+.. autoclass:: is_memmap
+    :members:
+    :inherited-members:

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: tensordict
+
+
+MemmapTensor
+============
+
+.. autoclass:: MemmapTensor
+    :members:
+    :inherited-members:
