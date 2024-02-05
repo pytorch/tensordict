@@ -1826,6 +1826,12 @@ class TestTensorDicts(TestTensorDictsBase):
                     assert (td_1[key] == 0).all()
 
     @pytest.mark.parametrize("inplace", [False, True])
+    def test_apply_filter(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+        assert td.apply(lambda x: None, filter_empty=False) is not None
+        assert td.apply(lambda x: None, filter_empty=True) is None
+
+    @pytest.mark.parametrize("inplace", [False, True])
     def test_apply_other(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
