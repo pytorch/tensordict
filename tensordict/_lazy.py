@@ -1371,25 +1371,30 @@ class LazyStackedTensorDict(TensorDictBase):
                 inplace=inplace,
                 **constructor_kwargs,
             )
+
         others = (other.unbind(self.stack_dim) for other in others)
-        out = LazyStackedTensorDict(
-            *(
-                td._apply_nest(
-                    fn,
-                    *oth,
-                    checked=checked,
-                    device=device,
-                    call_on_nested=call_on_nested,
-                    default=default,
-                    named=named,
-                    nested_keys=nested_keys,
-                    prefix=prefix + (i,),
-                    inplace=inplace,
-                )
-                for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
-            ),
-            stack_dim=self.stack_dim,
-        )
+        results = [
+            td._apply_nest(
+                fn,
+                *oth,
+                checked=checked,
+                device=device,
+                call_on_nested=call_on_nested,
+                default=default,
+                named=named,
+                nested_keys=nested_keys,
+                prefix=prefix + (i,),
+                inplace=inplace,
+            )
+            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
+        ]
+        if not inplace:
+            out = LazyStackedTensorDict(
+                *results,
+                stack_dim=self.stack_dim,
+            )
+        else:
+            out = self
         if names is not None:
             out.names = names
         else:
