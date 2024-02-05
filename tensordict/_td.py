@@ -643,6 +643,8 @@ class TensorDict(TensorDictBase):
         named: bool = False,
         nested_keys: bool = False,
         prefix: tuple = (),
+        executor=None,
+        futures=None,
         **constructor_kwargs,
     ) -> T:
         if inplace:
@@ -670,6 +672,9 @@ class TensorDict(TensorDictBase):
         if not inplace and is_locked:
             out.unlock_()
 
+        subtd = isinstance(self, _SubTensorDict)
+        if executor is not None and futures is None:
+            futures = []
         for key, item in self.items():
             if not call_on_nested and _is_tensor_collection(item.__class__):
                 if default is not NO_DEFAULT:
@@ -694,28 +699,49 @@ class TensorDict(TensorDictBase):
                     nested_keys=nested_keys,
                     default=default,
                     prefix=prefix + (key,),
+                    executor=executor,
+                    futures=futures,
                     **constructor_kwargs,
                 )
+                if executor is None:
+                    if subtd:
+                        out.set(key, item_trsf, inplace=inplace)
+                    else:
+                        out._set_str(
+                            key,
+                            item_trsf,
+                            inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                            validated=checked,
+                        )
+
             else:
                 _others = [_other._get_str(key, default=default) for _other in others]
-                if named:
-                    if nested_keys:
-                        item_trsf = fn(unravel_key(prefix + (key,)), item, *_others)
+                def _call_fn(out=out, named=named, prefix=prefix, key=key, item=item, _others=_others, inplace=inplace, checked=checked):
+                    if named:
+                        if nested_keys:
+                            item_trsf = fn(unravel_key(prefix + (key,)), item, *_others)
+                        else:
+                            item_trsf = fn(key, item, *_others)
                     else:
-                        item_trsf = fn(key, item, *_others)
-                else:
-                    item_trsf = fn(item, *_others)
-            if item_trsf is not None:
-                if isinstance(self, _SubTensorDict):
-                    out.set(key, item_trsf, inplace=inplace)
-                else:
-                    out._set_str(
-                        key,
-                        item_trsf,
-                        inplace=BEST_ATTEMPT_INPLACE if inplace else False,
-                        validated=checked,
-                    )
+                        item_trsf = fn(item, *_others)
+                    return item_trsf
 
+                if executor is None:
+                    item_trsf = _call_fn()
+
+                    if subtd:
+                        out.set(key, item_trsf, inplace=inplace)
+                    else:
+                        out._set_str(
+                            key,
+                            item_trsf,
+                            inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                            validated=checked,
+                        )
+                else:
+                    futures.append(executor.submit(_call_fn))
+        if futures:
+            return futures
         if not inplace and is_locked:
             out.lock_()
         return out
