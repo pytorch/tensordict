@@ -1326,11 +1326,9 @@ class LazyStackedTensorDict(TensorDictBase):
         return data_type
 
     def apply_(self, fn: Callable, *others, **kwargs):
-        for i, td in enumerate(self.tensordicts):
-            idx = (slice(None),) * self.stack_dim + (i,)
-            td._fast_apply(
-                fn, *[other[idx] for other in others], inplace=True, **kwargs
-            )
+        others = zip(*(other.unbind(self.stack_dim) for other in others))
+        for td, _others in zip(self.tensordicts, others):
+            td._fast_apply(fn, *others, inplace=True, **kwargs)
         return self
 
     def _apply_nest(
@@ -1354,46 +1352,48 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise ValueError(
                     "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
                 )
-            return self.apply_(fn, *others, named=named, default=default)
-        else:
-            if batch_size is not None:
-                # any op that modifies the batch-size will result in a regular TensorDict
-                return TensorDict._apply_nest(
-                    self,
+        if batch_size is not None:
+            # any op that modifies the batch-size will result in a regular TensorDict
+            return TensorDict._apply_nest(
+                self,
+                fn,
+                *others,
+                batch_size=batch_size,
+                device=device,
+                names=names,
+                checked=checked,
+                call_on_nested=call_on_nested,
+                default=default,
+                named=named,
+                nested_keys=nested_keys,
+                prefix=prefix,
+                inplace=inplace,
+                **constructor_kwargs,
+            )
+        others = (other.unbind(self.stack_dim) for other in others)
+        out = LazyStackedTensorDict(
+            *(
+                td._apply_nest(
                     fn,
-                    *others,
-                    batch_size=batch_size,
-                    device=device,
-                    names=names,
+                    *oth,
                     checked=checked,
+                    device=device,
                     call_on_nested=call_on_nested,
                     default=default,
                     named=named,
                     nested_keys=nested_keys,
-                    prefix=prefix,
-                    **constructor_kwargs,
+                    prefix=prefix + (i,),
+                    inplace=inplace,
                 )
-            others = (other.unbind(self.stack_dim) for other in others)
-            out = LazyStackedTensorDict(
-                *(
-                    td._apply_nest(
-                        fn,
-                        *oth,
-                        checked=checked,
-                        device=device,
-                        call_on_nested=call_on_nested,
-                        default=default,
-                        named=named,
-                        nested_keys=nested_keys,
-                        prefix=prefix + (i,),
-                    )
-                    for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
-                ),
-                stack_dim=self.stack_dim,
-            )
-            if names is not None:
-                out.names = names
-            return out
+                for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
+            ),
+            stack_dim=self.stack_dim,
+        )
+        if names is not None:
+            out.names = names
+        else:
+            out._td_dim_name = self._td_dim_name
+        return out
 
     def _select(
         self,
