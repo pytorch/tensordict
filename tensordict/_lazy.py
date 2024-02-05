@@ -1326,9 +1326,9 @@ class LazyStackedTensorDict(TensorDictBase):
         return data_type
 
     def apply_(self, fn: Callable, *others, **kwargs):
-        others = zip(*(other.unbind(self.stack_dim) for other in others))
-        for td, _others in zip(self.tensordicts, others):
-            td._fast_apply(fn, *others, inplace=True, **kwargs)
+        others = (other.unbind(self.stack_dim) for other in others)
+        for td, *_others in zip(self.tensordicts, *others):
+            td._fast_apply(fn, *_others, inplace=True, **kwargs)
         return self
 
     def _apply_nest(
@@ -1347,11 +1347,12 @@ class LazyStackedTensorDict(TensorDictBase):
         prefix: tuple = (),
         **constructor_kwargs,
     ) -> T:
-        if inplace:
-            if any(arg for arg in (batch_size, device, names, constructor_kwargs)):
-                raise ValueError(
-                    "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
-                )
+        if inplace and any(
+            arg for arg in (batch_size, device, names, constructor_kwargs)
+        ):
+            raise ValueError(
+                "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
+            )
         if batch_size is not None:
             # any op that modifies the batch-size will result in a regular TensorDict
             return TensorDict._apply_nest(
