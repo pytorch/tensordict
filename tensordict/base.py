@@ -3843,7 +3843,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         default: Any = NO_DEFAULT,
         named: bool = False,
         nested_keys: bool = False,
-        filter_empty: bool | None = None,
+        # filter_empty must be False because we use _fast_apply for all sorts of ops like expand etc
+        # and non-tensor data will disappear if we use True by default.
+        filter_empty: bool | None = False,
         **constructor_kwargs,
     ) -> T | None:
         """A faster apply method.

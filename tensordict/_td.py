@@ -868,7 +868,10 @@ class TensorDict(TensorDictBase):
 
         names = [None] * (len(shape) - tensordict_dims) + self.names
         return self._fast_apply(
-            _expand, batch_size=shape, call_on_nested=True, names=names
+            _expand,
+            batch_size=shape,
+            call_on_nested=True,
+            names=names,
         )
 
     def _unbind(self, dim: int):
