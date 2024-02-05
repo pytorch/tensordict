@@ -675,7 +675,8 @@ class TensorDict(TensorDictBase):
                 if default is not NO_DEFAULT:
                     _others = [_other._get_str(key, default=None) for _other in others]
                     _others = [
-                        self.empty() if _other is None else _other for _other in _others
+                        self.empty(recurse=True) if _other is None else _other
+                        for _other in _others
                     ]
                 else:
                     _others = [
