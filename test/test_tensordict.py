@@ -4156,6 +4156,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td.get("a") == 1).all()
 
     @pytest.mark.filterwarnings("error")
+    @set_lazy_legacy(True)
     def test_stack_onto(self, td_name, device, tmpdir):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
