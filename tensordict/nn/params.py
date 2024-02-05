@@ -465,8 +465,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> TensorDictBase:
+    ) -> TensorDictBase | None:
         ...
 
     @_unlock_and_set(inplace=True)
@@ -479,8 +480,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> TensorDictBase:
+    ) -> TensorDictBase | None:
         ...
 
     @_unlock_and_set(inplace=True)
@@ -1082,7 +1084,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_apply_on_data
-    def apply_(self, fn: Callable, *others) -> T:
+    def apply_(self, fn: Callable, *others, **kwargs) -> T:
         ...
 
     def _apply(self, fn, recurse=True):

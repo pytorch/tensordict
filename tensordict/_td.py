@@ -643,33 +643,42 @@ class TensorDict(TensorDictBase):
         named: bool = False,
         nested_keys: bool = False,
         prefix: tuple = (),
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> T:
+    ) -> T | None:
         if inplace:
-            out = self
+            result = self
+            is_locked = result.is_locked
         elif batch_size is not None:
-            out = TensorDict(
-                {},
-                batch_size=torch.Size(batch_size),
-                names=names,
-                device=self.device if not device else device,
-                _run_checks=False,
-                **constructor_kwargs,
-            )
+
+            def make_result():
+                return TensorDict(
+                    {},
+                    batch_size=torch.Size(batch_size),
+                    names=names,
+                    device=self.device if not device else device,
+                    _run_checks=False,
+                    **constructor_kwargs,
+                )
+
+            result = None
+            is_locked = False
         else:
-            out = TensorDict(
-                {},
-                batch_size=self.batch_size,
-                device=self.device if not device else device,
-                names=self.names if self._has_names() else None,
-                _run_checks=False,
-                **constructor_kwargs,
-            )
 
-        is_locked = out.is_locked
-        if not inplace and is_locked:
-            out.unlock_()
+            def make_result():
+                return TensorDict(
+                    {},
+                    batch_size=self.batch_size,
+                    device=self.device if not device else device,
+                    names=self.names if self._has_names() else None,
+                    _run_checks=False,
+                    **constructor_kwargs,
+                )
 
+            result = None
+            is_locked = False
+
+        any_set = False
         for key, item in self.items():
             if not call_on_nested and _is_tensor_collection(item.__class__):
                 if default is not NO_DEFAULT:
@@ -694,6 +703,7 @@ class TensorDict(TensorDictBase):
                     nested_keys=nested_keys,
                     default=default,
                     prefix=prefix + (key,),
+                    filter_empty=filter_empty,
                     **constructor_kwargs,
                 )
             else:
@@ -706,19 +716,36 @@ class TensorDict(TensorDictBase):
                 else:
                     item_trsf = fn(item, *_others)
             if item_trsf is not None:
+                if not any_set:
+                    if result is None:
+                        result = make_result()
+                    any_set = True
                 if isinstance(self, _SubTensorDict):
-                    out.set(key, item_trsf, inplace=inplace)
+                    result.set(key, item_trsf, inplace=inplace)
                 else:
-                    out._set_str(
+                    result._set_str(
                         key,
                         item_trsf,
                         inplace=BEST_ATTEMPT_INPLACE if inplace else False,
                         validated=checked,
                     )
 
+        if filter_empty and not any_set:
+            return
+        elif filter_empty is None and not any_set:
+            warn(
+                "Your resulting tensordict has no leaves but you did not specify filter_empty=False. "
+                "Currently, this returns an empty tree (filter_empty=True), but from v0.5 it will return "
+                "a None unless filter_empty=False. "
+                "To silcence this warning, set filter_empty to the desired value in your call to `apply`.",
+                category=DeprecationWarning,
+            )
+        if result is None:
+            result = make_result()
+
         if not inplace and is_locked:
-            out.lock_()
-        return out
+            result.lock_()
+        return result
 
     # Functorch compatibility
     @cache  # noqa: B019
@@ -841,7 +868,10 @@ class TensorDict(TensorDictBase):
 
         names = [None] * (len(shape) - tensordict_dims) + self.names
         return self._fast_apply(
-            _expand, batch_size=shape, call_on_nested=True, names=names
+            _expand,
+            batch_size=shape,
+            call_on_nested=True,
+            names=names,
         )
 
     def _unbind(self, dim: int):
