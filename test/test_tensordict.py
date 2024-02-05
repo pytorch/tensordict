@@ -1981,6 +1981,15 @@ class TestTensorDicts(TestTensorDictsBase):
                     assert (td_1[key] == 0).all()
 
     @pytest.mark.parametrize("inplace", [False, True])
+    def test_apply_filter(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+        assert td.apply(lambda x: None, filter_empty=False) is not None
+        if td_name != "td_with_non_tensor":
+            assert td.apply(lambda x: None, filter_empty=True) is None
+        else:
+            assert td.apply(lambda x: None, filter_empty=True) is not None
+
+    @pytest.mark.parametrize("inplace", [False, True])
     def test_apply_other(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
@@ -4309,6 +4318,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td.get("a") == 1).all()
 
     @pytest.mark.filterwarnings("error")
+    @set_lazy_legacy(True)
     def test_stack_onto(self, td_name, device, tmpdir):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -4361,6 +4371,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_stack == td_out).all()
 
     @pytest.mark.filterwarnings("error")
+    @set_lazy_legacy(True)
     def test_stack_subclasses_on_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)

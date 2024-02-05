@@ -1354,8 +1354,9 @@ class LazyStackedTensorDict(TensorDictBase):
         named: bool = False,
         nested_keys: bool = False,
         prefix: tuple = (),
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> T:
+    ) -> T | None:
         if inplace and any(
             arg for arg in (batch_size, device, names, constructor_kwargs)
         ):
@@ -1378,6 +1379,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 nested_keys=nested_keys,
                 prefix=prefix,
                 inplace=inplace,
+                filter_empty=filter_empty,
                 **constructor_kwargs,
             )
 
@@ -1392,11 +1394,14 @@ class LazyStackedTensorDict(TensorDictBase):
                 default=default,
                 named=named,
                 nested_keys=nested_keys,
-                prefix=prefix + (i,),
+                prefix=prefix,  # + (i,),
                 inplace=inplace,
+                filter_empty=filter_empty,
             )
             for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
         ]
+        if filter_empty and all(r is None for r in results):
+            return
         if not inplace:
             out = LazyStackedTensorDict(
                 *results,

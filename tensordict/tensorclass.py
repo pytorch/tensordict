@@ -1394,3 +1394,15 @@ class NonTensorData:
         if not escape_conversion:
             return _from_tensordict_with_copy(tensorclass_instance, result)
         return result
+
+    def _apply_nest(self, *args, **kwargs):
+        kwargs["filter_empty"] = False
+        return _wrap_method(self, "_apply_nest", self._tensordict._apply_nest)(
+            *args, **kwargs
+        )
+
+    def _fast_apply(self, *args, **kwargs):
+        kwargs["filter_empty"] = False
+        return _wrap_method(self, "_fast_apply", self._tensordict._fast_apply)(
+            *args, **kwargs
+        )
