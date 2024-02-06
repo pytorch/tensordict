@@ -2324,27 +2324,31 @@ class LazyStackedTensorDict(TensorDictBase):
             # example: shape = [5, 4, 3, 2, 1], stack_dim=1, dim0=1, dim1=4
             # resulting shape: [5, 1, 3, 2, 4]
             if dim1 == dim0 + 1:
-                return LazyStackedTensorDict(*self.tensordicts, stack_dim=dim1)
-            return LazyStackedTensorDict(
-                *(td.transpose(dim0, dim1 - 1) for td in self.tensordicts),
-                stack_dim=dim1,
-            )
+                result = LazyStackedTensorDict(*self.tensordicts, stack_dim=dim1)
+            else:
+                result = LazyStackedTensorDict(
+                    *(td.transpose(dim0, dim1 - 1) for td in self.tensordicts),
+                    stack_dim=dim1,
+                )
         elif dim1 == self.stack_dim:
             # example: shape = [5, 4, 3, 2, 1], stack_dim=3, dim0=1, dim1=3
             # resulting shape: [5, 2, 3, 4, 1]
             if dim0 + 1 == dim1:
-                return LazyStackedTensorDict(*self.tensordicts, stack_dim=dim0)
-            return LazyStackedTensorDict(
-                *(td.transpose(dim0 + 1, dim1) for td in self.tensordicts),
-                stack_dim=dim0,
-            )
+                result = LazyStackedTensorDict(*self.tensordicts, stack_dim=dim0)
+            else:
+                result = LazyStackedTensorDict(
+                    *(td.transpose(dim0 + 1, dim1) for td in self.tensordicts),
+                    stack_dim=dim0,
+                )
         else:
             dim0 = dim0 if dim0 < self.stack_dim else dim0 - 1
             dim1 = dim1 if dim1 < self.stack_dim else dim1 - 1
-            return LazyStackedTensorDict(
+            result = LazyStackedTensorDict(
                 *(td.transpose(dim0, dim1) for td in self.tensordicts),
                 stack_dim=self.stack_dim,
             )
+        result._td_dim_name = self._td_dim_name
+        return result
 
     def _permute(
         self,
