@@ -1050,8 +1050,19 @@ class TensorDict(TensorDictBase):
         v1 = batch_size[dim1]
         batch_size[dim1] = v0
         batch_size[dim0] = v1
+        if self._has_names():
+            names = self.names
+            names = [
+                names[dim0] if i == dim1 else names[dim1] if i == dim0 else names[i]
+                for i in range(self.ndim)
+            ]
+        else:
+            names = None
         result = self._fast_apply(
-            _transpose, batch_size=torch.Size(batch_size), call_on_nested=True
+            _transpose,
+            batch_size=torch.Size(batch_size),
+            call_on_nested=True,
+            names=names,
         )
         self._maybe_set_shared_attributes(result)
         return result
