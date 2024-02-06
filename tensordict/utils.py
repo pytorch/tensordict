@@ -1911,12 +1911,14 @@ def remove_duplicates(
         ... )
         >>> assert (td == expected_output).all()
     """
+    tensor = input.get(key, default=None)
+
     # Check if the key is a TensorDict
-    if key not in input.keys(include_nested=True):
+    if tensor is None:
         raise KeyError(f"The key '{key}' does not exist in the TensorDict.")
 
     # Check that the key points to a tensor
-    if not isinstance(input.get(key), torch.Tensor):
+    if not isinstance(tensor, torch.Tensor):
         raise KeyError(f"The key '{key}' does not point to a tensor in the TensorDict.")
 
     # Check dim is valid
