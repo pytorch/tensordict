@@ -87,6 +87,7 @@ Utils
 
     utils.expand_as_right
     utils.expand_right
+    utils.isin
     is_memmap
     is_batchedtensor
     is_tensor_collection

@@ -1854,6 +1854,85 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logging.info(indent + os.path.basename(path))
 
 
+def isin(
+    input: TensorDictBase,
+    reference: TensorDictBase,
+    key: NestedKey,
+    dim: int = 0,
+) -> Tensor:
+    """Tests if each element of ``key`` in input ``dim`` is also present in the reference.
+
+    This function returns a boolean tensor of length  ``input.batch_size[dim]`` that is ``True`` for elements in
+    the entry ``key`` that are also present in the ``reference``. This function assumes that both ``input`` and
+    ``reference`` have the same batch size and contain the specified entry, otherwise an error will be raised.
+
+    Args:
+        input (TensorDictBase): Input TensorDict.
+        reference (TensorDictBase): Target TensorDict against which to test.
+        key (Nestedkey): The key to test.
+        dim (int, optional): The dimension along which to test. Defaults to ``0``.
+
+    Returns:
+        out (Tensor): A boolean tensor of length ``input.batch_size[dim]`` that is ``True`` for elements in
+            the ``input`` ``key`` tensor that are also present in the ``reference``.
+
+    Examples:
+        >>> td = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
+        ...     },
+        ...     batch_size=[4],
+        ... )
+        >>> td_ref = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [10, 11, 12]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
+        ...     },
+        ...     batch_size=[3],
+        ... )
+        >>> in_reference = isin(td, td_ref, key="tensor1")
+        >>> expected_in_reference = torch.tensor([True, True, True, False])
+        >>> torch.testing.assert_close(in_reference, expected_in_reference)
+    """
+    # Get the data
+    reference_tensor = reference.get(key, default=None)
+    target_tensor = input.get(key, default=None)
+
+    # Check key is present in both tensordict and reference_tensordict
+    if not isinstance(target_tensor, torch.Tensor):
+        raise KeyError(f"Key '{key}' not found in input or not a tensor.")
+    if not isinstance(reference_tensor, torch.Tensor):
+        raise KeyError(f"Key '{key}' not found in reference or not a tensor.")
+
+    # Check that both TensorDicts have the same number of dimensions
+    if len(input.batch_size) != len(reference.batch_size):
+        raise ValueError(
+            "The number of dimensions in the batch size of the input and reference must be the same."
+        )
+
+    # Check dim is valid
+    batch_dims = input.ndim
+    if dim >= batch_dims or dim < -batch_dims or batch_dims == 0:
+        raise ValueError(
+            f"The specified dimension '{dim}' is invalid for an input TensorDict with batch size '{input.batch_size}'."
+        )
+
+    # Convert negative dimension to its positive equivalent
+    if dim < 0:
+        dim = batch_dims + dim
+
+    # Find the common indices
+    N = reference_tensor.shape[dim]
+    cat_data = torch.cat([reference_tensor, target_tensor], dim=dim)
+    _, unique_indices = torch.unique(
+        cat_data, dim=dim, sorted=True, return_inverse=True
+    )
+    out = torch.isin(unique_indices[N:], unique_indices[:N], assume_unique=True)
+
+    return out
+
+
 def _index_preserve_data_ptr(index):
     if isinstance(index, tuple):
         return all(_index_preserve_data_ptr(idx) for idx in index)
