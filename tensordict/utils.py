@@ -1859,11 +1859,11 @@ def isin(
     *,
     invert: bool = False,
 ) -> Tensor:
-    """Tests if each element of 'key' in tensordict 'dim' is also present in the reference_tensordict.
+    """Tests if each element of ``key`` in tensordict ``dim`` is also present in the reference_tensordict.
 
-    This function returns a boolean tensor of length  ´tensordict.batch_size[dim]´ that is True for elements in
-    'key' that are also present in the reference_tensordict. This function assumes that both tensordict and
-    reference_tensordict have the same batch size and contain the specified key, otherwise it will raise an error.
+    This function returns a boolean tensor of length  ``input.batch_size[dim]`` that is ``True`` for elements in
+    the entry ``key`` that are also present in the ``reference``. This function assumes that both ``input`` and
+    ``reference`` have the same batch size and contain the specified entry, otherwise an error will be raised.
 
     Args:
         input (TensorDictBase): Input TensorDict.
