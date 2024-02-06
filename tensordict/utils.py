@@ -1851,7 +1851,7 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logging.info(indent + os.path.basename(path))
 
 
-def isin(
+def contains(
     input: TensorDictBase,
     reference: TensorDictBase,
     key: str,
@@ -1892,9 +1892,9 @@ def isin(
         ...     },
         ...     batch_size=[3],
         ... )
-        >>> in_reference = is_in_reference(td, td_ref, key="tensor1")
+        >>> in_reference = contains(td, td_ref, key="tensor1")
         >>> expected_in_reference = torch.tensor([True, True, True, False])
-        >>> assert torch.equal(in_reference, expected_in_reference)
+        >>> torch.testing.assert_close(in_reference, expected_in_reference)
     """
     # Get the data
     reference_tensor = reference.get(key, default=None)
@@ -1909,14 +1909,19 @@ def isin(
     # Check that both TensorDicts have the same number of dimensions
     if len(input.batch_size) != len(reference.batch_size):
         raise ValueError(
-            "The number of dimensions in the batch size of the tensordict and reference_tensordict must be the same."
+            "The number of dimensions in the batch size of the input and reference must be the same."
         )
 
-    # Check that dim is valid
-    if dim >= len(input.batch_size):
+    # Check dim is valid
+    batch_dims = input.ndim
+    if dim >= batch_dims or dim < -batch_dims:
         raise ValueError(
-            f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{input.batch_size}'."
+            f"The specified dimension '{dim}' is invalid for an input TensorDict with batch size '{input.batch_size}'."
         )
+
+    # Convert negative dimension to its positive equivalent
+    if dim < 0:
+        dim = batch_dims + dim
 
     # Find the common indices
     N = reference_tensor.shape[dim]
