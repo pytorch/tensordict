@@ -1851,7 +1851,7 @@ def print_directory_tree(path, indent="", display_metadata=True):
         logging.info(indent + os.path.basename(path))
 
 
-def contains(
+def isin(
     input: TensorDictBase,
     reference: TensorDictBase,
     key: str,
@@ -1888,7 +1888,7 @@ def contains(
         ...     },
         ...     batch_size=[3],
         ... )
-        >>> in_reference = contains(td, td_ref, key="tensor1")
+        >>> in_reference = isin(td, td_ref, key="tensor1")
         >>> expected_in_reference = torch.tensor([True, True, True, False])
         >>> torch.testing.assert_close(in_reference, expected_in_reference)
     """

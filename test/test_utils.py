@@ -13,8 +13,8 @@ from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict.utils import (
     _getitem_batch_size,
     _make_cache_key,
-    contains,
     convert_ellipsis_to_idx,
+    isin,
 )
 
 
@@ -153,7 +153,7 @@ def test_unravel_key_to_tuple():
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3"))
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
-def test_contains_1dim(key, dim):
+def test_isin_1dim(key, dim):
     td = TensorDict(
         {
             "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -173,15 +173,15 @@ def test_contains_1dim(key, dim):
         with pytest.raises(
             KeyError, match=f"Key '{key}' not found in input or not a tensor."
         ):
-            contains(td, td_ref, key, dim)
+            isin(td, td_ref, key, dim)
     elif dim in (1, -2):
         with pytest.raises(
             ValueError,
             match=f"The specified dimension '{dim}' is invalid for an input TensorDict with batch size .*.",
         ):
-            contains(td, td_ref, key, dim)
+            isin(td, td_ref, key, dim)
     else:
-        in_ref = contains(td, td_ref, key, dim)
+        in_ref = isin(td, td_ref, key, dim)
         expected_in_ref = torch.tensor([True, True, True, False])
         torch.testing.assert_close(in_ref, expected_in_ref)
 
@@ -190,11 +190,11 @@ def test_contains_1dim(key, dim):
             match="The number of dimensions in the batch size of the input and reference must be the same.",
         ):
             td.batch_size = []
-            contains(td, td_ref, key, dim)
+            isin(td, td_ref, key, dim)
 
 
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
-def test_contains_2dim(dim):
+def test_isin_2dim(dim):
     key = "tensor1"
     input = TensorDict(
         {
@@ -213,7 +213,7 @@ def test_contains_2dim(dim):
 
     positive_dim = dim if dim >= 0 else dim + 2
     input[key][(slice(None),) * positive_dim + (0,)] = 2
-    in_ref = contains(input, td_ref, key, dim)
+    in_ref = isin(input, td_ref, key, dim)
     expected_in_ref = torch.tensor([False, True, True, True])
     torch.testing.assert_close(in_ref, expected_in_ref)
 
