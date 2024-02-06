@@ -1867,7 +1867,7 @@ def isin(
         input (TensorDictBase): Input TensorDict.
         reference (TensorDictBase): Target TensorDict against which to test.
         key (Nestedkey): The key to test.
-        dim (int, optionl): The dimension along which to test. Default: 0
+        dim (int, optional): The dimension along which to test. Defaults to ``0``.
 
     Returns:
         out (Tensor): A boolean tensor of length ``input.batch_size[dim]`` that is ``True`` for elements in
