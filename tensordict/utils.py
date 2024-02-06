@@ -1854,7 +1854,7 @@ def print_directory_tree(path, indent="", display_metadata=True):
 def isin(
     input: TensorDictBase,
     reference: TensorDictBase,
-    key: str,
+    key: NestedKey,
     dim: int = 0,
 ) -> Tensor:
     """Tests if each element of ``key`` in input ``dim`` is also present in the reference.
