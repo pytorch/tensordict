@@ -3569,7 +3569,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             self or a copy of self with the function applied
 
         """
-        return self.apply(fn, *others, inplace=True)
+        return self.apply(fn, *others, inplace=True, **kwargs)
 
     def apply(
         self,
