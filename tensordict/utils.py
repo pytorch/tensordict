@@ -1921,7 +1921,7 @@ def remove_duplicates(
 
     # Check dim is valid
     batch_dims = input.ndim
-    if dim >= batch_dims or dim < -batch_dims:
+    if dim >= batch_dims or dim < -batch_dims or batch_dims == 0:
         raise ValueError(
             f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{input.batch_size}'."
         )
