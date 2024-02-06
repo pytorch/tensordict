@@ -1894,14 +1894,14 @@ def remove_duplicates(
             input tensordict for the specified `key` along the specified `dim`. Only provided if return_index is True.
 
     Example:
-        >>> tensordict = TensorDict(
+        >>> td = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
         ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
         ...     }
         ...     batch_size=[4],
         ... )
-        >>> output_tensordict = remove_duplicate_elements(tensordict, key="tensor1", dim=0)
+        >>> output_tensordict = remove_duplicate_elements(td, key="tensor1", dim=0)
         >>> expected_output = TensorDict(
         ...     {
         ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
@@ -1909,7 +1909,7 @@ def remove_duplicates(
         ...     },
         ...     batch_size=[3],
         ... )
-        >>> assert (tensordict == expected_output).all()
+        >>> assert (td == expected_output).all()
     """
     # Check if the key is a TensorDict
     if key not in input.keys(include_nested=True):
@@ -1939,7 +1939,7 @@ def remove_duplicates(
     # Find first occurrence of each index  (e.g. [0, 1, 3])
     _, unique_indices_sorted = torch.sort(unique_indices, stable=True)
     cum_sum = counts.cumsum(0)
-    cum_sum = torch.cat((torch.tensor([0]), cum_sum[:-1]))
+    cum_sum = torch.cat((torch.tensor([0], device=input.device), cum_sum[:-1]))
     first_indices = unique_indices_sorted[cum_sum]
 
     # Remove duplicate elements in the TensorDict
