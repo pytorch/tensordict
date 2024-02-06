@@ -362,7 +362,7 @@ class TestFunctionalization:
                 for p in params.flatten_keys().values()
             )
             assert params.requires_grad
-            params.apply_(zero_grad)
+            params.apply_(zero_grad, filter_empty=True)
             assert params.requires_grad
 
     def test_repopulate(self):
