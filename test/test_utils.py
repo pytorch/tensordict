@@ -153,8 +153,7 @@ def test_unravel_key_to_tuple():
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3"))
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
-@pytest.mark.parametrize("invert", (True, False))
-def test_contains_1dim(key, dim, invert):
+def test_contains_1dim(key, dim):
     td = TensorDict(
         {
             "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -174,20 +173,16 @@ def test_contains_1dim(key, dim, invert):
         with pytest.raises(
             KeyError, match=f"Key '{key}' not found in input or not a tensor."
         ):
-            contains(td, td_ref, key, dim, invert=invert)
+            contains(td, td_ref, key, dim)
     elif dim in (1, -2):
         with pytest.raises(
             ValueError,
             match=f"The specified dimension '{dim}' is invalid for an input TensorDict with batch size .*.",
         ):
-            contains(td, td_ref, key, dim, invert=invert)
+            contains(td, td_ref, key, dim)
     else:
-        in_ref = contains(td, td_ref, key, dim, invert=invert)
-
+        in_ref = contains(td, td_ref, key, dim)
         expected_in_ref = torch.tensor([True, True, True, False])
-        if invert:
-            expected_in_ref = ~expected_in_ref
-
         torch.testing.assert_close(in_ref, expected_in_ref)
 
         with pytest.raises(
@@ -195,12 +190,11 @@ def test_contains_1dim(key, dim, invert):
             match="The number of dimensions in the batch size of the input and reference must be the same.",
         ):
             td.batch_size = []
-            contains(td, td_ref, key, dim, invert=invert)
+            contains(td, td_ref, key, dim)
 
 
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
-@pytest.mark.parametrize("invert", (True, False))
-def test_contains_2dim(dim, invert):
+def test_contains_2dim(dim):
     key = "tensor1"
     input = TensorDict(
         {
@@ -219,12 +213,8 @@ def test_contains_2dim(dim, invert):
 
     positive_dim = dim if dim >= 0 else dim + 2
     input[key][(slice(None),) * positive_dim + (0,)] = 2
-    in_ref = contains(input, td_ref, key, dim, invert=invert)
+    in_ref = contains(input, td_ref, key, dim)
     expected_in_ref = torch.tensor([False, True, True, True])
-
-    if invert:
-        expected_in_ref = ~expected_in_ref
-
     torch.testing.assert_close(in_ref, expected_in_ref)
 
 

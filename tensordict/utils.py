@@ -1856,8 +1856,6 @@ def contains(
     reference: TensorDictBase,
     key: str,
     dim: int = 0,
-    *,
-    invert: bool = False,
 ) -> Tensor:
     """Tests if each element of ``key`` in input ``dim`` is also present in the reference.
 
@@ -1870,12 +1868,10 @@ def contains(
         reference (TensorDictBase): Target TensorDict against which to test.
         key (Nestedkey): The key to test.
         dim (int, optionl): The dimension along which to test. Default: 0
-        invert (bool, optional):  If True, inverts the boolean return tensor, resulting in True values for elements
-            not in reference_tensordict. Default: False
 
     Returns:
-        out (Tensor): A boolean tensor of length ``input.batch_size[dim]`` that is True for elements in
-            ``key`` that are also present in the reference_tensordict or False if invert is True.
+        out (Tensor): A boolean tensor of length ``input.batch_size[dim]`` that is ``True`` for elements in
+            the ``input`` ``key`` tensor that are also present in the ``reference``.
 
     Examples:
         >>> td = TensorDict(
@@ -1914,7 +1910,7 @@ def contains(
 
     # Check dim is valid
     batch_dims = input.ndim
-    if dim >= batch_dims or dim < -batch_dims:
+    if dim >= batch_dims or dim < -batch_dims or batch_dims == 0:
         raise ValueError(
             f"The specified dimension '{dim}' is invalid for an input TensorDict with batch size '{input.batch_size}'."
         )
@@ -1930,10 +1926,6 @@ def contains(
         cat_data, dim=dim, sorted=True, return_inverse=True
     )
     out = torch.isin(unique_indices[N:], unique_indices[:N], assume_unique=True)
-
-    # Invert if necessary
-    if invert:
-        out = ~out
 
     return out
 
