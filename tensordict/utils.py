@@ -1852,12 +1852,13 @@ def print_directory_tree(path, indent="", display_metadata=True):
 
 
 def isin(
-    tensordict: TensorDictBase,
-    reference_tensordict: TensorDictBase,
+    input: TensorDictBase,
+    reference: TensorDictBase,
     key: str,
     dim: int = 0,
+    *,
     invert: bool = False,
-):
+) -> Tensor:
     """Tests if each element of 'key' in tensordict 'dim' is also present in the reference_tensordict.
 
     This function returns a boolean tensor of length  ´tensordict.batch_size[dim]´ that is True for elements in
@@ -1865,11 +1866,11 @@ def isin(
     reference_tensordict have the same batch size and contain the specified key, otherwise it will raise an error.
 
     Args:
-        tensordict (TensorDictBase): Input TensorDict.
-        reference_tensordict (TensorDictBase): Target TensorDict against which to test.
-        key (str): The key to test.
-        dim (int): The dimension along which to test. Default: 0
-        invert (bool):  If True, inverts the boolean return tensor, resulting in True values for elements
+        input (TensorDictBase): Input TensorDict.
+        reference (TensorDictBase): Target TensorDict against which to test.
+        key (Nestedkey): The key to test.
+        dim (int, optionl): The dimension along which to test. Default: 0
+        invert (bool, optional):  If True, inverts the boolean return tensor, resulting in True values for elements
             not in reference_tensordict. Default: False
 
     Returns:
@@ -1896,26 +1897,26 @@ def isin(
         >>> assert torch.equal(in_reference, expected_in_reference)
     """
     # Check key is present in both tensordict and reference_tensordict
-    if key not in tensordict.keys(include_nested=True):
+    if key not in input.keys(include_nested=True):
         raise KeyError(f"Key '{key}' not found in tensordict.")
-    if key not in reference_tensordict.keys(include_nested=True):
+    if key not in reference.keys(include_nested=True):
         raise KeyError(f"Key '{key}' not found in reference_tensordict.")
 
     # Check that both TensorDicts have the same number of dimensions
-    if len(tensordict.batch_size) != len(reference_tensordict.batch_size):
+    if len(input.batch_size) != len(reference.batch_size):
         raise ValueError(
             "The number of dimensions in the batch size of the tensordict and reference_tensordict must be the same."
         )
 
     # Check that dim is valid
-    if dim >= len(tensordict.batch_size):
+    if dim >= len(input.batch_size):
         raise ValueError(
-            f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{tensordict.batch_size}'."
+            f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{input.batch_size}'."
         )
 
     # Get the data
-    reference_tensor = reference_tensordict.get(key)
-    target_tensor = tensordict.get(key)
+    reference_tensor = reference.get(key)
+    target_tensor = input.get(key)
     N = reference_tensor.shape[0]
 
     # Find the common indices
