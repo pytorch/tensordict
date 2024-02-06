@@ -1859,7 +1859,7 @@ def isin(
     *,
     invert: bool = False,
 ) -> Tensor:
-    """Tests if each element of ``key`` in tensordict ``dim`` is also present in the reference_tensordict.
+    """Tests if each element of ``key`` in input ``dim`` is also present in the reference.
 
     This function returns a boolean tensor of length  ``input.batch_size[dim]`` that is ``True`` for elements in
     the entry ``key`` that are also present in the ``reference``. This function assumes that both ``input`` and
@@ -1874,8 +1874,8 @@ def isin(
             not in reference_tensordict. Default: False
 
     Returns:
-        out (Tensor): A boolean tensor of length ´tensordict.batch_size[dim]´ that is True for elements in
-            'key' that are also present in the reference_tensordict or False if invert is True.
+        out (Tensor): A boolean tensor of length ``input.batch_size[dim]`` that is True for elements in
+            ``key`` that are also present in the reference_tensordict or False if invert is True.
 
     Examples:
         >>> td = TensorDict(
@@ -1896,11 +1896,15 @@ def isin(
         >>> expected_in_reference = torch.tensor([True, True, True, False])
         >>> assert torch.equal(in_reference, expected_in_reference)
     """
+    # Get the data
+    reference_tensor = reference.get(key, default=None)
+    target_tensor = input.get(key, default=None)
+
     # Check key is present in both tensordict and reference_tensordict
-    if key not in input.keys(include_nested=True):
-        raise KeyError(f"Key '{key}' not found in tensordict.")
-    if key not in reference.keys(include_nested=True):
-        raise KeyError(f"Key '{key}' not found in reference_tensordict.")
+    if not isinstance(target_tensor, torch.Tensor):
+        raise KeyError(f"Key '{key}' not found in input or not a tensor.")
+    if not isinstance(reference_tensor, torch.Tensor):
+        raise KeyError(f"Key '{key}' not found in reference or not a tensor.")
 
     # Check that both TensorDicts have the same number of dimensions
     if len(input.batch_size) != len(reference.batch_size):
@@ -1914,14 +1918,12 @@ def isin(
             f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{input.batch_size}'."
         )
 
-    # Get the data
-    reference_tensor = reference.get(key)
-    target_tensor = input.get(key)
-    N = reference_tensor.shape[0]
-
     # Find the common indices
-    cat_data = torch.cat([reference_tensor, target_tensor], dim=0)
-    _, unique_indices = torch.unique(cat_data, dim=0, sorted=True, return_inverse=True)
+    N = reference_tensor.shape[dim]
+    cat_data = torch.cat([reference_tensor, target_tensor], dim=dim)
+    _, unique_indices = torch.unique(
+        cat_data, dim=dim, sorted=True, return_inverse=True
+    )
     out = torch.isin(unique_indices[N:], unique_indices[:N], assume_unique=True)
 
     # Invert if necessary
