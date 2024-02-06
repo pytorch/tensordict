@@ -3104,9 +3104,15 @@ class TestTensorDicts(TestTensorDictsBase):
         def count(name, value, keys):
             keys.add(name)
 
-        td.named_apply(functools.partial(count, keys=keys_complete), nested_keys=True, filter_empty=True)
         td.named_apply(
-            functools.partial(count, keys=keys_not_complete), nested_keys=False, filter_empty=True
+            functools.partial(count, keys=keys_complete),
+            nested_keys=True,
+            filter_empty=True,
+        )
+        td.named_apply(
+            functools.partial(count, keys=keys_not_complete),
+            nested_keys=False,
+            filter_empty=True,
         )
         assert len(keys_complete) == len(list(td.keys(True, True)))
         assert len(keys_complete) > len(keys_not_complete)
