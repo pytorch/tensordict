@@ -1931,7 +1931,6 @@ def remove_duplicates(
         dim = batch_dims + dim
 
     # Get indices of unique elements (e.g. [0, 1, 0, 2])
-    tensor = input.get(key)
     _, unique_indices, counts = torch.unique(
         tensor, dim=dim, sorted=True, return_inverse=True, return_counts=True
     )
