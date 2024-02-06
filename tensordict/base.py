@@ -2157,7 +2157,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     return x.filter_non_tensor_data()
                 return x
 
-        return self._apply_nest(_filter, call_on_nested=True)
+        return self._apply_nest(_filter, call_on_nested=True, filter_empty=False)
 
     def _convert_inplace(self, inplace, key):
         if inplace is not False:
