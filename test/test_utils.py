@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 import pytest
 import torch
+from _utils_internal import get_available_devices
 from tensordict import TensorDict, unravel_key, unravel_key_list
 from tensordict._tensordict import _unravel_key_to_tuple
 
@@ -154,7 +155,8 @@ def test_unravel_key_to_tuple():
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3", "next"))
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
-def test_remove_duplicates_1dim(key, dim):
+@pytest.mark.parametrize("device", get_available_devices())
+def test_remove_duplicates_1dim(key, dim, device):
     input_tensordict = TensorDict(
         {
             "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
@@ -165,9 +167,11 @@ def test_remove_duplicates_1dim(key, dim):
                     "tensor4": torch.tensor([[10], [11], [12], [13]]),
                 },
                 batch_size=[4],
+                device=device,
             ),
         },
         batch_size=[4],
+        device=device,
     )
 
     # Test for non-existent key
@@ -204,15 +208,18 @@ def test_remove_duplicates_1dim(key, dim):
                         "tensor4": torch.tensor([[10], [11], [13]]),
                     },
                     batch_size=[3],
+                    device=device,
                 ),
             },
             batch_size=[3],
+            device=device,
         )
         assert (output_tensordict == expected_output).all()
 
 
 @pytest.mark.parametrize("dim", (0, 1, 2, -1, -2, -3))
-def test_remove_duplicates_2dims(dim):
+@pytest.mark.parametrize("device", get_available_devices())
+def test_remove_duplicates_2dims(dim, device):
     key = "tensor1"
     input_tensordict = TensorDict(
         {
@@ -220,6 +227,7 @@ def test_remove_duplicates_2dims(dim):
             "tensor2": torch.ones(4, 4),
         },
         batch_size=[4, 4],
+        device=device,
     )
 
     if dim in (2, -3):
@@ -238,6 +246,7 @@ def test_remove_duplicates_2dims(dim):
                     "tensor2": torch.ones(1, 4),
                 },
                 batch_size=[1, 4],
+                device=device,
             )
         else:
             expected_output = TensorDict(
@@ -246,6 +255,7 @@ def test_remove_duplicates_2dims(dim):
                     "tensor2": torch.ones(4, 1),
                 },
                 batch_size=[4, 1],
+                device=device,
             )
         assert (output_tensordict == expected_output).all()
 
