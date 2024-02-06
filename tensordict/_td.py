@@ -733,7 +733,6 @@ class TensorDict(TensorDictBase):
         if filter_empty and not any_set:
             return
         elif filter_empty is None and not any_set and not self.is_empty():
-            raise RuntimeError
             # we raise the deprecation warning only if the tensordict wasn't already empty.
             # After we introduce the new behaviour, we will have to consider what happens
             # to empty tensordicts by default: will they disappear or stay?
