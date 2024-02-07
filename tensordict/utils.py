@@ -2021,8 +2021,10 @@ def remove_duplicates(
 
     # Find first occurrence of each index  (e.g. [0, 1, 3])
     _, unique_indices_sorted = torch.sort(unique_indices, stable=True)
-    cum_sum = counts.cumsum(0)
-    cum_sum = torch.cat((torch.zeros(1, device=input.device), cum_sum[:-1]))
+    cum_sum = counts.cumsum(0, dtype=torch.long)
+    cum_sum = torch.cat(
+        (torch.zeros(1, device=input.device, dtype=torch.long), cum_sum[:-1])
+    )
     first_indices = unique_indices_sorted[cum_sum]
 
     # Remove duplicate elements in the TensorDict
