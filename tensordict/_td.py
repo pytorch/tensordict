@@ -298,17 +298,18 @@ class TensorDict(TensorDictBase):
         return destination
 
     def is_empty(self):
-        from tensordict import NonTensorData
 
-        for _, item in self._tensordict.items():
+        for item in self._tensordict.values():
             # we need to check if item is empty
-            if (
-                _is_tensor_collection(type(item))
-                and not isinstance(item, NonTensorData)
-                and item.is_empty()
-            ):
-                continue
-            return False
+            if _is_tensor_collection(type(item)):
+                if not item.is_empty():
+                    return False
+                from tensordict.tensorclass import NonTensorData
+
+                if isinstance(item, NonTensorData):
+                    return False
+            else:
+                return False
         return True
 
     def _to_module(
@@ -322,13 +323,14 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
     ):
 
-        from tensordict.nn import TensorDictParams
-
-        if isinstance(module, TensorDictParams):
+        if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:
                 swap = module.copy()
                 module.update(self)
                 return swap
+            else:
+                module.update(self)
+                return
 
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         __dict__ = module.__dict__
@@ -369,7 +371,7 @@ class TensorDict(TensorDictBase):
                     return Buffer(x)
                 return x
 
-            input = state_dict.unflatten_keys(".").apply(convert_type, self)
+            input = state_dict.unflatten_keys(".")._fast_apply(convert_type, self)
         else:
             input = self
             inplace = bool(inplace)
@@ -399,9 +401,8 @@ class TensorDict(TensorDictBase):
                     # Otherwise, we just go to the next key
                     continue
                 child = __dict__["_modules"][key]
-                if id(child) in memo:
-                    local_out = memo[id(child)]
-                else:
+                local_out = memo.get(id(child), NO_DEFAULT)
+                if local_out is NO_DEFAULT:
                     local_out = value._to_module(
                         child,
                         inplace=inplace,

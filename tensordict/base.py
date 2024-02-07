@@ -442,6 +442,8 @@ class TensorDictBase(MutableMapping):
             >>> params.to_module(module)
             >>> assert (module.layers[0].linear1.weight == 0).all()
         """
+        if memo is not None:
+            raise RuntimeError("memo cannot be passed to the public to_module anymore.")
         hooks = getattr(
             torch.nn.modules.module, "_global_parameter_registration_hooks", {}
         )
@@ -452,6 +454,7 @@ class TensorDictBase(MutableMapping):
             return_swap=return_swap,
             swap_dest=swap_dest,
             memo=memo,
+            use_state_dict=use_state_dict,
         )
 
     @abc.abstractmethod
