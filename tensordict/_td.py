@@ -21,6 +21,7 @@ from warnings import warn
 import numpy as np
 import torch
 from functorch import dim as ftdim
+
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
@@ -250,6 +251,10 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         prefix="",
     ):
+        from tensordict.nn import TensorDictParams
+
+        if isinstance(module, TensorDictParams):
+            return module
         destination = {}
         if use_state_dict:
             keep_vars = False
@@ -280,7 +285,7 @@ class TensorDict(TensorDictBase):
             if submodule is not None:
                 subtd = cls._from_module(
                     module=submodule,
-                    as_module=as_module,
+                    as_module=False,
                     use_state_dict=use_state_dict,
                     prefix=prefix + name + ".",
                 )
@@ -293,21 +298,21 @@ class TensorDict(TensorDictBase):
         return destination
 
     def is_empty(self):
-        from tensordict import NonTensorData
 
-        for _, item in self._tensordict.items():
+        for item in self._tensordict.values():
             # we need to check if item is empty
-            if (
-                _is_tensor_collection(type(item))
-                and not isinstance(item, NonTensorData)
-                and item.is_empty()
-            ):
-                continue
-            return False
+            if _is_tensor_collection(type(item)):
+                if not item.is_empty():
+                    return False
+                from tensordict.tensorclass import NonTensorData
+
+                if isinstance(item, NonTensorData):
+                    return False
+            else:
+                return False
         return True
 
-    @as_decorator()
-    def to_module(
+    def _to_module(
         self,
         module,
         *,
@@ -317,28 +322,24 @@ class TensorDict(TensorDictBase):
         memo=None,
         use_state_dict: bool = False,
     ):
+
+        if not use_state_dict and isinstance(module, TensorDictBase):
+            if return_swap:
+                swap = module.copy()
+                module.update(self)
+                return swap
+            else:
+                module.update(self)
+                return
+
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         __dict__ = module.__dict__
 
-        swap = None
-        has_set_device = False
-        if memo is None:
-            hooks = getattr(
-                torch.nn.modules.module, "_global_parameter_registration_hooks", {}
-            )
-            memo = {"hooks": tuple(hooks.values())}
-        else:
-            hooks = memo["hooks"]
+        hooks = memo["hooks"]
         if return_swap:
-            # this could break if the device and batch-size are not congruent.
-            # For batch-size it is a minor issue (unlikely that a td with batch-size
-            # is passed with to_module) but for the device it could be a problem.
-            if swap_dest is None:
-                swap = TensorDict({}, batch_size=torch.Size(()), _run_checks=False)
-            else:
-                swap = swap_dest
-            memo[id(module)] = swap
             _swap = {}
+            memo[id(module)] = _swap
+
         if use_state_dict:
             if inplace is not None:
                 raise RuntimeError(
@@ -370,7 +371,7 @@ class TensorDict(TensorDictBase):
                     return Buffer(x)
                 return x
 
-            input = state_dict.unflatten_keys(".").apply(convert_type, self)
+            input = state_dict.unflatten_keys(".")._fast_apply(convert_type, self)
         else:
             input = self
             inplace = bool(inplace)
@@ -397,44 +398,38 @@ class TensorDict(TensorDictBase):
             else:
                 if value.is_empty():
                     # if there is at least one key, we must populate the module.
-                    # Otherwise we just go to the next key
+                    # Otherwise, we just go to the next key
                     continue
-                if swap_dest is not None:
-                    local_dest = swap_dest._get_str(key, default=NO_DEFAULT)
-                else:
-                    local_dest = None
                 child = __dict__["_modules"][key]
-                if id(child) in memo:
-                    local_out = memo[id(child)]
-                else:
-                    local_out = value.to_module(
+                local_out = memo.get(id(child), NO_DEFAULT)
+                if local_out is NO_DEFAULT:
+                    local_out = value._to_module(
                         child,
                         inplace=inplace,
                         return_swap=return_swap,
-                        swap_dest=local_dest,
+                        swap_dest={},  # we'll be calling update later
                         memo=memo,
                         use_state_dict=use_state_dict,
                     )
-                # we don't want to do this op more than once
-                if return_swap and (
-                    not has_set_device
-                    and swap.device is not None
-                    and local_out.device is not None
-                    and local_out.device != swap.device
-                ):
-                    has_set_device = True
-                    # map out to the local_out device
-                    swap = swap.to(device=local_out.device)
 
             if return_swap:
                 _swap[key] = local_out
         if return_swap:
-            if isinstance(swap, TensorDict):
-                # this is very ad-hoc but faster than calling _set_str every time
-                swap._tensordict.update(_swap)
+            if isinstance(swap_dest, dict):
+                return _swap
+            elif swap_dest is not None:
+
+                def _quick_set(swap_dict, swap_td):
+                    for key, val in swap_dict.items():
+                        if isinstance(val, dict):
+                            _quick_set(val, swap_td._get_str(key, default=NO_DEFAULT))
+                        else:
+                            swap_td._set_str(key, val, inplace=False, validated=True)
+
+                _quick_set(_swap, swap_dest)
+                return swap_dest
             else:
-                swap.update(_swap)
-        return swap
+                return TensorDict(_swap, batch_size=[], _run_checks=False)
 
     def __ne__(self, other: object) -> T | bool:
         if _is_tensorclass(other):
@@ -2829,7 +2824,7 @@ class _SubTensorDict(TensorDictBase):
     memmap_like = TensorDict.memmap_like
     reshape = TensorDict.reshape
     split = TensorDict.split
-    to_module = TensorDict.to_module
+    _to_module = TensorDict._to_module
     _unbind = TensorDict._unbind
 
     def _view(self, *args, **kwargs):
