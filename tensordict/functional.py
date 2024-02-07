@@ -97,7 +97,8 @@ def pad_sequence(
         device (device compatible type, optional): if provded, the device where the
             TensorDict output will be created.
         return_mask (bool, optional): if ``True``, a "masks" entry will be returned.
-            It contains a tensordict with the same structure as the stacked tensordict where every key contains the mask of valid values with size ``torch.Size([batch_size, max_seq_length])``.
+            It contains a tensordict with the same structure as the stacked tensordict where every entry contains the mask of valid values with size ``torch.Size([stack_len, *new_shape])``, 
+            where `new_shape[pad_dim] = max_seq_length` and the rest of the `new_shape` matches the previous shape of the contained tensors.
 
     Examples:
         >>> list_td = [
