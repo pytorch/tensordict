@@ -2823,7 +2823,7 @@ class _SubTensorDict(TensorDictBase):
     memmap_like = TensorDict.memmap_like
     reshape = TensorDict.reshape
     split = TensorDict.split
-    to_module = TensorDict.to_module
+    _to_module = TensorDict._to_module
     _unbind = TensorDict._unbind
 
     def _view(self, *args, **kwargs):
