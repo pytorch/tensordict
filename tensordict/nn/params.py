@@ -337,7 +337,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         for key, value in parameters.items(True, True):
             # flatten key
             if isinstance(key, tuple):
-                key = "_".join(key)
+                key = ".".join(key)
             if isinstance(value, nn.Parameter):
                 param_keys.append(key)
                 params.append(value)

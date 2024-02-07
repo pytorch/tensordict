@@ -423,7 +423,7 @@ class TensorDict(TensorDictBase):
                     for key, val in swap_dict.items():
                         if isinstance(val, dict):
                             _quick_set(val, swap_td._get_str(key, default=NO_DEFAULT))
-                        else:
+                        elif swap_td._get_str(key, None) is not val:
                             swap_td._set_str(key, val, inplace=False, validated=True)
 
                 _quick_set(_swap, swap_dest)
