@@ -1913,7 +1913,18 @@ are supported.</p></li>
 <li><p><strong>num_workers</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a><em>, </em><em>optional</em>) – the number of workers. Exclusive with <code class="docutils literal notranslate"><span class="pre">pool</span></code>.
 If none is provided, the number of workers will be set to the
 number of cpus available.</p></li>
-<li><p><strong>chunksize</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a><em>, </em><em>optional</em>) – The size of each chunk of data.
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – an optional container for the output.
+Its batch-size along the <code class="docutils literal notranslate"><span class="pre">dim</span></code> provided must match <code class="docutils literal notranslate"><span class="pre">self.ndim</span></code>.
+If it is shared or memmap (<a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.is_shared" title="tensordict.LazyStackedTensorDict.is_shared"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_shared()</span></code></a> or <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.is_memmap" title="tensordict.LazyStackedTensorDict.is_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">is_memmap()</span></code></a>
+returns <code class="docutils literal notranslate"><span class="pre">True</span></code>) it will be populated within the remote processes,
+avoiding data inward transfers. Otherwise, the data from the <code class="docutils literal notranslate"><span class="pre">self</span></code>
+slice will be sent to the process, collected on the current process
+and written inplace into <code class="docutils literal notranslate"><span class="pre">out</span></code>.</p></li>
+<li><p><strong>chunksize</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.int" title="tensordict.TensorDictParams.int"><em>int</em></a><em>, </em><em>optional</em>) – The size of each chunk of data.
 A <code class="docutils literal notranslate"><span class="pre">chunksize</span></code> of 0 will unbind the tensordict along the
 desired dimension and restack it after the function is applied,
 whereas <code class="docutils literal notranslate"><span class="pre">chunksize&gt;0</span></code> will split the tensordict and call
@@ -1923,7 +1934,7 @@ of workers. For very large tensordicts, such large chunks
 may not fit in memory for the operation to be done and
 more chunks may be needed to make the operation practically
 doable. This argument is exclusive with <code class="docutils literal notranslate"><span class="pre">num_chunks</span></code>.</p></li>
-<li><p><strong>num_chunks</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a><em>, </em><em>optional</em>) – the number of chunks to split the tensordict
+<li><p><strong>num_chunks</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.int" title="tensordict.TensorDictParams.int"><em>int</em></a><em>, </em><em>optional</em>) – the number of chunks to split the tensordict
 into. If none is provided, the number of chunks will equate the number
 of workers. For very large tensordicts, such large chunks
 may not fit in memory for the operation to be done and
@@ -1959,12 +1970,12 @@ that each worker has a different seed and that the pseudo-random
 operations on each will be uncorrelated.</p>
 </div>
 </p></li>
-<li><p><strong>max_tasks_per_child</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a><em>, </em><em>optional</em>) – the maximum number of jobs picked
+<li><p><strong>max_tasks_per_child</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.int" title="tensordict.TensorDictParams.int"><em>int</em></a><em>, </em><em>optional</em>) – the maximum number of jobs picked
 by every child process. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, i.e., no restriction
 on the number of jobs.</p></li>
-<li><p><strong>worker_threads</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a><em>, </em><em>optional</em>) – the number of threads for the workers.
+<li><p><strong>worker_threads</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.int" title="tensordict.TensorDictParams.int"><em>int</em></a><em>, </em><em>optional</em>) – the number of threads for the workers.
 Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
-<li><p><strong>pbar</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a progress bar will be displayed.
+<li><p><strong>pbar</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a progress bar will be displayed.
 Requires tqdm to be available. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
