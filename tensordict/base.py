@@ -405,7 +405,6 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
-    @abc.abstractmethod
     @as_decorator()
     def to_module(
         self,
@@ -414,8 +413,8 @@ class TensorDictBase(MutableMapping):
         inplace: bool | None = None,
         return_swap: bool = True,
         swap_dest=None,
-        memo=None,
         use_state_dict: bool = False,
+        memo=None,  # deprecated
     ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
 
@@ -429,10 +428,6 @@ class TensorDictBase(MutableMapping):
                 will be returned. Defaults to ``False``.
             swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
                 the tensordict where the swap should be written.
-            memo (dict, optional): when the same module is present multiple times
-                in the input module, a memo is used to avoid fetching the params
-                that have just been set. This argument should be ignored during
-                regular calls to `to_module`.
             use_state_dict (bool, optional): if ``True``, state-dict API will be
                 used to load the parameters (including the state-dict hooks).
                 Defaults to ``False``.
@@ -447,6 +442,29 @@ class TensorDictBase(MutableMapping):
             >>> params.to_module(module)
             >>> assert (module.layers[0].linear1.weight == 0).all()
         """
+        hooks = getattr(
+            torch.nn.modules.module, "_global_parameter_registration_hooks", {}
+        )
+        memo = {"hooks": tuple(hooks.values())}
+        return self._to_module(
+            module=module,
+            inplace=inplace,
+            return_swap=return_swap,
+            swap_dest=swap_dest,
+            memo=memo,
+        )
+
+    @abc.abstractmethod
+    def _to_module(
+        self,
+        module,
+        *,
+        inplace: bool | None = None,
+        return_swap: bool = True,
+        swap_dest=None,
+        memo=None,
+        use_state_dict: bool = False,
+    ):
         ...
 
     # Shape functionality
