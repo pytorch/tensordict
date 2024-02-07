@@ -1096,7 +1096,7 @@ class PersistentTensorDict(TensorDictBase):
     masked_select = TensorDict.masked_select
     reshape = TensorDict.reshape
     split = TensorDict.split
-    to_module = TensorDict.to_module
+    _to_module = TensorDict._to_module
     _unbind = TensorDict._unbind
     _get_names_idx = TensorDict._get_names_idx
 

@@ -31,7 +31,6 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _LOCK_ERROR,
-    as_decorator,
     Buffer,
     erase_cache,
     IndexType,
@@ -907,8 +906,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_fallback
-    @as_decorator()
-    def to_module(
+    def _to_module(
         self,
         module,
         *,

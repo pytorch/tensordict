@@ -2433,7 +2433,7 @@ class LazyStackedTensorDict(TensorDictBase):
     masked_select = TensorDict.masked_select
     reshape = TensorDict.reshape
     split = TensorDict.split
-    to_module = TensorDict.to_module
+    _to_module = TensorDict._to_module
 
 
 class _CustomOpTensorDict(TensorDictBase):
@@ -2954,7 +2954,7 @@ class _CustomOpTensorDict(TensorDictBase):
     masked_select = TensorDict.masked_select
     reshape = TensorDict.reshape
     split = TensorDict.split
-    to_module = TensorDict.to_module
+    _to_module = TensorDict._to_module
     _apply_nest = TensorDict._apply_nest
     _remove_batch_dim = TensorDict._remove_batch_dim
     all = TensorDict.all
