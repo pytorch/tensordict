@@ -39,6 +39,7 @@ from typing import (
 import numpy as np
 import torch
 from tensordict.utils import (
+    _CloudpickleWrapper,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
     _is_tensorclass,
@@ -52,7 +53,6 @@ from tensordict.utils import (
     _unravel_key_to_tuple,
     as_decorator,
     cache,
-    _CloudpickleWrapper,
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
