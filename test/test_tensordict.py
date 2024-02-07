@@ -774,6 +774,13 @@ class TestGeneric:
         assert td.view(3, 4) is td
         assert td.view(-1, 12).shape == torch.Size([1, 12])
 
+    def test_is_empty(self):
+        assert TensorDict({"a": {"b": {}}}, []).is_empty()
+        assert not TensorDict(
+            {"a": {"b": {}, "c": NonTensorData("a string!", batch_size=[])}}, []
+        ).is_empty()
+        assert not TensorDict({"a": {"b": {}, "c": 1}}, []).is_empty()
+
     def test_keys_view(self):
         tensor = torch.randn(4, 5, 6, 7)
         sub_sub_tensordict = TensorDict({"c": tensor}, [4, 5, 6])
@@ -812,6 +819,16 @@ class TestGeneric:
 
         assert leaves == set()
         assert leaves_nested == {("a", "b", "c")}
+
+    def test_load_state_dict_incomplete(self):
+        data = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, [])
+        sd = TensorDict({"d": 0}, []).state_dict()
+        data.load_state_dict(sd, strict=True)
+        assert data["d"] == 0
+        sd = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, []).state_dict()
+        data = TensorDict({"d": 0}, [])
+        data.load_state_dict(sd, strict=True)
+        assert data["d"] == 1
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mask_td(self, device):
@@ -1675,6 +1692,35 @@ class TestGeneric:
             td_unbind[0].batch_size == td[:, 0].batch_size
         ), f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
 
+    @pytest.mark.parametrize("stack", [True, False])
+    @pytest.mark.parametrize("todict", [True, False])
+    def test_update_(self, stack, todict):
+        def make(val, todict=False, stack=False):
+            if todict:
+                return make(val, stack=stack).to_dict()
+            if stack:
+                return LazyStackedTensorDict.lazy_stack([make(val), make(val)])
+            return TensorDict({"a": {"b": val, "c": {}}, "d": {"e": val, "f": val}}, [])
+
+        td1 = make(1, stack=stack)
+        td2 = make(2, stack=stack, todict=todict)
+
+        # plain update_
+        td1.update_(td2)
+        assert (td1 == 2).all()
+
+        td1 = make(1, stack=stack)
+        for key in (("a",), "a"):
+            td1.update_(td2, keys_to_update=[key])
+            assert (td1.select("a") == 2).all()
+            assert (td1.exclude("a") == 1).all()
+
+        td1 = make(1, stack=stack)
+        for key in (("a", "b"), (("a",), ((("b"),),))):
+            td1.update_(td2, keys_to_update=[key])
+            assert (td1.select(("a", "b")) == 2).all()
+            assert (td1.exclude(("a", "b")) == 1).all()
+
     def test_update_nested_dict(self):
         t = TensorDict({"a": {"d": [[[0]] * 3] * 2}}, [2, 3])
         assert ("a", "d") in t.keys(include_nested=True)
@@ -1778,6 +1824,15 @@ class TestTensorDicts(TestTensorDictsBase):
                 else:
                     assert key == ("nested", "newkey")
                     assert (td_1[key] == 0).all()
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_apply_filter(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+        assert td.apply(lambda x: None, filter_empty=False) is not None
+        if td_name != "td_with_non_tensor":
+            assert td.apply(lambda x: None, filter_empty=True) is None
+        else:
+            assert td.apply(lambda x: None, filter_empty=True) is not None
 
     @pytest.mark.parametrize("inplace", [False, True])
     def test_apply_other(self, td_name, device, inplace):
@@ -2543,6 +2598,29 @@ class TestTensorDicts(TestTensorDictsBase):
         assert td_index.is_shared() is td.is_shared()
         assert td_index.device == td.device
 
+    @pytest.mark.parametrize("npy", [False, True])
+    def test_index_tensor_nd_names(self, td_name, device, npy):
+        td = getattr(self, td_name)(device)
+        names = ("a", "b", "c", "d")
+        try:
+            td.refine_names(*names)
+        except RuntimeError:
+            names = td.names
+        tensor_example = torch.zeros(()).expand(td.shape)
+        assert td.names == list(names)
+        index = torch.tensor([[0, 1, 2], [1, 2, 0], [2, 0, 1]])
+        if npy:
+            index = index.numpy()
+        td_idx = td[:, index]
+        assert tensor_example[:, index].shape == td_idx.shape
+        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+        td_idx = td[0, index]
+        assert tensor_example[0, index].shape == td_idx.shape
+        assert td_idx.names == [names[1], names[1], *names[2:]]
+        td_idx = td[..., index, :, :]
+        assert tensor_example[..., index, :, :].shape == td_idx.shape
+        assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
+
     def test_inferred_view_size(self, td_name, device):
         if td_name in ("permute_td", "sub_td2"):
             pytest.skip("view incompatible with stride / permutation")
@@ -2996,7 +3074,7 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(ValueError, match="Failed to update"):
                 td.named_apply(named_plus, inplace=inplace)
             return
-        td_1 = td.named_apply(named_plus, inplace=inplace)
+        td_1 = td.named_apply(named_plus, inplace=inplace, filter_empty=True)
         if inplace:
             assert td_1 is td
             for key in td_1.keys(True, True):
@@ -3026,9 +3104,15 @@ class TestTensorDicts(TestTensorDictsBase):
         def count(name, value, keys):
             keys.add(name)
 
-        td.named_apply(functools.partial(count, keys=keys_complete), nested_keys=True)
         td.named_apply(
-            functools.partial(count, keys=keys_not_complete), nested_keys=False
+            functools.partial(count, keys=keys_complete),
+            nested_keys=True,
+            filter_empty=True,
+        )
+        td.named_apply(
+            functools.partial(count, keys=keys_not_complete),
+            nested_keys=False,
+            filter_empty=True,
         )
         assert len(keys_complete) == len(list(td.keys(True, True)))
         assert len(keys_complete) > len(keys_not_complete)
@@ -4081,6 +4165,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td.get("a") == 1).all()
 
     @pytest.mark.filterwarnings("error")
+    @set_lazy_legacy(True)
     def test_stack_onto(self, td_name, device, tmpdir):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -4133,6 +4218,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td_stack == td_out).all()
 
     @pytest.mark.filterwarnings("error")
+    @set_lazy_legacy(True)
     def test_stack_subclasses_on_td(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -5849,12 +5935,12 @@ class TestLazyStackedTensorDict:
         middle = LazyStackedTensorDict.lazy_stack([inner] * 3, 0)
         outer = LazyStackedTensorDict.lazy_stack([middle] * 2, 0)
         outer_dense = outer.to_tensordict()
-        ref_tensor = torch.zeros(2, 3, 4)
         pos1 = self._idx_list[pos1]
         pos2 = self._idx_list[pos2]
         pos3 = self._idx_list[pos3]
         index = (pos1, pos2, pos3)
         result = outer[index]
+        ref_tensor = torch.zeros(outer.shape)
         assert result.batch_size == ref_tensor[index].shape, index
         assert result.batch_size == outer_dense[index].shape, index
 
@@ -6435,9 +6521,7 @@ class TestSnapshot:
         assert td_dest["b"].batch_size == td_plain["b"].batch_size
         assert isinstance(td_dest["b", "c"], MemoryMappedTensor)
 
-    def test_update(
-        self,
-    ):
+    def test_update(self):
         tensordict = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         state = {"state": tensordict}
         tensordict.memmap_()
@@ -6448,7 +6532,7 @@ class TestSnapshot:
         del tensordict
 
         snapshot = torchsnapshot.Snapshot(path=path)
-        tensordict2 = TensorDict({}, [])
+        tensordict2 = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3)}}, [])
         target_state = {"state": tensordict2}
         snapshot.restore(app_state=target_state)
         assert (td_plain == tensordict2).all()

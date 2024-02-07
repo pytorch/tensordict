@@ -1611,10 +1611,49 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     elif "." in key:
                         raise RuntimeError(DOT_ERROR)
                 return self.update(self_flatten.unflatten_keys("."))
+
         # copy since we'll be using pop
         state_dict = copy(state_dict)
-        self.batch_size = state_dict.pop("__batch_size")
+        batch_size = state_dict.pop("__batch_size")
         device = state_dict.pop("__device", None)
+
+        if strict and set(state_dict.keys()) != set(self.keys()):
+            set_sd = set(state_dict.keys())
+            set_td = set(self.keys())
+
+            # if there are keys in state-dict that point to an empty tensordict
+            # or if the local tensordicts are empty, we can skip
+            def _is_empty_dict(sd, key=None):
+                if key is not None:
+                    if not isinstance(sd[key], dict):
+                        return False
+                    return _is_empty_dict(sd[key])
+                for key, item in sd.items():
+                    if key in ("__batch_size", "__device"):
+                        continue
+                    if isinstance(item, dict):
+                        if not _is_empty_dict(item):
+                            return False
+                        continue
+                    return False
+                else:
+                    return True
+
+            def check_is_empty(target, key):
+                item = target.get(key)
+                if not is_tensor_collection(item) or not item.is_empty():
+                    return False
+                return True
+
+            if not all(check_is_empty(self, key) for key in set_td - set_sd) or not all(
+                _is_empty_dict(state_dict, key) for key in set_sd - set_td
+            ):
+                raise RuntimeError(
+                    "Cannot load state-dict because the key sets don't match: got "
+                    f"state_dict extra keys \n{set_sd - set_td}\n and tensordict extra keys\n{set_td - set_sd}\n"
+                )
+
+        self.batch_size = batch_size
         if device is not None and self.device is not None and device != self.device:
             raise RuntimeError("Loading data from another device is not yet supported.")
 
@@ -1631,13 +1670,6 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 )
             else:
                 self.set(key, item, inplace=not assign)
-        if strict and set(state_dict.keys()) != set(self.keys()):
-            set_sd = set(state_dict.keys())
-            set_td = set(self.keys())
-            raise RuntimeError(
-                "Cannot load state-dict because the key sets don't match: got "
-                f"state_dict extra keys \n{set_sd - set_td}\n and tensordict extra keys\n{set_td - set_sd}\n"
-            )
         return self
 
     def is_shared(self) -> bool:
@@ -2125,7 +2157,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     return x.filter_non_tensor_data()
                 return x
 
-        return self._apply_nest(_filter, call_on_nested=True)
+        return self._apply_nest(_filter, call_on_nested=True, filter_empty=False)
 
     def _convert_inplace(self, inplace, key):
         if inplace is not False:
@@ -2469,18 +2501,42 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
-            keys_to_update = unravel_key_list(keys_to_update)
-        for key, value in input_dict_or_td.items():
-            firstkey, *nextkeys = _unravel_key_to_tuple(key)
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
-            ):
-                continue
-            if clone:
-                value = value.clone()
-            self.set_((firstkey, *nextkeys), value)
-        return self
+            keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
+        if keys_to_update:
+            named = True
+
+            def inplace_update(name, dest, source):
+                if source is None:
+                    return dest
+                name = _unravel_key_to_tuple(name)
+                for key in keys_to_update:
+                    if key == name[: len(key)]:
+                        return dest.copy_(source, non_blocking=True)
+                else:
+                    return dest
+
+        else:
+            named = False
+
+            def inplace_update(dest, source):
+                if source is None:
+                    return dest
+                return dest.copy_(source, non_blocking=True)
+
+        if not is_tensor_collection(input_dict_or_td):
+            from tensordict import TensorDict
+
+            input_dict_or_td = TensorDict.from_dict(
+                input_dict_or_td, batch_dims=self.batch_dims
+            )
+        return self._apply_nest(
+            inplace_update,
+            input_dict_or_td,
+            nested_keys=True,
+            default=None,
+            inplace=True,
+            named=named,
+        )
 
     def update_at_(
         self,
@@ -3500,7 +3556,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             return
 
     # Apply and map functionality
-    def apply_(self, fn: Callable, *others) -> T:
+    def apply_(self, fn: Callable, *others, **kwargs) -> T:
         """Applies a callable to all values stored in the tensordict and re-writes them in-place.
 
         Args:
@@ -3509,11 +3565,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             *others (sequence of TensorDictBase, optional): the other
                 tensordicts to be used.
 
+        Keyword Args: See :meth:`~.apply`.
+
         Returns:
             self or a copy of self with the function applied
 
         """
-        return self.apply(fn, *others, inplace=True)
+        return self.apply(fn, *others, inplace=True, **kwargs)
 
     def apply(
         self,
@@ -3524,8 +3582,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> T:
+    ) -> T | None:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
 
         The callable signature must be ``Callable[Tuple[Tensor, ...], Optional[Union[Tensor, TensorDictBase]]]``.
@@ -3553,6 +3612,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             default (Any, optional): default value for missing entries in the
                 other tensordicts. If not provided, missing entries will
                 raise a `KeyError`.
+            filter_empty (bool, optional): if ``True``, empty tensordicts will be
+                filtered out. This also comes with a lower computational cost as
+                empty data structures won't be created and destroyed. Non-tensor data
+                is considered as a leaf and thereby will be kept in the tensordict even
+                if left untouched by the function.
+                Defaults to ``False`` for backward compatibility.
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
 
@@ -3610,6 +3675,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             inplace=inplace,
             checked=False,
             default=default,
+            filter_empty=filter_empty,
             **constructor_kwargs,
         )
 
@@ -3623,8 +3689,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> T:
+    ) -> T | None:
         """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new atensordict.
 
         The callable signature must be ``Callable[Tuple[str, Tensor, ...], Optional[Union[Tensor, TensorDictBase]]]``.
@@ -3654,6 +3721,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             default (Any, optional): default value for missing entries in the
                 other tensordicts. If not provided, missing entries will
                 raise a `KeyError`.
+            filter_empty (bool, optional): if ``True``, empty tensordicts will be
+                filtered out. This also comes with a lower computational cost as
+                empty data structures won't be created and destroyed. Defaults to
+                ``False`` for backward compatibility.
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
 
@@ -3738,6 +3809,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             default=default,
             named=True,
             nested_keys=nested_keys,
+            filter_empty=filter_empty,
             **constructor_kwargs,
         )
 
@@ -3756,8 +3828,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         named: bool = False,
         nested_keys: bool = False,
         prefix: tuple = (),
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> T:
+    ) -> T | None:
         ...
 
     def _fast_apply(
@@ -3772,8 +3845,11 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         default: Any = NO_DEFAULT,
         named: bool = False,
         nested_keys: bool = False,
+        # filter_empty must be False because we use _fast_apply for all sorts of ops like expand etc
+        # and non-tensor data will disappear if we use True by default.
+        filter_empty: bool | None = False,
         **constructor_kwargs,
-    ) -> T:
+    ) -> T | None:
         """A faster apply method.
 
         This method does not run any check after performing the func. This
@@ -3793,6 +3869,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=named,
             default=default,
             nested_keys=nested_keys,
+            filter_empty=filter_empty,
             **constructor_kwargs,
         )
 

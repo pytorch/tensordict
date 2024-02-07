@@ -11,11 +11,11 @@ import torch
 from _utils_internal import get_available_devices
 from tensordict import TensorDict, unravel_key, unravel_key_list
 from tensordict._tensordict import _unravel_key_to_tuple
-
 from tensordict.utils import (
     _getitem_batch_size,
     _make_cache_key,
     convert_ellipsis_to_idx,
+    isin,
     remove_duplicates,
 )
 
@@ -151,6 +151,73 @@ def test_unravel_key_to_tuple():
     assert keys_out == [("a",), ("b",), ("c", "d")]
     assert not _unravel_key_to_tuple(("a", (1,), ("b",)))
     assert not _unravel_key_to_tuple(("a", (slice(None),), ("b",)))
+
+
+@pytest.mark.parametrize("key", ("tensor1", "tensor3"))
+@pytest.mark.parametrize("dim", (0, 1, -1, -2))
+def test_isin_1dim(key, dim):
+    td = TensorDict(
+        {
+            "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
+            "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
+        },
+        batch_size=[4],
+    )
+    td_ref = TensorDict(
+        {
+            "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [10, 11, 12]]),
+            "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
+        },
+        batch_size=[3],
+    )
+
+    if key == "tensor3":
+        with pytest.raises(
+            KeyError, match=f"Key '{key}' not found in input or not a tensor."
+        ):
+            isin(td, td_ref, key, dim)
+    elif dim in (1, -2):
+        with pytest.raises(
+            ValueError,
+            match=f"The specified dimension '{dim}' is invalid for an input TensorDict with batch size .*.",
+        ):
+            isin(td, td_ref, key, dim)
+    else:
+        in_ref = isin(td, td_ref, key, dim)
+        expected_in_ref = torch.tensor([True, True, True, False])
+        torch.testing.assert_close(in_ref, expected_in_ref)
+
+        with pytest.raises(
+            ValueError,
+            match="The number of dimensions in the batch size of the input and reference must be the same.",
+        ):
+            td.batch_size = []
+            isin(td, td_ref, key, dim)
+
+
+@pytest.mark.parametrize("dim", (0, 1, -1, -2))
+def test_isin_2dim(dim):
+    key = "tensor1"
+    input = TensorDict(
+        {
+            "tensor1": torch.ones(4, 4),
+            "tensor2": torch.ones(4, 4),
+        },
+        batch_size=[4, 4],
+    )
+    td_ref = TensorDict(
+        {
+            "tensor1": torch.ones(4, 4),
+            "tensor2": torch.ones(4, 4),
+        },
+        batch_size=[4, 4],
+    )
+
+    positive_dim = dim if dim >= 0 else dim + 2
+    input[key][(slice(None),) * positive_dim + (0,)] = 2
+    in_ref = isin(input, td_ref, key, dim)
+    expected_in_ref = torch.tensor([False, True, True, True])
+    torch.testing.assert_close(in_ref, expected_in_ref)
 
 
 @pytest.mark.parametrize("key", ("tensor1", "tensor3", "next"))
