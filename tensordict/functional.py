@@ -138,7 +138,7 @@ def pad_sequence(
         ):
             list_of_tensordicts = [
                 td.clone(False).set(
-                    tuple(["masks"] + list(key)),
+                    ("masks", key),
                     torch.ones(td.get(key).shape[pad_dim], dtype=torch.bool),
                 )
                 for td in list_of_tensordicts
