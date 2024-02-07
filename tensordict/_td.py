@@ -21,6 +21,7 @@ from warnings import warn
 import numpy as np
 import torch
 from functorch import dim as ftdim
+
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
@@ -250,6 +251,10 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         prefix="",
     ):
+        from tensordict.nn import TensorDictParams
+
+        if isinstance(module, TensorDictParams):
+            return module
         destination = {}
         if use_state_dict:
             keep_vars = False
@@ -316,6 +321,15 @@ class TensorDict(TensorDictBase):
         memo=None,
         use_state_dict: bool = False,
     ):
+
+        from tensordict.nn import TensorDictParams
+
+        if isinstance(module, TensorDictParams):
+            if return_swap:
+                swap = module.copy()
+                module.update(self)
+                return swap
+
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         __dict__ = module.__dict__
 

@@ -2972,6 +2972,43 @@ class TestTensorDictParams:
         td_clone = td.clone()
         assert td_clone["c"] is td_clone["a", "b", "c"]
 
+    def test_func_on_tdparams(self):
+        # tdparams isn't represented in a nested way, so we must check that calling to_module on it works ok
+        net = nn.Sequential(
+            nn.Linear(2, 2),
+            nn.Sequential(
+                nn.Linear(2, 2),
+                nn.Dropout(),
+                nn.BatchNorm1d(2),
+                nn.Sequential(
+                    nn.Tanh(),
+                    nn.Linear(2, 2),
+                )
+            )
+        )
+
+        params = TensorDict.from_module(net, as_module=True)
+
+        params0 = params.apply(lambda x: x.data * 0)
+        assert (params0==0).all()
+        with params0.to_module(params):
+            assert (params == 0).all()
+        assert not (params == 0).all()
+
+        # Now with a module around it
+        class MyModule(nn.Module):
+            pass
+        m = MyModule()
+        m.params = params
+        params_m = TensorDict.from_module(m, as_module=True)
+        params_m0 = params_m.apply(lambda x: x.data * 0)
+        assert (params_m0==0).all()
+        with params_m0.to_module(m):
+            assert (params_m == 0).all()
+        assert not (params_m == 0).all()
+
+
+
     def test_inplace_ops(self):
         td = TensorDict(
             {
