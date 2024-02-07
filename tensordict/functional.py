@@ -102,8 +102,8 @@ def pad_sequence(
 
     Examples:
         >>> list_td = [
-        ...     TensorDict({"a": torch.zeros((3,8)), "b": torch.zeros((6,8))}, []),
-        ...     TensorDict({"a": torch.zeros((5,8)), "b": torch.zeros((6,8))}, []),
+        ...     TensorDict({"a": torch.zeros((3, 8)), "b": torch.zeros((6, 8))}, batch_size=[]),
+        ...     TensorDict({"a": torch.zeros((5, 8)), "b": torch.zeros((6, 8))}, batch_size=[]),
         ...     ]
         >>> padded_td = pad_sequence(list_td, return_mask=True)
         >>> print(padded_td)
