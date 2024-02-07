@@ -399,10 +399,6 @@ class TensorDict(TensorDictBase):
                     # if there is at least one key, we must populate the module.
                     # Otherwise we just go to the next key
                     continue
-                if swap_dest is not None:
-                    local_dest = swap_dest._get_str(key, default=NO_DEFAULT)
-                else:
-                    local_dest = None
                 child = __dict__["_modules"][key]
                 if id(child) in memo:
                     local_out = memo[id(child)]
@@ -411,7 +407,7 @@ class TensorDict(TensorDictBase):
                         child,
                         inplace=inplace,
                         return_swap=return_swap,
-                        swap_dest=local_dest,
+                        swap_dest=None,  # we'll be calling update later
                         memo=memo,
                         use_state_dict=use_state_dict,
                     )
