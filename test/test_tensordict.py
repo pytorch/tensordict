@@ -7576,6 +7576,23 @@ class TestMap:
         data = TensorDict({"tensor": torch.zeros(10)}, [10]).memmap_()
         data.map(self._assert_is_memmap, chunksize=chunksize, num_workers=2)
 
+    @staticmethod
+    def selectfn(input):
+        return input.select("a")
+
+    @pytest.mark.parametrize("chunksize", [0, 5])
+    @pytest.mark.parametrize("mmap", [True, False])
+    def test_map_with_out(self, mmap, chunksize, tmpdir):
+        tmpdir = Path(tmpdir)
+        input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
+        if mmap:
+            input.memmap_(tmpdir / "input")
+        out = TensorDict({"a": torch.zeros(10, dtype=torch.int)}, [10])
+        if mmap:
+            out.memmap_(tmpdir / "output")
+        input.map(self.selectfn, num_workers=2, chunksize=chunksize, out=out)
+        assert (out["a"] == torch.arange(10)).all(), (chunksize, mmap)
+
 
 # class TestNonTensorData:
 class TestNonTensorData:

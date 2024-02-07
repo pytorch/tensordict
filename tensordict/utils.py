@@ -1865,3 +1865,21 @@ def _index_preserve_data_ptr(index):
     if isinstance(index, slice) and (index.start == 0 or index.start is None):
         return True
     return False
+
+
+class _CloudpickleWrapper(object):
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __getstate__(self):
+        import cloudpickle
+
+        return cloudpickle.dumps(self.fn)
+
+    def __setstate__(self, ob: bytes):
+        import pickle
+
+        self.fn = pickle.loads(ob)
+
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
