@@ -2869,7 +2869,7 @@ class TestTensorDictParams:
         m = self.CustomModule(p)
         assert (
             TensorDict(dict(m.named_parameters()), [])
-            == TensorDict({"params": params.flatten_keys("_")}, []).flatten_keys(".")
+            == TensorDict({"params": params.flatten_keys(".")}, []).flatten_keys(".")
         ).all()
 
         assert not m.params.is_locked
