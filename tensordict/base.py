@@ -18,6 +18,7 @@ from collections.abc import MutableMapping
 
 from concurrent.futures import ThreadPoolExecutor
 from copy import copy
+from functools import wraps
 from pathlib import Path
 from textwrap import indent
 from typing import (
@@ -38,6 +39,7 @@ from typing import (
 import numpy as np
 import torch
 from tensordict.utils import (
+    _CloudpickleWrapper,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
     _is_tensorclass,
@@ -3878,6 +3880,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         fn: Callable,
         dim: int = 0,
         num_workers: int | None = None,
+        *,
+        out: TensorDictBase = None,
         chunksize: int | None = None,
         num_chunks: int | None = None,
         pool: mp.Pool | None = None,
@@ -3904,6 +3908,15 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             num_workers (int, optional): the number of workers. Exclusive with ``pool``.
                 If none is provided, the number of workers will be set to the
                 number of cpus available.
+
+        Keyword Args:
+            out (TensorDictBase, optional): an optional container for the output.
+                Its batch-size along the ``dim`` provided must match ``self.ndim``.
+                If it is shared or memmap (:meth:`~.is_shared` or :meth:`~.is_memmap`
+                returns ``True``) it will be populated within the remote processes,
+                avoiding data inward transfers. Otherwise, the data from the ``self``
+                slice will be sent to the process, collected on the current process
+                and written inplace into ``out``.
             chunksize (int, optional): The size of each chunk of data.
                 A ``chunksize`` of 0 will unbind the tensordict along the
                 desired dimension and restack it after the function is applied,
@@ -4003,6 +4016,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     num_chunks=num_chunks,
                     pool=pool,
                     pbar=pbar,
+                    out=out,
                 )
         num_workers = pool._processes
         dim_orig = dim
@@ -4013,16 +4027,44 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
         self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
         call_chunksize = 1
+
+        def wrap_fn_with_out(fn, out):
+            @wraps(fn)
+            def newfn(item_and_out):
+                item, out = item_and_out
+                result = fn(item)
+                out.update_(result)
+                return
+
+            out_split = _split_tensordict(out, chunksize, num_chunks, num_workers, dim)
+            return _CloudpickleWrapper(newfn), zip(self_split, out_split)
+
+        if out is not None and (out.is_shared() or out.is_memmap()):
+            fn, self_split = wrap_fn_with_out(fn, out)
+            out = None
+
         imap = pool.imap(fn, self_split, call_chunksize)
+
         if pbar and importlib.util.find_spec("tqdm", None) is not None:
             import tqdm
 
             imap = tqdm.tqdm(imap, total=len(self_split))
 
         imaplist = []
+        start = 0
         for item in imap:
             if item is not None:
-                imaplist.append(item)
+                if out is not None:
+                    if chunksize:
+                        end = start + item.shape[dim]
+                        chunk = slice(start, end)
+                        out[chunk].update_(item)
+                        start = end
+                    else:
+                        out[start].update_(item)
+                        start += 1
+                else:
+                    imaplist.append(item)
         del imap
 
         # support inplace modif
@@ -4031,7 +4073,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 out = torch.stack(imaplist, dim)
             else:
                 out = torch.cat(imaplist, dim)
-            return out
+        return out
 
     # Functorch compatibility
     @abc.abstractmethod
