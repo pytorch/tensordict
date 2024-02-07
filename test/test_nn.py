@@ -2983,14 +2983,14 @@ class TestTensorDictParams:
                 nn.Sequential(
                     nn.Tanh(),
                     nn.Linear(2, 2),
-                )
-            )
+                ),
+            ),
         )
 
         params = TensorDict.from_module(net, as_module=True)
 
         params0 = params.apply(lambda x: x.data * 0)
-        assert (params0==0).all()
+        assert (params0 == 0).all()
         with params0.to_module(params):
             assert (params == 0).all()
         assert not (params == 0).all()
@@ -2998,16 +2998,15 @@ class TestTensorDictParams:
         # Now with a module around it
         class MyModule(nn.Module):
             pass
+
         m = MyModule()
         m.params = params
         params_m = TensorDict.from_module(m, as_module=True)
         params_m0 = params_m.apply(lambda x: x.data * 0)
-        assert (params_m0==0).all()
+        assert (params_m0 == 0).all()
         with params_m0.to_module(m):
             assert (params_m == 0).all()
         assert not (params_m == 0).all()
-
-
 
     def test_inplace_ops(self):
         td = TensorDict(
