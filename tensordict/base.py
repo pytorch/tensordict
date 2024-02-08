@@ -4067,25 +4067,26 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             length = None
         call_chunksize = 1
 
-        def wrap_fn_with_out(fn, out):
-            @wraps(fn)
-            def newfn(item_and_out):
-                item, out = item_and_out
-                result = fn(item)
-                out.update_(result)
-                return
-
-            out_split = _split_tensordict(
-                out,
-                chunksize,
-                num_chunks,
-                num_workers,
-                dim,
-                use_generator=index_with_generator,
-            )
-            return _CloudpickleWrapper(newfn), zip(self_split, out_split)
-
         if out is not None and (out.is_shared() or out.is_memmap()):
+
+            def wrap_fn_with_out(fn, out):
+                @wraps(fn)
+                def newfn(item_and_out):
+                    item, out = item_and_out
+                    result = fn(item)
+                    out.update_(result)
+                    return
+
+                out_split = _split_tensordict(
+                    out,
+                    chunksize,
+                    num_chunks,
+                    num_workers,
+                    dim,
+                    use_generator=index_with_generator,
+                )
+                return _CloudpickleWrapper(newfn), zip(self_split, out_split)
+
             fn, self_split = wrap_fn_with_out(fn, out)
             out = None
 

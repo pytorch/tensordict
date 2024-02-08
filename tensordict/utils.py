@@ -1145,7 +1145,15 @@ class as_decorator:
         return new_func
 
 
-def _split_tensordict(td, chunksize, num_chunks, num_workers, dim, use_generator=False):
+def _split_tensordict(
+    td,
+    chunksize,
+    num_chunks,
+    num_workers,
+    dim,
+    use_generator=False,
+    to_tensordict=False,
+):
     if chunksize is None and num_chunks is None:
         num_chunks = num_workers
     if chunksize is not None and num_chunks is not None:
@@ -1162,7 +1170,10 @@ def _split_tensordict(td, chunksize, num_chunks, num_workers, dim, use_generator
                 base = (slice(None),) * dim
                 for _ in range(num_chunks):
                     idx_end = idx_start + chunksize
-                    yield td[base + (slice(idx_start, idx_end),)]
+                    out = td[base + (slice(idx_start, idx_end),)]
+                    if to_tensordict:
+                        out = out.to_tensordict()
+                    yield out
                     idx_start = idx_end
 
             return _chunk_generator()
@@ -1174,7 +1185,10 @@ def _split_tensordict(td, chunksize, num_chunks, num_workers, dim, use_generator
                 def _unbind_generator():
                     base = (slice(None),) * dim
                     for i in range(td.shape[dim]):
-                        yield td[base + (i,)]
+                        out = td[base + (i,)]
+                        if to_tensordict:
+                            out = out.to_tensordict()
+                        yield out
 
                 return _unbind_generator()
             return td.unbind(dim=dim)
@@ -1185,7 +1199,10 @@ def _split_tensordict(td, chunksize, num_chunks, num_workers, dim, use_generator
                 base = (slice(None),) * dim
                 for _ in range(num_chunks):
                     idx_end = idx_start + chunksize
-                    yield td[base + (slice(idx_start, idx_end),)]
+                    out = td[base + (slice(idx_start, idx_end),)]
+                    if to_tensordict:
+                        out = out.to_tensordict()
+                    yield out
                     idx_start = idx_end
 
             return _split_generator()

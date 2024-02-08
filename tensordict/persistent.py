@@ -6,33 +6,32 @@
 """Persistent tensordicts (H5 and others)."""
 from __future__ import annotations
 
-import tempfile
-import warnings
-from pathlib import Path
-from typing import Any, Callable, Type
-
-from tensordict._td import _unravel_key_to_tuple
-from torch import multiprocessing as mp
-
-H5_ERR = None
-try:
-    import h5py
-
-    _has_h5 = True
-except ModuleNotFoundError as err:
-    H5_ERR = err
-    _has_h5 = False
+import importlib
 
 import json
 import os
 
+import tempfile
+import warnings
+from functools import wraps
+from pathlib import Path
+from typing import Any, Callable, Type
+
 import numpy as np
 import torch
-from tensordict._td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
+
+from tensordict._td import (
+    _TensorDictKeysView,
+    _unravel_key_to_tuple,
+    CompatibleType,
+    NO_DEFAULT,
+    TensorDict,
+)
 from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
+    _CloudpickleWrapper,
     _KEY_ERROR,
     _LOCK_ERROR,
     _parse_to,
@@ -45,6 +44,16 @@ from tensordict.utils import (
     NestedKey,
     NUMPY_TO_TORCH_DTYPE_DICT,
 )
+from torch import multiprocessing as mp
+
+H5_ERR = None
+try:
+    import h5py
+
+    _has_h5 = True
+except ModuleNotFoundError as err:
+    H5_ERR = err
+    _has_h5 = False
 
 
 class _Visitor:
@@ -682,12 +691,16 @@ class PersistentTensorDict(TensorDictBase):
         fn: Callable,
         dim: int = 0,
         num_workers: int = None,
+        *,
+        out: TensorDictBase = None,
         chunksize: int = None,
         num_chunks: int = None,
         pool: mp.Pool = None,
         generator: torch.Generator | None = None,
         max_tasks_per_child: int | None = None,
         worker_threads: int = 1,
+        index_with_generator: bool = False,
+        pbar: bool = False,
     ):
         if pool is None:
             if num_workers is None:
@@ -715,11 +728,75 @@ class PersistentTensorDict(TensorDictBase):
         if dim < 0 or dim >= self.ndim:
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
-        self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
-        self_split = tuple(split.to_tensordict() for split in self_split)
-        chunksize = 1
-        out = pool.imap(fn, self_split, chunksize)
-        out = torch.cat(list(out), dim)
+        self_split = _split_tensordict(
+            self,
+            chunksize,
+            num_chunks,
+            num_workers,
+            dim,
+            use_generator=index_with_generator,
+            to_tensordict=True,
+        )
+        if not index_with_generator:
+            length = len(self_split)
+            self_split = tuple(split.to_tensordict() for split in self_split)
+        else:
+            length = None
+
+        if out is not None and (out.is_shared() or out.is_memmap()):
+
+            def wrap_fn_with_out(fn, out):
+                @wraps(fn)
+                def newfn(item_and_out):
+                    item, out = item_and_out
+                    result = fn(item)
+                    out.update_(result)
+                    return
+
+                out_split = _split_tensordict(
+                    out,
+                    chunksize,
+                    num_chunks,
+                    num_workers,
+                    dim,
+                    use_generator=index_with_generator,
+                )
+                return _CloudpickleWrapper(newfn), zip(self_split, out_split)
+
+            fn, self_split = wrap_fn_with_out(fn, out)
+            out = None
+
+        call_chunksize = 1
+        imap = pool.imap(fn, self_split, call_chunksize)
+
+        if pbar and importlib.util.find_spec("tqdm", None) is not None:
+            import tqdm
+
+            imap = tqdm.tqdm(imap, total=length)
+
+        imaplist = []
+        start = 0
+        for item in imap:
+            if item is not None:
+                if out is not None:
+                    if chunksize:
+                        end = start + item.shape[dim]
+                        chunk = slice(start, end)
+                        out[chunk].update_(item)
+                        start = end
+                    else:
+                        out[start].update_(item)
+                        start += 1
+                else:
+                    imaplist.append(item)
+        del imap
+
+        # support inplace modif
+        if imaplist:
+            if chunksize == 0:
+                out = torch.stack(imaplist, dim)
+            else:
+                out = torch.cat(imaplist, dim)
         return out
 
     def rename_key_(
