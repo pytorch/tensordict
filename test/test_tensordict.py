@@ -7568,15 +7568,15 @@ class TestMap:
             output_generator = torch.zeros_like(self.selectfn(input))
             output_split = torch.zeros_like(self.selectfn(input))
         else:
-            output_generator=None
-            output_split=None
+            output_generator = None
+            output_split = None
         output_generator = input.map(
             self.selectfn,
             num_workers=2,
             index_with_generator=True,
             num_chunks=num_chunks,
             chunksize=chunksize,
-            out=output_generator
+            out=output_generator,
         )
         output_split = input.map(
             self.selectfn,
@@ -7584,7 +7584,7 @@ class TestMap:
             index_with_generator=True,
             num_chunks=num_chunks,
             chunksize=chunksize,
-            out=output_split
+            out=output_split,
         )
         assert (output_generator == output_split).all()
 
