@@ -4099,17 +4099,18 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
         imaplist = []
         start = 0
+        base_index = (slice(None),) * dim
         for item in imap:
             if item is not None:
                 if out is not None:
-                    if chunksize:
+                    if chunksize == 0:
+                        out[base_index + (start,)].update_(item)
+                        start += 1
+                    else:
                         end = start + item.shape[dim]
-                        chunk = slice(start, end)
+                        chunk = base_index + (slice(start, end),)
                         out[chunk].update_(item)
                         start = end
-                    else:
-                        out[start].update_(item)
-                        start += 1
                 else:
                     imaplist.append(item)
         del imap
