@@ -1975,6 +1975,12 @@ by every child process. Defaults to <code class="docutils literal notranslate"><
 on the number of jobs.</p></li>
 <li><p><strong>worker_threads</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.int" title="tensordict.TensorDictParams.int"><em>int</em></a><em>, </em><em>optional</em>) – the number of threads for the workers.
 Defaults to <code class="docutils literal notranslate"><span class="pre">1</span></code>.</p></li>
+<li><p><strong>index_with_generator</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the splitting / chunking
+of the tensordict will be done during the query, sparing init time.
+Note that <a class="reference internal" href="#tensordict.TensorDictParams.chunk" title="tensordict.TensorDictParams.chunk"><code class="xref py py-meth docutils literal notranslate"><span class="pre">chunk()</span></code></a> and <a class="reference internal" href="#tensordict.TensorDictParams.split" title="tensordict.TensorDictParams.split"><code class="xref py py-meth docutils literal notranslate"><span class="pre">split()</span></code></a> are much more
+efficient than indexing (which is used within the generator)
+so a gain of processing time at init time may have a negative
+impact on the total runtime. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>pbar</strong> (<a class="reference internal" href="#tensordict.TensorDictParams.bool" title="tensordict.TensorDictParams.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a progress bar will be displayed.
 Requires tqdm to be available. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
