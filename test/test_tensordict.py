@@ -7451,7 +7451,7 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
-# @pytest.mark.skipif(_IS_OSX, reason="Pool executionn in osx can hang forever.")
+# @pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
@@ -7565,8 +7565,8 @@ class TestMap:
             tmpdir = pathlib.Path(tmpdir)
             input = input.to_h5(tmpdir / "file.h5")
         if has_out:
-            output_generator = torch.zeros_like(self.selectfn(input))
-            output_split = torch.zeros_like(self.selectfn(input))
+            output_generator = torch.zeros_like(self.selectfn(input.to_tensordict()))
+            output_split = torch.zeros_like(self.selectfn(input.to_tensordict()))
         else:
             output_generator = None
             output_split = None
