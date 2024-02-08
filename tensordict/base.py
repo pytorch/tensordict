@@ -3909,6 +3909,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         generator: torch.Generator | None = None,
         max_tasks_per_child: int | None = None,
         worker_threads: int = 1,
+        index_with_generator: bool = False,
         pbar: bool = False,
     ):
         """Maps a function to splits of the tensordict across one dimension.
@@ -3985,6 +3986,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 on the number of jobs.
             worker_threads (int, optional): the number of threads for the workers.
                 Defaults to ``1``.
+            index_with_generator (bool, optional): if ``True``, the splitting / chunking
+                of the tensordict will be done during the query, sparing init time.
+                Note that :meth:`~.chunk` and :meth:`~.split` are much more
+                efficient than indexing (which is used within the generator)
+                so a gain of processing time at init time may have a negative
+                impact on the total runtime. Defaults to ``False``.
             pbar (bool, optional): if ``True``, a progress bar will be displayed.
                 Requires tqdm to be available. Defaults to ``False``.
 
@@ -4046,21 +4053,40 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         if dim < 0 or dim >= self.ndim:
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
-        self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
+        self_split = _split_tensordict(
+            self,
+            chunksize,
+            num_chunks,
+            num_workers,
+            dim,
+            use_generator=index_with_generator,
+        )
+        if not index_with_generator:
+            length = len(self_split)
+        else:
+            length = None
         call_chunksize = 1
 
-        def wrap_fn_with_out(fn, out):
-            @wraps(fn)
-            def newfn(item_and_out):
-                item, out = item_and_out
-                result = fn(item)
-                out.update_(result)
-                return
-
-            out_split = _split_tensordict(out, chunksize, num_chunks, num_workers, dim)
-            return _CloudpickleWrapper(newfn), zip(self_split, out_split)
-
         if out is not None and (out.is_shared() or out.is_memmap()):
+
+            def wrap_fn_with_out(fn, out):
+                @wraps(fn)
+                def newfn(item_and_out):
+                    item, out = item_and_out
+                    result = fn(item)
+                    out.update_(result)
+                    return
+
+                out_split = _split_tensordict(
+                    out,
+                    chunksize,
+                    num_chunks,
+                    num_workers,
+                    dim,
+                    use_generator=index_with_generator,
+                )
+                return _CloudpickleWrapper(newfn), zip(self_split, out_split)
+
             fn, self_split = wrap_fn_with_out(fn, out)
             out = None
 
@@ -4069,21 +4095,22 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         if pbar and importlib.util.find_spec("tqdm", None) is not None:
             import tqdm
 
-            imap = tqdm.tqdm(imap, total=len(self_split))
+            imap = tqdm.tqdm(imap, total=length)
 
         imaplist = []
         start = 0
+        base_index = (slice(None),) * dim
         for item in imap:
             if item is not None:
                 if out is not None:
-                    if chunksize:
+                    if chunksize == 0:
+                        out[base_index + (start,)].update_(item)
+                        start += 1
+                    else:
                         end = start + item.shape[dim]
-                        chunk = slice(start, end)
+                        chunk = base_index + (slice(start, end),)
                         out[chunk].update_(item)
                         start = end
-                    else:
-                        out[start].update_(item)
-                        start += 1
                 else:
                     imaplist.append(item)
         del imap

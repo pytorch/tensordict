@@ -5,11 +5,15 @@
 
 import argparse
 
+import contextlib
+
 import functools
 import gc
 import json
 import logging
 import os
+import pathlib
+import platform
 import re
 import uuid
 from pathlib import Path
@@ -17,28 +21,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-
-from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData
-
-try:
-    import torchsnapshot
-
-    _has_torchsnapshot = True
-    TORCHSNAPSHOT_ERR = ""
-except ImportError as err:
-    _has_torchsnapshot = False
-    TORCHSNAPSHOT_ERR = str(err)
-
-try:
-    import h5py  # noqa
-
-    _has_h5py = True
-except ImportError:
-    _has_h5py = False
-
-import contextlib
-import platform
 
 from _utils_internal import (
     decompose,
@@ -56,6 +38,9 @@ from tensordict._torch_func import _stack as stack_td
 from tensordict.base import TensorDictBase
 from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
+
+from tensordict.nn import TensorDictParams
+from tensordict.tensorclass import NonTensorData
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -65,6 +50,22 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import multiprocessing as mp, nn
+
+try:
+    import torchsnapshot
+
+    _has_torchsnapshot = True
+    TORCHSNAPSHOT_ERR = ""
+except ImportError as err:
+    _has_torchsnapshot = False
+    TORCHSNAPSHOT_ERR = str(err)
+
+try:
+    import h5py  # noqa
+
+    _has_h5py = True
+except ImportError:
+    _has_h5py = False
 
 _IS_OSX = platform.system() == "Darwin"
 
@@ -7450,7 +7451,7 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
-@pytest.mark.skipif(_IS_OSX, reason="Pool executionn in osx can hang forever.")
+@pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
@@ -7552,6 +7553,40 @@ class TestMap:
             td_out_0["s"].sort().values,
             td_out_1["s"].sort().values,
         )
+
+    @pytest.mark.parametrize(
+        "chunksize,num_chunks", [[0, None], [2, None], [None, 5], [None, 10]]
+    )
+    @pytest.mark.parametrize("h5", [False, True])
+    @pytest.mark.parametrize("has_out", [False, True])
+    def test_index_with_generator(self, chunksize, num_chunks, h5, has_out, tmpdir):
+        input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
+        if h5:
+            tmpdir = pathlib.Path(tmpdir)
+            input = input.to_h5(tmpdir / "file.h5")
+        if has_out:
+            output_generator = torch.zeros_like(self.selectfn(input.to_tensordict()))
+            output_split = torch.zeros_like(self.selectfn(input.to_tensordict()))
+        else:
+            output_generator = None
+            output_split = None
+        output_generator = input.map(
+            self.selectfn,
+            num_workers=2,
+            index_with_generator=True,
+            num_chunks=num_chunks,
+            chunksize=chunksize,
+            out=output_generator,
+        )
+        output_split = input.map(
+            self.selectfn,
+            num_workers=2,
+            index_with_generator=True,
+            num_chunks=num_chunks,
+            chunksize=chunksize,
+            out=output_split,
+        )
+        assert (output_generator == output_split).all()
 
     def test_map_unbind(self):
         if mp.get_start_method(allow_none=True) is None:

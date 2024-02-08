@@ -1145,7 +1145,15 @@ class as_decorator:
         return new_func
 
 
-def _split_tensordict(td, chunksize, num_chunks, num_workers, dim):
+def _split_tensordict(
+    td,
+    chunksize,
+    num_chunks,
+    num_workers,
+    dim,
+    use_generator=False,
+    to_tensordict=False,
+):
     if chunksize is None and num_chunks is None:
         num_chunks = num_workers
     if chunksize is not None and num_chunks is not None:
@@ -1154,10 +1162,50 @@ def _split_tensordict(td, chunksize, num_chunks, num_workers, dim):
         )
     if num_chunks is not None:
         num_chunks = min(td.shape[dim], num_chunks)
+        if use_generator:
+
+            def _chunk_generator():
+                chunksize = -(td.shape[dim] // -num_chunks)
+                idx_start = 0
+                base = (slice(None),) * dim
+                for _ in range(num_chunks):
+                    idx_end = idx_start + chunksize
+                    out = td[base + (slice(idx_start, idx_end),)]
+                    if to_tensordict:
+                        out = out.to_tensordict()
+                    yield out
+                    idx_start = idx_end
+
+            return _chunk_generator()
         return td.chunk(num_chunks, dim=dim)
     else:
         if chunksize == 0:
+            if use_generator:
+
+                def _unbind_generator():
+                    base = (slice(None),) * dim
+                    for i in range(td.shape[dim]):
+                        out = td[base + (i,)]
+                        if to_tensordict:
+                            out = out.to_tensordict()
+                        yield out
+
+                return _unbind_generator()
             return td.unbind(dim=dim)
+        if use_generator:
+
+            def _split_generator():
+                idx_start = 0
+                base = (slice(None),) * dim
+                for _ in range(num_chunks):
+                    idx_end = idx_start + chunksize
+                    out = td[base + (slice(idx_start, idx_end),)]
+                    if to_tensordict:
+                        out = out.to_tensordict()
+                    yield out
+                    idx_start = idx_end
+
+            return _split_generator()
         chunksize = min(td.shape[dim], chunksize)
         return td.split(chunksize, dim=dim)
 
