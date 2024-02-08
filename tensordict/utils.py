@@ -1145,7 +1145,7 @@ class as_decorator:
         return new_func
 
 
-def _split_tensordict(td, chunksize, num_chunks, num_workers, dim, use_generator):
+def _split_tensordict(td, chunksize, num_chunks, num_workers, dim, use_generator=False):
     if chunksize is None and num_chunks is None:
         num_chunks = num_workers
     if chunksize is not None and num_chunks is not None:
