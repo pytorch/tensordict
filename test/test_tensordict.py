@@ -7553,6 +7553,27 @@ class TestMap:
             td_out_1["s"].sort().values,
         )
 
+    @pytest.mark.parametrize(
+        "chunksize,num_chunks", [[0, None], [2, None], [None, 5], [None, 10]]
+    )
+    def test_index_with_generator(self, chunksize, num_chunks):
+        input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
+        output_generator = input.map(
+            self.selectfn,
+            num_workers=2,
+            index_with_generator=True,
+            num_chunks=num_chunks,
+            chunksize=chunksize,
+        )
+        output_split = input.map(
+            self.selectfn,
+            num_workers=2,
+            index_with_generator=True,
+            num_chunks=num_chunks,
+            chunksize=chunksize,
+        )
+        assert (output_generator == output_split).all()
+
     def test_map_unbind(self):
         if mp.get_start_method(allow_none=True) is None:
             mp.set_start_method("spawn")
