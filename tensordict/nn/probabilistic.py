@@ -166,12 +166,18 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             the output value. Should be one of InteractionType: MODE, MEDIAN, MEAN or RANDOM
             (in which case the value is sampled randomly from the distribution). Default
             is MODE.
-            Note: When a sample is drawn, the :obj:`ProbabilisticTDModule` instance will
-            first look for the interaction mode dictated by the `interaction_type()`
-            global function. If this returns `None` (its default value), then the
-            `default_interaction_type` of the `ProbabilisticTDModule` instance will be
-            used. Note that DataCollector instances will use `set_interaction_type` to
-            `RANDOM` by default.
+
+            .. note:: When a sample is drawn, the
+              :class:`ProbabilisticTensorDictModule` instance will
+              first look for the interaction mode dictated by the
+              :func:`~tensordict.nn.probabilistic.interaction_type`
+              global function. If this returns `None` (its default value), then the
+              `default_interaction_type` of the `ProbabilisticTDModule`
+              instance will be used. Note that
+              :class:`~torchrl.collectors.collectors.DataCollectorBase`
+              instances will use `set_interaction_type` to
+              :class:`tensordict.nn.InteractionType.RANDOM` by default.
+
         distribution_class (Type, optional): keyword-only argument.
             A :class:`torch.distributions.Distribution` class to
             be used for sampling.
