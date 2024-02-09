@@ -405,17 +405,25 @@ written. Importantly, if these keys are found in the input TensorDict, the
 sampling step will be skipped.</p></li>
 <li><p><strong>default_interaction_mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><em>str</em></a><em>, </em><em>optional</em>) – <em>Deprecated</em> keyword-only argument.
 Please use default_interaction_type instead.</p></li>
-<li><p><strong>default_interaction_type</strong> (<em>InteractionType</em><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>default_interaction_type</strong> (<em>InteractionType</em><em>, </em><em>optional</em>) – <p>keyword-only argument.
 Default method to be used to retrieve
 the output value. Should be one of InteractionType: MODE, MEDIAN, MEAN or RANDOM
 (in which case the value is sampled randomly from the distribution). Default
-is MODE.
-Note: When a sample is drawn, the <code class="xref py py-obj docutils literal notranslate"><span class="pre">ProbabilisticTDModule</span></code> instance will
-first look for the interaction mode dictated by the <cite>interaction_type()</cite>
+is MODE.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>When a sample is drawn, the
+<a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> instance will
+first look for the interaction mode dictated by the
+<code class="xref py py-func docutils literal notranslate"><span class="pre">interaction_type()</span></code>
 global function. If this returns <cite>None</cite> (its default value), then the
-<cite>default_interaction_type</cite> of the <cite>ProbabilisticTDModule</cite> instance will be
-used. Note that DataCollector instances will use <cite>set_interaction_type</cite> to
-<cite>RANDOM</cite> by default.</p></li>
+<cite>default_interaction_type</cite> of the <cite>ProbabilisticTDModule</cite>
+instance will be used. Note that
+<code class="xref py py-class docutils literal notranslate"><span class="pre">DataCollectorBase</span></code>
+instances will use <cite>set_interaction_type</cite> to
+<code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.InteractionType.RANDOM</span></code> by default.</p>
+</div>
+</p></li>
 <li><p><strong>distribution_class</strong> (<em>Type</em><em>, </em><em>optional</em>) – keyword-only argument.
 A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> class to
 be used for sampling.
