@@ -637,7 +637,8 @@ class TensorDictModuleBase(nn.Module):
                 raise ValueError(err_msg)
         self.register_forward_hook(_OutKeysSelect(out_keys))
         for hook in self._forward_hooks.values():
-            hook._init(self)
+            if isinstance(hook, _OutKeysSelect):
+                hook._init(self)
         return self
 
     @implement_for("torch", "2.0", None)
@@ -750,7 +751,8 @@ class TensorDictModuleBase(nn.Module):
                 raise ValueError(err_msg)
         self.register_forward_hook(_OutKeysSelect(out_keys), with_kwargs=True)
         for hook in self._forward_hooks.values():
-            hook._init(self)
+            if isinstance(hook, _OutKeysSelect):
+                hook._init(self)
         return self
 
     def reset_out_keys(self):
