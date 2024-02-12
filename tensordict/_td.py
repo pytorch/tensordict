@@ -151,11 +151,12 @@ class TensorDict(TensorDictBase):
     Args:
         source (TensorDict or Dict[NestedKey, Union[Tensor, TensorDictBase]]): a
             data source. If empty, the tensordict can be populated subsequently.
-        batch_size (iterable of int): a batch size for the
+        batch_size (iterable of int, optional): a batch size for the
             tensordict. The batch size can be modified subsequently as long
-            as it is compatible with its content. Unless the
-            source is another TensorDict, the batch_size argument must be
-            provided as it won't be inferred from the data.
+            as it is compatible with its content.
+            If not batch-size is provided, an empty batch-size is assumed (it
+            is not inferred automatically from the data). To automatically set
+            the batch-size, refer to :meth:`~.auto_batch_size_`.
         device (torch.device or compatible type, optional): a device for the
             TensorDict. If provided, all tensors will be stored on that device.
             If not, tensors on different devices are allowed.
@@ -1282,14 +1283,16 @@ class TensorDict(TensorDictBase):
         try:
             return torch.Size(batch_size)
         except Exception as err:
-            if isinstance(batch_size, Number):
+            if batch_size is None:
+                return torch.Size([])
+            elif isinstance(batch_size, Number):
                 return torch.Size([batch_size])
             elif isinstance(source, TensorDictBase):
                 return source.batch_size
             raise ValueError(
                 "batch size was not specified when creating the TensorDict "
                 "instance and it could not be retrieved from source."
-            ) from err
+            )
 
     @property
     def batch_dims(self) -> int:
