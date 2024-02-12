@@ -1282,7 +1282,7 @@ class TensorDict(TensorDictBase):
     ) -> torch.Size:
         try:
             return torch.Size(batch_size)
-        except Exception as err:
+        except Exception:
             if batch_size is None:
                 return torch.Size([])
             elif isinstance(batch_size, Number):
