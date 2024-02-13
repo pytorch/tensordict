@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from typing import Any, Dict, List, Tuple
 
+import torch
 from tensordict import (
     LazyStackedTensorDict,
     PersistentTensorDict,
@@ -92,7 +93,6 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
 
 
 def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]:
-    # print("context", context, "values", values)
     device = context["device"]
     if device is not None:
         device = (
@@ -100,11 +100,19 @@ def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, 
             if all(val.device == device for val in values if hasattr(val, "device"))
             else None
         )
+    batch_size = context["batch_size"]
+    names = context["names"]
+    keys = context["keys"]
+    batch_dims = len(batch_size)
+    if any(tensor.shape[:batch_dims] != batch_size for tensor in values):
+        batch_size = torch.Size([])
+        names = None
     return TensorDict(
-        dict(zip(context["keys"], values)),
-        context["batch_size"],
-        names=context["names"],
+        dict(zip(keys, values)),
+        batch_size=batch_size,
+        names=names,
         device=device,
+        _run_checks=False,
     )
 
 
