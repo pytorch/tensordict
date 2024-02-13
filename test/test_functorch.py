@@ -8,7 +8,7 @@ import argparse
 import pytest
 import torch
 
-from _utils_internal import expand_list, TestTensorDictsBase
+from _utils_internal import expand_list, get_available_devices, TestTensorDictsBase
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -17,10 +17,10 @@ from tensordict.nn.functional_modules import (
     make_functional,
     repopulate_module,
 )
+from tensordict.utils import implement_for
 from torch import nn
 from torch.nn import Linear
 from torch.utils._pytree import tree_map
-from tensordict.utils import implement_for
 
 try:
     from functorch import (
@@ -642,9 +642,24 @@ class TestPyTree(TestTensorDictsBase):
             assert path[1].key == "b"
             assert path[2].key == "c"
             return tensor
-        td = TensorDict({"a":{"b":{"c": [1]}}}, [1])
+
+        td = TensorDict({"a": {"b": {"c": [1]}}}, [1])
         torch.utils._pytree.tree_map_with_path(assert_path, td)
 
     @implement_for("torch", None, "2.3")
-    def test_map_with_path(self):
-        pytest.skip(reason="tree_map_with_path not implemented" )
+    def test_map_with_path(self):  # noqa: F811
+        pytest.skip(reason="tree_map_with_path not implemented")
+
+    @pytest.mark.parametrize("dest", get_available_devices())
+    def test_device_map(self, dest):
+        td = TensorDict({"a": {"b": {"c": [1]}, "d": [2]}}, [1], device="cpu")
+        td_device = tree_map(lambda x: x.to(dest), td)
+        if dest == torch.device("cpu"):
+            assert td_device.device == torch.device("cpu")
+        else:
+            assert td_device.device is None
+
+    def test_shape_map(self):
+        td = TensorDict({"a": {"b": {"c": [1]}, "d": [2]}}, [1])
+        td_no_shape = tree_map(lambda x: x.squeeze(), td)
+        assert td_no_shape.shape == torch.Size([])
