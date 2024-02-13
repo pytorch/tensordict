@@ -31,7 +31,6 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _LOCK_ERROR,
-    as_decorator,
     Buffer,
     erase_cache,
     IndexType,
@@ -338,7 +337,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         for key, value in parameters.items(True, True):
             # flatten key
             if isinstance(key, tuple):
-                key = "_".join(key)
+                key = ".".join(key)
             if isinstance(value, nn.Parameter):
                 param_keys.append(key)
                 params.append(value)
@@ -427,15 +426,13 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @lock_blocked
     @_unlock_and_set
-    def pop(
-        self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         ...
 
     @lock_blocked
     @_unlock_and_set
     def rename_key_(
-        self, old_key: str, new_key: str, safe: bool = False
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> TensorDictBase:
         ...
 
@@ -447,6 +444,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         chunksize: int = None,
         num_chunks: int = None,
         pool: mp.Pool = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
     ):
         raise RuntimeError(
             "Cannot call map on a TensorDictParams object. Convert it "
@@ -464,8 +464,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> TensorDictBase:
+    ) -> TensorDictBase | None:
         ...
 
     @_unlock_and_set(inplace=True)
@@ -478,8 +479,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> TensorDictBase:
+    ) -> TensorDictBase | None:
         ...
 
     @_unlock_and_set(inplace=True)
@@ -488,9 +490,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_get_post_hook
     @_fallback
-    def get(
-        self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
+    def get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         ...
 
     @_get_post_hook
@@ -815,7 +815,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_unlock_and_set(inplace=True)
     def _exclude(
-        self, *keys: str, inplace: bool = False, set_shared: bool = True
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> TensorDictBase:
         ...
 
@@ -908,8 +908,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_fallback
-    @as_decorator()
-    def to_module(
+    def _to_module(
         self,
         module,
         *,
@@ -1054,7 +1053,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     @_apply_on_data
     def _stack_onto_at_(
         self,
-        key: str,
+        key: NestedKey,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,
@@ -1083,7 +1082,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_apply_on_data
-    def apply_(self, fn: Callable, *others) -> T:
+    def apply_(self, fn: Callable, *others, **kwargs) -> T:
         ...
 
     def _apply(self, fn, recurse=True):

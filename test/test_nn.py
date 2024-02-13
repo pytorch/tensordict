@@ -36,6 +36,7 @@ from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.nn.utils import (
     _set_auto_make_functional,
+    _set_dispatch_td_nn_modules,
     Buffer,
     set_skip_existing,
     skip_existing,
@@ -425,6 +426,28 @@ class TestTDModule:
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )
+    def test_functional_deactivate(self):
+        torch.manual_seed(0)
+        param_multiplier = 1
+
+        net = nn.Linear(3, 4 * param_multiplier)
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+
+        with _set_auto_make_functional(False):
+            tensordict_module = TensorDictModule(
+                module=net, in_keys=["in"], out_keys=["out"]
+            )
+        assert not is_functional(tensordict_module)
+        params = TensorDict.from_module(tensordict_module)
+        with pytest.raises(TypeError):
+            tensordict_module(td, params=params)
+        make_functional(tensordict_module)
+        tensordict_module(td, params=params)
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
     def test_functional(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -743,6 +766,22 @@ class TestTDModule:
             tdmodule.__deepcopy__
         assert tdmodule.some_attribute == "a"
         assert isinstance(copy.deepcopy(tdmodule), TensorDictModule)
+
+    def test_dispatch_deactivate(self):
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        td = TensorDict({"a": torch.zeros(1, 1)}, 1)
+        tdm(td)
+        with _set_dispatch_td_nn_modules(True):
+            out = tdm(a=torch.zeros(1, 1))
+            assert (out == td["b"]).all()
+        with _set_dispatch_td_nn_modules(False), pytest.raises(
+            TypeError, match="missing 1 required positional argument"
+        ):
+            tdm(a=torch.zeros(1, 1))
+
+        # checks that things are back in place
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        tdm(a=torch.zeros(1, 1))
 
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
@@ -1890,12 +1929,10 @@ def test_probabilistic_sequential_type_checks():
 def test_keyerr_msg():
     module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
     with pytest.raises(
-        RuntimeError, match="TensorDictModule failed with operation"
-    ) as err:
+        KeyError,
+        match="Some tensors that are necessary for the module call may not have not been found in the input tensordict",
+    ):
         module(TensorDict({"c": torch.randn(())}, []))
-    assert "Some tensors that are necessary for the module call" in str(
-        err.value.__cause__
-    )
 
 
 def test_input():
@@ -2836,7 +2873,7 @@ class TestTensorDictParams:
         m = self.CustomModule(p)
         assert (
             TensorDict(dict(m.named_parameters()), [])
-            == TensorDict({"params": params.flatten_keys("_")}, []).flatten_keys(".")
+            == TensorDict({"params": params.flatten_keys(".")}, []).flatten_keys(".")
         ).all()
 
         assert not m.params.is_locked
@@ -2938,6 +2975,42 @@ class TestTensorDictParams:
         td = TensorDictParams(td, no_convert=True)
         td_clone = td.clone()
         assert td_clone["c"] is td_clone["a", "b", "c"]
+
+    def test_func_on_tdparams(self):
+        # tdparams isn't represented in a nested way, so we must check that calling to_module on it works ok
+        net = nn.Sequential(
+            nn.Linear(2, 2),
+            nn.Sequential(
+                nn.Linear(2, 2),
+                nn.Dropout(),
+                nn.BatchNorm1d(2),
+                nn.Sequential(
+                    nn.Tanh(),
+                    nn.Linear(2, 2),
+                ),
+            ),
+        )
+
+        params = TensorDict.from_module(net, as_module=True)
+
+        params0 = params.apply(lambda x: x.data * 0)
+        assert (params0 == 0).all()
+        with params0.to_module(params):
+            assert (params == 0).all()
+        assert not (params == 0).all()
+
+        # Now with a module around it
+        class MyModule(nn.Module):
+            pass
+
+        m = MyModule()
+        m.params = params
+        params_m = TensorDict.from_module(m, as_module=True)
+        params_m0 = params_m.apply(lambda x: x.data * 0)
+        assert (params_m0 == 0).all()
+        with params_m0.to_module(m):
+            assert (params_m == 0).all()
+        assert not (params_m == 0).all()
 
     def test_inplace_ops(self):
         td = TensorDict(

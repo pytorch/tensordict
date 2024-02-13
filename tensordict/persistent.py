@@ -6,12 +6,44 @@
 """Persistent tensordicts (H5 and others)."""
 from __future__ import annotations
 
+import importlib
+
+import json
+import os
+
 import tempfile
 import warnings
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Type
 
-from tensordict._td import _unravel_key_to_tuple
+import numpy as np
+import torch
+
+from tensordict._td import (
+    _TensorDictKeysView,
+    _unravel_key_to_tuple,
+    CompatibleType,
+    NO_DEFAULT,
+    TensorDict,
+)
+from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
+from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
+from tensordict.utils import (
+    _CloudpickleWrapper,
+    _KEY_ERROR,
+    _LOCK_ERROR,
+    _parse_to,
+    _proc_init,
+    _split_tensordict,
+    cache,
+    expand_right,
+    IndexType,
+    lock_blocked,
+    NestedKey,
+    NUMPY_TO_TORCH_DTYPE_DICT,
+)
 from torch import multiprocessing as mp
 
 H5_ERR = None
@@ -22,28 +54,6 @@ try:
 except ModuleNotFoundError as err:
     H5_ERR = err
     _has_h5 = False
-
-import json
-import os
-
-import numpy as np
-import torch
-from tensordict._td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
-from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
-from tensordict.memmap import MemoryMappedTensor
-from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
-from tensordict.utils import (
-    _KEY_ERROR,
-    _LOCK_ERROR,
-    _parse_to,
-    _split_tensordict,
-    cache,
-    expand_right,
-    IndexType,
-    lock_blocked,
-    NestedKey,
-    NUMPY_TO_TORCH_DTYPE_DICT,
-)
 
 
 class _Visitor:
@@ -282,7 +292,7 @@ class PersistentTensorDict(TensorDictBase):
     _get_tuple = get
 
     def get_at(
-        self, key: str, idx: IndexType, default: CompatibleType = NO_DEFAULT
+        self, key: NestedKey, idx: IndexType, default: CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
         array = self._get_array(key, default)
         if isinstance(array, (h5py.Dataset,)):
@@ -681,14 +691,35 @@ class PersistentTensorDict(TensorDictBase):
         fn: Callable,
         dim: int = 0,
         num_workers: int = None,
+        *,
+        out: TensorDictBase = None,
         chunksize: int = None,
         num_chunks: int = None,
         pool: mp.Pool = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
+        index_with_generator: bool = False,
+        pbar: bool = False,
     ):
         if pool is None:
             if num_workers is None:
                 num_workers = mp.cpu_count()  # Get the number of CPU cores
-            with mp.Pool(num_workers) as pool:
+            if generator is None:
+                generator = torch.Generator()
+            seed = (
+                torch.empty((), dtype=torch.int64).random_(generator=generator).item()
+            )
+
+            queue = mp.Queue(maxsize=num_workers)
+            for i in range(num_workers):
+                queue.put(i)
+            with mp.Pool(
+                processes=num_workers,
+                initializer=_proc_init,
+                initargs=(seed, queue, worker_threads),
+                maxtasksperchild=max_tasks_per_child,
+            ) as pool:
                 return self.map(fn, dim=dim, chunksize=chunksize, pool=pool)
         num_workers = pool._processes
         dim_orig = dim
@@ -697,15 +728,79 @@ class PersistentTensorDict(TensorDictBase):
         if dim < 0 or dim >= self.ndim:
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
-        self_split = _split_tensordict(self, chunksize, num_chunks, num_workers, dim)
-        self_split = tuple(split.to_tensordict() for split in self_split)
-        chunksize = 1
-        out = pool.imap(fn, self_split, chunksize)
-        out = torch.cat(list(out), dim)
+        self_split = _split_tensordict(
+            self,
+            chunksize,
+            num_chunks,
+            num_workers,
+            dim,
+            use_generator=index_with_generator,
+            to_tensordict=True,
+        )
+        if not index_with_generator:
+            length = len(self_split)
+            self_split = tuple(split.to_tensordict() for split in self_split)
+        else:
+            length = None
+
+        if out is not None and (out.is_shared() or out.is_memmap()):
+
+            def wrap_fn_with_out(fn, out):
+                @wraps(fn)
+                def newfn(item_and_out):
+                    item, out = item_and_out
+                    result = fn(item)
+                    out.update_(result)
+                    return
+
+                out_split = _split_tensordict(
+                    out,
+                    chunksize,
+                    num_chunks,
+                    num_workers,
+                    dim,
+                    use_generator=index_with_generator,
+                )
+                return _CloudpickleWrapper(newfn), zip(self_split, out_split)
+
+            fn, self_split = wrap_fn_with_out(fn, out)
+            out = None
+
+        call_chunksize = 1
+        imap = pool.imap(fn, self_split, call_chunksize)
+
+        if pbar and importlib.util.find_spec("tqdm", None) is not None:
+            import tqdm
+
+            imap = tqdm.tqdm(imap, total=length)
+
+        imaplist = []
+        start = 0
+        for item in imap:
+            if item is not None:
+                if out is not None:
+                    if chunksize:
+                        end = start + item.shape[dim]
+                        chunk = slice(start, end)
+                        out[chunk].update_(item)
+                        start = end
+                    else:
+                        out[start].update_(item)
+                        start += 1
+                else:
+                    imaplist.append(item)
+        del imap
+
+        # support inplace modif
+        if imaplist:
+            if chunksize == 0:
+                out = torch.stack(imaplist, dim)
+            else:
+                out = torch.cat(imaplist, dim)
         return out
 
     def rename_key_(
-        self, old_key: str, new_key: str, safe: bool = False
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> PersistentTensorDict:
         old_key = self._process_key(old_key)
         new_key = self._process_key(new_key)
@@ -715,7 +810,7 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f"key {new_key} already present in TensorDict.") from err
         return self
 
-    def fill_(self, key: str, value: float | bool) -> TensorDictBase:
+    def fill_(self, key: NestedKey, value: float | bool) -> TensorDictBase:
         """Fills a tensor pointed by the key with the a given value.
 
         Args:
@@ -742,7 +837,7 @@ class PersistentTensorDict(TensorDictBase):
         return target_td
 
     def _select(
-        self, *keys: str, inplace: bool = False, strict: bool = True
+        self, *keys: NestedKey, inplace: bool = False, strict: bool = True
     ) -> PersistentTensorDict:
         raise NotImplementedError(
             "Cannot call select on a PersistentTensorDict. "
@@ -750,7 +845,7 @@ class PersistentTensorDict(TensorDictBase):
         )
 
     def _exclude(
-        self, *keys: str, inplace: bool = False, set_shared: bool = True
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> PersistentTensorDict:
         raise NotImplementedError(
             "Cannot call exclude on a PersistentTensorDict. "
@@ -817,8 +912,8 @@ class PersistentTensorDict(TensorDictBase):
 
     def _set(
         self,
-        key: str,
-        value,
+        key: NestedKey,
+        value: Any,
         inplace: bool = False,
         idx=None,
         validated=False,
@@ -1078,7 +1173,7 @@ class PersistentTensorDict(TensorDictBase):
     masked_select = TensorDict.masked_select
     reshape = TensorDict.reshape
     split = TensorDict.split
-    to_module = TensorDict.to_module
+    _to_module = TensorDict._to_module
     _unbind = TensorDict._unbind
     _get_names_idx = TensorDict._get_names_idx
 

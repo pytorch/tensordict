@@ -8,7 +8,7 @@ import argparse
 import pytest
 import torch
 
-from _utils_internal import expand_list, TestTensorDictsBase
+from _utils_internal import expand_list, get_available_devices, TestTensorDictsBase
 
 from tensordict import LazyStackedTensorDict, TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
@@ -17,6 +17,7 @@ from tensordict.nn.functional_modules import (
     make_functional,
     repopulate_module,
 )
+from tensordict.utils import implement_for
 from torch import nn
 from torch.nn import Linear
 from torch.utils._pytree import tree_map
@@ -308,8 +309,8 @@ class TestVmap:
         )
         td0 = TensorDict({key: [1.0]}, [1])
         td1 = TensorDict({key: [2.0]}, [1])
-        x = torch.stack([td0, td0.clone()], stack_dim)
-        y = torch.stack([td1, td1.clone()], stack_dim)
+        x = LazyStackedTensorDict.lazy_stack([td0, td0.clone()], stack_dim)
+        y = LazyStackedTensorDict.lazy_stack([td1, td1.clone()], stack_dim)
         if lock_x:
             x.lock_()
         if lock_y:
@@ -362,7 +363,7 @@ class TestFunctionalization:
                 for p in params.flatten_keys().values()
             )
             assert params.requires_grad
-            params.apply_(zero_grad)
+            params.apply_(zero_grad, filter_empty=True)
             assert params.requires_grad
 
     def test_repopulate(self):
@@ -633,3 +634,32 @@ class TestPyTree(TestTensorDictsBase):
         for v1, v2 in zip(td_pytree.values(True), td_apply.values(True)):
             # recursively checks the shape, including for the nested tensordicts
             assert v1.shape == v2.shape
+
+    @implement_for("torch", "2.3")
+    def test_map_with_path(self):
+        def assert_path(path, tensor):
+            assert path[0].key == "a"
+            assert path[1].key == "b"
+            assert path[2].key == "c"
+            return tensor
+
+        td = TensorDict({"a": {"b": {"c": [1]}}}, [1])
+        torch.utils._pytree.tree_map_with_path(assert_path, td)
+
+    @implement_for("torch", None, "2.3")
+    def test_map_with_path(self):  # noqa: F811
+        pytest.skip(reason="tree_map_with_path not implemented")
+
+    @pytest.mark.parametrize("dest", get_available_devices())
+    def test_device_map(self, dest):
+        td = TensorDict({"a": {"b": {"c": [1]}, "d": [2]}}, [1], device="cpu")
+        td_device = tree_map(lambda x: x.to(dest), td)
+        if dest == torch.device("cpu"):
+            assert td_device.device == torch.device("cpu")
+        else:
+            assert td_device.device is None
+
+    def test_shape_map(self):
+        td = TensorDict({"a": {"b": {"c": [1]}, "d": [2]}}, [1])
+        td_no_shape = tree_map(lambda x: x.squeeze(), td)
+        assert td_no_shape.shape == torch.Size([])

@@ -14,7 +14,7 @@ from typing import Any, Callable
 import torch
 from torch import nn
 
-AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
+AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "True"))
 
 
 DISPATCH_TDNN_MODULES = strtobool(os.environ.get("DISPATCH_TDNN_MODULES", "True"))
@@ -298,21 +298,16 @@ from tensordict.utils import Buffer  # noqa
 
 
 def _auto_make_functional():
-    global DISPATCH_TDNN_MODULES
+    """Returns ``True`` if TensorDictModuleBase subclasses are automatically made functional with the old API."""
+    global AUTO_MAKE_FUNCTIONAL
     return AUTO_MAKE_FUNCTIONAL
 
 
 class _set_auto_make_functional(_DecoratorContextManager):
+    """Controls if TensorDictModule subclasses should be made functional automatically with the old API."""
+
     def __init__(self, mode):
         self.mode = mode
-
-    def __call__(self, func):
-        @functools.wraps(func)
-        def new_func(*args, **kwargs):
-            with self:
-                return func(*args, **kwargs)
-
-        return new_func
 
     def clone(self):
         return self.__class__(self.mode)
@@ -328,21 +323,16 @@ class _set_auto_make_functional(_DecoratorContextManager):
 
 
 def _dispatch_td_nn_modules():
+    """Returns ``True`` if @dispatch should be used. Not using dispatch is faster and also better compatible with torch.compile."""
     global DISPATCH_TDNN_MODULES
     return DISPATCH_TDNN_MODULES
 
 
 class _set_dispatch_td_nn_modules(_DecoratorContextManager):
+    """Controls whether @dispatch should be used. Not using dispatch is faster and also better compatible with torch.compile."""
+
     def __init__(self, mode):
         self.mode = mode
-
-    def __call__(self, func):
-        @wraps(func)
-        def new_func(*args, **kwargs):
-            with self:
-                return func(*args, **kwargs)
-
-        return new_func
 
     def clone(self):
         return self.__class__(self.mode)

@@ -1147,6 +1147,20 @@ class NonTensorData:
         >>> non_tensor = NonTensorData(non_tensor)
         >>> assert non_tensor.data == "a string!"
 
+    .. note:: To faciliate ``NonTensorData`` integration in tensordict, the
+        :meth:`~tensordict.TensorDictBase.__getitem__` and :meth:`~tensordict.TensorDictBase.__setitem__`
+        are overloaded to set non-tensor data appropriately (unlike :meth:`~tensordict.TensorDictBase.set`
+        and :meth:`~tensordict.TensorDictBase.get` which are reserved for tensor-like
+        objects):
+
+        >>> td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])
+        >>> td["a"]  # gets a tensor
+        >>> td["b"] = "a string!"
+        >>> assert td["b"] == "a string!"
+        >>> # indexing preserves the meta-data
+        >>> assert td[0]["b"] == "a string!"
+        >>> td.get("b")  # returns the NonTensorData
+
     .. note:: Unlike other tensorclass classes, :class:`NonTensorData` supports
         comparisons of two non-tensor data through :meth:`~.__eq__`, :meth:`~.__ne__`,
         :meth:`~.__xor__` or :meth:`~.__or__`. These operations return a tensor
@@ -1369,3 +1383,15 @@ class NonTensorData:
         if not escape_conversion:
             return _from_tensordict_with_copy(tensorclass_instance, result)
         return result
+
+    def _apply_nest(self, *args, **kwargs):
+        kwargs["filter_empty"] = False
+        return _wrap_method(self, "_apply_nest", self._tensordict._apply_nest)(
+            *args, **kwargs
+        )
+
+    def _fast_apply(self, *args, **kwargs):
+        kwargs["filter_empty"] = False
+        return _wrap_method(self, "_fast_apply", self._tensordict._fast_apply)(
+            *args, **kwargs
+        )

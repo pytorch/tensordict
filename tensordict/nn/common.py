@@ -242,6 +242,7 @@ class dispatch:
                     "named 'tensordict'."
                 )
             break
+        # if the env variable was used, we can skip the wrapper altogether
         if not _dispatch_td_nn_modules():
             return func
 
@@ -249,7 +250,7 @@ class dispatch:
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
 
             if not _dispatch_td_nn_modules():
-                return func(*args, **kwargs)
+                return func(_self, *args, **kwargs)
 
             source = self.source
             if isinstance(source, str):
@@ -636,7 +637,8 @@ class TensorDictModuleBase(nn.Module):
                 raise ValueError(err_msg)
         self.register_forward_hook(_OutKeysSelect(out_keys))
         for hook in self._forward_hooks.values():
-            hook._init(self)
+            if isinstance(hook, _OutKeysSelect):
+                hook._init(self)
         return self
 
     @implement_for("torch", "2.0", None)
@@ -749,7 +751,8 @@ class TensorDictModuleBase(nn.Module):
                 raise ValueError(err_msg)
         self.register_forward_hook(_OutKeysSelect(out_keys), with_kwargs=True)
         for hook in self._forward_hooks.values():
-            hook._init(self)
+            if isinstance(hook, _OutKeysSelect):
+                hook._init(self)
         return self
 
     def reset_out_keys(self):
@@ -1214,9 +1217,9 @@ class TensorDictModule(TensorDictModuleBase):
             module = indent(str(module), 4 * " ")
             in_keys = indent(f"in_keys={self.in_keys}", 4 * " ")
             out_keys = indent(f"out_keys={self.out_keys}", 4 * " ")
-            raise RuntimeError(
+            raise err from RuntimeError(
                 f"TensorDictModule failed with operation\n{module}\n{in_keys}\n{out_keys}."
-            ) from err
+            )
 
     @property
     def device(self) -> torch.device:
