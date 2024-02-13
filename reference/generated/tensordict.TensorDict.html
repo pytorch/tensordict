@@ -414,11 +414,12 @@ expended to the right, e.g.:</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>source</strong> (<a class="reference internal" href="#tensordict.TensorDict" title="tensordict.TensorDict"><em>TensorDict</em></a><em> or </em><em>Dict</em><em>[</em><em>NestedKey</em><em>, </em><em>Union</em><em>[</em><em>Tensor</em><em>, </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>]</em><em>]</em>) – a
 data source. If empty, the tensordict can be populated subsequently.</p></li>
-<li><p><strong>batch_size</strong> (<em>iterable of int</em>) – a batch size for the
+<li><p><strong>batch_size</strong> (<em>iterable of int</em><em>, </em><em>optional</em>) – a batch size for the
 tensordict. The batch size can be modified subsequently as long
-as it is compatible with its content. Unless the
-source is another TensorDict, the batch_size argument must be
-provided as it won’t be inferred from the data.</p></li>
+as it is compatible with its content.
+If not batch-size is provided, an empty batch-size is assumed (it
+is not inferred automatically from the data). To automatically set
+the batch-size, refer to <a class="reference internal" href="#tensordict.TensorDict.auto_batch_size_" title="tensordict.TensorDict.auto_batch_size_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">auto_batch_size_()</span></code></a>.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.2)"><em>torch.device</em></a><em> or </em><em>compatible type</em><em>, </em><em>optional</em>) – a device for the
 TensorDict. If provided, all tensors will be stored on that device.
 If not, tensors on different devices are allowed.</p></li>
