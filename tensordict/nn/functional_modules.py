@@ -6,19 +6,14 @@
 from __future__ import annotations
 
 import inspect
-import os
 import re
 import types
 import warnings
 from copy import deepcopy
-from distutils.util import strtobool
 from functools import wraps
 from typing import Any, Callable, Iterable
 
-import tensordict.nn.utils
-
 import torch
-from tensordict._contextlib import _DecoratorContextManager
 from tensordict._pytree import PYTREE_REGISTERED_TDS
 
 from tensordict._td import TensorDict
