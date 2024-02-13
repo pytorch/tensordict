@@ -20,6 +20,7 @@ from tensordict.nn.functional_modules import (
 from torch import nn
 from torch.nn import Linear
 from torch.utils._pytree import tree_map
+from tensordict.utils import implement_for
 
 try:
     from functorch import (
@@ -633,3 +634,17 @@ class TestPyTree(TestTensorDictsBase):
         for v1, v2 in zip(td_pytree.values(True), td_apply.values(True)):
             # recursively checks the shape, including for the nested tensordicts
             assert v1.shape == v2.shape
+
+    @implement_for("torch", "2.3")
+    def test_map_with_path(self):
+        def assert_path(path, tensor):
+            assert path[0].key == "a"
+            assert path[1].key == "b"
+            assert path[2].key == "c"
+            return tensor
+        td = TensorDict({"a":{"b":{"c": [1]}}}, [1])
+        torch.utils._pytree.tree_map_with_path(assert_path, td)
+
+    @implement_for("torch", None, "2.3")
+    def test_map_with_path(self):
+        pytest.skip(reason="tree_map_with_path not implemented" )
