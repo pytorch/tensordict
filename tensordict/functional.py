@@ -149,10 +149,10 @@ def pad_sequence(
             # track the maximum sequence length to update batch_size accordingly
             if tensor_shape[pos_pad_dim] > max_seq_length:
                 max_seq_length = tensor_shape[pos_pad_dim]
-            
+
             # The mask should always contain the batch_size of the TensorDict
             mask_shape = td.shape
-            
+
             # if the pad_dim is past the batch_size of the TensorDict, we need to add the new dimension to the mask
             if pos_pad_dim >= td.ndim:
                 mask_shape += torch.Size([tensor_shape[pos_pad_dim]])
@@ -184,7 +184,7 @@ def pad_sequence(
             pos_pad_dim = (
                 (pad_dim if pad_dim >= 0 else len(tensor_shape) + pad_dim)
                 if len(tensor_shape) > 1
-                else 0 # handles the case when the masks are 1-dimensional
+                else 0  # handles the case when the masks are 1-dimensional
             )
             out.set(
                 key,
