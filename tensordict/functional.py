@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Sequence
 import warnings
+
+from typing import Sequence
 
 import torch
 
@@ -97,7 +98,7 @@ def pad_sequence(
         device (device compatible type, optional): if provded, the device where the
             TensorDict output will be created.
         return_mask (bool, optional): if ``True``, a "masks" entry will be returned.
-            It contains a tensordict with the same structure as the stacked tensordict where every entry contains the mask of valid values with size ``torch.Size([stack_len, *new_shape])``, 
+            It contains a tensordict with the same structure as the stacked tensordict where every entry contains the mask of valid values with size ``torch.Size([stack_len, *new_shape])``,
             where `new_shape[pad_dim] = max_seq_length` and the rest of the `new_shape` matches the previous shape of the contained tensors.
 
     Examples:
@@ -132,53 +133,71 @@ def pad_sequence(
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
     # check that all tensordict match
-    if return_mask:
-        for key in _check_keys(
-            list_of_tensordicts, leaves_only=True, include_nested=True
-        ):
-            list_of_tensordicts = [
-                td.clone(False).set(
+    update_batch_size = True
+    max_seq_length = float("-inf")
+    keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
+    tmp_list_of_tensordicts = []
+    for td in list_of_tensordicts:
+
+        if return_mask:
+            tmp_list_of_tensordicts.append(td.clone(False))
+
+        for key in keys:
+            tensor_shape = td.get(key).shape
+            pos_pad_dim = pad_dim if pad_dim >= 0 else len(tensor_shape) + pad_dim
+
+            # track the maximum sequence length to update batch_size accordingly
+            if tensor_shape[pos_pad_dim] > max_seq_length:
+                max_seq_length = tensor_shape[pos_pad_dim]
+            
+            # The mask should always contain the batch_size of the TensorDict
+            mask_shape = td.shape
+            
+            # if the pad_dim is past the batch_size of the TensorDict, we need to add the new dimension to the mask
+            if pos_pad_dim >= td.ndim:
+                mask_shape += torch.Size([tensor_shape[pos_pad_dim]])
+                update_batch_size = False
+
+            if return_mask:
+                tmp_list_of_tensordicts[-1].set(
                     ("masks", key),
-                    torch.ones(td.get(key).shape[pad_dim], dtype=torch.bool),
+                    torch.ones(mask_shape, dtype=torch.bool),
                 )
-                for td in list_of_tensordicts
-            ]
+    if return_mask:
+        list_of_tensordicts = tmp_list_of_tensordicts
 
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
+
+    old_batch_size = list(list_of_tensordicts[0].batch_size)
+    if update_batch_size and len(old_batch_size) > 0:
+        old_batch_size[pad_dim] = max_seq_length
     shape = [
         len(list_of_tensordicts),
-    ]
+    ] + old_batch_size
 
     if out is None:
-        out = TensorDict(
-            {}, batch_size=torch.Size(shape), device=device, _run_checks=False
-        )
-        set_func = out.set
-    else:
-        set_func = out.set_
+        out = list_of_tensordicts[0].empty(recurse=True).reshape(torch.Size(shape))
+
     for key in keys:
         try:
-            if key[0] != "masks":
-                set_func(
-                    key,
-                    torch.nn.utils.rnn.pad_sequence(
-                        [
-                            td.get(key).transpose(0, pad_dim)
-                            for td in list_of_tensordicts
-                        ],
-                        batch_first=True,
-                        padding_value=padding_value,
-                    ).transpose(1, pad_dim + 1),
-                )
-            else:
-                set_func(
-                    key,
-                    torch.nn.utils.rnn.pad_sequence(
-                        [td.get(key) for td in list_of_tensordicts],
-                        batch_first=True,
-                        padding_value=padding_value,
-                    ),
-                )
+            tensor_shape = list_of_tensordicts[0].get(key).shape
+            pos_pad_dim = (
+                (pad_dim if pad_dim >= 0 else len(tensor_shape) + pad_dim)
+                if len(tensor_shape) > 1
+                else 0 # handles the case when the masks are 1-dimensional
+            )
+            out.set(
+                key,
+                torch.nn.utils.rnn.pad_sequence(
+                    [
+                        td.get(key).transpose(0, pos_pad_dim)
+                        for td in list_of_tensordicts
+                    ],
+                    batch_first=True,
+                    padding_value=padding_value,
+                ).transpose(1, pos_pad_dim + 1),
+                inplace=True,
+            )
         except Exception as err:
             raise RuntimeError(f"pad_sequence failed for key {key}") from err
     return out
