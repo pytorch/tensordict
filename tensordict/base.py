@@ -59,10 +59,10 @@ from tensordict.utils import (
     IndexType,
     infer_size_impl,
     int_generator,
-    KeyedJaggedTensor,
+    KeyedJaggedTensor,Buffer,
     lazy_legacy,
     lock_blocked,
-    NestedKey,
+    NestedKey,set_lazy_legacy,
     prod,
     TensorDictFuture,
     unravel_key,
@@ -376,6 +376,7 @@ class TensorDictBase(MutableMapping):
         """Copies the params and buffers of a module in a tensordict.
 
         Args:
+            module (nn.Module): the module to get the parameters from.
             as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
                 instance will be returned which can be used to store parameters
                 within a :class:`torch.nn.Module`. Defaults to ``False``.
@@ -385,7 +386,7 @@ class TensorDictBase(MutableMapping):
                 module will be used and unflattened into a TensorDict with
                 the tree structure of the model. Defaults to ``False``.
                 .. note::
-                  This is particularily useful when state-dict hooks have to be
+                  This is particularly useful when state-dict hooks have to be
                   used.
 
         Examples:
@@ -404,6 +405,83 @@ class TensorDictBase(MutableMapping):
                 is_shared=False)
         """
         ...
+
+    @classmethod
+    def from_modules(cls, *modules, as_module: bool=False, lock: bool=True, use_state_dict:bool=False, lazy_stack: bool=False):
+        """Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.
+
+        Args:
+            modules (sequence of nn.Module): the modules to get the parameters from.
+                If the modules differ in their structure, a lazy stack is needed
+                (see the ``lazy_stack`` argument below).
+
+        Keyword Args:
+            as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
+                instance will be returned which can be used to store parameters
+                within a :class:`torch.nn.Module`. Defaults to ``False``.
+            lock (bool, optional): if ``True``, the resulting tensordict will be locked.
+                Defaults to ``True``.
+            use_state_dict (bool, optional): if ``True``, the state-dict from the
+                module will be used and unflattened into a TensorDict with
+                the tree structure of the model. Defaults to ``False``.
+                .. note::
+                  This is particularly useful when state-dict hooks have to be
+                  used.
+            lazy_stack (bool, optional): whether parameters should be densly or
+                lazily stacked. Defaults to ``False`` (dense stack).
+                .. warning::
+                    There is a crucial difference between lazy and non-lazy outputs
+                    in that non-lazy output will reinstantiate parameters with the
+                    desired batch-size, while ``lazy_stack`` will just represent
+                    the parameters as lazily stacked. This means that whilst the
+                    original parameters can safely be passed to an optimizer
+                    when ``lazy_stack=True``, the new parameters need to be passed
+                    when it is set to ``True``.
+
+        Examples:
+            >>> from torch import nn
+            >>> from tensordict import TensorDict
+            >>> torch.manual_seed(0)
+            >>> empty_module = nn.Linear(3, 4, device="meta")
+            >>> n_models = 2
+            >>> modules = [nn.Linear(3, 4) for _ in range(n_models)]
+            >>> params = TensorDict.from_modules(*modules)
+            >>> print(params)
+            >>> # example of batch execution
+            >>> def exec_module(params, x):
+            ...     with params.to_module(empty_module):
+            ...         return empty_module(x)
+            >>> x = torch.randn(3)
+            >>> y = torch.vmap(exec_module, (0, None))(params, x)
+            >>> assert y.shape == (n_models, 4)
+            >>> # since lazy_stack = False, backprop leaves the original params untouched
+            >>> y.sum().backwward()
+            >>> assert params["weight"].grad.norm() > 0
+            >>> assert modules[0].weight.grad is None
+
+        """
+        param_list = [cls.from_module(module, use_state_dict=use_state_dict) for module in modules]
+        if lazy_stack:
+            from tensordict._lazy import LazyStackedTensorDict
+
+            params = LazyStackedTensorDict.lazy_stack(param_list)
+        else:
+            with set_lazy_legacy(False), torch.no_grad():
+                params = torch.stack(param_list)
+            # Make sure params are params, buffers are buffers
+            def make_param(param, orig_param):
+                if isinstance(orig_param, nn.Parameter):
+                    return nn.Parameter(param.detach(), orig_param.requires_grad)
+                return Buffer(param)
+            params = params.apply(make_param, param_list[0])
+
+        if as_module:
+            from tensordict.nn import TensorDictParams
+
+            params = TensorDictParams(params, no_convert=True)
+        if lock:
+            params.lock_()
+        return params
 
     @as_decorator()
     def to_module(
