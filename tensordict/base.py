@@ -439,6 +439,8 @@ class TensorDictBase(MutableMapping):
             lazy_stack (bool, optional): whether parameters should be densly or
                 lazily stacked. Defaults to ``False`` (dense stack).
 
+                .. note:: ``lazy_stack`` and ``as_module`` are exclusive features.
+
                 .. warning::
                     There is a crucial difference between lazy and non-lazy outputs
                     in that non-lazy output will reinstantiate parameters with the
