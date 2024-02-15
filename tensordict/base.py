@@ -1974,9 +1974,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     return result
                 else:
                     return TensorDictFuture(futures, result)
-        input = self.apply(
-            lambda x: torch.empty_like(x)
-        )
+        input = self.apply(lambda x: torch.empty_like(x))
         return input._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
