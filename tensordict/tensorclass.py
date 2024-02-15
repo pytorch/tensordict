@@ -1342,7 +1342,7 @@ class NonTensorData:
         if all(_check_equal(data.data, first.data) for data in list_of_non_tensor[1:]):
             batch_size = list(first.batch_size)
             batch_size.insert(dim, len(list_of_non_tensor))
-            return type(self)(
+            return type(cls)(
                 data=first.data,
                 batch_size=batch_size,
                 names=first.names if first._has_names() else None,
@@ -1368,7 +1368,14 @@ class NonTensorData:
         ):
             return NotImplemented
 
-        escape_conversion = func in (torch.stack, torch.ones_like, torch.zeros_like, torch.empty_like, torch.randn_like, torch.rand_like)
+        escape_conversion = func in (
+            torch.stack,
+            torch.ones_like,
+            torch.zeros_like,
+            torch.empty_like,
+            torch.randn_like,
+            torch.rand_like,
+        )
 
         if kwargs is None:
             kwargs = {}

@@ -52,6 +52,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     as_decorator,
+    Buffer,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -59,11 +60,12 @@ from tensordict.utils import (
     IndexType,
     infer_size_impl,
     int_generator,
-    KeyedJaggedTensor,Buffer,
+    KeyedJaggedTensor,
     lazy_legacy,
     lock_blocked,
-    NestedKey,set_lazy_legacy,
+    NestedKey,
     prod,
+    set_lazy_legacy,
     TensorDictFuture,
     unravel_key,
     unravel_key_list,
@@ -407,7 +409,14 @@ class TensorDictBase(MutableMapping):
         ...
 
     @classmethod
-    def from_modules(cls, *modules, as_module: bool=False, lock: bool=True, use_state_dict:bool=False, lazy_stack: bool=False):
+    def from_modules(
+        cls,
+        *modules,
+        as_module: bool = False,
+        lock: bool = True,
+        use_state_dict: bool = False,
+        lazy_stack: bool = False,
+    ):
         """Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.
 
         Args:
@@ -429,6 +438,7 @@ class TensorDictBase(MutableMapping):
                   used.
             lazy_stack (bool, optional): whether parameters should be densly or
                 lazily stacked. Defaults to ``False`` (dense stack).
+
                 .. warning::
                     There is a crucial difference between lazy and non-lazy outputs
                     in that non-lazy output will reinstantiate parameters with the
@@ -437,6 +447,18 @@ class TensorDictBase(MutableMapping):
                     original parameters can safely be passed to an optimizer
                     when ``lazy_stack=True``, the new parameters need to be passed
                     when it is set to ``True``.
+
+                .. warning::
+                    Whilst it can be tempting to use a lazy stack to keep the
+                    orignal parameter references, remember that lazy stack
+                    perform a stack each time :meth:`~.get` is called. This will
+                    require memory (N times the size of the parameters, more if a
+                    graph is built) and time to be computed.
+                    It also means that the optimizer(s) will contain more
+                    parameters, and operations like :meth:`~torch.optim.Optimizer.step`
+                    or :meth:`~torch.optim.Optimizer.zero_grad` will take longer
+                    to be executed. In general, ``lazy_stack`` should be reserved
+                    to very few use cases.
 
         Examples:
             >>> from torch import nn
@@ -447,6 +469,13 @@ class TensorDictBase(MutableMapping):
             >>> modules = [nn.Linear(3, 4) for _ in range(n_models)]
             >>> params = TensorDict.from_modules(*modules)
             >>> print(params)
+            TensorDict(
+                fields={
+                    bias: Parameter(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    weight: Parameter(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)
             >>> # example of batch execution
             >>> def exec_module(params, x):
             ...     with params.to_module(empty_module):
@@ -455,12 +484,35 @@ class TensorDictBase(MutableMapping):
             >>> y = torch.vmap(exec_module, (0, None))(params, x)
             >>> assert y.shape == (n_models, 4)
             >>> # since lazy_stack = False, backprop leaves the original params untouched
-            >>> y.sum().backwward()
+            >>> y.sum().backward()
             >>> assert params["weight"].grad.norm() > 0
             >>> assert modules[0].weight.grad is None
 
+        With ``lazy_stack=True``, things are slightly different:
+
+            >>> params = TensorDict.from_modules(*modules, lazy_stack=True)
+            >>> print(params)
+            LazyStackedTensorDict(
+                fields={
+                    bias: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    weight: Tensor(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                exclusive_fields={
+                },
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False,
+                stack_dim=0)
+            >>> # example of batch execution
+            >>> y = torch.vmap(exec_module, (0, None))(params, x)
+            >>> assert y.shape == (n_models, 4)
+            >>> y.sum().backward()
+            >>> assert modules[0].weight.grad is not None
+
+
         """
-        param_list = [cls.from_module(module, use_state_dict=use_state_dict) for module in modules]
+        param_list = [
+            cls.from_module(module, use_state_dict=use_state_dict) for module in modules
+        ]
         if lazy_stack:
             from tensordict._lazy import LazyStackedTensorDict
 
@@ -468,11 +520,13 @@ class TensorDictBase(MutableMapping):
         else:
             with set_lazy_legacy(False), torch.no_grad():
                 params = torch.stack(param_list)
+
             # Make sure params are params, buffers are buffers
             def make_param(param, orig_param):
                 if isinstance(orig_param, nn.Parameter):
                     return nn.Parameter(param.detach(), orig_param.requires_grad)
                 return Buffer(param)
+
             params = params.apply(make_param, param_list[0])
 
         if as_module:
@@ -2052,9 +2106,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     return result
                 else:
                     return TensorDictFuture(futures, result)
-        input = self.apply(
-            lambda x: torch.empty_like(x)
-        )
+        input = self.apply(lambda x: torch.empty_like(x))
         return input._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
