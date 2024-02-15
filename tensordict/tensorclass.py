@@ -56,6 +56,9 @@ _TD_PASS_THROUGH = {
     torch.full_like,
     torch.zeros_like,
     torch.ones_like,
+    torch.empty_like,
+    torch.randn_like,
+    torch.rand_like,
     torch.clone,
     torch.squeeze,
     torch.unsqueeze,
@@ -1246,6 +1249,13 @@ class NonTensorData:
     # and all the overhead falls back on this class.
     data: Any
 
+    @classmethod
+    def from_tensor(cls, value: torch.Tensor, batch_size, device=None, names=None):
+        """A util to create a NonTensorData containing a tensor."""
+        out = cls(data=None, batch_size=batch_size, device=device, names=names)
+        out._non_tensordict["data"] = value
+        return out
+
     def __post_init__(self):
         if isinstance(self.data, NonTensorData):
             self.data = self.data.data
@@ -1304,7 +1314,7 @@ class NonTensorData:
             self.__class__.__or__ = __or__
 
     def empty(self, recurse=False):
-        return NonTensorData(
+        return type(self)(
             data=self.data,
             batch_size=self.batch_size,
             names=self.names if self._has_names() else None,
@@ -1332,7 +1342,7 @@ class NonTensorData:
         if all(_check_equal(data.data, first.data) for data in list_of_non_tensor[1:]):
             batch_size = list(first.batch_size)
             batch_size.insert(dim, len(list_of_non_tensor))
-            return NonTensorData(
+            return type(self)(
                 data=first.data,
                 batch_size=batch_size,
                 names=first.names if first._has_names() else None,
@@ -1358,7 +1368,7 @@ class NonTensorData:
         ):
             return NotImplemented
 
-        escape_conversion = func in (torch.stack,)
+        escape_conversion = func in (torch.stack, torch.ones_like, torch.zeros_like, torch.empty_like, torch.randn_like, torch.rand_like)
 
         if kwargs is None:
             kwargs = {}
