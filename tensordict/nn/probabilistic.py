@@ -546,8 +546,22 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         return self.module[-1].log_prob(tensordict_out)
 
     def build_dist_from_params(self, tensordict: TensorDictBase) -> D.Distribution:
-        """Construct a distribution from the input parameters. Other modules in the sequence are not evaluated."""
-        return self.module[-1].get_dist(tensordict)
+        """Construct a distribution from the input parameters. Other modules in the sequence are not evaluated.
+
+        This method will look for the last ProbabilisticTensorDictModule contained in the
+        sequence and use it to build the distribution.
+
+        """
+        dest_module = None
+        for module in reversed(list(self.modules())):
+            if isinstance(module, ProbabilisticTensorDictModule):
+                dest_module = module
+                break
+        if dest_module is None:
+            raise RuntimeError(
+                "Could not find any ProbabilisticTensorDictModule in the sequence."
+            )
+        return dest_module.get_dist(tensordict)
 
     @dispatch(auto_batch_size=False)
     @set_skip_existing(None)
