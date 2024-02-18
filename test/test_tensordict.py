@@ -897,15 +897,28 @@ class TestGeneric:
                     {"a": torch.ones((2, 8, 8)), ("b", "c"): torch.ones((2, 3))}, [2]
                 ),
                 TensorDict(
-                    {"a": torch.ones((4, 8, 8)), ("b", "c"): torch.ones((4, 3))}, [4]
+                    {"a": torch.full((4, 8, 8), 2), ("b", "c"): torch.full((4, 3), 2)},
+                    [4],
                 ),
             ]
             padded_td = pad_sequence(list_td, pad_dim=pad_dim, return_mask=make_mask)
-            assert padded_td.shape == torch.Size([2])
-            assert padded_td["a"].shape == torch.Size([2, 4, 8, 8])
-            assert padded_td["a"][0, -1, -1, -1] == 0
-            assert padded_td["b", "c"].shape == torch.Size([2, 4, 3])
-            assert padded_td["b", "c"][0, -1, 0] == 0
+            assert padded_td.shape == torch.Size(
+                [2, 4]
+            )  # check the shape of the padded tensordict
+            assert torch.all(
+                padded_td["a"][0, :2, :, :] == 1
+            )  # check the values of the first tensor
+            assert torch.all(
+                padded_td["a"][1, :, :, :] == 2
+            )  # check the values of the second tensor
+            assert padded_td["a"].shape == torch.Size(
+                [2, 4, 8, 8]
+            )  # check the shape of the padded tensor
+            assert torch.all(padded_td["a"][0, 2:, :, :] == 0)  # check the padding
+            assert padded_td["b", "c"].shape == torch.Size(
+                [2, 4, 3]
+            )  # check the shape of the padded tensor
+            assert torch.all(padded_td["b", "c"][0, 2:, :] == 0)  # check the padding
             if make_mask:
                 padded_td_without_masks = pad_sequence(
                     list_td, pad_dim=pad_dim, return_mask=False
@@ -924,15 +937,28 @@ class TestGeneric:
                     {"a": torch.ones((6, 3, 8)), ("b", "c"): torch.ones((6, 3))}, []
                 ),
                 TensorDict(
-                    {"a": torch.ones((6, 5, 8)), ("b", "c"): torch.ones((6, 7))}, []
+                    {"a": torch.full((6, 5, 8), 2), ("b", "c"): torch.full((6, 7), 2)},
+                    [],
                 ),
             ]
             padded_td = pad_sequence(list_td, pad_dim=pad_dim, return_mask=make_mask)
-            assert padded_td.shape == torch.Size([2])
-            assert padded_td["a"].shape == torch.Size([2, 6, 5, 8])
-            assert padded_td["a"][0, -1, -1, -1] == 0
-            assert padded_td["b", "c"].shape == torch.Size([2, 6, 7])
-            assert padded_td["b", "c"][0, 0, -1] == 0
+            assert padded_td.shape == torch.Size(
+                [2]
+            )  # check the shape of the padded tensordict
+            assert padded_td["a"].shape == torch.Size(
+                [2, 6, 5, 8]
+            )  # check the shape of the padded tensor
+            assert torch.all(
+                padded_td["a"][0, :, :3, :] == 1
+            )  # check the values of the first tensor
+            assert torch.all(padded_td["a"][0, :, 3:, :] == 0)  # check the padding
+            assert torch.all(
+                padded_td["a"][1, :, :, :] == 2
+            )  # check the values of the second tensor
+            assert padded_td["b", "c"].shape == torch.Size(
+                [2, 6, 7]
+            )  # check the shape of the padded tensor
+            assert torch.all(padded_td["b", "c"][0, :, 3:] == 0)  # check the padding
             if make_mask:
                 padded_td_without_masks = pad_sequence(
                     list_td, pad_dim=pad_dim, return_mask=False
