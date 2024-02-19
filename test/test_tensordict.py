@@ -50,6 +50,7 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import multiprocessing as mp, nn
+from torch.nn.parameter import UninitializedTensorMixin
 
 try:
     import torchsnapshot
@@ -753,9 +754,10 @@ class TestGeneric:
 
     @pytest.mark.parametrize("as_module", [False, True])
     @pytest.mark.parametrize("lazy_stack", [False, True])
-    def test_from_modules_lazy(self, as_module, lazy_stack):
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_from_modules_lazy(self, as_module, lazy_stack, device):
         empty_module = nn.LazyLinear(4, device="meta")
-        modules = [nn.LazyLinear(4) for _ in range(3)]
+        modules = [nn.LazyLinear(4, device) for _ in range(3)]
         if lazy_stack:
             with pytest.raises(
                 RuntimeError,
@@ -775,7 +777,8 @@ class TestGeneric:
             with params.to_module(empty_module):
                 return empty_module(x)
 
-        x = torch.zeros(3)
+        x = torch.zeros(3, device=device)
+        assert isinstance(params["weight"], UninitializedTensorMixin)
         y = torch.vmap(exec_module, (0, None), randomness="same")(params, x)
         assert params["weight"].shape == torch.Size((3, 4, 3))
 
