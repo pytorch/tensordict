@@ -23,6 +23,8 @@ from typing import Any, Callable, List, Sequence, TypeVar
 
 import tensordict as tensordict_lib
 
+import tensordict.utils
+
 import torch
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
@@ -171,7 +173,7 @@ def tensorclass(cls: T) -> T:
     cls._from_tensordict = classmethod(_from_tensordict_wrapper(expected_keys))
     cls.from_tensordict = cls._from_tensordict
     if not hasattr(cls, "__torch_function__"):
-        cls.__torch_function__ = classmethod(__torch_function__)
+        tensordict.utils.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
     cls.__getattribute__ = _getattribute_wrapper(cls.__getattribute__)

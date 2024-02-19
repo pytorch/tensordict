@@ -38,6 +38,8 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
+    _BatchedUninitializedBuffer,
+    _BatchedUninitializedParameter,
     _clone_value,
     _expand_to_match_shape,
     _get_item,
@@ -750,21 +752,21 @@ class TensorDict(TensorDictBase):
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         td = self
+
         def _add_batch_dim_wrapper(key, value):
             if is_tensor_collection(value):
                 return value._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
-            from tensordict._torch_func import BatchedUninitializedParameter, BatchedUninitializedBuffer
 
-            if isinstance(value, (BatchedUninitializedParameter, BatchedUninitializedBuffer)):
+            if isinstance(
+                value, (_BatchedUninitializedParameter, _BatchedUninitializedBuffer)
+            ):
                 value.in_dim = in_dim
                 value.vmap_level = vmap_level
                 return value
             return _add_batch_dim(value, in_dim, vmap_level)
+
         out = TensorDict(
-            {
-                key: _add_batch_dim_wrapper(key, value)
-                for key, value in td.items()
-            },
+            {key: _add_batch_dim_wrapper(key, value) for key, value in td.items()},
             batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
             names=[name for i, name in enumerate(td.names) if i != in_dim],
             _run_checks=False,
@@ -3049,7 +3051,7 @@ class _TensorDictKeysView:
 def _set_tensor_dict(  # noqa: F811
     module_dict,
     hooks,
-    module,
+    module: torch.nn.Module,
     name: str,
     tensor: torch.Tensor,
     inplace: bool,
@@ -3075,6 +3077,20 @@ def _set_tensor_dict(  # noqa: F811
             if output is not None:
                 tensor = output
         module_dict["_parameters"][name] = tensor
+
+        if isinstance(
+            tensor, (_BatchedUninitializedParameter, _BatchedUninitializedBuffer)
+        ):
+
+            def pre_hook(mod, args, kwargs):
+                for name, param in list(mod.named_parameters(recurse=False)):
+                    if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
+                        param = _add_batch_dim(param, param.in_dim, param.vmap_level)
+                        delattr(mod, name)
+                        setattr(mod, name, param)
+
+            module.register_forward_pre_hook(pre_hook, with_kwargs=True)
+
     elif was_buffer and isinstance(tensor, torch.Tensor):
         module_dict["_buffers"][name] = tensor
     else:

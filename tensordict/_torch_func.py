@@ -11,7 +11,6 @@ import warnings
 from typing import Any, Callable, Sequence, TypeVar
 
 import torch
-
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
@@ -22,10 +21,13 @@ from tensordict.utils import (
     DeviceType,
     lazy_legacy,
     set_lazy_legacy,
-    Buffer,
 )
-from torch import Tensor
-from torch.nn.parameter import Parameter, UninitializedTensorMixin, UninitializedParameter, UninitializedBuffer
+from torch import _C, Tensor
+from torch.nn.parameter import (
+    UninitializedBuffer,
+    UninitializedParameter,
+    UninitializedTensorMixin,
+)
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
@@ -54,7 +56,10 @@ def implements_for_lazy_td(torch_function: Callable) -> Callable[[Callable], Cal
 
     return decorator
 
-def implements_for_uninit_param(torch_function: Callable) -> Callable[[Callable], Callable]:
+
+def implements_for_uninit_param(
+    torch_function: Callable,
+) -> Callable[[Callable], Callable]:
     """Register a torch function override for UninitializedTensorMixin."""
 
     @functools.wraps(torch_function)
@@ -63,6 +68,7 @@ def implements_for_uninit_param(torch_function: Callable) -> Callable[[Callable]
         return func
 
     return decorator
+
 
 @implements_for_td(torch.unbind)
 def _unbind(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
@@ -363,7 +369,7 @@ def _stack(
 
     from tensordict.tensorclass import NonTensorData
 
-    if all(isinstance(tensordict, NonTensorData) for tensordict in list_of_tensordicts):
+    if all(isinstance(td, NonTensorData) for td in list_of_tensordicts):
         return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
 
     batch_size = list_of_tensordicts[0].batch_size
@@ -513,30 +519,6 @@ def where(condition, input, other, *, out=None):
         )
     return input.where(condition, other, out=out)
 
-class BatchedUninitializedParameter(UninitializedParameter):
-    batch_size: torch.Size
-    in_dim: int | None = None
-    vmap_level: int | None = None
-
-    def materialize(self, shape, device=None, dtype=None):
-        out = UninitializedParameter.materialize(self, (*self, *shape), device=device, dtype=dtype)
-        if self.in_dim is not None:
-            from tensordict._td import _add_batch_dim
-            return _add_batch_dim(out, in_dim=self.in_dim, vmap_level=self.vmap_level)
-        return out
-
-
-class BatchedUninitializedBuffer(UninitializedBuffer):
-    batch_size: torch.Size
-    in_dim: int | None = None
-    vmap_level: int | None = None
-
-    def materialize(self, shape, device=None, dtype=None):
-        out = Buffer(UninitializedBuffer.materialize(self, (*self, *shape), device=device, dtype=dtype))
-        if self.in_dim is not None:
-            from tensordict._td import _add_batch_dim
-            return _add_batch_dim(out, in_dim=self.in_dim, vmap_level=self.vmap_level)
-        return out
 
 def __torch_function__(
     cls,
@@ -547,16 +529,15 @@ def __torch_function__(
 ) -> Callable:
     if kwargs is None:
         kwargs = {}
-    fnc = UNINIT_TENSOR_FUNCTIONS.get(func, None)
-    if fnc is not None:
-        return fnc(*args, **kwargs)
-    fnc = getattr(cls, func.__name__, None)
-    if fnc is not None:
-        return fnc(*args, **kwargs)
-    # raise getattr(cls, func.__name__)(*args, **kwargs)
-        # super(cls, cls).__torch_function__(func, types, args, kwargs)
+    fnc_uninit = UNINIT_TENSOR_FUNCTIONS.get(func, None)
+    if fnc_uninit is not None:
+        return fnc_uninit(*args, **kwargs)
+    with _C.DisableTorchFunctionSubclass():
+        return func(*args, **kwargs)
+
 
 UninitializedTensorMixin.__torch_function__ = classmethod(__torch_function__)
+
 
 @implements_for_uninit_param(torch.stack)
 def _stack_uninit_params(list_of_params, dim=0, out=None):
@@ -564,9 +545,14 @@ def _stack_uninit_params(list_of_params, dim=0, out=None):
         raise NotImplementedError
     if dim > 0:
         raise NotImplementedError
+    from tensordict.utils import (
+        _BatchedUninitializedBuffer,
+        _BatchedUninitializedParameter,
+    )
+
     if isinstance(list_of_params[0], UninitializedParameter):
-        out = BatchedUninitializedParameter()
-    elif _is_leaf_nontensor(list_of_params[0], UninitializedBuffer):
-        out = BatchedUninitializedBuffer()
+        out = _BatchedUninitializedParameter()
+    elif isinstance(list_of_params[0], UninitializedBuffer):
+        out = _BatchedUninitializedBuffer()
     out.batch_size = torch.Size([len(list_of_params)])
     return out

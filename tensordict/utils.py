@@ -9,7 +9,6 @@ import concurrent.futures
 import dataclasses
 import inspect
 import logging
-from torch.nn.parameter import Parameter, UninitializedTensorMixin, UninitializedParameter, UninitializedBuffer
 
 import math
 import os
@@ -52,8 +51,14 @@ from tensordict._tensordict import (  # noqa: F401
 )
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
-from torch.nn.parameter import _ParameterMeta
+from torch.nn.parameter import (
+    _ParameterMeta,
+    UninitializedBuffer,
+    UninitializedParameter,
+    UninitializedTensorMixin,
+)
 from torch.utils.data._utils.worker import _generate_state
+
 
 if TYPE_CHECKING:
     from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
@@ -1427,7 +1432,11 @@ def _td_fields(td: T, keys=None) -> str:
             if isinstance(tensor, TensorDictBase):
                 substr = _td_fields(tensor)
             else:
-                is_shared = tensor.is_shared() if not isinstance(tensor, UninitializedTensorMixin) else None
+                is_shared = (
+                    tensor.is_shared()
+                    if not isinstance(tensor, UninitializedTensorMixin)
+                    else None
+                )
                 substr = _get_repr_custom(
                     tensor.__class__,
                     shape=shape,
@@ -2105,3 +2114,25 @@ class _CloudpickleWrapper(object):
 
     def __call__(self, *args, **kwargs):
         return self.fn(*args, **kwargs)
+
+
+class _BatchedUninitializedParameter(UninitializedParameter):
+    batch_size: torch.Size
+    in_dim: int | None = None
+    vmap_level: int | None = None
+
+    def materialize(self, shape, device=None, dtype=None):
+        UninitializedParameter.materialize(
+            self, (*self.batch_size, *shape), device=device, dtype=dtype
+        )
+
+
+class _BatchedUninitializedBuffer(UninitializedBuffer):
+    batch_size: torch.Size
+    in_dim: int | None = None
+    vmap_level: int | None = None
+
+    def materialize(self, shape, device=None, dtype=None):
+        UninitializedBuffer.materialize(
+            self, (*self.batch_size, *shape), device=device, dtype=dtype
+        )
