@@ -550,9 +550,7 @@ def __torch_function__(
     fnc = UNINIT_TENSOR_FUNCTIONS.get(func, None)
     if fnc is not None:
         return fnc(*args, **kwargs)
-    print('did not find', func.__name__)
     fnc = getattr(cls, func.__name__, None)
-    print('resulted in', fnc)
     if fnc is not None:
         return fnc(*args, **kwargs)
     # raise getattr(cls, func.__name__)(*args, **kwargs)
