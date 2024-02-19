@@ -46,14 +46,7 @@ from tensordict.utils import (
 )
 from torch import multiprocessing as mp
 
-H5_ERR = None
-try:
-    import h5py
-
-    _has_h5 = True
-except ModuleNotFoundError as err:
-    H5_ERR = err
-    _has_h5 = False
+_has_h5 = importlib.util.find_spec("h5py", None) is not None
 
 
 class _Visitor:
@@ -151,7 +144,9 @@ class PersistentTensorDict(TensorDictBase):
         self._locked_tensordicts = []
         self._lock_id = set()
         if not _has_h5:
-            raise ModuleNotFoundError("Could not load h5py.") from H5_ERR
+            raise ModuleNotFoundError("Could not load h5py.")
+        import h5py
+
         super().__init__()
         self.filename = filename
         self.mode = mode
@@ -213,6 +208,8 @@ class PersistentTensorDict(TensorDictBase):
             A :class:`PersitentTensorDict` instance linked to the newly created file.
 
         """
+        import h5py
+
         file = h5py.File(filename, "w", locking=cls.LOCKING)
         _has_batch_size = True
         if batch_size is None:
@@ -260,6 +257,8 @@ class PersistentTensorDict(TensorDictBase):
             raise KeyError(f"key {key} not found in PersistentTensorDict {self}")
 
     def _process_array(self, key, array):
+        import h5py
+
         if isinstance(array, (h5py.Dataset,)):
             if self.device is not None:
                 device = self.device
@@ -294,6 +293,8 @@ class PersistentTensorDict(TensorDictBase):
     def get_at(
         self, key: NestedKey, idx: IndexType, default: CompatibleType = NO_DEFAULT
     ) -> CompatibleType:
+        import h5py
+
         array = self._get_array(key, default)
         if isinstance(array, (h5py.Dataset,)):
             if self.device is not None:
@@ -339,6 +340,8 @@ class PersistentTensorDict(TensorDictBase):
 
         This method avoids creating a tensor from scratch, and just reads the metadata of the array.
         """
+        import h5py
+
         array = self._get_array(key)
         if (
             isinstance(array, (h5py.Dataset,))
@@ -1048,6 +1051,8 @@ class PersistentTensorDict(TensorDictBase):
             self._nested_tensordicts[key]._set_metadata(td)
 
     def _clone(self, recurse: bool = True, newfile=None) -> PersistentTensorDict:
+        import h5py
+
         if recurse:
             # this should clone the h5 to a new location indicated by newfile
             if newfile is None:
@@ -1106,6 +1111,8 @@ class PersistentTensorDict(TensorDictBase):
         return state
 
     def __setstate__(self, state):
+        import h5py
+
         state["file"] = h5py.File(
             state["filename"], mode=state["mode"], locking=self.LOCKING
         )
