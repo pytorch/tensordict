@@ -730,13 +730,58 @@ class TestGeneric:
             *modules, as_module=as_module, lazy_stack=lazy_stack
         )
 
-        def vmap_module(params, x):
+        def exec_module(params, x):
             with params.to_module(empty_module):
                 return empty_module(x)
 
         x = torch.zeros(3)
-        y = torch.vmap(vmap_module, (0, None))(params, x)
+        y = torch.vmap(exec_module, (0, None))(params, x)
         y.sum().backward()
+        if lazy_stack:
+            leaves = []
+
+            def get_leaf(leaf):
+                leaves.append(leaf)
+
+            params.apply(get_leaf)
+            assert all(param.grad is not None for param in leaves)
+            assert all(param.grad is None for param in params.values(True, True))
+        else:
+            for p in modules[0].parameters():
+                assert p.grad is None
+            assert all(param.grad is not None for param in params.values(True, True))
+
+    @pytest.mark.parametrize("as_module", [False, True])
+    @pytest.mark.parametrize("lazy_stack", [False, True])
+    def test_from_modules_lazy(self, as_module, lazy_stack):
+        empty_module = nn.LazyLinear(4, device="meta")
+        modules = [nn.LazyLinear(4) for _ in range(3)]
+        if lazy_stack:
+            with pytest.raises(
+                RuntimeError,
+                match="lasy_stack=True is not compatible with lazy modules.",
+            ):
+                params = TensorDict.from_modules(
+                    *modules, as_module=as_module, lazy_stack=lazy_stack
+                )
+            return
+
+        params = TensorDict.from_modules(
+            *modules, as_module=as_module, lazy_stack=lazy_stack
+        )
+        optim = torch.optim.Adam(list(params.values(True, True)))
+
+        def exec_module(params, x):
+            with params.to_module(empty_module):
+                return empty_module(x)
+
+        x = torch.zeros(3)
+        y = torch.vmap(exec_module, (0, None), randomness="same")(params, x)
+        assert params["weight"].shape == torch.Size((3, 4, 3))
+
+        y.sum().backward()
+        optim.step()
+
         if lazy_stack:
             leaves = []
 

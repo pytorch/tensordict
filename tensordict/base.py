@@ -519,6 +519,14 @@ class TensorDictBase(MutableMapping):
         if lazy_stack:
             from tensordict._lazy import LazyStackedTensorDict
 
+            for param in param_list:
+                if any(
+                    isinstance(tensor, UninitializedTensorMixin)
+                    for tensor in param.values(True, True)
+                ):
+                    raise RuntimeError(
+                        "lasy_stack=True is not compatible with lazy modules."
+                    )
             params = LazyStackedTensorDict.lazy_stack(param_list)
         else:
             with set_lazy_legacy(False), torch.no_grad():
