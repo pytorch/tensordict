@@ -9,6 +9,7 @@ import concurrent.futures
 import dataclasses
 import inspect
 import logging
+from torch.nn.parameter import Parameter, UninitializedTensorMixin, UninitializedParameter, UninitializedBuffer
 
 import math
 import os
@@ -559,7 +560,9 @@ def _ndimension(tensor: Tensor) -> int:
 
 
 def _shape(tensor: Tensor) -> torch.Size:
-    if not isinstance(tensor, Tensor):
+    if isinstance(tensor, UninitializedTensorMixin):
+        return torch.Size([*getattr(tensor, "batch_size", ()), -1])
+    elif not isinstance(tensor, Tensor):
         if type(tensor) is KeyedJaggedTensor:
             return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
         return tensor.shape
@@ -1424,12 +1427,13 @@ def _td_fields(td: T, keys=None) -> str:
             if isinstance(tensor, TensorDictBase):
                 substr = _td_fields(tensor)
             else:
+                is_shared = tensor.is_shared() if not isinstance(tensor, UninitializedTensorMixin) else None
                 substr = _get_repr_custom(
                     tensor.__class__,
                     shape=shape,
                     device=tensor.device,
                     dtype=tensor.dtype,
-                    is_shared=tensor.is_shared(),
+                    is_shared=is_shared,
                 )
             strs.append(f"{key}: {substr}")
 

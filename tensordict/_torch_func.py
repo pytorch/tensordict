@@ -22,11 +22,14 @@ from tensordict.utils import (
     DeviceType,
     lazy_legacy,
     set_lazy_legacy,
+    Buffer,
 )
 from torch import Tensor
+from torch.nn.parameter import Parameter, UninitializedTensorMixin, UninitializedParameter, UninitializedBuffer
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
+UNINIT_TENSOR_FUNCTIONS: dict[Callable, Callable] = {}
 T = TypeVar("T", bound="TensorDictBase")
 
 
@@ -51,6 +54,15 @@ def implements_for_lazy_td(torch_function: Callable) -> Callable[[Callable], Cal
 
     return decorator
 
+def implements_for_uninit_param(torch_function: Callable) -> Callable[[Callable], Callable]:
+    """Register a torch function override for UninitializedTensorMixin."""
+
+    @functools.wraps(torch_function)
+    def decorator(func: Callable) -> Callable:
+        UNINIT_TENSOR_FUNCTIONS[torch_function] = func
+        return func
+
+    return decorator
 
 @implements_for_td(torch.unbind)
 def _unbind(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
@@ -409,7 +421,9 @@ To silence this warning, choose one of the following options:
                 tensor_shape = None
                 for _tensordict in list_of_tensordicts:
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
-                    if tensor_shape is None:
+                    if isinstance(tensor, UninitializedTensorMixin):
+                        pass
+                    elif tensor_shape is None:
                         tensor_shape = tensor.shape
                     elif tensor.shape != tensor_shape:
                         with set_lazy_legacy(True):
@@ -498,3 +512,63 @@ def where(condition, input, other, *, out=None):
             "Cannot use a persistent tensordict as output of torch.where."
         )
     return input.where(condition, other, out=out)
+
+class BatchedUninitializedParameter(UninitializedParameter):
+    batch_size: torch.Size
+    in_dim: int | None = None
+    vmap_level: int | None = None
+
+    def materialize(self, shape, device=None, dtype=None):
+        out = UninitializedParameter.materialize(self, (*self, *shape), device=device, dtype=dtype)
+        if self.in_dim is not None:
+            from tensordict._td import _add_batch_dim
+            return _add_batch_dim(out, in_dim=self.in_dim, vmap_level=self.vmap_level)
+        return out
+
+
+class BatchedUninitializedBuffer(UninitializedBuffer):
+    batch_size: torch.Size
+    in_dim: int | None = None
+    vmap_level: int | None = None
+
+    def materialize(self, shape, device=None, dtype=None):
+        out = Buffer(UninitializedBuffer.materialize(self, (*self, *shape), device=device, dtype=dtype))
+        if self.in_dim is not None:
+            from tensordict._td import _add_batch_dim
+            return _add_batch_dim(out, in_dim=self.in_dim, vmap_level=self.vmap_level)
+        return out
+
+def __torch_function__(
+    cls,
+    func: Callable,
+    types: tuple[type, ...],
+    args: tuple[Any, ...] = (),
+    kwargs: dict[str, Any] | None = None,
+) -> Callable:
+    if kwargs is None:
+        kwargs = {}
+    fnc = UNINIT_TENSOR_FUNCTIONS.get(func, None)
+    if fnc is not None:
+        return fnc(*args, **kwargs)
+    print('did not find', func.__name__)
+    fnc = getattr(cls, func.__name__, None)
+    print('resulted in', fnc)
+    if fnc is not None:
+        return fnc(*args, **kwargs)
+    # raise getattr(cls, func.__name__)(*args, **kwargs)
+        # super(cls, cls).__torch_function__(func, types, args, kwargs)
+
+UninitializedTensorMixin.__torch_function__ = classmethod(__torch_function__)
+
+@implements_for_uninit_param(torch.stack)
+def _stack_uninit_params(list_of_params, dim=0, out=None):
+    if out is not None:
+        raise NotImplementedError
+    if dim > 0:
+        raise NotImplementedError
+    if isinstance(list_of_params[0], UninitializedParameter):
+        out = BatchedUninitializedParameter()
+    elif _is_leaf_nontensor(list_of_params[0], UninitializedBuffer):
+        out = BatchedUninitializedBuffer()
+    out.batch_size = torch.Size([len(list_of_params)])
+    return out

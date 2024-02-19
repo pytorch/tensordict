@@ -750,15 +750,24 @@ class TensorDict(TensorDictBase):
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):
         td = self
+        def _add_batch_dim_wrapper(key, value):
+            if is_tensor_collection(value):
+                return value._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
+            from tensordict._torch_func import BatchedUninitializedParameter, BatchedUninitializedBuffer
+
+            if isinstance(value, (BatchedUninitializedParameter, BatchedUninitializedBuffer)):
+                value.in_dim = in_dim
+                value.vmap_level = vmap_level
+                return value
+            return _add_batch_dim(value, in_dim, vmap_level)
         out = TensorDict(
             {
-                key: value._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
-                if is_tensor_collection(value)
-                else _add_batch_dim(value, in_dim, vmap_level)
+                key: _add_batch_dim_wrapper(key, value)
                 for key, value in td.items()
             },
             batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
             names=[name for i, name in enumerate(td.names) if i != in_dim],
+            _run_checks=False,
         )
         return out
 
