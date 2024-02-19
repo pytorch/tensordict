@@ -2136,3 +2136,20 @@ class _BatchedUninitializedBuffer(UninitializedBuffer):
         UninitializedBuffer.materialize(
             self, (*self.batch_size, *shape), device=device, dtype=dtype
         )
+
+
+class _add_batch_dim_pre_hook:
+    def __call__(self, mod: torch.nn.Module, args, kwargs):
+        for name, param in list(mod.named_parameters(recurse=False)):
+            if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
+                from torch._C._functorch import _add_batch_dim
+
+                param = _add_batch_dim(param, param.in_dim, param.vmap_level)
+                delattr(mod, name)
+                setattr(mod, name, param)
+        for key, val in list(mod._forward_pre_hooks.items()):
+            if val is self:
+                del mod._forward_pre_hooks[key]
+                return
+        else:
+            raise RuntimeError("did not find pre-hook")

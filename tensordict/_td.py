@@ -38,6 +38,7 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
+    _add_batch_dim_pre_hook,
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
     _clone_value,
@@ -3081,15 +3082,9 @@ def _set_tensor_dict(  # noqa: F811
         if isinstance(
             tensor, (_BatchedUninitializedParameter, _BatchedUninitializedBuffer)
         ):
-
-            def pre_hook(mod, args, kwargs):
-                for name, param in list(mod.named_parameters(recurse=False)):
-                    if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
-                        param = _add_batch_dim(param, param.in_dim, param.vmap_level)
-                        delattr(mod, name)
-                        setattr(mod, name, param)
-
-            module.register_forward_pre_hook(pre_hook, with_kwargs=True)
+            module.register_forward_pre_hook(
+                _add_batch_dim_pre_hook(), with_kwargs=True
+            )
 
     elif was_buffer and isinstance(tensor, torch.Tensor):
         module_dict["_buffers"][name] = tensor
