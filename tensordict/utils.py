@@ -1743,7 +1743,7 @@ def _getitem_batch_size(batch_size, index):
 
 
 # Lazy classes control (legacy feature)
-_DEFAULT_LAZY_OP = True
+_DEFAULT_LAZY_OP = False
 _LAZY_OP = os.environ.get("LAZY_LEGACY_OP", None)
 
 
