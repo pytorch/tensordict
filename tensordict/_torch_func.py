@@ -551,8 +551,16 @@ def _stack_uninit_params(list_of_params, dim=0, out=None):
     )
 
     if isinstance(list_of_params[0], UninitializedParameter):
-        out = _BatchedUninitializedParameter()
+        out = _BatchedUninitializedParameter(
+            requires_grad=list_of_params[0].requires_grad,
+            device=list_of_params[0].device,
+            dtype=list_of_params[0].dtype,
+        )
     elif isinstance(list_of_params[0], UninitializedBuffer):
-        out = _BatchedUninitializedBuffer()
+        out = _BatchedUninitializedBuffer(
+            requires_grad=list_of_params[0].requires_grad,
+            device=list_of_params[0].device,
+            dtype=list_of_params[0].dtype,
+        )
     out.batch_size = torch.Size([len(list_of_params)])
     return out
