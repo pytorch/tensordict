@@ -757,7 +757,7 @@ class TestGeneric:
     @pytest.mark.parametrize("device", get_available_devices())
     def test_from_modules_lazy(self, as_module, lazy_stack, device):
         empty_module = nn.LazyLinear(4, device="meta")
-        modules = [nn.LazyLinear(4, device) for _ in range(3)]
+        modules = [nn.LazyLinear(4, device=device) for _ in range(3)]
         if lazy_stack:
             with pytest.raises(
                 RuntimeError,
