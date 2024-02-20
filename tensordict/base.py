@@ -71,6 +71,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
+from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
@@ -518,6 +519,14 @@ class TensorDictBase(MutableMapping):
         if lazy_stack:
             from tensordict._lazy import LazyStackedTensorDict
 
+            for param in param_list:
+                if any(
+                    isinstance(tensor, UninitializedTensorMixin)
+                    for tensor in param.values(True, True)
+                ):
+                    raise RuntimeError(
+                        "lasy_stack=True is not compatible with lazy modules."
+                    )
             params = LazyStackedTensorDict.lazy_stack(param_list)
         else:
             with set_lazy_legacy(False), torch.no_grad():
@@ -525,12 +534,13 @@ class TensorDictBase(MutableMapping):
 
             # Make sure params are params, buffers are buffers
             def make_param(param, orig_param):
+                if isinstance(param, UninitializedTensorMixin):
+                    return param
                 if isinstance(orig_param, nn.Parameter):
                     return nn.Parameter(param.detach(), orig_param.requires_grad)
                 return Buffer(param)
 
-            params = params.apply(make_param, param_list[0])
-
+            params = params._fast_apply(make_param, param_list[0])
         if as_module:
             from tensordict.nn import TensorDictParams
 
