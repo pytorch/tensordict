@@ -768,7 +768,9 @@ class TensorDict(TensorDictBase):
 
         out = TensorDict(
             {key: _add_batch_dim_wrapper(key, value) for key, value in td.items()},
-            batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
+            batch_size=torch.Size(
+                [b for i, b in enumerate(td.batch_size) if i != in_dim]
+            ),
             names=[name for i, name in enumerate(td.names) if i != in_dim],
             _run_checks=False,
         )
