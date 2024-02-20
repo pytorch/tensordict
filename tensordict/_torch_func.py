@@ -11,7 +11,6 @@ import warnings
 from typing import Any, Callable, Sequence, TypeVar
 
 import torch
-
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
@@ -23,10 +22,16 @@ from tensordict.utils import (
     lazy_legacy,
     set_lazy_legacy,
 )
-from torch import Tensor
+from torch import _C, Tensor
+from torch.nn.parameter import (
+    UninitializedBuffer,
+    UninitializedParameter,
+    UninitializedTensorMixin,
+)
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
+UNINIT_TENSOR_FUNCTIONS: dict[Callable, Callable] = {}
 T = TypeVar("T", bound="TensorDictBase")
 
 
@@ -47,6 +52,19 @@ def implements_for_lazy_td(torch_function: Callable) -> Callable[[Callable], Cal
     @functools.wraps(torch_function)
     def decorator(func: Callable) -> Callable:
         LAZY_TD_HANDLED_FUNCTIONS[torch_function] = func
+        return func
+
+    return decorator
+
+
+def implements_for_uninit_param(
+    torch_function: Callable,
+) -> Callable[[Callable], Callable]:
+    """Register a torch function override for UninitializedTensorMixin."""
+
+    @functools.wraps(torch_function)
+    def decorator(func: Callable) -> Callable:
+        UNINIT_TENSOR_FUNCTIONS[torch_function] = func
         return func
 
     return decorator
@@ -351,7 +369,7 @@ def _stack(
 
     from tensordict.tensorclass import NonTensorData
 
-    if all(isinstance(tensordict, NonTensorData) for tensordict in list_of_tensordicts):
+    if all(isinstance(td, NonTensorData) for td in list_of_tensordicts):
         return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
 
     batch_size = list_of_tensordicts[0].batch_size
@@ -409,7 +427,9 @@ To silence this warning, choose one of the following options:
                 tensor_shape = None
                 for _tensordict in list_of_tensordicts:
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
-                    if tensor_shape is None:
+                    if isinstance(tensor, UninitializedTensorMixin):
+                        pass
+                    elif tensor_shape is None:
                         tensor_shape = tensor.shape
                     elif tensor.shape != tensor_shape:
                         with set_lazy_legacy(True):
@@ -498,3 +518,49 @@ def where(condition, input, other, *, out=None):
             "Cannot use a persistent tensordict as output of torch.where."
         )
     return input.where(condition, other, out=out)
+
+
+def __torch_function__(
+    cls,
+    func: Callable,
+    types: tuple[type, ...],
+    args: tuple[Any, ...] = (),
+    kwargs: dict[str, Any] | None = None,
+) -> Callable:
+    if kwargs is None:
+        kwargs = {}
+    fnc_uninit = UNINIT_TENSOR_FUNCTIONS.get(func, None)
+    if fnc_uninit is not None:
+        return fnc_uninit(*args, **kwargs)
+    with _C.DisableTorchFunctionSubclass():
+        return func(*args, **kwargs)
+
+
+UninitializedTensorMixin.__torch_function__ = classmethod(__torch_function__)
+
+
+@implements_for_uninit_param(torch.stack)
+def _stack_uninit_params(list_of_params, dim=0, out=None):
+    if out is not None:
+        raise NotImplementedError
+    if dim > 0:
+        raise NotImplementedError
+    from tensordict.utils import (
+        _BatchedUninitializedBuffer,
+        _BatchedUninitializedParameter,
+    )
+
+    if isinstance(list_of_params[0], UninitializedParameter):
+        out = _BatchedUninitializedParameter(
+            requires_grad=list_of_params[0].requires_grad,
+            device=list_of_params[0].device,
+            dtype=list_of_params[0].dtype,
+        )
+    elif isinstance(list_of_params[0], UninitializedBuffer):
+        out = _BatchedUninitializedBuffer(
+            requires_grad=list_of_params[0].requires_grad,
+            device=list_of_params[0].device,
+            dtype=list_of_params[0].dtype,
+        )
+    out.batch_size = torch.Size([len(list_of_params)])
+    return out
