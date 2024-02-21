@@ -1402,6 +1402,11 @@ class NonTensorData:
         )
 
     def tolist(self):
+        """Converts the data in a list if the batch-size is non-empty.
+
+        If the batch-size is empty, returns the data.
+
+        """
         if not self.batch_size:
             return self.data
         return [ntd.tolist() for ntd in self.unbind(0)]

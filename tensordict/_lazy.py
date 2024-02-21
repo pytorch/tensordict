@@ -1518,7 +1518,10 @@ class LazyStackedTensorDict(TensorDictBase):
                     converted_idx.items(),
                     value_unbind,
                 ):
-                    self.tensordicts[i][_idx] = _value
+                    if _idx != ():
+                        self.tensordicts[i][_idx] = _value
+                    else:
+                        self.tensordicts[i] = _value
             else:
                 # we must split, not unbind
                 mask_unbind = split_index["individual_masks"]

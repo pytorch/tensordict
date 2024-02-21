@@ -246,6 +246,10 @@ class TensorDictBase(MutableMapping):
 
                 if isinstance(result, NonTensorData):
                     return result.data
+                from ._lazy import StackNonTensor
+
+                if isinstance(result, StackNonTensor):
+                    return result.tolist()
                 return result
 
         if (istuple and not index) or (not istuple and index is Ellipsis):
@@ -2308,10 +2312,15 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 return subtd
             return subtd._get_non_tensor(key[1:], default=default)
         value = self._get_str(key, default=default)
-        from tensordict.tensorclass import NonTensorData
+
+        from .tensorclass import NonTensorData
 
         if isinstance(value, NonTensorData):
             return value.data
+        from ._lazy import StackNonTensor
+
+        if isinstance(value, StackNonTensor):
+            return value.tolist()
         return value
 
     def filter_non_tensor_data(self) -> T:
@@ -5376,8 +5385,8 @@ def _default_is_leaf(cls: Type) -> bool:
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:
-    from tensordict.tensorclass import NonTensorData
     from tensordict._lazy import StackNonTensor
+    from tensordict.tensorclass import NonTensorData
 
     if issubclass(cls, KeyedJaggedTensor):
         return False

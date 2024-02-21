@@ -7785,6 +7785,43 @@ class TestNonTensorData:
             LazyStackedTensorDict,
         )
 
+    def test_assign_non_tensor(self):
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        assert data["b"] == "a string!"
+        assert data.get("b").tolist() == [["a string!"] * 10]
+        data[0, 1] = TensorDict({"a": 0, "b": "another string!"}, [])
+        assert data.get("b").tolist() == [
+            ["a string!"] + ["another string!"] + ["a string!"] * 8
+        ]
+
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        data[0, 5:] = TensorDict({"a": torch.zeros(5), "b": "another string!"}, [5])
+        assert data.get("b").tolist() == [["a string!"] * 5 + ["another string!"] * 5]
+
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        data[0, 0::2] = TensorDict(
+            {"a": torch.zeros(5, dtype=torch.long), "b": "another string!"}, [5]
+        )
+        assert data.get("b").tolist() == [["another string!", "a string!"] * 5]
+
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        data[0] = TensorDict(
+            {"a": torch.zeros(10, dtype=torch.long), "b": "another string!"}, [10]
+        )
+        assert data.get("b").tolist() == [["another string!"] * 10]
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()

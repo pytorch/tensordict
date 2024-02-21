@@ -308,9 +308,10 @@ class TensorDict(TensorDictBase):
             if _is_tensor_collection(type(item)):
                 if not item.is_empty():
                     return False
+                from tensordict._lazy import StackNonTensor
                 from tensordict.tensorclass import NonTensorData
 
-                if isinstance(item, NonTensorData):
+                if isinstance(item, (NonTensorData, StackNonTensor)):
                     return False
             else:
                 return False
@@ -2433,10 +2434,13 @@ class _SubTensorDict(TensorDictBase):
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)
+        from tensordict._lazy import StackNonTensor
         from tensordict.tensorclass import NonTensorData
 
-        if isinstance(out, _SubTensorDict) and isinstance(out._source, NonTensorData):
-            return out._source.data
+        if isinstance(out, _SubTensorDict) and isinstance(
+            out._source, (NonTensorData, StackNonTensor)
+        ):
+            return out._source
         return out
 
     def _get_str(self, key, default):
