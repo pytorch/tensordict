@@ -1339,9 +1339,9 @@ class NonTensorData:
                 device=first.device,
             )
 
-        from tensordict._lazy import LazyStackedTensorDict
+        from tensordict._lazy import StackNonTensor
 
-        return LazyStackedTensorDict(*list_of_non_tensor, stack_dim=dim)
+        return StackNonTensor(*list_of_non_tensor, stack_dim=dim)
 
     @classmethod
     def __torch_function__(

@@ -2441,6 +2441,10 @@ class LazyStackedTensorDict(TensorDictBase):
     _to_module = TensorDict._to_module
 
 
+class StackNonTensor(LazyStackedTensorDict):
+    """A thin wrapper aroung LazyStackedTensorDict to make stack on non-tensor data easily recognizable."""
+    pass
+
 class _CustomOpTensorDict(TensorDictBase):
     """Encodes lazy operations on tensors contained in a TensorDict."""
 

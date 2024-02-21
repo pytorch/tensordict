@@ -5377,9 +5377,10 @@ def _default_is_leaf(cls: Type) -> bool:
 
 def _is_leaf_nontensor(cls: Type) -> bool:
     from tensordict.tensorclass import NonTensorData
+    from tensordict._lazy import StackNonTensor
 
     if issubclass(cls, KeyedJaggedTensor):
         return False
     if _is_tensor_collection(cls):
-        return issubclass(cls, NonTensorData)
+        return issubclass(cls, (NonTensorData, StackNonTensor))
     return issubclass(cls, torch.Tensor)
