@@ -432,7 +432,7 @@ To silence this warning, choose one of the following options:
                 ):
                     return torch.stack(values, dim)
 
-            out = {key: stack_fn(key, value, islazy) for key, (value, islazy) in out.items()}
+            out = {key: stack_fn(key, value, islazy) for (key, (value, islazy)) in out.items()}
 
             return TensorDict(
                 out,
