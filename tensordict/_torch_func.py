@@ -411,28 +411,29 @@ To silence this warning, choose one of the following options:
             out = {}
             for key in keys:
                 out[key] = []
-                islazy = False
+                is_lazy = False
                 tensor_shape = None
                 for _tensordict in list_of_tensordicts:
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
                     if isinstance(tensor, UninitializedTensorMixin):
-                        islazy = True
+                        is_lazy = True
                     elif tensor_shape is None:
                         tensor_shape = tensor.shape
                     elif tensor.shape != tensor_shape:
                         with set_lazy_legacy(True):
                             return _stack(list_of_tensordicts, dim=dim)
-                    out[key].append((tensor, islazy))
+                    out[key].append(tensor)
+                out[key] = (out[key], is_lazy)
 
-            def stack_fn(key, values, islazy):
-                if islazy:
+            def stack_fn(key, values, is_lazy):
+                if is_lazy:
                     return _stack_uninit_params(values, dim)
                 with _ErrorInteceptor(
                     key, "Attempted to stack tensors on different devices at key"
                 ):
                     return torch.stack(values, dim)
 
-            out = {key: stack_fn(key, value, islazy) for (key, (value, islazy)) in out.items()}
+            out = {key: stack_fn(key, values, is_lazy) for key, (values, is_lazy) in out.items()}
 
             return TensorDict(
                 out,
