@@ -1473,7 +1473,7 @@ class LazyStackedTensorDict(TensorDictBase):
         elif isinstance(index, (list, range)):
             index = torch.tensor(index, device=self.device)
 
-        if isinstance(value, (TensorDictBase, dict)):
+        if is_tensor_collection(value) or isinstance(value, dict):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
                 value = TensorDict(
@@ -1500,7 +1500,11 @@ class LazyStackedTensorDict(TensorDictBase):
             if isinteger:
                 # this will break if the index along the stack dim is [0] or :1 or smth
                 for i, _idx in converted_idx.items():
-                    self.tensordicts[i][_idx] = value
+                    if _idx != ():
+                        self.tensordicts[i][_idx] = value
+                    else:
+                        self.tensordicts[i] = value
+
                 return self
             if is_nd_tensor:
                 raise RuntimeError(
@@ -2443,7 +2447,13 @@ class LazyStackedTensorDict(TensorDictBase):
 
 class StackNonTensor(LazyStackedTensorDict):
     """A thin wrapper aroung LazyStackedTensorDict to make stack on non-tensor data easily recognizable."""
-    pass
+
+    def tolist(self):
+        if self.stack_dim == 0:
+            return [td.tolist() for td in self.tensordicts]
+        else:
+            return [td.tolist() for td in self.unbind(0)]
+
 
 class _CustomOpTensorDict(TensorDictBase):
     """Encodes lazy operations on tensors contained in a TensorDict."""

@@ -1538,7 +1538,9 @@ class TensorDict(TensorDictBase):
             tensor_in = _sub_index(tensor_in, idx)
             tensor_in.copy_(value)
         else:
-            _set_item(tensor_in, idx, value, validated=validated)
+            tensor_out = _set_item(tensor_in, idx, value, validated=validated)
+            if tensor_in is not tensor_out:
+                self._set_str(key, tensor_out, validated=True, inplace=False)
 
         return self
 
@@ -2366,10 +2368,11 @@ class _SubTensorDict(TensorDictBase):
             )
             tensor_in = _sub_index(tensor_in, idx)
             tensor_in.copy_(value)
+            tensor_out = tensor_in
         else:
-            _set_item(tensor_in, idx, value, validated=validated)
+            tensor_out = _set_item(tensor_in, idx, value, validated=validated)
         # make sure that the value is updated
-        self._source._set_at_str(key, tensor_in, self.idx, validated=validated)
+        self._source._set_at_str(key, tensor_out, self.idx, validated=validated)
         return self
 
     def _set_at_tuple(self, key, value, idx, *, validated):

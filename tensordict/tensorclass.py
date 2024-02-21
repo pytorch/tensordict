@@ -56,6 +56,9 @@ _TD_PASS_THROUGH = {
     torch.full_like,
     torch.zeros_like,
     torch.ones_like,
+    torch.rand_like,
+    torch.empty_like,
+    torch.randn_like,
     torch.clone,
     torch.squeeze,
     torch.unsqueeze,
@@ -1329,7 +1332,9 @@ class NonTensorData:
                 iseq = False
             return iseq
 
-        if all(_check_equal(data.data, first.data) for data in list_of_non_tensor[1:]):
+        if all(isinstance(data, NonTensorData) for data in list_of_non_tensor) and all(
+            _check_equal(data.data, first.data) for data in list_of_non_tensor[1:]
+        ):
             batch_size = list(first.batch_size)
             batch_size.insert(dim, len(list_of_non_tensor))
             return NonTensorData(
@@ -1395,3 +1400,8 @@ class NonTensorData:
         return _wrap_method(self, "_fast_apply", self._tensordict._fast_apply)(
             *args, **kwargs
         )
+
+    def tolist(self):
+        if not self.batch_size:
+            return self.data
+        return [ntd.tolist() for ntd in self.unbind(0)]

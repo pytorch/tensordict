@@ -161,6 +161,32 @@ def _ones_like(td: T, **kwargs: Any) -> T:
     return td_clone
 
 
+@implements_for_td(torch.rand_like)
+def _rand_like(td: T, **kwargs: Any) -> T:
+    td_clone = td._fast_apply(lambda x: torch.rand_like(x))
+    if "device" in kwargs:
+        td_clone = td_clone.to(kwargs.pop("device"))
+    if len(kwargs):
+        raise RuntimeError(
+            f"keyword arguments {list(kwargs.keys())} are not "
+            f"supported with full_like with TensorDict"
+        )
+    return td_clone
+
+
+@implements_for_td(torch.randn_like)
+def _randn_like(td: T, **kwargs: Any) -> T:
+    td_clone = td._fast_apply(lambda x: torch.randn_like(x))
+    if "device" in kwargs:
+        td_clone = td_clone.to(kwargs.pop("device"))
+    if len(kwargs):
+        raise RuntimeError(
+            f"keyword arguments {list(kwargs.keys())} are not "
+            f"supported with full_like with TensorDict"
+        )
+    return td_clone
+
+
 @implements_for_td(torch.empty_like)
 def _empty_like(td: T, *args, **kwargs) -> T:
     try:
@@ -353,9 +379,12 @@ def _stack(
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
+    from tensordict._lazy import StackNonTensor
     from tensordict.tensorclass import NonTensorData
 
-    if all(isinstance(td, NonTensorData) for td in list_of_tensordicts):
+    if all(
+        isinstance(td, (NonTensorData, StackNonTensor)) for td in list_of_tensordicts
+    ):
         return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
 
     batch_size = list_of_tensordicts[0].batch_size
