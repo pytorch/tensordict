@@ -22,7 +22,7 @@ from tensordict.utils import (
     lazy_legacy,
     set_lazy_legacy,
 )
-from torch import _C, Tensor
+from torch import Tensor
 from torch.nn.parameter import (
     UninitializedBuffer,
     UninitializedParameter,
@@ -54,7 +54,6 @@ def implements_for_lazy_td(torch_function: Callable) -> Callable[[Callable], Cal
         return func
 
     return decorator
-
 
 
 @implements_for_td(torch.unbind)
@@ -433,7 +432,10 @@ To silence this warning, choose one of the following options:
                 ):
                     return torch.stack(values, dim)
 
-            out = {key: stack_fn(key, values, is_lazy) for key, (values, is_lazy) in out.items()}
+            out = {
+                key: stack_fn(key, values, is_lazy)
+                for key, (values, is_lazy) in out.items()
+            }
 
             return TensorDict(
                 out,
