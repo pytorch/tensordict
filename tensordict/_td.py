@@ -329,7 +329,8 @@ class TensorDict(TensorDictBase):
         if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:
                 swap = module.copy()
-                module.update(self)
+                with module.unlock_():
+                    module.update(self)
                 return swap
             else:
                 module.update(self)
