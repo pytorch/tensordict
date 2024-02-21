@@ -379,11 +379,10 @@ def _stack(
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
-    from tensordict._lazy import StackNonTensor
-    from tensordict.tensorclass import NonTensorData
+    from tensordict.tensorclass import NonTensorData, NonTensorStack
 
     if all(
-        isinstance(td, (NonTensorData, StackNonTensor)) for td in list_of_tensordicts
+        isinstance(td, (NonTensorData, NonTensorStack)) for td in list_of_tensordicts
     ):
         return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
 

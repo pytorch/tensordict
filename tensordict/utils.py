@@ -656,10 +656,9 @@ def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> 
     elif isinstance(tensor, KeyedJaggedTensor):
         tensor = setitem_keyedjaggedtensor(tensor, index, value)
         return tensor
-    from tensordict._lazy import StackNonTensor
-    from tensordict.tensorclass import NonTensorData
+    from tensordict.tensorclass import NonTensorData, NonTensorStack
 
-    if isinstance(tensor, (NonTensorData, StackNonTensor)):
+    if isinstance(tensor, (NonTensorData, NonTensorStack)):
         if (
             isinstance(value, NonTensorData)
             and isinstance(tensor, NonTensorData)
@@ -676,9 +675,9 @@ def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> 
                 tensor = _set_item(tensor, idx, tensor_idx, validated=True)
                 return tensor
         if isinstance(tensor, NonTensorData):
-            tensor = StackNonTensor(*[tensor[0]] * tensor.shape[0], stack_dim=0)
+            tensor = NonTensorStack(*[tensor[0]] * tensor.shape[0], stack_dim=0)
         elif tensor.stack_dim != 0:
-            tensor = StackNonTensor(*tensor.unbind(0), stack_dim=0)
+            tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value
         return tensor
     else:

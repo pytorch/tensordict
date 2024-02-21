@@ -15,7 +15,7 @@ import pickle
 import re
 import sys
 import warnings
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
@@ -24,6 +24,7 @@ from typing import Any, Callable, List, Sequence, TypeVar
 import tensordict as tensordict_lib
 
 import torch
+from tensordict import LazyStackedTensorDict
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
@@ -475,7 +476,7 @@ def _getattribute_wrapper(getattribute: Callable) -> Callable:
     return wrapper
 
 
-SET_ATTRIBUTES = ("batch_size", "device", "_locked_tensordicts")
+SET_ATTRIBUTES = ("batch_size", "device", "_locked_tensordicts", "names")
 
 
 def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
@@ -489,12 +490,10 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
 
         """
         __dict__ = self.__dict__
-        if (
-            "_tensordict" not in __dict__
-            or "_non_tensordict" not in __dict__
-            or key in SET_ATTRIBUTES
-        ):
+        if "_tensordict" not in __dict__ or "_non_tensordict" not in __dict__:
             return setattr_(self, key, value)
+        if key in SET_ATTRIBUTES:
+            return setattr(self._tensordict, key, value)
 
         out = self.set(key, value)
         if out is not self:
@@ -714,6 +713,9 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
         __dict__ = self.__dict__
         if __dict__["_tensordict"].is_locked:
             raise RuntimeError(_LOCK_ERROR)
+        if key in ("batch_size", "names", "device"):
+            # handled by setattr
+            return
         expected_keys = self.__dataclass_fields__
         if key not in expected_keys:
             raise AttributeError(
@@ -1344,9 +1346,7 @@ class NonTensorData:
                 device=first.device,
             )
 
-        from tensordict._lazy import StackNonTensor
-
-        return StackNonTensor(*list_of_non_tensor, stack_dim=dim)
+        return NonTensorStack(*list_of_non_tensor, stack_dim=dim)
 
     @classmethod
     def __torch_function__(
@@ -1410,3 +1410,39 @@ class NonTensorData:
         if not self.batch_size:
             return self.data
         return [ntd.tolist() for ntd in self.unbind(0)]
+
+    def copy_(self, src: NonTensorData | NonTensorStack, non_blocking: bool = False):
+        if isinstance(src, NonTensorStack):
+            raise RuntimeError(
+                "Cannot update a NonTensorData with a NonTensorStack object."
+            )
+        if not isinstance(src, NonTensorData):
+            raise RuntimeError(
+                "NonTensorData.copy_ requires the source to be a NonTensorData object."
+            )
+        self._non_tensordict["data"] = src.data
+
+    def clone(self, recurse: bool = True):
+        if recurse:
+            return type(self)(
+                data=deepcopy(self.data),
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self.names,
+            )
+        return type(self)(
+            data=self.data,
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self.names,
+        )
+
+
+class NonTensorStack(LazyStackedTensorDict):
+    """A thin wrapper aroung LazyStackedTensorDict to make stack on non-tensor data easily recognizable."""
+
+    def tolist(self):
+        if self.stack_dim == 0:
+            return [td.tolist() for td in self.tensordicts]
+        else:
+            return [td.tolist() for td in self.unbind(0)]

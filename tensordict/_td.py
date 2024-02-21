@@ -29,6 +29,7 @@ from tensordict.base import (
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
+    is_non_tensor,
     is_tensor_collection,
     NO_DEFAULT,
     T,
@@ -308,10 +309,9 @@ class TensorDict(TensorDictBase):
             if _is_tensor_collection(type(item)):
                 if not item.is_empty():
                     return False
-                from tensordict._lazy import StackNonTensor
-                from tensordict.tensorclass import NonTensorData
+                from tensordict.tensorclass import NonTensorData, NonTensorStack
 
-                if isinstance(item, (NonTensorData, StackNonTensor)):
+                if isinstance(item, (NonTensorData, NonTensorStack)):
                     return False
             else:
                 return False
@@ -680,7 +680,11 @@ class TensorDict(TensorDictBase):
 
         any_set = False
         for key, item in self.items():
-            if not call_on_nested and _is_tensor_collection(item.__class__):
+            if (
+                not call_on_nested
+                and _is_tensor_collection(item.__class__)
+                and not is_non_tensor(item)
+            ):
                 if default is not NO_DEFAULT:
                     _others = [_other._get_str(key, default=None) for _other in others]
                     _others = [
@@ -2434,11 +2438,10 @@ class _SubTensorDict(TensorDictBase):
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)
-        from tensordict._lazy import StackNonTensor
-        from tensordict.tensorclass import NonTensorData
+        from tensordict.tensorclass import NonTensorData, NonTensorStack
 
         if isinstance(out, _SubTensorDict) and isinstance(
-            out._source, (NonTensorData, StackNonTensor)
+            out._source, (NonTensorData, NonTensorStack)
         ):
             return out._source
         return out

@@ -246,9 +246,9 @@ class TensorDictBase(MutableMapping):
 
                 if isinstance(result, NonTensorData):
                     return result.data
-                from ._lazy import StackNonTensor
+                from tensordict.tensorclass import NonTensorStack
 
-                if isinstance(result, StackNonTensor):
+                if isinstance(result, NonTensorStack):
                     return result.tolist()
                 return result
 
@@ -1659,6 +1659,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             return self.to(torch.device("cuda"))
         return self.to(f"cuda:{device}")
 
+    @property
+    def is_cuda(self):
+        return self.device is not None and self.device.type == "cuda"
+
+    @property
+    def is_cpu(self):
+        return self.device is not None and self.device.type == "cpu"
+
     # Serialization functionality
     def state_dict(
         self,
@@ -2317,9 +2325,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
         if isinstance(value, NonTensorData):
             return value.data
-        from ._lazy import StackNonTensor
+        from tensordict.tensorclass import NonTensorStack
 
-        if isinstance(value, StackNonTensor):
+        if isinstance(value, NonTensorStack):
             return value.tolist()
         return value
 
@@ -5380,16 +5388,22 @@ def is_tensor_collection(datatype: type | Any) -> bool:
     return _is_tensor_collection(datatype)
 
 
+def is_non_tensor(data):
+    """Checks if an item is a non-tensor."""
+    from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+    return isinstance(data, (NonTensorData, NonTensorStack))
+
+
 def _default_is_leaf(cls: Type) -> bool:
     return not _is_tensor_collection(cls)
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:
-    from tensordict._lazy import StackNonTensor
-    from tensordict.tensorclass import NonTensorData
+    from tensordict.tensorclass import NonTensorData, NonTensorStack
 
     if issubclass(cls, KeyedJaggedTensor):
         return False
     if _is_tensor_collection(cls):
-        return issubclass(cls, (NonTensorData, StackNonTensor))
+        return issubclass(cls, (NonTensorData, NonTensorStack))
     return issubclass(cls, torch.Tensor)

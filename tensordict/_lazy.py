@@ -718,7 +718,7 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             dim = dim - 1
             stack_dim = self.stack_dim
-        return LazyStackedTensorDict(
+        return type(self)(
             *(tensordict.unsqueeze(dim) for tensordict in self.tensordicts),
             stack_dim=stack_dim,
         )
@@ -756,7 +756,7 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             dim = dim - 1
             stack_dim = self.stack_dim
-        return LazyStackedTensorDict(
+        return type(self)(
             *(tensordict.squeeze(dim) for tensordict in self.tensordicts),
             stack_dim=stack_dim,
         )
@@ -1236,7 +1236,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return out
 
     def empty(self, recurse=False) -> T:
-        return LazyStackedTensorDict(
+        return type(self)(
             *[td.empty(recurse=recurse) for td in self.tensordicts],
             stack_dim=self.stack_dim,
         )
@@ -1245,12 +1245,12 @@ class LazyStackedTensorDict(TensorDictBase):
         if recurse:
             # This could be optimized using copy but we must be careful with
             # metadata (_is_shared etc)
-            result = LazyStackedTensorDict(
+            result = type(self)(
                 *[td._clone() for td in self.tensordicts],
                 stack_dim=self.stack_dim,
             )
         else:
-            result = LazyStackedTensorDict(
+            result = type(self)(
                 *[td._clone(recurse=False) for td in self.tensordicts],
                 stack_dim=self.stack_dim,
             )
@@ -1274,7 +1274,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
 
-        return LazyStackedTensorDict(
+        return type(self)(
             *[td.to(*args, **kwargs) for td in self.tensordicts],
             stack_dim=self.stack_dim,
             hook_out=self.hook_out,
@@ -1403,7 +1403,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if filter_empty and all(r is None for r in results):
             return
         if not inplace:
-            out = LazyStackedTensorDict(
+            out = type(self)(
                 *results,
                 stack_dim=self.stack_dim,
             )
@@ -1429,7 +1429,7 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         if inplace:
             return self
-        result = LazyStackedTensorDict(*tensordicts, stack_dim=self.stack_dim)
+        result = type(self)(*tensordicts, stack_dim=self.stack_dim)
         return result
 
     def _exclude(
@@ -1442,7 +1442,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if inplace:
             self.tensordicts = tensordicts
             return self
-        result = LazyStackedTensorDict(*tensordicts, stack_dim=self.stack_dim)
+        result = type(self)(*tensordicts, stack_dim=self.stack_dim)
         return result
 
     def __setitem__(self, index: IndexType, value: T) -> T:
@@ -2336,9 +2336,9 @@ class LazyStackedTensorDict(TensorDictBase):
             # example: shape = [5, 4, 3, 2, 1], stack_dim=1, dim0=1, dim1=4
             # resulting shape: [5, 1, 3, 2, 4]
             if dim1 == dim0 + 1:
-                result = LazyStackedTensorDict(*self.tensordicts, stack_dim=dim1)
+                result = type(self)(*self.tensordicts, stack_dim=dim1)
             else:
-                result = LazyStackedTensorDict(
+                result = type(self)(
                     *(td.transpose(dim0, dim1 - 1) for td in self.tensordicts),
                     stack_dim=dim1,
                 )
@@ -2346,16 +2346,16 @@ class LazyStackedTensorDict(TensorDictBase):
             # example: shape = [5, 4, 3, 2, 1], stack_dim=3, dim0=1, dim1=3
             # resulting shape: [5, 2, 3, 4, 1]
             if dim0 + 1 == dim1:
-                result = LazyStackedTensorDict(*self.tensordicts, stack_dim=dim0)
+                result = type(self)(*self.tensordicts, stack_dim=dim0)
             else:
-                result = LazyStackedTensorDict(
+                result = type(self)(
                     *(td.transpose(dim0 + 1, dim1) for td in self.tensordicts),
                     stack_dim=dim0,
                 )
         else:
             dim0 = dim0 if dim0 < self.stack_dim else dim0 - 1
             dim1 = dim1 if dim1 < self.stack_dim else dim1 - 1
-            result = LazyStackedTensorDict(
+            result = type(self)(
                 *(td.transpose(dim0, dim1) for td in self.tensordicts),
                 stack_dim=self.stack_dim,
             )
@@ -2446,16 +2446,6 @@ class LazyStackedTensorDict(TensorDictBase):
     reshape = TensorDict.reshape
     split = TensorDict.split
     _to_module = TensorDict._to_module
-
-
-class StackNonTensor(LazyStackedTensorDict):
-    """A thin wrapper aroung LazyStackedTensorDict to make stack on non-tensor data easily recognizable."""
-
-    def tolist(self):
-        if self.stack_dim == 0:
-            return [td.tolist() for td in self.tensordicts]
-        else:
-            return [td.tolist() for td in self.unbind(0)]
 
 
 class _CustomOpTensorDict(TensorDictBase):
