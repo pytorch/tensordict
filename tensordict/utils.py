@@ -305,7 +305,10 @@ def expand_as_right(
             f" tensor.ndimension()={tensor.ndimension()} and "
             f"dest.ndimension()={dest.ndimension()}"
         )
-    if not (tensor.shape == dest.shape[: tensor.ndimension()]):
+    if any(
+        tensor.shape[i] != dest.shape[i] and tensor.shape[i] != 1
+        for i in range(tensor.ndimension())
+    ):
         raise RuntimeError(
             f"tensor shape is incompatible with dest shape, "
             f"got: tensor.shape={tensor.shape}, dest={dest.shape}"
