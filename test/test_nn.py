@@ -3018,6 +3018,37 @@ class TestTensorDictParams:
             assert (params_m == 0).all()
         assert not (params_m == 0).all()
 
+    def test_load_state_dict(self):
+        net = nn.Sequential(
+            nn.Linear(2, 2),
+            nn.Sequential(
+                nn.Linear(2, 2),
+                nn.Dropout(),
+                nn.BatchNorm1d(2),
+                nn.Sequential(
+                    nn.Tanh(),
+                    nn.Linear(2, 2),
+                ),
+            ),
+        )
+
+        params = TensorDict.from_module(net, as_module=True)
+
+        # Now with a module around it
+        class MyModule(nn.Module):
+            pass
+
+        module = MyModule()
+        module.model = MyModule()
+        module.model.params = params
+        sd = module.state_dict()
+        sd = {
+            key: val * 0 if isinstance(val, torch.Tensor) else val
+            for key, val in sd.items()
+        }
+        module.load_state_dict(sd)
+        assert (params == 0).all()
+
     def test_inplace_ops(self):
         td = TensorDict(
             {
