@@ -988,18 +988,17 @@ class TensorDictParams(TensorDictBase, nn.Module):
         unexpected_keys,
         error_msgs,
     ):
-        data = (
-            TensorDict(
-                {
-                    key: val
-                    for key, val in state_dict.items()
-                    if key.startswith(prefix) and val is not None
-                },
-                [],
-            )
-            .unflatten_keys(".")
-            .get(prefix[:-1])
-        )
+        data = TensorDict(
+            {
+                key: val
+                for key, val in state_dict.items()
+                if key.startswith(prefix) and val is not None
+            },
+            [],
+        ).unflatten_keys(".")
+        prefix = tuple(key for key in prefix.split(".") if key)
+        if prefix:
+            data = data.get(prefix)
         self.data.load_state_dict(data)
 
     def items(
