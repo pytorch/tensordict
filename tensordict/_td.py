@@ -330,8 +330,7 @@ class TensorDict(TensorDictBase):
         if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:
                 swap = module.copy()
-                with module.unlock_():
-                    module.update(self)
+                module._param_td = getattr(self, "_param_td", self)
                 return swap
             else:
                 module.update(self)
@@ -407,7 +406,17 @@ class TensorDict(TensorDictBase):
                     continue
                 child = __dict__["_modules"][key]
                 local_out = memo.get(id(child), NO_DEFAULT)
+
                 if local_out is NO_DEFAULT:
+                    # if isinstance(child, TensorDictBase):
+                    #     # then child is a TensorDictParams
+                    #     from tensordict.nn import TensorDictParams
+                    #
+                    #     local_out = child
+                    #     if not isinstance(value, TensorDictParams):
+                    #         value = TensorDictParams(value, no_convert=True)
+                    #     __dict__["_modules"][key] = value
+                    # else:
                     local_out = value._to_module(
                         child,
                         inplace=inplace,
