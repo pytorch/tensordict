@@ -196,6 +196,9 @@ def tensorclass(cls: T) -> T:
     cls.load_state_dict = _load_state_dict
     cls._memmap_ = _memmap_
 
+    cls.__enter__ = __enter__
+    cls.__exit__ = __exit__
+
     # Memmap
     cls.memmap_like = TensorDictBase.memmap_like
     cls.memmap_ = TensorDictBase.memmap_
@@ -419,6 +422,14 @@ def _load_memmap(cls, prefix: Path, metadata: dict):
             non_tensordict.update(pickle.load(pickle_file))
     td = TensorDict.load_memmap(prefix / "_tensordict")
     return cls._from_tensordict(td, non_tensordict)
+
+
+def __enter__(self, *args, **kwargs):
+    return self._tensordict.__enter__(*args, **kwargs)
+
+
+def __exit__(self, *args, **kwargs):
+    return self._tensordict.__exit__(*args, **kwargs)
 
 
 def _getstate(self) -> dict[str, Any]:
