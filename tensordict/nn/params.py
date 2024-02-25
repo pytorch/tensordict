@@ -1117,8 +1117,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 param.data = param_applied
                 out_param = param
             else:
-                assert isinstance(param, nn.Parameter)
-                assert param.is_leaf
                 out_param = nn.Parameter(param_applied, param.requires_grad)
                 self._parameters[key] = out_param
 
@@ -1129,10 +1127,8 @@ class TensorDictParams(TensorDictBase, nn.Module):
                     param.grad, grad_applied
                 )
                 if should_use_set_data:
-                    assert out_param.grad is not None
                     out_param.grad.data = grad_applied
                 else:
-                    assert param.grad.is_leaf
                     out_param.grad = grad_applied.requires_grad_(
                         param.grad.requires_grad
                     )
@@ -1150,8 +1146,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 buffer.data = buffer_applied
                 out_buffer = buffer
             else:
-                assert isinstance(buffer, Buffer)
-                assert buffer.is_leaf
                 out_buffer = Buffer(buffer_applied, buffer.requires_grad)
                 self._buffers[key] = out_buffer
 
@@ -1162,10 +1156,8 @@ class TensorDictParams(TensorDictBase, nn.Module):
                     buffer.grad, grad_applied
                 )
                 if should_use_set_data:
-                    assert out_buffer.grad is not None
                     out_buffer.grad.data = grad_applied
                 else:
-                    assert buffer.grad.is_leaf
                     out_buffer.grad = grad_applied.requires_grad_(
                         buffer.grad.requires_grad
                     )

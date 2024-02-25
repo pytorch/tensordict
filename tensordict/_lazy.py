@@ -1553,6 +1553,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 return self
             if is_nd_tensor:
                 unbind_dim = self.stack_dim - num_single + num_none - num_squash
+
                 # converted_idx is a nested list with (int, index) items
                 def assign(converted_idx, value=value):
                     value = value.unbind(unbind_dim)

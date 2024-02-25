@@ -1601,7 +1601,6 @@ def _renamed_inplace_method(fn):
 
 def _broadcast_tensors(index):
     # tensors and range need to be broadcast
-    assert isinstance(index, tuple)
     tensors = {
         i: torch.as_tensor(tensor)
         for i, tensor in enumerate(index)

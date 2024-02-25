@@ -6101,12 +6101,6 @@ class TestLazyStackedTensorDict:
         pos2 = self._idx_list[pos2]
         pos3 = self._idx_list[pos3]
         index = (pos1, pos2, pos3)
-        print(
-            "index",
-            tuple(
-                index if not hasattr(index, "shape") else index.shape for index in index
-            ),
-        )
         result = outer[index]
         ref_tensor = torch.zeros(outer.shape)
         assert result.batch_size == ref_tensor[index].shape, (
