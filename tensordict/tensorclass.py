@@ -28,7 +28,7 @@ from tensordict import LazyStackedTensorDict
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-from tensordict.base import _ACCEPTED_CLASSES, _register_tensor_class
+from tensordict.base import _ACCEPTED_CLASSES, _register_tensor_class, CompatibleType
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
 from tensordict.utils import (
@@ -1319,6 +1319,23 @@ class NonTensorData:
 
             self.__class__.__or__ = __or__
 
+    def update(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        inplace: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> T:
+        if isinstance(input_dict_or_td, NonTensorData):
+            data = input_dict_or_td.data
+            if clone:
+                data = deepcopy(data)
+            self.data = data
+        elif not input_dict_or_td.is_empty():
+            raise RuntimeError(f"Unexpected type {type(input_dict_or_td)}")
+        return self
+
     def empty(self, recurse=False):
         return NonTensorData(
             data=self.data,
@@ -1450,10 +1467,59 @@ class NonTensorData:
 
 
 class NonTensorStack(LazyStackedTensorDict):
-    """A thin wrapper aroung LazyStackedTensorDict to make stack on non-tensor data easily recognizable."""
+    """A thin wrapper around LazyStackedTensorDict to make stack on non-tensor data easily recognizable.
+
+    A ``NonTensorStack`` is returned whenever :func:`~torch.stack` is called on
+    a list of :class:`~tensordict.NonTensorData` or ``NonTensorStack``.
+
+    Examples:
+        >>> from tensordict import NonTensorData
+        >>> import torch
+        >>> data = torch.stack([
+        ...     torch.stack([NonTensorData(data=(i, j), batch_size=[]) for i in range(2)])
+        ...    for j in range(3)])
+        >>> print(data)
+        NonTensorStack(
+            [[(0, 0), (1, 0)], [(0, 1), (1, 1)], [(0, 2), (1, ...,
+            batch_size=torch.Size([3, 2]),
+            device=None)
+
+    To obtain the values stored in a ``NonTensorStack``, call :class:`~.tolist`.
+
+    """
 
     def tolist(self):
-        if self.stack_dim == 0:
-            return [td.tolist() for td in self.tensordicts]
-        else:
-            return [td.tolist() for td in self.unbind(0)]
+        """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.
+
+        Examples:
+            >>> from tensordict import NonTensorData
+            >>> import torch
+            >>> data = torch.stack([
+            ...     torch.stack([NonTensorData(data=(i, j), batch_size=[]) for i in range(2)])
+            ...    for j in range(3)])
+            >>> data.tolist()
+            [[(0, 0), (1, 0)], [(0, 1), (1, 1)], [(0, 2), (1, 2)]]
+
+        """
+        iterator = self.tensordicts if self.stack_dim == 0 else self.unbind(0)
+        return [td.tolist() for td in iterator]
+
+    @classmethod
+    def from_nontensordata(cls, non_tensor: NonTensorData):
+        data = non_tensor.data
+        prev = NonTensorData(data, batch_size=[], device=non_tensor.device)
+        for dim in reversed(non_tensor.shape):
+            prev = cls(*[prev.clone(False) for _ in range(dim)], stack_dim=0)
+        return prev
+
+    def __repr__(self):
+        selfrepr = str(self.tolist())
+        if len(selfrepr) > 50:
+            selfrepr = f"{selfrepr[:50]}..."
+        selfrepr = indent(selfrepr, prefix=4 * " ")
+        batch_size = indent(f"batch_size={self.batch_size}", prefix=4 * " ")
+        device = indent(f"device={self.device}", prefix=4 * " ")
+        return f"NonTensorStack(\n{selfrepr}," f"\n{batch_size}," f"\n{device})"
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.tolist()

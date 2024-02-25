@@ -2322,6 +2322,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         value = self._get_str(key, default=default)
 
         from .tensorclass import NonTensorData, NonTensorStack
+
         if isinstance(value, NonTensorData):
             return value.data
         if isinstance(value, NonTensorStack):

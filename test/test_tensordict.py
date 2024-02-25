@@ -2774,6 +2774,7 @@ class TestTensorDicts(TestTensorDictsBase):
             index = index.numpy()
         td_idx = td[:, index]
         assert tensor_example[:, index].shape == td_idx.shape
+        # TODO: this multiple dims with identical names should not be allowed
         assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
         td_idx = td[0, index]
         assert tensor_example[0, index].shape == td_idx.shape
@@ -6100,10 +6101,24 @@ class TestLazyStackedTensorDict:
         pos2 = self._idx_list[pos2]
         pos3 = self._idx_list[pos3]
         index = (pos1, pos2, pos3)
+        print(
+            "index",
+            tuple(
+                index if not hasattr(index, "shape") else index.shape for index in index
+            ),
+        )
         result = outer[index]
         ref_tensor = torch.zeros(outer.shape)
-        assert result.batch_size == ref_tensor[index].shape, index
-        assert result.batch_size == outer_dense[index].shape, index
+        assert result.batch_size == ref_tensor[index].shape, (
+            result.batch_size,
+            ref_tensor[index].shape,
+            index,
+        )
+        assert result.batch_size == outer_dense[index].shape, (
+            result.batch_size,
+            outer_dense[index].shape,
+            index,
+        )
 
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize("mask_dim", [0, 1, 2])

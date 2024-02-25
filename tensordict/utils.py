@@ -668,18 +668,9 @@ def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> 
             and tensor.data == value.data
         ):
             return tensor
-        if isinstance(index, tuple):
-            if len(index) == 1:
-                index = index[0]
-            else:
-                idx = index[0]
-                tensor_idx = tensor[idx]
-                tensor_idx = _set_item(tensor_idx, index[1:], value, validated=True)
-                tensor = _set_item(tensor, idx, tensor_idx, validated=True)
-                return tensor
-        if isinstance(tensor, NonTensorData):
-            tensor = NonTensorStack(*[tensor[0]] * tensor.shape[0], stack_dim=0)
-        elif tensor.stack_dim != 0:
+        elif isinstance(tensor, NonTensorData):
+            tensor = NonTensorStack.from_nontensordata(tensor)
+        if tensor.stack_dim != 0:
             tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
         tensor[index] = value
         return tensor
@@ -1610,8 +1601,9 @@ def _renamed_inplace_method(fn):
 
 def _broadcast_tensors(index):
     # tensors and range need to be broadcast
+    assert isinstance(index, tuple)
     tensors = {
-        i: tensor if isinstance(tensor, Tensor) else torch.tensor(tensor)
+        i: torch.as_tensor(tensor)
         for i, tensor in enumerate(index)
         if isinstance(tensor, (range, list, np.ndarray, Tensor))
     }
