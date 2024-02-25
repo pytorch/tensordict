@@ -31,7 +31,6 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _LOCK_ERROR,
-    as_decorator,
     Buffer,
     erase_cache,
     IndexType,
@@ -338,7 +337,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         for key, value in parameters.items(True, True):
             # flatten key
             if isinstance(key, tuple):
-                key = "_".join(key)
+                key = ".".join(key)
             if isinstance(value, nn.Parameter):
                 param_keys.append(key)
                 params.append(value)
@@ -445,6 +444,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         chunksize: int = None,
         num_chunks: int = None,
         pool: mp.Pool = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
     ):
         raise RuntimeError(
             "Cannot call map on a TensorDictParams object. Convert it "
@@ -462,8 +464,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> TensorDictBase:
+    ) -> TensorDictBase | None:
         ...
 
     @_unlock_and_set(inplace=True)
@@ -476,8 +479,9 @@ class TensorDictParams(TensorDictBase, nn.Module):
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> TensorDictBase:
+    ) -> TensorDictBase | None:
         ...
 
     @_unlock_and_set(inplace=True)
@@ -904,8 +908,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_fallback
-    @as_decorator()
-    def to_module(
+    def _to_module(
         self,
         module,
         *,
@@ -987,18 +990,17 @@ class TensorDictParams(TensorDictBase, nn.Module):
         unexpected_keys,
         error_msgs,
     ):
-        data = (
-            TensorDict(
-                {
-                    key: val
-                    for key, val in state_dict.items()
-                    if key.startswith(prefix) and val is not None
-                },
-                [],
-            )
-            .unflatten_keys(".")
-            .get(prefix[:-1])
-        )
+        data = TensorDict(
+            {
+                key: val
+                for key, val in state_dict.items()
+                if key.startswith(prefix) and val is not None
+            },
+            [],
+        ).unflatten_keys(".")
+        prefix = tuple(key for key in prefix.split(".") if key)
+        if prefix:
+            data = data.get(prefix)
         self.data.load_state_dict(data)
 
     def items(
@@ -1079,7 +1081,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_apply_on_data
-    def apply_(self, fn: Callable, *others) -> T:
+    def apply_(self, fn: Callable, *others, **kwargs) -> T:
         ...
 
     def _apply(self, fn, recurse=True):

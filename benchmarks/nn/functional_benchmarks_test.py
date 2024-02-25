@@ -319,6 +319,19 @@ def test_vmap_transformer_speed_decorator(benchmark, stack, tdmodule):
         benchmark(vfun, x, params)
 
 
+@pytest.mark.parametrize("tdparams", [True, False])
+def test_to_module_speed(benchmark, tdparams):
+    module = torch.nn.Transformer()
+    params = TensorDict.from_module(module, as_module=tdparams)
+
+    def func(params=params, module=module):
+        with params.to_module(module):
+            pass
+        return
+
+    benchmark(func)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

@@ -11,7 +11,6 @@ import warnings
 from typing import Any, Callable, Sequence, TypeVar
 
 import torch
-
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
@@ -24,6 +23,11 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import Tensor
+from torch.nn.parameter import (
+    UninitializedBuffer,
+    UninitializedParameter,
+    UninitializedTensorMixin,
+)
 
 TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
@@ -92,8 +96,10 @@ def _gather(
         return out
 
     if out is None:
-        names = input.names if input._has_names() else None
-
+        if len(index.shape) == input.ndim and input._has_names():
+            names = input.names
+        else:
+            names = None
         return TensorDict(
             {
                 key: _gather_tensor(value)
@@ -351,7 +357,7 @@ def _stack(
 
     from tensordict.tensorclass import NonTensorData
 
-    if all(isinstance(tensordict, NonTensorData) for tensordict in list_of_tensordicts):
+    if all(isinstance(td, NonTensorData) for td in list_of_tensordicts):
         return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
 
     batch_size = list_of_tensordicts[0].batch_size
@@ -376,7 +382,7 @@ stack of tensordicts. Up until v0.3 included, a lazy stack was returned.
 From v0.4 onward, a dense stack will be returned and to build a
 lazy stack, an explicit call to LazyStackedTensorDict.lazy_stack will be required.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
@@ -406,24 +412,32 @@ To silence this warning, choose one of the following options:
             out = {}
             for key in keys:
                 out[key] = []
+                is_lazy = False
                 tensor_shape = None
                 for _tensordict in list_of_tensordicts:
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
-                    if tensor_shape is None:
+                    if isinstance(tensor, UninitializedTensorMixin):
+                        is_lazy = True
+                    elif tensor_shape is None:
                         tensor_shape = tensor.shape
                     elif tensor.shape != tensor_shape:
                         with set_lazy_legacy(True):
                             return _stack(list_of_tensordicts, dim=dim)
                     out[key].append(tensor)
+                out[key] = (out[key], is_lazy)
 
-            def stack_fn(key_values):
-                key, values = key_values
+            def stack_fn(key, values, is_lazy):
+                if is_lazy:
+                    return _stack_uninit_params(values, dim)
                 with _ErrorInteceptor(
                     key, "Attempted to stack tensors on different devices at key"
                 ):
                     return torch.stack(values, dim)
 
-            out = {key: stack_fn((key, value)) for key, value in out.items()}
+            out = {
+                key: stack_fn(key, values, is_lazy)
+                for key, (values, is_lazy) in out.items()
+            }
 
             return TensorDict(
                 out,
@@ -498,3 +512,29 @@ def where(condition, input, other, *, out=None):
             "Cannot use a persistent tensordict as output of torch.where."
         )
     return input.where(condition, other, out=out)
+
+
+def _stack_uninit_params(list_of_params, dim=0, out=None):
+    if out is not None:
+        raise NotImplementedError
+    if dim > 0:
+        raise NotImplementedError
+    from tensordict.utils import (
+        _BatchedUninitializedBuffer,
+        _BatchedUninitializedParameter,
+    )
+
+    if isinstance(list_of_params[0], UninitializedParameter):
+        out = _BatchedUninitializedParameter(
+            requires_grad=list_of_params[0].requires_grad,
+            device=list_of_params[0].device,
+            dtype=list_of_params[0].dtype,
+        )
+    elif isinstance(list_of_params[0], UninitializedBuffer):
+        out = _BatchedUninitializedBuffer(
+            requires_grad=list_of_params[0].requires_grad,
+            device=list_of_params[0].device,
+            dtype=list_of_params[0].dtype,
+        )
+    out.batch_size = torch.Size([len(list_of_params)])
+    return out
