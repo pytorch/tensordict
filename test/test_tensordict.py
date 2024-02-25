@@ -990,33 +990,103 @@ class TestGeneric:
         assert torch.equal(padded_td["a"], expected_a)
         padded_td._check_batch_size()
 
-    @pytest.mark.parametrize("batch_first", [True, False])
     @pytest.mark.parametrize("make_mask", [True, False])
-    def test_pad_sequence(self, batch_first, make_mask):
+    def test_pad_sequence_pad_dim0(self, make_mask):
+        pad_dim = 0
         list_td = [
-            TensorDict({"a": torch.ones((2,)), ("b", "c"): torch.ones((2, 3))}, [2]),
-            TensorDict({"a": torch.ones((4,)), ("b", "c"): torch.ones((4, 3))}, [4]),
+            TensorDict(
+                {"a": torch.ones((2, 8, 8)), ("b", "c"): torch.ones((2, 3))}, [2]
+            ),
+            TensorDict(
+                {"a": torch.full((4, 8, 8), 2), ("b", "c"): torch.full((4, 3), 2)},
+                [4],
+            ),
         ]
-        padded_td = pad_sequence(
-            list_td, batch_first=batch_first, return_mask=make_mask
-        )
-        if batch_first:
-            assert padded_td.shape == torch.Size([2, 4])
-            assert padded_td["a"].shape == torch.Size([2, 4])
-            assert padded_td["a"][0, -1] == 0
-            assert padded_td["b", "c"].shape == torch.Size([2, 4, 3])
-            assert padded_td["b", "c"][0, -1, 0] == 0
-        else:
-            assert padded_td.shape == torch.Size([4, 2])
-            assert padded_td["a"].shape == torch.Size([4, 2])
-            assert padded_td["a"][-1, 0] == 0
-            assert padded_td["b", "c"].shape == torch.Size([4, 2, 3])
-            assert padded_td["b", "c"][-1, 0, 0] == 0
+        padded_td = pad_sequence(list_td, pad_dim=pad_dim, return_mask=make_mask)
+        assert padded_td.shape == torch.Size(
+            [2, 4]
+        )  # check the shape of the padded tensordict
+        assert torch.all(
+            padded_td["a"][0, :2, :, :] == 1
+        )  # check the values of the first tensor
+        assert torch.all(
+            padded_td["a"][1, :, :, :] == 2
+        )  # check the values of the second tensor
+        assert padded_td["a"].shape == torch.Size(
+            [2, 4, 8, 8]
+        )  # check the shape of the padded tensor
+        assert torch.all(padded_td["a"][0, 2:, :, :] == 0)  # check the padding
+        assert padded_td["b", "c"].shape == torch.Size(
+            [2, 4, 3]
+        )  # check the shape of the padded tensor
+        assert torch.all(padded_td["b", "c"][0, 2:, :] == 0)  # check the padding
         if make_mask:
-            assert "mask" in padded_td.keys()
-            assert not padded_td["mask"].all()
+            padded_td_without_masks = pad_sequence(
+                list_td, pad_dim=pad_dim, return_mask=False
+            )
+            assert "masks" in padded_td.keys()
+            assert set(
+                padded_td_without_masks.keys(include_nested=True, leaves_only=True)
+            ) == set(padded_td["masks"].keys(include_nested=True, leaves_only=True))
+            assert not padded_td["masks", "a"].all()
+            assert padded_td["masks", "a"].ndim == pad_dim + 2
+            assert (padded_td["a"][padded_td["masks", "a"]] != 0).all()
+            assert (padded_td["a"][~padded_td["masks", "a"]] == 0).all()
+            assert not padded_td["masks", "b", "c"].all()
+            assert padded_td["masks", "b", "c"].ndim == pad_dim + 2
+            assert (padded_td["b", "c"][padded_td["masks", "b", "c"]] != 0).all()
+            assert (padded_td["b", "c"][~padded_td["masks", "b", "c"]] == 0).all()
         else:
-            assert "mask" not in padded_td.keys()
+            assert "masks" not in padded_td.keys()
+
+    @pytest.mark.parametrize("make_mask", [True, False])
+    def test_pad_sequence_pad_dim1(self, make_mask):
+        pad_dim = 1
+        list_td = [
+            TensorDict(
+                {"a": torch.ones((6, 3, 8)), ("b", "c"): torch.ones((6, 3))}, [6]
+            ),
+            TensorDict(
+                {"a": torch.full((6, 5, 8), 2), ("b", "c"): torch.full((6, 7), 2)},
+                [6],
+            ),
+        ]
+        padded_td = pad_sequence(list_td, pad_dim=pad_dim, return_mask=make_mask)
+        assert padded_td.shape == torch.Size(
+            [2, 6]
+        )  # check the shape of the padded tensordict
+        assert padded_td["a"].shape == torch.Size(
+            [2, 6, 5, 8]
+        )  # check the shape of the padded tensor
+        assert torch.all(
+            padded_td["a"][0, :, :3, :] == 1
+        )  # check the values of the first tensor
+        assert torch.all(padded_td["a"][0, :, 3:, :] == 0)  # check the padding
+        assert torch.all(
+            padded_td["a"][1, :, :, :] == 2
+        )  # check the values of the second tensor
+        assert padded_td["b", "c"].shape == torch.Size(
+            [2, 6, 7]
+        )  # check the shape of the padded tensor
+        assert torch.all(padded_td["b", "c"][0, :, 3:] == 0)  # check the padding
+        if make_mask:
+            padded_td_without_masks = pad_sequence(
+                list_td, pad_dim=pad_dim, return_mask=False
+            )
+            assert "masks" in padded_td.keys()
+            assert set(
+                padded_td_without_masks.keys(include_nested=True, leaves_only=True)
+            ) == set(padded_td["masks"].keys(include_nested=True, leaves_only=True))
+            assert not padded_td["masks", "a"].all()
+            assert padded_td["masks", "a"].ndim == pad_dim + 2
+            assert (padded_td["a"][padded_td["masks", "a"]] != 0).all()
+            assert (padded_td["a"][~padded_td["masks", "a"]] == 0).all()
+            assert not padded_td["masks", "b", "c"].all()
+            assert padded_td["masks", "b", "c"].ndim == pad_dim + 2
+            assert (padded_td["b", "c"][padded_td["masks", "b", "c"]] != 0).all()
+            assert (padded_td["b", "c"][~padded_td["masks", "b", "c"]] == 0).all()
+        else:
+            assert "masks" not in padded_td.keys()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_permute(self, device):
