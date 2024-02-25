@@ -309,9 +309,8 @@ class TensorDict(TensorDictBase):
             if _is_tensor_collection(type(item)):
                 if not item.is_empty():
                     return False
-                from tensordict.tensorclass import NonTensorData, NonTensorStack
 
-                if isinstance(item, (NonTensorData, NonTensorStack)):
+                if is_non_tensor(item):
                     return False
             else:
                 return False
@@ -693,7 +692,7 @@ class TensorDict(TensorDictBase):
             if (
                 not call_on_nested
                 and _is_tensor_collection(item.__class__)
-                and not is_non_tensor(item)
+                # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
                     _others = [_other._get_str(key, default=None) for _other in others]
@@ -2467,7 +2466,10 @@ class _SubTensorDict(TensorDictBase):
 
     def _get_str(self, key, default):
         if key in self.keys() and _is_tensor_collection(self.entry_class(key)):
-            return _SubTensorDict(self._source._get_str(key, NO_DEFAULT), self.idx)
+            data = self._source._get_str(key, NO_DEFAULT)
+            if is_non_tensor(data):
+                return data[self.idx]
+            return _SubTensorDict(data, self.idx)
         return self._source._get_at_str(key, self.idx, default=default)
 
     def _get_tuple(self, key, default):

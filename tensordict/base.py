@@ -2321,12 +2321,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             return subtd._get_non_tensor(key[1:], default=default)
         value = self._get_str(key, default=default)
 
-        from .tensorclass import NonTensorData
-
+        from .tensorclass import NonTensorData, NonTensorStack
         if isinstance(value, NonTensorData):
             return value.data
-        from tensordict.tensorclass import NonTensorStack
-
         if isinstance(value, NonTensorStack):
             return value.tolist()
         return value
