@@ -330,8 +330,7 @@ class TensorDict(TensorDictBase):
         if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:
                 swap = module.copy()
-                with module.unlock_():
-                    module.update(self)
+                module._param_td = getattr(self, "_param_td", self)
                 return swap
             else:
                 module.update(self)
@@ -407,7 +406,17 @@ class TensorDict(TensorDictBase):
                     continue
                 child = __dict__["_modules"][key]
                 local_out = memo.get(id(child), NO_DEFAULT)
+
                 if local_out is NO_DEFAULT:
+                    # if isinstance(child, TensorDictBase):
+                    #     # then child is a TensorDictParams
+                    #     from tensordict.nn import TensorDictParams
+                    #
+                    #     local_out = child
+                    #     if not isinstance(value, TensorDictParams):
+                    #         value = TensorDictParams(value, no_convert=True)
+                    #     __dict__["_modules"][key] = value
+                    # else:
                     local_out = value._to_module(
                         child,
                         inplace=inplace,
@@ -820,12 +829,14 @@ class TensorDict(TensorDictBase):
             raise RuntimeError(
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
             )
-        if names is None:
-            names = self._get_names_idx(index)
         if new_batch_size is not None:
             batch_size = new_batch_size
         else:
             batch_size = _getitem_batch_size(batch_size, index)
+
+        if names is None:
+            names = self._get_names_idx(index)
+
         source = {}
         for key, item in self.items():
             if isinstance(item, TensorDict):
@@ -1362,14 +1373,20 @@ class TensorDict(TensorDictBase):
                 # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
                 count = 0
                 idx_to_take = []
+                no_more_tensors = False
                 for _idx in idx_names:
                     if _idx is None:
                         idx_to_take.append(None)
                     elif _is_number(_idx):
                         count += 1
                     elif isinstance(_idx, (torch.Tensor, np.ndarray)):
-                        idx_to_take.extend([count] * _idx.ndim)
-                        count += 1
+                        if not no_more_tensors:
+                            idx_to_take.extend([count] * _idx.ndim)
+                            count += 1
+                            no_more_tensors = True
+                        else:
+                            # skip this one
+                            count += 1
                     else:
                         idx_to_take.append(count)
                         count += 1
@@ -1383,6 +1400,7 @@ class TensorDict(TensorDictBase):
             self._rename_subtds(value)
             self._erase_names()
             return
+        value = list(value)
         num_none = sum(v is None for v in value)
         if num_none:
             num_none -= 1
