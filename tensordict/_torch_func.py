@@ -96,8 +96,10 @@ def _gather(
         return out
 
     if out is None:
-        names = input.names if input._has_names() else None
-
+        if len(index.shape) == input.ndim and input._has_names():
+            names = input.names
+        else:
+            names = None
         return TensorDict(
             {
                 key: _gather_tensor(value)
