@@ -273,3 +273,4 @@ Here is an example:
 
     tensorclass
     NonTensorData
+    NonTensorStack
