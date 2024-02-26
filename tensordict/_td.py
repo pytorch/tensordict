@@ -3043,7 +3043,10 @@ class _TensorDictKeysView:
         if isinstance(key, str):
             if key in self._keys():
                 if self.leaves_only:
-                    return not _is_tensor_collection(self.tensordict.entry_class(key))
+                    # TODO: make this faster for LazyStacked without compromising regular
+                    return not _is_tensor_collection(
+                        type(self.tensordict._get_str(key))
+                    )
                 return True
             return False
         else:
@@ -3051,25 +3054,30 @@ class _TensorDictKeysView:
             if len(key) == 1:
                 return key[0] in self._keys()
             elif self.include_nested:
-                if key[0] in self._keys():
-                    entry_type = self.tensordict.entry_class(key[0])
-                    if entry_type in (Tensor, _MemmapTensor):
+                item_root = self.tensordict._get_str(key[0], default=None)
+                if item_root is not None:
+                    entry_type = type(item_root)
+                    if issubclass(entry_type, (Tensor, _MemmapTensor)):
                         return False
-                    if entry_type is KeyedJaggedTensor:
+                    elif entry_type is KeyedJaggedTensor:
                         if len(key) > 2:
                             return False
-                        return key[1] in self.tensordict.get(key[0]).keys()
+                        return key[1] in item_root.keys()
+                    # TODO: make this faster for LazyStacked without compromising regular
                     _is_tensordict = _is_tensor_collection(entry_type)
                     if _is_tensordict:
                         # # this will call _unravel_key_to_tuple many times
                         # return key[1:] in self.tensordict._get_str(key[0], NO_DEFAULT).keys(include_nested=self.include_nested)
                         # this won't call _unravel_key_to_tuple but requires to get the default which can be suboptimal
-                        leaf_td = self.tensordict._get_tuple(key[:-1], None)
-                        if leaf_td is None or (
-                            not _is_tensor_collection(leaf_td.__class__)
-                            and not isinstance(leaf_td, KeyedJaggedTensor)
-                        ):
-                            return False
+                        if len(key) >= 3:
+                            leaf_td = item_root._get_tuple(key[1:-1], None)
+                            if leaf_td is None or (
+                                not _is_tensor_collection(leaf_td.__class__)
+                                and not isinstance(leaf_td, KeyedJaggedTensor)
+                            ):
+                                return False
+                        else:
+                            leaf_td = item_root
                         return key[-1] in leaf_td.keys()
                 return False
             # this is reached whenever there is more than one key but include_nested is False

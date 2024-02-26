@@ -415,6 +415,7 @@ class TestTDModule:
         tensordict_module = TensorDictModule(
             module=net, in_keys=["in"], out_keys=["out"]
         )
+        make_functional(tensordict_module, return_params=False)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tensordict_module(td, params=TensorDict({"module": params}, []))
@@ -580,6 +581,7 @@ class TestTDModule:
         tdmodule = TensorDictModule(module=net, in_keys=["in"], out_keys=["out"])
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
+        make_functional(tdmodule, return_params=False)
         tdmodule(td, params=TensorDict({"module": params}, []))
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
