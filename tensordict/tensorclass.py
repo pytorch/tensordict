@@ -28,7 +28,12 @@ from tensordict import LazyStackedTensorDict
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-from tensordict.base import _ACCEPTED_CLASSES, _register_tensor_class, CompatibleType
+from tensordict.base import (
+    _ACCEPTED_CLASSES,
+    _register_tensor_class,
+    CompatibleType,
+    is_non_tensor,
+)
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
 from tensordict.utils import (
@@ -1261,10 +1266,11 @@ class NonTensorData:
     # to patch tensordict with additional checks that will encur unwanted overhead
     # and all the overhead falls back on this class.
     data: Any
+    _non_tensor: bool = True
 
     def __post_init__(self):
-        if isinstance(self.data, NonTensorData):
-            self.data = self.data.data
+        if is_non_tensor(self.data):
+            self.data = self.data.tolist()
 
         old_eq = self.__class__.__eq__
         if old_eq is _eq:
@@ -1487,6 +1493,8 @@ class NonTensorStack(LazyStackedTensorDict):
     To obtain the values stored in a ``NonTensorStack``, call :class:`~.tolist`.
 
     """
+
+    _non_tensor: bool = True
 
     def tolist(self):
         """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.

@@ -13,7 +13,12 @@ from typing import Any, Callable, Sequence, TypeVar
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
+from tensordict.base import (
+    _is_leaf_nontensor,
+    is_non_tensor,
+    NO_DEFAULT,
+    TensorDictBase,
+)
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
@@ -381,11 +386,9 @@ def _stack(
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
-    from tensordict.tensorclass import NonTensorData, NonTensorStack
+    if all(is_non_tensor(td) for td in list_of_tensordicts):
+        from tensordict.tensorclass import NonTensorData
 
-    if all(
-        isinstance(td, (NonTensorData, NonTensorStack)) for td in list_of_tensordicts
-    ):
         return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
 
     batch_size = list_of_tensordicts[0].batch_size

@@ -49,6 +49,8 @@ from tensordict._tensordict import (  # noqa: F401
     unravel_key_list,
     unravel_keys,
 )
+
+from tensordict.base import is_non_tensor
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import (
@@ -58,7 +60,6 @@ from torch.nn.parameter import (
     UninitializedTensorMixin,
 )
 from torch.utils.data._utils.worker import _generate_state
-
 
 if TYPE_CHECKING:
     from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
@@ -661,7 +662,7 @@ def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> 
         return tensor
     from tensordict.tensorclass import NonTensorData, NonTensorStack
 
-    if isinstance(tensor, (NonTensorData, NonTensorStack)):
+    if is_non_tensor(tensor):
         if (
             isinstance(value, NonTensorData)
             and isinstance(tensor, NonTensorData)
@@ -1521,9 +1522,7 @@ def _expand_to_match_shape(
 
 def _set_max_batch_size(source: T, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
-    from tensordict import NonTensorData
-
-    tensor_data = [val for val in source.values() if not isinstance(val, NonTensorData)]
+    tensor_data = [val for val in source.values() if not is_non_tensor(val)]
 
     for val in tensor_data:
         from tensordict.base import _is_tensor_collection

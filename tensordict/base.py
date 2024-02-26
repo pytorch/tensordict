@@ -242,14 +242,11 @@ class TensorDictBase(MutableMapping):
             idx_unravel = _unravel_key_to_tuple(index)
             if idx_unravel:
                 result = self._get_tuple(idx_unravel, NO_DEFAULT)
-                from .tensorclass import NonTensorData
-
-                if isinstance(result, NonTensorData):
-                    return result.data
-                from tensordict.tensorclass import NonTensorStack
-
-                if isinstance(result, NonTensorStack):
-                    return result.tolist()
+                if is_non_tensor(result):
+                    result_data = getattr(result, "data", NO_DEFAULT)
+                    if result_data is NO_DEFAULT:
+                        return result_data.tolist()
+                    return result_data
                 return result
 
         if (istuple and not index) or (not istuple and index is Ellipsis):
@@ -2321,20 +2318,15 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             return subtd._get_non_tensor(key[1:], default=default)
         value = self._get_str(key, default=default)
 
-        from .tensorclass import NonTensorData, NonTensorStack
-
-        if isinstance(value, NonTensorData):
-            return value.data
-        if isinstance(value, NonTensorStack):
+        if is_non_tensor(value):
             return value.tolist()
         return value
 
     def filter_non_tensor_data(self) -> T:
         """Filters out all non-tensor-data."""
-        from tensordict.tensorclass import NonTensorData
 
         def _filter(x):
-            if not isinstance(x, NonTensorData):
+            if not is_non_tensor(x):
                 if is_tensor_collection(x):
                     return x.filter_non_tensor_data()
                 return x
@@ -5388,9 +5380,7 @@ def is_tensor_collection(datatype: type | Any) -> bool:
 
 def is_non_tensor(data):
     """Checks if an item is a non-tensor."""
-    from tensordict.tensorclass import NonTensorData, NonTensorStack
-
-    return isinstance(data, (NonTensorData, NonTensorStack))
+    return type(data).__dict__.get("_non_tensor", False)
 
 
 def _default_is_leaf(cls: Type) -> bool:
@@ -5398,10 +5388,8 @@ def _default_is_leaf(cls: Type) -> bool:
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:
-    from tensordict.tensorclass import NonTensorData, NonTensorStack
-
     if issubclass(cls, KeyedJaggedTensor):
         return False
     if _is_tensor_collection(cls):
-        return issubclass(cls, (NonTensorData, NonTensorStack))
+        return cls.__dict__.get("_non_tensor", False)
     return issubclass(cls, torch.Tensor)

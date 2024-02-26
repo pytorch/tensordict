@@ -29,6 +29,7 @@ from tensordict.base import (
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
+    is_non_tensor,
     is_tensor_collection,
     NO_DEFAULT,
     T,
@@ -931,15 +932,15 @@ class LazyStackedTensorDict(TensorDictBase):
         if not items:
             raise RuntimeError("items cannot be empty")
 
-        from .tensorclass import NonTensorData
-
         if all(isinstance(item, torch.Tensor) for item in items):
             return torch.stack(items, dim=dim, out=out)
         if all(
             is_tensorclass(item) and type(item) == type(items[0])  # noqa: E721
             for item in items
         ):
-            if all(isinstance(tensordict, NonTensorData) for tensordict in items):
+            if all(is_non_tensor(tensordict) for tensordict in items):
+                from .tensorclass import NonTensorData
+
                 return NonTensorData._stack_non_tensor(items, dim=dim)
             lazy_stack = cls.lazy_stack(
                 [item._tensordict for item in items], dim=dim, out=out

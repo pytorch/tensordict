@@ -2456,11 +2456,8 @@ class _SubTensorDict(TensorDictBase):
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)
-        from tensordict.tensorclass import NonTensorData, NonTensorStack
 
-        if isinstance(out, _SubTensorDict) and isinstance(
-            out._source, (NonTensorData, NonTensorStack)
-        ):
+        if isinstance(out, _SubTensorDict) and is_non_tensor(out._source):
             return out._source
         return out
 
