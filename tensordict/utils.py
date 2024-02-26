@@ -50,7 +50,6 @@ from tensordict._tensordict import (  # noqa: F401
     unravel_keys,
 )
 
-from tensordict.base import is_non_tensor
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import (
@@ -2170,3 +2169,8 @@ class _add_batch_dim_pre_hook:
                 return
         else:
             raise RuntimeError("did not find pre-hook")
+
+
+def is_non_tensor(data):
+    """Checks if an item is a non-tensor."""
+    return type(data).__dict__.get("_non_tensor", False)

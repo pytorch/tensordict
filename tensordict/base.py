@@ -60,6 +60,7 @@ from tensordict.utils import (
     IndexType,
     infer_size_impl,
     int_generator,
+    is_non_tensor,
     KeyedJaggedTensor,
     lazy_legacy,
     lock_blocked,
@@ -5376,11 +5377,6 @@ def is_tensor_collection(datatype: type | Any) -> bool:
     if not isinstance(datatype, type):
         datatype = type(datatype)
     return _is_tensor_collection(datatype)
-
-
-def is_non_tensor(data):
-    """Checks if an item is a non-tensor."""
-    return type(data).__dict__.get("_non_tensor", False)
 
 
 def _default_is_leaf(cls: Type) -> bool:

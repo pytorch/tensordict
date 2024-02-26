@@ -28,12 +28,7 @@ from tensordict import LazyStackedTensorDict
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-from tensordict.base import (
-    _ACCEPTED_CLASSES,
-    _register_tensor_class,
-    CompatibleType,
-    is_non_tensor,
-)
+from tensordict.base import _ACCEPTED_CLASSES, _register_tensor_class, CompatibleType
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
 from tensordict.utils import (
@@ -42,6 +37,7 @@ from tensordict.utils import (
     _LOCK_ERROR,
     DeviceType,
     IndexType,
+    is_non_tensor,
     is_tensorclass,
     NestedKey,
 )

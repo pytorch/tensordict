@@ -13,17 +13,13 @@ from typing import Any, Callable, Sequence, TypeVar
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-from tensordict.base import (
-    _is_leaf_nontensor,
-    is_non_tensor,
-    NO_DEFAULT,
-    TensorDictBase,
-)
+from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
     DeviceType,
+    is_non_tensor,
     lazy_legacy,
     set_lazy_legacy,
 )
