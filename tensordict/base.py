@@ -2320,7 +2320,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         value = self._get_str(key, default=default)
 
         if is_non_tensor(value):
-            return value.tolist()
+            data = getattr(value, "data", None)
+            if data is None:
+                return value.tolist()
+            return data
         return value
 
     def filter_non_tensor_data(self) -> T:
