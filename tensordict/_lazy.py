@@ -135,6 +135,8 @@ class LazyStackedTensorDict(TensorDictBase):
             `td.ndimension()-1` along which the stack should be performed.
          hook_out (callable, optional): a callable to execute after :meth:`~.get`.
          hook_in (callable, optional): a callable to execute before :meth:`~.set`.
+         stack_dim_name (str, optional): the name of the stack dimension.
+            Defaults to ``None``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -185,6 +187,7 @@ class LazyStackedTensorDict(TensorDictBase):
         hook_out: callable | None = None,
         hook_in: callable | None = None,
         batch_size: Sequence[int] | None = None,  # TODO: remove
+        stack_dim_name: str | None = None,
     ) -> None:
         self._is_locked = None
 
@@ -229,6 +232,8 @@ class LazyStackedTensorDict(TensorDictBase):
         self.hook_in = hook_in
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
+        if stack_dim_name is not None:
+            self._td_dim_name = stack_dim_name
 
     # These attributes should never be set
     @property
@@ -855,7 +860,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 # then we consider this default as non-stackable and return prematurly
                 return default
         try:
-            out = self.lazy_stack(tensors, self.stack_dim)
+            out = self.lazy_stack(
+                tensors, self.stack_dim, stack_dim_name=self._td_dim_name
+            )
             if _is_tensor_collection(out.__class__):
                 if isinstance(out, LazyStackedTensorDict):
                     # then it's a LazyStackedTD
@@ -867,8 +874,6 @@ class LazyStackedTensorDict(TensorDictBase):
                         self._batch_size
                         + out.batch_size[(len(self._batch_size) + incr) :]
                     )
-                    if self._td_dim_name is not None:
-                        out._td_dim_name = self._td_dim_name
                 elif is_tensorclass(out):
                     # then it's a tensorclass
                     out._tensordict.hook_out = self.hook_out
@@ -879,8 +884,6 @@ class LazyStackedTensorDict(TensorDictBase):
                         self._batch_size
                         + out._tensordict.batch_size[(len(self._batch_size) + incr) :]
                     )
-                    if self._td_dim_name is not None:
-                        out._tensordict._td_dim_name = self._td_dim_name
                 else:
                     raise RuntimeError
             elif self.hook_out is not None:
@@ -925,8 +928,10 @@ class LazyStackedTensorDict(TensorDictBase):
         cls,
         items: Sequence[TensorDictBase],
         dim: int = 0,
+        *,
         device: DeviceType | None = None,
         out: T | None = None,
+        stack_dim_name: str | None = None,
     ) -> T:
         """Stacks tensordicts in a LazyStackedTensorDict."""
         if not items:
@@ -943,7 +948,10 @@ class LazyStackedTensorDict(TensorDictBase):
 
                 return NonTensorData._stack_non_tensor(items, dim=dim)
             lazy_stack = cls.lazy_stack(
-                [item._tensordict for item in items], dim=dim, out=out
+                [item._tensordict for item in items],
+                dim=dim,
+                out=out,
+                stack_dim_name=stack_dim_name,
             )
             # we take the first non_tensordict by convention
             return type(items[0])._from_tensordict(
@@ -968,7 +976,9 @@ class LazyStackedTensorDict(TensorDictBase):
             # The first case is handled within _check_keys which fails if keys
             # don't match exactly.
             # The second requires a check over the tensor shapes.
-            return LazyStackedTensorDict(*items, stack_dim=dim)
+            return LazyStackedTensorDict(
+                *items, stack_dim=dim, stack_dim_name=stack_dim_name
+            )
         else:
             batch_size = list(batch_size)
             batch_size.insert(dim, len(items))
@@ -1293,14 +1303,14 @@ class LazyStackedTensorDict(TensorDictBase):
             result = type(self)(
                 *[td._clone() for td in self.tensordicts],
                 stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
         else:
             result = type(self)(
                 *[td._clone(recurse=False) for td in self.tensordicts],
                 stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
-        if self._td_dim_name is not None:
-            result._td_dim_name = self._td_dim_name
         return result
 
     def pin_memory(self) -> T:
@@ -1451,13 +1461,12 @@ class LazyStackedTensorDict(TensorDictBase):
             out = type(self)(
                 *results,
                 stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
         else:
             out = self
         if names is not None:
             out.names = names
-        else:
-            out._td_dim_name = self._td_dim_name
         return out
 
     def _select(
@@ -1654,9 +1663,10 @@ class LazyStackedTensorDict(TensorDictBase):
                     else:
                         stack_elt, idx = item
                         stack.append(self.tensordicts[stack_elt][idx])
-                result = LazyStackedTensorDict.lazy_stack(stack, stack_dim)
                 # TODO: this produces multiple dims with the same name
-                result._td_dim_name = self._td_dim_name
+                result = LazyStackedTensorDict.lazy_stack(
+                    stack, stack_dim, stack_dim=self._td_dim_name
+                )
                 return result
 
             return recompose(converted_idx)
@@ -1680,8 +1690,9 @@ class LazyStackedTensorDict(TensorDictBase):
                         result.append(self.tensordicts[i])
                     else:
                         result.append(self.tensordicts[i][_idx])
-                result = LazyStackedTensorDict.lazy_stack(result, new_stack_dim)
-                result._td_dim_name = self._td_dim_name
+                result = LazyStackedTensorDict.lazy_stack(
+                    result, new_stack_dim, stack_dim_name=self._td_dim_name
+                )
                 return result
 
     def __eq__(self, other):
@@ -2427,8 +2438,8 @@ class LazyStackedTensorDict(TensorDictBase):
             result = type(self)(
                 *(td.transpose(dim0, dim1) for td in self.tensordicts),
                 stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
-        result._td_dim_name = self._td_dim_name
         return result
 
     def _permute(
@@ -2446,9 +2457,10 @@ class LazyStackedTensorDict(TensorDictBase):
             d if d < self.stack_dim else d - 1 for d in dims_list if d != self.stack_dim
         ]
         result = LazyStackedTensorDict.lazy_stack(
-            [td.permute(dims_list) for td in self.tensordicts], stack_dim
+            [td.permute(dims_list) for td in self.tensordicts],
+            stack_dim,
+            stack_dim_name=self._td_dim_name,
         )
-        result._td_dim_name = self._td_dim_name
         return result
 
     def _squeeze(self, dim=None):
@@ -2471,9 +2483,10 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 stack_dim = self.stack_dim - 1
             result = LazyStackedTensorDict.lazy_stack(
-                [td.squeeze(dim) for td in self.tensordicts], stack_dim
+                [td.squeeze(dim) for td in self.tensordicts],
+                stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
-            result._td_dim_name = result._td_dim_name
         else:
             result = self
             for dim in range(self.batch_dims - 1, -1, -1):
@@ -2496,9 +2509,10 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             stack_dim = self.stack_dim + 1
         result = LazyStackedTensorDict.lazy_stack(
-            [td.unsqueeze(dim) for td in self.tensordicts], stack_dim
+            [td.unsqueeze(dim) for td in self.tensordicts],
+            stack_dim,
+            stack_dim_name=self._td_dim_name,
         )
-        result._td_dim_name = result._td_dim_name
         return result
 
     lock_ = TensorDictBase.lock_
