@@ -13,10 +13,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
+
 from tensordict._td import is_tensor_collection, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.functional import make_tensordict
-
 from tensordict.nn.functional_modules import (
     _swap_state,
     extract_weights_and_buffers,
@@ -24,7 +24,6 @@ from tensordict.nn.functional_modules import (
     make_functional,
     repopulate_module,
 )
-
 from tensordict.nn.utils import (
     _auto_make_functional,
     _dispatch_td_nn_modules,
@@ -248,7 +247,6 @@ class dispatch:
 
         @functools.wraps(func)
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
-
             if not _dispatch_td_nn_modules():
                 return func(_self, *args, **kwargs)
 
@@ -830,7 +828,11 @@ class TensorDictModuleBase(nn.Module):
             False
         """
         if parameters is None:
-            self._reset_parameters(self)
+            any_reset = self._reset_parameters(self)
+            if not any_reset:
+                warnings.warn(
+                    "reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset"
+                )
             return
         elif parameters.ndim:
             raise RuntimeError(
@@ -868,13 +870,16 @@ class TensorDictModuleBase(nn.Module):
                 self._reset_parameters(self)
             return sanitized_parameters
 
-    def _reset_parameters(self, module: nn.Module) -> None:
+    def _reset_parameters(self, module: nn.Module) -> bool:
+        any_reset = False
         for child in module.children():
             if isinstance(child, nn.Module):
-                self._reset_parameters(child)
+                any_reset |= self._reset_parameters(child)
 
             if hasattr(child, "reset_parameters"):
                 child.reset_parameters()
+                any_reset |= True
+        return any_reset
 
 
 class TensorDictModule(TensorDictModuleBase):
