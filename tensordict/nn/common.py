@@ -878,7 +878,7 @@ class TensorDictModuleBase(nn.Module):
 
             if hasattr(child, "reset_parameters"):
                 child.reset_parameters()
-                any_reset += True
+                any_reset |= True
         return any_reset
 
 
