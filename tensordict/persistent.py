@@ -6,29 +6,26 @@
 """Persistent tensordicts (H5 and others)."""
 from __future__ import annotations
 
+import importlib
+
+import json
+import os
+
 import tempfile
 import warnings
 from pathlib import Path
 from typing import Any, Callable, Type
 
-from tensordict._td import _unravel_key_to_tuple
-from torch import multiprocessing as mp
-
-H5_ERR = None
-try:
-    import h5py
-
-    _has_h5 = True
-except ModuleNotFoundError as err:
-    H5_ERR = err
-    _has_h5 = False
-
-import json
-import os
-
 import numpy as np
 import torch
-from tensordict._td import _TensorDictKeysView, CompatibleType, NO_DEFAULT, TensorDict
+
+from tensordict._td import (
+    _TensorDictKeysView,
+    _unravel_key_to_tuple,
+    CompatibleType,
+    NO_DEFAULT,
+    TensorDict,
+)
 from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor

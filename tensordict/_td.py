@@ -724,22 +724,6 @@ class TensorDict(TensorDictBase):
                         validated=checked,
                     )
 
-        if filter_empty and not any_set:
-            return
-        elif filter_empty is None and not any_set and not self.is_empty():
-            # we raise the deprecation warning only if the tensordict wasn't already empty.
-            # After we introduce the new behaviour, we will have to consider what happens
-            # to empty tensordicts by default: will they disappear or stay?
-            warn(
-                "Your resulting tensordict has no leaves but you did not specify filter_empty=False. "
-                "Currently, this returns an empty tree (filter_empty=True), but from v0.5 it will return "
-                "a None unless filter_empty=False. "
-                "To silcence this warning, set filter_empty to the desired value in your call to `apply`.",
-                category=DeprecationWarning,
-            )
-        if result is None:
-            result = make_result()
-
         if not inplace and is_locked:
             out.lock_()
         return out

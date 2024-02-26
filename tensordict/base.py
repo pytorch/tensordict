@@ -50,6 +50,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     as_decorator,
+    Buffer,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -62,6 +63,7 @@ from tensordict.utils import (
     lock_blocked,
     NestedKey,
     prod,
+    set_lazy_legacy,
     TensorDictFuture,
     unravel_key,
     unravel_key_list,
@@ -2319,7 +2321,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     return x.filter_non_tensor_data()
                 return x
 
-        return self._apply_nest(_filter, call_on_nested=True, filter_empty=False)
+        return self._apply_nest(_filter, call_on_nested=True)
 
     def _convert_inplace(self, inplace, key):
         if inplace is not False:
@@ -3718,7 +3720,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             return
 
     # Apply and map functionality
-    def apply_(self, fn: Callable, *others) -> T:
+    def apply_(self, fn: Callable, *others, **kwargs) -> T:
         """Applies a callable to all values stored in the tensordict and re-writes them in-place.
 
         Args:

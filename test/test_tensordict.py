@@ -3220,7 +3220,7 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(ValueError, match="Failed to update"):
                 td.named_apply(named_plus, inplace=inplace)
             return
-        td_1 = td.named_apply(named_plus, inplace=inplace, filter_empty=True)
+        td_1 = td.named_apply(named_plus, inplace=inplace)
         if inplace:
             assert td_1 is td
             for key in td_1.keys(True, True):
@@ -3253,12 +3253,10 @@ class TestTensorDicts(TestTensorDictsBase):
         td.named_apply(
             functools.partial(count, keys=keys_complete),
             nested_keys=True,
-            filter_empty=True,
         )
         td.named_apply(
             functools.partial(count, keys=keys_not_complete),
             nested_keys=False,
-            filter_empty=True,
         )
         assert len(keys_complete) == len(list(td.keys(True, True)))
         assert len(keys_complete) > len(keys_not_complete)
