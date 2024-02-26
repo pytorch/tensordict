@@ -53,6 +53,7 @@ from tensordict.utils import (
     expand_right,
     IndexType,
     infer_size_impl,
+    is_non_tensor,
     is_tensorclass,
     KeyedJaggedTensor,
     lock_blocked,
@@ -134,6 +135,8 @@ class LazyStackedTensorDict(TensorDictBase):
             `td.ndimension()-1` along which the stack should be performed.
          hook_out (callable, optional): a callable to execute after :meth:`~.get`.
          hook_in (callable, optional): a callable to execute before :meth:`~.set`.
+         stack_dim_name (str, optional): the name of the stack dimension.
+            Defaults to ``None``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -184,6 +187,7 @@ class LazyStackedTensorDict(TensorDictBase):
         hook_out: callable | None = None,
         hook_in: callable | None = None,
         batch_size: Sequence[int] | None = None,  # TODO: remove
+        stack_dim_name: str | None = None,
     ) -> None:
         self._is_locked = None
 
@@ -200,6 +204,10 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         _batch_size = tensordicts[0].batch_size
         device = tensordicts[0].device
+        if stack_dim > len(_batch_size):
+            raise RuntimeError(
+                f"Stack dim {stack_dim} is too big for batch size {_batch_size}."
+            )
 
         for td in tensordicts[1:]:
             if not is_tensor_collection(td):
@@ -224,6 +232,8 @@ class LazyStackedTensorDict(TensorDictBase):
         self.hook_in = hook_in
         if batch_size is not None and batch_size != self.batch_size:
             raise RuntimeError("batch_size does not match self.batch_size.")
+        if stack_dim_name is not None:
+            self._td_dim_name = stack_dim_name
 
     # These attributes should never be set
     @property
@@ -487,9 +497,10 @@ class LazyStackedTensorDict(TensorDictBase):
         isinteger = False
         is_nd_tensor = False
         cursor = 0  # the dimension cursor
-        selected_td_idx = range(len(self.tensordicts))
+        selected_td_idx = torch.arange(len(self.tensordicts))
         has_bool = False
         num_squash = 0
+        encountered_tensor = False
         for i, idx in enumerate(index):  # noqa: B007
             cursor_incr = 1
             if idx is None:
@@ -509,10 +520,8 @@ class LazyStackedTensorDict(TensorDictBase):
                     if not isinstance(selected_td_idx, range):
                         isinteger = True
                         selected_td_idx = [selected_td_idx]
-                elif isinstance(idx, (list, range)):
-                    selected_td_idx = idx
-                elif isinstance(idx, (torch.Tensor, np.ndarray)):
-                    if idx.dtype in (np.dtype("bool"), torch.bool):
+                elif isinstance(idx, torch.Tensor):
+                    if idx.dtype == torch.bool:
                         # we mark that we need to dispatch the indices across stack idx
                         has_bool = True
                         # split mask along dim
@@ -522,11 +531,14 @@ class LazyStackedTensorDict(TensorDictBase):
                         split_dim = self.stack_dim - num_single
                         mask_loc = i
                     else:
-                        if isinstance(idx, np.ndarray):
-                            idx = torch.tensor(idx)
                         is_nd_tensor = True
-                        selected_td_idx = range(len(idx))
-                        out.append(idx.unbind(0))
+                        if not encountered_tensor:
+                            # num_single -= idx.ndim - 1
+                            encountered_tensor = True
+                        else:
+                            num_single += 1
+                        selected_td_idx = idx
+                        # out.append(idx.unbind(0))
                 else:
                     raise TypeError(f"Invalid index type: {type(idx)}.")
             else:
@@ -537,13 +549,11 @@ class LazyStackedTensorDict(TensorDictBase):
                     (
                         ftdim.Dim,
                         slice,
-                        list,
-                        range,
                     ),
                 ):
                     out.append(idx)
-                elif isinstance(idx, (np.ndarray, torch.Tensor)):
-                    if idx.dtype in (np.dtype("bool"), torch.bool):
+                elif isinstance(idx, torch.Tensor):
+                    if idx.dtype == torch.bool:
                         cursor_incr = idx.ndim
                         if cursor < self.stack_dim:
                             num_squash += cursor_incr - 1
@@ -568,7 +578,11 @@ class LazyStackedTensorDict(TensorDictBase):
                         # smth[torch.tensor(1)].ndim = smth.ndim-1
                         # smth[torch.tensor([1])].ndim = smth.ndim
                         # smth[torch.tensor([[1]])].ndim = smth.ndim+1
-                        num_single -= idx.ndim - 1
+                        if not encountered_tensor:
+                            num_single -= idx.ndim - 1
+                            encountered_tensor = True
+                        else:
+                            num_single += 1
                     out.append(idx)
                 else:
                     raise TypeError(f"Invalid index type: {type(idx)}.")
@@ -593,20 +607,45 @@ class LazyStackedTensorDict(TensorDictBase):
         elif is_nd_tensor:
 
             def isindexable(idx):
-                if isinstance(idx, (torch.Tensor, np.ndarray)):
-                    if idx.dtype in (torch.bool, np.dtype("bool")):
+                if isinstance(idx, torch.Tensor):
+                    if idx.dtype == torch.bool:
                         return False
                     return True
                 if isinstance(idx, (tuple, list, range)):
                     return True
                 return False
 
-            out = tuple(
-                tuple(idx if not isindexable(idx) else idx[i] for idx in out)
-                for i in selected_td_idx
-            )
+            def outer_list(tensor_index, tuple_index):
+                """Converts a tensor and a tuple to a nested list where each leaf is a (int, index) tuple where the index only points to one element."""
+                if isinstance(tensor_index, torch.Tensor):
+                    list_index = tensor_index.tolist()
+                else:
+                    list_index = tensor_index
+                list_result = []
+
+                def index_tuple_index(i, convert=False):
+                    for idx in tuple_index:
+                        if isindexable(idx):
+                            if convert:
+                                yield int(idx[i])
+                            else:
+                                yield idx[i]
+                        else:
+                            yield idx
+
+                for i, idx in enumerate(list_index):
+                    if isinstance(idx, int):
+                        list_result.append(
+                            (idx, tuple(index_tuple_index(i, convert=True)))
+                        )
+                    elif isinstance(idx, list):
+                        list_result.append(outer_list(idx, tuple(index_tuple_index(i))))
+                    else:
+                        raise NotImplementedError
+                return list_result
+
             return {
-                "index_dict": dict(enumerate(out)),
+                "index_dict": outer_list(selected_td_idx, out),
                 "num_single": num_single,
                 "isinteger": isinteger,
                 "has_bool": has_bool,
@@ -646,8 +685,19 @@ class LazyStackedTensorDict(TensorDictBase):
         if is_nd_tensor:
             unbind_dim = self.stack_dim - num_single + num_none - num_squash
             value_unbind = value.unbind(unbind_dim)
-            for idx, _value in zip(converted_idx.values(), value_unbind):
-                self._set_at_str(key, _value, idx, validated=validated)
+
+            def set_at_str(converted_idx):
+                for i, item in enumerate(converted_idx):
+                    if isinstance(item, list):
+                        set_at_str(item)
+                    else:
+                        _value = value_unbind[i]
+                        stack_idx, idx = item
+                        self.tensordicts[stack_idx]._set_at_str(
+                            key, _value, idx, validated=validated
+                        )
+
+            set_at_str(converted_idx)
             return self
         elif not has_bool:
             unbind_dim = self.stack_dim - num_single + num_none - num_squash
@@ -718,7 +768,7 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             dim = dim - 1
             stack_dim = self.stack_dim
-        return LazyStackedTensorDict(
+        return type(self)(
             *(tensordict.unsqueeze(dim) for tensordict in self.tensordicts),
             stack_dim=stack_dim,
         )
@@ -756,7 +806,7 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             dim = dim - 1
             stack_dim = self.stack_dim
-        return LazyStackedTensorDict(
+        return type(self)(
             *(tensordict.squeeze(dim) for tensordict in self.tensordicts),
             stack_dim=stack_dim,
         )
@@ -810,7 +860,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 # then we consider this default as non-stackable and return prematurly
                 return default
         try:
-            out = self.lazy_stack(tensors, self.stack_dim)
+            out = self.lazy_stack(
+                tensors, self.stack_dim, stack_dim_name=self._td_dim_name
+            )
             if _is_tensor_collection(out.__class__):
                 if isinstance(out, LazyStackedTensorDict):
                     # then it's a LazyStackedTD
@@ -822,8 +874,6 @@ class LazyStackedTensorDict(TensorDictBase):
                         self._batch_size
                         + out.batch_size[(len(self._batch_size) + incr) :]
                     )
-                    if self._td_dim_name is not None:
-                        out._td_dim_name = self._td_dim_name
                 elif is_tensorclass(out):
                     # then it's a tensorclass
                     out._tensordict.hook_out = self.hook_out
@@ -834,8 +884,6 @@ class LazyStackedTensorDict(TensorDictBase):
                         self._batch_size
                         + out._tensordict.batch_size[(len(self._batch_size) + incr) :]
                     )
-                    if self._td_dim_name is not None:
-                        out._tensordict._td_dim_name = self._td_dim_name
                 else:
                     raise RuntimeError
             elif self.hook_out is not None:
@@ -880,14 +928,14 @@ class LazyStackedTensorDict(TensorDictBase):
         cls,
         items: Sequence[TensorDictBase],
         dim: int = 0,
+        *,
         device: DeviceType | None = None,
         out: T | None = None,
+        stack_dim_name: str | None = None,
     ) -> T:
         """Stacks tensordicts in a LazyStackedTensorDict."""
         if not items:
             raise RuntimeError("items cannot be empty")
-
-        from .tensorclass import NonTensorData
 
         if all(isinstance(item, torch.Tensor) for item in items):
             return torch.stack(items, dim=dim, out=out)
@@ -895,10 +943,15 @@ class LazyStackedTensorDict(TensorDictBase):
             is_tensorclass(item) and type(item) == type(items[0])  # noqa: E721
             for item in items
         ):
-            if all(isinstance(tensordict, NonTensorData) for tensordict in items):
+            if all(is_non_tensor(tensordict) for tensordict in items):
+                from .tensorclass import NonTensorData
+
                 return NonTensorData._stack_non_tensor(items, dim=dim)
             lazy_stack = cls.lazy_stack(
-                [item._tensordict for item in items], dim=dim, out=out
+                [item._tensordict for item in items],
+                dim=dim,
+                out=out,
+                stack_dim_name=stack_dim_name,
             )
             # we take the first non_tensordict by convention
             return type(items[0])._from_tensordict(
@@ -923,7 +976,9 @@ class LazyStackedTensorDict(TensorDictBase):
             # The first case is handled within _check_keys which fails if keys
             # don't match exactly.
             # The second requires a check over the tensor shapes.
-            return LazyStackedTensorDict(*items, stack_dim=dim)
+            return LazyStackedTensorDict(
+                *items, stack_dim=dim, stack_dim_name=stack_dim_name
+            )
         else:
             batch_size = list(batch_size)
             batch_size.insert(dim, len(items))
@@ -1236,7 +1291,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return out
 
     def empty(self, recurse=False) -> T:
-        return LazyStackedTensorDict(
+        return type(self)(
             *[td.empty(recurse=recurse) for td in self.tensordicts],
             stack_dim=self.stack_dim,
         )
@@ -1245,17 +1300,17 @@ class LazyStackedTensorDict(TensorDictBase):
         if recurse:
             # This could be optimized using copy but we must be careful with
             # metadata (_is_shared etc)
-            result = LazyStackedTensorDict(
+            result = type(self)(
                 *[td._clone() for td in self.tensordicts],
                 stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
         else:
-            result = LazyStackedTensorDict(
+            result = type(self)(
                 *[td._clone(recurse=False) for td in self.tensordicts],
                 stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
-        if self._td_dim_name is not None:
-            result._td_dim_name = self._td_dim_name
         return result
 
     def pin_memory(self) -> T:
@@ -1274,7 +1329,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
 
-        return LazyStackedTensorDict(
+        return type(self)(
             *[td.to(*args, **kwargs) for td in self.tensordicts],
             stack_dim=self.stack_dim,
             hook_out=self.hook_out,
@@ -1403,16 +1458,15 @@ class LazyStackedTensorDict(TensorDictBase):
         if filter_empty and all(r is None for r in results):
             return
         if not inplace:
-            out = LazyStackedTensorDict(
+            out = type(self)(
                 *results,
                 stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
         else:
             out = self
         if names is not None:
             out.names = names
-        else:
-            out._td_dim_name = self._td_dim_name
         return out
 
     def _select(
@@ -1429,7 +1483,7 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         if inplace:
             return self
-        result = LazyStackedTensorDict(*tensordicts, stack_dim=self.stack_dim)
+        result = type(self)(*tensordicts, stack_dim=self.stack_dim)
         return result
 
     def _exclude(
@@ -1442,7 +1496,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if inplace:
             self.tensordicts = tensordicts
             return self
-        result = LazyStackedTensorDict(*tensordicts, stack_dim=self.stack_dim)
+        result = type(self)(*tensordicts, stack_dim=self.stack_dim)
         return result
 
     def __setitem__(self, index: IndexType, value: T) -> T:
@@ -1460,10 +1514,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
                 return
 
-            if any(isinstance(sub_index, (list, range)) for sub_index in index):
+            if any(
+                isinstance(sub_index, (list, range, np.ndarray)) for sub_index in index
+            ):
                 index = tuple(
-                    torch.tensor(sub_index, device=self.device)
-                    if isinstance(sub_index, (list, range))
+                    torch.as_tensor(sub_index, device=self.device)
+                    if isinstance(sub_index, (list, range, np.ndarray))
                     else sub_index
                     for sub_index in index
                 )
@@ -1471,9 +1527,9 @@ class LazyStackedTensorDict(TensorDictBase):
         if index is Ellipsis or (isinstance(index, tuple) and Ellipsis in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         elif isinstance(index, (list, range)):
-            index = torch.tensor(index, device=self.device)
+            index = torch.as_tensor(index, device=self.device)
 
-        if isinstance(value, (TensorDictBase, dict)):
+        if is_tensor_collection(value) or isinstance(value, dict):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
                 value = TensorDict(
@@ -1500,13 +1556,26 @@ class LazyStackedTensorDict(TensorDictBase):
             if isinteger:
                 # this will break if the index along the stack dim is [0] or :1 or smth
                 for i, _idx in converted_idx.items():
-                    self.tensordicts[i][_idx] = value
+                    if _idx == ():
+                        self.tensordicts[i].update(value, inplace=True)
+                    else:
+                        self.tensordicts[i][_idx] = value
                 return self
             if is_nd_tensor:
-                raise RuntimeError(
-                    "Indexing along stack dim with a non-boolean tensor is not supported yet. "
-                    "Use SubTensorDict instead."
-                )
+                unbind_dim = self.stack_dim - num_single + num_none - num_squash
+
+                # converted_idx is a nested list with (int, index) items
+                def assign(converted_idx, value=value):
+                    value = value.unbind(unbind_dim)
+                    for i, item in enumerate(converted_idx):
+                        if isinstance(item, list):
+                            assign(item)
+                        else:
+                            stack_item, idx = item
+                            self.tensordicts[stack_item][idx] = value[i]
+
+                assign(converted_idx)
+                return self
             if not has_bool:
                 unbind_dim = self.stack_dim - num_single + num_none - num_squash
                 value_unbind = value.unbind(unbind_dim)
@@ -1514,7 +1583,10 @@ class LazyStackedTensorDict(TensorDictBase):
                     converted_idx.items(),
                     value_unbind,
                 ):
-                    self.tensordicts[i][_idx] = _value
+                    if _idx == ():
+                        self.tensordicts[i].update(_value, inplace=True)
+                    else:
+                        self.tensordicts[i][_idx] = _value
             else:
                 # we must split, not unbind
                 mask_unbind = split_index["individual_masks"]
@@ -1582,11 +1654,22 @@ class LazyStackedTensorDict(TensorDictBase):
                 return torch.cat(result, cat_dim)
         elif is_nd_tensor:
             new_stack_dim = self.stack_dim - num_single + num_none
-            out = LazyStackedTensorDict.lazy_stack(
-                [self[idx] for idx in converted_idx.values()], new_stack_dim
-            )
-            out._td_dim_name = self._td_dim_name
-            return out
+
+            def recompose(converted_idx, stack_dim=new_stack_dim):
+                stack = []
+                for item in converted_idx:
+                    if isinstance(item, list):
+                        stack.append(recompose(item, stack_dim=stack_dim))
+                    else:
+                        stack_elt, idx = item
+                        stack.append(self.tensordicts[stack_elt][idx])
+                # TODO: this produces multiple dims with the same name
+                result = LazyStackedTensorDict.lazy_stack(
+                    stack, stack_dim, stack_dim_name=self._td_dim_name
+                )
+                return result
+
+            return recompose(converted_idx)
         else:
             if isinteger:
                 for (
@@ -1603,9 +1686,13 @@ class LazyStackedTensorDict(TensorDictBase):
                 result = []
                 new_stack_dim = self.stack_dim - num_single + num_none - num_squash
                 for i, _idx in converted_idx.items():
-                    result.append(self.tensordicts[i][_idx])
-                result = LazyStackedTensorDict.lazy_stack(result, new_stack_dim)
-                result._td_dim_name = self._td_dim_name
+                    if _idx == ():
+                        result.append(self.tensordicts[i])
+                    else:
+                        result.append(self.tensordicts[i][_idx])
+                result = LazyStackedTensorDict.lazy_stack(
+                    result, new_stack_dim, stack_dim_name=self._td_dim_name
+                )
                 return result
 
     def __eq__(self, other):
@@ -2329,9 +2416,9 @@ class LazyStackedTensorDict(TensorDictBase):
             # example: shape = [5, 4, 3, 2, 1], stack_dim=1, dim0=1, dim1=4
             # resulting shape: [5, 1, 3, 2, 4]
             if dim1 == dim0 + 1:
-                result = LazyStackedTensorDict(*self.tensordicts, stack_dim=dim1)
+                result = type(self)(*self.tensordicts, stack_dim=dim1)
             else:
-                result = LazyStackedTensorDict(
+                result = type(self)(
                     *(td.transpose(dim0, dim1 - 1) for td in self.tensordicts),
                     stack_dim=dim1,
                 )
@@ -2339,20 +2426,20 @@ class LazyStackedTensorDict(TensorDictBase):
             # example: shape = [5, 4, 3, 2, 1], stack_dim=3, dim0=1, dim1=3
             # resulting shape: [5, 2, 3, 4, 1]
             if dim0 + 1 == dim1:
-                result = LazyStackedTensorDict(*self.tensordicts, stack_dim=dim0)
+                result = type(self)(*self.tensordicts, stack_dim=dim0)
             else:
-                result = LazyStackedTensorDict(
+                result = type(self)(
                     *(td.transpose(dim0 + 1, dim1) for td in self.tensordicts),
                     stack_dim=dim0,
                 )
         else:
             dim0 = dim0 if dim0 < self.stack_dim else dim0 - 1
             dim1 = dim1 if dim1 < self.stack_dim else dim1 - 1
-            result = LazyStackedTensorDict(
+            result = type(self)(
                 *(td.transpose(dim0, dim1) for td in self.tensordicts),
                 stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
-        result._td_dim_name = self._td_dim_name
         return result
 
     def _permute(
@@ -2370,9 +2457,10 @@ class LazyStackedTensorDict(TensorDictBase):
             d if d < self.stack_dim else d - 1 for d in dims_list if d != self.stack_dim
         ]
         result = LazyStackedTensorDict.lazy_stack(
-            [td.permute(dims_list) for td in self.tensordicts], stack_dim
+            [td.permute(dims_list) for td in self.tensordicts],
+            stack_dim,
+            stack_dim_name=self._td_dim_name,
         )
-        result._td_dim_name = self._td_dim_name
         return result
 
     def _squeeze(self, dim=None):
@@ -2395,9 +2483,10 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 stack_dim = self.stack_dim - 1
             result = LazyStackedTensorDict.lazy_stack(
-                [td.squeeze(dim) for td in self.tensordicts], stack_dim
+                [td.squeeze(dim) for td in self.tensordicts],
+                stack_dim,
+                stack_dim_name=self._td_dim_name,
             )
-            result._td_dim_name = result._td_dim_name
         else:
             result = self
             for dim in range(self.batch_dims - 1, -1, -1):
@@ -2420,9 +2509,10 @@ class LazyStackedTensorDict(TensorDictBase):
         else:
             stack_dim = self.stack_dim + 1
         result = LazyStackedTensorDict.lazy_stack(
-            [td.unsqueeze(dim) for td in self.tensordicts], stack_dim
+            [td.unsqueeze(dim) for td in self.tensordicts],
+            stack_dim,
+            stack_dim_name=self._td_dim_name,
         )
-        result._td_dim_name = result._td_dim_name
         return result
 
     lock_ = TensorDictBase.lock_

@@ -49,6 +49,7 @@ from tensordict._tensordict import (  # noqa: F401
     unravel_key_list,
     unravel_keys,
 )
+
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
 from torch.nn.parameter import (
@@ -58,7 +59,6 @@ from torch.nn.parameter import (
     UninitializedTensorMixin,
 )
 from torch.utils.data._utils.worker import _generate_state
-
 
 if TYPE_CHECKING:
     from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
@@ -658,6 +658,21 @@ def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> 
         return tensor
     elif isinstance(tensor, KeyedJaggedTensor):
         tensor = setitem_keyedjaggedtensor(tensor, index, value)
+        return tensor
+    from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+    if is_non_tensor(tensor):
+        if (
+            isinstance(value, NonTensorData)
+            and isinstance(tensor, NonTensorData)
+            and tensor.data == value.data
+        ):
+            return tensor
+        elif isinstance(tensor, NonTensorData):
+            tensor = NonTensorStack.from_nontensordata(tensor)
+        if tensor.stack_dim != 0:
+            tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
+        tensor[index] = value
         return tensor
     else:
         tensor[index] = value
@@ -1506,9 +1521,7 @@ def _expand_to_match_shape(
 
 def _set_max_batch_size(source: T, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
-    from tensordict import NonTensorData
-
-    tensor_data = [val for val in source.values() if not isinstance(val, NonTensorData)]
+    tensor_data = [val for val in source.values() if not is_non_tensor(val)]
 
     for val in tensor_data:
         from tensordict.base import _is_tensor_collection
@@ -1587,7 +1600,7 @@ def _renamed_inplace_method(fn):
 def _broadcast_tensors(index):
     # tensors and range need to be broadcast
     tensors = {
-        i: tensor if isinstance(tensor, Tensor) else torch.tensor(tensor)
+        i: torch.as_tensor(tensor)
         for i, tensor in enumerate(index)
         if isinstance(tensor, (range, list, np.ndarray, Tensor))
     }
@@ -1987,3 +2000,8 @@ class _add_batch_dim_pre_hook:
                 return
         else:
             raise RuntimeError("did not find pre-hook")
+
+
+def is_non_tensor(data):
+    """Checks if an item is a non-tensor."""
+    return type(data).__dict__.get("_non_tensor", False)

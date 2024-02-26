@@ -58,6 +58,7 @@ from tensordict.utils import (
     IndexType,
     infer_size_impl,
     int_generator,
+    is_non_tensor,
     KeyedJaggedTensor,
     lazy_legacy,
     lock_blocked,
@@ -240,10 +241,11 @@ class TensorDictBase(MutableMapping):
             idx_unravel = _unravel_key_to_tuple(index)
             if idx_unravel:
                 result = self._get_tuple(idx_unravel, NO_DEFAULT)
-                from .tensorclass import NonTensorData
-
-                if isinstance(result, NonTensorData):
-                    return result.data
+                if is_non_tensor(result):
+                    result_data = getattr(result, "data", NO_DEFAULT)
+                    if result_data is NO_DEFAULT:
+                        return result.tolist()
+                    return result_data
                 return result
 
         if (istuple and not index) or (not istuple and index is Ellipsis):
@@ -1652,6 +1654,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             return self.to(torch.device("cuda"))
         return self.to(f"cuda:{device}")
 
+    @property
+    def is_cuda(self):
+        return self.device is not None and self.device.type == "cuda"
+
+    @property
+    def is_cpu(self):
+        return self.device is not None and self.device.type == "cpu"
+
     # Serialization functionality
     def state_dict(
         self,
@@ -2305,18 +2315,19 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 return subtd
             return subtd._get_non_tensor(key[1:], default=default)
         value = self._get_str(key, default=default)
-        from tensordict.tensorclass import NonTensorData
 
-        if isinstance(value, NonTensorData):
-            return value.data
+        if is_non_tensor(value):
+            data = getattr(value, "data", None)
+            if data is None:
+                return value.tolist()
+            return data
         return value
 
     def filter_non_tensor_data(self) -> T:
         """Filters out all non-tensor-data."""
-        from tensordict.tensorclass import NonTensorData
 
         def _filter(x):
-            if not isinstance(x, NonTensorData):
+            if not is_non_tensor(x):
                 if is_tensor_collection(x):
                     return x.filter_non_tensor_data()
                 return x
@@ -5306,10 +5317,8 @@ def _default_is_leaf(cls: Type) -> bool:
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:
-    from tensordict.tensorclass import NonTensorData
-
     if issubclass(cls, KeyedJaggedTensor):
         return False
     if _is_tensor_collection(cls):
-        return issubclass(cls, NonTensorData)
+        return cls.__dict__.get("_non_tensor", False)
     return issubclass(cls, torch.Tensor)
