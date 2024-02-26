@@ -12,9 +12,12 @@ import weakref
 
 import pytest
 import torch
+from tensordict._tensordict import unravel_key_list
+from torch import distributions as d, nn
+from torch.distributions import Normal
+from torch.utils._pytree import tree_map
 
 from tensordict import tensorclass, TensorDict
-from tensordict._tensordict import unravel_key_list
 from tensordict.nn import (
     dispatch,
     probabilistic as nn_probabilistic,
@@ -42,9 +45,6 @@ from tensordict.nn.utils import (
     set_skip_existing,
     skip_existing,
 )
-from torch import distributions as d, nn
-from torch.distributions import Normal
-from torch.utils._pytree import tree_map
 
 try:
     import functorch  # noqa
@@ -164,6 +164,16 @@ class TestTDModule:
 
         seq.reset_parameters_recursive()
         assert torch.all(old_param != net[0][0].weight.data)
+
+    def test_reset_warning(self):
+        torch.manual_seed(0)
+        net = nn.ModuleList([nn.Tanh(), nn.ReLU()])
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        with pytest.warns(
+            UserWarning,
+            match="reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset",
+        ):
+            module.reset_parameters_recursive()
 
     @pytest.mark.parametrize(
         "net",
@@ -2666,7 +2676,6 @@ def test_module_buffer():
     ],
 )
 def test_nested_keys_probabilistic_delta(log_prob_key):
-
     policy_module = TensorDictModule(
         nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
     )
@@ -2711,7 +2720,6 @@ def test_nested_keys_probabilistic_delta(log_prob_key):
     ],
 )
 def test_nested_keys_probabilistic_normal(log_prob_key):
-
     loc_module = TensorDictModule(
         nn.Linear(1, 1),
         in_keys=[("data", "states")],
