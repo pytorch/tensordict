@@ -831,7 +831,7 @@ class TensorDictModuleBase(nn.Module):
             any_reset = self._reset_parameters(self)
             if not any_reset:
                 warnings.warn(
-                    "reset_parameters_recursive was called without parameters and did not find any parameters to reset"
+                    "reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset"
                 )
             return
         elif parameters.ndim:
