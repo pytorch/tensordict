@@ -49,9 +49,15 @@ from tensordict._tensordict import (  # noqa: F401
     unravel_key_list,
     unravel_keys,
 )
+
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
-from torch.nn.parameter import _ParameterMeta
+from torch.nn.parameter import (
+    _ParameterMeta,
+    UninitializedBuffer,
+    UninitializedParameter,
+    UninitializedTensorMixin,
+)
 from torch.utils.data._utils.worker import _generate_state
 
 if TYPE_CHECKING:
@@ -299,7 +305,10 @@ def expand_as_right(
             f" tensor.ndimension()={tensor.ndimension()} and "
             f"dest.ndimension()={dest.ndimension()}"
         )
-    if not (tensor.shape == dest.shape[: tensor.ndimension()]):
+    if any(
+        tensor.shape[i] != dest.shape[i] and tensor.shape[i] != 1
+        for i in range(tensor.ndimension())
+    ):
         raise RuntimeError(
             f"tensor shape is incompatible with dest shape, "
             f"got: tensor.shape={tensor.shape}, dest={dest.shape}"
@@ -559,7 +568,9 @@ def _ndimension(tensor: Tensor) -> int:
 
 
 def _shape(tensor: Tensor) -> torch.Size:
-    if not isinstance(tensor, Tensor):
+    if isinstance(tensor, UninitializedTensorMixin):
+        return torch.Size([*getattr(tensor, "batch_size", ()), -1])
+    elif not isinstance(tensor, Tensor):
         if type(tensor) is KeyedJaggedTensor:
             return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
         return tensor.shape
@@ -647,6 +658,21 @@ def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> 
         return tensor
     elif isinstance(tensor, KeyedJaggedTensor):
         tensor = setitem_keyedjaggedtensor(tensor, index, value)
+        return tensor
+    from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+    if is_non_tensor(tensor):
+        if (
+            isinstance(value, NonTensorData)
+            and isinstance(tensor, NonTensorData)
+            and tensor.data == value.data
+        ):
+            return tensor
+        elif isinstance(tensor, NonTensorData):
+            tensor = NonTensorStack.from_nontensordata(tensor)
+        if tensor.stack_dim != 0:
+            tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
+        tensor[index] = value
         return tensor
     else:
         tensor[index] = value
@@ -1424,12 +1450,17 @@ def _td_fields(td: T, keys=None) -> str:
             if isinstance(tensor, TensorDictBase):
                 substr = _td_fields(tensor)
             else:
+                is_shared = (
+                    tensor.is_shared()
+                    if not isinstance(tensor, UninitializedTensorMixin)
+                    else None
+                )
                 substr = _get_repr_custom(
                     tensor.__class__,
                     shape=shape,
                     device=tensor.device,
                     dtype=tensor.dtype,
-                    is_shared=tensor.is_shared(),
+                    is_shared=is_shared,
                 )
             strs.append(f"{key}: {substr}")
 
@@ -1490,9 +1521,7 @@ def _expand_to_match_shape(
 
 def _set_max_batch_size(source: T, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
-    from tensordict import NonTensorData
-
-    tensor_data = [val for val in source.values() if not isinstance(val, NonTensorData)]
+    tensor_data = [val for val in source.values() if not is_non_tensor(val)]
 
     for val in tensor_data:
         from tensordict.base import _is_tensor_collection
@@ -1571,7 +1600,7 @@ def _renamed_inplace_method(fn):
 def _broadcast_tensors(index):
     # tensors and range need to be broadcast
     tensors = {
-        i: tensor if isinstance(tensor, Tensor) else torch.tensor(tensor)
+        i: torch.as_tensor(tensor)
         for i, tensor in enumerate(index)
         if isinstance(tensor, (range, list, np.ndarray, Tensor))
     }
@@ -1743,7 +1772,7 @@ def _getitem_batch_size(batch_size, index):
 
 
 # Lazy classes control (legacy feature)
-_DEFAULT_LAZY_OP = True
+_DEFAULT_LAZY_OP = False
 _LAZY_OP = os.environ.get("LAZY_LEGACY_OP", None)
 
 
@@ -2101,3 +2130,47 @@ class _CloudpickleWrapper(object):
 
     def __call__(self, *args, **kwargs):
         return self.fn(*args, **kwargs)
+
+
+class _BatchedUninitializedParameter(UninitializedParameter):
+    batch_size: torch.Size
+    in_dim: int | None = None
+    vmap_level: int | None = None
+
+    def materialize(self, shape, device=None, dtype=None):
+        UninitializedParameter.materialize(
+            self, (*self.batch_size, *shape), device=device, dtype=dtype
+        )
+
+
+class _BatchedUninitializedBuffer(UninitializedBuffer):
+    batch_size: torch.Size
+    in_dim: int | None = None
+    vmap_level: int | None = None
+
+    def materialize(self, shape, device=None, dtype=None):
+        UninitializedBuffer.materialize(
+            self, (*self.batch_size, *shape), device=device, dtype=dtype
+        )
+
+
+class _add_batch_dim_pre_hook:
+    def __call__(self, mod: torch.nn.Module, args, kwargs):
+        for name, param in list(mod.named_parameters(recurse=False)):
+            if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
+                from torch._C._functorch import _add_batch_dim
+
+                param = _add_batch_dim(param, param.in_dim, param.vmap_level)
+                delattr(mod, name)
+                setattr(mod, name, param)
+        for key, val in list(mod._forward_pre_hooks.items()):
+            if val is self:
+                del mod._forward_pre_hooks[key]
+                return
+        else:
+            raise RuntimeError("did not find pre-hook")
+
+
+def is_non_tensor(data):
+    """Checks if an item is a non-tensor."""
+    return type(data).__dict__.get("_non_tensor", False)

@@ -16,7 +16,7 @@ from tensordict.functional import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.memmap_deprec import is_memmap, MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
-from tensordict.tensorclass import NonTensorData, tensorclass
+from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
 from tensordict.utils import (
     assert_allclose_td,
     is_batchedtensor,
@@ -43,6 +43,7 @@ __all__ = [
     "TensorDict",
     "TensorDictBase",
     "merge_tensordicts",
+    "NonTensorStack",
     "set_transfer_ownership",
     "pad_sequence",
     "is_memmap",

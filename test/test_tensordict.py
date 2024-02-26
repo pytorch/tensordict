@@ -50,6 +50,7 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import multiprocessing as mp, nn
+from torch.nn.parameter import UninitializedTensorMixin
 
 try:
     import torchsnapshot
@@ -714,6 +715,90 @@ class TestGeneric:
         sd = net.state_dict()
         assert_allclose_td(params_sd.flatten_keys("."), TensorDict(sd, []))
 
+    @pytest.mark.parametrize("as_module", [False, True])
+    @pytest.mark.parametrize("lazy_stack", [False, True])
+    def test_from_modules(self, as_module, lazy_stack):
+        empty_module = nn.Linear(3, 4, device="meta")
+        modules = [nn.Linear(3, 4) for _ in range(3)]
+        if as_module and lazy_stack:
+            with pytest.raises(RuntimeError, match="within a TensorDictParams"):
+                params = TensorDict.from_modules(
+                    *modules, as_module=as_module, lazy_stack=lazy_stack
+                )
+            return
+
+        params = TensorDict.from_modules(
+            *modules, as_module=as_module, lazy_stack=lazy_stack
+        )
+
+        def exec_module(params, x):
+            with params.to_module(empty_module):
+                return empty_module(x)
+
+        x = torch.zeros(3)
+        y = torch.vmap(exec_module, (0, None))(params, x)
+        y.sum().backward()
+        if lazy_stack:
+            leaves = []
+
+            def get_leaf(leaf):
+                leaves.append(leaf)
+
+            params.apply(get_leaf)
+            assert all(param.grad is not None for param in leaves)
+            assert all(param.grad is None for param in params.values(True, True))
+        else:
+            for p in modules[0].parameters():
+                assert p.grad is None
+            assert all(param.grad is not None for param in params.values(True, True))
+
+    @pytest.mark.parametrize("as_module", [False, True])
+    @pytest.mark.parametrize("lazy_stack", [False, True])
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_from_modules_lazy(self, as_module, lazy_stack, device):
+        empty_module = nn.LazyLinear(4, device="meta")
+        modules = [nn.LazyLinear(4, device=device) for _ in range(3)]
+        if lazy_stack:
+            with pytest.raises(
+                RuntimeError,
+                match="lasy_stack=True is not compatible with lazy modules.",
+            ):
+                params = TensorDict.from_modules(
+                    *modules, as_module=as_module, lazy_stack=lazy_stack
+                )
+            return
+
+        params = TensorDict.from_modules(
+            *modules, as_module=as_module, lazy_stack=lazy_stack
+        )
+        optim = torch.optim.Adam(list(params.values(True, True)))
+
+        def exec_module(params, x):
+            with params.to_module(empty_module):
+                return empty_module(x)
+
+        x = torch.zeros(3, device=device)
+        assert isinstance(params["weight"], UninitializedTensorMixin)
+        y = torch.vmap(exec_module, (0, None), randomness="same")(params, x)
+        assert params["weight"].shape == torch.Size((3, 4, 3))
+
+        y.sum().backward()
+        optim.step()
+
+        if lazy_stack:
+            leaves = []
+
+            def get_leaf(leaf):
+                leaves.append(leaf)
+
+            params.apply(get_leaf)
+            assert all(param.grad is not None for param in leaves)
+            assert all(param.grad is None for param in params.values(True, True))
+        else:
+            for p in modules[0].parameters():
+                assert p.grad is None
+            assert all(param.grad is not None for param in params.values(True, True))
+
     @pytest.mark.parametrize(
         "idx",
         [
@@ -911,33 +996,103 @@ class TestGeneric:
         assert torch.equal(padded_td["a"], expected_a)
         padded_td._check_batch_size()
 
-    @pytest.mark.parametrize("batch_first", [True, False])
     @pytest.mark.parametrize("make_mask", [True, False])
-    def test_pad_sequence(self, batch_first, make_mask):
+    def test_pad_sequence_pad_dim0(self, make_mask):
+        pad_dim = 0
         list_td = [
-            TensorDict({"a": torch.ones((2,)), ("b", "c"): torch.ones((2, 3))}, [2]),
-            TensorDict({"a": torch.ones((4,)), ("b", "c"): torch.ones((4, 3))}, [4]),
+            TensorDict(
+                {"a": torch.ones((2, 8, 8)), ("b", "c"): torch.ones((2, 3))}, [2]
+            ),
+            TensorDict(
+                {"a": torch.full((4, 8, 8), 2), ("b", "c"): torch.full((4, 3), 2)},
+                [4],
+            ),
         ]
-        padded_td = pad_sequence(
-            list_td, batch_first=batch_first, return_mask=make_mask
-        )
-        if batch_first:
-            assert padded_td.shape == torch.Size([2, 4])
-            assert padded_td["a"].shape == torch.Size([2, 4])
-            assert padded_td["a"][0, -1] == 0
-            assert padded_td["b", "c"].shape == torch.Size([2, 4, 3])
-            assert padded_td["b", "c"][0, -1, 0] == 0
-        else:
-            assert padded_td.shape == torch.Size([4, 2])
-            assert padded_td["a"].shape == torch.Size([4, 2])
-            assert padded_td["a"][-1, 0] == 0
-            assert padded_td["b", "c"].shape == torch.Size([4, 2, 3])
-            assert padded_td["b", "c"][-1, 0, 0] == 0
+        padded_td = pad_sequence(list_td, pad_dim=pad_dim, return_mask=make_mask)
+        assert padded_td.shape == torch.Size(
+            [2, 4]
+        )  # check the shape of the padded tensordict
+        assert torch.all(
+            padded_td["a"][0, :2, :, :] == 1
+        )  # check the values of the first tensor
+        assert torch.all(
+            padded_td["a"][1, :, :, :] == 2
+        )  # check the values of the second tensor
+        assert padded_td["a"].shape == torch.Size(
+            [2, 4, 8, 8]
+        )  # check the shape of the padded tensor
+        assert torch.all(padded_td["a"][0, 2:, :, :] == 0)  # check the padding
+        assert padded_td["b", "c"].shape == torch.Size(
+            [2, 4, 3]
+        )  # check the shape of the padded tensor
+        assert torch.all(padded_td["b", "c"][0, 2:, :] == 0)  # check the padding
         if make_mask:
-            assert "mask" in padded_td.keys()
-            assert not padded_td["mask"].all()
+            padded_td_without_masks = pad_sequence(
+                list_td, pad_dim=pad_dim, return_mask=False
+            )
+            assert "masks" in padded_td.keys()
+            assert set(
+                padded_td_without_masks.keys(include_nested=True, leaves_only=True)
+            ) == set(padded_td["masks"].keys(include_nested=True, leaves_only=True))
+            assert not padded_td["masks", "a"].all()
+            assert padded_td["masks", "a"].ndim == pad_dim + 2
+            assert (padded_td["a"][padded_td["masks", "a"]] != 0).all()
+            assert (padded_td["a"][~padded_td["masks", "a"]] == 0).all()
+            assert not padded_td["masks", "b", "c"].all()
+            assert padded_td["masks", "b", "c"].ndim == pad_dim + 2
+            assert (padded_td["b", "c"][padded_td["masks", "b", "c"]] != 0).all()
+            assert (padded_td["b", "c"][~padded_td["masks", "b", "c"]] == 0).all()
         else:
-            assert "mask" not in padded_td.keys()
+            assert "masks" not in padded_td.keys()
+
+    @pytest.mark.parametrize("make_mask", [True, False])
+    def test_pad_sequence_pad_dim1(self, make_mask):
+        pad_dim = 1
+        list_td = [
+            TensorDict(
+                {"a": torch.ones((6, 3, 8)), ("b", "c"): torch.ones((6, 3))}, [6]
+            ),
+            TensorDict(
+                {"a": torch.full((6, 5, 8), 2), ("b", "c"): torch.full((6, 7), 2)},
+                [6],
+            ),
+        ]
+        padded_td = pad_sequence(list_td, pad_dim=pad_dim, return_mask=make_mask)
+        assert padded_td.shape == torch.Size(
+            [2, 6]
+        )  # check the shape of the padded tensordict
+        assert padded_td["a"].shape == torch.Size(
+            [2, 6, 5, 8]
+        )  # check the shape of the padded tensor
+        assert torch.all(
+            padded_td["a"][0, :, :3, :] == 1
+        )  # check the values of the first tensor
+        assert torch.all(padded_td["a"][0, :, 3:, :] == 0)  # check the padding
+        assert torch.all(
+            padded_td["a"][1, :, :, :] == 2
+        )  # check the values of the second tensor
+        assert padded_td["b", "c"].shape == torch.Size(
+            [2, 6, 7]
+        )  # check the shape of the padded tensor
+        assert torch.all(padded_td["b", "c"][0, :, 3:] == 0)  # check the padding
+        if make_mask:
+            padded_td_without_masks = pad_sequence(
+                list_td, pad_dim=pad_dim, return_mask=False
+            )
+            assert "masks" in padded_td.keys()
+            assert set(
+                padded_td_without_masks.keys(include_nested=True, leaves_only=True)
+            ) == set(padded_td["masks"].keys(include_nested=True, leaves_only=True))
+            assert not padded_td["masks", "a"].all()
+            assert padded_td["masks", "a"].ndim == pad_dim + 2
+            assert (padded_td["a"][padded_td["masks", "a"]] != 0).all()
+            assert (padded_td["a"][~padded_td["masks", "a"]] == 0).all()
+            assert not padded_td["masks", "b", "c"].all()
+            assert padded_td["masks", "b", "c"].ndim == pad_dim + 2
+            assert (padded_td["b", "c"][padded_td["masks", "b", "c"]] != 0).all()
+            assert (padded_td["b", "c"][~padded_td["masks", "b", "c"]] == 0).all()
+        else:
+            assert "masks" not in padded_td.keys()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_permute(self, device):
@@ -2619,6 +2774,7 @@ class TestTensorDicts(TestTensorDictsBase):
             index = index.numpy()
         td_idx = td[:, index]
         assert tensor_example[:, index].shape == td_idx.shape
+        # TODO: this multiple dims with identical names should not be allowed
         assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
         td_idx = td[0, index]
         assert tensor_example[0, index].shape == td_idx.shape
@@ -5947,8 +6103,16 @@ class TestLazyStackedTensorDict:
         index = (pos1, pos2, pos3)
         result = outer[index]
         ref_tensor = torch.zeros(outer.shape)
-        assert result.batch_size == ref_tensor[index].shape, index
-        assert result.batch_size == outer_dense[index].shape, index
+        assert result.batch_size == ref_tensor[index].shape, (
+            result.batch_size,
+            ref_tensor[index].shape,
+            index,
+        )
+        assert result.batch_size == outer_dense[index].shape, (
+            result.batch_size,
+            outer_dense[index].shape,
+            index,
+        )
 
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize("mask_dim", [0, 1, 2])
@@ -7633,6 +7797,29 @@ class TestMap:
         input.map(self.selectfn, num_workers=2, chunksize=chunksize, out=out)
         assert (out["a"] == torch.arange(10)).all(), (chunksize, mmap)
 
+    @classmethod
+    def nontensor_check(cls, td):
+        td["check"] = td["non_tensor"] == (
+            "a string!" if (td["tensor"] % 2) == 0 else "another string!"
+        )
+        return td
+
+    def test_non_tensor(self):
+        # with NonTensorStack
+        td = TensorDict(
+            {"tensor": torch.arange(10), "non_tensor": "a string!"}, batch_size=[10]
+        )
+        td[1::2] = TensorDict({"non_tensor": "another string!"}, [5])
+        td = td.map(self.nontensor_check, chunksize=0)
+        assert td["check"].all()
+        # with NonTensorData
+        td = TensorDict(
+            {"tensor": torch.zeros(10, dtype=torch.int), "non_tensor": "a string!"},
+            batch_size=[10],
+        )
+        td = td.map(self.nontensor_check, chunksize=0)
+        assert td["check"].all()
+
 
 # class TestNonTensorData:
 class TestNonTensorData:
@@ -7699,6 +7886,43 @@ class TestNonTensorData:
             torch.stack([non_tensor_data, non_tensor_copy], 0).get(("nested", "int")),
             LazyStackedTensorDict,
         )
+
+    def test_assign_non_tensor(self):
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        assert data["b"] == "a string!"
+        assert data.get("b").tolist() == [["a string!"] * 10]
+        data[0, 1] = TensorDict({"a": 0, "b": "another string!"}, [])
+        assert data.get("b").tolist() == [
+            ["a string!"] + ["another string!"] + ["a string!"] * 8
+        ]
+
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        data[0, 5:] = TensorDict({"a": torch.zeros(5), "b": "another string!"}, [5])
+        assert data.get("b").tolist() == [["a string!"] * 5 + ["another string!"] * 5]
+
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        data[0, 0::2] = TensorDict(
+            {"a": torch.zeros(5, dtype=torch.long), "b": "another string!"}, [5]
+        )
+        assert data.get("b").tolist() == [["another string!", "a string!"] * 5]
+
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        data[0] = TensorDict(
+            {"a": torch.zeros(10, dtype=torch.long), "b": "another string!"}, [10]
+        )
+        assert data.get("b").tolist() == [["another string!"] * 10]
 
 
 if __name__ == "__main__":

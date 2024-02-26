@@ -52,6 +52,7 @@ from tensordict.utils import (
     _td_fields,
     _unravel_key_to_tuple,
     as_decorator,
+    Buffer,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -59,16 +60,19 @@ from tensordict.utils import (
     IndexType,
     infer_size_impl,
     int_generator,
+    is_non_tensor,
     KeyedJaggedTensor,
     lazy_legacy,
     lock_blocked,
     NestedKey,
     prod,
+    set_lazy_legacy,
     TensorDictFuture,
     unravel_key,
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
+from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
@@ -239,10 +243,11 @@ class TensorDictBase(MutableMapping):
             idx_unravel = _unravel_key_to_tuple(index)
             if idx_unravel:
                 result = self._get_tuple(idx_unravel, NO_DEFAULT)
-                from .tensorclass import NonTensorData
-
-                if isinstance(result, NonTensorData):
-                    return result.data
+                if is_non_tensor(result):
+                    result_data = getattr(result, "data", NO_DEFAULT)
+                    if result_data is NO_DEFAULT:
+                        return result.tolist()
+                    return result_data
                 return result
 
         if (istuple and not index) or (not istuple and index is Ellipsis):
@@ -376,6 +381,7 @@ class TensorDictBase(MutableMapping):
         """Copies the params and buffers of a module in a tensordict.
 
         Args:
+            module (nn.Module): the module to get the parameters from.
             as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
                 instance will be returned which can be used to store parameters
                 within a :class:`torch.nn.Module`. Defaults to ``False``.
@@ -385,7 +391,7 @@ class TensorDictBase(MutableMapping):
                 module will be used and unflattened into a TensorDict with
                 the tree structure of the model. Defaults to ``False``.
                 .. note::
-                  This is particularily useful when state-dict hooks have to be
+                  This is particularly useful when state-dict hooks have to be
                   used.
 
         Examples:
@@ -404,6 +410,146 @@ class TensorDictBase(MutableMapping):
                 is_shared=False)
         """
         ...
+
+    @classmethod
+    def from_modules(
+        cls,
+        *modules,
+        as_module: bool = False,
+        lock: bool = True,
+        use_state_dict: bool = False,
+        lazy_stack: bool = False,
+    ):
+        """Retrieves the parameters of several modules for ensebmle learning/feature of expects applications through vmap.
+
+        Args:
+            modules (sequence of nn.Module): the modules to get the parameters from.
+                If the modules differ in their structure, a lazy stack is needed
+                (see the ``lazy_stack`` argument below).
+
+        Keyword Args:
+            as_module (bool, optional): if ``True``, a :class:`~tensordict.nn.TensorDictParams`
+                instance will be returned which can be used to store parameters
+                within a :class:`torch.nn.Module`. Defaults to ``False``.
+            lock (bool, optional): if ``True``, the resulting tensordict will be locked.
+                Defaults to ``True``.
+            use_state_dict (bool, optional): if ``True``, the state-dict from the
+                module will be used and unflattened into a TensorDict with
+                the tree structure of the model. Defaults to ``False``.
+                .. note::
+                  This is particularly useful when state-dict hooks have to be
+                  used.
+            lazy_stack (bool, optional): whether parameters should be densly or
+                lazily stacked. Defaults to ``False`` (dense stack).
+
+                .. note:: ``lazy_stack`` and ``as_module`` are exclusive features.
+
+                .. warning::
+                    There is a crucial difference between lazy and non-lazy outputs
+                    in that non-lazy output will reinstantiate parameters with the
+                    desired batch-size, while ``lazy_stack`` will just represent
+                    the parameters as lazily stacked. This means that whilst the
+                    original parameters can safely be passed to an optimizer
+                    when ``lazy_stack=True``, the new parameters need to be passed
+                    when it is set to ``True``.
+
+                .. warning::
+                    Whilst it can be tempting to use a lazy stack to keep the
+                    orignal parameter references, remember that lazy stack
+                    perform a stack each time :meth:`~.get` is called. This will
+                    require memory (N times the size of the parameters, more if a
+                    graph is built) and time to be computed.
+                    It also means that the optimizer(s) will contain more
+                    parameters, and operations like :meth:`~torch.optim.Optimizer.step`
+                    or :meth:`~torch.optim.Optimizer.zero_grad` will take longer
+                    to be executed. In general, ``lazy_stack`` should be reserved
+                    to very few use cases.
+
+        Examples:
+            >>> from torch import nn
+            >>> from tensordict import TensorDict
+            >>> torch.manual_seed(0)
+            >>> empty_module = nn.Linear(3, 4, device="meta")
+            >>> n_models = 2
+            >>> modules = [nn.Linear(3, 4) for _ in range(n_models)]
+            >>> params = TensorDict.from_modules(*modules)
+            >>> print(params)
+            TensorDict(
+                fields={
+                    bias: Parameter(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    weight: Parameter(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False)
+            >>> # example of batch execution
+            >>> def exec_module(params, x):
+            ...     with params.to_module(empty_module):
+            ...         return empty_module(x)
+            >>> x = torch.randn(3)
+            >>> y = torch.vmap(exec_module, (0, None))(params, x)
+            >>> assert y.shape == (n_models, 4)
+            >>> # since lazy_stack = False, backprop leaves the original params untouched
+            >>> y.sum().backward()
+            >>> assert params["weight"].grad.norm() > 0
+            >>> assert modules[0].weight.grad is None
+
+        With ``lazy_stack=True``, things are slightly different:
+
+            >>> params = TensorDict.from_modules(*modules, lazy_stack=True)
+            >>> print(params)
+            LazyStackedTensorDict(
+                fields={
+                    bias: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    weight: Tensor(shape=torch.Size([2, 4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                exclusive_fields={
+                },
+                batch_size=torch.Size([2]),
+                device=None,
+                is_shared=False,
+                stack_dim=0)
+            >>> # example of batch execution
+            >>> y = torch.vmap(exec_module, (0, None))(params, x)
+            >>> assert y.shape == (n_models, 4)
+            >>> y.sum().backward()
+            >>> assert modules[0].weight.grad is not None
+
+
+        """
+        param_list = [
+            cls.from_module(module, use_state_dict=use_state_dict) for module in modules
+        ]
+        if lazy_stack:
+            from tensordict._lazy import LazyStackedTensorDict
+
+            for param in param_list:
+                if any(
+                    isinstance(tensor, UninitializedTensorMixin)
+                    for tensor in param.values(True, True)
+                ):
+                    raise RuntimeError(
+                        "lasy_stack=True is not compatible with lazy modules."
+                    )
+            params = LazyStackedTensorDict.lazy_stack(param_list)
+        else:
+            with set_lazy_legacy(False), torch.no_grad():
+                params = torch.stack(param_list)
+
+            # Make sure params are params, buffers are buffers
+            def make_param(param, orig_param):
+                if isinstance(param, UninitializedTensorMixin):
+                    return param
+                if isinstance(orig_param, nn.Parameter):
+                    return nn.Parameter(param.detach(), orig_param.requires_grad)
+                return Buffer(param)
+
+            params = params._fast_apply(make_param, param_list[0])
+        if as_module:
+            from tensordict.nn import TensorDictParams
+
+            params = TensorDictParams(params, no_convert=True)
+        if lock:
+            params.lock_()
+        return params
 
     @as_decorator()
     def to_module(
@@ -706,7 +852,7 @@ class TensorDictBase(MutableMapping):
 version of the unsqueezed tensordict. Up until v0.3 included, a lazy unsqueezed tensordict was returned.
 From v0.4 onward, a dense unsqueeze will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
@@ -795,7 +941,7 @@ To temporarily unsqueeze a tensordict you can still user unsqueeze() as a contex
 version of the squeezed tensordict. Up until v0.3 included, a lazy squeezed tensordict was returned.
 From v0.4 onward, a dense squeeze will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
@@ -1007,7 +1153,7 @@ To temporarily squeeze a tensordict you can still user squeeze() as a context ma
 version of the viewed tensordict. Up until v0.3 included, a lazy view of the tensordict was returned.
 From v0.4 onward, a proper view will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
@@ -1076,7 +1222,7 @@ To temporarily view a tensordict you can still user view() as a context manager 
 version of the transposed tensordict. Up until v0.3 included, a lazy transpose of the tensordict was returned.
 From v0.4 onward, a proper transpose will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
@@ -1191,7 +1337,7 @@ To temporarily transpose a tensordict you can still user transpose() as a contex
 version of the permuted tensordict. Up until v0.3 included, a lazy permute of the tensordict was returned.
 From v0.4 onward, a proper permute will be returned.
 To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended) or 'True' depending on
+- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
   the behaviour you want to use. Another way to achieve this is to call
   `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
 - set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
@@ -1510,6 +1656,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         if device is None:
             return self.to(torch.device("cuda"))
         return self.to(f"cuda:{device}")
+
+    @property
+    def is_cuda(self):
+        return self.device is not None and self.device.type == "cuda"
+
+    @property
+    def is_cpu(self):
+        return self.device is not None and self.device.type == "cpu"
 
     # Serialization functionality
     def state_dict(
@@ -2162,18 +2316,19 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 return subtd
             return subtd._get_non_tensor(key[1:], default=default)
         value = self._get_str(key, default=default)
-        from tensordict.tensorclass import NonTensorData
 
-        if isinstance(value, NonTensorData):
-            return value.data
+        if is_non_tensor(value):
+            data = getattr(value, "data", None)
+            if data is None:
+                return value.tolist()
+            return data
         return value
 
     def filter_non_tensor_data(self) -> T:
         """Filters out all non-tensor-data."""
-        from tensordict.tensorclass import NonTensorData
 
         def _filter(x):
-            if not isinstance(x, NonTensorData):
+            if not is_non_tensor(x):
                 if is_tensor_collection(x):
                     return x.filter_non_tensor_data()
                 return x
@@ -5230,10 +5385,8 @@ def _default_is_leaf(cls: Type) -> bool:
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:
-    from tensordict.tensorclass import NonTensorData
-
     if issubclass(cls, KeyedJaggedTensor):
         return False
     if _is_tensor_collection(cls):
-        return issubclass(cls, NonTensorData)
+        return cls.__dict__.get("_non_tensor", False)
     return issubclass(cls, torch.Tensor)

@@ -1785,6 +1785,22 @@ class TestNesting:
         assert isinstance(td.get("c")[0], self.TensorClass)
 
 
+def test_decorator():
+    @tensorclass
+    class MyClass:
+        X: torch.Tensor
+        y: Any
+
+    obj = MyClass(X=torch.zeros(2), y="a string!", batch_size=[])
+    assert not obj.is_locked
+    with obj.lock_():
+        assert obj.is_locked
+        with obj.unlock_():
+            assert not obj.is_locked
+        assert obj.is_locked
+    assert not obj.is_locked
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

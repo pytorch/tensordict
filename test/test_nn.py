@@ -8,6 +8,7 @@ import copy
 import pickle
 import unittest
 import warnings
+import weakref
 
 import pytest
 import torch
@@ -414,6 +415,7 @@ class TestTDModule:
         tensordict_module = TensorDictModule(
             module=net, in_keys=["in"], out_keys=["out"]
         )
+        make_functional(tensordict_module, return_params=False)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tensordict_module(td, params=TensorDict({"module": params}, []))
@@ -579,6 +581,7 @@ class TestTDModule:
         tdmodule = TensorDictModule(module=net, in_keys=["in"], out_keys=["out"])
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
+        make_functional(tdmodule, return_params=False)
         tdmodule(td, params=TensorDict({"module": params}, []))
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
@@ -2972,7 +2975,8 @@ class TestTensorDictParams:
         td_clone = td.clone()
         assert td_clone["c"] is td_clone["a", "b", "c"]
 
-    def test_func_on_tdparams(self):
+    @pytest.mark.parametrize("with_batch", [False, True])
+    def test_func_on_tdparams(self, with_batch):
         # tdparams isn't represented in a nested way, so we must check that calling to_module on it works ok
         net = nn.Sequential(
             nn.Linear(2, 2),
@@ -2987,9 +2991,13 @@ class TestTensorDictParams:
             ),
         )
 
-        params = TensorDict.from_module(net, as_module=True)
+        if with_batch:
+            params = TensorDict.from_modules(net, net, as_module=True)
+            params0 = params[0].expand(3).clone().apply(lambda x: x.data * 0)
+        else:
+            params = TensorDict.from_module(net, as_module=True)
+            params0 = params.apply(lambda x: x.data * 0)
 
-        params0 = params.apply(lambda x: x.data * 0)
         assert (params0 == 0).all()
         with params0.to_module(params):
             assert (params == 0).all()
@@ -3002,11 +3010,51 @@ class TestTensorDictParams:
         m = MyModule()
         m.params = params
         params_m = TensorDict.from_module(m, as_module=True)
-        params_m0 = params_m.apply(lambda x: x.data * 0)
+        if with_batch:
+            params_m0 = params_m.clone()
+            params_m0["params"] = params_m0["params"][0].expand(3).clone()
+        else:
+            params_m0 = params_m
+        params_m0 = params_m0.apply(lambda x: x.data * 0)
         assert (params_m0 == 0).all()
         with params_m0.to_module(m):
             assert (params_m == 0).all()
         assert not (params_m == 0).all()
+
+    def test_load_state_dict(self):
+        net = nn.Sequential(
+            nn.Linear(2, 2),
+            nn.Sequential(
+                nn.Linear(2, 2),
+                nn.Dropout(),
+                nn.BatchNorm1d(2),
+                nn.Sequential(
+                    nn.Tanh(),
+                    nn.Linear(2, 2),
+                ),
+            ),
+        )
+
+        params = TensorDict.from_module(net, as_module=True)
+        assert any(isinstance(p, nn.Parameter) for p in params.values(True, True))
+        weakrefs = {weakref.ref(t) for t in params.values(True, True)}
+
+        # Now with a module around it
+        class MyModule(nn.Module):
+            pass
+
+        module = MyModule()
+        module.model = MyModule()
+        module.model.params = params
+        sd = module.state_dict()
+        sd = {
+            key: val * 0 if isinstance(val, torch.Tensor) else val
+            for key, val in sd.items()
+        }
+        module.load_state_dict(sd)
+        assert (params == 0).all()
+        assert any(isinstance(p, nn.Parameter) for p in params.values(True, True))
+        assert weakrefs == {weakref.ref(t) for t in params.values(True, True)}
 
     def test_inplace_ops(self):
         td = TensorDict(

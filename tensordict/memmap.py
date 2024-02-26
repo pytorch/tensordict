@@ -22,19 +22,7 @@ import torch
 
 from tensordict.utils import implement_for
 
-from torch import distributed as dist
-
 from torch.multiprocessing.reductions import ForkingPickler
-
-try:
-    if dist.is_available():
-        from torch.distributed._tensor.api import DTensor
-    else:
-        raise ImportError
-except ImportError:
-
-    class DTensor(torch.Tensor):  # noqa: D101
-        ...
 
 
 class MemoryMappedTensor(torch.Tensor):
@@ -204,7 +192,7 @@ class MemoryMappedTensor(torch.Tensor):
         out.index = None
         out.parent_shape = input.shape
         if copy_data:
-            if isinstance(input, DTensor):
+            if hasattr(input, "full_tensor"):
                 input = input.full_tensor()
             out.copy_(input)
         return out
