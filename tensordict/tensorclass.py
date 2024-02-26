@@ -221,6 +221,7 @@ def tensorclass(cls: T) -> T:
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
+    cls.names = property(_names, _names_setter)
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
@@ -502,10 +503,12 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
 
         """
         __dict__ = self.__dict__
-        if "_tensordict" not in __dict__ or "_non_tensordict" not in __dict__:
+        if (
+            "_tensordict" not in __dict__
+            or "_non_tensordict" not in __dict__
+            or key in SET_ATTRIBUTES
+        ):
             return setattr_(self, key, value)
-        if key in SET_ATTRIBUTES:
-            return setattr(self._tensordict, key, value)
 
         out = self.set(key, value)
         if out is not self:
@@ -842,6 +845,26 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:  # noqa: D417
 
     """
     self._tensordict._batch_size_setter(new_size)
+
+
+def _names(self) -> torch.Size:
+    """Retrieves the dim names for the tensor class.
+
+    Returns:
+        names (list of str)
+
+    """
+    return self._tensordict.names
+
+
+def _names_setter(self, names: str) -> None:  # noqa: D417
+    """Set the value of ``tensorclass.names``.
+
+    Args:
+        names (sequence of str)
+
+    """
+    self._tensordict.names = names
 
 
 def _state_dict(
