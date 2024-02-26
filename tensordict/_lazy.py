@@ -1665,7 +1665,7 @@ class LazyStackedTensorDict(TensorDictBase):
                         stack.append(self.tensordicts[stack_elt][idx])
                 # TODO: this produces multiple dims with the same name
                 result = LazyStackedTensorDict.lazy_stack(
-                    stack, stack_dim, stack_dim=self._td_dim_name
+                    stack, stack_dim, stack_dim_name=self._td_dim_name
                 )
                 return result
 
