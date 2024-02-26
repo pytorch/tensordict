@@ -246,7 +246,7 @@ class TensorDictBase(MutableMapping):
                 if is_non_tensor(result):
                     result_data = getattr(result, "data", NO_DEFAULT)
                     if result_data is NO_DEFAULT:
-                        return result_data.tolist()
+                        return result.tolist()
                     return result_data
                 return result
 

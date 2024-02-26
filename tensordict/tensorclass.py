@@ -1266,7 +1266,10 @@ class NonTensorData:
 
     def __post_init__(self):
         if is_non_tensor(self.data):
-            self.data = self.data.tolist()
+            data = getattr(self.data, "data", None)
+            if data is None:
+                data = self.data.tolist()
+            self.data = data
 
         old_eq = self.__class__.__eq__
         if old_eq is _eq:
