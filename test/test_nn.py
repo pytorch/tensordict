@@ -42,7 +42,7 @@ from tensordict.nn.utils import (
     set_skip_existing,
     skip_existing,
 )
-from torch import distributions as d, nn
+from torch import distributions, nn
 from torch.distributions import Normal
 from torch.utils._pytree import tree_map
 
@@ -164,6 +164,16 @@ class TestTDModule:
 
         seq.reset_parameters_recursive()
         assert torch.all(old_param != net[0][0].weight.data)
+
+    def test_reset_warning(self):
+        torch.manual_seed(0)
+        net = nn.ModuleList([nn.Tanh(), nn.ReLU()])
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        with pytest.warns(
+            UserWarning,
+            match="reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset",
+        ):
+            module.reset_parameters_recursive()
 
     @pytest.mark.parametrize(
         "net",
@@ -335,7 +345,7 @@ class TestTDModule:
         net = TensorDictModule(module=net, in_keys=in_keys, out_keys=out_keys)
 
         kwargs = {
-            "distribution_class": torch.distributions.Uniform,
+            "distribution_class": distributions.Uniform,
             "distribution_kwargs": {"high": max_dist},
         }
         if out_keys == ["low"]:
@@ -2666,7 +2676,6 @@ def test_module_buffer():
     ],
 )
 def test_nested_keys_probabilistic_delta(log_prob_key):
-
     policy_module = TensorDictModule(
         nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
     )
@@ -2711,7 +2720,6 @@ def test_nested_keys_probabilistic_delta(log_prob_key):
     ],
 )
 def test_nested_keys_probabilistic_normal(log_prob_key):
-
     loc_module = TensorDictModule(
         nn.Linear(1, 1),
         in_keys=[("data", "states")],
@@ -3083,7 +3091,10 @@ class TestCompositeDist:
         )
         dist = CompositeDistribution(
             params,
-            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
         )
         assert dist.batch_shape == params.shape
         assert len(dist.dists) == 2
@@ -3100,7 +3111,10 @@ class TestCompositeDist:
         )
         dist = CompositeDistribution(
             params,
-            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
         )
         sample = dist.sample()
         assert sample.shape == params.shape
@@ -3121,8 +3135,8 @@ class TestCompositeDist:
         dist = CompositeDistribution(
             params,
             distribution_map={
-                "cont": d.Normal,
-                ("nested", "disc"): d.RelaxedOneHotCategorical,
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
         )
@@ -3147,8 +3161,8 @@ class TestCompositeDist:
         dist = CompositeDistribution(
             params,
             distribution_map={
-                "cont": d.Normal,
-                ("nested", "disc"): d.RelaxedOneHotCategorical,
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
         )
@@ -3172,7 +3186,11 @@ class TestCompositeDist:
             [3],
         )
         dist = CompositeDistribution(
-            params, distribution_map={"cont": d.Normal, ("nested", "cont"): d.Normal}
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "cont"): distributions.Normal,
+            },
         )
         sample = dist.rsample((4,))
         sample = dist.cdf(sample)
@@ -3194,7 +3212,11 @@ class TestCompositeDist:
             [3],
         )
         dist = CompositeDistribution(
-            params, distribution_map={"cont": d.Normal, ("nested", "cont"): d.Normal}
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "cont"): distributions.Normal,
+            },
         )
         sample = dist.rsample((4,))
         sample = dist.cdf(sample)
@@ -3225,7 +3247,10 @@ class TestCompositeDist:
         )
         in_keys = ["params"]
         out_keys = ["cont", ("nested", "cont")]
-        distribution_map = {"cont": d.Normal, ("nested", "cont"): d.Normal}
+        distribution_map = {
+            "cont": distributions.Normal,
+            ("nested", "cont"): distributions.Normal,
+        }
         module = ProbabilisticTensorDictModule(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -3275,7 +3300,10 @@ class TestCompositeDist:
         )
         in_keys = ["params"]
         out_keys = ["cont", ("nested", "cont")]
-        distribution_map = {"cont": d.Normal, ("nested", "cont"): d.Normal}
+        distribution_map = {
+            "cont": distributions.Normal,
+            ("nested", "cont"): distributions.Normal,
+        }
         backbone = TensorDictModule(lambda: None, in_keys=[], out_keys=[])
         module = ProbabilisticTensorDictSequential(
             backbone,
