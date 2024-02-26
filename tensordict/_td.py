@@ -71,6 +71,7 @@ from tensordict.utils import (
     DeviceType,
     expand_as_right,
     IndexType,
+    is_non_tensor,
     is_tensorclass,
     KeyedJaggedTensor,
     lock_blocked,
@@ -308,9 +309,8 @@ class TensorDict(TensorDictBase):
             if _is_tensor_collection(type(item)):
                 if not item.is_empty():
                     return False
-                from tensordict.tensorclass import NonTensorData
 
-                if isinstance(item, NonTensorData):
+                if is_non_tensor(item):
                     return False
             else:
                 return False
@@ -689,7 +689,11 @@ class TensorDict(TensorDictBase):
 
         any_set = False
         for key, item in self.items():
-            if not call_on_nested and _is_tensor_collection(item.__class__):
+            if (
+                not call_on_nested
+                and _is_tensor_collection(item.__class__)
+                # and not is_non_tensor(item)
+            ):
                 if default is not NO_DEFAULT:
                     _others = [_other._get_str(key, default=None) for _other in others]
                     _others = [
@@ -1557,7 +1561,9 @@ class TensorDict(TensorDictBase):
             tensor_in = _sub_index(tensor_in, idx)
             tensor_in.copy_(value)
         else:
-            _set_item(tensor_in, idx, value, validated=validated)
+            tensor_out = _set_item(tensor_in, idx, value, validated=validated)
+            if tensor_in is not tensor_out:
+                self._set_str(key, tensor_out, validated=True, inplace=False)
 
         return self
 
@@ -2385,10 +2391,11 @@ class _SubTensorDict(TensorDictBase):
             )
             tensor_in = _sub_index(tensor_in, idx)
             tensor_in.copy_(value)
+            tensor_out = tensor_in
         else:
-            _set_item(tensor_in, idx, value, validated=validated)
+            tensor_out = _set_item(tensor_in, idx, value, validated=validated)
         # make sure that the value is updated
-        self._source._set_at_str(key, tensor_in, self.idx, validated=validated)
+        self._source._set_at_str(key, tensor_out, self.idx, validated=validated)
         return self
 
     def _set_at_tuple(self, key, value, idx, *, validated):
@@ -2449,15 +2456,17 @@ class _SubTensorDict(TensorDictBase):
 
     def _get_non_tensor(self, key: NestedKey, default=NO_DEFAULT):
         out = super()._get_non_tensor(key, default=default)
-        from tensordict.tensorclass import NonTensorData
 
-        if isinstance(out, _SubTensorDict) and isinstance(out._source, NonTensorData):
-            return out._source.data
+        if isinstance(out, _SubTensorDict) and is_non_tensor(out._source):
+            return out._source
         return out
 
     def _get_str(self, key, default):
         if key in self.keys() and _is_tensor_collection(self.entry_class(key)):
-            return _SubTensorDict(self._source._get_str(key, NO_DEFAULT), self.idx)
+            data = self._source._get_str(key, NO_DEFAULT)
+            if is_non_tensor(data):
+                return data[self.idx]
+            return _SubTensorDict(data, self.idx)
         return self._source._get_at_str(key, self.idx, default=default)
 
     def _get_tuple(self, key, default):
@@ -3031,7 +3040,10 @@ class _TensorDictKeysView:
         if isinstance(key, str):
             if key in self._keys():
                 if self.leaves_only:
-                    return not _is_tensor_collection(self.tensordict.entry_class(key))
+                    # TODO: make this faster for LazyStacked without compromising regular
+                    return not _is_tensor_collection(
+                        type(self.tensordict._get_str(key))
+                    )
                 return True
             return False
         else:
@@ -3039,25 +3051,30 @@ class _TensorDictKeysView:
             if len(key) == 1:
                 return key[0] in self._keys()
             elif self.include_nested:
-                if key[0] in self._keys():
-                    entry_type = self.tensordict.entry_class(key[0])
-                    if entry_type in (Tensor, _MemmapTensor):
+                item_root = self.tensordict._get_str(key[0], default=None)
+                if item_root is not None:
+                    entry_type = type(item_root)
+                    if issubclass(entry_type, (Tensor, _MemmapTensor)):
                         return False
-                    if entry_type is KeyedJaggedTensor:
+                    elif entry_type is KeyedJaggedTensor:
                         if len(key) > 2:
                             return False
-                        return key[1] in self.tensordict.get(key[0]).keys()
+                        return key[1] in item_root.keys()
+                    # TODO: make this faster for LazyStacked without compromising regular
                     _is_tensordict = _is_tensor_collection(entry_type)
                     if _is_tensordict:
                         # # this will call _unravel_key_to_tuple many times
                         # return key[1:] in self.tensordict._get_str(key[0], NO_DEFAULT).keys(include_nested=self.include_nested)
                         # this won't call _unravel_key_to_tuple but requires to get the default which can be suboptimal
-                        leaf_td = self.tensordict._get_tuple(key[:-1], None)
-                        if leaf_td is None or (
-                            not _is_tensor_collection(leaf_td.__class__)
-                            and not isinstance(leaf_td, KeyedJaggedTensor)
-                        ):
-                            return False
+                        if len(key) >= 3:
+                            leaf_td = item_root._get_tuple(key[1:-1], None)
+                            if leaf_td is None or (
+                                not _is_tensor_collection(leaf_td.__class__)
+                                and not isinstance(leaf_td, KeyedJaggedTensor)
+                            ):
+                                return False
+                        else:
+                            leaf_td = item_root
                         return key[-1] in leaf_td.keys()
                 return False
             # this is reached whenever there is more than one key but include_nested is False

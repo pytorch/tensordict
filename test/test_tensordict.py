@@ -2774,6 +2774,7 @@ class TestTensorDicts(TestTensorDictsBase):
             index = index.numpy()
         td_idx = td[:, index]
         assert tensor_example[:, index].shape == td_idx.shape
+        # TODO: this multiple dims with identical names should not be allowed
         assert td_idx.names == [names[0], names[1], names[1], *names[2:]]
         td_idx = td[0, index]
         assert tensor_example[0, index].shape == td_idx.shape
@@ -6102,8 +6103,16 @@ class TestLazyStackedTensorDict:
         index = (pos1, pos2, pos3)
         result = outer[index]
         ref_tensor = torch.zeros(outer.shape)
-        assert result.batch_size == ref_tensor[index].shape, index
-        assert result.batch_size == outer_dense[index].shape, index
+        assert result.batch_size == ref_tensor[index].shape, (
+            result.batch_size,
+            ref_tensor[index].shape,
+            index,
+        )
+        assert result.batch_size == outer_dense[index].shape, (
+            result.batch_size,
+            outer_dense[index].shape,
+            index,
+        )
 
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize("mask_dim", [0, 1, 2])
@@ -7788,6 +7797,29 @@ class TestMap:
         input.map(self.selectfn, num_workers=2, chunksize=chunksize, out=out)
         assert (out["a"] == torch.arange(10)).all(), (chunksize, mmap)
 
+    @classmethod
+    def nontensor_check(cls, td):
+        td["check"] = td["non_tensor"] == (
+            "a string!" if (td["tensor"] % 2) == 0 else "another string!"
+        )
+        return td
+
+    def test_non_tensor(self):
+        # with NonTensorStack
+        td = TensorDict(
+            {"tensor": torch.arange(10), "non_tensor": "a string!"}, batch_size=[10]
+        )
+        td[1::2] = TensorDict({"non_tensor": "another string!"}, [5])
+        td = td.map(self.nontensor_check, chunksize=0)
+        assert td["check"].all()
+        # with NonTensorData
+        td = TensorDict(
+            {"tensor": torch.zeros(10, dtype=torch.int), "non_tensor": "a string!"},
+            batch_size=[10],
+        )
+        td = td.map(self.nontensor_check, chunksize=0)
+        assert td["check"].all()
+
 
 # class TestNonTensorData:
 class TestNonTensorData:
@@ -7854,6 +7886,43 @@ class TestNonTensorData:
             torch.stack([non_tensor_data, non_tensor_copy], 0).get(("nested", "int")),
             LazyStackedTensorDict,
         )
+
+    def test_assign_non_tensor(self):
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        assert data["b"] == "a string!"
+        assert data.get("b").tolist() == [["a string!"] * 10]
+        data[0, 1] = TensorDict({"a": 0, "b": "another string!"}, [])
+        assert data.get("b").tolist() == [
+            ["a string!"] + ["another string!"] + ["a string!"] * 8
+        ]
+
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        data[0, 5:] = TensorDict({"a": torch.zeros(5), "b": "another string!"}, [5])
+        assert data.get("b").tolist() == [["a string!"] * 5 + ["another string!"] * 5]
+
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        data[0, 0::2] = TensorDict(
+            {"a": torch.zeros(5, dtype=torch.long), "b": "another string!"}, [5]
+        )
+        assert data.get("b").tolist() == [["another string!", "a string!"] * 5]
+
+        data = TensorDict({}, [1, 10])
+
+        data[0, 0] = TensorDict({"a": 0, "b": "a string!"}, [])
+
+        data[0] = TensorDict(
+            {"a": torch.zeros(10, dtype=torch.long), "b": "another string!"}, [10]
+        )
+        assert data.get("b").tolist() == [["another string!"] * 10]
 
 
 if __name__ == "__main__":
