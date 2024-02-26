@@ -7797,6 +7797,29 @@ class TestMap:
         input.map(self.selectfn, num_workers=2, chunksize=chunksize, out=out)
         assert (out["a"] == torch.arange(10)).all(), (chunksize, mmap)
 
+    @classmethod
+    def nontensor_check(cls, td):
+        td["check"] = td["non_tensor"] == (
+            "a string!" if (td["tensor"] % 2) == 0 else "another string!"
+        )
+        return td
+
+    def test_non_tensor(self):
+        # with NonTensorStack
+        td = TensorDict(
+            {"tensor": torch.arange(10), "non_tensor": "a string!"}, batch_size=[10]
+        )
+        td[1::2] = TensorDict({"non_tensor": "another string!"}, [5])
+        td = td.map(self.nontensor_check, chunksize=0)
+        assert td["check"].all()
+        # with NonTensorData
+        td = TensorDict(
+            {"tensor": torch.zeros(10, dtype=torch.int), "non_tensor": "a string!"},
+            batch_size=[10],
+        )
+        td = td.map(self.nontensor_check, chunksize=0)
+        assert td["check"].all()
+
 
 # class TestNonTensorData:
 class TestNonTensorData:
