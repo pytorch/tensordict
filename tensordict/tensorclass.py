@@ -15,7 +15,7 @@ import pickle
 import re
 import sys
 import warnings
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
@@ -24,10 +24,11 @@ from typing import Any, Callable, List, Sequence, TypeVar
 import tensordict as tensordict_lib
 
 import torch
+from tensordict import LazyStackedTensorDict
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-from tensordict.base import _ACCEPTED_CLASSES, _register_tensor_class
+from tensordict.base import _ACCEPTED_CLASSES, _register_tensor_class, CompatibleType
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
 from tensordict.utils import (
@@ -36,6 +37,7 @@ from tensordict.utils import (
     _LOCK_ERROR,
     DeviceType,
     IndexType,
+    is_non_tensor,
     is_tensorclass,
     NestedKey,
 )
@@ -56,6 +58,9 @@ _TD_PASS_THROUGH = {
     torch.full_like,
     torch.zeros_like,
     torch.ones_like,
+    torch.rand_like,
+    torch.empty_like,
+    torch.randn_like,
     torch.clone,
     torch.squeeze,
     torch.unsqueeze,
@@ -216,6 +221,7 @@ def tensorclass(cls: T) -> T:
     cls.to_tensordict = _to_tensordict
     cls.device = property(_device, _device_setter)
     cls.batch_size = property(_batch_size, _batch_size_setter)
+    cls.names = property(_names, _names_setter)
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
@@ -483,7 +489,7 @@ def _getattribute_wrapper(getattribute: Callable) -> Callable:
     return wrapper
 
 
-SET_ATTRIBUTES = ("batch_size", "device", "_locked_tensordicts")
+SET_ATTRIBUTES = ("batch_size", "device", "_locked_tensordicts", "names")
 
 
 def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
@@ -722,6 +728,9 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
         __dict__ = self.__dict__
         if __dict__["_tensordict"].is_locked:
             raise RuntimeError(_LOCK_ERROR)
+        if key in ("batch_size", "names", "device"):
+            # handled by setattr
+            return
         expected_keys = self.__dataclass_fields__
         if key not in expected_keys:
             raise AttributeError(
@@ -836,6 +845,26 @@ def _batch_size_setter(self, new_size: torch.Size) -> None:  # noqa: D417
 
     """
     self._tensordict._batch_size_setter(new_size)
+
+
+def _names(self) -> torch.Size:
+    """Retrieves the dim names for the tensor class.
+
+    Returns:
+        names (list of str)
+
+    """
+    return self._tensordict.names
+
+
+def _names_setter(self, names: str) -> None:  # noqa: D417
+    """Set the value of ``tensorclass.names``.
+
+    Args:
+        names (sequence of str)
+
+    """
+    self._tensordict.names = names
 
 
 def _state_dict(
@@ -1256,10 +1285,14 @@ class NonTensorData:
     # to patch tensordict with additional checks that will encur unwanted overhead
     # and all the overhead falls back on this class.
     data: Any
+    _non_tensor: bool = True
 
     def __post_init__(self):
-        if isinstance(self.data, NonTensorData):
-            self.data = self.data.data
+        if is_non_tensor(self.data):
+            data = getattr(self.data, "data", None)
+            if data is None:
+                data = self.data.tolist()
+            self.data = data
 
         old_eq = self.__class__.__eq__
         if old_eq is _eq:
@@ -1314,6 +1347,23 @@ class NonTensorData:
 
             self.__class__.__or__ = __or__
 
+    def update(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        inplace: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> T:
+        if isinstance(input_dict_or_td, NonTensorData):
+            data = input_dict_or_td.data
+            if clone:
+                data = deepcopy(data)
+            self.data = data
+        elif not input_dict_or_td.is_empty():
+            raise RuntimeError(f"Unexpected type {type(input_dict_or_td)}")
+        return self
+
     def empty(self, recurse=False):
         return NonTensorData(
             data=self.data,
@@ -1340,7 +1390,9 @@ class NonTensorData:
                 iseq = False
             return iseq
 
-        if all(_check_equal(data.data, first.data) for data in list_of_non_tensor[1:]):
+        if all(isinstance(data, NonTensorData) for data in list_of_non_tensor) and all(
+            _check_equal(data.data, first.data) for data in list_of_non_tensor[1:]
+        ):
             batch_size = list(first.batch_size)
             batch_size.insert(dim, len(list_of_non_tensor))
             return NonTensorData(
@@ -1350,9 +1402,7 @@ class NonTensorData:
                 device=first.device,
             )
 
-        from tensordict._lazy import LazyStackedTensorDict
-
-        return LazyStackedTensorDict(*list_of_non_tensor, stack_dim=dim)
+        return NonTensorStack(*list_of_non_tensor, stack_dim=dim)
 
     @classmethod
     def __torch_function__(
@@ -1406,3 +1456,100 @@ class NonTensorData:
         return _wrap_method(self, "_fast_apply", self._tensordict._fast_apply)(
             *args, **kwargs
         )
+
+    def tolist(self):
+        """Converts the data in a list if the batch-size is non-empty.
+
+        If the batch-size is empty, returns the data.
+
+        """
+        if not self.batch_size:
+            return self.data
+        return [ntd.tolist() for ntd in self.unbind(0)]
+
+    def copy_(self, src: NonTensorData | NonTensorStack, non_blocking: bool = False):
+        if isinstance(src, NonTensorStack):
+            raise RuntimeError(
+                "Cannot update a NonTensorData with a NonTensorStack object."
+            )
+        if not isinstance(src, NonTensorData):
+            raise RuntimeError(
+                "NonTensorData.copy_ requires the source to be a NonTensorData object."
+            )
+        self._non_tensordict["data"] = src.data
+
+    def clone(self, recurse: bool = True):
+        if recurse:
+            return type(self)(
+                data=deepcopy(self.data),
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self.names,
+            )
+        return type(self)(
+            data=self.data,
+            batch_size=self.batch_size,
+            device=self.device,
+            names=self.names,
+        )
+
+
+class NonTensorStack(LazyStackedTensorDict):
+    """A thin wrapper around LazyStackedTensorDict to make stack on non-tensor data easily recognizable.
+
+    A ``NonTensorStack`` is returned whenever :func:`~torch.stack` is called on
+    a list of :class:`~tensordict.NonTensorData` or ``NonTensorStack``.
+
+    Examples:
+        >>> from tensordict import NonTensorData
+        >>> import torch
+        >>> data = torch.stack([
+        ...     torch.stack([NonTensorData(data=(i, j), batch_size=[]) for i in range(2)])
+        ...    for j in range(3)])
+        >>> print(data)
+        NonTensorStack(
+            [[(0, 0), (1, 0)], [(0, 1), (1, 1)], [(0, 2), (1, ...,
+            batch_size=torch.Size([3, 2]),
+            device=None)
+
+    To obtain the values stored in a ``NonTensorStack``, call :class:`~.tolist`.
+
+    """
+
+    _non_tensor: bool = True
+
+    def tolist(self):
+        """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.
+
+        Examples:
+            >>> from tensordict import NonTensorData
+            >>> import torch
+            >>> data = torch.stack([
+            ...     torch.stack([NonTensorData(data=(i, j), batch_size=[]) for i in range(2)])
+            ...    for j in range(3)])
+            >>> data.tolist()
+            [[(0, 0), (1, 0)], [(0, 1), (1, 1)], [(0, 2), (1, 2)]]
+
+        """
+        iterator = self.tensordicts if self.stack_dim == 0 else self.unbind(0)
+        return [td.tolist() for td in iterator]
+
+    @classmethod
+    def from_nontensordata(cls, non_tensor: NonTensorData):
+        data = non_tensor.data
+        prev = NonTensorData(data, batch_size=[], device=non_tensor.device)
+        for dim in reversed(non_tensor.shape):
+            prev = cls(*[prev.clone(False) for _ in range(dim)], stack_dim=0)
+        return prev
+
+    def __repr__(self):
+        selfrepr = str(self.tolist())
+        if len(selfrepr) > 50:
+            selfrepr = f"{selfrepr[:50]}..."
+        selfrepr = indent(selfrepr, prefix=4 * " ")
+        batch_size = indent(f"batch_size={self.batch_size}", prefix=4 * " ")
+        device = indent(f"device={self.device}", prefix=4 * " ")
+        return f"NonTensorStack(\n{selfrepr}," f"\n{batch_size}," f"\n{device})"
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.tolist()
