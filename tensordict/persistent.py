@@ -919,7 +919,8 @@ class PersistentTensorDict(TensorDictBase):
         value: Any,
         inplace: bool = False,
         idx=None,
-        validated=False,
+        validated: bool = False,
+        ignore_lock: bool = False,
     ) -> PersistentTensorDict:
         if not validated:
             value = self._validate_value(value, check_shape=idx is None)
@@ -927,7 +928,7 @@ class PersistentTensorDict(TensorDictBase):
         if not inplace:
             if idx is not None:
                 raise RuntimeError("Cannot pass an index to _set when inplace=False.")
-            elif self.is_locked:
+            elif self.is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
         # shortcut set if we're placing a tensordict
         if is_tensor_collection(value):
@@ -1019,9 +1020,19 @@ class PersistentTensorDict(TensorDictBase):
             f"set_non_tensor is not compatible with the tensordict type {type(self)}."
         )
 
-    def _set_str(self, key, value, *, inplace, validated):
+    def _set_str(
+        self,
+        key: str,
+        value: Any,
+        *,
+        inplace: bool,
+        validated: bool,
+        ignore_lock: bool = False,
+    ):
         inplace = self._convert_inplace(inplace, key)
-        return self._set(key, value, inplace=inplace, validated=validated)
+        return self._set(
+            key, value, inplace=inplace, validated=validated, ignore_lock=ignore_lock
+        )
 
     def _set_tuple(self, key, value, *, inplace, validated):
         if len(key) == 1:

@@ -2215,7 +2215,15 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         return self._set_tuple(key, item, inplace=inplace, validated=False)
 
     @abc.abstractmethod
-    def _set_str(self, key, value, *, inplace, validated):
+    def _set_str(
+        self,
+        key: str,
+        value: Any,
+        *,
+        inplace: bool,
+        validated: bool,
+        ignore_lock: bool = False,
+    ):
         ...
 
     @abc.abstractmethod

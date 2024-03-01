@@ -425,6 +425,7 @@ class LazyStackedTensorDict(TensorDictBase):
         *,
         inplace: bool,
         validated: bool,
+        ignore_lock: bool = False,
     ) -> T:
         try:
             inplace = self._convert_inplace(inplace, key)
@@ -441,7 +442,9 @@ class LazyStackedTensorDict(TensorDictBase):
             value = self.hook_in(value)
         values = value.unbind(self.stack_dim)
         for tensordict, item in zip(self.tensordicts, values):
-            tensordict._set_str(key, item, inplace=inplace, validated=validated)
+            tensordict._set_str(
+                key, item, inplace=inplace, validated=validated, ignore_lock=ignore_lock
+            )
         return self
 
     def _set_tuple(
@@ -2674,12 +2677,16 @@ class _CustomOpTensorDict(TensorDictBase):
     def _transform_value(self, item):
         return getattr(item, self.custom_op)(**self._update_custom_op_kwargs(item))
 
-    def _set_str(self, key, value, *, inplace: bool, validated: bool):
+    def _set_str(
+        self, key, value, *, inplace: bool, validated: bool, ignore_lock: bool = False
+    ):
         if not validated:
             value = self._validate_value(value, check_shape=True)
             validated = True
         value = getattr(value, self.inv_op)(**self._update_inv_op_kwargs(value))
-        self._source._set_str(key, value, inplace=inplace, validated=validated)
+        self._source._set_str(
+            key, value, inplace=inplace, validated=validated, ignore_lock=ignore_lock
+        )
         return self
 
     def _set_tuple(self, key, value, *, inplace: bool, validated: bool):
