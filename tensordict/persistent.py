@@ -1019,9 +1019,19 @@ class PersistentTensorDict(TensorDictBase):
             f"set_non_tensor is not compatible with the tensordict type {type(self)}."
         )
 
-    def _set_str(self, key, value, *, inplace, validated):
+    def _set_str(
+        self,
+        key: str,
+        value: Any,
+        *,
+        inplace: bool,
+        validated: bool,
+        ignore_lock: bool = False,
+    ):
         inplace = self._convert_inplace(inplace, key)
-        return self._set(key, value, inplace=inplace, validated=validated)
+        return self._set(
+            key, value, inplace=inplace, validated=validated, ignore_lock=ignore_lock
+        )
 
     def _set_tuple(self, key, value, *, inplace, validated):
         if len(key) == 1:

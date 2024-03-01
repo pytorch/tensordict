@@ -1499,6 +1499,7 @@ class TensorDict(TensorDictBase):
         *,
         inplace: bool,
         validated: bool,
+        ignore_lock: bool = False,
     ) -> T:
         if inplace is not False:
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
@@ -1506,7 +1507,7 @@ class TensorDict(TensorDictBase):
         if not validated:
             value = self._validate_value(value, check_shape=True)
         if not inplace:
-            if self._is_locked:
+            if self._is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
             self._tensordict[key] = value
         else:
@@ -1563,7 +1564,13 @@ class TensorDict(TensorDictBase):
         else:
             tensor_out = _set_item(tensor_in, idx, value, validated=validated)
             if tensor_in is not tensor_out:
-                self._set_str(key, tensor_out, validated=True, inplace=False)
+                # this happens only when a NonTensorData becomes a NonTensorStack
+                # so it is legitimate (there is no in-place modification of a tensor
+                # that was expected to happen but didn't).
+                # For this reason we can ignore the locked attribute of the td.
+                self._set_str(
+                    key, tensor_out, validated=True, inplace=False, ignore_lock=True
+                )
 
         return self
 
@@ -2317,6 +2324,7 @@ class _SubTensorDict(TensorDictBase):
         *,
         inplace: bool,
         validated: bool,
+        ignore_lock: bool = False,
     ) -> T:
         inplace = self._convert_inplace(inplace, key)
         # it is assumed that if inplace=False then the key doesn't exist. This is
@@ -2339,6 +2347,7 @@ class _SubTensorDict(TensorDictBase):
                         ),
                         inplace=inplace,
                         validated=validated,
+                        ignore_lock=ignore_lock,
                     )
             else:
                 value_expand = torch.zeros(
@@ -2353,7 +2362,13 @@ class _SubTensorDict(TensorDictBase):
                     value_expand.share_memory_()
                 elif self._is_memmap:
                     value_expand = MemoryMappedTensor.from_tensor(value_expand)
-            parent._set_str(key, value_expand, inplace=False, validated=validated)
+            parent._set_str(
+                key,
+                value_expand,
+                inplace=False,
+                validated=validated,
+                ignore_lock=ignore_lock,
+            )
 
         parent._set_at_str(key, value, self.idx, validated=validated)
         return self
