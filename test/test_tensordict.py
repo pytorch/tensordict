@@ -7924,6 +7924,15 @@ class TestNonTensorData:
         )
         assert data.get("b").tolist() == [["another string!"] * 10]
 
+    def test_ignore_lock(self):
+        td = TensorDict({"a": {"b": "1"}}, batch_size=[10])
+        td.lock_()
+        td[0] = TensorDict({"a": {"b": "0"}}, [])
+        assert td.is_locked
+        assert td["a"].is_locked
+        assert td[0]["a", "b"] == "0"
+        assert td[1]["a", "b"] == "1"
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
