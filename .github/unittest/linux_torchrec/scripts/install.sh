@@ -26,7 +26,7 @@ git submodule sync && git submodule update --init --recursive
 
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
-    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    pip3 install 'mpmath<1.4' --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
     conda install pytorch pytorch-cuda=11.7 -c pytorch-nightly -c nvidia -y
 fi
