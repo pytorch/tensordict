@@ -4061,7 +4061,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     def map(
         self,
-        fn: Callable,
+        fn: Callable[[TensorDictBase], TensorDictBase | None],
         dim: int = 0,
         num_workers: int | None = None,
         *,
@@ -4074,6 +4074,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         worker_threads: int = 1,
         index_with_generator: bool = False,
         pbar: bool = False,
+        mp_start_method: str | None = None,
     ):
         """Maps a function to splits of the tensordict across one dimension.
 
@@ -4157,6 +4158,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 impact on the total runtime. Defaults to ``False``.
             pbar (bool, optional): if ``True``, a progress bar will be displayed.
                 Requires tqdm to be available. Defaults to ``False``.
+            mp_start_method (str, optional): the start method for multiprocessing.
+                If not provided, the default start method will be used.
+                Accepted strings are ``"fork"`` and ``"spawn"``. Keep in mind that
+                ``"cuda"`` tensors cannot be shared between processes with the
+                ``"fork"`` start method. This is without effect if the ``pool``
+                is passed to the ``map`` method.
 
         Examples:
             >>> import torch
@@ -4190,11 +4197,15 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             seed = (
                 torch.empty((), dtype=torch.int64).random_(generator=generator).item()
             )
+            if mp_start_method is not None:
+                ctx = mp.get_context(mp_start_method)
+            else:
+                ctx = mp.get_context()
 
-            queue = mp.Queue(maxsize=num_workers)
+            queue = ctx.Queue(maxsize=num_workers)
             for i in range(num_workers):
                 queue.put(i)
-            with mp.Pool(
+            with ctx.Pool(
                 processes=num_workers,
                 initializer=_proc_init,
                 initargs=(seed, queue, worker_threads),
@@ -4539,6 +4550,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 device=None,
                 is_shared=False)
         """
+        keys = unravel_key_list(keys)
         result = self._select(*keys, inplace=inplace, strict=strict)
         if not inplace and (result._is_memmap or result._is_shared):
             result.lock_()
@@ -4593,6 +4605,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 is_shared=False)
 
         """
+        keys = unravel_key_list(keys)
         result = self._exclude(*keys, inplace=inplace)
         if not inplace and (result._is_memmap or result._is_shared):
             result.lock_()
