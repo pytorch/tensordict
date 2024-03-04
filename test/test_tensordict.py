@@ -7786,7 +7786,8 @@ class TestMap:
 
     @pytest.mark.parametrize("chunksize", [0, 5])
     @pytest.mark.parametrize("mmap", [True, False])
-    def test_map_with_out(self, mmap, chunksize, tmpdir):
+    @pytest.mark.parametrize("start_method", [None, "fork"])
+    def test_map_with_out(self, mmap, chunksize, tmpdir, start_method):
         tmpdir = Path(tmpdir)
         input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
         if mmap:
@@ -7794,7 +7795,13 @@ class TestMap:
         out = TensorDict({"a": torch.zeros(10, dtype=torch.int)}, [10])
         if mmap:
             out.memmap_(tmpdir / "output")
-        input.map(self.selectfn, num_workers=2, chunksize=chunksize, out=out)
+        input.map(
+            self.selectfn,
+            num_workers=2,
+            chunksize=chunksize,
+            out=out,
+            mp_start_method=start_method,
+        )
         assert (out["a"] == torch.arange(10)).all(), (chunksize, mmap)
 
     @classmethod
