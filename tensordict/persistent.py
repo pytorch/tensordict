@@ -704,6 +704,7 @@ class PersistentTensorDict(TensorDictBase):
         worker_threads: int = 1,
         index_with_generator: bool = False,
         pbar: bool = False,
+        mp_start_method: str | None = None,
     ):
         if pool is None:
             if num_workers is None:
@@ -713,11 +714,15 @@ class PersistentTensorDict(TensorDictBase):
             seed = (
                 torch.empty((), dtype=torch.int64).random_(generator=generator).item()
             )
+            if mp_start_method is not None:
+                ctx = mp.get_context(mp_start_method)
+            else:
+                ctx = mp.get_context()
 
-            queue = mp.Queue(maxsize=num_workers)
+            queue = ctx.Queue(maxsize=num_workers)
             for i in range(num_workers):
                 queue.put(i)
-            with mp.Pool(
+            with ctx.Pool(
                 processes=num_workers,
                 initializer=_proc_init,
                 initargs=(seed, queue, worker_threads),
