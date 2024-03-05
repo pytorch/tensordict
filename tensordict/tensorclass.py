@@ -412,8 +412,7 @@ def _memmap_(
                 metadata = {"_type": str(cls)}
                 to_pickle = {}
                 for key, value in _non_tensordict.items():
-                    if isinstance(value, multiprocessing.sharedctypes.Synchronized):
-                        value = value.value
+                    value = _from_shared_nontensor(value)
                     if _is_json_serializable(value):
                         metadata[key] = value
                     else:
@@ -1699,7 +1698,9 @@ def _share_memory_nontensor(data, manager: Manager):
         result.update(data)
         return result
     if isinstance(data, str):
-        return mp.Value(ctypes.c_wchar_p, data)
+        result = mp.Array(ctypes.c_char_p, 1)
+        result[0] = data.encode('utf-8')
+        return result
     if isinstance(data, list):
         result = manager.list()
         result.extend(data)
@@ -1716,6 +1717,8 @@ def _from_shared_nontensor(nontensor):
         return dict(nontensor)
     if isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
         return nontensor.value
+    if isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
+        return nontensor[0].decode("utf-8")
     return nontensor
 
 
@@ -1728,5 +1731,7 @@ def _update_shared_nontensor(nontensor, val):
         nontensor.update(val)
     elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
         nontensor.value = val
+    elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
+        nontensor[0] = val.encode("utf-8")
     else:
         raise NotImplementedError(f"{type(nontensor)} is not supported.")
