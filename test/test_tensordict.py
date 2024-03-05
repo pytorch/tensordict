@@ -7940,6 +7940,58 @@ class TestNonTensorData:
         assert td[0]["a", "b"] == "0"
         assert td[1]["a", "b"] == "1"
 
+    PAIRS = [
+        ("something", "something else"),
+        ([0, "something", 2], [9, "something else", 11]),
+        (0, 1),
+        ({"key1": 1, 2: 3}, {"key1": 4, 5: 6}),
+    ]
+
+    @pytest.mark.parametrize("pair", PAIRS)
+    @pytest.mark.parametrize("update", ["update_", "update-inplace", "update"])
+    def test_shared_single(self, pair, update):
+        val0, val1 = pair
+        td = TensorDict({"val": NonTensorData(data=val0, batch_size=[])}, [])
+        td.share_memory_()
+        # Test that the Value is unpacked
+        assert td.get("val").data == val0
+        assert td["val"] == val0
+
+        # Check shared status
+        assert td._is_shared
+        assert td.get("val")._is_shared
+        assert td.get("val")._tensordict._is_shared
+
+        # Update in place
+        if update == "update_":
+            td.get("val").update_(NonTensorData(data=val1, batch_size=[]))
+        elif update == "update-inplace":
+            td.get("val").update(NonTensorData(data=val1, batch_size=[]), inplace=True)
+        elif update == "update":
+            with pytest.raises(RuntimeError, match="lock"):
+                td.get("val").update(
+                    NonTensorData(data="something else", batch_size=[])
+                )
+            return
+
+        # Test that the Value is unpacked
+        assert td.get("val").data == val1
+        assert td["val"] == val1
+
+        # Check shared status
+        assert td._is_shared
+        assert td.get("val")._is_shared
+        assert td.get("val")._tensordict._is_shared
+
+    def test_memmap_single(self):
+        ...
+
+    def test_shared_mult(self):
+        ...
+
+    def test_memmap_mult(self):
+        ...
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
