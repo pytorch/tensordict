@@ -8017,7 +8017,7 @@ class TestNonTensorData:
             #     print(json.load(file))
 
     @staticmethod
-    def _run_worker(td, val1, update, q):
+    def _run_worker(td, val1, update):
         # Update in place
         if update == "setitem":
             td["val"] = val1
@@ -8025,12 +8025,17 @@ class TestNonTensorData:
             td.get("val").update_(NonTensorData(data=val1, batch_size=[]))
         elif update == "update-inplace":
             td.get("val").update(NonTensorData(data=val1, batch_size=[]), inplace=True)
-        q.put("done")
+        else:
+            raise NotImplementedError
+        # Test that the Value is unpacked
+        assert td.get("val").data == val1
+        assert td["val"] == val1
 
     @pytest.mark.parametrize("pair", PAIRS)
     @pytest.mark.parametrize("strategy", ["shared", "memmap"])
     @pytest.mark.parametrize("update", ["update_", "update-inplace"])
     def test_shared_memmap_mult(self, pair, strategy, update, tmpdir):
+        from tensordict.tensorclass import _from_shared_nontensor
         val0, val1 = pair
         td = TensorDict({"val": NonTensorData(data=val0, batch_size=[])}, [])
         if strategy == "shared":
@@ -8060,13 +8065,12 @@ class TestNonTensorData:
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
 
-        q = mp.Queue(1)
-        proc = mp.Process(target=self._run_worker, args=(td, val1, update, q))
+        proc = mp.Process(target=self._run_worker, args=(td, val1, update))
         proc.start()
-        assert q.get() == "done"
         proc.join()
 
         # Test that the Value is unpacked
+        assert _from_shared_nontensor(td.get("val")._non_tensordict["data"]) == val1
         assert td.get("val").data == val1
         assert td["val"] == val1
 
