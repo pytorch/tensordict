@@ -1558,6 +1558,13 @@ class TensorDict(TensorDictBase):
         else:
             tensor_out = _set_item(tensor_in, idx, value, validated=validated)
             if tensor_in is not tensor_out:
+                if self._is_shared or self._is_memmap:
+                    raise RuntimeError(
+                        "You're attempting to update a leaf in-place with a shared "
+                        "tensordict, but the new value does not match the previous. "
+                        "If you're using NonTensorData, see the class documentation "
+                        "to see how to properly pre-allocate memory in shared contexts."
+                    )
                 # this happens only when a NonTensorData becomes a NonTensorStack
                 # so it is legitimate (there is no in-place modification of a tensor
                 # that was expected to happen but didn't).
@@ -1746,6 +1753,17 @@ class TensorDict(TensorDictBase):
                 device=torch.device("cpu"),
             )
         )
+
+        # We must set these attributes before memmapping because we need the metadata
+        # to match the tensordict content.
+        if inplace:
+            self._is_memmap = True
+            self._is_shared = False  # since they are mutually exclusive
+            self._device = torch.device("cpu")
+        else:
+            dest._is_memmap = True
+            dest._is_shared = False  # since they are mutually exclusive
+
         for key, value in self.items():
             if _is_tensor_collection(value.__class__):
                 dest._tensordict[key] = value._memmap_(
@@ -1793,15 +1811,6 @@ class TensorDict(TensorDictBase):
                 futures.append(
                     executor.submit(save_metadata, dest, prefix / "meta.json", metadata)
                 )
-        if inplace:
-            self._is_memmap = True
-            self._is_shared = False  # since they are mutually exclusive
-            self._device = torch.device("cpu")
-        else:
-            dest._is_memmap = True
-            dest._is_shared = False  # since they are mutually exclusive
-            dest._device = torch.device("cpu")
-
         dest._is_locked = True
         return dest
 

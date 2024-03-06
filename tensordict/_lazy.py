@@ -2055,7 +2055,6 @@ class LazyStackedTensorDict(TensorDictBase):
         while (prefix / str(i)).exists():
             tensordicts.append(TensorDict.load_memmap(prefix / str(i)))
             i += 1
-
         return cls(*tensordicts, stack_dim=metadata["stack_dim"])
 
     def expand(self, *args: int, inplace: bool = False) -> T:

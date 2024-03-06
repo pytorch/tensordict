@@ -16,6 +16,7 @@ import pathlib
 import platform
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -3161,7 +3162,7 @@ class TestTensorDicts(TestTensorDictsBase):
             v2 = tdmemmap[key]
             if isinstance(v1, str):
                 # non-tensor data storing strings share the same id in python
-                assert v1 is v2
+                assert v1 == v2
             else:
                 assert v1 is not v2
         assert (tdmemmap == 0).all()
@@ -7932,6 +7933,232 @@ class TestNonTensorData:
         assert td["a"].is_locked
         assert td[0]["a", "b"] == "0"
         assert td[1]["a", "b"] == "1"
+
+    PAIRS = [
+        ("something", "something else"),
+        (0, 1),
+        (0.0, 1.0),
+        ([0, "something", 2], [9, "something else", 11]),
+        ({"key1": 1, 2: 3}, {"key1": 4, 5: 6}),
+    ]
+
+    @pytest.mark.parametrize("pair", PAIRS)
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    @pytest.mark.parametrize("update", ["update_", "update-inplace", "update"])
+    def test_shared_memmap_single(self, pair, strategy, update, tmpdir):
+        val0, val1 = pair
+        td = TensorDict({"val": NonTensorData(data=val0, batch_size=[])}, [])
+        if strategy == "shared":
+            td.share_memory_()
+        elif strategy == "memmap":
+            td.memmap_(tmpdir)
+        else:
+            raise RuntimeError
+
+        # Test that the Value is unpacked
+        assert td.get("val").data == val0
+        assert td["val"] == val0
+
+        # Check shared status
+        if strategy == "shared":
+            assert td._is_shared
+            assert td.get("val")._is_shared
+            assert td.get("val")._tensordict._is_shared
+        elif strategy == "memmap":
+            assert td._is_memmap
+            assert td.get("val")._is_memmap
+            assert td.get("val")._tensordict._is_memmap
+
+            # check that the json has been updated
+            td_load = TensorDict.load_memmap(tmpdir)
+            assert td["val"] == td_load["val"]
+            # with open(Path(tmpdir) / "val" / "meta.json") as file:
+            #     print(json.load(file))
+
+        # Update in place
+        if update == "setitem":
+            td["val"] = val1
+        elif update == "update_":
+            td.get("val").update_(NonTensorData(data=val1, batch_size=[]))
+        elif update == "update-inplace":
+            td.get("val").update(NonTensorData(data=val1, batch_size=[]), inplace=True)
+        elif update == "update":
+            with pytest.raises(RuntimeError, match="lock"):
+                td.get("val").update(
+                    NonTensorData(data="something else", batch_size=[])
+                )
+            return
+
+        # Test that the Value is unpacked
+        assert td.get("val").data == val1
+        assert td["val"] == val1
+
+        # Check shared status
+        if strategy == "shared":
+            assert td._is_shared
+            assert td.get("val")._is_shared
+            assert td.get("val")._tensordict._is_shared
+        elif strategy == "memmap":
+            assert td._is_memmap
+            assert td.get("val")._is_memmap
+            assert td.get("val")._tensordict._is_memmap
+
+            # check that the json has been updated
+            td_load = TensorDict.load_memmap(tmpdir)
+            assert td["val"] == td_load["val"]
+            # with open(Path(tmpdir) / "val" / "meta.json") as file:
+            #     print(json.load(file))
+
+    @staticmethod
+    def _run_worker(td, val1, update):
+        # Update in place
+        if update == "setitem":
+            td["val"] = val1
+        elif update == "update_":
+            td.get("val").update_(NonTensorData(data=val1, batch_size=[]))
+        elif update == "update-inplace":
+            td.get("val").update(NonTensorData(data=val1, batch_size=[]), inplace=True)
+        else:
+            raise NotImplementedError
+        # Test that the Value is unpacked
+        assert td.get("val").data == val1
+        assert td["val"] == val1
+
+    @pytest.mark.parametrize("pair", PAIRS)
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    @pytest.mark.parametrize("update", ["update_", "update-inplace"])
+    def test_shared_memmap_mult(self, pair, strategy, update, tmpdir):
+        from tensordict.tensorclass import _from_shared_nontensor
+
+        val0, val1 = pair
+        td = TensorDict({"val": NonTensorData(data=val0, batch_size=[])}, [])
+        if strategy == "shared":
+            td.share_memory_()
+        elif strategy == "memmap":
+            td.memmap_(tmpdir)
+        else:
+            raise RuntimeError
+
+        # Test that the Value is unpacked
+        assert td.get("val").data == val0
+        assert td["val"] == val0
+
+        # Check shared status
+        if strategy == "shared":
+            assert td._is_shared
+            assert td.get("val")._is_shared
+            assert td.get("val")._tensordict._is_shared
+        elif strategy == "memmap":
+            assert td._is_memmap
+            assert td.get("val")._is_memmap
+            assert td.get("val")._tensordict._is_memmap
+
+            # check that the json has been updated
+            td_load = TensorDict.load_memmap(tmpdir)
+            assert td["val"] == td_load["val"]
+            # with open(Path(tmpdir) / "val" / "meta.json") as file:
+            #     print(json.load(file))
+
+        proc = mp.Process(target=self._run_worker, args=(td, val1, update))
+        proc.start()
+        proc.join()
+
+        # Test that the Value is unpacked
+        assert _from_shared_nontensor(td.get("val")._non_tensordict["data"]) == val1
+        assert td.get("val").data == val1
+        assert td["val"] == val1
+
+        # Check shared status
+        if strategy == "shared":
+            assert td._is_shared
+            assert td.get("val")._is_shared
+            assert td.get("val")._tensordict._is_shared
+        elif strategy == "memmap":
+            assert td._is_memmap
+            assert td.get("val")._is_memmap
+            assert td.get("val")._tensordict._is_memmap
+
+            # check that the json has been updated
+            td_load = TensorDict.load_memmap(tmpdir)
+            assert td["val"] == td_load["val"]
+            # with open(Path(tmpdir) / "val" / "meta.json") as file:
+            #     print(json.load(file))
+
+    def test_shared_limitations(self):
+        # Sharing a special type works but it's locked for writing
+        @dataclass
+        class MyClass:
+            string: str
+
+        val0 = MyClass(string="a string!")
+
+        td = TensorDict({"val": NonTensorData(data=val0, batch_size=[])}, [])
+        td.share_memory_()
+
+        # with pytest.raises(RuntimeError)
+        val1 = MyClass(string="another string!")
+        with pytest.raises(
+            NotImplementedError, match="Updating MyClass within a shared/memmaped"
+        ):
+            td.update(
+                TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []),
+                inplace=True,
+            )
+        with pytest.raises(ValueError, match="Failed to update"):
+            td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+
+        # We can update a batched NonTensorData to a NonTensorStack if it's not already shared
+        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        td[1::2] = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+        assert td.get("val").tolist() == [0, 1] * 5
+        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        td.share_memory_()
+        with pytest.raises(
+            RuntimeError,
+            match="You're attempting to update a leaf in-place with a shared",
+        ):
+            td[1::2] = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+
+    def _update_stack(self, td):
+        td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
+
+    @pytest.mark.parametrize("update", ["update_at_", "slice"])
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    def test_shared_stack(self, strategy, update, tmpdir):
+        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+        if update == "slice":
+            td[1::2] = newdata
+        elif update == "update_at_":
+            td.update_at_(newdata, slice(1, None, 2))
+        else:
+            raise NotImplementedError
+        if strategy == "shared":
+            td.share_memory_()
+        elif strategy == "memmap":
+            td.memmap_(tmpdir)
+        else:
+            raise NotImplementedError
+        assert td.get("val").tolist() == [0, 1] * 5
+
+        newdata = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
+        if update == "slice":
+            td[1::2] = newdata
+        elif update == "update_at_":
+            td.update_at_(newdata, slice(1, None, 2))
+        else:
+            raise NotImplementedError
+
+        assert td.get("val").tolist() == [0, 2] * 5
+        if strategy == "memmap":
+            assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 2] * 5
+
+        proc = mp.Process(target=self._update_stack, args=(td,))
+        proc.start()
+        proc.join()
+        assert td.get("val").tolist() == [0, 3] * 5
+        if strategy == "memmap":
+            assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
 
 
 if __name__ == "__main__":
