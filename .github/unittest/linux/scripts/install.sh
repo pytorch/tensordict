@@ -28,9 +28,9 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      python -m pip install 'mpmath<1.4' --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
+      python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
   else
-      python -m pip install 'mpmath<1.4' --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
