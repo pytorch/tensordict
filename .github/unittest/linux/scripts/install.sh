@@ -46,11 +46,11 @@ fi
 printf "* Installing tensordict\n"
 python setup.py develop
 
-# install torchsnapshot nightly
-if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  python -m pip install git+https://github.com/pytorch/torchsnapshot --no-build-isolation
-elif [[ "$TORCH_VERSION" == "stable" ]]; then
-  python -m pip install torchsnapshot
-fi
+# # install torchsnapshot nightly
+# if [[ "$TORCH_VERSION" == "nightly" ]]; then
+#   python -m pip install git+https://github.com/pytorch/torchsnapshot --no-build-isolation
+# elif [[ "$TORCH_VERSION" == "stable" ]]; then
+#   python -m pip install torchsnapshot
+# fi
 # smoke test
-python -c "import functorch;import torchsnapshot"
+python -c "import functorch"
