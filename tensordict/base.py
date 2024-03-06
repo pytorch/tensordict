@@ -2159,7 +2159,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     return other_cls._load_memmap(prefix, metadata)
             else:
                 raise RuntimeError(
-                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. Did you call _register_tensor_class(cls) on {type_name}?"
+                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. "
+                    f"Did you call _register_tensor_class(cls) on {type_name}?"
                 )
         return cls._load_memmap(prefix, metadata)
 

@@ -5,10 +5,14 @@
 
 from __future__ import annotations
 
+import ctypes
+
 import dataclasses
 import functools
 import inspect
 import json
+import multiprocessing.managers
+import multiprocessing.sharedctypes
 import numbers
 import os
 import pickle
@@ -30,7 +34,6 @@ from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import _ACCEPTED_CLASSES, _register_tensor_class, CompatibleType
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
-
 from tensordict.utils import (
     _get_repr,
     _is_json_serializable,
@@ -41,7 +44,8 @@ from tensordict.utils import (
     is_tensorclass,
     NestedKey,
 )
-from torch import Tensor
+from torch import multiprocessing as mp, Tensor
+from torch.multiprocessing import Manager
 
 T = TypeVar("T", bound=TensorDictBase)
 PY37 = sys.version_info < (3, 8)
@@ -191,25 +195,41 @@ def tensorclass(cls: T) -> T:
     cls.__ne__ = _ne
     cls.__or__ = _or
     cls.__xor__ = _xor
-    cls.set = _set
-    cls.set_at_ = _set_at_
-    cls.del_ = _del_
-    cls.get = _get
-    cls.get_at = _get_at
-    cls.unbind = _unbind
-    cls.state_dict = _state_dict
-    cls.load_state_dict = _load_state_dict
-    cls._memmap_ = _memmap_
+    if not hasattr(cls, "set"):
+        cls.set = _set
+    if not hasattr(cls, "set_at_"):
+        cls.set_at_ = _set_at_
+    if not hasattr(cls, "del_"):
+        cls.del_ = _del_
+    if not hasattr(cls, "get"):
+        cls.get = _get
+    if not hasattr(cls, "get_at"):
+        cls.get_at = _get_at
+    if not hasattr(cls, "unbind"):
+        cls.unbind = _unbind
+    if not hasattr(cls, "state_dict"):
+        cls.state_dict = _state_dict
+    if not hasattr(cls, "load_state_dict"):
+        cls.load_state_dict = _load_state_dict
+    if not hasattr(cls, "_memmap_"):
+        cls._memmap_ = _memmap_
+    if not hasattr(cls, "share_memory_"):
+        cls.share_memory_ = _share_memory_
 
     cls.__enter__ = __enter__
     cls.__exit__ = __exit__
 
     # Memmap
-    cls.memmap_like = TensorDictBase.memmap_like
-    cls.memmap_ = TensorDictBase.memmap_
-    cls.memmap = TensorDictBase.memmap
-    cls.load_memmap = TensorDictBase.load_memmap
-    cls._load_memmap = classmethod(_load_memmap)
+    if not hasattr(cls, "memmap_like"):
+        cls.memmap_like = TensorDictBase.memmap_like
+    if not hasattr(cls, "memmap_"):
+        cls.memmap_ = TensorDictBase.memmap_
+    if not hasattr(cls, "memmap"):
+        cls.memmap = TensorDictBase.memmap
+    if not hasattr(cls, "load_memmap"):
+        cls.load_memmap = TensorDictBase.load_memmap
+    if not hasattr(cls, "_load_memmap"):
+        cls._load_memmap = classmethod(_load_memmap)
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
@@ -218,10 +238,14 @@ def tensorclass(cls: T) -> T:
             if issubclass(tdcls, TensorDictBase):  # detects classmethods
                 setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
-    cls.to_tensordict = _to_tensordict
-    cls.device = property(_device, _device_setter)
-    cls.batch_size = property(_batch_size, _batch_size_setter)
-    cls.names = property(_names, _names_setter)
+    if not hasattr(cls, "_to_tensordict"):
+        cls.to_tensordict = _to_tensordict
+    if not hasattr(cls, "device"):
+        cls.device = property(_device, _device_setter)
+    if not hasattr(cls, "batch_size"):
+        cls.batch_size = property(_batch_size, _batch_size_setter)
+    if not hasattr(cls, "names"):
+        cls.names = property(_names, _names_setter)
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
@@ -388,6 +412,7 @@ def _memmap_(
                 metadata = {"_type": str(cls)}
                 to_pickle = {}
                 for key, value in _non_tensordict.items():
+                    value = _from_shared_nontensor(value)
                     if _is_json_serializable(value):
                         metadata[key] = value
                     else:
@@ -418,6 +443,12 @@ def _memmap_(
     else:
         result = self
     return result
+
+
+# TODO: test
+def _share_memory_(self):
+    self._tensordict.share_memory_()
+    return self
 
 
 def _load_memmap(cls, prefix: Path, metadata: dict):
@@ -483,6 +514,12 @@ def _getattribute_wrapper(getattribute: Callable) -> Callable:
                 and item in self.__dict__["_non_tensordict"]
             ):
                 out = self._non_tensordict[item]
+                if (
+                    isinstance(self, NonTensorData)
+                    and item == "data"
+                    and (self._is_shared or self._is_memmap)
+                ):
+                    return _from_shared_nontensor(out)
                 return out
         return getattribute(self, item)
 
@@ -1159,6 +1196,15 @@ def _unbind(self, dim: int):
 
 NONTENSOR_HANDLED_FUNCTIONS = []
 
+_MP_MANAGER = None
+
+
+def _mp_manager():
+    global _MP_MANAGER
+    if _MP_MANAGER is None:
+        _MP_MANAGER = Manager()
+    return _MP_MANAGER
+
 
 @tensorclass
 class NonTensorData:
@@ -1278,6 +1324,114 @@ class NonTensorData:
             meta.json
         >>> assert loaded.get_non_tensor("pickable").value == 10
 
+    .. note:: __Preallocation__ is also possible with ``NonTensorData``.
+      This class can handle conversion from ``NonTensorData`` to
+      ``NonTensorStack`` where appropriate, as the following example
+      demonstrates:
+
+        >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        >>> print(td)
+        TensorDict(
+            fields={
+                val: NonTensorData(
+                    data=0,
+                    _metadata=None,
+                    _non_tensor=True,
+                    batch_size=torch.Size([10]),
+                    device=None,
+                    is_shared=False)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)
+        >>> print(td["val"])
+        0
+        >>> newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+        >>> td[1::2] = newdata
+        >>> print(td)
+        TensorDict(
+            fields={
+                val: NonTensorStack(
+                    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+                    batch_size=torch.Size([10]),
+                    device=None)},
+            batch_size=torch.Size([10]),
+            device=None,
+            is_shared=False)
+        >>> print(td["val"])  # the stack is automatically converted to a list
+        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
+
+      If the value is unique, the ``NonTensorData`` container is kept and
+      retrieving the value only returns this value. If a ``NonTensorStack``
+      is used, ``__getitem__`` will return the list of values instead.
+      This makes the two operations not exactly interchangeable. The reason
+      for this inconsistency is that a single ``NonTensorData`` with a non-empty
+      batch-size is intended to be used as a metadata carrier for bigger
+      tensordicts, whereas ``NonTensorStack`` usage is aimed at allocating
+      one metadata atom to each corresponding batch element.
+
+    .. note::
+      ``NonTensorData`` can be shared between processes. In fact, both
+      :meth:`~tensordict.TensorDict.memmap_` (and the likes) and
+      :meth:`~tensordict.TensorDict.share_memory_` will produce sharable
+      instances.
+
+      Valid methods to write data are :meth:`~tensordict.TensorDictBase.update`
+      with the `inplace=True` flag and :meth:`~tensordict.TensorDictBase.update_`
+      or :meth:`~tensordict.TensorDictBase.update_at_`.
+
+        >>> if __name__ == "__main__":
+        ...     td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
+        ...     td.share_memory_()
+        ...     td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))  # works
+        ...     td.update(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []), inplace=True)  # works
+        ...     td["val"] = 1  # breaks
+
+      A shared ``NonTensorData`` is writable whenever its content is a ``str``,
+      ``int``, ``float``, ``bool``, ``dict`` or ``list`` instance. Other types
+      (e.g., dataclasses) will not raise an exception during the call to
+      ``memmap_`` or ``share_memory_`` but they will cause the code to break
+      when the data is overwritten.
+
+        >>> @dataclass
+        ... class MyClass:
+        ...     string: str
+        ...
+        >>> if __name__ == "__main__":
+        ...     td = TensorDict({"val": MyClass("a string!")}, [])
+        ...     td.share_memory_()  # works and can be shared between processes
+        ...     td.update_(TensorDict({"val": MyClass("another string!")}, []))  # breaks!
+
+      :class:`~tensordict.tensorclass.TensorStack` instances are also sharable
+      in a similar way. Crucially, preallocation must be properly handled for
+      this to work.
+
+        >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        >>> newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+        >>> td[1::2] = newdata
+        >>> # If TD is properly preallocated, we can share it and change its content
+        >>> td.share_memory_()
+        >>> newdata = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
+        >>> td[1::2] = newdata  # Works!
+        >>> # In contrast, not preallocating the tensordict properly will break when assigning values
+        >>> td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        >>> td.share_memory_()
+        >>> newdata = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
+        >>> td[1::2] = newdata  # breaks!
+
+      Writable memmapped-``NonTensorData`` instances will update the underlying
+      metadata if required. This involves writing in a JSON file, which can
+      introduce some overhead. We advise against this usage whenever one seeks
+      performance and long-lasting data sharing isn't required (``share_memory_``
+      should be preferred in these cases).
+
+        >>> if __name__ == "__main__":
+        ...     td = TensorDict({"val": NonTensorData(data=0, batch_size=[])}, [])
+        ...     td.memmap_(dest_folder)
+        ...     td.update_(TensorDict({"val": NonTensorData(data=1, batch_size=[])}, []))
+        ...     # The underlying metadata on disk is updated during calls to update_
+        ...     td_load = TensorDict.load_memmap(dest_folder)
+        ...     assert (td == td_load).all()
+
     """
 
     # Used to carry non-tensor data in a tensordict.
@@ -1285,6 +1439,7 @@ class NonTensorData:
     # to patch tensordict with additional checks that will encur unwanted overhead
     # and all the overhead falls back on this class.
     data: Any
+    _metadata: dict | None = None
     _non_tensor: bool = True
 
     def __post_init__(self):
@@ -1357,6 +1512,58 @@ class NonTensorData:
     ) -> T:
         if isinstance(input_dict_or_td, NonTensorData):
             data = input_dict_or_td.data
+            if inplace and self._tensordict._is_shared:
+                _update_shared_nontensor(self._non_tensordict["data"], data)
+                return self
+            elif inplace and self._tensordict._is_memmap:
+                _update_shared_nontensor(self._non_tensordict["data"], data)
+                # Force json update by setting is memmap to False
+                self._tensordict._is_memmap = False
+                self._memmap_(
+                    prefix=self._metadata["memmap_prefix"],
+                    copy_existing=False,
+                    executor=None,
+                    futures=None,
+                    inplace=True,
+                    like=False,
+                )
+                return self
+            elif not inplace and self.is_locked:
+                raise RuntimeError(_LOCK_ERROR)
+            if clone:
+                data = deepcopy(data)
+            self.data = data
+        elif not input_dict_or_td.is_empty():
+            raise RuntimeError(f"Unexpected type {type(input_dict_or_td)}")
+        return self
+
+    def update_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> T:
+        if isinstance(input_dict_or_td, NonTensorData):
+            data = input_dict_or_td.data
+            if self._tensordict._is_shared:
+                _update_shared_nontensor(self._non_tensordict["data"], data)
+                return self
+            if self._tensordict._is_memmap:
+                _update_shared_nontensor(self._non_tensordict["data"], data)
+                # Force json update by setting is memmap to False
+                self._tensordict._is_memmap = False
+                self._memmap_(
+                    prefix=self._metadata["memmap_prefix"],
+                    copy_existing=False,
+                    executor=None,
+                    futures=None,
+                    inplace=True,
+                    like=False,
+                )
+                return self
+            if self._tensordict._is_memmap:
+                raise NotImplementedError
             if clone:
                 data = deepcopy(data)
             self.data = data
@@ -1493,6 +1700,50 @@ class NonTensorData:
             names=self.names,
         )
 
+    def share_memory_(self):
+        if self._tensordict._is_shared:
+            return self
+        with self.unlock_():
+            self._non_tensordict["data"] = _share_memory_nontensor(
+                self.data, manager=_mp_manager()
+            )
+        self._tensordict.share_memory_()
+        return self
+
+    def _memmap_(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        executor=None,
+        futures=None,
+        inplace=True,
+        like=False,
+    ):
+        if self._tensordict._is_memmap:
+            return self
+
+        if prefix is not None:
+            _metadata = copy(self._metadata)
+            if _metadata is None:
+                self._non_tensordict["_metadata"] = {}
+            self._metadata["memmap_prefix"] = prefix
+
+        out = _memmap_(
+            self,
+            prefix=prefix,
+            copy_existing=copy_existing,
+            executor=executor,
+            futures=futures,
+            inplace=inplace,
+            like=like,
+        )
+        if prefix is not None and not inplace:
+            self._non_tensordict["_metadata"] = _metadata
+        out._non_tensordict["data"] = _share_memory_nontensor(
+            out.data, manager=_mp_manager()
+        )
+        return out
+
 
 class NonTensorStack(LazyStackedTensorDict):
     """A thin wrapper around LazyStackedTensorDict to make stack on non-tensor data easily recognizable.
@@ -1553,3 +1804,77 @@ class NonTensorStack(LazyStackedTensorDict):
 
     def to_dict(self) -> dict[str, Any]:
         return self.tolist()
+
+
+_register_tensor_class(NonTensorStack)
+
+
+def _share_memory_nontensor(data, manager: Manager):
+    if isinstance(data, int):
+        return mp.Value(ctypes.c_int, data)
+    if isinstance(data, float):
+        return mp.Value(ctypes.c_double, data)
+    if isinstance(data, bool):
+        return mp.Value(ctypes.c_bool, data)
+    if isinstance(data, bytes):
+        return mp.Value(ctypes.c_byte, data)
+    if isinstance(data, dict):
+        result = manager.dict()
+        result.update(data)
+        return result
+    if isinstance(data, str):
+        result = mp.Array(ctypes.c_char, 100)
+        data = data.encode("utf-8")
+        result[: len(data)] = data
+        return result
+    if isinstance(data, list):
+        result = manager.list()
+        result.extend(data)
+        return result
+    # In all other cases, we just return the tensor. It's ok because the content
+    # will be passed to the remote process using regular serialization. We will
+    # lock the update in _update_shared_nontensor though.
+    return data
+
+
+def _from_shared_nontensor(nontensor):
+    if isinstance(nontensor, multiprocessing.managers.ListProxy):
+        return list(nontensor)
+    if isinstance(nontensor, multiprocessing.managers.DictProxy):
+        return dict(nontensor)
+    if isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
+        return nontensor.value
+    if isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
+        byte_list = []
+        for byte in nontensor:
+            if byte == b"\x00":
+                break
+            byte_list.append(byte)
+        return b"".join(byte_list).decode("utf-8")
+    return nontensor
+
+
+def _update_shared_nontensor(nontensor, val):
+    if isinstance(nontensor, multiprocessing.managers.ListProxy):
+        nontensor[:] = []
+        nontensor.extend(val)
+    elif isinstance(nontensor, multiprocessing.managers.DictProxy):
+        nontensor.clear()
+        nontensor.update(val)
+    elif isinstance(nontensor, multiprocessing.sharedctypes.Synchronized):
+        nontensor.value = val
+    elif isinstance(nontensor, multiprocessing.sharedctypes.SynchronizedArray):
+        val = val.encode("utf-8")
+        for i, byte in enumerate(nontensor):
+            if i < len(val):
+                v = val[i]
+                nontensor[i] = v
+            elif byte == b"\x00":
+                break
+            else:
+                nontensor[i] = b"\x00"
+        # nontensor[0] = val.encode("utf-8")
+    else:
+        raise NotImplementedError(
+            f"Updating {type(nontensor).__name__} within a shared/memmaped structure is not supported."
+        )
