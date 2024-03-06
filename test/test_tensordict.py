@@ -15,8 +15,8 @@ import os
 import pathlib
 import platform
 import re
-import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -8036,6 +8036,7 @@ class TestNonTensorData:
     @pytest.mark.parametrize("update", ["update_", "update-inplace"])
     def test_shared_memmap_mult(self, pair, strategy, update, tmpdir):
         from tensordict.tensorclass import _from_shared_nontensor
+
         val0, val1 = pair
         td = TensorDict({"val": NonTensorData(data=val0, batch_size=[])}, [])
         if strategy == "shared":
@@ -8089,6 +8090,82 @@ class TestNonTensorData:
             assert td["val"] == td_load["val"]
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
+
+    def test_shared_limitations(self):
+        # Sharing a special type works but it's locked for writing
+        @dataclass
+        class MyClass:
+            string: str
+
+        val0 = MyClass(string="a string!")
+
+        td = TensorDict({"val": NonTensorData(data=val0, batch_size=[])}, [])
+        td.share_memory_()
+
+        # with pytest.raises(RuntimeError)
+        val1 = MyClass(string="another string!")
+        with pytest.raises(
+            NotImplementedError, match="Updating MyClass within a shared/memmaped"
+        ):
+            td.update(
+                TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []),
+                inplace=True,
+            )
+        with pytest.raises(ValueError, match="Failed to update"):
+            td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
+
+        # We can update a batched NonTensorData to a NonTensorStack if it's not already shared
+        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        td[1::2] = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+        assert td.get("val").tolist() == [0, 1] * 5
+        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        td.share_memory_()
+        with pytest.raises(
+            RuntimeError,
+            match="You're attempting to update a leaf in-place with a shared",
+        ):
+            td[1::2] = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+
+    def _update_stack(self, td):
+        td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
+
+    @pytest.mark.parametrize("update", ["update_at_", "slice"])
+    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
+    def test_shared_stack(self, strategy, update, tmpdir):
+        td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
+        newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
+        if update == "slice":
+            td[1::2] = newdata
+        elif update == "update_at_":
+            td.update_at_(newdata, slice(1, None, 2))
+        else:
+            raise NotImplementedError
+        if strategy == "shared":
+            td.share_memory_()
+        elif strategy == "memmap":
+            td.memmap_(tmpdir)
+        else:
+            raise NotImplementedError
+        assert td.get("val").tolist() == [0, 1] * 5
+
+        newdata = TensorDict({"val": NonTensorData(data=2, batch_size=[5])}, [5])
+        if update == "slice":
+            td[1::2] = newdata
+        elif update == "update_at_":
+            td.update_at_(newdata, slice(1, None, 2))
+        else:
+            raise NotImplementedError
+
+        assert td.get("val").tolist() == [0, 2] * 5
+        if strategy == "memmap":
+            assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 2] * 5
+
+        proc = mp.Process(target=self._update_stack, args=(td,))
+        proc.start()
+        proc.join()
+        assert td.get("val").tolist() == [0, 3] * 5
+        if strategy == "memmap":
+            assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
 
 
 if __name__ == "__main__":
