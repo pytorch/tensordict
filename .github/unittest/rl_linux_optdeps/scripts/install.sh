@@ -32,9 +32,9 @@ if [ "${CU_VERSION:-}" == cpu ] ; then
     # conda install -y pytorch torchvision cpuonly -c pytorch-nightly
     # use pip to install pytorch as conda can frequently pick older release
 #    conda install -y pytorch cpuonly -c pytorch-nightly
-    pip3 install 'mpmath<1.4' --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 else
-    pip3 install 'mpmath<1.4' --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu118
+    pip3 install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/cu118
 fi
 
 # install tensordict
