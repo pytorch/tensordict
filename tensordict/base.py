@@ -5285,8 +5285,9 @@ def _register_tensor_class(cls):
 
 
 def _is_tensor_collection(datatype):
-    out = _TENSOR_COLLECTION_MEMO.get(datatype, None)
-    if out is None:
+    try:
+        out = _TENSOR_COLLECTION_MEMO[datatype]
+    except KeyError:
         if issubclass(datatype, TensorDictBase):
             out = True
         elif _is_tensorclass(datatype):

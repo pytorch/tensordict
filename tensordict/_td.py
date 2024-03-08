@@ -519,6 +519,14 @@ class TensorDict(TensorDictBase):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                keys1 = sorted(
+                    keys1,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                keys2 = sorted(
+                    keys2,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
                 raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
             d = {}
             for key, item1 in self.items():
