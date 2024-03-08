@@ -2689,7 +2689,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             if len(keys_to_update) == 0:
                 return self
             keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
-        if keys_to_update:
+
             named = True
 
             def inplace_update(name, dest, source):
@@ -2698,9 +2698,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 name = _unravel_key_to_tuple(name)
                 for key in keys_to_update:
                     if key == name[: len(key)]:
-                        return dest.copy_(source, non_blocking=True)
-                else:
-                    return dest
+                        dest.copy_(source, non_blocking=True)
 
         else:
             named = False
@@ -2708,7 +2706,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             def inplace_update(dest, source):
                 if source is None:
                     return dest
-                return dest.copy_(source, non_blocking=True)
+                dest.copy_(source, non_blocking=True)
 
         if not is_tensor_collection(input_dict_or_td):
             from tensordict import TensorDict
@@ -2716,14 +2714,16 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-        return self._apply_nest(
+        self._apply_nest(
             inplace_update,
             input_dict_or_td,
             nested_keys=True,
             default=None,
             inplace=True,
+            filter_empty=True,
             named=named,
         )
+        return self
 
     def update_at_(
         self,
