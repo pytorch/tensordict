@@ -223,6 +223,8 @@ def tensorclass(cls: T) -> T:
         cls._memmap_ = _memmap_
     if not hasattr(cls, "share_memory_"):
         cls.share_memory_ = _share_memory_
+    if not hasattr(cls, "update"):
+        cls.update = _update
 
     cls.__enter__ = __enter__
     cls.__exit__ = __exit__
@@ -593,6 +595,44 @@ def _wrap_method(self, attr, func):
         return res
 
     return wrapped_func
+
+
+def _update(
+    self,
+    input_dict_or_td: dict[str, CompatibleType] | T,
+    clone: bool = False,
+    inplace: bool = False,
+    *,
+    keys_to_update: Sequence[NestedKey] | None = None,
+):
+    if isinstance(input_dict_or_td, dict):
+        input_dict_or_td = TensorDict.from_dict(
+            input_dict_or_td, batch_size=self.batch_size
+        )
+    elif is_tensorclass(input_dict_or_td):
+        self._tensordict.update(input_dict_or_td._tensordict)
+        self._non_tensordict.update(input_dict_or_td._non_tensordict)
+        return self
+
+    non_tensordict = {}
+
+    def _filter(name, x, non_tensordict=non_tensordict):
+        if not is_non_tensor(x):
+            return x
+        non_tensordict[name] = x.data
+
+    td = input_dict_or_td._apply_nest(
+        _filter,
+        call_on_nested=False,
+        filter_empty=True,
+        named=True,
+        is_leaf=_is_leaf_nontensor,
+    )
+    self._tensordict.update(
+        td, clone=clone, inplace=inplace, keys_to_update=keys_to_update
+    )
+    self._non_tensordict.update(non_tensordict)
+    return self
 
 
 def _wrap_classmethod(td_cls, cls, func):
