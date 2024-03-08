@@ -729,6 +729,7 @@ class TensorDict(TensorDictBase):
                     default=default,
                     prefix=prefix + (key,),
                     filter_empty=filter_empty,
+                    is_leaf=is_leaf,
                     **constructor_kwargs,
                 )
             else:
