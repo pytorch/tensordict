@@ -1801,6 +1801,32 @@ def test_decorator():
     assert not obj.is_locked
 
 
+def test_to_dict():
+    @tensorclass
+    class TestClass:
+        my_tensor: torch.Tensor
+        my_str: str
+
+    test_class = TestClass(
+        my_tensor=torch.tensor([1, 2, 3]), my_str="hello", batch_size=[3]
+    )
+
+    assert (test_class == TestClass.from_dict(test_class.to_dict())).all()
+
+    # Currently we don't test non-tensor in __eq__ because __eq__ can break with arrays and such
+    # test_class2 = TestClass(
+    #     my_tensor=torch.tensor([1, 2, 3]), my_str="goodbye", batch_size=[3]
+    # )
+    #
+    # assert not (test_class == TestClass.from_dict(test_class2.to_dict())).all()
+
+    test_class3 = TestClass(
+        my_tensor=torch.tensor([1, 2, 0]), my_str="hello", batch_size=[3]
+    )
+
+    assert not (test_class == TestClass.from_dict(test_class3.to_dict())).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

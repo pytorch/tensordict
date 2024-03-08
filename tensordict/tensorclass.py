@@ -32,7 +32,12 @@ from tensordict import LazyStackedTensorDict
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
-from tensordict.base import _ACCEPTED_CLASSES, _register_tensor_class, CompatibleType
+from tensordict.base import (
+    _ACCEPTED_CLASSES,
+    _is_leaf_nontensor,
+    _register_tensor_class,
+    CompatibleType,
+)
 from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
     _get_repr,
@@ -197,6 +202,7 @@ def tensorclass(cls: T) -> T:
     cls.__ne__ = _ne
     cls.__or__ = _or
     cls.__xor__ = _xor
+    cls.__bool__ = _bool
     if not hasattr(cls, "set"):
         cls.set = _set
     if not hasattr(cls, "set_at_"):
@@ -232,6 +238,8 @@ def tensorclass(cls: T) -> T:
         cls.load_memmap = TensorDictBase.load_memmap
     if not hasattr(cls, "_load_memmap"):
         cls._load_memmap = classmethod(_load_memmap)
+    if not hasattr(cls, "from_dict"):
+        cls.from_dict = classmethod(_from_dict)
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
@@ -248,6 +256,8 @@ def tensorclass(cls: T) -> T:
         cls.batch_size = property(_batch_size, _batch_size_setter)
     if not hasattr(cls, "names"):
         cls.names = property(_names, _names_setter)
+    if not hasattr(cls, "to_dict"):
+        cls.to_dict = _to_dict
 
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
@@ -722,6 +732,33 @@ def _len(self) -> int:
     return len(self._tensordict)
 
 
+def _to_dict(self) -> dict:
+    td_dict = self._tensordict.to_dict()
+    td_dict.update(self._non_tensordict)
+    return td_dict
+
+
+def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
+    td = TensorDict.from_dict(
+        input_dict, batch_size=batch_size, device=device, batch_dims=batch_dims
+    )
+    non_tensor = {}
+
+    def _filter(name, x, non_tensor=non_tensor):
+        if not is_non_tensor(x):
+            return x
+        non_tensor[name] = x.data
+
+    td = td._apply_nest(
+        _filter,
+        call_on_nested=False,
+        filter_empty=True,
+        named=True,
+        is_leaf=_is_leaf_nontensor,
+    )
+    return cls.from_tensordict(tensordict=td, non_tensordict=non_tensor)
+
+
 def _to_tensordict(self) -> TensorDict:
     """Convert the tensorclass into a regular TensorDict.
 
@@ -1128,6 +1165,10 @@ def _xor(self, other: object) -> bool:
     else:
         tensor = self._tensordict ^ other
     return _from_tensordict_with_none(self, tensor)
+
+
+def _bool(self):
+    raise RuntimeError("Converting a tensorclass to boolean value is not permitted")
 
 
 def _single_td_field_as_str(key, item, tensordict):
