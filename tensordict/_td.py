@@ -1299,6 +1299,7 @@ class TensorDict(TensorDictBase):
             )
 
         batch_size_set = torch.Size(()) if batch_size is None else batch_size
+        input_dict = copy(input_dict)
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
                 # we don't know if another tensor of smaller size is coming

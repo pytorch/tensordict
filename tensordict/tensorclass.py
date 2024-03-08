@@ -225,6 +225,8 @@ def tensorclass(cls: T) -> T:
         cls.share_memory_ = _share_memory_
     if not hasattr(cls, "update"):
         cls.update = _update
+    if not hasattr(cls, "update_"):
+        cls.update_ = _update_
 
     cls.__enter__ = __enter__
     cls.__exit__ = __exit__
@@ -606,6 +608,39 @@ def _update(
     keys_to_update: Sequence[NestedKey] | None = None,
 ):
     if isinstance(input_dict_or_td, dict):
+        input_dict_or_td = self.from_dict(input_dict_or_td)
+
+    if is_tensorclass(input_dict_or_td):
+        self._tensordict.update(input_dict_or_td._tensordict)
+        self._non_tensordict.update(input_dict_or_td._non_tensordict)
+        return self
+
+    non_tensordict = {}
+    input_dict_or_td = input_dict_or_td.copy()
+    for key, val in input_dict_or_td.items():
+        if is_non_tensor(val):
+            # This may be dangerous if a value is indicated as being a NonTensorData
+            # in the class, it won't be placed in tensordict but in non_tensordict
+            # here
+            non_tensordict[key] = val.data
+            del input_dict_or_td[key]
+
+    self._tensordict.update(
+        input_dict_or_td, clone=clone, inplace=inplace, keys_to_update=keys_to_update
+    )
+    self._non_tensordict.update(non_tensordict)
+    return self
+
+
+def _update_(
+    self,
+    input_dict_or_td: dict[str, CompatibleType] | T,
+    clone: bool = False,
+    inplace: bool = False,
+    *,
+    keys_to_update: Sequence[NestedKey] | None = None,
+):
+    if isinstance(input_dict_or_td, dict):
         input_dict_or_td = TensorDict.from_dict(
             input_dict_or_td, batch_size=self.batch_size
         )
@@ -628,7 +663,7 @@ def _update(
         named=True,
         is_leaf=_is_leaf_nontensor,
     )
-    self._tensordict.update(
+    self._tensordict.update_(
         td, clone=clone, inplace=inplace, keys_to_update=keys_to_update
     )
     self._non_tensordict.update(non_tensordict)
@@ -1098,7 +1133,9 @@ def _eq(self, other: object) -> bool:
     if is_tensorclass(other):
         tensor = self._tensordict == other._tensordict
     else:
-        tensor = self._tensordict == other
+        # other can be a tensordict reconstruction of self, in which case we discard
+        # the non-tensor data
+        tensor = self._tensordict == other.exclude(*self._non_tensordict.keys())
     return _from_tensordict_with_none(self, tensor)
 
 

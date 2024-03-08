@@ -1326,6 +1326,35 @@ class TestTensorClass:
         assert split_tcs[0].z == split_tcs[1].z == split_tcs[2].z == z
         assert split_tcs[0].y[0].z == split_tcs[0].y[1].z == split_tcs[0].y[2].z == z
 
+
+    def test_update(
+        self
+    ):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+            @classmethod
+            def get_data(cls, shift):
+                X = torch.zeros(1, 4, 5) + shift
+                z = f"test_tensorclass{shift}"
+                batch_size = [1, 4]
+                data_nest = cls(X=X, z=z, batch_size=batch_size)
+                data = cls(X=X, y=data_nest, z=z, batch_size=batch_size)
+                return data
+
+        data1 = MyDataNested.get_data(1)
+        for _data1 in (data1, data1.to_dict(), data1.to_tensordict()):
+            data0 = MyDataNested.get_data(0)
+            data0.update(_data1)
+            assert (data0.X == 1).all()
+            assert (data0.z == "test_tensorclass1"), _data1
+            assert (data0.y.X == 1).all()
+            assert (data0.y.z == "test_tensorclass1"), _data1
+
+
     def test_squeeze(
         self,
     ):
