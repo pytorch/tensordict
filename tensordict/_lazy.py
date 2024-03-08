@@ -1413,6 +1413,7 @@ class LazyStackedTensorDict(TensorDictBase):
         nested_keys: bool = False,
         prefix: tuple = (),
         filter_empty: bool | None = None,
+        is_leaf: Callable | None = None,
         **constructor_kwargs,
     ) -> T | None:
         if inplace and any(
@@ -1438,6 +1439,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 prefix=prefix,
                 inplace=inplace,
                 filter_empty=filter_empty,
+                is_leaf=is_leaf,
                 **constructor_kwargs,
             )
 
@@ -1455,6 +1457,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 prefix=prefix,  # + (i,),
                 inplace=inplace,
                 filter_empty=filter_empty,
+                is_leaf=is_leaf,
             )
             for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
         ]

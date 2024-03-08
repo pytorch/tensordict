@@ -660,6 +660,7 @@ class TensorDict(TensorDictBase):
         nested_keys: bool = False,
         prefix: tuple = (),
         filter_empty: bool | None = None,
+        is_leaf: Callable = None,
         **constructor_kwargs,
     ) -> T | None:
         if inplace:
@@ -695,10 +696,13 @@ class TensorDict(TensorDictBase):
             is_locked = False
 
         any_set = False
+        if is_leaf is None:
+            is_leaf = _default_is_leaf
+
         for key, item in self.items():
             if (
                 not call_on_nested
-                and _is_tensor_collection(item.__class__)
+                and not is_leaf(item.__class__)
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
@@ -724,6 +728,7 @@ class TensorDict(TensorDictBase):
                     default=default,
                     prefix=prefix + (key,),
                     filter_empty=filter_empty,
+                    is_leaf=is_leaf,
                     **constructor_kwargs,
                 )
             else:

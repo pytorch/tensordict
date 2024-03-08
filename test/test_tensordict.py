@@ -8104,7 +8104,9 @@ class TestNonTensorData:
                 TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []),
                 inplace=True,
             )
-        with pytest.raises(ValueError, match="Failed to update"):
+        with pytest.raises(
+            NotImplementedError, match="Updating MyClass within a shared/memmaped"
+        ):
             td.update_(TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []))
 
         # We can update a batched NonTensorData to a NonTensorStack if it's not already shared
