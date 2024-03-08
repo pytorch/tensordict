@@ -2708,7 +2708,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     return None
                 dest.copy_(source, non_blocking=True)
 
-        if not is_tensor_collection(input_dict_or_td):
+        if not _is_tensor_collection(type(input_dict_or_td)):
             from tensordict import TensorDict
 
             input_dict_or_td = TensorDict.from_dict(
@@ -2719,7 +2719,6 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             input_dict_or_td,
             nested_keys=True,
             default=None,
-            inplace=True,
             filter_empty=True,
             named=named,
         )
