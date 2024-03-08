@@ -61,7 +61,6 @@ from tensordict.utils import (
     infer_size_impl,
     int_generator,
     is_non_tensor,
-    KeyedJaggedTensor,
     lazy_legacy,
     lock_blocked,
     NestedKey,

@@ -167,11 +167,7 @@ def tensorclass(cls: T) -> T:
             )
         return _from_tensordict_with_copy(tensorclass_instance, result)
 
-    if hasattr(cls, "_non_tensor"):
-        _non_tensor = getattr(cls, "_non_tensor")
-        # delattr(cls, "_non_tensor")
-    else:
-        _non_tensor = False
+    _non_tensor = getattr(cls, "_non_tensor", False)
 
     cls = dataclass(cls)
     expected_keys = set(cls.__dataclass_fields__)
