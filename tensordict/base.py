@@ -107,12 +107,13 @@ _TENSOR_COLLECTION_MEMO = {}
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
-    _safe = False
-    _lazy = False
-    _inplace_set = False
-    is_meta = False
-    _is_locked = False
-    _cache = None
+    _safe: bool = False
+    _lazy: bool = False
+    _inplace_set: bool = False
+    is_meta: bool = False
+    _is_locked: bool = False
+    _cache: bool = None
+    _non_tensor: bool = False
 
     def __bool__(self) -> bool:
         raise RuntimeError("Converting a tensordict to boolean value is not permitted")
@@ -2721,6 +2722,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             default=None,
             filter_empty=True,
             named=named,
+            is_leaf=_is_leaf_nontensor,
         )
         return self
 
@@ -4015,6 +4017,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         nested_keys: bool = False,
         prefix: tuple = (),
         filter_empty: bool | None = None,
+        is_leaf: Callable = None,
         **constructor_kwargs,
     ) -> T | None:
         ...
@@ -4034,6 +4037,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # filter_empty must be False because we use _fast_apply for all sorts of ops like expand etc
         # and non-tensor data will disappear if we use True by default.
         filter_empty: bool | None = False,
+        is_leaf: Callable = None,
         **constructor_kwargs,
     ) -> T | None:
         """A faster apply method.
@@ -4056,6 +4060,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             default=default,
             nested_keys=nested_keys,
             filter_empty=filter_empty,
+            is_leaf=is_leaf,
             **constructor_kwargs,
         )
 
@@ -5409,8 +5414,8 @@ def _default_is_leaf(cls: Type) -> bool:
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:
-    if issubclass(cls, KeyedJaggedTensor):
-        return False
     if _is_tensor_collection(cls):
-        return cls.__dict__.get("_non_tensor", False)
+        return cls._non_tensor
+    # if issubclass(cls, KeyedJaggedTensor):
+    #     return False
     return issubclass(cls, torch.Tensor)

@@ -167,11 +167,17 @@ def tensorclass(cls: T) -> T:
             )
         return _from_tensordict_with_copy(tensorclass_instance, result)
 
+    if hasattr(cls, "_non_tensor"):
+        _non_tensor = getattr(cls, "_non_tensor")
+        # delattr(cls, "_non_tensor")
+    else:
+        _non_tensor = False
+
     cls = dataclass(cls)
     expected_keys = set(cls.__dataclass_fields__)
 
     for attr in cls.__dataclass_fields__:
-        if attr in dir(TensorDict):
+        if attr in dir(TensorDict) and attr != "_non_tensor":
             raise AttributeError(
                 f"Attribute name {attr} can't be used with @tensorclass"
             )
@@ -250,6 +256,9 @@ def tensorclass(cls: T) -> T:
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
     _register_tensor_class(cls)
+
+    cls._non_tensor = _non_tensor
+
     return cls
 
 
@@ -1440,6 +1449,7 @@ class NonTensorData:
     # and all the overhead falls back on this class.
     data: Any
     _metadata: dict | None = None
+
     _non_tensor: bool = True
 
     def __post_init__(self):
@@ -1544,6 +1554,16 @@ class NonTensorData:
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
+
+        if isinstance(input_dict_or_td, NonTensorStack):
+            raise RuntimeError(
+                "Cannot update a NonTensorData with a NonTensorStack object."
+            )
+        if not isinstance(input_dict_or_td, NonTensorData):
+            raise RuntimeError(
+                "NonTensorData.copy_ / update_ requires the source to be a NonTensorData object."
+            )
+
         if isinstance(input_dict_or_td, NonTensorData):
             data = input_dict_or_td.data
             if self._tensordict._is_shared:
@@ -1675,15 +1695,7 @@ class NonTensorData:
         return [ntd.tolist() for ntd in self.unbind(0)]
 
     def copy_(self, src: NonTensorData | NonTensorStack, non_blocking: bool = False):
-        if isinstance(src, NonTensorStack):
-            raise RuntimeError(
-                "Cannot update a NonTensorData with a NonTensorStack object."
-            )
-        if not isinstance(src, NonTensorData):
-            raise RuntimeError(
-                "NonTensorData.copy_ requires the source to be a NonTensorData object."
-            )
-        self._non_tensordict["data"] = src.data
+        return self.update_(src)
 
     def clone(self, recurse: bool = True):
         if recurse:
