@@ -196,6 +196,12 @@ def tensorclass(cls: T) -> T:
     cls.__or__ = _or
     cls.__xor__ = _xor
     cls.__bool__ = _bool
+    # if not hasattr(cls, "keys"):
+    #     cls.keys = _keys
+    # if not hasattr(cls, "values"):
+    #     cls.values = _values
+    # if not hasattr(cls, "items"):
+    #     cls.items = _items
     if not hasattr(cls, "set"):
         cls.set = _set
     if not hasattr(cls, "set_at_"):
@@ -548,6 +554,18 @@ def _memmap_(
     return result
 
 
+# def _keys(self, include_nested=False, leaves_only=False, *, is_leaf=None):
+#     yield from self._tensordict.keys(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)
+#     yield from self._non_tensordict.keys()
+#
+# def _values(self, include_nested=False, leaves_only=False, is_leaf=None):
+#     yield from self._tensordict.values(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)
+#     yield from self._non_tensordict.values()
+#
+# def _items(self, include_nested=False, leaves_only=False, is_leaf=None):
+#     yield from self._tensordict.items(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)
+#     yield from self._non_tensordict.items()
+
 # TODO: test
 def _share_memory_(self):
     self._tensordict.share_memory_()
@@ -849,10 +867,13 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         self._tensordict[item] = value._tensordict
     else:  # it is one of accepted "broadcast" types
         # attempt broadcast on all tensordata and nested tensorclasses
-        self._tensordict[item] = value
-        for key, val in self._non_tensordict.items():
-            if is_tensorclass(val):
-                _setitem(self._non_tensordict[key], item, value)
+        self._tensordict[item] = value.filter_non_tensor_data()
+        self._non_tensordict.update(
+            {
+                key: val.data
+                for key, val in value.items(is_leaf=is_non_tensor, leaves_only=True)
+            }
+        )
 
 
 def _repr(self) -> str:
