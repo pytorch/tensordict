@@ -369,6 +369,57 @@ class TensorDictBase(MutableMapping):
         _set_max_batch_size(self, batch_dims)
         return self
 
+    @abc.abstractmethod
+    def from_dict_instance(
+        self, input_dict, batch_size=None, device=None, batch_dims=None
+    ):
+        """Instance method version of :meth:`~tensordict.TensorDict.from_dict`.
+
+        Unlike :meth:`~tensordict.TensorDict.from_dict`, this method will
+        attempt to keep the tensordict types within the existing tree (for
+        any existing leaf).
+
+        Examples:
+            >>> from tensordict import TensorDict, tensorclass
+            >>> import torch
+            >>>
+            >>> @tensorclass
+            >>> class MyClass:
+            ...     x: torch.Tensor
+            ...     y: int
+            >>>
+            >>> td = TensorDict({"a": torch.randn(()), "b": MyClass(x=torch.zeros(()), y=1)})
+            >>> print(td.from_dict_instance(td.to_dict()))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: MyClass(
+                        x=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                        y=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> print(td.from_dict(td.to_dict()))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            y: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+
+        """
+        ...
+
     # Module interaction
     @classmethod
     def from_module(
@@ -672,13 +723,12 @@ class TensorDictBase(MutableMapping):
             )
         if not isinstance(new_batch_size, torch.Size):
             new_batch_size = torch.Size(new_batch_size)
-        for key in self.keys():
-            if _is_tensor_collection(self.entry_class(key)):
-                tensordict = self.get(key)
-                if len(tensordict.batch_size) < len(new_batch_size):
+        for key, value in self.items():
+            if _is_tensor_collection(type(value)):
+                if len(value.batch_size) < len(new_batch_size):
                     # document as edge case
-                    tensordict.batch_size = new_batch_size
-                    self._set_str(key, tensordict, inplace=True, validated=True)
+                    value.batch_size = new_batch_size
+                    self._set_str(key, value, inplace=True, validated=True)
         self._check_new_batch_size(new_batch_size)
         self._change_batch_size(new_batch_size)
         if self._has_names():

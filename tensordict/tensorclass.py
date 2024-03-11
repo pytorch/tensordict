@@ -237,6 +237,8 @@ def tensorclass(cls: T) -> T:
         cls._load_memmap = classmethod(_load_memmap)
     if not hasattr(cls, "from_dict"):
         cls.from_dict = classmethod(_from_dict)
+    if not hasattr(cls, "from_dict_instance"):
+        cls.from_dict_instance = _from_dict_instance
 
     for attr in TensorDict.__dict__.keys():
         func = getattr(TensorDict, attr)
@@ -245,7 +247,7 @@ def tensorclass(cls: T) -> T:
             if issubclass(tdcls, TensorDictBase):  # detects classmethods
                 setattr(cls, attr, _wrap_classmethod(tdcls, cls, func))
 
-    if not hasattr(cls, "_to_tensordict"):
+    if not hasattr(cls, "to_tensordict"):
         cls.to_tensordict = _to_tensordict
     if not hasattr(cls, "device"):
         cls.device = property(_device, _device_setter)
@@ -902,6 +904,52 @@ def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
             del td[key]
 
     return cls.from_tensordict(tensordict=td, non_tensordict=non_tensor)
+
+
+def _from_dict_instance(
+    self, input_dict, batch_size=None, device=None, batch_dims=None
+):
+    if batch_dims is not None and batch_size is not None:
+        raise ValueError("Cannot pass both batch_size and batch_dims to `from_dict`.")
+    from tensordict import TensorDict
+
+    batch_size_set = torch.Size(()) if batch_size is None else batch_size
+    # TODO: this is a bit slow and will be a bottleneck every time td[idx] = dict(subtd)
+    # is called when there are non tensor data in it
+    if not _is_tensor_collection(type(input_dict)):
+        input_tdict = TensorDict.from_dict(input_dict)
+    else:
+        input_tdict = input_dict
+    trsf_dict = {}
+    for key, value in list(input_tdict.items()):
+        # cur_value = getattr(self, key, None)
+        cur_value = self.get(key, None)
+        if cur_value is not None:
+            if _is_tensor_collection(type(cur_value)):
+                trsf_dict[key] = cur_value.from_dict_instance(
+                    value, batch_size=[], device=device, batch_dims=None
+                )
+            elif not isinstance(cur_value, torch.Tensor) and is_non_tensor(value):
+                trsf_dict[key] = value.data
+            elif not isinstance(cur_value, torch.Tensor):
+                # This is slightly unsafe but will work with bool, float and int
+                try:
+                    trsf_dict[key] = type(cur_value)(value)
+                except Exception:
+                    trsf_dict[key] = input_dict[key]
+            else:
+                trsf_dict[key] = value
+        else:
+            trsf_dict[key] = value
+    out = type(self)(
+        **trsf_dict,
+        batch_size=batch_size_set,
+        device=device,
+    )
+    # check that
+    if batch_size is None:
+        out._tensordict.auto_batch_size_()
+    return out
 
 
 def _to_tensordict(self) -> TensorDict:
@@ -1814,6 +1862,9 @@ class NonTensorData:
         # override to_dict to return just the data
         return self.data
 
+    def to_tensordict(self):
+        return self
+
     @classmethod
     def _stack_non_tensor(cls, list_of_non_tensor, dim=0):
         # checks have been performed previously, so we're sure the list is non-empty
@@ -2027,6 +2078,9 @@ class NonTensorStack(LazyStackedTensorDict):
 
     def to_dict(self) -> dict[str, Any]:
         return self.tolist()
+
+    def to_tensordict(self):
+        return self
 
 
 _register_tensor_class(NonTensorStack)

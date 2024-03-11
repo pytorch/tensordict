@@ -41,7 +41,7 @@ from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData
+from tensordict.tensorclass import NonTensorData, tensorclass
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -663,6 +663,29 @@ class TestGeneric:
             assert data["b"].batch_size == torch.Size(batch_size)
             assert data["d"].batch_size == torch.Size(batch_size)
             assert data["d", "g"].batch_size == torch.Size(batch_size)
+
+    def test_from_dict_instance(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor = None
+            y: int = None
+            z: "MyClass" = None
+
+        td = TensorDict(
+            {"a": torch.randn(()), "b": MyClass(x=torch.zeros(()), y=1, z=MyClass(y=2))}
+        )
+        td_dict = td.to_dict()
+        assert isinstance(td_dict["b"], dict)
+        assert isinstance(td_dict["b"]["y"], int)
+        assert isinstance(td_dict["b"]["z"], dict)
+        assert isinstance(td_dict["b"]["z"]["y"], int)
+        td_recon = td.from_dict_instance(td_dict)
+        assert isinstance(td_recon["a"], torch.Tensor)
+        assert isinstance(td_recon["b"], MyClass)
+        assert isinstance(td_recon["b"].x, torch.Tensor)
+        assert isinstance(td_recon["b"].y, int)
+        assert isinstance(td_recon["b"].z, MyClass)
+        assert isinstance(td_recon["b"].z.y, int)
 
     @pytest.mark.parametrize("memmap", [True, False])
     @pytest.mark.parametrize("params", [False, True])
