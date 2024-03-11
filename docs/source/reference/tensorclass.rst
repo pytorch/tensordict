@@ -6,10 +6,13 @@ tensorclass
 The ``@tensorclass`` decorator helps you build custom classes that inherit the
 behaviour from :class:`~tensordict.TensorDict` while being able to restrict
 the possible entries to a predefined set or implement custom methods for your class.
-Like :class:`~tensordict.TensorDict`, ``@tensorclass`` supports nesting, indexing, reshaping,
-item assignment. It also supports tensor operations like clone, squeeze, cat,
-split and many more. ``@tensorclass`` allows non-tensor entries,
+
+Like :class:`~tensordict.TensorDict`, ``@tensorclass`` supports nesting,
+indexing, reshaping, item assignment. It also supports tensor operations like
+``clone``, ``squeeze``, ``torch.cat``, ``split`` and many more.
+``@tensorclass`` allows non-tensor entries,
 however all the tensor operations are strictly restricted to tensor attributes.
+
 One needs to implement their custom methods for non-tensor data.
 It is important to note that ``@tensorclass`` does not enforce strict type matching
 
@@ -69,9 +72,12 @@ It is important to note that ``@tensorclass`` does not enforce strict type match
     device=None,
     is_shared=False)
 
+As it is the case with :class:`~tensordict.TensorDict`, from v0.4 if the batch size
+is omitted it is considered as empty.
 
-``@tensorclass`` supports indexing. Internally the tensor objects gets indexed,
-however the non-tensor data remains the same
+If a non-empty batch-size is provided, ``@tensorclass`` supports indexing.
+Internally the tensor objects gets indexed, however the non-tensor data
+remains the same
 
 .. code-block::
 
@@ -150,7 +156,7 @@ Here is an example:
      is_shared=False)
 
 Serialization
-~~~~~~~~~~~~~
+-------------
 
 Saving a tensorclass instance can be achieved with the `memmap` method.
 The saving strategy is as follows: tensor data will be saved using memory-mapped
@@ -168,7 +174,7 @@ the `tensorclass` is available in the working environment:
 
 
 Edge cases
-~~~~~~~~~~
+----------
 
 ``@tensorclass`` supports equality and inequality operators, even for
 nested objects. Note that the non-tensor/ meta data is not validated.
@@ -212,11 +218,12 @@ thrown
   >>> data[0] = data2[0]
   UserWarning: Meta data at 'non_tensordata' may or may not be equal, this may result in undefined behaviours
 
-Even though ``@tensorclass`` supports torch functions like cat and stack, the
-non-tensor / meta data is not validated. The torch operation is performed on the
-tensor data and while returning the output, the non-tensor / meta data of the first
-tensor class object is considered. User needs to make sure that all the
-list of tensor class objects have the same non-tensor data to avoid discrepancies
+Even though ``@tensorclass`` supports torch functions like :func:`~torch.cat`
+and :func:`~torch.stack`, the non-tensor / meta data is not validated.
+The torch operation is performed on the tensor data and while returning the
+output, the non-tensor / meta data of the first tensor class object is
+considered. User needs to make sure that all the list of tensor class objects
+have the same non-tensor data to avoid discrepancies
 
 Here is an example:
 
@@ -274,3 +281,74 @@ Here is an example:
     tensorclass
     NonTensorData
     NonTensorStack
+
+Auto-casting
+------------
+
+``@tensorclass`` partially supports auto-casting as an experimental feature.
+Methods such as ``__setattr__``, ``update``, ``update_`` and ``from_dict`` will
+attempt to cast type-annotated entries to the desired TensorDict / tensorclass
+instance (except in cases detailed below). For instance, following code will
+cast the `td` dictionary to a :class:`~tensordict.TensorDict` and the `tc`
+entry to a :class:`MyClass` instance:
+
+    >>> @tensorclass
+    ... class MyClass:
+    ...     tensor: torch.Tensor
+    ...     td: TensorDict
+    ...     tc: MyClass
+    ...
+    >>> obj = MyClass(
+    ...     tensor=torch.randn(()),
+    ...     td={"a": torch.randn(())},
+    ...     tc={"tensor": torch.randn(()), "td": None, "tc": None})
+    >>> assert isinstance(obj.tensor, torch.Tensor)
+    >>> assert isinstance(obj.tc, TensorDict)
+    >>> assert isinstance(obj.td, MyClass)
+
+.. note:: Type annotated items that include an ``typing.Optional`` or
+  ``typing.Union`` will not be compatible with auto-casting, but other items
+  in the tensorclass will:
+
+    >>> @tensorclass
+    ... class MyClass:
+    ...     tensor: torch.Tensor
+    ...     tc_autocast: MyClass = None
+    ...     tc_not_autocast: Optional[MyClass] = None
+    >>> obj = MyClass(
+    ...     tensor=torch.randn(()),
+    ...     tc_autocast={"tensor": torch.randn(())},
+    ...     tc_not_autocast={"tensor": torch.randn(())},
+    ... )
+    >>> assert isinstance(obj.tc_autocast, MyClass)
+    >>> # because the type is Optional or Union, auto-casting is disabled for
+    >>> # that variable.
+    >>> assert not isinstance(obj.tc_not_autocast, MyClass)
+
+  If at least one item in the class is annotated using the ``type0 | type1``
+  semantic, the whole class auto-casting capabilities are deactivated.
+  Because ``tensorclass`` supports non-tensor leaves, setting a dictionary in
+  these cases will lead to setting it as a plain dictionary instead of a
+  tensor collection subclass (``TensorDict`` or ``tensorclass``):
+
+    >>> @tensorclass
+    ... class MyClass:
+    ...     tensor: torch.Tensor
+    ...     td: TensorDict
+    ...     tc: MyClass | None
+    ...
+    >>> obj = MyClass(
+    ...     tensor=torch.randn(()),
+    ...     td={"a": torch.randn(())},
+    ...     tc={"tensor": torch.randn(()), "td": None, "tc": None})
+    >>> assert isinstance(obj.tensor, torch.Tensor)
+    >>> # tc and td have not been cast
+    >>> assert isinstance(obj.tc, dict)
+    >>> assert isinstance(obj.td, dict)
+
+.. note:: Auto-casting isn't enabled for leaves (tensors).
+  The reason for this is that this feature isn't compatible with type
+  annotations that contain the ``type0 | type1`` type hinting semantic, which
+  is widespread. Allowing auto-casting would result in very similar codes to
+  have drastically different behaviours if the type annotation differs only
+  slightly.
