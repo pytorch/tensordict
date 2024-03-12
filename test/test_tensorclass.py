@@ -5,11 +5,13 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 import inspect
 import os
 import pickle
 import re
+import sys
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -60,6 +62,9 @@ class MyData:
     def stuff(self):
         return self.X + self.y
 
+PY8 = sys.version_info >= (3, 8) and sys.version_info < (3, 9)
+PY9 = sys.version_info >= (3, 9) and sys.version_info < (3, 10)
+PY10 = sys.version_info >= (3, 10)
 
 # this slightly convoluted construction of MyData allows us to check that instances of
 # the tensorclass are instances of the original class.
@@ -1955,7 +1960,12 @@ class TestAutoCasting:
         assert isinstance(obj.tensor, torch.Tensor)
         assert isinstance(obj.non_tensor, str)
         assert isinstance(obj.td, TensorDict)
-        assert isinstance(obj.tc, self.ClsAutoCast), (type(obj.tc), type(obj))
+        if not PY8:
+            assert isinstance(obj.tc, self.ClsAutoCast), (
+                type(obj.tc), type(obj))
+        else:
+            assert isinstance(obj.tc, dict), (type(obj.tc), type(obj))
+
         assert isinstance(obj.tc_global, AutoCast), (type(obj.tc), type(obj))
 
         assert isinstance(obj.tc.tensor, torch.Tensor)
@@ -1966,7 +1976,7 @@ class TestAutoCasting:
     def test_autocast_or(self):
         with pytest.warns(
             UserWarning, match="This may be caused by annotations that use plain"
-        ):
+        ) if not PY10 else contextlib.nullcontext():
             obj = AutoCastOr(
                 tensor=torch.zeros(()),
                 non_tensor="x",
@@ -1981,7 +1991,10 @@ class TestAutoCasting:
 
         assert isinstance(obj.tensor, torch.Tensor)
         assert isinstance(obj.non_tensor, str)
-        assert not isinstance(obj.td, TensorDict)
+        if not PY10:
+            assert not isinstance(obj.td, TensorDict)
+        else:
+            assert isinstance(obj.td, TensorDict)
         assert not isinstance(obj.tc, AutoCast), (type(obj.tc), type(obj))
 
         assert isinstance(obj.tc["tensor"], torch.Tensor)

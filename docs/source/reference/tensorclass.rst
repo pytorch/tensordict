@@ -285,6 +285,9 @@ Here is an example:
 Auto-casting
 ------------
 
+.. warning:: Auto-casting is an experimental feature and subject to changes in
+  the future. Compatibility with python<=3.9 is limited.
+
 ``@tensorclass`` partially supports auto-casting as an experimental feature.
 Methods such as ``__setattr__``, ``update``, ``update_`` and ``from_dict`` will
 attempt to cast type-annotated entries to the desired TensorDict / tensorclass
