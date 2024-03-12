@@ -865,7 +865,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
                 del self._non_tensordict[key]
 
         self._tensordict[item] = value._tensordict
-    else:  # it is one of accepted "broadcast" types
+    elif isinstance(value, TensorDictBase):  # it is one of accepted "broadcast" types
         # attempt broadcast on all tensordata and nested tensorclasses
         self._tensordict[item] = value.filter_non_tensor_data()
         self._non_tensordict.update(
@@ -874,6 +874,9 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
                 for key, val in value.items(is_leaf=is_non_tensor, leaves_only=True)
             }
         )
+    else:
+        # int, float etc.
+        self._tensordict[item] = value
 
 
 def _repr(self) -> str:
@@ -945,21 +948,18 @@ def _from_dict_instance(
     for key, value in list(input_tdict.items()):
         # cur_value = getattr(self, key, None)
         cur_value = self.get(key, None)
-        if cur_value is not None:
-            if _is_tensor_collection(type(cur_value)):
-                trsf_dict[key] = cur_value.from_dict_instance(
-                    value, batch_size=[], device=device, batch_dims=None
-                )
-            elif not isinstance(cur_value, torch.Tensor) and is_non_tensor(value):
-                trsf_dict[key] = value.data
-            elif not isinstance(cur_value, torch.Tensor):
-                # This is slightly unsafe but will work with bool, float and int
-                try:
-                    trsf_dict[key] = type(cur_value)(value)
-                except Exception:
-                    trsf_dict[key] = input_dict[key]
-            else:
-                trsf_dict[key] = value
+        if _is_tensor_collection(type(cur_value)):
+            trsf_dict[key] = cur_value.from_dict_instance(
+                value, batch_size=[], device=device, batch_dims=None
+            )
+        elif not isinstance(cur_value, torch.Tensor) and is_non_tensor(value):
+            trsf_dict[key] = value.data
+        elif cur_value is not None and not isinstance(cur_value, torch.Tensor):
+            # This is slightly unsafe but will work with bool, float and int
+            try:
+                trsf_dict[key] = type(cur_value)(value)
+            except Exception:
+                trsf_dict[key] = input_dict[key]
         else:
             trsf_dict[key] = value
     out = type(self)(
