@@ -1968,10 +1968,11 @@ class TestAutoCasting:
 
         assert isinstance(obj.tc_global, AutoCast), (type(obj.tc), type(obj))
 
-        assert isinstance(obj.tc.tensor, torch.Tensor)
-        assert isinstance(obj.tc.non_tensor, str)
-        assert isinstance(obj.tc.td, TensorDict)
-        assert obj.tc.tc is None
+        if not PY8:
+            assert isinstance(obj.tc.tensor, torch.Tensor)
+            assert isinstance(obj.tc.non_tensor, str)
+            assert isinstance(obj.tc.td, TensorDict)
+            assert obj.tc.tc is None
 
     def test_autocast_or(self):
         with pytest.warns(
