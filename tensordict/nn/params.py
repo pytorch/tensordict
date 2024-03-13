@@ -821,6 +821,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_carry_over
+    def from_dict_instance(
+        self, input_dict, batch_size=None, device=None, batch_dims=None
+    ):
+        ...
+
+    @_carry_over
     def _legacy_transpose(self, dim0, dim1):
         ...
 

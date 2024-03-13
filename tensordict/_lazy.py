@@ -115,7 +115,10 @@ def _fails_exclusive_keys(func):
             raise RuntimeError(
                 f"the method {func.__name__} cannot complete when there are exclusive keys."
             )
-        return getattr(TensorDictBase, func.__name__)(self, *args, **kwargs)
+        parent_func = getattr(TensorDictBase, func.__name__, None)
+        if parent_func is None:
+            parent_func = getattr(TensorDict, func.__name__)
+        return parent_func(self, *args, **kwargs)
 
     return newfunc
 
@@ -2538,6 +2541,7 @@ class LazyStackedTensorDict(TensorDictBase):
     reshape = TensorDict.reshape
     split = TensorDict.split
     _to_module = TensorDict._to_module
+    from_dict_instance = TensorDict.from_dict_instance
 
 
 class _CustomOpTensorDict(TensorDictBase):
@@ -3070,6 +3074,7 @@ class _CustomOpTensorDict(TensorDictBase):
     expand = TensorDict.expand
     _unbind = TensorDict._unbind
     _get_names_idx = TensorDict._get_names_idx
+    from_dict_instance = TensorDict.from_dict_instance
 
 
 class _UnsqueezedTensorDict(_CustomOpTensorDict):

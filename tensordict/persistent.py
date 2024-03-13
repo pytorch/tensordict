@@ -1199,6 +1199,7 @@ class PersistentTensorDict(TensorDictBase):
     _to_module = TensorDict._to_module
     _unbind = TensorDict._unbind
     _get_names_idx = TensorDict._get_names_idx
+    from_dict_instance = TensorDict.from_dict_instance
 
 
 def _set_max_batch_size(source: PersistentTensorDict):

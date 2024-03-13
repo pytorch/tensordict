@@ -448,7 +448,9 @@ class TensorDict(TensorDictBase):
     def __ne__(self, other: object) -> T | bool:
         if _is_tensorclass(other):
             return other != self
-        if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -470,7 +472,9 @@ class TensorDict(TensorDictBase):
     def __xor__(self, other: object) -> T | bool:
         if _is_tensorclass(other):
             return other ^ self
-        if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -492,7 +496,9 @@ class TensorDict(TensorDictBase):
     def __or__(self, other: object) -> T | bool:
         if _is_tensorclass(other):
             return other | self
-        if isinstance(other, (dict,)) or _is_tensor_collection(other.__class__):
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -515,7 +521,7 @@ class TensorDict(TensorDictBase):
         if is_tensorclass(other):
             return other == self
         if isinstance(other, (dict,)):
-            other = self.empty(recurse=True).update(other)
+            other = self.from_dict_instance(other)
         if _is_tensor_collection(other.__class__):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
@@ -570,7 +576,7 @@ class TensorDict(TensorDictBase):
         if isinstance(value, (TensorDictBase, dict)):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = TensorDict.from_dict(value, batch_size=indexed_bs)
+                value = self.from_dict_instance(value, batch_size=indexed_bs)
                 # value = self.empty(recurse=True)[index].update(value)
             if value.batch_size != indexed_bs:
                 if value.shape == indexed_bs[-len(value.shape) :]:
@@ -1299,6 +1305,7 @@ class TensorDict(TensorDictBase):
             )
 
         batch_size_set = torch.Size(()) if batch_size is None else batch_size
+        input_dict = copy(input_dict)
         for key, value in list(input_dict.items()):
             if isinstance(value, (dict,)):
                 # we don't know if another tensor of smaller size is coming
@@ -1308,6 +1315,41 @@ class TensorDict(TensorDictBase):
                 )
         # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
         out = cls(
+            input_dict,
+            batch_size=batch_size_set,
+            device=device,
+        )
+        if batch_size is None:
+            _set_max_batch_size(out, batch_dims)
+        else:
+            out.batch_size = batch_size
+        return out
+
+    def from_dict_instance(
+        self, input_dict, batch_size=None, device=None, batch_dims=None
+    ):
+        if batch_dims is not None and batch_size is not None:
+            raise ValueError(
+                "Cannot pass both batch_size and batch_dims to `from_dict`."
+            )
+        from tensordict import TensorDict
+
+        batch_size_set = torch.Size(()) if batch_size is None else batch_size
+        input_dict = copy(input_dict)
+        for key, value in list(input_dict.items()):
+            if isinstance(value, (dict,)):
+                cur_value = self.get(key, None)
+                if cur_value is not None:
+                    input_dict[key] = cur_value.from_dict_instance(
+                        value, batch_size=[], device=device, batch_dims=None
+                    )
+                    continue
+                # we don't know if another tensor of smaller size is coming
+                # so we can't be sure that the batch-size will still be valid later
+                input_dict[key] = TensorDict.from_dict(
+                    value, batch_size=[], device=device, batch_dims=None
+                )
+        out = TensorDict.from_dict(
             input_dict,
             batch_size=batch_size_set,
             device=device,
@@ -2338,6 +2380,8 @@ class _SubTensorDict(TensorDictBase):
         elif not inplace and self.is_locked:
             raise RuntimeError(_LOCK_ERROR)
         return inplace
+
+    from_dict_instance = TensorDict.from_dict_instance
 
     def _set_str(
         self,
