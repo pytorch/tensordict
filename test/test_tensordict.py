@@ -41,12 +41,14 @@ from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData
+from tensordict.tensorclass import NonTensorData, tensorclass
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
     assert_allclose_td,
     convert_ellipsis_to_idx,
+    is_non_tensor,
+    is_tensorclass,
     lazy_legacy,
     set_lazy_legacy,
 )
@@ -8168,6 +8170,36 @@ class TestNonTensorData:
         assert td.get("val").tolist() == [0, 3] * 5
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
+
+
+class TestSubclassing:
+    def test_td_inheritance(self):
+        class SubTD(TensorDict):
+            ...
+
+        assert is_tensor_collection(SubTD)
+
+    def test_tc_inheritance(self):
+        @tensorclass
+        class MyClass:
+            ...
+
+        assert is_tensor_collection(MyClass)
+        assert is_tensorclass(MyClass)
+
+        class SubTC(MyClass):
+            ...
+
+        assert is_tensor_collection(SubTC)
+        assert is_tensorclass(SubTC)
+
+    def test_nontensor_inheritance(self):
+        class SubTC(NonTensorData):
+            ...
+
+        assert is_tensor_collection(SubTC)
+        assert is_tensorclass(SubTC)
+        assert is_non_tensor(SubTC(data=1, batch_size=[]))
 
 
 if __name__ == "__main__":

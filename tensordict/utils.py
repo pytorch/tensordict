@@ -785,11 +785,7 @@ def is_tensorclass(obj: type | Any) -> bool:
 
 
 def _is_tensorclass(cls) -> bool:
-    return (
-        dataclasses.is_dataclass(cls)
-        and "to_tensordict" in cls.__dict__
-        and "_from_tensordict" in cls.__dict__
-    )
+    return dataclasses.is_dataclass(cls) and hasattr(cls, "to_tensordict")
 
 
 class implement_for:
@@ -2173,4 +2169,4 @@ class _add_batch_dim_pre_hook:
 
 def is_non_tensor(data):
     """Checks if an item is a non-tensor."""
-    return type(data).__dict__.get("_non_tensor", False)
+    return getattr(type(data), "_non_tensor", False)
