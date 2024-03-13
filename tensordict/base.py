@@ -110,7 +110,7 @@ class TensorDictBase(MutableMapping):
     is_meta: bool = False
     _is_locked: bool = False
     _cache: bool = None
-    _non_tensor: bool = False
+    _is_non_tensor: bool = False
 
     def __bool__(self) -> bool:
         raise RuntimeError("Converting a tensordict to boolean value is not permitted")
@@ -5331,7 +5331,7 @@ def _default_is_leaf(cls: Type) -> bool:
 
 def _is_leaf_nontensor(cls: Type) -> bool:
     if _is_tensor_collection(cls):
-        return cls._non_tensor
+        return cls._is_non_tensor
     # if issubclass(cls, KeyedJaggedTensor):
     #     return False
     return issubclass(cls, torch.Tensor)
