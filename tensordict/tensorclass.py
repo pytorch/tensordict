@@ -165,13 +165,13 @@ def tensorclass(cls: T) -> T:
             )
         return _from_tensordict_with_copy(tensorclass_instance, result)
 
-    _non_tensor = getattr(cls, "_non_tensor", False)
+    _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
     cls = dataclass(cls)
     expected_keys = set(cls.__dataclass_fields__)
 
     for attr in cls.__dataclass_fields__:
-        if attr in dir(TensorDict) and attr != "_non_tensor":
+        if attr in dir(TensorDict) and attr != "_is_non_tensor":
             raise AttributeError(
                 f"Attribute name {attr} can't be used with @tensorclass"
             )
@@ -268,7 +268,9 @@ def tensorclass(cls: T) -> T:
 
     _register_tensor_class(cls)
 
-    cls._non_tensor = _non_tensor
+    # faster than doing instance checks
+    cls._is_non_tensor = _is_non_tensor
+    cls._is_tensorclass = True
 
     return cls
 
@@ -1625,7 +1627,7 @@ class NonTensorData:
                 val: NonTensorData(
                     data=0,
                     _metadata=None,
-                    _non_tensor=True,
+                    _is_non_tensor=True,
                     batch_size=torch.Size([10]),
                     device=None,
                     is_shared=False)},
@@ -1730,7 +1732,7 @@ class NonTensorData:
     data: Any
     _metadata: dict | None = None
 
-    _non_tensor: bool = True
+    _is_non_tensor: bool = True
 
     def __post_init__(self):
         if is_non_tensor(self.data):
@@ -2062,7 +2064,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
     """
 
-    _non_tensor: bool = True
+    _is_non_tensor: bool = True
 
     def tolist(self):
         """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.

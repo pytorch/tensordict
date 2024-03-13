@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import collections
 import concurrent.futures
-import dataclasses
 import inspect
 import logging
 
@@ -784,12 +783,8 @@ def is_tensorclass(obj: type | Any) -> bool:
     return _is_tensorclass(cls)
 
 
-def _is_tensorclass(cls) -> bool:
-    return (
-        dataclasses.is_dataclass(cls)
-        and "to_tensordict" in cls.__dict__
-        and "_from_tensordict" in cls.__dict__
-    )
+def _is_tensorclass(cls: type) -> bool:
+    return getattr(cls, "_is_tensorclass", False)
 
 
 class implement_for:
@@ -2182,4 +2177,4 @@ class _add_batch_dim_pre_hook:
 
 def is_non_tensor(data):
     """Checks if an item is a non-tensor."""
-    return type(data).__dict__.get("_non_tensor", False)
+    return getattr(type(data), "_is_non_tensor", False)
