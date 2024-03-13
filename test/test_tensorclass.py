@@ -62,6 +62,7 @@ class MyData:
     def stuff(self):
         return self.X + self.y
 
+
 PY8 = sys.version_info >= (3, 8) and sys.version_info < (3, 9)
 PY9 = sys.version_info >= (3, 9) and sys.version_info < (3, 10)
 PY10 = sys.version_info >= (3, 10)
@@ -1961,8 +1962,7 @@ class TestAutoCasting:
         assert isinstance(obj.non_tensor, str)
         assert isinstance(obj.td, TensorDict)
         if not PY8:
-            assert isinstance(obj.tc, self.ClsAutoCast), (
-                type(obj.tc), type(obj))
+            assert isinstance(obj.tc, self.ClsAutoCast), (type(obj.tc), type(obj))
         else:
             assert isinstance(obj.tc, dict), (type(obj.tc), type(obj))
 
