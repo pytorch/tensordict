@@ -367,12 +367,13 @@
 <h1>tensorclass<a class="headerlink" href="#tensorclass" title="Permalink to this heading">¶</a></h1>
 <p>The <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> decorator helps you build custom classes that inherit the
 behaviour from <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> while being able to restrict
-the possible entries to a predefined set or implement custom methods for your class.
-Like <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> supports nesting, indexing, reshaping,
-item assignment. It also supports tensor operations like clone, squeeze, cat,
-split and many more. <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> allows non-tensor entries,
-however all the tensor operations are strictly restricted to tensor attributes.
-One needs to implement their custom methods for non-tensor data.
+the possible entries to a predefined set or implement custom methods for your class.</p>
+<p>Like <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> supports nesting,
+indexing, reshaping, item assignment. It also supports tensor operations like
+<code class="docutils literal notranslate"><span class="pre">clone</span></code>, <code class="docutils literal notranslate"><span class="pre">squeeze</span></code>, <code class="docutils literal notranslate"><span class="pre">torch.cat</span></code>, <code class="docutils literal notranslate"><span class="pre">split</span></code> and many more.
+<code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> allows non-tensor entries,
+however all the tensor operations are strictly restricted to tensor attributes.</p>
+<p>One needs to implement their custom methods for non-tensor data.
 It is important to note that <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> does not enforce strict type matching</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.prototype</span> <span class="kn">import</span> <span class="n">tensorclass</span>
@@ -429,8 +430,11 @@ It is important to note that <code class="docutils literal notranslate"><span cl
 <span class="go">  is_shared=False)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> supports indexing. Internally the tensor objects gets indexed,
-however the non-tensor data remains the same</p>
+<p>As it is the case with <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, from v0.4 if the batch size
+is omitted it is considered as empty.</p>
+<p>If a non-empty batch-size is provided, <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> supports indexing.
+Internally the tensor objects gets indexed, however the non-tensor data
+remains the same</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;indexed:&quot;</span><span class="p">,</span> <span class="n">data</span><span class="p">[:</span><span class="mi">2</span><span class="p">])</span>
 <span class="go">indexed: MyData(</span>
 <span class="go">   floatdata=Tensor(shape=torch.Size([2, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
@@ -554,11 +558,12 @@ thrown</p>
 <span class="go">UserWarning: Meta data at &#39;non_tensordata&#39; may or may not be equal, this may result in undefined behaviours</span>
 </pre></div>
 </div>
-<p>Even though <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> supports torch functions like cat and stack, the
-non-tensor / meta data is not validated. The torch operation is performed on the
-tensor data and while returning the output, the non-tensor / meta data of the first
-tensor class object is considered. User needs to make sure that all the
-list of tensor class objects have the same non-tensor data to avoid discrepancies</p>
+<p>Even though <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> supports torch functions like <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.2)"><code class="xref py py-func docutils literal notranslate"><span class="pre">cat()</span></code></a>
+and <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.2)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a>, the non-tensor / meta data is not validated.
+The torch operation is performed on the tensor data and while returning the
+output, the non-tensor / meta data of the first tensor class object is
+considered. User needs to make sure that all the list of tensor class objects
+have the same non-tensor data to avoid discrepancies</p>
 <p>Here is an example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data2</span><span class="o">.</span><span class="n">non_tensordata</span> <span class="o">=</span> <span class="s2">&quot;test_new&quot;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">stack_tc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">data</span><span class="p">,</span> <span class="n">data2</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
@@ -617,6 +622,87 @@ it will be saved as either tensor data or non-tensor / meta  data</p>
 </tbody>
 </table>
 </section>
+<section id="auto-casting">
+<h2>Auto-casting<a class="headerlink" href="#auto-casting" title="Permalink to this heading">¶</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Auto-casting is an experimental feature and subject to changes in
+the future. Compatibility with python&lt;=3.9 is limited.</p>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> partially supports auto-casting as an experimental feature.
+Methods such as <code class="docutils literal notranslate"><span class="pre">__setattr__</span></code>, <code class="docutils literal notranslate"><span class="pre">update</span></code>, <code class="docutils literal notranslate"><span class="pre">update_</span></code> and <code class="docutils literal notranslate"><span class="pre">from_dict</span></code> will
+attempt to cast type-annotated entries to the desired TensorDict / tensorclass
+instance (except in cases detailed below). For instance, following code will
+cast the <cite>td</cite> dictionary to a <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> and the <cite>tc</cite>
+entry to a <code class="xref py py-class docutils literal notranslate"><span class="pre">MyClass</span></code> instance:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span> <span class="nc">MyClass</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="p">:</span> <span class="n">TensorDict</span>
+<span class="gp">... </span>    <span class="n">tc</span><span class="p">:</span> <span class="n">MyClass</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(())},</span>
+<span class="gp">... </span>    <span class="n">tc</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span> <span class="s2">&quot;td&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;tc&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tc</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">td</span><span class="p">,</span> <span class="n">MyClass</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Type annotated items that include an <code class="docutils literal notranslate"><span class="pre">typing.Optional</span></code> or
+<code class="docutils literal notranslate"><span class="pre">typing.Union</span></code> will not be compatible with auto-casting, but other items
+in the tensorclass will:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span> <span class="nc">MyClass</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">tc_autocast</span><span class="p">:</span> <span class="n">MyClass</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="gp">... </span>    <span class="n">tc_not_autocast</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MyClass</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span>
+<span class="gp">... </span>    <span class="n">tc_autocast</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(())},</span>
+<span class="gp">... </span>    <span class="n">tc_not_autocast</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(())},</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tc_autocast</span><span class="p">,</span> <span class="n">MyClass</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># because the type is Optional or Union, auto-casting is disabled for</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># that variable.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tc_not_autocast</span><span class="p">,</span> <span class="n">MyClass</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>If at least one item in the class is annotated using the <code class="docutils literal notranslate"><span class="pre">type0</span> <span class="pre">|</span> <span class="pre">type1</span></code>
+semantic, the whole class auto-casting capabilities are deactivated.
+Because <code class="docutils literal notranslate"><span class="pre">tensorclass</span></code> supports non-tensor leaves, setting a dictionary in
+these cases will lead to setting it as a plain dictionary instead of a
+tensor collection subclass (<code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> or <code class="docutils literal notranslate"><span class="pre">tensorclass</span></code>):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nd">@tensorclass</span>
+<span class="gp">... </span><span class="k">class</span> <span class="nc">MyClass</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="p">:</span> <span class="n">TensorDict</span>
+<span class="gp">... </span>    <span class="n">tc</span><span class="p">:</span> <span class="n">MyClass</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="gp">...</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">obj</span> <span class="o">=</span> <span class="n">MyClass</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(())},</span>
+<span class="gp">... </span>    <span class="n">tc</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span> <span class="s2">&quot;td&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;tc&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># tc and td have not been cast</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">tc</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">td</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Auto-casting isn’t enabled for leaves (tensors).
+The reason for this is that this feature isn’t compatible with type
+annotations that contain the <code class="docutils literal notranslate"><span class="pre">type0</span> <span class="pre">|</span> <span class="pre">type1</span></code> type hinting semantic, which
+is widespread. Allowing auto-casting would result in very similar codes to
+have drastically different behaviours if the type annotation differs only
+slightly.</p>
+</div>
+</section>
 </section>
 
 
@@ -665,6 +751,7 @@ it will be saved as either tensor data or non-tensor / meta  data</p>
 <li><a class="reference internal" href="#">tensorclass</a><ul>
 <li><a class="reference internal" href="#serialization">Serialization</a></li>
 <li><a class="reference internal" href="#edge-cases">Edge cases</a></li>
+<li><a class="reference internal" href="#auto-casting">Auto-casting</a></li>
 </ul>
 </li>
 </ul>
