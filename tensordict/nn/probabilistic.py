@@ -210,7 +210,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         ...     TensorDictModule,
         ... )
         >>> from tensordict.nn.distributions import NormalParamExtractor
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict(
         ...     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3]

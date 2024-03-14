@@ -88,7 +88,6 @@ class TensorDictSequential(TensorDictModule):
         ...     TensorDictSequential,
         ... )
         >>> from tensordict.nn.distributions import NormalParamExtractor
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> from torch.distributions import Normal
         >>> td = TensorDict({"input": torch.randn(3, 4)}, [3,])
         >>> net1 = torch.nn.Linear(4, 8)
