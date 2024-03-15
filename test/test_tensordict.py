@@ -8155,8 +8155,90 @@ class TestNonTensorData:
         assert data_recon.tolist() == data.tolist()
         assert data_memmap.is_memmap()
         assert data_memmap._is_memmap
-        # assert data_recon.is_memmap()
-        # assert data_recon._is_memmap
+
+    def test_memmap_stack_updates(self, tmpdir):
+        data = torch.stack([NonTensorData(data=0), NonTensorData(data=1)], 0)
+        data = torch.stack([data] * 3).clone()
+        data.memmap_(tmpdir)
+        data_recon = TensorDict.load_memmap(tmpdir)
+        assert data.tolist() == data_recon.tolist()
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data[0, 0]._is_memmaped_from_above()
+
+        data_other = torch.stack([NonTensorData(data=2), NonTensorData(data=3)], 0)
+        data_other = torch.stack([data_other] * 3)
+        with pytest.raises(RuntimeError, match="locked"):
+            data.update(data_other)
+        data.update(data_other, inplace=True)
+        assert data[0, 0]._is_memmaped_from_above()
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data.tolist() == [[2, 3]] * 3
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+
+        data_other = torch.stack([NonTensorData(data=4), NonTensorData(data=5)], 0)
+        data_other = torch.stack([data_other] * 3)
+        data.update_(data_other)
+        assert data[0, 0]._is_memmaped_from_above()
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data.tolist() == [[4, 5]] * 3
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+
+        data.update(NonTensorData(data=6), inplace=True)
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data.tolist() == [[6] * 2] * 3
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+
+        data.update_(NonTensorData(data=7))
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data.tolist() == [[7] * 2] * 3
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+
+        assert data[0, 0]._is_memmaped_from_above()
+        # Should raise an exception
+        assert isinstance(data[0, 0], NonTensorData)
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack",
+        ):
+            data[0, 0].update(NonTensorData(data=1), inplace=True)
+
+        # Should raise an exception
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack",
+        ):
+            data[0].update(NonTensorData(data=1), inplace=True)
+
+        # should raise an exception
+        with pytest.raises(
+            ValueError,
+            match="Cannot update a NonTensorData object with a NonTensorStack",
+        ):
+            out = NonTensorData(data=1).update(data, inplace=True)
+        # as suggested by the error message this works
+        out = (
+            NonTensorData(data=1, batch_size=data.batch_size)
+            .to_stack()
+            .update(data, inplace=True)
+        )
+        assert out.tolist() == data.tolist()
+
+        data[0, 0] = NonTensorData(data=99)
+        assert data.tolist() == [[99, 7], [7, 7], [7, 7]]
+        assert (
+            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+        ), TensorDict.load_memmap(tmpdir).tolist()
+
+        data.update_at_(NonTensorData(data=99), (0, 1))
+        assert data.tolist() == [[99, 99], [7, 7], [7, 7]], data.tolist()
+        assert (
+            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+        ), TensorDict.load_memmap(tmpdir).tolist()
 
     def test_shared_limitations(self):
         # Sharing a special type works but it's locked for writing

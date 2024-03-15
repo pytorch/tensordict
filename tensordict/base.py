@@ -2827,6 +2827,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> assert (td[1] == 1).all()
 
         """
+        if idx == ():
+            return self.update_(
+                input_dict_or_td=input_dict_or_td,
+                keys_to_update=keys_to_update,
+                clone=clone,
+            )
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self

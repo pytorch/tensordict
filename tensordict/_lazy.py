@@ -2182,7 +2182,7 @@ class LazyStackedTensorDict(TensorDictBase):
         index: IndexType,
         clone: bool = False,
     ) -> T:
-        if not isinstance(input_dict_or_td, TensorDictBase):
+        if not _is_tensor_collection(type(input_dict_or_td)):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_size=self.batch_size
             )
