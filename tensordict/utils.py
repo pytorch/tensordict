@@ -120,6 +120,21 @@ _LOCK_ERROR = (
 )
 
 
+LOGGING_LEVEL = os.environ.get("TD_LOGGING_LEVEL", "DEBUG")
+logger = logging.getLogger("tensordict")
+logger.setLevel(getattr(logging, LOGGING_LEVEL))
+# Disable propagation to the root logger
+logger.propagate = False
+# Remove all attached handlers
+while logger.hasHandlers():
+    logger.removeHandler(logger.handlers[0])
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+
 def _sub_index(tensor: Tensor, idx: IndexType) -> Tensor:
     """Allows indexing of tensors with nested tuples.
 
@@ -728,7 +743,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            logging.info(" -- ".join(strings))
+            logger.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -1923,17 +1938,17 @@ def print_directory_tree(path, indent="", display_metadata=True):
 
         total_size_bytes = get_directory_size(path)
         formatted_size = format_size(total_size_bytes)
-        logging.info(f"Directory size: {formatted_size}")
+        logger.info(f"Directory size: {formatted_size}")
 
     if os.path.isdir(path):
-        logging.info(indent + os.path.basename(path) + "/")
+        logger.info(indent + os.path.basename(path) + "/")
         indent += "    "
         for item in os.listdir(path):
             print_directory_tree(
                 os.path.join(path, item), indent=indent, display_metadata=False
             )
     else:
-        logging.info(indent + os.path.basename(path))
+        logger.info(indent + os.path.basename(path))
 
 
 def _index_preserve_data_ptr(index):
