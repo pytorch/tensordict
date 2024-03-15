@@ -2000,6 +2000,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
+        prefix = Path(prefix) if prefix is not None else None
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -2070,6 +2071,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
+        prefix = Path(prefix) if prefix is not None else None
+
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -2092,6 +2095,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     return result
                 else:
                     return TensorDictFuture(futures, result)
+
         return self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -2148,6 +2152,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> buffer = td.memmap_like("/path/to/dataset")
 
         """
+        prefix = Path(prefix) if prefix is not None else None
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)

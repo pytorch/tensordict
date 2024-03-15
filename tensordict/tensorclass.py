@@ -510,9 +510,9 @@ def _memmap_(
     inplace=True,
     like=False,
     *,
-    memmaped: bool=False,
+    memmaped: bool = False,
 ):
-    _non_tensordict = self._non_tensordict
+    _non_tensordict = copy(self._non_tensordict)
     cls = self.__class__
 
     if not memmaped and prefix is not None:
@@ -2020,7 +2020,7 @@ class NonTensorData:
         inplace=True,
         like=False,
         *,
-            memmaped: bool=False,
+        memmaped: bool = False,
     ):
         if self._tensordict._is_memmap:
             return self
@@ -2042,7 +2042,7 @@ class NonTensorData:
             memmaped=memmaped,
         )
         if prefix is not None and not inplace:
-            self._non_tensordict["_metadata"] = _metadata
+            out._non_tensordict["_metadata"] = _metadata
         out._non_tensordict["data"] = _share_memory_nontensor(
             out.data, manager=_mp_manager()
         )
@@ -2124,28 +2124,39 @@ class NonTensorStack(LazyStackedTensorDict):
         memmaped: bool = False,
     ) -> T:
         if not memmaped and prefix is not None:
-            prefix = Path(prefix)
 
             def save_metadata(prefix=prefix, self=self):
                 data = self.tolist()
+                device = str(self.device) if self.device is not None else None
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
-                with open(prefix / "meta.json", "w") as f:
-                    json.dump(
-                        {"_type": str(self.__class__), "stack_dim": self.stack_dim, "data": data}, f
-                    )
-
-                if executor is None:
-                    save_metadata()
+                jsondict = {
+                    "_type": str(self.__class__),
+                    "stack_dim": self.stack_dim,
+                    "device": device,
+                }
+                if _is_json_serializable(data):
+                    jsondict["data"] = data
                 else:
-                    futures.append(executor.submit(save_metadata))
+                    jsondict["data"] = "pickle.pkl"
+                    with open(prefix / "pickle.pkl", "wb") as f:
+                        pickle.dump(data, f)
+                with open(prefix / "meta.json", "w") as f:
+                    json.dump(jsondict, f)
+
+            if executor is None:
+                save_metadata()
+            else:
+                futures.append(executor.submit(save_metadata))
         # The leaves are all non-tensor or non-tensor stacks, and we already saved this on disk
         # The only thing remaining to do is share the data between processes
         results = []
         for i, td in enumerate(self.tensordicts):
             results.append(
                 td._memmap_(
-                    prefix=(prefix / str(i)) if not memmaped and prefix is not None else None,
+                    prefix=(prefix / str(i))
+                    if not memmaped and prefix is not None
+                    else None,
                     copy_existing=copy_existing,
                     executor=executor,
                     futures=futures,
@@ -2162,6 +2173,35 @@ class NonTensorStack(LazyStackedTensorDict):
             results = self
         results._device = torch.device("cpu")
         return results
+
+    @classmethod
+    def _load_memmap(cls, prefix: str, metadata: dict) -> LazyStackedTensorDict:
+        data = metadata.get("data", None)
+        if data is not None:
+            if isinstance(data, str):
+                with open(prefix / data, "rb") as file:
+                    data = pickle.load(file)
+            device = metadata["device"]
+            if device is not None:
+                device = torch.device(device)
+            return cls._from_list(data, device=device)
+        return super()._load_memmap(prefix=prefix, metadata=metadata)
+
+    @classmethod
+    def _from_list(cls, datalist: List, device: torch.device):
+        if all(isinstance(item, list) for item in datalist) and all(
+            len(item) == len(datalist[0]) for item in datalist
+        ):
+            return NonTensorStack(
+                *(cls._from_list(item, device=device) for item in datalist), stack_dim=0
+            )
+        return NonTensorStack(
+            *(
+                NonTensorData(data=item, device=device, batch_size=torch.Size([]))
+                for item in datalist
+            ),
+            stack_dim=0,
+        )
 
 
 _register_tensor_class(NonTensorStack)

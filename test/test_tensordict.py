@@ -8116,6 +8116,44 @@ class TestNonTensorData:
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
 
+    @pytest.mark.parametrize("json_serializable", [True, False])
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
+    def test_memmap_stack(self, tmpdir, json_serializable, device):
+        if json_serializable:
+            data = torch.stack(
+                [
+                    NonTensorData(data=0, device=device),
+                    NonTensorData(data=1, device=device),
+                ]
+            )
+
+        else:
+
+            data = torch.stack(
+                [
+                    NonTensorData(data=DummyPicklableClass(0), device=device),
+                    NonTensorData(data=DummyPicklableClass(1), device=device),
+                ]
+            )
+        data = torch.stack([data] * 3)
+        data.memmap(tmpdir)
+        device_str = "null" if device is None else f'"{device}"'
+        with open(f"{tmpdir}/meta.json") as f:
+            if json_serializable:
+                assert (
+                    f.read()
+                    == f'{{"_type": "<class \'tensordict.tensorclass.NonTensorStack\'>", "stack_dim": 0, "device": {device_str}, "data": [[0, 1], [0, 1], [0, 1]]}}'
+                )
+            else:
+                assert (
+                    f.read()
+                    == f'{{"_type": "<class \'tensordict.tensorclass.NonTensorStack\'>", "stack_dim": 0, "device": {device_str}, "data": "pickle.pkl"}}'
+                )
+        data_recon = TensorDict.load_memmap(tmpdir)
+        assert data_recon.batch_size == data.batch_size
+        assert data_recon.device == data.device
+        assert data_recon.tolist() == data.tolist()
+
     def test_shared_limitations(self):
         # Sharing a special type works but it's locked for writing
         @dataclass
