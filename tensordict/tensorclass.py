@@ -16,6 +16,7 @@ import multiprocessing.sharedctypes
 import numbers
 import os
 import pickle
+import shutil
 import warnings
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -2172,6 +2173,8 @@ class NonTensorStack(LazyStackedTensorDict):
         else:
             results = self
         results._device = torch.device("cpu")
+        if prefix is not None:
+            results._path_to_memmap = prefix
         return results
 
     @classmethod
@@ -2202,6 +2205,80 @@ class NonTensorStack(LazyStackedTensorDict):
             ),
             stack_dim=0,
         )
+
+    def update(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        inplace: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> T:
+        if inplace and self.is_locked and not (self._is_shared or self._is_memmap):
+            raise RuntimeError(_LOCK_ERROR)
+        memmap = False
+        if self._is_memmap and hasattr(self, "_path_to_memmap"):
+            # remove memmap
+            shutil.rmtree(self._path_to_memmap)
+            memmap = True
+        # update content
+        if isinstance(input_dict_or_td, NonTensorData):
+            datalist = input_dict_or_td.data
+            for d in reversed(self.batch_size):
+                datalist = [datalist] * d
+            reconstructed = self._from_list(datalist, device=self.device)
+            return self.update(reconstructed, clone=clone, inplace=inplace, keys_to_update=keys_to_update)
+        elif isinstance(input_dict_or_td, NonTensorStack):
+            super().update(input_dict_or_td, clone=clone, inplace=True, keys_to_update=keys_to_update)
+            if memmap:
+                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+        else:
+            raise NotImplementedError(f"The data type {type(input_dict_or_td)} is not supported within {type(self).__name__}.update")
+
+    # def update_(
+    #     self,
+    #     input_dict_or_td: dict[str, CompatibleType] | T,
+    #     clone: bool = False,
+    #     *,
+    #     keys_to_update: Sequence[NestedKey] | None = None,
+    # ) -> T:
+    #
+    #     if isinstance(input_dict_or_td, NonTensorStack):
+    #         raise RuntimeError(
+    #             "Cannot update a NonTensorData with a NonTensorStack object."
+    #         )
+    #     if not isinstance(input_dict_or_td, NonTensorData):
+    #         raise RuntimeError(
+    #             "NonTensorData.copy_ / update_ requires the source to be a NonTensorData object."
+    #         )
+    #
+    #     if isinstance(input_dict_or_td, NonTensorData):
+    #         data = input_dict_or_td.data
+    #         if self._tensordict._is_shared:
+    #             _update_shared_nontensor(self._non_tensordict["data"], data)
+    #             return self
+    #         if self._tensordict._is_memmap:
+    #             _update_shared_nontensor(self._non_tensordict["data"], data)
+    #             # Force json update by setting is memmap to False
+    #             self._tensordict._is_memmap = False
+    #             # TODO: this too should be modified
+    #             self._memmap_(
+    #                 prefix=self._metadata["memmap_prefix"],
+    #                 copy_existing=False,
+    #                 executor=None,
+    #                 futures=None,
+    #                 inplace=True,
+    #                 like=False,
+    #             )
+    #             return self
+    #         if self._tensordict._is_memmap:
+    #             raise NotImplementedError
+    #         if clone:
+    #             data = deepcopy(data)
+    #         self.data = data
+    #     elif not input_dict_or_td.is_empty():
+    #         raise RuntimeError(f"Unexpected type {type(input_dict_or_td)}")
+    #     return self
 
 
 _register_tensor_class(NonTensorStack)

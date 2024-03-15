@@ -8136,7 +8136,7 @@ class TestNonTensorData:
                 ]
             )
         data = torch.stack([data] * 3)
-        data.memmap(tmpdir)
+        data_memmap = data.memmap(tmpdir)
         device_str = "null" if device is None else f'"{device}"'
         with open(f"{tmpdir}/meta.json") as f:
             if json_serializable:
@@ -8153,6 +8153,10 @@ class TestNonTensorData:
         assert data_recon.batch_size == data.batch_size
         assert data_recon.device == data.device
         assert data_recon.tolist() == data.tolist()
+        assert data_memmap.is_memmap()
+        assert data_memmap._is_memmap
+        # assert data_recon.is_memmap()
+        # assert data_recon._is_memmap
 
     def test_shared_limitations(self):
         # Sharing a special type works but it's locked for writing
