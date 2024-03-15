@@ -8223,7 +8223,7 @@ class TestNonTensorData:
         # as suggested by the error message this works
         out = (
             NonTensorData(data=1, batch_size=data.batch_size)
-            .to_stack()
+            .maybe_to_stack()
             .update(data, inplace=True)
         )
         assert out.tolist() == data.tolist()

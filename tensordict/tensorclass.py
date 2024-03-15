@@ -1890,19 +1890,18 @@ class NonTensorData:
             self.data = data
         elif isinstance(input_dict_or_td, NonTensorStack):
             raise ValueError(
-                "Cannot update a NonTensorData object with a NonTensorStack. Call `non_tensor_data.to_stack()` "
+                "Cannot update a NonTensorData object with a NonTensorStack. Call `non_tensor_data.maybe_to_stack()` "
                 "before calling update()."
             )
         elif not input_dict_or_td.is_empty():
             raise RuntimeError(f"Unexpected type {type(input_dict_or_td)}")
         return self
 
-    def to_stack(self):
+    def maybe_to_stack(self):
+        """Converts the NonTensorData object to a NonTensorStack object if it has a non-empty batch-size."""
         datalist = self.data
         if not self.batch_size:
-            raise RuntimeError(
-                "to_stack can only be called with NonTensorData objects that have a non-empty batch-size."
-            )
+            return self
         for i in reversed(self.batch_size):
             datalist = [datalist] * i
         return NonTensorStack._from_list(datalist, device=self.device)
@@ -2135,6 +2134,23 @@ class NonTensorData:
 
     def __repr__(self):
         return f"{type(self).__name__}(data={self.data}, batch_size={self.batch_size}, device={self.device})"
+
+    _INCOMPATIBLE_ERR = "The method {} is not compatible with class NonTensorData."
+
+    def set(
+        self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
+    ) -> T:
+        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set"))
+
+    def set_(
+        self,
+        key: NestedKey,
+        item: CompatibleType,
+    ) -> T:
+        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set_"))
+
+    def set_at_(self, key: NestedKey, value: CompatibleType, index: IndexType) -> T:
+        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set_at_"))
 
 
 # For __setitem__ and _update_at_ we don't pass a kwarg but use a global variable instead
@@ -2418,6 +2434,23 @@ class NonTensorStack(LazyStackedTensorDict):
         finally:
             _BREAK_ON_MEMMAP = True
         return self
+
+    _INCOMPATIBLE_ERR = "The method {} is not compatible with class NonTensorStack."
+
+    def set(
+        self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
+    ) -> T:
+        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set"))
+
+    def set_(
+        self,
+        key: NestedKey,
+        item: CompatibleType,
+    ) -> T:
+        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set_"))
+
+    def set_at_(self, key: NestedKey, value: CompatibleType, index: IndexType) -> T:
+        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set_at_"))
 
 
 _register_tensor_class(NonTensorStack)
