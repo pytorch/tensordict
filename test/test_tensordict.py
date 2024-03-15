@@ -50,6 +50,7 @@ from tensordict.utils import (
     is_non_tensor,
     is_tensorclass,
     lazy_legacy,
+    logger as tdlogger,
     set_lazy_legacy,
 )
 from torch import multiprocessing as mp, nn
@@ -6012,12 +6013,12 @@ class TestLazyStackedTensorDict:
         from tensordict.nn import TensorDictModule  # noqa
         from torch import vmap
 
-        logging.info("first call to vmap")
+        tdloggerinfo("first call to vmap")
         fun = vmap(lambda x: x)
         fun(td)
         td.zero_()
         # this value should be cached
-        logging.info("second call to vmap")
+        tdloggerinfo("second call to vmap")
         std = fun(td)
         for value in std.values(True, True):
             assert (value == 0).all()
@@ -6034,11 +6035,11 @@ class TestLazyStackedTensorDict:
         from torch import vmap
 
         fun = vmap(lambda x: x)
-        logging.info("first call to vmap")
+        tdloggerinfo("first call to vmap")
         fun(td)
         td.zero_()
         # this value should be cached
-        logging.info("second call to vmap")
+        tdloggerinfo("second call to vmap")
         std = fun(td)
         for value in std.values(True, True):
             assert (value == 0).all()
