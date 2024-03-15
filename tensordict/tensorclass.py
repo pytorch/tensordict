@@ -509,11 +509,13 @@ def _memmap_(
     futures=None,
     inplace=True,
     like=False,
+    *,
+    memmaped: bool=False,
 ):
     _non_tensordict = self._non_tensordict
     cls = self.__class__
 
-    if prefix is not None:
+    if not memmaped and prefix is not None:
         prefix = Path(prefix)
         if not prefix.exists():
             os.makedirs(prefix, exist_ok=True)
@@ -1811,6 +1813,7 @@ class NonTensorData:
                 _update_shared_nontensor(self._non_tensordict["data"], data)
                 # Force json update by setting is memmap to False
                 self._tensordict._is_memmap = False
+                # TODO: this too should be modified
                 self._memmap_(
                     prefix=self._metadata["memmap_prefix"],
                     copy_existing=False,
@@ -1855,6 +1858,7 @@ class NonTensorData:
                 _update_shared_nontensor(self._non_tensordict["data"], data)
                 # Force json update by setting is memmap to False
                 self._tensordict._is_memmap = False
+                # TODO: this too should be modified
                 self._memmap_(
                     prefix=self._metadata["memmap_prefix"],
                     copy_existing=False,
@@ -2015,11 +2019,13 @@ class NonTensorData:
         futures=None,
         inplace=True,
         like=False,
+        *,
+            memmaped: bool=False,
     ):
         if self._tensordict._is_memmap:
             return self
 
-        if prefix is not None:
+        if not memmaped and prefix is not None:
             _metadata = copy(self._metadata)
             if _metadata is None:
                 self._non_tensordict["_metadata"] = {}
@@ -2033,6 +2039,7 @@ class NonTensorData:
             futures=futures,
             inplace=inplace,
             like=like,
+            memmaped=memmaped,
         )
         if prefix is not None and not inplace:
             self._non_tensordict["_metadata"] = _metadata
@@ -2104,6 +2111,57 @@ class NonTensorStack(LazyStackedTensorDict):
 
     def to_tensordict(self):
         return self
+
+    def _memmap_(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        executor=None,
+        futures=None,
+        inplace=True,
+        like=False,
+        *,
+        memmaped: bool = False,
+    ) -> T:
+        if not memmaped and prefix is not None:
+            prefix = Path(prefix)
+
+            def save_metadata(prefix=prefix, self=self):
+                data = self.tolist()
+                if not prefix.exists():
+                    os.makedirs(prefix, exist_ok=True)
+                with open(prefix / "meta.json", "w") as f:
+                    json.dump(
+                        {"_type": str(self.__class__), "stack_dim": self.stack_dim, "data": data}, f
+                    )
+
+                if executor is None:
+                    save_metadata()
+                else:
+                    futures.append(executor.submit(save_metadata))
+        # The leaves are all non-tensor or non-tensor stacks, and we already saved this on disk
+        # The only thing remaining to do is share the data between processes
+        results = []
+        for i, td in enumerate(self.tensordicts):
+            results.append(
+                td._memmap_(
+                    prefix=(prefix / str(i)) if not memmaped and prefix is not None else None,
+                    copy_existing=copy_existing,
+                    executor=executor,
+                    futures=futures,
+                    inplace=inplace,
+                    like=like,
+                    # tell the nested stack / nontensor that
+                    # no memmapping should be executed
+                    memmaped=True,
+                )
+            )
+        if not inplace:
+            results = LazyStackedTensorDict.lazy_stack(results, dim=self.stack_dim)
+        else:
+            results = self
+        results._device = torch.device("cpu")
+        return results
 
 
 _register_tensor_class(NonTensorStack)
