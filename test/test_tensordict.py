@@ -6013,12 +6013,12 @@ class TestLazyStackedTensorDict:
         from tensordict.nn import TensorDictModule  # noqa
         from torch import vmap
 
-        tdloggerinfo("first call to vmap")
+        tdlogger.info("first call to vmap")
         fun = vmap(lambda x: x)
         fun(td)
         td.zero_()
         # this value should be cached
-        tdloggerinfo("second call to vmap")
+        tdlogger.info("second call to vmap")
         std = fun(td)
         for value in std.values(True, True):
             assert (value == 0).all()
@@ -6035,11 +6035,11 @@ class TestLazyStackedTensorDict:
         from torch import vmap
 
         fun = vmap(lambda x: x)
-        tdloggerinfo("first call to vmap")
+        tdlogger.info("first call to vmap")
         fun(td)
         td.zero_()
         # this value should be cached
-        tdloggerinfo("second call to vmap")
+        tdlogger.info("second call to vmap")
         std = fun(td)
         for value in std.values(True, True):
             assert (value == 0).all()
