@@ -945,14 +945,17 @@ class LazyStackedTensorDict(TensorDictBase):
 
         if all(isinstance(item, torch.Tensor) for item in items):
             return torch.stack(items, dim=dim, out=out)
+        if all(is_non_tensor(tensordict) for tensordict in items):
+            # Non-tensor data (Data or Stack) are stacked using NonTensorStack
+            # If the content is identical (not equal but same id) this does not
+            # require additional memory.
+            from .tensorclass import NonTensorStack
+
+            return NonTensorStack(*items, stack_dim=dim)
         if all(
             is_tensorclass(item) and type(item) == type(items[0])  # noqa: E721
             for item in items
         ):
-            if all(is_non_tensor(tensordict) for tensordict in items):
-                from .tensorclass import NonTensorData
-
-                return NonTensorData._stack_non_tensor(items, dim=dim)
             lazy_stack = cls.lazy_stack(
                 [item._tensordict for item in items],
                 dim=dim,
@@ -2011,12 +2014,14 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _memmap_(
         self,
+        *,
         prefix: str | None = None,
         copy_existing: bool = False,
         executor=None,
         futures=None,
         inplace=True,
         like=False,
+        share_non_tensor,
     ) -> T:
         if prefix is not None:
             prefix = Path(prefix)
@@ -2045,6 +2050,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     futures=futures,
                     inplace=inplace,
                     like=like,
+                    share_non_tensor=share_non_tensor,
                 )
             )
         if not inplace:
@@ -2895,6 +2901,7 @@ class _CustomOpTensorDict(TensorDictBase):
         futures,
         inplace,
         like,
+        share_non_tensor,
     ) -> T:
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
@@ -2926,6 +2933,7 @@ class _CustomOpTensorDict(TensorDictBase):
             futures=futures,
             inplace=inplace,
             like=like,
+            share_non_tensor=share_non_tensor,
         )
         if not inplace:
             dest = type(self)(

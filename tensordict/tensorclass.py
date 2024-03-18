@@ -506,14 +506,15 @@ def _from_tensordict_wrapper(expected_keys):
 
 def _memmap_(
     self,
+    *,
     prefix: str | None = None,
     copy_existing: bool = False,
     executor=None,
     futures=None,
     inplace=True,
     like=False,
-    *,
     memmaped: bool = False,
+    share_non_tensor: bool = False,
 ):
     _non_tensordict = copy(self._non_tensordict)
     cls = self.__class__
@@ -552,8 +553,9 @@ def _memmap_(
         inplace=inplace,
         like=like,
         copy_existing=copy_existing,
+        share_non_tensor=share_non_tensor,
     )
-
+    td._tensordict.device = torch.device("cpu")
     if not inplace:
         result = cls._from_tensordict(td, _non_tensordict)
     else:
@@ -561,19 +563,6 @@ def _memmap_(
     return result
 
 
-# def _keys(self, include_nested=False, leaves_only=False, *, is_leaf=None):
-#     yield from self._tensordict.keys(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)
-#     yield from self._non_tensordict.keys()
-#
-# def _values(self, include_nested=False, leaves_only=False, is_leaf=None):
-#     yield from self._tensordict.values(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)
-#     yield from self._non_tensordict.values()
-#
-# def _items(self, include_nested=False, leaves_only=False, is_leaf=None):
-#     yield from self._tensordict.items(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)
-#     yield from self._non_tensordict.items()
-
-# TODO: test
 def _share_memory_(self):
     self._tensordict.share_memory_()
     return self
@@ -1859,7 +1848,7 @@ class NonTensorData:
             if inplace and self._tensordict._is_shared:
                 _update_shared_nontensor(self._non_tensordict["data"], data)
                 return self
-            elif inplace and self._tensordict._is_memmap:
+            elif inplace and self._is_memmap:
                 _is_memmaped_from_above = self._is_memmaped_from_above()
                 if break_on_memmap is None:
                     global _BREAK_ON_MEMMAP
@@ -1869,11 +1858,14 @@ class NonTensorData:
                         "Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack. "
                         "To update this leaf node, please update the NonTensorStack with the proper index."
                     )
-                _update_shared_nontensor(self._non_tensordict["data"], data)
+                share_non_tensor = self._metadata["_share_non_tensor"]
+                if share_non_tensor:
+                    _update_shared_nontensor(self._non_tensordict["data"], data)
+                else:
+                    self._non_tensordict["data"] = data
                 # Force json update by setting is memmap to False
-                if not _is_memmaped_from_above and self._metadata is not None:
+                if not _is_memmaped_from_above and "memmap_prefix" in self._metadata:
                     self._tensordict._is_memmap = False
-                    # TODO: this too should be modified
                     self._memmap_(
                         prefix=self._metadata["memmap_prefix"],
                         copy_existing=False,
@@ -1881,6 +1873,7 @@ class NonTensorData:
                         futures=None,
                         inplace=True,
                         like=False,
+                        share_non_tensor=share_non_tensor,
                     )
                 return self
             elif not inplace and self.is_locked:
@@ -2090,19 +2083,20 @@ class NonTensorData:
 
     def _memmap_(
         self,
+        *,
         prefix: str | None = None,
         copy_existing: bool = False,
         executor=None,
         futures=None,
         inplace=True,
         like=False,
-        *,
         memmaped: bool = False,
+        share_non_tensor: bool = False,
     ):
         if self._tensordict._is_memmap:
             return self
 
-        _metadata = None
+        _metadata = {}
         if prefix is not None:
             _metadata = copy(self._metadata)
             if _metadata is None:
@@ -2119,11 +2113,14 @@ class NonTensorData:
             inplace=inplace,
             like=like,
             memmaped=memmaped,
+            share_non_tensor=share_non_tensor,
         )
+        _metadata["_share_non_tensor"] = share_non_tensor
         out._non_tensordict["_metadata"] = _metadata
-        out._non_tensordict["data"] = _share_memory_nontensor(
-            out.data, manager=_mp_manager()
-        )
+        if share_non_tensor:
+            out._non_tensordict["data"] = _share_memory_nontensor(
+                out.data, manager=_mp_manager()
+            )
         return out
 
     def _is_memmaped_from_above(self):
@@ -2134,23 +2131,6 @@ class NonTensorData:
 
     def __repr__(self):
         return f"{type(self).__name__}(data={self.data}, batch_size={self.batch_size}, device={self.device})"
-
-    _INCOMPATIBLE_ERR = "The method {} is not compatible with class NonTensorData."
-
-    def set(
-        self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
-    ) -> T:
-        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set"))
-
-    def set_(
-        self,
-        key: NestedKey,
-        item: CompatibleType,
-    ) -> T:
-        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set_"))
-
-    def set_at_(self, key: NestedKey, value: CompatibleType, index: IndexType) -> T:
-        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set_at_"))
 
 
 # For __setitem__ and _update_at_ we don't pass a kwarg but use a global variable instead
@@ -2222,14 +2202,15 @@ class NonTensorStack(LazyStackedTensorDict):
 
     def _memmap_(
         self,
+        *,
         prefix: str | None = None,
         copy_existing: bool = False,
         executor=None,
         futures=None,
         inplace=True,
         like=False,
-        *,
         memmaped: bool = False,
+        share_non_tensor: bool = False,
     ) -> T:
 
         memmaped_leaves = memmaped
@@ -2274,15 +2255,15 @@ class NonTensorStack(LazyStackedTensorDict):
                     # tell the nested stack / nontensor that
                     # no memmapping should be executed
                     memmaped=memmaped_leaves,
+                    share_non_tensor=share_non_tensor,
                 )
             )
         if not inplace:
-            results = LazyStackedTensorDict.lazy_stack(results, dim=self.stack_dim)
+            results = self.lazy_stack(results, dim=self.stack_dim)
         else:
             results = self
-        results._device = torch.device("cpu")
         if not memmaped and prefix is not None:
-            results._path_to_memmap = prefix
+            results.__dict__["_path_to_memmap"] = prefix
         return results
 
     @classmethod
@@ -2434,23 +2415,6 @@ class NonTensorStack(LazyStackedTensorDict):
         finally:
             _BREAK_ON_MEMMAP = True
         return self
-
-    _INCOMPATIBLE_ERR = "The method {} is not compatible with class NonTensorStack."
-
-    def set(
-        self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
-    ) -> T:
-        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set"))
-
-    def set_(
-        self,
-        key: NestedKey,
-        item: CompatibleType,
-    ) -> T:
-        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set_"))
-
-    def set_at_(self, key: NestedKey, value: CompatibleType, index: IndexType) -> T:
-        raise RuntimeError(self._INCOMPATIBLE_ERR.format("set_at_"))
 
 
 _register_tensor_class(NonTensorStack)

@@ -8067,7 +8067,7 @@ class TestNonTensorData:
         if strategy == "shared":
             td.share_memory_()
         elif strategy == "memmap":
-            td.memmap_(tmpdir)
+            td.memmap_(tmpdir, share_non_tensor=True)
         else:
             raise RuntimeError
 
@@ -8281,8 +8281,11 @@ class TestNonTensorData:
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
 
     @pytest.mark.parametrize("update", ["update_at_", "slice"])
-    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
-    def test_shared_stack(self, strategy, update, tmpdir):
+    @pytest.mark.parametrize(
+        "strategy,share_non_tensor",
+        [["shared", None], ["memmap", True], ["memmap", False]],
+    )
+    def test_shared_stack(self, strategy, update, share_non_tensor, tmpdir):
         td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
         newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
         if update == "slice":
@@ -8294,7 +8297,7 @@ class TestNonTensorData:
         if strategy == "shared":
             td.share_memory_()
         elif strategy == "memmap":
-            td.memmap_(tmpdir)
+            td.memmap_(tmpdir, share_non_tensor=share_non_tensor)
         else:
             raise NotImplementedError
         assert td.get("val").tolist() == [0, 1] * 5
@@ -8314,7 +8317,11 @@ class TestNonTensorData:
         proc = mp.Process(target=self._update_stack, args=(td,))
         proc.start()
         proc.join()
-        assert td.get("val").tolist() == [0, 3] * 5
+        if share_non_tensor in (True, None):
+            assert td.get("val").tolist() == [0, 3] * 5
+        else:
+            assert td.get("val").tolist() == [0, 2] * 5
+
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
 
