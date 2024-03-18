@@ -345,4 +345,6 @@ class DummyPicklableClass:
         self.value = value
 
     def __eq__(self, other):
-        return self.value == other.value
+        if isinstance(other, DummyPicklableClass):
+            return self.value == other.value
+        return self.value == other

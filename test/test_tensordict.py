@@ -3443,14 +3443,26 @@ class TestTensorDicts(TestTensorDictsBase):
         # check get (for tensor)
         assert (td.get_non_tensor(("this", "tensor")) == 0).all()
         # check get (for non-tensor)
-        assert td.get_non_tensor(("this", "will")) == "succeed"
-        assert isinstance(td.get(("this", "will")), NonTensorData)
+
+        def check(x):
+            assert x == "succeed"
+
+        torch.utils._pytree.tree_map(check, td.get_non_tensor(("this", "will")))
+
+        assert is_non_tensor(td.get(("this", "will")))
 
         with td.unlock_():
             td["this", "other", "tensor"] = "success"
-            assert td["this", "other", "tensor"] == "success"
-            assert isinstance(td.get(("this", "other", "tensor")), NonTensorData)
-            assert td.get_non_tensor(("this", "other", "tensor")) == "success"
+
+            def check(x):
+                assert x == "success"
+
+            assert not is_non_tensor(td["this", "other", "tensor"]), td
+            torch.utils._pytree.tree_map(check, td["this", "other", "tensor"])
+            assert is_non_tensor(td.get(("this", "other", "tensor")))
+            torch.utils._pytree.tree_map(
+                check, td.get_non_tensor(("this", "other", "tensor"))
+            )
 
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
@@ -3471,7 +3483,11 @@ class TestTensorDicts(TestTensorDictsBase):
                 return
         td_flat = td.flatten_keys()
         assert (td_flat.get("this.tensor") == 0).all()
-        assert td_flat.get_non_tensor("this.will") == "succeed"
+
+        def check(x):
+            assert x == "succeed"
+
+        torch.utils._pytree.tree_map(check, td_flat.get_non_tensor("this.will"))
 
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
@@ -3493,9 +3509,18 @@ class TestTensorDicts(TestTensorDictsBase):
             td.set_non_tensor(("non", "json", "serializable"), DummyPicklableClass(10))
         td.memmap(prefix=tmpdir, copy_existing=True)
         loaded = TensorDict.load_memmap(tmpdir)
-        assert isinstance(loaded.get(("non", "json", "serializable")), NonTensorData)
-        assert loaded.get_non_tensor(("non", "json", "serializable")).value == 10
-        assert loaded.get_non_tensor(("this", "will")) == "succeed"
+        assert is_non_tensor(loaded.get(("non", "json", "serializable")))
+
+        def check(x, val):
+            assert x == val
+
+        torch.utils._pytree.tree_map(
+            lambda x: check(x, val=10),
+            loaded.get_non_tensor(("non", "json", "serializable")),
+        )
+        torch.utils._pytree.tree_map(
+            lambda x: check(x, val="succeed"), loaded.get_non_tensor(("this", "will"))
+        )
 
     def test_pad(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -8067,7 +8092,7 @@ class TestNonTensorData:
         if strategy == "shared":
             td.share_memory_()
         elif strategy == "memmap":
-            td.memmap_(tmpdir)
+            td.memmap_(tmpdir, share_non_tensor=True)
         else:
             raise RuntimeError
 
@@ -8116,6 +8141,130 @@ class TestNonTensorData:
             # with open(Path(tmpdir) / "val" / "meta.json") as file:
             #     print(json.load(file))
 
+    @pytest.mark.parametrize("json_serializable", [True, False])
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
+    def test_memmap_stack(self, tmpdir, json_serializable, device):
+        if json_serializable:
+            data = torch.stack(
+                [
+                    NonTensorData(data=0, device=device),
+                    NonTensorData(data=1, device=device),
+                ]
+            )
+
+        else:
+
+            data = torch.stack(
+                [
+                    NonTensorData(data=DummyPicklableClass(0), device=device),
+                    NonTensorData(data=DummyPicklableClass(1), device=device),
+                ]
+            )
+        data = torch.stack([data] * 3)
+        data_memmap = data.memmap(tmpdir)
+        device_str = "null" if device is None else f'"{device}"'
+        with open(f"{tmpdir}/meta.json") as f:
+            if json_serializable:
+                assert (
+                    f.read()
+                    == f'{{"_type": "<class \'tensordict.tensorclass.NonTensorStack\'>", "stack_dim": 0, "device": {device_str}, "data": [[0, 1], [0, 1], [0, 1]]}}'
+                )
+            else:
+                assert (
+                    f.read()
+                    == f'{{"_type": "<class \'tensordict.tensorclass.NonTensorStack\'>", "stack_dim": 0, "device": {device_str}, "data": "pickle.pkl"}}'
+                )
+        data_recon = TensorDict.load_memmap(tmpdir)
+        assert data_recon.batch_size == data.batch_size
+        assert data_recon.device == data.device
+        assert data_recon.tolist() == data.tolist()
+        assert data_memmap.is_memmap()
+        assert data_memmap._is_memmap
+
+    def test_memmap_stack_updates(self, tmpdir):
+        data = torch.stack([NonTensorData(data=0), NonTensorData(data=1)], 0)
+        data = torch.stack([data] * 3).clone()
+        data.memmap_(tmpdir)
+        data_recon = TensorDict.load_memmap(tmpdir)
+        assert data.tolist() == data_recon.tolist()
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data[0, 0]._is_memmaped_from_above()
+
+        data_other = torch.stack([NonTensorData(data=2), NonTensorData(data=3)], 0)
+        data_other = torch.stack([data_other] * 3)
+        with pytest.raises(RuntimeError, match="locked"):
+            data.update(data_other)
+        data.update(data_other, inplace=True)
+        assert data[0, 0]._is_memmaped_from_above()
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data.tolist() == [[2, 3]] * 3
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+
+        data_other = torch.stack([NonTensorData(data=4), NonTensorData(data=5)], 0)
+        data_other = torch.stack([data_other] * 3)
+        data.update_(data_other)
+        assert data[0, 0]._is_memmaped_from_above()
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data.tolist() == [[4, 5]] * 3
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+
+        data.update(NonTensorData(data=6), inplace=True)
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data.tolist() == [[6] * 2] * 3
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+
+        data.update_(NonTensorData(data=7))
+        assert data.is_memmap()
+        assert data._is_memmap
+        assert data.tolist() == [[7] * 2] * 3
+        assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+
+        assert data[0, 0]._is_memmaped_from_above()
+        # Should raise an exception
+        assert isinstance(data[0, 0], NonTensorData)
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack",
+        ):
+            data[0, 0].update(NonTensorData(data=1), inplace=True)
+
+        # Should raise an exception
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack",
+        ):
+            data[0].update(NonTensorData(data=1), inplace=True)
+
+        # should raise an exception
+        with pytest.raises(
+            ValueError,
+            match="Cannot update a NonTensorData object with a NonTensorStack",
+        ):
+            out = NonTensorData(data=1).update(data, inplace=True)
+        # as suggested by the error message this works
+        out = (
+            NonTensorData(data=1, batch_size=data.batch_size)
+            .maybe_to_stack()
+            .update(data, inplace=True)
+        )
+        assert out.tolist() == data.tolist()
+
+        data[0, 0] = NonTensorData(data=99)
+        assert data.tolist() == [[99, 7], [7, 7], [7, 7]]
+        assert (
+            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+        ), TensorDict.load_memmap(tmpdir).tolist()
+
+        data.update_at_(NonTensorData(data=99), (0, 1))
+        assert data.tolist() == [[99, 99], [7, 7], [7, 7]], data.tolist()
+        assert (
+            data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
+        ), TensorDict.load_memmap(tmpdir).tolist()
+
     def test_shared_limitations(self):
         # Sharing a special type works but it's locked for writing
         @dataclass
@@ -8157,8 +8306,11 @@ class TestNonTensorData:
         td[1::2] = TensorDict({"val": NonTensorData(data=3, batch_size=[5])}, [5])
 
     @pytest.mark.parametrize("update", ["update_at_", "slice"])
-    @pytest.mark.parametrize("strategy", ["shared", "memmap"])
-    def test_shared_stack(self, strategy, update, tmpdir):
+    @pytest.mark.parametrize(
+        "strategy,share_non_tensor",
+        [["shared", None], ["memmap", True], ["memmap", False]],
+    )
+    def test_shared_stack(self, strategy, update, share_non_tensor, tmpdir):
         td = TensorDict({"val": NonTensorData(data=0, batch_size=[10])}, [10])
         newdata = TensorDict({"val": NonTensorData(data=1, batch_size=[5])}, [5])
         if update == "slice":
@@ -8170,7 +8322,7 @@ class TestNonTensorData:
         if strategy == "shared":
             td.share_memory_()
         elif strategy == "memmap":
-            td.memmap_(tmpdir)
+            td.memmap_(tmpdir, share_non_tensor=share_non_tensor)
         else:
             raise NotImplementedError
         assert td.get("val").tolist() == [0, 1] * 5
@@ -8190,7 +8342,11 @@ class TestNonTensorData:
         proc = mp.Process(target=self._update_stack, args=(td,))
         proc.start()
         proc.join()
-        assert td.get("val").tolist() == [0, 3] * 5
+        if share_non_tensor in (True, None):
+            assert td.get("val").tolist() == [0, 3] * 5
+        else:
+            assert td.get("val").tolist() == [0, 2] * 5
+
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
 

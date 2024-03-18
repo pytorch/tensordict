@@ -1959,6 +1959,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         futures,
         inplace,
         like,
+        share_non_tensor,
     ) -> T:
         ...
 
@@ -1969,6 +1970,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         *,
         num_threads: int = 0,
         return_early: bool = False,
+        share_non_tensor: bool = False,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
 
@@ -1986,6 +1988,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 tensors. Defaults to `0`.
             return_early (bool, optional): if ``True`` and ``num_threads>0``,
                 the method will return a future of the tensordict.
+            share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
+                shared between the processes and writing operation (such as inplace update
+                or set) on any of the workers within a single node will update the value
+                on all other workers. If the number of non-tensor leaves is high (e.g.,
+                sharing large stacks of non-tensor data) this may result in OOM or similar
+                errors. Defaults to ``False``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -2000,6 +2008,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
+        prefix = Path(prefix) if prefix is not None else None
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -2016,6 +2025,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     futures=futures,
                     inplace=True,
                     like=False,
+                    share_non_tensor=share_non_tensor,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -2029,6 +2039,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             futures=None,
             executor=None,
             like=False,
+            share_non_tensor=share_non_tensor,
         ).lock_()
 
     def memmap(
@@ -2038,6 +2049,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         *,
         num_threads: int = 0,
         return_early: bool = False,
+        share_non_tensor: bool = False,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
@@ -2055,6 +2067,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 tensors. Defaults to `0`.
             return_early (bool, optional): if ``True`` and ``num_threads>0``,
                 the method will return a future of the tensordict.
+            share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
+                shared between the processes and writing operation (such as inplace update
+                or set) on any of the workers within a single node will update the value
+                on all other workers. If the number of non-tensor leaves is high (e.g.,
+                sharing large stacks of non-tensor data) this may result in OOM or similar
+                errors. Defaults to ``False``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -2070,6 +2088,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
+        prefix = Path(prefix) if prefix is not None else None
+
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -2086,12 +2106,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     futures=futures,
                     inplace=False,
                     like=False,
+                    share_non_tensor=share_non_tensor,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
                     return result
                 else:
                     return TensorDictFuture(futures, result)
+
         return self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -2099,6 +2121,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             executor=None,
             like=False,
             futures=None,
+            share_non_tensor=share_non_tensor,
         ).lock_()
 
     def memmap_like(
@@ -2108,6 +2131,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         *,
         num_threads: int = 0,
         return_early: bool = False,
+        share_non_tensor: bool = False,
     ) -> T:
         """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
 
@@ -2125,6 +2149,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 tensors. Defaults to `0`.
             return_early (bool, optional): if ``True`` and ``num_threads>0``,
                 the method will return a future of the tensordict.
+            share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
+                shared between the processes and writing operation (such as inplace update
+                or set) on any of the workers within a single node will update the value
+                on all other workers. If the number of non-tensor leaves is high (e.g.,
+                sharing large stacks of non-tensor data) this may result in OOM or similar
+                errors. Defaults to ``False``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -2148,6 +2178,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> buffer = td.memmap_like("/path/to/dataset")
 
         """
+        prefix = Path(prefix) if prefix is not None else None
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -2172,6 +2203,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     futures=futures,
                     inplace=False,
                     like=True,
+                    share_non_tensor=share_non_tensor,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -2188,6 +2220,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             like=True,
             executor=None,
             futures=None,
+            share_non_tensor=share_non_tensor,
         ).lock_()
 
     @classmethod
@@ -2822,6 +2855,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> assert (td[1] == 1).all()
 
         """
+        if idx == ():
+            return self.update_(
+                input_dict_or_td=input_dict_or_td,
+                keys_to_update=keys_to_update,
+                clone=clone,
+            )
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
