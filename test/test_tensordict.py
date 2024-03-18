@@ -3443,14 +3443,26 @@ class TestTensorDicts(TestTensorDictsBase):
         # check get (for tensor)
         assert (td.get_non_tensor(("this", "tensor")) == 0).all()
         # check get (for non-tensor)
-        assert td.get_non_tensor(("this", "will")) == "succeed"
-        assert isinstance(td.get(("this", "will")), NonTensorData)
+
+        def check(x):
+            assert x == "succeed"
+
+        torch.utils._pytree.tree_map(check, td.get_non_tensor(("this", "will")))
+
+        assert is_non_tensor(td.get(("this", "will")))
 
         with td.unlock_():
             td["this", "other", "tensor"] = "success"
-            assert td["this", "other", "tensor"] == "success"
-            assert isinstance(td.get(("this", "other", "tensor")), NonTensorData)
-            assert td.get_non_tensor(("this", "other", "tensor")) == "success"
+
+            def check(x):
+                assert x == "success"
+
+            assert not is_non_tensor(td["this", "other", "tensor"]), td
+            torch.utils._pytree.tree_map(check, td["this", "other", "tensor"])
+            assert is_non_tensor(td.get(("this", "other", "tensor")))
+            torch.utils._pytree.tree_map(
+                check, td.get_non_tensor(("this", "other", "tensor"))
+            )
 
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
@@ -3471,7 +3483,11 @@ class TestTensorDicts(TestTensorDictsBase):
                 return
         td_flat = td.flatten_keys()
         assert (td_flat.get("this.tensor") == 0).all()
-        assert td_flat.get_non_tensor("this.will") == "succeed"
+
+        def check(x):
+            assert x == "succeed"
+
+        torch.utils._pytree.tree_map(check, td_flat.get_non_tensor("this.will"))
 
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should

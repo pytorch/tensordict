@@ -2214,7 +2214,6 @@ class NonTensorStack(LazyStackedTensorDict):
             items=items, dim=dim, out=out, stack_dim_name=stack_dim_name, device=device
         )
         if not isinstance(result, cls):
-            print(result.tensordicts)
             raise RuntimeError(
                 f"Unexpected result type: {type(result)} - expected one of {cls}."
             )

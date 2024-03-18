@@ -829,8 +829,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             for td in self.tensordicts:
                 out.append(td._unbind(new_dim))
-            print("stacking", type(self))
-            print("vals", out)
             return tuple(self.lazy_stack(vals, new_stack_dim) for vals in zip(*out))
 
     def _stack_onto_(
@@ -1632,12 +1630,13 @@ class LazyStackedTensorDict(TensorDictBase):
         if isinstance(index, (tuple, str)):
             index_key = _unravel_key_to_tuple(index)
             if index_key:
-                result = self._get_tuple(index_key, NO_DEFAULT)
-                from .tensorclass import NonTensorData
-
-                if isinstance(result, NonTensorData):
-                    return result.data
-                return result
+                leaf = self._get_tuple(index_key, NO_DEFAULT)
+                if is_non_tensor(leaf):
+                    result = getattr(leaf, "data", NO_DEFAULT)
+                    if result is NO_DEFAULT:
+                        return leaf.tolist()
+                    return result
+                return leaf
         split_index = self._split_index(index)
         converted_idx = split_index["index_dict"]
         isinteger = split_index["isinteger"]
