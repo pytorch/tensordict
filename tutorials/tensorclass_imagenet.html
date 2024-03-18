@@ -751,7 +751,7 @@ saved in the subdirectory <code class="docutils literal notranslate"><span class
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Using device: cpu
 
   0%|          | 0/244 [00:00&lt;?, ?it/s]
- 26%|██▌       | 64/244 [00:00&lt;00:00, 217.00it/s]ImageNetData(
+ 26%|██▌       | 64/244 [00:00&lt;00:00, 226.04it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([244, 3, 256, 256]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([244]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([244]),
@@ -800,10 +800,10 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 244/244 [00:00&lt;00:00, 743.48it/s]
+100%|██████████| 244/244 [00:00&lt;00:00, 755.27it/s]
 
   0%|          | 0/153 [00:00&lt;?, ?it/s]
- 42%|████▏     | 64/153 [00:00&lt;00:00, 194.88it/s]ImageNetData(
+ 42%|████▏     | 64/153 [00:00&lt;00:00, 210.15it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -827,7 +827,8 @@ ImageNetData(
     batch_size=torch.Size([64]),
     device=None,
     is_shared=False)
-ImageNetData(
+
+100%|██████████| 153/153 [00:00&lt;00:00, 420.48it/s]ImageNetData(
     images=MemoryMappedTensor(shape=torch.Size([153, 3, 224, 224]), device=cpu, dtype=torch.uint8, is_shared=False),
     targets=MemoryMappedTensor(shape=torch.Size([153]), device=cpu, dtype=torch.int64, is_shared=False),
     batch_size=torch.Size([153]),
@@ -840,14 +841,14 @@ ImageNetData(
     device=None,
     is_shared=False)
 
-100%|██████████| 153/153 [00:00&lt;00:00, 374.84it/s]
-One iteration over dataloader done! Rate: 985.3985 fps, time:  0.2233s
-One iteration over tensorclass dataloader done! Rate: 1749.1771 fps, time:  0.1258s
-One iteration over val data done! Rate: 682.9717 fps, time:  0.1889s
-One iteration over tensorclass val data done! Rate: 18320.0791 fps, time:  0.0070s
+100%|██████████| 153/153 [00:00&lt;00:00, 364.69it/s]
+One iteration over dataloader done! Rate: 1025.5090 fps, time:  0.2145s
+One iteration over tensorclass dataloader done! Rate: 1843.8748 fps, time:  0.1193s
+One iteration over val data done! Rate: 681.1858 fps, time:  0.1894s
+One iteration over tensorclass val data done! Rate: 19734.6616 fps, time:  0.0065s
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.554 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 1.521 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensorclass-imagenet-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/a4db2295c156dd86b1f4437d354c9744/tensorclass_imagenet.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensorclass_imagenet.ipynb</span></code></a></p>
