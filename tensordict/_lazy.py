@@ -829,7 +829,8 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             for td in self.tensordicts:
                 out.append(td._unbind(new_dim))
-
+            print("stacking", type(self))
+            print("vals", out)
             return tuple(self.lazy_stack(vals, new_stack_dim) for vals in zip(*out))
 
     def _stack_onto_(

@@ -215,6 +215,7 @@ def tensorclass(cls: T) -> T:
         cls.get_at = _get_at
     if not hasattr(cls, "unbind"):
         cls.unbind = _unbind
+    cls._unbind = _unbind
     if not hasattr(cls, "state_dict"):
         cls.state_dict = _state_dict
     if not hasattr(cls, "load_state_dict"):
@@ -555,7 +556,7 @@ def _memmap_(
         copy_existing=copy_existing,
         share_non_tensor=share_non_tensor,
     )
-    td._tensordict.device = torch.device("cpu")
+    td._device = torch.device("cpu")
     if not inplace:
         result = cls._from_tensordict(td, _non_tensordict)
     else:
@@ -2161,6 +2162,11 @@ class NonTensorStack(LazyStackedTensorDict):
 
     _is_non_tensor: bool = True
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not all(is_non_tensor(item) for item in self.tensordicts):
+            raise RuntimeError("All tensordicts must be non-tensors.")
+
     def tolist(self):
         """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.
 
@@ -2193,6 +2199,26 @@ class NonTensorStack(LazyStackedTensorDict):
         batch_size = indent(f"batch_size={self.batch_size}", prefix=4 * " ")
         device = indent(f"device={self.device}", prefix=4 * " ")
         return f"NonTensorStack(\n{selfrepr}," f"\n{batch_size}," f"\n{device})"
+
+    @classmethod
+    def lazy_stack(
+        cls,
+        items: Sequence[TensorDictBase],
+        dim: int = 0,
+        *,
+        device: DeviceType | None = None,
+        out: T | None = None,
+        stack_dim_name: str | None = None,
+    ) -> T:
+        result = super().lazy_stack(
+            items=items, dim=dim, out=out, stack_dim_name=stack_dim_name, device=device
+        )
+        if not isinstance(result, cls):
+            print(result.tensordicts)
+            raise RuntimeError(
+                f"Unexpected result type: {type(result)} - expected one of {cls}."
+            )
+        return result
 
     def to_dict(self) -> dict[str, Any]:
         return self.tolist()

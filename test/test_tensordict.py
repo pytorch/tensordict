@@ -3493,9 +3493,18 @@ class TestTensorDicts(TestTensorDictsBase):
             td.set_non_tensor(("non", "json", "serializable"), DummyPicklableClass(10))
         td.memmap(prefix=tmpdir, copy_existing=True)
         loaded = TensorDict.load_memmap(tmpdir)
-        assert isinstance(loaded.get(("non", "json", "serializable")), NonTensorData)
-        assert loaded.get_non_tensor(("non", "json", "serializable")).value == 10
-        assert loaded.get_non_tensor(("this", "will")) == "succeed"
+        assert is_non_tensor(loaded.get(("non", "json", "serializable")))
+
+        def check(x, val):
+            assert x == val
+
+        torch.utils._pytree.tree_map(
+            lambda x: check(x, val=10),
+            loaded.get_non_tensor(("non", "json", "serializable")),
+        )
+        torch.utils._pytree.tree_map(
+            lambda x: check(x, val="succeed"), loaded.get_non_tensor(("this", "will"))
+        )
 
     def test_pad(self, td_name, device):
         td = getattr(self, td_name)(device)
