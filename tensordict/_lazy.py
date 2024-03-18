@@ -829,7 +829,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             for td in self.tensordicts:
                 out.append(td._unbind(new_dim))
-
             return tuple(self.lazy_stack(vals, new_stack_dim) for vals in zip(*out))
 
     def _stack_onto_(
@@ -945,14 +944,17 @@ class LazyStackedTensorDict(TensorDictBase):
 
         if all(isinstance(item, torch.Tensor) for item in items):
             return torch.stack(items, dim=dim, out=out)
+        if all(is_non_tensor(tensordict) for tensordict in items):
+            # Non-tensor data (Data or Stack) are stacked using NonTensorStack
+            # If the content is identical (not equal but same id) this does not
+            # require additional memory.
+            from .tensorclass import NonTensorStack
+
+            return NonTensorStack(*items, stack_dim=dim)
         if all(
             is_tensorclass(item) and type(item) == type(items[0])  # noqa: E721
             for item in items
         ):
-            if all(is_non_tensor(tensordict) for tensordict in items):
-                from .tensorclass import NonTensorData
-
-                return NonTensorData._stack_non_tensor(items, dim=dim)
             lazy_stack = cls.lazy_stack(
                 [item._tensordict for item in items],
                 dim=dim,
@@ -1628,12 +1630,13 @@ class LazyStackedTensorDict(TensorDictBase):
         if isinstance(index, (tuple, str)):
             index_key = _unravel_key_to_tuple(index)
             if index_key:
-                result = self._get_tuple(index_key, NO_DEFAULT)
-                from .tensorclass import NonTensorData
-
-                if isinstance(result, NonTensorData):
-                    return result.data
-                return result
+                leaf = self._get_tuple(index_key, NO_DEFAULT)
+                if is_non_tensor(leaf):
+                    result = getattr(leaf, "data", NO_DEFAULT)
+                    if result is NO_DEFAULT:
+                        return leaf.tolist()
+                    return result
+                return leaf
         split_index = self._split_index(index)
         converted_idx = split_index["index_dict"]
         isinteger = split_index["isinteger"]
@@ -2011,12 +2014,14 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def _memmap_(
         self,
+        *,
         prefix: str | None = None,
         copy_existing: bool = False,
         executor=None,
         futures=None,
         inplace=True,
         like=False,
+        share_non_tensor,
     ) -> T:
         if prefix is not None:
             prefix = Path(prefix)
@@ -2045,6 +2050,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     futures=futures,
                     inplace=inplace,
                     like=like,
+                    share_non_tensor=share_non_tensor,
                 )
             )
         if not inplace:
@@ -2182,7 +2188,7 @@ class LazyStackedTensorDict(TensorDictBase):
         index: IndexType,
         clone: bool = False,
     ) -> T:
-        if not isinstance(input_dict_or_td, TensorDictBase):
+        if not _is_tensor_collection(type(input_dict_or_td)):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_size=self.batch_size
             )
@@ -2895,6 +2901,7 @@ class _CustomOpTensorDict(TensorDictBase):
         futures,
         inplace,
         like,
+        share_non_tensor,
     ) -> T:
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
@@ -2926,6 +2933,7 @@ class _CustomOpTensorDict(TensorDictBase):
             futures=futures,
             inplace=inplace,
             like=like,
+            share_non_tensor=share_non_tensor,
         )
         if not inplace:
             dest = type(self)(

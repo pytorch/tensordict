@@ -2024,3 +2024,7 @@ class _add_batch_dim_pre_hook:
 def is_non_tensor(data):
     """Checks if an item is a non-tensor."""
     return getattr(type(data), "_is_non_tensor", False)
+
+
+def _is_non_tensor(cls: type):
+    return getattr(cls, "_is_non_tensor", False)

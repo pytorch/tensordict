@@ -16,6 +16,7 @@ import multiprocessing.sharedctypes
 import numbers
 import os
 import pickle
+import shutil
 import warnings
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -214,6 +215,7 @@ def tensorclass(cls: T) -> T:
         cls.get_at = _get_at
     if not hasattr(cls, "unbind"):
         cls.unbind = _unbind
+    cls._unbind = _unbind
     if not hasattr(cls, "state_dict"):
         cls.state_dict = _state_dict
     if not hasattr(cls, "load_state_dict"):
@@ -226,6 +228,8 @@ def tensorclass(cls: T) -> T:
         cls.update = _update
     if not hasattr(cls, "update_"):
         cls.update_ = _update_
+    if not hasattr(cls, "update_at_"):
+        cls.update_at_ = _update_at_
 
     cls.__enter__ = __enter__
     cls.__exit__ = __exit__
@@ -503,17 +507,20 @@ def _from_tensordict_wrapper(expected_keys):
 
 def _memmap_(
     self,
+    *,
     prefix: str | None = None,
     copy_existing: bool = False,
     executor=None,
     futures=None,
     inplace=True,
     like=False,
+    memmaped: bool = False,
+    share_non_tensor: bool = False,
 ):
-    _non_tensordict = self._non_tensordict
+    _non_tensordict = copy(self._non_tensordict)
     cls = self.__class__
 
-    if prefix is not None:
+    if not memmaped and prefix is not None:
         prefix = Path(prefix)
         if not prefix.exists():
             os.makedirs(prefix, exist_ok=True)
@@ -547,8 +554,9 @@ def _memmap_(
         inplace=inplace,
         like=like,
         copy_existing=copy_existing,
+        share_non_tensor=share_non_tensor,
     )
-
+    td._device = torch.device("cpu")
     if not inplace:
         result = cls._from_tensordict(td, _non_tensordict)
     else:
@@ -556,19 +564,6 @@ def _memmap_(
     return result
 
 
-# def _keys(self, include_nested=False, leaves_only=False, *, is_leaf=None):
-#     yield from self._tensordict.keys(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)
-#     yield from self._non_tensordict.keys()
-#
-# def _values(self, include_nested=False, leaves_only=False, is_leaf=None):
-#     yield from self._tensordict.values(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)
-#     yield from self._non_tensordict.values()
-#
-# def _items(self, include_nested=False, leaves_only=False, is_leaf=None):
-#     yield from self._tensordict.items(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)
-#     yield from self._non_tensordict.items()
-
-# TODO: test
 def _share_memory_(self):
     self._tensordict.share_memory_()
     return self
@@ -759,6 +754,37 @@ def _update_(
         input_dict_or_td.exclude(*non_tensordict.keys()),
         clone=clone,
         inplace=inplace,
+        keys_to_update=keys_to_update,
+    )
+    self._non_tensordict.update(non_tensordict)
+    return self
+
+
+def _update_at_(
+    self,
+    input_dict_or_td: dict[str, CompatibleType] | T,
+    index: IndexType,
+    clone: bool = False,
+    *,
+    keys_to_update: Sequence[NestedKey] | None = None,
+):
+    if isinstance(input_dict_or_td, dict):
+        input_dict_or_td = self.from_dict(input_dict_or_td, batch_size=self.batch_size)
+
+    if is_tensorclass(input_dict_or_td):
+        self._tensordict.update(input_dict_or_td._tensordict)
+        self._non_tensordict.update(input_dict_or_td._non_tensordict)
+        return self
+
+    non_tensordict = {}
+    for key, value in input_dict_or_td.items():
+        if is_non_tensor(value):
+            non_tensordict[key] = value.data
+
+    self._tensordict.update_at_(
+        input_dict_or_td.exclude(*non_tensordict.keys()),
+        index=index,
+        clone=clone,
         keys_to_update=keys_to_update,
     )
     self._non_tensordict.update(non_tensordict)
@@ -1802,32 +1828,77 @@ class NonTensorData:
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
+        return self._update(
+            input_dict_or_td=input_dict_or_td,
+            clone=clone,
+            inplace=inplace,
+            keys_to_update=keys_to_update,
+        )
+
+    def _update(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        inplace: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+        break_on_memmap: bool = None,
+    ) -> T:
         if isinstance(input_dict_or_td, NonTensorData):
             data = input_dict_or_td.data
             if inplace and self._tensordict._is_shared:
                 _update_shared_nontensor(self._non_tensordict["data"], data)
                 return self
-            elif inplace and self._tensordict._is_memmap:
-                _update_shared_nontensor(self._non_tensordict["data"], data)
+            elif inplace and self._is_memmap:
+                _is_memmaped_from_above = self._is_memmaped_from_above()
+                if break_on_memmap is None:
+                    global _BREAK_ON_MEMMAP
+                    break_on_memmap = _BREAK_ON_MEMMAP
+                if _is_memmaped_from_above and break_on_memmap:
+                    raise RuntimeError(
+                        "Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack. "
+                        "To update this leaf node, please update the NonTensorStack with the proper index."
+                    )
+                share_non_tensor = self._metadata["_share_non_tensor"]
+                if share_non_tensor:
+                    _update_shared_nontensor(self._non_tensordict["data"], data)
+                else:
+                    self._non_tensordict["data"] = data
                 # Force json update by setting is memmap to False
-                self._tensordict._is_memmap = False
-                self._memmap_(
-                    prefix=self._metadata["memmap_prefix"],
-                    copy_existing=False,
-                    executor=None,
-                    futures=None,
-                    inplace=True,
-                    like=False,
-                )
+                if not _is_memmaped_from_above and "memmap_prefix" in self._metadata:
+                    self._tensordict._is_memmap = False
+                    self._memmap_(
+                        prefix=self._metadata["memmap_prefix"],
+                        copy_existing=False,
+                        executor=None,
+                        futures=None,
+                        inplace=True,
+                        like=False,
+                        share_non_tensor=share_non_tensor,
+                    )
                 return self
             elif not inplace and self.is_locked:
                 raise RuntimeError(_LOCK_ERROR)
             if clone:
                 data = deepcopy(data)
             self.data = data
+        elif isinstance(input_dict_or_td, NonTensorStack):
+            raise ValueError(
+                "Cannot update a NonTensorData object with a NonTensorStack. Call `non_tensor_data.maybe_to_stack()` "
+                "before calling update()."
+            )
         elif not input_dict_or_td.is_empty():
             raise RuntimeError(f"Unexpected type {type(input_dict_or_td)}")
         return self
+
+    def maybe_to_stack(self):
+        """Converts the NonTensorData object to a NonTensorStack object if it has a non-empty batch-size."""
+        datalist = self.data
+        if not self.batch_size:
+            return self
+        for i in reversed(self.batch_size):
+            datalist = [datalist] * i
+        return NonTensorStack._from_list(datalist, device=self.device)
 
     def update_(
         self,
@@ -1835,6 +1906,20 @@ class NonTensorData:
         clone: bool = False,
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> T:
+        return self._update_(
+            input_dict_or_td=input_dict_or_td,
+            clone=clone,
+            keys_to_update=keys_to_update,
+        )
+
+    def _update_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+        break_on_memmap: bool = None,
     ) -> T:
 
         if isinstance(input_dict_or_td, NonTensorStack):
@@ -1845,33 +1930,23 @@ class NonTensorData:
             raise RuntimeError(
                 "NonTensorData.copy_ / update_ requires the source to be a NonTensorData object."
             )
+        return self._update(
+            input_dict_or_td,
+            inplace=True,
+            clone=clone,
+            keys_to_update=keys_to_update,
+            break_on_memmap=break_on_memmap,
+        )
 
-        if isinstance(input_dict_or_td, NonTensorData):
-            data = input_dict_or_td.data
-            if self._tensordict._is_shared:
-                _update_shared_nontensor(self._non_tensordict["data"], data)
-                return self
-            if self._tensordict._is_memmap:
-                _update_shared_nontensor(self._non_tensordict["data"], data)
-                # Force json update by setting is memmap to False
-                self._tensordict._is_memmap = False
-                self._memmap_(
-                    prefix=self._metadata["memmap_prefix"],
-                    copy_existing=False,
-                    executor=None,
-                    futures=None,
-                    inplace=True,
-                    like=False,
-                )
-                return self
-            if self._tensordict._is_memmap:
-                raise NotImplementedError
-            if clone:
-                data = deepcopy(data)
-            self.data = data
-        elif not input_dict_or_td.is_empty():
-            raise RuntimeError(f"Unexpected type {type(input_dict_or_td)}")
-        return self
+    def update_at_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        index: IndexType,
+        clone: bool = False,
+    ) -> NonTensorData:
+        if index != () and index != slice(None):
+            raise RuntimeError("Cannot update a part of a NonTensorData.")
+        return self.update_(input_dict_or_td=input_dict_or_td, clone=clone)
 
     def empty(self, recurse=False):
         return NonTensorData(
@@ -2009,21 +2084,26 @@ class NonTensorData:
 
     def _memmap_(
         self,
+        *,
         prefix: str | None = None,
         copy_existing: bool = False,
         executor=None,
         futures=None,
         inplace=True,
         like=False,
+        memmaped: bool = False,
+        share_non_tensor: bool = False,
     ):
         if self._tensordict._is_memmap:
             return self
 
+        _metadata = {}
         if prefix is not None:
             _metadata = copy(self._metadata)
             if _metadata is None:
-                self._non_tensordict["_metadata"] = {}
-            self._metadata["memmap_prefix"] = prefix
+                _metadata = {}
+            _metadata["memmap_prefix"] = prefix
+            _metadata["memmaped"] = memmaped
 
         out = _memmap_(
             self,
@@ -2033,13 +2113,29 @@ class NonTensorData:
             futures=futures,
             inplace=inplace,
             like=like,
+            memmaped=memmaped,
+            share_non_tensor=share_non_tensor,
         )
-        if prefix is not None and not inplace:
-            self._non_tensordict["_metadata"] = _metadata
-        out._non_tensordict["data"] = _share_memory_nontensor(
-            out.data, manager=_mp_manager()
-        )
+        _metadata["_share_non_tensor"] = share_non_tensor
+        out._non_tensordict["_metadata"] = _metadata
+        if share_non_tensor:
+            out._non_tensordict["data"] = _share_memory_nontensor(
+                out.data, manager=_mp_manager()
+            )
         return out
+
+    def _is_memmaped_from_above(self):
+        _metadata = self._metadata
+        if _metadata is None:
+            return False
+        return _metadata.get("memmaped", False)
+
+    def __repr__(self):
+        return f"{type(self).__name__}(data={self.data}, batch_size={self.batch_size}, device={self.device})"
+
+
+# For __setitem__ and _update_at_ we don't pass a kwarg but use a global variable instead
+_BREAK_ON_MEMMAP = True
 
 
 class NonTensorStack(LazyStackedTensorDict):
@@ -2065,6 +2161,11 @@ class NonTensorStack(LazyStackedTensorDict):
     """
 
     _is_non_tensor: bool = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not all(is_non_tensor(item) for item in self.tensordicts):
+            raise RuntimeError("All tensordicts must be non-tensors.")
 
     def tolist(self):
         """Extracts the content of a :class:`tensordict.tensorclass.NonTensorStack` in a nested list.
@@ -2099,10 +2200,245 @@ class NonTensorStack(LazyStackedTensorDict):
         device = indent(f"device={self.device}", prefix=4 * " ")
         return f"NonTensorStack(\n{selfrepr}," f"\n{batch_size}," f"\n{device})"
 
+    @classmethod
+    def lazy_stack(
+        cls,
+        items: Sequence[TensorDictBase],
+        dim: int = 0,
+        *,
+        device: DeviceType | None = None,
+        out: T | None = None,
+        stack_dim_name: str | None = None,
+    ) -> T:
+        result = super().lazy_stack(
+            items=items, dim=dim, out=out, stack_dim_name=stack_dim_name, device=device
+        )
+        if not isinstance(result, cls):
+            raise RuntimeError(
+                f"Unexpected result type: {type(result)} - expected one of {cls}."
+            )
+        return result
+
     def to_dict(self) -> dict[str, Any]:
         return self.tolist()
 
     def to_tensordict(self):
+        return self
+
+    def _memmap_(
+        self,
+        *,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        executor=None,
+        futures=None,
+        inplace=True,
+        like=False,
+        memmaped: bool = False,
+        share_non_tensor: bool = False,
+    ) -> T:
+
+        memmaped_leaves = memmaped
+        if not memmaped and prefix is not None:
+            memmaped_leaves = True
+
+            def save_metadata(prefix=prefix, self=self):
+                data = self.tolist()
+                device = str(self.device) if self.device is not None else None
+                if not prefix.exists():
+                    os.makedirs(prefix, exist_ok=True)
+                jsondict = {
+                    "_type": str(self.__class__),
+                    "stack_dim": self.stack_dim,
+                    "device": device,
+                }
+                if _is_json_serializable(data):
+                    jsondict["data"] = data
+                else:
+                    jsondict["data"] = "pickle.pkl"
+                    with open(prefix / "pickle.pkl", "wb") as f:
+                        pickle.dump(data, f)
+                with open(prefix / "meta.json", "w") as f:
+                    json.dump(jsondict, f)
+
+            if executor is None:
+                save_metadata()
+            else:
+                futures.append(executor.submit(save_metadata))
+        # The leaves are all non-tensor or non-tensor stacks, and we already saved this on disk
+        # The only thing remaining to do is share the data between processes
+        results = []
+        for i, td in enumerate(self.tensordicts):
+            results.append(
+                td._memmap_(
+                    prefix=(prefix / str(i)) if prefix is not None else None,
+                    copy_existing=copy_existing,
+                    executor=executor,
+                    futures=futures,
+                    inplace=inplace,
+                    like=like,
+                    # tell the nested stack / nontensor that
+                    # no memmapping should be executed
+                    memmaped=memmaped_leaves,
+                    share_non_tensor=share_non_tensor,
+                )
+            )
+        if not inplace:
+            results = self.lazy_stack(results, dim=self.stack_dim)
+        else:
+            results = self
+        if not memmaped and prefix is not None:
+            results.__dict__["_path_to_memmap"] = prefix
+        return results
+
+    @classmethod
+    def _load_memmap(cls, prefix: str, metadata: dict) -> LazyStackedTensorDict:
+        data = metadata.get("data", None)
+        if data is not None:
+            if isinstance(data, str):
+                with open(prefix / data, "rb") as file:
+                    data = pickle.load(file)
+            device = metadata["device"]
+            if device is not None:
+                device = torch.device(device)
+            return cls._from_list(data, device=device)
+        return super()._load_memmap(prefix=prefix, metadata=metadata)
+
+    @classmethod
+    def _from_list(cls, datalist: List, device: torch.device):
+        if all(isinstance(item, list) for item in datalist) and all(
+            len(item) == len(datalist[0]) for item in datalist
+        ):
+            return NonTensorStack(
+                *(cls._from_list(item, device=device) for item in datalist), stack_dim=0
+            )
+        return NonTensorStack(
+            *(
+                NonTensorData(data=item, device=device, batch_size=torch.Size([]))
+                for item in datalist
+            ),
+            stack_dim=0,
+        )
+
+    def update(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        inplace: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> T:
+        return self._update(
+            input_dict_or_td=input_dict_or_td,
+            clone=clone,
+            inplace=inplace,
+            keys_to_update=keys_to_update,
+        )
+
+    def update_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+    ) -> T:
+        return self._update(
+            input_dict_or_td=input_dict_or_td,
+            clone=clone,
+            inplace=True,
+            keys_to_update=keys_to_update,
+        )
+
+    def _update(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | T,
+        clone: bool = False,
+        inplace: bool = False,
+        *,
+        keys_to_update: Sequence[NestedKey] | None = None,
+        break_on_memmap: bool = None,
+    ) -> T:
+        if inplace and self.is_locked and not (self._is_shared or self._is_memmap):
+            raise RuntimeError(_LOCK_ERROR)
+
+        if isinstance(input_dict_or_td, NonTensorData):
+            datalist = input_dict_or_td.data
+            for d in reversed(self.batch_size):
+                datalist = [datalist] * d
+            reconstructed = self._from_list(datalist, device=self.device)
+            return self.update(
+                reconstructed,
+                clone=clone,
+                inplace=inplace,
+                keys_to_update=keys_to_update,
+            )
+
+        memmap = False
+        if self._is_memmap and hasattr(self, "_path_to_memmap"):
+            if break_on_memmap is None:
+                global _BREAK_ON_MEMMAP
+                break_on_memmap = _BREAK_ON_MEMMAP
+            if not break_on_memmap:
+                raise RuntimeError(
+                    "Calling _update with break_on_memmap=False is not permitted if the stack has a path."
+                )
+            # this is the only way break_on_memmap is False
+            break_on_memmap = False
+            # remove memmap
+            if self._path_to_memmap.exists():
+                shutil.rmtree(self._path_to_memmap)
+            memmap = True
+
+        # update content
+        if isinstance(input_dict_or_td, NonTensorStack):
+            for leaf_dest, leaf_src in zip(
+                self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
+            ):
+                leaf_dest._update(
+                    leaf_src,
+                    clone=clone,
+                    inplace=inplace,
+                    keys_to_update=keys_to_update,
+                    break_on_memmap=break_on_memmap,
+                )
+            if memmap:
+                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+        else:
+            raise NotImplementedError(
+                f"The data type {type(input_dict_or_td)} is not supported within {type(self).__name__}.update"
+            )
+        return self
+
+    def __setitem__(self, index, value):
+        memmap = False
+        if self._is_memmap and hasattr(self, "_path_to_memmap"):
+            global _BREAK_ON_MEMMAP
+            _BREAK_ON_MEMMAP = False
+            memmap = True
+        try:
+            super().__setitem__(index, value)
+            if memmap:
+                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+        finally:
+            _BREAK_ON_MEMMAP = True
+
+    def update_at_(
+        self,
+        input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
+        index: IndexType,
+        clone: bool = False,
+    ) -> T:
+        memmap = False
+        if self._is_memmap and hasattr(self, "_path_to_memmap"):
+            global _BREAK_ON_MEMMAP
+            _BREAK_ON_MEMMAP = False
+            memmap = True
+        try:
+            super().update_at_(input_dict_or_td, index, clone=clone)
+            if memmap:
+                self._memmap_(prefix=self._path_to_memmap, inplace=True)
+        finally:
+            _BREAK_ON_MEMMAP = True
         return self
 
 

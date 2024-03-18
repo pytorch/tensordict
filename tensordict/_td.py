@@ -1769,12 +1769,14 @@ class TensorDict(TensorDictBase):
 
     def _memmap_(
         self,
+        *,
         prefix: str | None,
         copy_existing: bool,
         executor,
         futures,
         inplace,
         like,
+        share_non_tensor,
     ) -> T:
         def save_metadata(data: TensorDictBase, filepath, metadata=None):
             if metadata is None:
@@ -1828,6 +1830,7 @@ class TensorDict(TensorDictBase):
                     futures=futures,
                     inplace=inplace,
                     like=like,
+                    share_non_tensor=share_non_tensor,
                 )
                 continue
             else:
@@ -2834,6 +2837,7 @@ class _SubTensorDict(TensorDictBase):
         futures,
         inplace,
         like,
+        share_non_tensor,
     ) -> T:
         if prefix is not None:
 
@@ -2862,6 +2866,7 @@ class _SubTensorDict(TensorDictBase):
             futures=futures,
             inplace=inplace,
             like=like,
+            share_non_tensor=share_non_tensor,
         )
         if not inplace:
             result = _SubTensorDict(_source, idx=self.idx)
