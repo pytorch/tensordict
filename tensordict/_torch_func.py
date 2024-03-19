@@ -14,6 +14,7 @@ import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
+from tensordict.functional import dense_stack_tds
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
@@ -435,6 +436,12 @@ To silence this warning, choose one of the following options:
                     with set_lazy_legacy(True):
                         return _stack(list_of_tensordicts, dim=dim)
                 raise
+
+            if all(
+                isinstance(_tensordict, LazyStackedTensorDict)
+                for _tensordict in list_of_tensordicts
+            ):
+                return dense_stack_tds(list_of_tensordicts, dim=dim)
 
             out = {}
             for key in keys:
