@@ -6539,6 +6539,35 @@ class TestLazyStackedTensorDict:
         ):
             td_a.update_(td_b.to_tensordict())
 
+    @pytest.mark.parametrize(
+        "stack_order", [[0, 1, 2], [2, 1, 0], [1, 2, 0], [1, 0, 2], [2, 0, 1]]
+    )
+    def test_stack_with_stack(self, stack_order):
+        # tests the condition where all(
+        #                 isinstance(_tensordict, LazyStackedTensorDict)
+        #                 for _tensordict in list_of_tensordicts
+        #             ):
+        data = TensorDict(
+            {
+                ("level0", "level1", "level2", "entry"): torch.arange(60).reshape(
+                    3, 4, 5
+                )
+            },
+            [3, 4, 5],
+        )
+        stacked_data = data.clone()
+        stacked_data["level0", "level1"] = LazyStackedTensorDict(
+            *stacked_data["level0", "level1"].unbind(stack_order[0]),
+            stack_dim=stack_order[0],
+        )
+        stacked_data["level0"] = LazyStackedTensorDict(
+            *stacked_data["level0"].unbind(stack_order[1]), stack_dim=stack_order[1]
+        )
+        stacked_data = stacked_data.unbind(stack_order[2])
+        stacked_data = torch.stack(stacked_data, stack_order[2])
+        assert stacked_data.batch_size == data.batch_size
+        assert (stacked_data == data).all()
+
     @pytest.mark.parametrize("device", get_available_devices())
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     def test_stacked_indexing(self, device, stack_dim):

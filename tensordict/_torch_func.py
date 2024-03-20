@@ -14,7 +14,6 @@ import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
-from tensordict.functional import dense_stack_tds
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
