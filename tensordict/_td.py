@@ -2060,9 +2060,17 @@ class TensorDict(TensorDictBase):
         return result
 
     def contiguous(self) -> T:
-        if not self.is_contiguous():
-            return self.clone()
-        return self
+        source = {key: value.contiguous() for key, value in self.items()}
+        batch_size = self.batch_size
+        device = self.device
+        out = TensorDict(
+            source=source,
+            batch_size=batch_size,
+            device=device,
+            names=self.names,
+            _run_checks=False,
+        )
+        return out
 
     def empty(self, recurse=False) -> T:
         if not recurse:
@@ -2750,11 +2758,9 @@ class _SubTensorDict(TensorDictBase):
         return all(value.is_contiguous() for value in self.values())
 
     def contiguous(self) -> T:
-        if self.is_contiguous():
-            return self
         return TensorDict(
             batch_size=self.batch_size,
-            source={key: value for key, value in self.items()},
+            source={key: value.contiguous() for key, value in self.items()},
             device=self.device,
             names=self.names,
             _run_checks=False,
