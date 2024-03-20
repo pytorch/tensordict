@@ -2829,8 +2829,6 @@ class _CustomOpTensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def contiguous(self) -> T:
-        if self.is_contiguous():
-            return self
         return self._fast_apply(lambda x: x.contiguous())
 
     def rename_key_(
