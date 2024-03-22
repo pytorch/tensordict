@@ -518,7 +518,7 @@ class TestGeneric:
                 other_td = other_td.unsqueeze(-1).to_tensordict()
             if update:
                 subtd = td._get_sub_tensordict(i)
-                subtd.update(other_td, inplace=True)
+                subtd.update(other_td, inplace=True, non_blocking=False)
             else:
                 td[i] = other_td
 
@@ -986,7 +986,7 @@ class TestGeneric:
         else:
             raise NotImplementedError
 
-        td.set("a", torch.randn(4, 5), inplace=True)
+        td.set("a", torch.randn(4, 5), inplace=True, non_blocking=False)
         td.set_("a", torch.randn(4, 5))  # No exception because set_ ignores the lock
 
         with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
@@ -996,7 +996,7 @@ class TestGeneric:
             td.set("b", torch.randn(4, 5))
 
         with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
-            td.set("b", torch.randn(4, 5), inplace=True)
+            td.set("b", torch.randn(4, 5), inplace=True, non_blocking=False)
 
     def test_no_batch_size(self):
         td = TensorDict({"a": torch.zeros(3, 4)})
@@ -1805,7 +1805,10 @@ class TestGeneric:
         torch.testing.assert_close(td.get("key2")[2, 2], x.to(torch.float))
 
         td.set(
-            "key1", torch.zeros(4, 5, dtype=torch.double, device=device), inplace=True
+            "key1",
+            torch.zeros(4, 5, dtype=torch.double, device=device),
+            inplace=True,
+            non_blocking=False,
         )
         assert (td.get("key1") == 0).all()
         td.set(
@@ -3986,7 +3989,7 @@ class TestTensorDicts(TestTensorDictsBase):
             ):
                 td.set("z", torch.ones_like(td.get("a")))
         else:
-            td.set("z", torch.ones_like(td.get("a")))
+            td.set("z", torch.ones_like(td.get("a")), non_blocking=False)
             assert (td.get("z") == 1).all()
 
     def test_setdefault_existing_key(self, td_name, device):
@@ -8065,9 +8068,15 @@ class TestNonTensorData:
         if update == "setitem":
             td["val"] = val1
         elif update == "update_":
-            td.get("val").update_(NonTensorData(data=val1, batch_size=[]))
+            td.get("val").update_(
+                NonTensorData(data=val1, batch_size=[]), non_blocking=False
+            )
         elif update == "update-inplace":
-            td.get("val").update(NonTensorData(data=val1, batch_size=[]), inplace=True)
+            td.get("val").update(
+                NonTensorData(data=val1, batch_size=[]),
+                inplace=True,
+                non_blocking=False,
+            )
         elif update == "update":
             with pytest.raises(RuntimeError, match="lock"):
                 td.get("val").update(
@@ -8101,9 +8110,15 @@ class TestNonTensorData:
         if update == "setitem":
             td["val"] = val1
         elif update == "update_":
-            td.get("val").update_(NonTensorData(data=val1, batch_size=[]))
+            td.get("val").update_(
+                NonTensorData(data=val1, batch_size=[]), non_blocking=False
+            )
         elif update == "update-inplace":
-            td.get("val").update(NonTensorData(data=val1, batch_size=[]), inplace=True)
+            td.get("val").update(
+                NonTensorData(data=val1, batch_size=[]),
+                inplace=True,
+                non_blocking=False,
+            )
         else:
             raise NotImplementedError
         # Test that the Value is unpacked
@@ -8224,7 +8239,7 @@ class TestNonTensorData:
         data_other = torch.stack([data_other] * 3)
         with pytest.raises(RuntimeError, match="locked"):
             data.update(data_other)
-        data.update(data_other, inplace=True)
+        data.update(data_other, inplace=True, non_blocking=False)
         assert data[0, 0]._is_memmaped_from_above()
         assert data.is_memmap()
         assert data._is_memmap
@@ -8240,7 +8255,7 @@ class TestNonTensorData:
         assert data.tolist() == [[4, 5]] * 3
         assert data.tolist() == TensorDict.load_memmap(tmpdir).tolist()
 
-        data.update(NonTensorData(data=6), inplace=True)
+        data.update(NonTensorData(data=6), inplace=True, non_blocking=False)
         assert data.is_memmap()
         assert data._is_memmap
         assert data.tolist() == [[6] * 2] * 3
@@ -8259,26 +8274,26 @@ class TestNonTensorData:
             RuntimeError,
             match="Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack",
         ):
-            data[0, 0].update(NonTensorData(data=1), inplace=True)
+            data[0, 0].update(NonTensorData(data=1), inplace=True, non_blocking=False)
 
         # Should raise an exception
         with pytest.raises(
             RuntimeError,
             match="Cannot update a leaf NonTensorData from a memmaped parent NonTensorStack",
         ):
-            data[0].update(NonTensorData(data=1), inplace=True)
+            data[0].update(NonTensorData(data=1), inplace=True, non_blocking=False)
 
         # should raise an exception
         with pytest.raises(
             ValueError,
             match="Cannot update a NonTensorData object with a NonTensorStack",
         ):
-            out = NonTensorData(data=1).update(data, inplace=True)
+            out = NonTensorData(data=1).update(data, inplace=True, non_blocking=False)
         # as suggested by the error message this works
         out = (
             NonTensorData(data=1, batch_size=data.batch_size)
             .maybe_to_stack()
-            .update(data, inplace=True)
+            .update(data, inplace=True, non_blocking=False)
         )
         assert out.tolist() == data.tolist()
 
@@ -8313,6 +8328,7 @@ class TestNonTensorData:
             td.update(
                 TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []),
                 inplace=True,
+                non_blocking=False,
             )
         with pytest.raises(
             NotImplementedError, match="Updating MyClass within a shared/memmaped"

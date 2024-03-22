@@ -517,7 +517,11 @@ class PersistentTensorDict(TensorDictBase):
             for key, val in self.items():
                 if is_tensor_collection(val):
                     out._set_str(
-                        key, val.empty(recurse=True), inplace=False, validated=True
+                        key,
+                        val.empty(recurse=True),
+                        inplace=False,
+                        validated=True,
+                        non_blocking=False,
                     )
             return out
         return TensorDict(
@@ -630,6 +634,7 @@ class PersistentTensorDict(TensorDictBase):
                     ),
                     inplace=False,
                     validated=True,
+                    non_blocking=False,
                 )
                 continue
             else:
@@ -658,6 +663,7 @@ class PersistentTensorDict(TensorDictBase):
                         val,
                         inplace=False,
                         validated=True,
+                        non_blocking=False,
                     )
 
                 if executor is None:
@@ -924,10 +930,12 @@ class PersistentTensorDict(TensorDictBase):
         self,
         key: NestedKey,
         value: Any,
+        *,
         inplace: bool = False,
         idx=None,
         validated: bool = False,
         ignore_lock: bool = False,
+        non_blocking: bool = False,
     ) -> PersistentTensorDict:
         if not validated:
             value = self._validate_value(value, check_shape=idx is None)
@@ -1035,27 +1043,59 @@ class PersistentTensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
         ignore_lock: bool = False,
+        non_blocking: bool = False,
     ):
         inplace = self._convert_inplace(inplace, key)
         return self._set(
-            key, value, inplace=inplace, validated=validated, ignore_lock=ignore_lock
+            key,
+            value,
+            inplace=inplace,
+            validated=validated,
+            ignore_lock=ignore_lock,
+            non_blocking=non_blocking,
         )
 
-    def _set_tuple(self, key, value, *, inplace, validated):
+    def _set_tuple(self, key, value, *, inplace, validated, non_blocking):
         if len(key) == 1:
-            return self._set_str(key[0], value, inplace=inplace, validated=validated)
+            return self._set_str(
+                key[0],
+                value,
+                inplace=inplace,
+                validated=validated,
+                non_blocking=non_blocking,
+            )
         elif key[0] in self.keys():
             return self._get_str(key[0])._set_tuple(
-                key[1:], value, inplace=inplace, validated=validated
+                key[1:],
+                value,
+                inplace=inplace,
+                validated=validated,
+                non_blocking=non_blocking,
             )
         inplace = self._convert_inplace(inplace, key)
-        return self._set(key, value, inplace=inplace, validated=validated)
+        return self._set(
+            key, value, inplace=inplace, validated=validated, non_blocking=non_blocking
+        )
 
-    def _set_at_str(self, key, value, idx, *, validated):
-        return self._set(key, value, inplace=True, idx=idx, validated=validated)
+    def _set_at_str(self, key, value, idx, *, validated, non_blocking):
+        return self._set(
+            key,
+            value,
+            inplace=True,
+            idx=idx,
+            validated=validated,
+            non_blocking=non_blocking,
+        )
 
-    def _set_at_tuple(self, key, value, idx, *, validated):
-        return self._set(key, value, inplace=True, idx=idx, validated=validated)
+    def _set_at_tuple(self, key, value, idx, *, validated, non_blocking):
+        return self._set(
+            key,
+            value,
+            inplace=True,
+            idx=idx,
+            validated=validated,
+            non_blocking=non_blocking,
+        )
 
     def _set_metadata(self, orig_metadata_container: PersistentTensorDict):
         for key, td in orig_metadata_container._nested_tensordicts.items():

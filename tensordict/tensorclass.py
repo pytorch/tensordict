@@ -705,6 +705,7 @@ def _update(
     inplace: bool = False,
     *,
     keys_to_update: Sequence[NestedKey] | None = None,
+    non_blocking: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
         input_dict_or_td = self.from_dict(input_dict_or_td)
@@ -724,6 +725,7 @@ def _update(
         clone=clone,
         inplace=inplace,
         keys_to_update=keys_to_update,
+        non_blocking=non_blocking,
     )
     self._non_tensordict.update(non_tensordict)
     return self
@@ -736,6 +738,7 @@ def _update_(
     inplace: bool = False,
     *,
     keys_to_update: Sequence[NestedKey] | None = None,
+    non_blocking: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
         input_dict_or_td = self.from_dict(input_dict_or_td, batch_size=self.batch_size)
@@ -755,6 +758,7 @@ def _update_(
         clone=clone,
         inplace=inplace,
         keys_to_update=keys_to_update,
+        non_blocking=non_blocking,
     )
     self._non_tensordict.update(non_tensordict)
     return self
@@ -767,6 +771,7 @@ def _update_at_(
     clone: bool = False,
     *,
     keys_to_update: Sequence[NestedKey] | None = None,
+    non_blocking: bool = False,
 ):
     if isinstance(input_dict_or_td, dict):
         input_dict_or_td = self.from_dict(input_dict_or_td, batch_size=self.batch_size)
@@ -786,6 +791,7 @@ def _update_at_(
         index=index,
         clone=clone,
         keys_to_update=keys_to_update,
+        non_blocking=non_blocking,
     )
     self._non_tensordict.update(non_tensordict)
     return self
@@ -1031,7 +1037,9 @@ def _device_setter(self, value: DeviceType) -> None:
     )
 
 
-def _set(self, key: NestedKey, value: Any, inplace: bool = False):
+def _set(
+    self, key: NestedKey, value: Any, inplace: bool = False, non_blocking: bool = False
+):
     """Sets a new key-value pair.
 
     Args:
@@ -1068,7 +1076,7 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
                         f"Cannot update an existing entry of type {type(self._non_tensordict.get(key))} with a value of type {type(value)}."
                     )
                 del self._non_tensordict[key]
-            self._tensordict.set(key, value, inplace=inplace)
+            self._tensordict.set(key, value, inplace=inplace, non_blocking=non_blocking)
             return self
         if isinstance(value, dict):
             type_hints = self._type_hints
@@ -1076,7 +1084,9 @@ def _set(self, key: NestedKey, value: Any, inplace: bool = False):
                 target_cls = type_hints.get(key, None)
                 if isinstance(target_cls, type) and _is_tensor_collection(target_cls):
                     value = target_cls.from_dict(value)
-                    self._tensordict.set(key, value, inplace=inplace)
+                    self._tensordict.set(
+                        key, value, inplace=inplace, non_blocking=non_blocking
+                    )
                     return self
             else:
                 warnings.warn(self._set_dict_warn_msg)
@@ -1119,10 +1129,12 @@ def _del_(self, key):
     return
 
 
-def _set_at_(self, key: NestedKey, value: Any, idx: IndexType):
+def _set_at_(
+    self, key: NestedKey, value: Any, idx: IndexType, non_blocking: bool = False
+):
     if key in self._non_tensordict:
         del self._non_tensordict[key]
-    return self._tensordict.set_at_(key, value, idx)
+    return self._tensordict.set_at_(key, value, idx, non_blocking=non_blocking)
 
 
 def _get(self, key: NestedKey, default: Any = NO_DEFAULT):
@@ -1826,6 +1838,7 @@ class NonTensorData:
         clone: bool = False,
         inplace: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         return self._update(
@@ -1905,6 +1918,7 @@ class NonTensorData:
         input_dict_or_td: dict[str, CompatibleType] | T,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         return self._update_(
@@ -1943,10 +1957,14 @@ class NonTensorData:
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
         index: IndexType,
         clone: bool = False,
+        *,
+        non_blocking: bool = False,
     ) -> NonTensorData:
         if index != () and index != slice(None):
             raise RuntimeError("Cannot update a part of a NonTensorData.")
-        return self.update_(input_dict_or_td=input_dict_or_td, clone=clone)
+        return self.update_(
+            input_dict_or_td=input_dict_or_td, clone=clone, non_blocking=non_blocking
+        )
 
     def empty(self, recurse=False):
         return NonTensorData(
@@ -2055,7 +2073,7 @@ class NonTensorData:
         return [ntd.tolist() for ntd in self.unbind(0)]
 
     def copy_(self, src: NonTensorData | NonTensorStack, non_blocking: bool = False):
-        return self.update_(src)
+        return self.update_(src, non_blocking=non_blocking)
 
     def clone(self, recurse: bool = True):
         if recurse:
@@ -2326,6 +2344,7 @@ class NonTensorStack(LazyStackedTensorDict):
         clone: bool = False,
         inplace: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         return self._update(
@@ -2340,6 +2359,7 @@ class NonTensorStack(LazyStackedTensorDict):
         input_dict_or_td: dict[str, CompatibleType] | T,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         return self._update(
@@ -2357,6 +2377,7 @@ class NonTensorStack(LazyStackedTensorDict):
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
         break_on_memmap: bool = None,
+        non_blocking: bool = False,
     ) -> T:
         if inplace and self.is_locked and not (self._is_shared or self._is_memmap):
             raise RuntimeError(_LOCK_ERROR)
@@ -2427,6 +2448,8 @@ class NonTensorStack(LazyStackedTensorDict):
         input_dict_or_td: dict[str, CompatibleType] | TensorDictBase,
         index: IndexType,
         clone: bool = False,
+        *,
+        non_blocking: bool = False,
     ) -> T:
         memmap = False
         if self._is_memmap and hasattr(self, "_path_to_memmap"):
@@ -2434,7 +2457,9 @@ class NonTensorStack(LazyStackedTensorDict):
             _BREAK_ON_MEMMAP = False
             memmap = True
         try:
-            super().update_at_(input_dict_or_td, index, clone=clone)
+            super().update_at_(
+                input_dict_or_td, index, clone=clone, non_blocking=non_blocking
+            )
             if memmap:
                 self._memmap_(prefix=self._path_to_memmap, inplace=True)
         finally:
