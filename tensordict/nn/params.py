@@ -930,7 +930,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         swap_dest=None,
         memo=None,
         use_state_dict: bool = False,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ):
         ...
 

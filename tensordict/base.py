@@ -669,7 +669,7 @@ class TensorDictBase(MutableMapping):
         swap_dest=None,
         memo=None,
         use_state_dict: bool = False,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ):
         ...
 
@@ -2328,7 +2328,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         inplace: bool,
         validated: bool,
         ignore_lock: bool = False,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ):
         ...
 

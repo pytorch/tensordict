@@ -429,7 +429,7 @@ class LazyStackedTensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
         ignore_lock: bool = False,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ) -> T:
         try:
             inplace = self._convert_inplace(inplace, key)
@@ -463,7 +463,7 @@ class LazyStackedTensorDict(TensorDictBase):
         *,
         inplace: bool,
         validated: bool,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ) -> T:
         if len(key) == 1:
             return self._set_str(
@@ -2752,7 +2752,7 @@ class _CustomOpTensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
         ignore_lock: bool = False,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ):
         if not validated:
             value = self._validate_value(value, check_shape=True)

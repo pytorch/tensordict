@@ -330,7 +330,7 @@ class TensorDict(TensorDictBase):
         swap_dest=None,
         memo=None,
         use_state_dict: bool = False,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ):
 
         if not use_state_dict and isinstance(module, TensorDictBase):
@@ -1574,7 +1574,7 @@ class TensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
         ignore_lock: bool = False,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ) -> T:
         if inplace is not False:
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
@@ -1608,7 +1608,7 @@ class TensorDict(TensorDictBase):
         *,
         inplace: bool,
         validated: bool,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ) -> T:
         if len(key) == 1:
             return self._set_str(
@@ -2455,7 +2455,7 @@ class _SubTensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
         ignore_lock: bool = False,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ) -> T:
         inplace = self._convert_inplace(inplace, key)
         # it is assumed that if inplace=False then the key doesn't exist. This is
@@ -2515,7 +2515,7 @@ class _SubTensorDict(TensorDictBase):
         *,
         inplace: bool,
         validated: bool,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ) -> T:
         if len(key) == 1:
             return self._set_str(

@@ -935,7 +935,7 @@ class PersistentTensorDict(TensorDictBase):
         idx=None,
         validated: bool = False,
         ignore_lock: bool = False,
-        non_blocking: bool,
+        non_blocking: bool = False,
     ) -> PersistentTensorDict:
         if not validated:
             value = self._validate_value(value, check_shape=idx is None)
