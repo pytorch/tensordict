@@ -2509,11 +2509,11 @@ class TestTensorDicts(TestTensorDictsBase):
             "unsqueezed_td",
         ):
             with pytest.raises(RuntimeError, match="Cannot call exclude"):
-                td.exclude("a", inplace=True, non_blocking=False)
+                td.exclude("a", inplace=True)
             return
 
         with td.unlock_():
-            td2 = td.exclude("a", inplace=True, non_blocking=False)
+            td2 = td.exclude("a", inplace=True)
         assert td2 is td
 
     @pytest.mark.parametrize("nested", [True, False])
@@ -2989,7 +2989,7 @@ class TestTensorDicts(TestTensorDictsBase):
                 # we can't call select inplace on these guys so we exit here
                 return
             with td.unlock_() if td.is_locked else contextlib.nullcontext():
-                td = td.select(inplace=True, non_blocking=False)
+                td = td.select(inplace=True)
         for key, item in td_clone.items(True):
             with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
                 td.set(key, item)
