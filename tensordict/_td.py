@@ -2568,13 +2568,17 @@ class _SubTensorDict(TensorDictBase):
 
     def _set_at_tuple(self, key, value, idx, *, validated, non_blocking: bool):
         if len(key) == 1:
-            return self._set_at_str(key[0], value, idx, validated=validated, non_blocking=non_blocking)
+            return self._set_at_str(
+                key[0], value, idx, validated=validated, non_blocking=non_blocking
+            )
         if key[0] not in self.keys():
             # this won't work
             raise KeyError(f"key {key} not found in set_at_ with tensordict {self}.")
         else:
             td = self._get_str(key[0], NO_DEFAULT)
-        td._set_at_tuple(key[1:], value, idx, validated=validated, non_blocking=non_blocking)
+        td._set_at_tuple(
+            key[1:], value, idx, validated=validated, non_blocking=non_blocking
+        )
         return self
 
     # @cache  # noqa: B019

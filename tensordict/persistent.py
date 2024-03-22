@@ -517,7 +517,11 @@ class PersistentTensorDict(TensorDictBase):
             for key, val in self.items():
                 if is_tensor_collection(val):
                     out._set_str(
-                        key, val.empty(recurse=True), inplace=False, validated=True
+                        key,
+                        val.empty(recurse=True),
+                        inplace=False,
+                        validated=True,
+                        non_blocking=False,
                     )
             return out
         return TensorDict(
@@ -630,6 +634,7 @@ class PersistentTensorDict(TensorDictBase):
                     ),
                     inplace=False,
                     validated=True,
+                    non_blocking=False,
                 )
                 continue
             else:
@@ -658,6 +663,7 @@ class PersistentTensorDict(TensorDictBase):
                         val,
                         inplace=False,
                         validated=True,
+                        non_blocking=False,
                     )
 
                 if executor is None:
