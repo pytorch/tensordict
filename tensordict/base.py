@@ -629,6 +629,9 @@ class TensorDictBase(MutableMapping):
             use_state_dict (bool, optional): if ``True``, state-dict API will be
                 used to load the parameters (including the state-dict hooks).
                 Defaults to ``False``.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Examples:
             >>> from torch import nn
@@ -2289,6 +2292,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 the entry cannot be found, it will be added. For a more restrictive
                 in-place operation, use :meth:`~.set_` instead.
                 Defaults to ``False``.
+
+        Keyword Args:
             non_blocking (bool, optional): if ``True`` and this copy is between
                 different devices, the copy may occur asynchronously with respect
                 to the host.
