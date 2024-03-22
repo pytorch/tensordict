@@ -11,7 +11,6 @@ import functools
 import gc
 import json
 import os
-import pathlib
 import platform
 import re
 import uuid
