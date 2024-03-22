@@ -46,7 +46,11 @@ def _apply_leaves(data, fn):
         with data.unlock_():
             for key, val in list(data.items()):
                 data._set_str(
-                    key, _apply_leaves(val, fn), validated=True, inplace=False
+                    key,
+                    _apply_leaves(val, fn),
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
                 )
         return data
     elif isinstance(data, LazyStackedTensorDict):
@@ -403,6 +407,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         clone: bool = False,
         inplace: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> TensorDictBase:
         if not self.no_convert:
@@ -420,6 +425,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 clone=clone,
                 inplace=inplace,
                 keys_to_update=keys_to_update,
+                non_blocking=non_blocking,
             )
             self._reset_params()
         return self
@@ -924,6 +930,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         swap_dest=None,
         memo=None,
         use_state_dict: bool = False,
+        non_blocking: bool,
     ):
         ...
 
@@ -1072,6 +1079,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         input_dict_or_td: dict[str, CompatibleType] | T,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         ...
@@ -1083,6 +1091,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         idx: IndexType,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         ...
