@@ -1728,7 +1728,7 @@ class TensorDict(TensorDictBase):
                 self.get(old_key),
                 inplace=False,
                 validated=True,
-                non_blocking=non_blocking,
+                non_blocking=False,
             )
         else:
             self._set_tuple(
@@ -1736,7 +1736,7 @@ class TensorDict(TensorDictBase):
                 self.get(old_key),
                 inplace=False,
                 validated=True,
-                non_blocking=non_blocking,
+                non_blocking=False,
             )
         self.del_(old_key)
         return self
@@ -2048,7 +2048,7 @@ class TensorDict(TensorDictBase):
                 else:
                     val = func(tensor, _other, key)
                 result._set_str(
-                    key, val, inplace=False, validated=True, non_blocking=non_blocking
+                    key, val, inplace=False, validated=True, non_blocking=False
                 )
                 other_keys.discard(key)
             for key in other_keys:
@@ -2066,7 +2066,7 @@ class TensorDict(TensorDictBase):
                 else:
                     val = func(tensor, _other, key)
                 result._set_str(
-                    key, val, inplace=False, validated=True, non_blocking=non_blocking
+                    key, val, inplace=False, validated=True, non_blocking=False
                 )
             return result
         else:
@@ -3042,7 +3042,7 @@ class _SubTensorDict(TensorDictBase):
         # this may fail with a sub-sub tensordict
         out = self._source.empty()
         self._source._set_str(
-            key, out, inplace=False, validated=True, non_blocking=non_blocking
+            key, out, inplace=False, validated=True, non_blocking=False
         )
         # the id of out changes
         return self._get_str(key, default=NO_DEFAULT)
