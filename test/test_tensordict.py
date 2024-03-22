@@ -16,7 +16,6 @@ import platform
 import re
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -674,7 +673,11 @@ class TestGeneric:
             z: "MyClass" = None
 
         td = TensorDict(
-            {"a": torch.randn(()), "b": MyClass(x=torch.zeros(()), y=1, z=MyClass(y=2))}
+            {
+                "a": torch.randn(()),
+                "b": MyClass(x=torch.zeros(()), y=1, z=MyClass(y=2)),
+            },
+            batch_size=[],
         )
         td_dict = td.to_dict()
         assert isinstance(td_dict["b"], dict)
@@ -998,9 +1001,10 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
             td.set("b", torch.randn(4, 5), inplace=True, non_blocking=False)
 
-    def test_no_batch_size(self):
-        td = TensorDict({"a": torch.zeros(3, 4)})
-        assert td.batch_size == torch.Size([])
+    # From v0.4
+    # def test_no_batch_size(self):
+    #     td = TensorDict({"a": torch.zeros(3, 4)})
+    #     assert td.batch_size == torch.Size([])
 
     def test_pad(self):
         dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
@@ -7809,25 +7813,19 @@ class TestMap:
         "chunksize,num_chunks", [[0, None], [2, None], [None, 5], [None, 10]]
     )
     @pytest.mark.parametrize("h5", [False, True])
-    @pytest.mark.parametrize("has_out", [False, True])
+    # From v0.4
+    @pytest.mark.parametrize("has_out", [False])
     def test_index_with_generator(self, chunksize, num_chunks, h5, has_out, tmpdir):
         input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
         if h5:
             tmpdir = pathlib.Path(tmpdir)
             input = input.to_h5(tmpdir / "file.h5")
-        if has_out:
-            output_generator = torch.zeros_like(self.selectfn(input.to_tensordict()))
-            output_split = torch.zeros_like(self.selectfn(input.to_tensordict()))
-        else:
-            output_generator = None
-            output_split = None
         output_generator = input.map(
             self.selectfn,
             num_workers=2,
             index_with_generator=True,
             num_chunks=num_chunks,
             chunksize=chunksize,
-            out=output_generator,
         )
         output_split = input.map(
             self.selectfn,
@@ -7835,7 +7833,6 @@ class TestMap:
             index_with_generator=True,
             num_chunks=num_chunks,
             chunksize=chunksize,
-            out=output_split,
         )
         assert (output_generator == output_split).all()
 
@@ -7867,18 +7864,19 @@ class TestMap:
     def selectfn(input):
         return input.select("a")
 
-    @pytest.mark.parametrize("chunksize", [0, 5])
-    @pytest.mark.parametrize("mmap", [True, False])
-    def test_map_with_out(self, mmap, chunksize, tmpdir):
-        tmpdir = Path(tmpdir)
-        input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
-        if mmap:
-            input.memmap_(tmpdir / "input")
-        out = TensorDict({"a": torch.zeros(10, dtype=torch.int)}, [10])
-        if mmap:
-            out.memmap_(tmpdir / "output")
-        input.map(self.selectfn, num_workers=2, chunksize=chunksize, out=out)
-        assert (out["a"] == torch.arange(10)).all(), (chunksize, mmap)
+    # From v0.4
+    # @pytest.mark.parametrize("chunksize", [0, 5])
+    # @pytest.mark.parametrize("mmap", [True, False])
+    # def test_map_with_out(self, mmap, chunksize, tmpdir):
+    #     tmpdir = Path(tmpdir)
+    #     input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
+    #     if mmap:
+    #         input.memmap_(tmpdir / "input")
+    #     out = TensorDict({"a": torch.zeros(10, dtype=torch.int)}, [10])
+    #     if mmap:
+    #         out.memmap_(tmpdir / "output")
+    #     input.map(self.selectfn, num_workers=2, chunksize=chunksize, out=out)
+    #     assert (out["a"] == torch.arange(10)).all(), (chunksize, mmap)
 
     @classmethod
     def nontensor_check(cls, td):
