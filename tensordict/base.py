@@ -608,6 +608,7 @@ class TensorDictBase(MutableMapping):
         return_swap: bool = True,
         swap_dest=None,
         use_state_dict: bool = False,
+        non_blocking: bool = False,
         memo=None,  # deprecated
     ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
@@ -625,6 +626,9 @@ class TensorDictBase(MutableMapping):
             use_state_dict (bool, optional): if ``True``, state-dict API will be
                 used to load the parameters (including the state-dict hooks).
                 Defaults to ``False``.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Examples:
             >>> from torch import nn
@@ -649,6 +653,7 @@ class TensorDictBase(MutableMapping):
             swap_dest=swap_dest,
             memo=memo,
             use_state_dict=use_state_dict,
+            non_blocking=non_blocking,
         )
 
     @abc.abstractmethod
@@ -661,6 +666,7 @@ class TensorDictBase(MutableMapping):
         swap_dest=None,
         memo=None,
         use_state_dict: bool = False,
+        non_blocking: bool = False,
     ):
         ...
 
@@ -725,7 +731,9 @@ class TensorDictBase(MutableMapping):
                 if len(value.batch_size) < len(new_batch_size):
                     # document as edge case
                     value.batch_size = new_batch_size
-                    self._set_str(key, value, inplace=True, validated=True)
+                    self._set_str(
+                        key, value, inplace=True, validated=True, non_blocking=False
+                    )
         self._check_new_batch_size(new_batch_size)
         self._change_batch_size(new_batch_size)
         if self._has_names():
@@ -2261,7 +2269,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         ...
 
     def set(
-        self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
+        self,
+        key: NestedKey,
+        item: CompatibleType,
+        inplace: bool = False,
+        *,
+        non_blocking: bool = False,
+        **kwargs: Any,
     ) -> T:
         """Sets a new key-value pair.
 
@@ -2275,6 +2289,11 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 the entry cannot be found, it will be added. For a more restrictive
                 in-place operation, use :meth:`~.set_` instead.
                 Defaults to ``False``.
+
+        Keyword Args:
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2293,7 +2312,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # inplace is loose here, but for set_ it is constraining. We translate it
         # to None to tell _set_str and others to drop it if the key isn't found
         inplace = BEST_ATTEMPT_INPLACE if inplace else False
-        return self._set_tuple(key, item, inplace=inplace, validated=False)
+        return self._set_tuple(
+            key, item, inplace=inplace, validated=False, non_blocking=non_blocking
+        )
 
     @abc.abstractmethod
     def _set_str(
@@ -2304,11 +2325,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         inplace: bool,
         validated: bool,
         ignore_lock: bool = False,
+        non_blocking: bool = False,
     ):
         ...
 
     @abc.abstractmethod
-    def _set_tuple(self, key, value, *, inplace, validated):
+    def _set_tuple(self, key, value, *, inplace, validated, non_blocking: bool):
         ...
 
     @lock_blocked
@@ -2358,6 +2380,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             ),
             validated=True,
             inplace=False,
+            non_blocking=False,
         )
         return self
 
@@ -2436,13 +2459,25 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             inplace = has_key
         return inplace
 
-    def set_at_(self, key: NestedKey, value: CompatibleType, index: IndexType) -> T:
+    def set_at_(
+        self,
+        key: NestedKey,
+        value: CompatibleType,
+        index: IndexType,
+        *,
+        non_blocking: bool = False,
+    ) -> T:
         """Sets the values in-place at the index indicated by ``index``.
 
         Args:
             key (str, tuple of str): key to be modified.
             value (torch.Tensor): value to be set at the index `index`
             index (int, tensor or tuple): index where to write the values.
+
+        Keyword Args:
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2455,20 +2490,24 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> assert (x[0] == 1).all()
         """
         key = _unravel_key_to_tuple(key)
-        return self._set_at_tuple(key, value, index, validated=False)
+        return self._set_at_tuple(
+            key, value, index, validated=False, non_blocking=non_blocking
+        )
 
     @abc.abstractmethod
-    def _set_at_str(self, key, value, idx, *, validated):
+    def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         ...
 
     @abc.abstractmethod
-    def _set_at_tuple(self, key, value, idx, *, validated):
+    def _set_at_tuple(self, key, value, idx, *, validated, non_blocking: bool):
         ...
 
     def set_(
         self,
         key: NestedKey,
         item: CompatibleType,
+        *,
+        non_blocking: bool = False,
     ) -> T:
         """Sets a value to an existing key while keeping the original storage.
 
@@ -2476,6 +2515,11 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             key (str): name of the value
             item (torch.Tensor or compatible type, TensorDictBase): value to
                 be stored in the tensordict
+
+        Keyword Args:
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2489,7 +2533,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
         """
         key = _unravel_key_to_tuple(key)
-        return self._set_tuple(key, item, inplace=True, validated=False)
+        return self._set_tuple(
+            key, item, inplace=True, validated=False, non_blocking=non_blocking
+        )
 
     # Stack functionality
     @abc.abstractmethod
@@ -2611,6 +2657,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         clone: bool = False,
         inplace: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         """Updates the TensorDict with values from either a dictionary or another TensorDict.
@@ -2631,6 +2678,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 the list of keys in ``key_to_update`` will be updated.
                 This is aimed at avoiding calls to
                 ``data_dest.update(data_src.select(*keys_to_update))``.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2647,8 +2697,6 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> assert td['a'] is not other_td['a']
 
         """
-        from tensordict._lazy import LazyStackedTensorDict
-
         if input_dict_or_td is self:
             # no op
             return self
@@ -2681,11 +2729,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                             inplace=inplace,
                             clone=clone,
                             keys_to_update=sub_keys_to_update,
+                            non_blocking=non_blocking,
                         )
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
                         value.__class__
                     ):
+                        from tensordict._lazy import LazyStackedTensorDict
+
                         if isinstance(value, LazyStackedTensorDict) and not isinstance(
                             target, LazyStackedTensorDict
                         ):
@@ -2702,9 +2753,11 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                                     inplace=inplace,
                                     clone=clone,
                                     keys_to_update=sub_keys_to_update,
+                                    non_blocking=non_blocking,
                                 ),
                                 validated=True,
                                 inplace=False,
+                                non_blocking=non_blocking,
                             )
                         else:
                             sub_keys_to_update = _prune_selected_keys(
@@ -2714,6 +2767,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                                 value,
                                 inplace=inplace,
                                 clone=clone,
+                                non_blocking=non_blocking,
                                 keys_to_update=sub_keys_to_update,
                             )
                         continue
@@ -2722,6 +2776,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 value,
                 inplace=BEST_ATTEMPT_INPLACE if inplace else False,
                 validated=False,
+                non_blocking=non_blocking,
             )
         return self
 
@@ -2730,6 +2785,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         input_dict_or_td: dict[str, CompatibleType] | T,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         """Updates the TensorDict in-place with values from either a dictionary or another TensorDict.
@@ -2747,6 +2803,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 the list of keys in ``key_to_update`` will be updated.
                 This is aimed at avoiding calls to
                 ``data_dest.update_(data_src.select(*keys_to_update))``.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2778,7 +2837,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 name = _unravel_key_to_tuple(name)
                 for key in keys_to_update:
                     if key == name[: len(key)]:
-                        dest.copy_(source, non_blocking=True)
+                        dest.copy_(source, non_blocking=non_blocking)
 
         else:
             named = False
@@ -2786,7 +2845,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             def inplace_update(dest, source):
                 if source is None:
                     return None
-                dest.copy_(source, non_blocking=True)
+                dest.copy_(source, non_blocking=non_blocking)
 
         if not _is_tensor_collection(type(input_dict_or_td)):
             from tensordict import TensorDict
@@ -2811,6 +2870,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         idx: IndexType,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         """Updates the TensorDict in-place at the specified index with values from either a dictionary or another TensorDict.
@@ -2829,6 +2889,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         Keyword Args:
             keys_to_update (sequence of NestedKeys, optional): if provided, only
                 the list of keys in ``key_to_update`` will be updated.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2857,6 +2920,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 input_dict_or_td=input_dict_or_td,
                 keys_to_update=keys_to_update,
                 clone=clone,
+                non_blocking=non_blocking,
             )
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
@@ -2876,7 +2940,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 )
             if clone:
                 value = value.clone()
-            self.set_at_((firstkey, *nextkeys), value, idx)
+            self.set_at_((firstkey, *nextkeys), value, idx, non_blocking=non_blocking)
         return self
 
     @lock_blocked
@@ -2925,7 +2989,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     def _create_nested_str(self, key):
         out = self.empty()
-        self._set_str(key, out, inplace=False, validated=True)
+        self._set_str(key, out, inplace=False, validated=True, non_blocking=False)
         return out
 
     def _create_nested_tuple(self, key):
@@ -2933,19 +2997,17 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         if len(key) > 1:
             td._create_nested_tuple(key[1:])
 
-    def copy_(self, tensordict: T, non_blocking: bool = None) -> T:
+    def copy_(self, tensordict: T, non_blocking: bool = False) -> T:
         """See :obj:`TensorDictBase.update_`.
 
         The non-blocking argument will be ignored and is just present for
         compatibility with :func:`torch.Tensor.copy_`.
         """
-        if non_blocking is False:
-            raise ValueError("non_blocking=False isn't supported in TensorDict.")
-        return self.update_(tensordict)
+        return self.update_(tensordict, non_blocking=non_blocking)
 
-    def copy_at_(self, tensordict: T, idx: IndexType) -> T:
+    def copy_at_(self, tensordict: T, idx: IndexType, non_blocking: bool = False) -> T:
         """See :obj:`TensorDictBase.update_at_`."""
-        return self.update_at_(tensordict, idx)
+        return self.update_at_(tensordict, idx, non_blocking=non_blocking)
 
     def is_empty(self) -> bool:
         """Checks if the tensordict contains any leaf."""
@@ -3532,6 +3594,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         _tag: int = -1,
         pseudo_rand: bool = False,
         group: "dist.ProcessGroup" | None = None,
+        non_blocking: bool = False,
     ) -> int:
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
@@ -3547,7 +3610,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             else:
                 _tag = int_generator(_tag + 1)
             dist.recv(value, src=src, tag=_tag, group=group)
-            self._set_str(key, value, inplace=True, validated=True)
+            self._set_str(
+                key, value, inplace=True, validated=True, non_blocking=non_blocking
+            )
 
         return _tag
 
@@ -4804,7 +4869,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             data._fast_apply(lambda x: x.fill_(value), inplace=True)
         else:
             data = data.fill_(value)
-            self._set_tuple(key, data, inplace=True, validated=True)
+            self._set_tuple(key, data, inplace=True, validated=True, non_blocking=False)
         return self
 
     # Masking
@@ -5015,7 +5080,11 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             result = self.empty()
             for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
                 result._set_str(
-                    leaf_flat, self.get(leaf), validated=True, inplace=False
+                    leaf_flat,
+                    self.get(leaf),
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
                 )
             # Uncomment if you want key operations to propagate the shared status
             # self._maybe_set_shared_attributes(result)

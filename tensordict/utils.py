@@ -663,7 +663,9 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
         return tensor[index]
 
 
-def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> Tensor:
+def _set_item(
+    tensor: Tensor, index: IndexType, value: Tensor, *, validated, non_blocking
+) -> Tensor:
     # the tensor must be validated
     if not validated:
         raise RuntimeError

@@ -192,6 +192,7 @@ class TensorDict(TensorDictBase):
     _td_dim_names = None
     _is_shared = False
     _is_memmap = False
+    _has_exclusive_keys = False
 
     def __init__(
         self,
@@ -199,6 +200,7 @@ class TensorDict(TensorDictBase):
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
+        non_blocking: bool = False,
         _run_checks: bool = True,
     ) -> None:
         if device is not None and isinstance(device, (int, str)):
@@ -216,6 +218,7 @@ class TensorDict(TensorDictBase):
                             batch_size=self._batch_size,
                             device=self._device,
                             _run_checks=_run_checks,
+                            non_blocking=non_blocking,
                         )
                     _tensordict[key] = value
             self._td_dim_names = names
@@ -230,7 +233,7 @@ class TensorDict(TensorDictBase):
 
             if source is not None:
                 for key, value in source.items():
-                    self.set(key, value)
+                    self.set(key, value, non_blocking=non_blocking)
 
     @classmethod
     def from_module(
@@ -293,7 +296,9 @@ class TensorDict(TensorDictBase):
                     use_state_dict=use_state_dict,
                     prefix=prefix + name + ".",
                 )
-                destination._set_str(name, subtd, validated=True, inplace=False)
+                destination._set_str(
+                    name, subtd, validated=True, inplace=False, non_blocking=False
+                )
 
         if as_module:
             from tensordict.nn.params import TensorDictParams
@@ -324,6 +329,7 @@ class TensorDict(TensorDictBase):
         swap_dest=None,
         memo=None,
         use_state_dict: bool = False,
+        non_blocking: bool = False,
     ):
 
         if not use_state_dict and isinstance(module, TensorDictBase):
@@ -397,7 +403,7 @@ class TensorDict(TensorDictBase):
                         new_val = local_out
                         if return_swap:
                             local_out = local_out.clone()
-                        new_val.data.copy_(value.data)
+                        new_val.data.copy_(value.data, non_blocking=non_blocking)
             else:
                 if value.is_empty():
                     # if there is at least one key, we must populate the module.
@@ -423,6 +429,7 @@ class TensorDict(TensorDictBase):
                         swap_dest={},  # we'll be calling update later
                         memo=memo,
                         use_state_dict=use_state_dict,
+                        non_blocking=non_blocking,
                     )
 
             if return_swap:
@@ -437,7 +444,13 @@ class TensorDict(TensorDictBase):
                         if isinstance(val, dict):
                             _quick_set(val, swap_td._get_str(key, default=NO_DEFAULT))
                         elif swap_td._get_str(key, None) is not val:
-                            swap_td._set_str(key, val, inplace=False, validated=True)
+                            swap_td._set_str(
+                                key,
+                                val,
+                                inplace=False,
+                                validated=True,
+                                non_blocking=non_blocking,
+                            )
 
                 _quick_set(_swap, swap_dest)
                 return swap_dest
@@ -563,6 +576,7 @@ class TensorDict(TensorDictBase):
                     if isinstance(self, _SubTensorDict)
                     else False,
                     validated=False,
+                    non_blocking=False,
                 )
                 return
 
@@ -598,9 +612,11 @@ class TensorDict(TensorDictBase):
                 subtd = self._get_sub_tensordict(index)
             for key, item in value.items():
                 if key in keys:
-                    self._set_at_str(key, item, index, validated=False)
+                    self._set_at_str(
+                        key, item, index, validated=False, non_blocking=False
+                    )
                 else:
-                    subtd.set(key, item, inplace=True)
+                    subtd.set(key, item, inplace=True, non_blocking=False)
         else:
             for key in self.keys():
                 self.set_at_(key, value, index)
@@ -759,6 +775,7 @@ class TensorDict(TensorDictBase):
                         item_trsf,
                         inplace=BEST_ATTEMPT_INPLACE if inplace else False,
                         validated=checked,
+                        non_blocking=False,
                     )
 
         if filter_empty and not any_set:
@@ -947,7 +964,9 @@ class TensorDict(TensorDictBase):
                 else val._unbind(dim)
             )
             for td, _val in zip(tds, unbound):
-                td._set_str(key, _val, validated=True, inplace=False)
+                td._set_str(
+                    key, _val, validated=True, inplace=False, non_blocking=False
+                )
 
         for key, val in self.items():
             unbind(key, val)
@@ -1549,6 +1568,7 @@ class TensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
         ignore_lock: bool = False,
+        non_blocking: bool = False,
     ) -> T:
         if inplace is not False:
             best_attempt = inplace is BEST_ATTEMPT_INPLACE
@@ -1563,10 +1583,10 @@ class TensorDict(TensorDictBase):
             try:
                 dest = self._get_str(key, default=NO_DEFAULT)
                 if best_attempt and _is_tensor_collection(dest.__class__):
-                    dest.update(value, inplace=True)
+                    dest.update(value, inplace=True, non_blocking=non_blocking)
                 else:
                     if dest is not value:
-                        dest.copy_(value, non_blocking=True)
+                        dest.copy_(value, non_blocking=non_blocking)
             except KeyError as err:
                 raise err
             except Exception as err:
@@ -1582,9 +1602,16 @@ class TensorDict(TensorDictBase):
         *,
         inplace: bool,
         validated: bool,
+        non_blocking: bool = False,
     ) -> T:
         if len(key) == 1:
-            return self._set_str(key[0], value, inplace=inplace, validated=validated)
+            return self._set_str(
+                key[0],
+                value,
+                inplace=inplace,
+                validated=validated,
+                non_blocking=non_blocking,
+            )
         td = self._get_str(key[0], None)
         if td is None:
             td = self._create_nested_str(key[0])
@@ -1593,10 +1620,16 @@ class TensorDict(TensorDictBase):
             raise KeyError(
                 f"The entry {key[0]} is already present in tensordict {self}."
             )
-        td._set_tuple(key[1:], value, inplace=inplace, validated=validated)
+        td._set_tuple(
+            key[1:],
+            value,
+            inplace=inplace,
+            validated=validated,
+            non_blocking=non_blocking,
+        )
         return self
 
-    def _set_at_str(self, key, value, idx, *, validated):
+    def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         if not validated:
             value = self._validate_value(value, check_shape=False)
             validated = True
@@ -1609,9 +1642,11 @@ class TensorDict(TensorDictBase):
                 "not write to the desired location if idx1 is a list/tensor."
             )
             tensor_in = _sub_index(tensor_in, idx)
-            tensor_in.copy_(value)
+            tensor_in.copy_(value, non_blocking=non_blocking)
         else:
-            tensor_out = _set_item(tensor_in, idx, value, validated=validated)
+            tensor_out = _set_item(
+                tensor_in, idx, value, validated=validated, non_blocking=non_blocking
+            )
             if tensor_in is not tensor_out:
                 if self._is_shared or self._is_memmap:
                     raise RuntimeError(
@@ -1625,20 +1660,29 @@ class TensorDict(TensorDictBase):
                 # that was expected to happen but didn't).
                 # For this reason we can ignore the locked attribute of the td.
                 self._set_str(
-                    key, tensor_out, validated=True, inplace=False, ignore_lock=True
+                    key,
+                    tensor_out,
+                    validated=True,
+                    inplace=False,
+                    ignore_lock=True,
+                    non_blocking=non_blocking,
                 )
 
         return self
 
-    def _set_at_tuple(self, key, value, idx, *, validated):
+    def _set_at_tuple(self, key, value, idx, *, validated, non_blocking: bool):
         if len(key) == 1:
-            return self._set_at_str(key[0], value, idx, validated=validated)
+            return self._set_at_str(
+                key[0], value, idx, validated=validated, non_blocking=non_blocking
+            )
         if key[0] not in self.keys():
             # this won't work
             raise KeyError(f"key {key} not found in set_at_ with tensordict {self}.")
         else:
             td = self._get_str(key[0], NO_DEFAULT)
-        td._set_at_tuple(key[1:], value, idx, validated=validated)
+        td._set_at_tuple(
+            key[1:], value, idx, validated=validated, non_blocking=non_blocking
+        )
         return self
 
     @lock_blocked
@@ -1673,9 +1717,21 @@ class TensorDict(TensorDictBase):
             raise KeyError(f"key {new_key} already present in TensorDict.")
 
         if isinstance(new_key, str):
-            self._set_str(new_key, self.get(old_key), inplace=False, validated=True)
+            self._set_str(
+                new_key,
+                self.get(old_key),
+                inplace=False,
+                validated=True,
+                non_blocking=False,
+            )
         else:
-            self._set_tuple(new_key, self.get(old_key), inplace=False, validated=True)
+            self._set_tuple(
+                new_key,
+                self.get(old_key),
+                inplace=False,
+                validated=True,
+                non_blocking=False,
+            )
         self.del_(old_key)
         return self
 
@@ -1904,6 +1960,7 @@ class TensorDict(TensorDictBase):
                 ),
                 validated=True,
                 inplace=False,
+                non_blocking=False,
             )
         # iterate over folders and load them
         for path in prefix.iterdir():
@@ -1984,7 +2041,9 @@ class TensorDict(TensorDictBase):
                     )
                 else:
                     val = func(tensor, _other, key)
-                result._set_str(key, val, inplace=False, validated=True)
+                result._set_str(
+                    key, val, inplace=False, validated=True, non_blocking=False
+                )
                 other_keys.discard(key)
             for key in other_keys:
                 tensor = None
@@ -2000,7 +2059,9 @@ class TensorDict(TensorDictBase):
                     )
                 else:
                     val = func(tensor, _other, key)
-                result._set_str(key, val, inplace=False, validated=True)
+                result._set_str(
+                    key, val, inplace=False, validated=True, non_blocking=False
+                )
             return result
         else:
             if out is None:
@@ -2396,6 +2457,7 @@ class _SubTensorDict(TensorDictBase):
         inplace: bool,
         validated: bool,
         ignore_lock: bool = False,
+        non_blocking: bool = False,
     ) -> T:
         inplace = self._convert_inplace(inplace, key)
         # it is assumed that if inplace=False then the key doesn't exist. This is
@@ -2419,6 +2481,7 @@ class _SubTensorDict(TensorDictBase):
                         inplace=inplace,
                         validated=validated,
                         ignore_lock=ignore_lock,
+                        non_blocking=non_blocking,
                     )
             else:
                 value_expand = torch.zeros(
@@ -2439,9 +2502,12 @@ class _SubTensorDict(TensorDictBase):
                 inplace=False,
                 validated=validated,
                 ignore_lock=ignore_lock,
+                non_blocking=non_blocking,
             )
 
-        parent._set_at_str(key, value, self.idx, validated=validated)
+        parent._set_at_str(
+            key, value, self.idx, validated=validated, non_blocking=non_blocking
+        )
         return self
 
     def _set_tuple(
@@ -2451,20 +2517,33 @@ class _SubTensorDict(TensorDictBase):
         *,
         inplace: bool,
         validated: bool,
+        non_blocking: bool = False,
     ) -> T:
         if len(key) == 1:
-            return self._set_str(key[0], value, inplace=inplace, validated=validated)
+            return self._set_str(
+                key[0],
+                value,
+                inplace=inplace,
+                validated=validated,
+                non_blocking=non_blocking,
+            )
         parent = self._source
         td = parent._get_str(key[0], None)
         if td is None:
             td = parent.select()
-            parent._set_str(key[0], td, inplace=False, validated=True)
+            parent._set_str(
+                key[0], td, inplace=False, validated=True, non_blocking=non_blocking
+            )
         _SubTensorDict(td, self.idx)._set_tuple(
-            key[1:], value, inplace=inplace, validated=validated
+            key[1:],
+            value,
+            inplace=inplace,
+            validated=validated,
+            non_blocking=non_blocking,
         )
         return self
 
-    def _set_at_str(self, key, value, idx, *, validated):
+    def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         tensor_in = self._get_str(key, NO_DEFAULT)
         if not validated:
             value = self._validate_value(value, check_shape=False)
@@ -2479,20 +2558,28 @@ class _SubTensorDict(TensorDictBase):
             tensor_in.copy_(value)
             tensor_out = tensor_in
         else:
-            tensor_out = _set_item(tensor_in, idx, value, validated=validated)
+            tensor_out = _set_item(
+                tensor_in, idx, value, validated=validated, non_blocking=non_blocking
+            )
         # make sure that the value is updated
-        self._source._set_at_str(key, tensor_out, self.idx, validated=validated)
+        self._source._set_at_str(
+            key, tensor_out, self.idx, validated=validated, non_blocking=non_blocking
+        )
         return self
 
-    def _set_at_tuple(self, key, value, idx, *, validated):
+    def _set_at_tuple(self, key, value, idx, *, validated, non_blocking: bool):
         if len(key) == 1:
-            return self._set_at_str(key[0], value, idx, validated=validated)
+            return self._set_at_str(
+                key[0], value, idx, validated=validated, non_blocking=non_blocking
+            )
         if key[0] not in self.keys():
             # this won't work
             raise KeyError(f"key {key} not found in set_at_ with tensordict {self}.")
         else:
             td = self._get_str(key[0], NO_DEFAULT)
-        td._set_at_tuple(key[1:], value, idx, validated=validated)
+        td._set_at_tuple(
+            key[1:], value, idx, validated=validated, non_blocking=non_blocking
+        )
         return self
 
     # @cache  # noqa: B019
@@ -2564,19 +2651,18 @@ class _SubTensorDict(TensorDictBase):
         clone: bool = False,
         inplace: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
         **kwargs,
     ) -> _SubTensorDict:
         if input_dict_or_td is self:
             # no op
             return self
-        from ._lazy import LazyStackedTensorDict
 
-        if isinstance(self._source, LazyStackedTensorDict):
-            if self._source._has_exclusive_keys:
-                raise RuntimeError(
-                    "Cannot use _SubTensorDict.update with a LazyStackedTensorDict that has exclusive keys."
-                )
+        if getattr(self._source, "_has_exclusive_keys", False):
+            raise RuntimeError(
+                "Cannot use _SubTensorDict.update with a LazyStackedTensorDict that has exclusive keys."
+            )
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
@@ -2607,6 +2693,7 @@ class _SubTensorDict(TensorDictBase):
                             {subkey: value},
                             inplace=False,
                             keys_to_update=sub_keys_to_update,
+                            non_blocking=non_blocking,
                         )
                         continue
                     elif isinstance(value, dict) or _is_tensor_collection(
@@ -2615,19 +2702,30 @@ class _SubTensorDict(TensorDictBase):
                         sub_keys_to_update = _prune_selected_keys(
                             keys_to_update, firstkey
                         )
-                        target.update(value, keys_to_update=sub_keys_to_update)
+                        target.update(
+                            value,
+                            keys_to_update=sub_keys_to_update,
+                            non_blocking=non_blocking,
+                        )
                         continue
                     raise ValueError(
                         f"Tried to replace a tensordict with an incompatible object of type {type(value)}"
                     )
                 else:
-                    self._set_tuple(key, value, inplace=True, validated=False)
+                    self._set_tuple(
+                        key,
+                        value,
+                        inplace=True,
+                        validated=False,
+                        non_blocking=non_blocking,
+                    )
             else:
                 self._set_tuple(
                     key,
                     value,
                     inplace=BEST_ATTEMPT_INPLACE if inplace else False,
                     validated=False,
+                    non_blocking=non_blocking,
                 )
         return self
 
@@ -2636,6 +2734,7 @@ class _SubTensorDict(TensorDictBase):
         input_dict: dict[str, CompatibleType] | TensorDictBase,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> _SubTensorDict:
         return self.update_at_(
@@ -2644,6 +2743,7 @@ class _SubTensorDict(TensorDictBase):
             discard_idx_attr=True,
             clone=clone,
             keys_to_update=keys_to_update,
+            non_blocking=non_blocking,
         )
 
     def update_at_(
@@ -2653,6 +2753,7 @@ class _SubTensorDict(TensorDictBase):
         *,
         discard_idx_attr: bool = False,
         clone: bool = False,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> _SubTensorDict:
         if keys_to_update is not None:
@@ -2679,10 +2780,13 @@ class _SubTensorDict(TensorDictBase):
                     key,
                     value,
                     idx,
+                    non_blocking=non_blocking,
                     validated=False,
                 )
             else:
-                self._set_at_tuple(key, value, idx, validated=False)
+                self._set_at_tuple(
+                    key, value, idx, validated=False, non_blocking=non_blocking
+                )
         return self
 
     def get_parent_tensordict(self) -> T:
@@ -2937,7 +3041,9 @@ class _SubTensorDict(TensorDictBase):
     def _create_nested_str(self, key):
         # this may fail with a sub-sub tensordict
         out = self._source.empty()
-        self._source._set_str(key, out, inplace=False, validated=True)
+        self._source._set_str(
+            key, out, inplace=False, validated=True, non_blocking=False
+        )
         # the id of out changes
         return self._get_str(key, default=NO_DEFAULT)
 
