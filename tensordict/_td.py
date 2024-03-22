@@ -21,7 +21,6 @@ from warnings import warn
 import numpy as np
 import torch
 from functorch import dim as ftdim
-from jupyter_lsp import non_blocking
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
