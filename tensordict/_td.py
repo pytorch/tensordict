@@ -1884,7 +1884,8 @@ class TensorDict(TensorDictBase):
             dest._is_shared = False  # since they are mutually exclusive
 
         for key, value in self.items():
-            if _is_tensor_collection(value.__class__):
+            type_value = type(value)
+            if _is_tensor_collection(type_value):
                 dest._tensordict[key] = value._memmap_(
                     prefix=prefix / key if prefix is not None else None,
                     copy_existing=copy_existing,
@@ -1894,6 +1895,10 @@ class TensorDict(TensorDictBase):
                     like=like,
                     share_non_tensor=share_non_tensor,
                 )
+                if prefix is not None:
+                    metadata[key] = {
+                        "type": type_value.__name__,
+                    }
                 continue
             else:
                 # user did specify location and memmap is in wrong place, so we copy
@@ -1944,9 +1949,14 @@ class TensorDict(TensorDictBase):
 
         out = cls({}, batch_size=metadata.pop("shape"), device=metadata.pop("device"))
 
+        paths = set()
         for key, entry_metadata in metadata.items():
             if not isinstance(entry_metadata, dict):
                 # there can be other metadata
+                continue
+            type_value = entry_metadata.get("type", None)
+            if type_value is not None:
+                paths.add(key)
                 continue
             dtype = entry_metadata.get("dtype", None)
             shape = entry_metadata.get("shape", None)
@@ -1970,7 +1980,7 @@ class TensorDict(TensorDictBase):
             )
         # iterate over folders and load them
         for path in prefix.iterdir():
-            if path.is_dir():
+            if path.is_dir() and path.parts[-1] in paths:
                 key = path.parts[len(prefix.parts) :]
                 out.set(key, TensorDict.load_memmap(path))
         return out
