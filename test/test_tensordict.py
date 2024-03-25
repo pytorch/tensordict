@@ -3101,6 +3101,8 @@ class TestTensorDicts(TestTensorDictsBase):
             )
             assert td.is_memmap(), (td, td._is_memmap)
         if use_dir:
+            # This would fail if we were not filtering out unregistered sub-folders
+            os.mkdir(Path(tmpdir) / "some_other_path")
             assert_allclose_td(TensorDict.load_memmap(tmpdir), td)
 
     @pytest.mark.parametrize("copy_existing", [False, True])
