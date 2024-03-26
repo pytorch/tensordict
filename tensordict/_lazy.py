@@ -1447,7 +1447,7 @@ class LazyStackedTensorDict(TensorDictBase):
         fn: Callable,
         *others: T,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         checked: bool = False,
