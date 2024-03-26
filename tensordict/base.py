@@ -76,7 +76,17 @@ from torch.utils._pytree import tree_map
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key, default=None)` is a valid usage.
-NO_DEFAULT = "_no_default_"
+class NoDefault:
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(NoDefault, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+
+NO_DEFAULT = NoDefault()
 
 T = TypeVar("T", bound="TensorDictBase")
 
