@@ -74,19 +74,20 @@ from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
+
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key, default=None)` is a valid usage.
-class NoDefault:
+class _NoDefault:
     def __new__(cls):
         if not hasattr(cls, "instance"):
-            cls.instance = super(NoDefault, cls).__new__(cls)
+            cls.instance = super(_NoDefault, cls).__new__(cls)
         return cls.instance
 
     def __bool__(self):
         return False
 
 
-NO_DEFAULT = NoDefault()
+NO_DEFAULT = _NoDefault()
 
 T = TypeVar("T", bound="TensorDictBase")
 
