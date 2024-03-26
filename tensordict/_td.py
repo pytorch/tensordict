@@ -673,7 +673,7 @@ class TensorDict(TensorDictBase):
         fn: Callable,
         *others: T,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         checked: bool = False,
@@ -696,7 +696,7 @@ class TensorDict(TensorDictBase):
                     {},
                     batch_size=torch.Size(batch_size),
                     names=names,
-                    device=self.device if not device else device,
+                    device=self.device if device is NO_DEFAULT else device,
                     _run_checks=False,
                     **constructor_kwargs,
                 )
@@ -709,7 +709,7 @@ class TensorDict(TensorDictBase):
                 return TensorDict(
                     {},
                     batch_size=self.batch_size,
-                    device=self.device if not device else device,
+                    device=self.device if device is NO_DEFAULT else device,
                     names=self.names if self._has_names() else None,
                     _run_checks=False,
                     **constructor_kwargs,

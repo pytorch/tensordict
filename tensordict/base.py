@@ -74,9 +74,20 @@ from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
+
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key, default=None)` is a valid usage.
-NO_DEFAULT = "_no_default_"
+class _NoDefault:
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(_NoDefault, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+
+NO_DEFAULT = _NoDefault()
 
 T = TypeVar("T", bound="TensorDictBase")
 
@@ -3919,7 +3930,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         fn: Callable,
         *others: T,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
@@ -4026,7 +4037,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         *others: T,
         nested_keys: bool = False,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
@@ -4160,7 +4171,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         fn: Callable,
         *others: T,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         checked: bool = False,
@@ -4180,7 +4191,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         fn: Callable,
         *others: T,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         call_on_nested: bool = False,
