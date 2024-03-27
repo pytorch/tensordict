@@ -3163,7 +3163,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             for k in self.keys():
                 yield self._get_str(k, NO_DEFAULT)
 
-    @cache
+    @cache  # noqa: B019
     def _values_list(
         self,
         include_nested: bool = False,
@@ -3176,7 +3176,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             )
         )
 
-    @cache
+    @cache  # noqa: B019
     def _items_list(
         self,
         include_nested: bool = False,
