@@ -1921,6 +1921,94 @@ class TestGeneric:
         t.update({"a": {"d": [[[1]] * 3] * 2}})
 
 
+class TestPointwiseOps:
+    @property
+    def dummy_td_0(self):
+        return TensorDict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.zeros(3, 5, dtype=torch.int)}}
+        )
+
+    @property
+    def dummy_td_1(self):
+        return self.dummy_td_0.apply(lambda x: x + 1)
+
+    @property
+    def dummy_td_2(self):
+        return self.dummy_td_0.apply(lambda x: x + 2)
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_add(self, locked):
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        assert (td.add(1) == 1).all()
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        assert (td.add(other) == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_add_(self, locked):
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        assert (td.add_(1) == 1).all()
+        assert td.add_(1) is td
+        td = self.dummy_td_0
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        assert (td.add_(other) == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_mul(self, locked):
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        assert (td.mul(0) == 0).all()
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        assert (td.mul(other) == 0).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_mul_(self, locked):
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        assert (td.mul_(0) == 0).all()
+        assert td.mul_(0) is td
+        td = self.dummy_td_1
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        assert (td.mul_(other) == 0).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_div(self, locked):
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td.div(2) == 1).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td.div(other) == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_div_(self, locked):
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        assert (td.div_(2) == 1).all()
+        assert td.div_(2) is td
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        assert (td.div_(other) == 1).all()
+
+
 @pytest.mark.parametrize(
     "td_name,device",
     TestTensorDictsBase.TYPES_DEVICES,

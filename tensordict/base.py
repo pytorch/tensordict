@@ -31,9 +31,10 @@ from typing import (
     OrderedDict,
     overload,
     Sequence,
+    Tuple,
     Type,
     TypeVar,
-    Union, Tuple,
+    Union,
 )
 
 import numpy as np
@@ -3163,21 +3164,35 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 yield self._get_str(k, NO_DEFAULT)
 
     @cache
-    def _values_list(        self,
+    def _values_list(
+        self,
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf=None,
-                             )->List:
-        return list(self.values(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf))
-
+    ) -> List:
+        return list(
+            self.values(
+                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            )
+        )
 
     @cache
-    def _items_list(        self,
+    def _items_list(
+        self,
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf=None,
-                             )->Tuple[List, List]:
-        return tuple(list(key_or_val) for key_or_val in zip(*self.items(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)))
+    ) -> Tuple[List, List]:
+        return tuple(
+            list(key_or_val)
+            for key_or_val in zip(
+                *self.items(
+                    include_nested=include_nested,
+                    leaves_only=leaves_only,
+                    is_leaf=is_leaf,
+                )
+            )
+        )
 
     @abc.abstractmethod
     def keys(
@@ -4485,15 +4500,64 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     # pointwise arithmetic ops
     def add_(self, other):
-        torch._foreach_add_(self._values_list(True, True), other._values_list(True, True))
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_add_(self._values_list(True, True), other_val)
         return self
 
-    # pointwise arithmetic ops
     def add(self, other):
         keys, vals = self._items_list(True, True)
-        vals = torch._foreach_add(vals, other._values_list(True, True))
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_add(vals, other_val)
         items = dict(zip(keys, vals))
-        return self._fast_apply(lambda name, val: items[name], named=True, nested_keys=True)
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def mul_(self, other):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_mul_(self._values_list(True, True), other_val)
+        return self
+
+    def mul(self, other):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_mul(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def div_(self, other):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_div_(self._values_list(True, True), other_val)
+        return self
+
+    def div(self, other):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_div(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
 
     # Functorch compatibility
     @abc.abstractmethod
