@@ -907,7 +907,7 @@ class TestGeneric:
         assert ("d", "e") in td
         assert "f" not in td
         with pytest.raises(RuntimeError, match="NestedKey"):
-            0 in td
+            0 in td  # noqa: B015
 
     def test_keys_view(self):
         tensor = torch.randn(4, 5, 6, 7)
@@ -2314,6 +2314,13 @@ class TestTensorDicts(TestTensorDictsBase):
         assert len(td_chunks) == chunks
         assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
         assert (torch.cat(td_chunks, dim) == td).all()
+
+    def test_clear(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            tdc = td.clear()
+            assert tdc.is_empty()
+            assert tdc is td
 
     def test_clone_td(self, td_name, device, tmp_path):
         torch.manual_seed(1)
