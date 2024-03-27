@@ -4849,6 +4849,21 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         """
         return self.clone(recurse=False)
 
+    def to_padded_tensor(self, padding=0.0):
+        """Converts all nested tensors to a padded version and adapts the batch-size accordingly."""
+        batch_size = self.batch_size
+        if any(shape == -1 for shape in batch_size):
+            new_batch_size = []
+        else:
+            new_batch_size = None
+        result = self._apply_nest(
+            lambda x: torch.nested.to_padded_tensor(x, padding=padding) if x.is_nested else x,
+            batch_size=new_batch_size,
+        )
+        if new_batch_size is not None:
+            result = result.auto_batch_size_(batch_dims=self.batch_dims)
+        return result
+
     def as_tensor(self):
         def as_tensor(tensor):
             try:
