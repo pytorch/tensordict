@@ -629,6 +629,12 @@ class TestGeneric:
         assert (f"a{separator}b") in td5_flat.keys()
         assert (f"a{separator}b{separator}c") in td5_flat.keys()
 
+    def test_fromkeys(self):
+        td = TensorDict.fromkeys({"a", "b", "c"})
+        assert td["a"] == 0
+        td = TensorDict.fromkeys({"a", "b", "c"}, 1)
+        assert td["a"] == 1
+
     @pytest.mark.parametrize("batch_size", [None, [3, 4]])
     @pytest.mark.parametrize("batch_dims", [None, 1, 2])
     @pytest.mark.parametrize("device", get_available_devices())
@@ -893,6 +899,15 @@ class TestGeneric:
             {"a": {"b": {}, "c": NonTensorData("a string!", batch_size=[])}}, []
         ).is_empty()
         assert not TensorDict({"a": {"b": {}, "c": 1}}, []).is_empty()
+
+    def test_is_in(self):
+        td = TensorDict.fromkeys({"a", "b", "c", ("d", "e")}, 0)
+        assert "a" in td
+        assert "d" in td
+        assert ("d", "e") in td
+        assert "f" not in td
+        with pytest.raises(RuntimeError, match="NestedKey"):
+            0 in td
 
     def test_keys_view(self):
         tensor = torch.randn(4, 5, 6, 7)

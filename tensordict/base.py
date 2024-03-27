@@ -207,16 +207,17 @@ class TensorDictBase(MutableMapping):
         return self.shape[0] if self.batch_dims else 0
 
     def __contains__(self, key: NestedKey) -> bool:
-        # by default a Mapping will implement __contains__ by calling __getitem__ and
-        # returning False if a KeyError is raised, True otherwise. TensorDict has a
-        # complex __getitem__ method since we support more than just retrieval of values
-        # by key, and so this can be quite inefficient, particularly if values are
-        # evaluated lazily on access. Hence, we don't support use of __contains__ and
-        # direct the user to use TensorDict.keys() instead
-        raise NotImplementedError(
-            "TensorDict does not support membership checks with the `in` keyword. If "
-            "you want to check if a particular key is in your TensorDict, please use "
-            "`key in tensordict.keys()` instead."
+        if isinstance(key, str):
+            return key in self.keys()
+        if isinstance(key, tuple):
+            key = unravel_key(key)
+            if not key:
+                raise RuntimeError(
+                    "key must be a NestedKey (a str or a possibly tuple of str)."
+                )
+            return key in self.keys(True)
+        raise RuntimeError(
+            "key must be a NestedKey (a str or a possibly tuple of str)."
         )
 
     def __getitem__(self, index: IndexType) -> T:
@@ -1692,6 +1693,24 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     @abc.abstractmethod
     def device(self, value: DeviceType) -> None:
         ...
+
+    def clear(self) -> T:
+        """Erases the content of the tensordict."""
+        for key in list(self.keys()):
+            del self[key]
+        return self
+
+    @classmethod
+    def fromkeys(cls, keys: List[NestedKey], value: Any = 0):
+        """Creates a tensordict from a list of keys and a single value.
+
+        Args:
+            keys (list of NestedKey): An iterable specifying the keys of the new dictionary.
+            value (compatible type, optional): The value for all keys. Defaults to ``0``.
+        """
+        from tensordict._td import TensorDict
+
+        return TensorDict(dict.fromkeys(keys, value), batch_size=[])
 
     def clear_device_(self) -> T:
         """Clears the device of the tensordict.
