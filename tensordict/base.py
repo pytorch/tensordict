@@ -33,7 +33,7 @@ from typing import (
     Sequence,
     Type,
     TypeVar,
-    Union,
+    Union, Tuple,
 )
 
 import numpy as np
@@ -3162,6 +3162,23 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             for k in self.keys():
                 yield self._get_str(k, NO_DEFAULT)
 
+    @cache
+    def _values_list(        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf=None,
+                             )->List:
+        return list(self.values(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf))
+
+
+    @cache
+    def _items_list(        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+        is_leaf=None,
+                             )->Tuple[List, List]:
+        return tuple(list(key_or_val) for key_or_val in zip(*self.items(include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf)))
+
     @abc.abstractmethod
     def keys(
         self,
@@ -4465,6 +4482,18 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             else:
                 out = torch.cat(imaplist, dim)
         return out
+
+    # pointwise arithmetic ops
+    def add_(self, other):
+        torch._foreach_add_(self._values_list(True, True), other._values_list(True, True))
+        return self
+
+    # pointwise arithmetic ops
+    def add(self, other):
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_add(vals, other._values_list(True, True))
+        items = dict(zip(keys, vals))
+        return self._fast_apply(lambda name, val: items[name], named=True, nested_keys=True)
 
     # Functorch compatibility
     @abc.abstractmethod
