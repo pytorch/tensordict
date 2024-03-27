@@ -4507,7 +4507,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         return out
 
     # pointwise arithmetic ops
-    def add_(self, other, alpha: float | None=None):
+    def add_(self, other, alpha: float | None = None):
         if _is_tensor_collection(type(other)):
             other_val = other._values_list(True, True)
         else:
@@ -4518,7 +4518,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             torch._foreach_add_(self._values_list(True, True), other_val)
         return self
 
-    def add(self, other, alpha: float | None=None):
+    def add(self, other, alpha: float | None = None):
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             other_val = other._values_list(True, True)
@@ -4596,6 +4596,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     def sqrt_(self):
         torch._foreach_sqrt_(self._values_list(True, True))
         return self
+
     def sqrt(self):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_sqrt(vals)

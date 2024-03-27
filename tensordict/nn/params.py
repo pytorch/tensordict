@@ -807,6 +807,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     @property
     def data(self):
         return self._param_td._data()
+
     @property
     def grad(self):
         return self._param_td._grad()
