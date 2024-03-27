@@ -806,7 +806,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @property
     def data(self):
-        return self._param_td.detach()
+        return self._param_td._data()
+    @property
+    def grad(self):
+        return self._param_td._grad()
 
     @_unlock_and_set(inplace=True)
     def flatten_keys(
