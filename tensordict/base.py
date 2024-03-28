@@ -4592,15 +4592,133 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         return out
 
     # pointwise arithmetic ops
-    def add_(self, other, alpha: float | None = None):
-        if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
-        else:
-            other_val = other
-        if alpha is not None:
-            torch._foreach_add_(self._values_list(True, True), other_val, alpha=alpha)
-        else:
-            torch._foreach_add_(self._values_list(True, True), other_val)
+    def __add__(self, other):
+        return self.add(other)
+
+    def __iadd__(self, other):
+        return self.add_(other)
+
+    def __abs__(self):
+        return self.abs()
+
+    def __truediv__(self, other):
+        return self.div(other)
+
+    def __itruediv__(self, other):
+        return self.div_(other)
+
+    def __mul__(self, other):
+        return self.mul(other)
+
+    def __imul__(self, other):
+        return self.mul_(other)
+
+    def __sub__(self, other):
+        return self.sub(other)
+
+    def __isub__(self, other):
+        return self.sub_(other)
+
+    def __pow__(self, other):
+        return self.pow(other)
+
+    def __ipow__(self, other):
+        return self.pow_(other)
+
+    def abs(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_abs(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def abs_(self) -> T:
+        torch._foreach_abs_(self._values_list(True, True))
+        return self
+
+    def exp(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_exp(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def exp_(self) -> T:
+        torch._foreach_exp_(self._values_list(True, True))
+        return self
+
+    def expm1(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_expm1(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def expm1_(self) -> T:
+        torch._foreach_expm1_(self._values_list(True, True))
+        return self
+
+    def log(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_log(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def log_(self) -> T:
+        torch._foreach_log_(self._values_list(True, True))
+        return self
+
+    def ceil(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_ceil(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def ceil_(self) -> T:
+        torch._foreach_ceil_(self._values_list(True, True))
+        return self
+
+    def floor(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_floor(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def floor_(self) -> T:
+        torch._foreach_floor_(self._values_list(True, True))
+        return self
+
+    def round(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_round(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def round_(self) -> T:
+        torch._foreach_round_(self._values_list(True, True))
+        return self
+
+    def erf(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_erf(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def erf_(self) -> T:
+        torch._foreach_erf_(self._values_list(True, True))
         return self
 
     def add(self, other, alpha: float | None = None):
@@ -4618,6 +4736,43 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             lambda name, val: items[name], named=True, nested_keys=True
         )
 
+    def add_(self, other, alpha: float | None = None):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            torch._foreach_add_(self._values_list(True, True), other_val, alpha=alpha)
+        else:
+            torch._foreach_add_(self._values_list(True, True), other_val)
+        return self
+
+    def sub(self, other, alpha: float | None = None):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            vals = torch._foreach_sub(vals, other_val, alpha=alpha)
+        else:
+            vals = torch._foreach_sub(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def sub_(self, other, alpha: float | None = None):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            torch._foreach_sub_(self._values_list(True, True), other_val, alpha=alpha)
+        else:
+            torch._foreach_sub_(self._values_list(True, True), other_val)
+        return self
+
     def mul_(self, other):
         if _is_tensor_collection(type(other)):
             other_val = other._values_list(True, True)
@@ -4633,6 +4788,46 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         else:
             other_val = other
         vals = torch._foreach_mul(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def clamp_max_(self, other):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_clamp_max_(self._values_list(True, True), other_val)
+        return self
+
+    def clamp_max(self, other):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_clamp_max(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name], named=True, nested_keys=True
+        )
+
+    def clamp_min_(self, other):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_clamp_min_(self._values_list(True, True), other_val)
+        return self
+
+    def clamp_min(self, other):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_clamp_min(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
             lambda name, val: items[name], named=True, nested_keys=True

@@ -1952,6 +1952,15 @@ class TestPointwiseOps:
             other.lock_()
         assert (td.add(other) == 1).all()
 
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        assert (td + 1 == 1).all()
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        assert (td + other == 1).all()
+
     @pytest.mark.parametrize("locked", [True, False])
     def test_add_(self, locked):
         td = self.dummy_td_0
@@ -1965,6 +1974,18 @@ class TestPointwiseOps:
             other.lock_()
         assert (td.add_(other) == 1).all()
 
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        td += 1
+        assert (td == 1).all()
+        td = self.dummy_td_0
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        td += other
+        assert (td == 1).all()
+
     @pytest.mark.parametrize("locked", [True, False])
     def test_mul(self, locked):
         td = self.dummy_td_1
@@ -1975,6 +1996,17 @@ class TestPointwiseOps:
         if locked:
             other.lock_()
         assert (td.mul(other) == 0).all()
+
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        td = td * 0
+        assert (td == 0).all()
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        td = td * other
+        assert (td == 0).all()
 
     @pytest.mark.parametrize("locked", [True, False])
     def test_mul_(self, locked):
@@ -1989,6 +2021,18 @@ class TestPointwiseOps:
             other.lock_()
         assert (td.mul_(other) == 0).all()
 
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        td *= 0
+        assert (td == 0).all()
+        td = self.dummy_td_1
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        td *= other
+        assert (td == 0).all()
+
     @pytest.mark.parametrize("locked", [True, False])
     def test_div(self, locked):
         td = self.dummy_td_2
@@ -1999,6 +2043,15 @@ class TestPointwiseOps:
         if locked:
             other.lock_()
         assert (td.div(other) == 1).all()
+
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td / 2 == 1).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td / other == 1).all()
 
     @pytest.mark.parametrize("locked", [True, False])
     def test_div_(self, locked):
@@ -2012,6 +2065,63 @@ class TestPointwiseOps:
         if locked:
             other.lock_()
         assert (td.div_(other) == 1).all()
+
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        td /= 2
+        assert (td == 1).all()
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        td /= other
+        assert (td == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_pow(self, locked):
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td.pow(2) == 4).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td.pow(other) == 4).all()
+
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td**2 == 4).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td**other == 4).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_pow_(self, locked):
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        assert (td.pow_(2) == 4).all()
+        assert td.pow_(2) is td
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        assert (td.pow_(other) == 4).all()
+
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        td **= 2
+        assert (td == 4).all()
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        td **= other
+        assert (td == 4).all()
 
 
 @pytest.mark.parametrize(

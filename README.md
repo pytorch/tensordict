@@ -140,6 +140,14 @@ You can also store non-tensor data in tensordicts:
 
 ### Tensor-like features
 
+TensorDict supports many common point-wise arithmetic operations such as `==` or `+`, `+=`
+and similar (provided that the underlying tensors support the said operation):
+```python
+>>> td = TensorDict.fromkeys(["a", "b", "c"], 0)
+>>> td += 1
+>>> assert (td==1).all()
+```
+
 TensorDict objects can be indexed exactly like tensors. The resulting of indexing
 a TensorDict is another TensorDict containing tensors indexed along the required dimension:
 ```python
