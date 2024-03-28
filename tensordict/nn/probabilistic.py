@@ -166,12 +166,18 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             the output value. Should be one of InteractionType: MODE, MEDIAN, MEAN or RANDOM
             (in which case the value is sampled randomly from the distribution). Default
             is MODE.
-            Note: When a sample is drawn, the :obj:`ProbabilisticTDModule` instance will
-            first look for the interaction mode dictated by the `interaction_type()`
-            global function. If this returns `None` (its default value), then the
-            `default_interaction_type` of the `ProbabilisticTDModule` instance will be
-            used. Note that DataCollector instances will use `set_interaction_type` to
-            `RANDOM` by default.
+
+            .. note:: When a sample is drawn, the
+              :class:`ProbabilisticTensorDictModule` instance will
+              first look for the interaction mode dictated by the
+              :func:`~tensordict.nn.probabilistic.interaction_type`
+              global function. If this returns `None` (its default value), then the
+              `default_interaction_type` of the `ProbabilisticTDModule`
+              instance will be used. Note that
+              :class:`~torchrl.collectors.collectors.DataCollectorBase`
+              instances will use `set_interaction_type` to
+              :class:`tensordict.nn.InteractionType.RANDOM` by default.
+
         distribution_class (Type, optional): keyword-only argument.
             A :class:`torch.distributions.Distribution` class to
             be used for sampling.
@@ -225,8 +231,9 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         >>> td_module = ProbabilisticTensorDictSequential(
         ...     module, normal_params, prob_module
         ... )
-        >>> params = make_functional(td_module, funs_to_decorate=["forward", "get_dist", "log_prob"])
-        >>> _ = td_module(td, params=params)
+        >>> params = TensorDict.from_module(td_module)
+        >>> with params.to_module(td_module):
+        ...     _ = td_module(td)
         >>> print(td)
         TensorDict(
             fields={
@@ -240,13 +247,17 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
-        >>> dist = td_module.get_dist(td, params=params)
+        >>> with params.to_module(td_module):
+        ...     dist = td_module.get_dist(td)
         >>> print(dist)
         Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4]))
         >>> # we can also apply the module to the TensorDict with vmap
         >>> from torch import vmap
         >>> params = params.expand(4)
-        >>> td_vmap = vmap(td_module, (None, 0))(td, params)
+        >>> def func(td, params):
+        ...     with params.to_module(td_module):
+        ...         return td_module(td)
+        >>> td_vmap = vmap(func, (None, 0))(td, params)
         >>> print(td_vmap)
         TensorDict(
             fields={
@@ -535,8 +546,22 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         return self.module[-1].log_prob(tensordict_out)
 
     def build_dist_from_params(self, tensordict: TensorDictBase) -> D.Distribution:
-        """Construct a distribution from the input parameters. Other modules in the sequence are not evaluated."""
-        return self.module[-1].get_dist(tensordict)
+        """Construct a distribution from the input parameters. Other modules in the sequence are not evaluated.
+
+        This method will look for the last ProbabilisticTensorDictModule contained in the
+        sequence and use it to build the distribution.
+
+        """
+        dest_module = None
+        for module in reversed(list(self.modules())):
+            if isinstance(module, ProbabilisticTensorDictModule):
+                dest_module = module
+                break
+        if dest_module is None:
+            raise RuntimeError(
+                "Could not find any ProbabilisticTensorDictModule in the sequence."
+            )
+        return dest_module.get_dist(tensordict)
 
     @dispatch(auto_batch_size=False)
     @set_skip_existing(None)

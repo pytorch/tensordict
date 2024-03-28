@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import functools
+
 import mmap
 import os
 
@@ -13,26 +15,14 @@ import tempfile
 from multiprocessing import util
 from multiprocessing.context import reduction
 from pathlib import Path
-from typing import Any, overload
+from typing import Any, Callable, overload
 
 import numpy as np
 import torch
 
 from tensordict.utils import implement_for
 
-from torch import distributed as dist
-
 from torch.multiprocessing.reductions import ForkingPickler
-
-try:
-    if dist.is_available():
-        from torch.distributed._tensor.api import DTensor
-    else:
-        raise ImportError
-except ImportError:
-
-    class DTensor(torch.Tensor):  # noqa: D101
-        ...
 
 
 class MemoryMappedTensor(torch.Tensor):
@@ -231,7 +221,7 @@ class MemoryMappedTensor(torch.Tensor):
         out.index = None
         out.parent_shape = shape
         if copy_data:
-            if isinstance(input, DTensor):
+            if hasattr(input, "full_tensor"):
                 input = input.full_tensor()
             out.copy_(input)
         return out
@@ -634,11 +624,7 @@ class MemoryMappedTensor(torch.Tensor):
                 ) from err
             raise
         if out.untyped_storage().data_ptr() == self.untyped_storage().data_ptr():
-            out = MemoryMappedTensor(out)
-            out._handler = self._handler
-            out._filename = self._filename
-            out.index = item
-            out.parent_shape = self.parent_shape
+            out = self._index_wrap(out, item)
         return out
 
     @implement_for("torch", None, "2.0")
@@ -653,12 +639,33 @@ class MemoryMappedTensor(torch.Tensor):
                 ) from err
             raise
         if out.storage().data_ptr() == self.storage().data_ptr():
-            out = MemoryMappedTensor(out)
-            out._handler = self._handler
-            out._filename = self._filename
-            out.index = item
-            out.parent_shape = self.parent_shape
+            out = self._index_wrap(out, item)
         return out
+
+    def _index_wrap(self, tensor, item, check=False):
+        if check:
+            if tensor.storage().data_ptr() == self.storage().data_ptr():
+                return self._index_wrap(tensor, item)
+            return tensor
+        tensor = MemoryMappedTensor(tensor)
+        tensor._handler = self._handler
+        tensor._filename = self._filename
+        tensor.index = item
+        tensor.parent_shape = self.parent_shape
+        return tensor
+
+    def unbind(self, dim):
+        out = super().unbind(dim)
+        if dim < 0:
+            dim = self.ndim + dim
+        index_base = (slice(None),) * dim
+        return tuple(
+            self._index_wrap(_out, index_base + (i,)) for i, _out in enumerate(out)
+        )
+
+    def chunk(self, chunks, dim=0):
+        out = super().chunk(chunks, dim)
+        return tuple(self._index_wrap(chunk, None, check=True) for chunk in out)
 
 
 #####################
@@ -774,3 +781,29 @@ def _proc_args_const(*args, **kwargs):
         kwargs.pop("fill_value", None),
         kwargs.pop("filename", None),
     )
+
+
+# Torch functions
+
+MEMMAP_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
+
+
+def implements_for_memmap(torch_function: Callable) -> Callable[[Callable], Callable]:
+    """Register a torch function override for MemoryMappedTensor."""
+
+    @functools.wraps(torch_function)
+    def decorator(func: Callable) -> Callable:
+        MEMMAP_HANDLED_FUNCTIONS[torch_function] = func
+        return func
+
+    return decorator
+
+
+@implements_for_memmap(torch.unbind)
+def _unbind(tensor, dim):
+    return tensor.unbind(dim)
+
+
+@implements_for_memmap(torch.chunk)
+def _chunk(input, chunks, dim=0):
+    return input.chunk(chunks, dim=dim)

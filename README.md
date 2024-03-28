@@ -28,25 +28,32 @@
 
 # TensorDict
 
-[**Installation**](#installation) | [**General features**](#general) |
+[**Installation**](#installation) | [**General features**](#general-principles) |
 [**Tensor-like features**](#tensor-like-features) |  [**Distributed capabilities**](#distributed-capabilities) |
-[**TensorDict for functional programming using FuncTorch**](#tensordict-for-functional-programming-using-functorch) |
+[**TensorDict for functional programming**](#tensordict-for-functional-programming) |
+[**TensorDict for parameter serialization](#tensordict-for-parameter-serialization) |
 [**Lazy preallocation**](#lazy-preallocation) | [**Nesting TensorDicts**](#nesting-tensordicts) | [**TensorClass**](#tensorclass)
 
 `TensorDict` is a dictionary-like class that inherits properties from tensors,
 such as indexing, shape operations, casting to device or point-to-point communication
-in distributed settings.
+in distributed settings. Whenever you need to execute an operation over a batch of tensors, 
+TensorDict is there to help you.
 
-The main purpose of TensorDict is to make code-bases more _readable_ and _modular_ by abstracting away tailored operations:
+The primary goal of TensorDict is to make your code-bases more _readable_, _compact_, and _modular_. 
+It abstracts away tailored operations, making your code less error-prone as it takes care of 
+dispatching the operation on the leaves for you.
+
+Using tensordict primitives, most supervised training loops can be rewritten in a generic way:
 ```python
-for i, tensordict in enumerate(dataset):
+for i, data in enumerate(dataset):
     # the model reads and writes tensordicts
-    tensordict = model(tensordict)
-    loss = loss_module(tensordict)
+    data = model(data)
+    loss = loss_module(data)
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()
 ```
+
 With this level of abstraction, one can recycle a training loop for highly heterogeneous task.
 Each individual step of the training loop (data collection and transform, model prediction, loss computation etc.)
 can be tailored to the use case at hand without impacting the others.
@@ -54,27 +61,81 @@ For instance, the above example can be easily used across classification and seg
 
 ## Features
 
-### General
+### General principles
+
+Unlike other [pytrees](https://github.com/pytorch/pytorch/blob/main/torch/utils/_pytree.py), TensorDict
+carries metadata that make it easy to query the state of the container. The main metadata
+are the [``batch_size``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.batch_size) 
+(also referred as ``shape``), 
+the [``device``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.device), 
+the shared status
+([``is_memmap``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_memmap) or 
+[``is_shared``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.is_shared)), 
+the dimension [``names``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.names) 
+and the [``lock``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.lock_) status.
 
 A tensordict is primarily defined by its `batch_size` (or `shape`) and its key-value pairs:
 ```python
 >>> from tensordict import TensorDict
 >>> import torch
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
 ... }, batch_size=[3, 4])
 ```
 The `batch_size` and the first dimensions of each of the tensors must be compliant.
-The tensors can be of any dtype and device. Optionally, one can restrict a tensordict to
-live on a dedicated device, which will send each tensor that is written there:
+The tensors can be of any dtype and device. 
+
+Optionally, one can restrict a tensordict to
+live on a dedicated ``device``, which will send each tensor that is written there:
 ```python
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
 ... }, batch_size=[3, 4], device="cuda:0")
->>> tensordict["key 3"] = torch.randn(3, 4, device="cpu")
->>> assert tensordict["key 3"].device is torch.device("cuda:0")
+```
+When a tensordict has a device, all write operations will cast the tensor to the
+TensorDict device:
+```python
+>>> data["key 3"] = torch.randn(3, 4, device="cpu")
+>>> assert data["key 3"].device is torch.device("cuda:0")
+```
+Once the device is set, it can be cleared with the 
+[``clear_device_``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear_device_)
+method. 
+
+### TensorDict as a specialized dictionary
+TensorDict possesses all the basic features of a dictionary such as 
+[``clear``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clear), 
+[``copy``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.copy), 
+[``fromkeys``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.fromkeys), 
+[``get``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.get), 
+[``items``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.items), 
+[``keys``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.keys), 
+[``pop``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.pop), 
+[``popitem``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.popitem), 
+[``setdefault``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.setdefault), 
+[``update``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.update) and 
+[``values``](https://pytorch.org/tensordict/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.values).
+
+But that is not all, you can also store nested values in a tensordict:
+```python
+>>> data["nested", "key"] = torch.zeros(3, 4) # the batch-size must match
+```
+and any nested tuple structure will be unravelled to make it easy to read code and
+write ops programmatically:
+```python
+>>> data["nested", ("supernested", ("key",))] = torch.zeros(3, 4) # the batch-size must match
+>>> assert (data["nested", "supernested", "key"] == 0).all()
+>>> assert (("nested",), "supernested", (("key",),)) in data.keys(include_nested=True)  # this works too!
+```
+
+You can also store non-tensor data in tensordicts:
+
+```python
+>>> data = TensorDict({"a-tensor": torch.randn(1, 2)}, batch_size=[1, 2])
+>>> data["non-tensor"] = "a string!"
+>>> assert data["non-tensor"] == "a string!"
 ```
 
 ### Tensor-like features
@@ -82,11 +143,11 @@ live on a dedicated device, which will send each tensor that is written there:
 TensorDict objects can be indexed exactly like tensors. The resulting of indexing
 a TensorDict is another TensorDict containing tensors indexed along the required dimension:
 ```python
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
 ... }, batch_size=[3, 4])
->>> sub_tensordict = tensordict[..., :2]
+>>> sub_tensordict = data[..., :2]
 >>> assert sub_tensordict.shape == torch.Size([3, 2])
 >>> assert sub_tensordict["key 1"].shape == torch.Size([3, 2, 5])
 ```
@@ -107,15 +168,15 @@ Similarly, one can build tensordicts by stacking or concatenating single tensord
 
 TensorDict instances can also be reshaped, viewed, squeezed and unsqueezed:
 ```python
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": torch.zeros(3, 4, 5, dtype=torch.bool),
 ... }, batch_size=[3, 4])
->>> print(tensordict.view(-1))
+>>> print(data.view(-1))
 torch.Size([12])
->>> print(tensordict.reshape(-1))
+>>> print(data.reshape(-1))
 torch.Size([12])
->>> print(tensordict.unsqueeze(-1))
+>>> print(data.unsqueeze(-1))
 torch.Size([3, 4, 1])
 ```
 
@@ -124,8 +185,16 @@ clone them, update them in-place or not, split them, unbind them, expand them et
 
 If a functionality is missing, it is easy to call it using `apply()` or `apply_()`:
 ```python
-tensordict_uniform = tensordict.apply(lambda tensor: tensor.uniform_())
+tensordict_uniform = data.apply(lambda tensor: tensor.uniform_())
 ```
+
+``apply()`` can also be great to filter a tensordict, for instance:
+```python
+data = TensorDict({"a": torch.tensor(1.0, dtype=torch.float), "b": torch.tensor(1, dtype=torch.int64)}, [])
+data_float = data.apply(lambda x: x if x.dtype == torch.float else None) # contains only the "a" key
+assert "b" not in data_float
+```
+
 ### Distributed capabilities
 
 Complex data structures can be cumbersome to synchronize in distributed settings.
@@ -146,39 +215,101 @@ When nodes share a common scratch space, the
 can be used
 to seamlessly send, receive and read a huge amount of data.
 
-### TensorDict for functional programming using FuncTorch
+### TensorDict for functional programming
 
 We also provide an API to use TensorDict in conjunction with [FuncTorch](https://pytorch.org/functorch).
 For instance, TensorDict makes it easy to concatenate model weights to do model ensembling:
 ```python
 >>> from torch import nn
 >>> from tensordict import TensorDict
->>> from tensordict.nn import make_functional
 >>> import torch
 >>> from torch import vmap
 >>> layer1 = nn.Linear(3, 4)
 >>> layer2 = nn.Linear(4, 4)
 >>> model = nn.Sequential(layer1, layer2)
+>>> params = TensorDict.from_module(model)
 >>> # we represent the weights hierarchically
 >>> weights1 = TensorDict(layer1.state_dict(), []).unflatten_keys(".")
 >>> weights2 = TensorDict(layer2.state_dict(), []).unflatten_keys(".")
->>> params = make_functional(model)
 >>> assert (params == TensorDict({"0": weights1, "1": weights2}, [])).all()
 >>> # Let's use our functional module
 >>> x = torch.randn(10, 3)
->>> out = model(x, params=params)  # params is the last arg (or kwarg)
+>>> with params.to_module(model):
+...     out = model(x)
 >>> # an ensemble of models: we stack params along the first dimension...
 >>> params_stack = torch.stack([params, params], 0)
 >>> # ... and use it as an input we'd like to pass through the model
->>> y = vmap(model, (None, 0))(x, params_stack)
+>>> def func(x, params):
+...     with params.to_module(model):
+...         return model(x)
+>>> y = vmap(func, (None, 0))(x, params_stack)
 >>> print(y.shape)
 torch.Size([2, 10, 4])
 ```
 
-Moreover, tensordict modules are compatible with `torch.fx` and `torch.compile`,
+Moreover, tensordict modules are compatible with `torch.fx` and (soon) `torch.compile`,
 which means that you can get the best of both worlds: a codebase that is
 both readable and future-proof as well as efficient and portable!
 
+### TensorDict for parameter serialization and building datasets
+
+TensorDict offers an API for parameter serialization that can be >3x faster than
+regular calls to `torch.save(state_dict)`. Moreover, because tensors will be saved
+independently on disk, you can deserialize your checkpoint on an arbitrary slice
+of the model.
+
+```python
+>>> model = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 3))
+>>> params = TensorDict.from_module(model)
+>>> params.memmap("/path/to/saved/folder/", num_threads=16)  # adjust num_threads for speed
+>>> # load params
+>>> params = TensorDict.load_memmap("/path/to/saved/folder/", num_threads=16)
+>>> params.to_module(model)  # load onto model
+>>> params["0"].to_module(model[0])  # load on a slice of the model
+>>> # in the latter case we could also have loaded only the slice we needed
+>>> params0 = TensorDict.load_memmap("/path/to/saved/folder/0", num_threads=16)
+>>> params0.to_module(model[0])  # load on a slice of the model
+```
+
+The same functionality can be used to access data in a dataset stored on disk.
+Soring a single contiguous tensor on disk accessed through the `tensordict.MemoryMappedTensor`
+primitive and reading slices of it is not only **much** faster than loading
+single files one at a time but it's also easier and safer (because there is no pickling
+or third-party library involved):
+
+```python
+# allocate memory of the dataset on disk
+data = TensorDict({
+    "images": torch.zeros((128, 128, 3), dtype=torch.uint8),
+    "labels": torch.zeros((), dtype=torch.int)}, batch_size=[])
+data = data.expand(1000000)
+data = data.memmap_like("/path/to/dataset")
+# ==> Fill your dataset here
+# Let's get 3 items of our dataset:
+data[torch.tensor([1, 10000, 500000])]  # This is much faster than loading the 3 images independently
+```
+
+### Preprocessing with TensorDict.map
+
+Preprocessing huge contiguous (or not!) datasets can be done via `TensorDict.map`
+which will dispatch a task to various workers:
+
+```python
+import torch
+from tensordict import TensorDict, MemoryMappedTensor
+import tempfile
+
+def process_data(data):
+    images = data.get("images").flip(-2).clone()
+    labels = data.get("labels") // 10
+    # we update the td inplace
+    data.set_("images", images)  # flip image
+    data.set_("labels", labels)  # cluster labels
+
+if __name__ == "__main__":
+    # create data_preproc here
+    data_preproc = data.map(process_data, num_workers=4, chunksize=0, pbar=True)  # process 1 images at a time
+```
 
 ### Lazy preallocation
 
@@ -187,21 +318,21 @@ items varies according to the script configuration. TensorDict solves this in an
 Assume you are working with a function `foo() -> TensorDict`, e.g.
 ```python
 def foo():
-    tensordict = TensorDict({}, batch_size=[])
-    tensordict["a"] = torch.randn(3)
-    tensordict["b"] = TensorDict({"c": torch.zeros(2)}, batch_size=[])
-    return tensordict
+    data = TensorDict({}, batch_size=[])
+    data["a"] = torch.randn(3)
+    data["b"] = TensorDict({"c": torch.zeros(2)}, batch_size=[])
+    return data
 ```
 and you would like to call this function repeatedly. You could do this in two ways.
 The first would simply be to stack the calls to the function:
 ```python
-tensordict = torch.stack([foo() for _ in range(N)])
+data = torch.stack([foo() for _ in range(N)])
 ```
 However, you could also choose to preallocate the tensordict:
 ```python
-tensordict = TensorDict({}, batch_size=[N])
+data = TensorDict({}, batch_size=[N])
 for i in range(N):
-    tensordict[i] = foo()
+    data[i] = foo()
 ```
 which also results in a tensordict (when `N = 10`)
 ```
@@ -233,16 +364,16 @@ batch size.
 We can switch easily between hierarchical and flat representations.
 For instance, the following code will result in a single-level tensordict with keys `"key 1"` and `"key 2.sub-key"`:
 ```python
->>> tensordict = TensorDict({
+>>> data = TensorDict({
 ...     "key 1": torch.ones(3, 4, 5),
 ...     "key 2": TensorDict({"sub-key": torch.randn(3, 4, 5, 6)}, batch_size=[3, 4, 5])
 ... }, batch_size=[3, 4])
->>> tensordict_flatten = tensordict.flatten_keys(separator=".")
+>>> tensordict_flatten = data.flatten_keys(separator=".")
 ```
 
 Accessing nested tensordicts can be achieved with a single index:
 ```python
->>> sub_value = tensordict["key 2", "sub-key"]
+>>> sub_value = data["key 2", "sub-key"]
 ```
 
 ## TensorClass

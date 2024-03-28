@@ -13,10 +13,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
+
 from tensordict._td import is_tensor_collection, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.functional import make_tensordict
-
 from tensordict.nn.functional_modules import (
     _swap_state,
     extract_weights_and_buffers,
@@ -24,8 +24,11 @@ from tensordict.nn.functional_modules import (
     make_functional,
     repopulate_module,
 )
-
-from tensordict.nn.utils import set_skip_existing
+from tensordict.nn.utils import (
+    _auto_make_functional,
+    _dispatch_td_nn_modules,
+    set_skip_existing,
+)
 from tensordict.utils import implement_for, NestedKey
 from torch import nn, Tensor
 
@@ -238,9 +241,14 @@ class dispatch:
                     "named 'tensordict'."
                 )
             break
+        # if the env variable was used, we can skip the wrapper altogether
+        if not _dispatch_td_nn_modules():
+            return func
 
         @functools.wraps(func)
         def wrapper(_self, *args: Any, **kwargs: Any) -> Any:
+            if not _dispatch_td_nn_modules():
+                return func(_self, *args, **kwargs)
 
             source = self.source
             if isinstance(source, str):
@@ -627,7 +635,8 @@ class TensorDictModuleBase(nn.Module):
                 raise ValueError(err_msg)
         self.register_forward_hook(_OutKeysSelect(out_keys))
         for hook in self._forward_hooks.values():
-            hook._init(self)
+            if isinstance(hook, _OutKeysSelect):
+                hook._init(self)
         return self
 
     @implement_for("torch", "2.0", None)
@@ -740,7 +749,8 @@ class TensorDictModuleBase(nn.Module):
                 raise ValueError(err_msg)
         self.register_forward_hook(_OutKeysSelect(out_keys), with_kwargs=True)
         for hook in self._forward_hooks.values():
-            hook._init(self)
+            if isinstance(hook, _OutKeysSelect):
+                hook._init(self)
         return self
 
     def reset_out_keys(self):
@@ -818,7 +828,11 @@ class TensorDictModuleBase(nn.Module):
             False
         """
         if parameters is None:
-            self._reset_parameters(self)
+            any_reset = self._reset_parameters(self)
+            if not any_reset:
+                warnings.warn(
+                    "reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset"
+                )
             return
         elif parameters.ndim:
             raise RuntimeError(
@@ -829,45 +843,47 @@ class TensorDictModuleBase(nn.Module):
             lambda x: x.detach().requires_grad_(), inplace=False
         )
 
-        if not is_functional(self):
+        if _auto_make_functional() and not is_functional(self):
             make_functional(self, keep_params=True)
-        is_stateless = self._is_stateless
-        if is_stateless:
-            repopulate_module(self, sanitized_parameters)
+            is_stateless = self._is_stateless
+            if is_stateless:
+                repopulate_module(self, sanitized_parameters)
+            else:
+                old_params = _swap_state(
+                    self,
+                    sanitized_parameters,
+                    is_stateless=False,
+                    return_old_tensordict=True,
+                )
+
+            self._reset_parameters(self)
+
+            if is_stateless:
+                new_parameters = extract_weights_and_buffers(self)
+            else:
+                new_parameters = _swap_state(
+                    self, old_params, is_stateless=False, return_old_tensordict=True
+                )
+            return new_parameters
         else:
-            old_params = _swap_state(
-                self,
-                sanitized_parameters,
-                is_stateless=False,
-                return_old_tensordict=True,
-            )
+            with sanitized_parameters.to_module(self):
+                self._reset_parameters(self)
+            return sanitized_parameters
 
-        self._reset_parameters(self)
-
-        if is_stateless:
-            new_parameters = extract_weights_and_buffers(self)
-        else:
-            new_parameters = _swap_state(
-                self, old_params, is_stateless=False, return_old_tensordict=True
-            )
-
-        return new_parameters
-
-    def _reset_parameters(self, module: nn.Module) -> None:
+    def _reset_parameters(self, module: nn.Module) -> bool:
+        any_reset = False
         for child in module.children():
             if isinstance(child, nn.Module):
-                self._reset_parameters(child)
+                any_reset |= self._reset_parameters(child)
 
             if hasattr(child, "reset_parameters"):
                 child.reset_parameters()
+                any_reset |= True
+        return any_reset
 
 
 class TensorDictModule(TensorDictModuleBase):
     """A TensorDictModule, is a python wrapper around a :obj:`nn.Module` that reads and writes to a TensorDict.
-
-    By default, :class:`TensorDictModule` subclasses are always functional,
-    meaning that they support the ``td_module(input, params=params)`` function
-    call signature.
 
     Args:
         module (Callable): a callable, typically a :class:`torch.nn.Module`,
@@ -966,14 +982,15 @@ class TensorDictModule(TensorDictModuleBase):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
-        >>> from tensordict.nn.functional_modules import make_functional
         >>> td = TensorDict({"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3,])
         >>> module = torch.nn.GRUCell(4, 8)
         >>> td_module = TensorDictModule(
         ...    module=module, in_keys=["input", "hidden"], out_keys=["output"]
         ... )
-        >>> params = make_functional(td_module)
-        >>> td_functional = td_module(td.clone(), params=params)
+        >>> params = TensorDict.from_module(td_module)
+        >>> # functional API
+        >>> with params.to_module(td_module):
+        ...     td_functional = td_module(td.clone())
         >>> print(td_functional)
         TensorDict(
             fields={
@@ -1022,7 +1039,10 @@ class TensorDictModule(TensorDictModuleBase):
             batch_size=torch.Size([4]),
             device=None,
             is_shared=False)
-        >>> td_vmap = vmap(td_module, (None, 0))(td.clone(), params_repeat)
+        >>> def func(td, params):
+        ...     with params.to_module(td_module):
+        ...         return td_module(td)
+        >>> td_vmap = vmap(func, (None, 0))(td.clone(), params_repeat)
         >>> print(td_vmap)
         TensorDict(
             fields={
@@ -1089,7 +1109,8 @@ class TensorDictModule(TensorDictModuleBase):
             )
 
         self.module = module
-        make_functional(self, keep_params=True, return_params=False)
+        if _auto_make_functional():
+            make_functional(self, keep_params=True, return_params=False)
 
     @property
     def is_functional(self) -> bool:
@@ -1200,9 +1221,9 @@ class TensorDictModule(TensorDictModuleBase):
             module = indent(str(module), 4 * " ")
             in_keys = indent(f"in_keys={self.in_keys}", 4 * " ")
             out_keys = indent(f"out_keys={self.out_keys}", 4 * " ")
-            raise RuntimeError(
+            raise err from RuntimeError(
                 f"TensorDictModule failed with operation\n{module}\n{in_keys}\n{out_keys}."
-            ) from err
+            )
 
     @property
     def device(self) -> torch.device:

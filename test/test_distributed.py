@@ -5,7 +5,6 @@
 
 import abc
 import argparse
-import logging
 import os
 import sys
 
@@ -17,6 +16,7 @@ from packaging import version
 from packaging.version import parse
 
 from tensordict import MemoryMappedTensor, TensorDict
+from tensordict.utils import logger as tdlogger
 from torch import distributed as dist, multiprocessing as mp, nn
 from torch.distributed._tensor import (
     DeviceMesh,
@@ -39,7 +39,7 @@ def set_context():
     try:
         mp.set_start_method("spawn")
     except Exception:
-        logging.info("context already set")
+        tdlogger.info("context already set")
 
 
 @pytest.mark.skipif(
@@ -83,7 +83,7 @@ class TestFSDP:
         dist.barrier()
         # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
         # with FSDP.state_dict_type(module, StateDictType.SHARDED_STATE_DICT): #, cfg):
-        #     logging.info(module.state_dict())
+        #     tdlogger.info(module.state_dict())
 
         # td = TensorDict(module.state_dict(), []).unflatten_keys(".")
         td = TensorDict.from_module(module, use_state_dict=True)
@@ -95,7 +95,7 @@ class TestFSDP:
         try:
             mp.set_start_method("spawn")
         except Exception:
-            logging.info("start method already set to", mp.get_start_method())
+            tdlogger.info("start method already set to", mp.get_start_method())
         proc0 = mp.Process(target=self.worker, args=(0, tmpdir))
         proc1 = mp.Process(target=self.worker, args=(1, tmpdir))
         proc0.start()
@@ -161,7 +161,7 @@ class TestDTensor:
         if rank == 0:
             tdmemmap = td.memmap()  # noqa: F841
             # for key, val in tdmemmap.items(True, True):
-            #     logging.info(key, val)
+            #     tdlogger.info(key, val)
             queue.put("memmaped")
         else:
             # TODO: we need this bit to call the gather on each worker
@@ -173,7 +173,7 @@ class TestDTensor:
         try:
             mp.set_start_method("spawn")
         except Exception:
-            logging.info("start method already set to", mp.get_start_method())
+            tdlogger.info("start method already set to", mp.get_start_method())
         server_queue = mp.Queue(1)
         client_queue = mp.Queue(1)
         server_worker = mp.Process(
@@ -322,9 +322,9 @@ class TestReduce:
             assert out is None
         elif return_premature:
             for _out in out:
-                logging.info("waiting...")
+                tdlogger.info("waiting...")
                 _out.wait()
-                logging.info("done")
+                tdlogger.info("done")
         else:
             assert out is None
         if op == dist.ReduceOp.SUM:

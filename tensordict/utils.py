@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import collections
 import concurrent.futures
-import dataclasses
 import inspect
 import logging
 
@@ -49,9 +48,15 @@ from tensordict._tensordict import (  # noqa: F401
     unravel_key_list,
     unravel_keys,
 )
+
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
-from torch.nn.parameter import _ParameterMeta
+from torch.nn.parameter import (
+    _ParameterMeta,
+    UninitializedBuffer,
+    UninitializedParameter,
+    UninitializedTensorMixin,
+)
 from torch.utils.data._utils.worker import _generate_state
 
 if TYPE_CHECKING:
@@ -113,6 +118,21 @@ _LOCK_ERROR = (
     "Cannot modify locked TensorDict. For in-place modification, consider "
     "using the `set_()` method and make sure the key is present."
 )
+
+
+LOGGING_LEVEL = os.environ.get("TD_LOGGING_LEVEL", "DEBUG")
+logger = logging.getLogger("tensordict")
+logger.setLevel(getattr(logging, LOGGING_LEVEL))
+# Disable propagation to the root logger
+logger.propagate = False
+# Remove all attached handlers
+while logger.hasHandlers():
+    logger.removeHandler(logger.handlers[0])
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 
 def _sub_index(tensor: Tensor, idx: IndexType) -> Tensor:
@@ -299,7 +319,10 @@ def expand_as_right(
             f" tensor.ndimension()={tensor.ndimension()} and "
             f"dest.ndimension()={dest.ndimension()}"
         )
-    if not (tensor.shape == dest.shape[: tensor.ndimension()]):
+    if any(
+        tensor.shape[i] != dest.shape[i] and tensor.shape[i] != 1
+        for i in range(tensor.ndimension())
+    ):
         raise RuntimeError(
             f"tensor shape is incompatible with dest shape, "
             f"got: tensor.shape={tensor.shape}, dest={dest.shape}"
@@ -559,7 +582,9 @@ def _ndimension(tensor: Tensor) -> int:
 
 
 def _shape(tensor: Tensor) -> torch.Size:
-    if not isinstance(tensor, Tensor):
+    if isinstance(tensor, UninitializedTensorMixin):
+        return torch.Size([*getattr(tensor, "batch_size", ()), -1])
+    elif not isinstance(tensor, Tensor):
         if type(tensor) is KeyedJaggedTensor:
             return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
         return tensor.shape
@@ -638,7 +663,9 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
         return tensor[index]
 
 
-def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> Tensor:
+def _set_item(
+    tensor: Tensor, index: IndexType, value: Tensor, *, validated, non_blocking
+) -> Tensor:
     # the tensor must be validated
     if not validated:
         raise RuntimeError
@@ -647,6 +674,21 @@ def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> 
         return tensor
     elif isinstance(tensor, KeyedJaggedTensor):
         tensor = setitem_keyedjaggedtensor(tensor, index, value)
+        return tensor
+    from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+    if is_non_tensor(tensor):
+        if (
+            isinstance(value, NonTensorData)
+            and isinstance(tensor, NonTensorData)
+            and tensor.data == value.data
+        ):
+            return tensor
+        elif isinstance(tensor, NonTensorData):
+            tensor = NonTensorStack.from_nontensordata(tensor)
+        if tensor.stack_dim != 0:
+            tensor = NonTensorStack(*tensor.unbind(0), stack_dim=0)
+        tensor[index] = value
         return tensor
     else:
         tensor[index] = value
@@ -703,7 +745,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            logging.info(" -- ".join(strings))
+            logger.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -758,12 +800,8 @@ def is_tensorclass(obj: type | Any) -> bool:
     return _is_tensorclass(cls)
 
 
-def _is_tensorclass(cls) -> bool:
-    return (
-        dataclasses.is_dataclass(cls)
-        and "to_tensordict" in cls.__dict__
-        and "_from_tensordict" in cls.__dict__
-    )
+def _is_tensorclass(cls: type) -> bool:
+    return getattr(cls, "_is_tensorclass", False)
 
 
 class implement_for:
@@ -822,9 +860,10 @@ class implement_for:
         implement_for._setters.append(self)
 
     @staticmethod
-    def check_version(version, from_version, to_version):
-        return (from_version is None or parse(version) >= parse(from_version)) and (
-            to_version is None or parse(version) < parse(to_version)
+    def check_version(version: str, from_version: str | None, to_version: str | None):
+        version = parse(".".join([str(v) for v in parse(version).release]))
+        return (from_version is None or version >= parse(from_version)) and (
+            to_version is None or version < parse(to_version)
         )
 
     @staticmethod
@@ -1145,7 +1184,15 @@ class as_decorator:
         return new_func
 
 
-def _split_tensordict(td, chunksize, num_chunks, num_workers, dim):
+def _split_tensordict(
+    td,
+    chunksize,
+    num_chunks,
+    num_workers,
+    dim,
+    use_generator=False,
+    to_tensordict=False,
+):
     if chunksize is None and num_chunks is None:
         num_chunks = num_workers
     if chunksize is not None and num_chunks is not None:
@@ -1154,10 +1201,50 @@ def _split_tensordict(td, chunksize, num_chunks, num_workers, dim):
         )
     if num_chunks is not None:
         num_chunks = min(td.shape[dim], num_chunks)
+        if use_generator:
+
+            def _chunk_generator():
+                chunksize = -(td.shape[dim] // -num_chunks)
+                idx_start = 0
+                base = (slice(None),) * dim
+                for _ in range(num_chunks):
+                    idx_end = idx_start + chunksize
+                    out = td[base + (slice(idx_start, idx_end),)]
+                    if to_tensordict:
+                        out = out.to_tensordict()
+                    yield out
+                    idx_start = idx_end
+
+            return _chunk_generator()
         return td.chunk(num_chunks, dim=dim)
     else:
         if chunksize == 0:
+            if use_generator:
+
+                def _unbind_generator():
+                    base = (slice(None),) * dim
+                    for i in range(td.shape[dim]):
+                        out = td[base + (i,)]
+                        if to_tensordict:
+                            out = out.to_tensordict()
+                        yield out
+
+                return _unbind_generator()
             return td.unbind(dim=dim)
+        if use_generator:
+
+            def _split_generator():
+                idx_start = 0
+                base = (slice(None),) * dim
+                for _ in range(num_chunks):
+                    idx_end = idx_start + chunksize
+                    out = td[base + (slice(idx_start, idx_end),)]
+                    if to_tensordict:
+                        out = out.to_tensordict()
+                    yield out
+                    idx_start = idx_end
+
+            return _split_generator()
         chunksize = min(td.shape[dim], chunksize)
         return td.split(chunksize, dim=dim)
 
@@ -1292,8 +1379,17 @@ def assert_allclose_td(
             assert_allclose_td(sub_actual, sub_expected, rtol=rtol, atol=atol)
         return True
 
-    set1 = set(actual.keys())
-    set2 = set(expected.keys())
+    try:
+        set1 = set(
+            actual.keys(is_leaf=lambda x: not is_non_tensor(x), leaves_only=True)
+        )
+        set2 = set(
+            expected.keys(is_leaf=lambda x: not is_non_tensor(x), leaves_only=True)
+        )
+    except ValueError:
+        # Persistent tensordicts do not work with is_leaf
+        set1 = set(actual.keys())
+        set2 = set(expected.keys())
     if not (len(set1.difference(set2)) == 0 and len(set2) == len(set1)):
         raise KeyError(
             "actual and expected tensordict keys mismatch, "
@@ -1343,7 +1439,7 @@ def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
     return f"{cls.__name__}({s})"
 
 
-def _make_repr(key: str, item, tensordict: T) -> str:
+def _make_repr(key: NestedKey, item, tensordict: T) -> str:
     from tensordict.base import _is_tensor_collection
 
     if _is_tensor_collection(type(item)):
@@ -1375,12 +1471,17 @@ def _td_fields(td: T, keys=None) -> str:
             if isinstance(tensor, TensorDictBase):
                 substr = _td_fields(tensor)
             else:
+                is_shared = (
+                    tensor.is_shared()
+                    if not isinstance(tensor, UninitializedTensorMixin)
+                    else None
+                )
                 substr = _get_repr_custom(
                     tensor.__class__,
                     shape=shape,
                     device=tensor.device,
                     dtype=tensor.dtype,
-                    is_shared=tensor.is_shared(),
+                    is_shared=is_shared,
                 )
             strs.append(f"{key}: {substr}")
 
@@ -1441,17 +1542,22 @@ def _expand_to_match_shape(
 
 def _set_max_batch_size(source: T, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
-    tensor_data = list(source.values())
+    tensor_data = [val for val in source.values() if not is_non_tensor(val)]
 
     for val in tensor_data:
         from tensordict.base import _is_tensor_collection
 
         if _is_tensor_collection(val.__class__):
             _set_max_batch_size(val, batch_dims=batch_dims)
+
     batch_size = []
     if not tensor_data:  # when source is empty
-        source.batch_size = batch_size
-        return
+        if batch_dims:
+            source.batch_size = source.batch_size[:batch_dims]
+            return source
+        else:
+            return source
+
     curr_dim = 0
     while True:
         if tensor_data[0].dim() > curr_dim:
@@ -1459,8 +1565,11 @@ def _set_max_batch_size(source: T, batch_dims=None):
         else:
             source.batch_size = batch_size
             return
-        for tensor in tensor_data[1:]:
-            if tensor.dim() <= curr_dim or tensor.size(curr_dim) != curr_dim_size:
+        for leaf in tensor_data[1:]:
+            # if we have a nested empty tensordict we can modify its batch size at will
+            if _is_tensor_collection(type(leaf)) and leaf.is_empty():
+                continue
+            if (leaf.dim() <= curr_dim) or (leaf.size(curr_dim) != curr_dim_size):
                 source.batch_size = batch_size
                 return
         if batch_dims is None or len(batch_size) < batch_dims:
@@ -1472,9 +1581,10 @@ def _clone_value(value, recurse: bool):
     from tensordict.base import _is_tensor_collection
 
     if recurse:
+        # this is not a problem for locked tds as we will not lock it
         return value.clone()
     elif _is_tensor_collection(value.__class__):
-        return value.clone(recurse=False)
+        return value._clone(recurse=False)
     else:
         return value
 
@@ -1511,7 +1621,7 @@ def _renamed_inplace_method(fn):
 def _broadcast_tensors(index):
     # tensors and range need to be broadcast
     tensors = {
-        i: tensor if isinstance(tensor, Tensor) else torch.tensor(tensor)
+        i: torch.as_tensor(tensor)
         for i, tensor in enumerate(index)
         if isinstance(tensor, (range, list, np.ndarray, Tensor))
     }
@@ -1683,7 +1793,8 @@ def _getitem_batch_size(batch_size, index):
 
 
 # Lazy classes control (legacy feature)
-_LAZY_OP = strtobool(os.environ.get("LAZY_LEGACY_OP", "True"))
+_DEFAULT_LAZY_OP = False
+_LAZY_OP = os.environ.get("LAZY_LEGACY_OP", None)
 
 
 class set_lazy_legacy(_DecoratorContextManager):
@@ -1708,6 +1819,9 @@ class set_lazy_legacy(_DecoratorContextManager):
         return self.__class__(self.mode)
 
     def __enter__(self) -> None:
+        self.set()
+
+    def set(self) -> None:
         global _LAZY_OP
         self._old_mode = _LAZY_OP
         _LAZY_OP = bool(self.mode)
@@ -1720,10 +1834,14 @@ class set_lazy_legacy(_DecoratorContextManager):
         os.environ["LAZY_LEGACY_OP"] = str(_LAZY_OP)
 
 
-def lazy_legacy():
+def lazy_legacy(allow_none=False):
     """Returns `True` if lazy representations will be used for selected methods."""
     global _LAZY_OP
-    return _LAZY_OP
+    if _LAZY_OP is None and allow_none:
+        return None
+    elif _LAZY_OP is None:
+        return _DEFAULT_LAZY_OP
+    return strtobool(_LAZY_OP) if isinstance(_LAZY_OP, str) else _LAZY_OP
 
 
 def _legacy_lazy(func):
@@ -1736,12 +1854,13 @@ def _legacy_lazy(func):
 
 
 # Process initializer for map
-def _proc_init(base_seed, queue):
-    worker_id = queue.get(timeout=10)
+def _proc_init(base_seed, queue, num_threads):
+    worker_id = queue.get(timeout=120)
     seed = base_seed + worker_id
     torch.manual_seed(seed)
     np_seed = _generate_state(base_seed, worker_id)
     np.random.seed(np_seed)
+    torch.set_num_threads(num_threads)
 
 
 def _prune_selected_keys(keys_to_update, prefix):
@@ -1821,14 +1940,262 @@ def print_directory_tree(path, indent="", display_metadata=True):
 
         total_size_bytes = get_directory_size(path)
         formatted_size = format_size(total_size_bytes)
-        logging.info(f"Directory size: {formatted_size}")
+        logger.info(f"Directory size: {formatted_size}")
 
     if os.path.isdir(path):
-        logging.info(indent + os.path.basename(path) + "/")
+        logger.info(indent + os.path.basename(path) + "/")
         indent += "    "
         for item in os.listdir(path):
             print_directory_tree(
                 os.path.join(path, item), indent=indent, display_metadata=False
             )
     else:
-        logging.info(indent + os.path.basename(path))
+        logger.info(indent + os.path.basename(path))
+
+
+def isin(
+    input: TensorDictBase,
+    reference: TensorDictBase,
+    key: NestedKey,
+    dim: int = 0,
+) -> Tensor:
+    """Tests if each element of ``key`` in input ``dim`` is also present in the reference.
+
+    This function returns a boolean tensor of length  ``input.batch_size[dim]`` that is ``True`` for elements in
+    the entry ``key`` that are also present in the ``reference``. This function assumes that both ``input`` and
+    ``reference`` have the same batch size and contain the specified entry, otherwise an error will be raised.
+
+    Args:
+        input (TensorDictBase): Input TensorDict.
+        reference (TensorDictBase): Target TensorDict against which to test.
+        key (Nestedkey): The key to test.
+        dim (int, optional): The dimension along which to test. Defaults to ``0``.
+
+    Returns:
+        out (Tensor): A boolean tensor of length ``input.batch_size[dim]`` that is ``True`` for elements in
+            the ``input`` ``key`` tensor that are also present in the ``reference``.
+
+    Examples:
+        >>> td = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
+        ...     },
+        ...     batch_size=[4],
+        ... )
+        >>> td_ref = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [10, 11, 12]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
+        ...     },
+        ...     batch_size=[3],
+        ... )
+        >>> in_reference = isin(td, td_ref, key="tensor1")
+        >>> expected_in_reference = torch.tensor([True, True, True, False])
+        >>> torch.testing.assert_close(in_reference, expected_in_reference)
+    """
+    # Get the data
+    reference_tensor = reference.get(key, default=None)
+    target_tensor = input.get(key, default=None)
+
+    # Check key is present in both tensordict and reference_tensordict
+    if not isinstance(target_tensor, torch.Tensor):
+        raise KeyError(f"Key '{key}' not found in input or not a tensor.")
+    if not isinstance(reference_tensor, torch.Tensor):
+        raise KeyError(f"Key '{key}' not found in reference or not a tensor.")
+
+    # Check that both TensorDicts have the same number of dimensions
+    if len(input.batch_size) != len(reference.batch_size):
+        raise ValueError(
+            "The number of dimensions in the batch size of the input and reference must be the same."
+        )
+
+    # Check dim is valid
+    batch_dims = input.ndim
+    if dim >= batch_dims or dim < -batch_dims or batch_dims == 0:
+        raise ValueError(
+            f"The specified dimension '{dim}' is invalid for an input TensorDict with batch size '{input.batch_size}'."
+        )
+
+    # Convert negative dimension to its positive equivalent
+    if dim < 0:
+        dim = batch_dims + dim
+
+    # Find the common indices
+    N = reference_tensor.shape[dim]
+    cat_data = torch.cat([reference_tensor, target_tensor], dim=dim)
+    _, unique_indices = torch.unique(
+        cat_data, dim=dim, sorted=True, return_inverse=True
+    )
+    out = torch.isin(unique_indices[N:], unique_indices[:N], assume_unique=True)
+
+    return out
+
+
+def _index_preserve_data_ptr(index):
+    if isinstance(index, tuple):
+        return all(_index_preserve_data_ptr(idx) for idx in index)
+    # we can't use a list comprehension here because it fails with tensor indices
+    if index is None or index is Ellipsis:
+        return True
+    if isinstance(index, int):
+        return True
+    if isinstance(index, slice) and (index.start == 0 or index.start is None):
+        return True
+    return False
+
+
+def remove_duplicates(
+    input: TensorDictBase,
+    key: NestedKey,
+    dim: int = 0,
+    *,
+    return_indices: bool = False,
+) -> TensorDictBase:
+    """Removes indices duplicated in `key` along the specified dimension.
+
+    This method detects duplicate elements in the tensor associated with the specified `key` along the specified
+    `dim` and removes elements in the same indices in all other tensors within the TensorDict. It is expected for
+    `dim` to be one of the dimensions within the batch size of the input TensorDict to ensure consistency in all
+    tensors. Otherwise, an error will be raised.
+
+    Args:
+        input (TensorDictBase): The TensorDict containing potentially duplicate elements.
+        key (NestedKey): The key of the tensor along which duplicate elements should be identified and removed. It
+            must be one of the leaf keys within the TensorDict, pointing to a tensor and not to another TensorDict.
+        dim (int, optional): The dimension along which duplicate elements should be identified and removed. It must be one of
+            the dimensions within the batch size of the input TensorDict. Defaults to ``0``.
+        return_indices (bool, optional): If ``True``, the indices of the unique elements in the input tensor will be
+            returned as well. Defaults to ``False``.
+
+    Returns:
+        output (TensorDictBase): input tensordict with the indices corrsponding to duplicated elements
+            in tensor `key` along dimension `dim` removed.
+        unique_indices (torch.Tensor, optional): The indices of the first occurrences of the unique elements in the
+            input tensordict for the specified `key` along the specified `dim`. Only provided if return_index is True.
+
+    Example:
+        >>> td = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [1, 2, 3], [7, 8, 9]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [40, 50], [50, 60]]),
+        ...     }
+        ...     batch_size=[4],
+        ... )
+        >>> output_tensordict = remove_duplicate_elements(td, key="tensor1", dim=0)
+        >>> expected_output = TensorDict(
+        ...     {
+        ...         "tensor1": torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
+        ...         "tensor2": torch.tensor([[10, 20], [30, 40], [50, 60]]),
+        ...     },
+        ...     batch_size=[3],
+        ... )
+        >>> assert (td == expected_output).all()
+    """
+    tensor = input.get(key, default=None)
+
+    # Check if the key is a TensorDict
+    if tensor is None:
+        raise KeyError(f"The key '{key}' does not exist in the TensorDict.")
+
+    # Check that the key points to a tensor
+    if not isinstance(tensor, torch.Tensor):
+        raise KeyError(f"The key '{key}' does not point to a tensor in the TensorDict.")
+
+    # Check dim is valid
+    batch_dims = input.ndim
+    if dim >= batch_dims or dim < -batch_dims or batch_dims == 0:
+        raise ValueError(
+            f"The specified dimension '{dim}' is invalid for a TensorDict with batch size '{input.batch_size}'."
+        )
+
+    # Convert negative dimension to its positive equivalent
+    if dim < 0:
+        dim = batch_dims + dim
+
+    # Get indices of unique elements (e.g. [0, 1, 0, 2])
+    _, unique_indices, counts = torch.unique(
+        tensor, dim=dim, sorted=True, return_inverse=True, return_counts=True
+    )
+
+    # Find first occurrence of each index  (e.g. [0, 1, 3])
+    _, unique_indices_sorted = torch.sort(unique_indices, stable=True)
+    cum_sum = counts.cumsum(0, dtype=torch.long)
+    cum_sum = torch.cat(
+        (torch.zeros(1, device=input.device, dtype=torch.long), cum_sum[:-1])
+    )
+    first_indices = unique_indices_sorted[cum_sum]
+
+    # Remove duplicate elements in the TensorDict
+    output = input[(slice(None),) * dim + (first_indices,)]
+
+    if return_indices:
+        return output, unique_indices
+
+    return output
+
+
+class _CloudpickleWrapper(object):
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __getstate__(self):
+        import cloudpickle
+
+        return cloudpickle.dumps(self.fn)
+
+    def __setstate__(self, ob: bytes):
+        import pickle
+
+        self.fn = pickle.loads(ob)
+
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
+
+
+class _BatchedUninitializedParameter(UninitializedParameter):
+    batch_size: torch.Size
+    in_dim: int | None = None
+    vmap_level: int | None = None
+
+    def materialize(self, shape, device=None, dtype=None):
+        UninitializedParameter.materialize(
+            self, (*self.batch_size, *shape), device=device, dtype=dtype
+        )
+
+
+class _BatchedUninitializedBuffer(UninitializedBuffer):
+    batch_size: torch.Size
+    in_dim: int | None = None
+    vmap_level: int | None = None
+
+    def materialize(self, shape, device=None, dtype=None):
+        UninitializedBuffer.materialize(
+            self, (*self.batch_size, *shape), device=device, dtype=dtype
+        )
+
+
+class _add_batch_dim_pre_hook:
+    def __call__(self, mod: torch.nn.Module, args, kwargs):
+        for name, param in list(mod.named_parameters(recurse=False)):
+            if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
+                from torch._C._functorch import _add_batch_dim
+
+                param = _add_batch_dim(param, param.in_dim, param.vmap_level)
+                delattr(mod, name)
+                setattr(mod, name, param)
+        for key, val in list(mod._forward_pre_hooks.items()):
+            if val is self:
+                del mod._forward_pre_hooks[key]
+                return
+        else:
+            raise RuntimeError("did not find pre-hook")
+
+
+def is_non_tensor(data):
+    """Checks if an item is a non-tensor."""
+    return getattr(type(data), "_is_non_tensor", False)
+
+
+def _is_non_tensor(cls: type):
+    return getattr(cls, "_is_non_tensor", False)

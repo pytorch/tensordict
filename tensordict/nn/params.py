@@ -31,7 +31,6 @@ from tensordict.base import (
 )
 from tensordict.utils import (
     _LOCK_ERROR,
-    as_decorator,
     Buffer,
     erase_cache,
     IndexType,
@@ -47,7 +46,11 @@ def _apply_leaves(data, fn):
         with data.unlock_():
             for key, val in list(data.items()):
                 data._set_str(
-                    key, _apply_leaves(val, fn), validated=True, inplace=False
+                    key,
+                    _apply_leaves(val, fn),
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
                 )
         return data
     elif isinstance(data, LazyStackedTensorDict):
@@ -338,7 +341,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         for key, value in parameters.items(True, True):
             # flatten key
             if isinstance(key, tuple):
-                key = "_".join(key)
+                key = ".".join(key)
             if isinstance(value, nn.Parameter):
                 param_keys.append(key)
                 params.append(value)
@@ -404,6 +407,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         clone: bool = False,
         inplace: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> TensorDictBase:
         if not self.no_convert:
@@ -421,21 +425,25 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 clone=clone,
                 inplace=inplace,
                 keys_to_update=keys_to_update,
+                non_blocking=non_blocking,
             )
             self._reset_params()
         return self
 
     @lock_blocked
     @_unlock_and_set
-    def pop(
-        self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
+    def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
+        ...
+
+    @lock_blocked
+    @_unlock_and_set
+    def popitem(self):
         ...
 
     @lock_blocked
     @_unlock_and_set
     def rename_key_(
-        self, old_key: str, new_key: str, safe: bool = False
+        self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> TensorDictBase:
         ...
 
@@ -447,6 +455,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
         chunksize: int = None,
         num_chunks: int = None,
         pool: mp.Pool = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
+        mp_start_method: str | None = None,
     ):
         raise RuntimeError(
             "Cannot call map on a TensorDictParams object. Convert it "
@@ -460,12 +472,13 @@ class TensorDictParams(TensorDictBase, nn.Module):
         fn: Callable,
         *others: TensorDictBase,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> TensorDictBase:
+    ) -> TensorDictBase | None:
         ...
 
     @_unlock_and_set(inplace=True)
@@ -474,12 +487,13 @@ class TensorDictParams(TensorDictBase, nn.Module):
         fn: Callable,
         *others: TensorDictBase,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
+        filter_empty: bool | None = None,
         **constructor_kwargs,
-    ) -> TensorDictBase:
+    ) -> TensorDictBase | None:
         ...
 
     @_unlock_and_set(inplace=True)
@@ -488,9 +502,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_get_post_hook
     @_fallback
-    def get(
-        self, key: NestedKey, default: str | CompatibleType = NO_DEFAULT
-    ) -> CompatibleType:
+    def get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         ...
 
     @_get_post_hook
@@ -518,7 +530,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
             return self
         return TensorDictParams(params)
 
-    def clone(self, recurse: bool = True) -> TensorDictBase:
+    def _clone(self, recurse: bool = True) -> TensorDictBase:
         """Clones the TensorDictParams.
 
         .. warning::
@@ -539,7 +551,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
         """
         if not recurse:
-            return TensorDictParams(self._param_td.clone(False), no_convert=True)
+            return TensorDictParams(self._param_td._clone(False), no_convert=True)
 
         memo = {}
 
@@ -564,7 +576,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_fallback
-    def unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
+    def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         ...
 
     @_fallback
@@ -739,7 +751,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_unlock_and_set
-    def select(self, *args, **kwargs):
+    def _select(self, *args, **kwargs):
         ...
 
     @_fallback
@@ -763,6 +775,14 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def is_memmap(self) -> bool:
         ...
 
+    @property
+    def _is_shared(self) -> bool:
+        return self._param_td._is_shared
+
+    @property
+    def _is_memmap(self) -> bool:
+        return self._param_td._is_memmap
+
     @_fallback_property
     def shape(self) -> torch.Size:
         ...
@@ -782,9 +802,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _propagate_unlock(self):
         # if we end up here, we can clear the graph associated with this td
         self._is_locked = False
-
-        self._is_shared = False
-        self._is_memmap = False
 
         if not self._lock_content:
             return self._param_td._propagate_unlock()
@@ -809,7 +826,15 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_unlock_and_set(inplace=True)
-    def exclude(self, *keys: str, inplace: bool = False) -> TensorDictBase:
+    def _exclude(
+        self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
+    ) -> TensorDictBase:
+        ...
+
+    @_carry_over
+    def from_dict_instance(
+        self, input_dict, batch_size=None, device=None, batch_dims=None
+    ):
         ...
 
     @_carry_over
@@ -901,8 +926,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         ...
 
     @_fallback
-    @as_decorator()
-    def to_module(
+    def _to_module(
         self,
         module,
         *,
@@ -911,6 +935,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         swap_dest=None,
         memo=None,
         use_state_dict: bool = False,
+        non_blocking: bool = False,
     ):
         ...
 
@@ -984,18 +1009,17 @@ class TensorDictParams(TensorDictBase, nn.Module):
         unexpected_keys,
         error_msgs,
     ):
-        data = (
-            TensorDict(
-                {
-                    key: val
-                    for key, val in state_dict.items()
-                    if key.startswith(prefix) and val is not None
-                },
-                [],
-            )
-            .unflatten_keys(".")
-            .get(prefix[:-1])
-        )
+        data = TensorDict(
+            {
+                key: val
+                for key, val in state_dict.items()
+                if key.startswith(prefix) and val is not None
+            },
+            [],
+        ).unflatten_keys(".")
+        prefix = tuple(key for key in prefix.split(".") if key)
+        if prefix:
+            data = data.get(prefix)
         self.data.load_state_dict(data)
 
     def items(
@@ -1047,7 +1071,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     @_apply_on_data
     def _stack_onto_at_(
         self,
-        key: str,
+        key: NestedKey,
         list_item: list[CompatibleType],
         dim: int,
         idx: IndexType,
@@ -1060,6 +1084,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         input_dict_or_td: dict[str, CompatibleType] | T,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         ...
@@ -1071,12 +1096,13 @@ class TensorDictParams(TensorDictBase, nn.Module):
         idx: IndexType,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         ...
 
     @_apply_on_data
-    def apply_(self, fn: Callable, *others) -> T:
+    def apply_(self, fn: Callable, *others, **kwargs) -> T:
         ...
 
     def _apply(self, fn, recurse=True):
@@ -1112,8 +1138,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 param.data = param_applied
                 out_param = param
             else:
-                assert isinstance(param, nn.Parameter)
-                assert param.is_leaf
                 out_param = nn.Parameter(param_applied, param.requires_grad)
                 self._parameters[key] = out_param
 
@@ -1124,10 +1148,8 @@ class TensorDictParams(TensorDictBase, nn.Module):
                     param.grad, grad_applied
                 )
                 if should_use_set_data:
-                    assert out_param.grad is not None
                     out_param.grad.data = grad_applied
                 else:
-                    assert param.grad.is_leaf
                     out_param.grad = grad_applied.requires_grad_(
                         param.grad.requires_grad
                     )
@@ -1145,8 +1167,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 buffer.data = buffer_applied
                 out_buffer = buffer
             else:
-                assert isinstance(buffer, Buffer)
-                assert buffer.is_leaf
                 out_buffer = Buffer(buffer_applied, buffer.requires_grad)
                 self._buffers[key] = out_buffer
 
@@ -1157,10 +1177,8 @@ class TensorDictParams(TensorDictBase, nn.Module):
                     buffer.grad, grad_applied
                 )
                 if should_use_set_data:
-                    assert out_buffer.grad is not None
                     out_buffer.grad.data = grad_applied
                 else:
-                    assert buffer.grad.is_leaf
                     out_buffer.grad = grad_applied.requires_grad_(
                         buffer.grad.requires_grad
                     )

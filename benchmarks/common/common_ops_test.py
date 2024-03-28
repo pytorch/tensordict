@@ -530,6 +530,16 @@ def test_update_nested(benchmark, td):
     benchmark(exec_update_nested)
 
 
+def test_update__nested(benchmark, td):
+    td2 = td.clone()
+
+    def exec_update__nested():
+        tdc = td.clone()
+        tdc.update_(td2)
+
+    benchmark(exec_update__nested)
+
+
 def test_set_nested(benchmark, td, b):
     def exec_set_nested():
         tdc = td.clone()
@@ -553,6 +563,36 @@ def test_select(benchmark, td, c):
         tdc.select("a", "z", ("c", "c", "c"), strict=False)
 
     benchmark(exec_select)
+
+
+def test_select_nested(benchmark):
+    td = big_nested_td()[0][0]
+    key = list(td.keys(True, True))[-1]
+
+    def func():
+        td.select(key)
+
+    benchmark(func)
+
+
+def test_exclude_nested(benchmark):
+    td = big_nested_td()[0][0]
+    key = list(td.keys(True, True))[-1]
+
+    def func():
+        td.exclude(key)
+
+    benchmark(func)
+
+
+@pytest.mark.parametrize("recurse", [True, False])
+def test_empty(benchmark, recurse):
+    td = big_nested_td()[0][0]
+
+    def func(recurse=recurse):
+        td.empty(recurse=recurse)
+
+    benchmark(func)
 
 
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="No cuda device")

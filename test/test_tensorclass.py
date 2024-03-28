@@ -2,13 +2,16 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 import inspect
 import os
 import pickle
 import re
+import sys
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -31,6 +34,7 @@ from _utils_internal import get_available_devices
 from tensordict import (
     assert_allclose_td,
     is_tensorclass,
+    lazy_legacy,
     LazyStackedTensorDict,
     MemoryMappedTensor,
     tensorclass,
@@ -58,6 +62,10 @@ class MyData:
     def stuff(self):
         return self.X + self.y
 
+
+PY8 = sys.version_info >= (3, 8) and sys.version_info < (3, 9)
+PY9 = sys.version_info >= (3, 9) and sys.version_info < (3, 10)
+PY10 = sys.version_info >= (3, 10)
 
 # this slightly convoluted construction of MyData allows us to check that instances of
 # the tensorclass are instances of the original class.
@@ -828,13 +836,14 @@ class TestTensorClass:
         batch_size = [3, 4]
         data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
         data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
-        stacked_tc = data.permute(1, 0)
-        assert stacked_tc.X.shape == torch.Size([4, 3, 5])
-        assert stacked_tc.y.X.shape == torch.Size([4, 3, 5])
-        assert stacked_tc.shape == torch.Size([4, 3])
-        assert (stacked_tc.X == 1).all()
-        assert isinstance(stacked_tc._tensordict, _PermutedTensorDict)
-        assert stacked_tc.z == stacked_tc.y.z == z
+        permuted_data = data.permute(1, 0)
+        assert permuted_data.X.shape == torch.Size([4, 3, 5])
+        assert permuted_data.y.X.shape == torch.Size([4, 3, 5])
+        assert permuted_data.shape == torch.Size([4, 3])
+        assert (permuted_data.X == 1).all()
+        if lazy_legacy():
+            assert isinstance(permuted_data._tensordict, _PermutedTensorDict)
+        assert permuted_data.z == permuted_data.y.z == z
 
     def test_pickle(
         self,
@@ -1008,6 +1017,17 @@ class TestTensorClass:
 
         # ensure optional fields are writable
         data.set("k", torch.zeros(3, 4, 5))
+
+    def test_set_dict(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: MyClass = None
+
+        c = MyClass(x=torch.zeros((10,)), y={"x": torch.ones((10,))}, batch_size=[10])
+
+        assert isinstance(c.y, MyClass)
+        assert c.y.batch_size == c.batch_size
 
     @pytest.mark.parametrize("any_to_td", [True, False])
     def test_setattr(self, any_to_td):
@@ -1284,11 +1304,10 @@ class TestTensorClass:
         with pytest.raises(TypeError, match="missing 1 required positional argument"):
             MyData(X=torch.rand(10), y=torch.rand(10), batch_size=[10], device="cpu")
 
-        # if all positional arguments are specified, ommitting batch_size gives error
-        with pytest.raises(
-            TypeError, match="missing 1 required keyword-only argument: 'batch_size'"
-        ):
-            MyData(X=torch.rand(10), y=torch.rand(10))
+        # No batch_size is empty batch size
+        assert MyData(
+            X=torch.rand(10), y=torch.rand(10), z="str"
+        ).batch_size == torch.Size([])
 
         # all positional arguments + batch_size is fine
         MyData(
@@ -1324,6 +1343,44 @@ class TestTensorClass:
         assert split_tcs[0].z == split_tcs[1].z == split_tcs[2].z == z
         assert split_tcs[0].y[0].z == split_tcs[0].y[1].z == split_tcs[0].y[2].z == z
 
+    def test_update(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+            @classmethod
+            def get_data(cls, shift):
+                X = torch.zeros(1, 4, 5) + shift
+                z = f"test_tensorclass{shift}"
+                batch_size = [1, 4]
+                data_nest = cls(X=X, z=z, batch_size=batch_size)
+                data = cls(X=X, y=data_nest, z=z, batch_size=batch_size)
+                return data
+
+        data1 = MyDataNested.get_data(1)
+        # for _data1 in (data1, data1.to_dict(), data1.to_tensordict()):
+        data0 = MyDataNested.get_data(0)
+        data0.update(data1)
+        assert (data0.X == 1).all()
+        assert data0.z == "test_tensorclass1"
+        assert (data0.y.X == 1).all()
+        assert data0.y.z == "test_tensorclass1"
+        data0 = MyDataNested.get_data(0)
+        data0.update(data1.to_dict())
+        assert (data0.X == 1).all()
+        assert data0.z == "test_tensorclass1"
+        assert (data0.y.X == 1).all()
+        assert data0.y.z == "test_tensorclass1"
+
+        data0 = MyDataNested.get_data(0)
+        data0.update(data1.to_tensordict())
+        assert (data0.X == 1).all()
+        assert data0.z == "test_tensorclass1"
+        assert (data0.y.X == 1).all()
+        assert data0.y.z == "test_tensorclass1"
+
     def test_squeeze(
         self,
     ):
@@ -1344,9 +1401,8 @@ class TestTensorClass:
         assert squeeze_tc.y.X.shape == torch.Size([4, 5])
         assert squeeze_tc.z == squeeze_tc.y.z == z
 
-    def test_stack(
-        self,
-    ):
+    @pytest.mark.parametrize("lazy", [True, False])
+    def test_stack(self, lazy):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -1360,15 +1416,19 @@ class TestTensorClass:
         data1 = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
         data2 = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
 
-        stacked_tc = torch.stack([data1, data2], 0)
+        if lazy:
+            stacked_tc = LazyStackedTensorDict.lazy_stack([data1, data2], 0)
+        else:
+            stacked_tc = torch.stack([data1, data2], 0)
         assert type(stacked_tc) is type(data1)
         assert isinstance(stacked_tc.y, type(data1.y))
         assert stacked_tc.X.shape == torch.Size([2, 3, 4, 5])
         assert stacked_tc.y.X.shape == torch.Size([2, 3, 4, 5])
         assert (stacked_tc.X == 1).all()
         assert (stacked_tc.y.X == 1).all()
-        assert isinstance(stacked_tc._tensordict, LazyStackedTensorDict)
-        assert isinstance(stacked_tc.y._tensordict, LazyStackedTensorDict)
+        if lazy_legacy() or lazy:
+            assert isinstance(stacked_tc._tensordict, LazyStackedTensorDict)
+            assert isinstance(stacked_tc.y._tensordict, LazyStackedTensorDict)
         assert stacked_tc.z == stacked_tc.y.z == z
 
         # Testing negative scenarios
@@ -1497,7 +1557,7 @@ class TestTensorClass:
         ctd = c.to_tensordict()
         assert isinstance(ctd, TensorDictBase)
         assert "x" in ctd.keys()
-        assert "z" not in ctd.keys()
+        assert "z" in ctd.keys()
         assert "y" in ctd.keys()
         assert ("y", "x") in ctd.keys(True)
 
@@ -1635,13 +1695,14 @@ class TestTensorClass:
         batch_size = [3, 4]
         data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
         data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
-        stacked_tc = data.view(-1)
-        assert stacked_tc.X.shape == torch.Size([12, 5])
-        assert stacked_tc.y.X.shape == torch.Size([12, 5])
-        assert stacked_tc.shape == torch.Size([12])
-        assert (stacked_tc.X == 1).all()
-        assert isinstance(stacked_tc._tensordict, _ViewedTensorDict)
-        assert stacked_tc.z == stacked_tc.y.z == z
+        viewed_td = data.view(-1)
+        assert viewed_td.X.shape == torch.Size([12, 5])
+        assert viewed_td.y.X.shape == torch.Size([12, 5])
+        assert viewed_td.shape == torch.Size([12])
+        assert (viewed_td.X == 1).all()
+        if lazy_legacy():
+            assert isinstance(viewed_td._tensordict, _ViewedTensorDict)
+        assert viewed_td.z == viewed_td.y.z == z
 
 
 class TestMemmap:
@@ -1735,6 +1796,7 @@ class TestMemmap:
         assert isinstance(cmemmap.x, MemoryMappedTensor)
         assert isinstance(cmemmap.y.x, MemoryMappedTensor)
         assert cmemmap.z == "foo"
+        assert cmemmap.is_memmap()
 
 
 class TestNesting:
@@ -1745,7 +1807,6 @@ class TestNesting:
         test: str
 
     def get_nested(self):
-
         c = self.TensorClass(torch.ones(1), ("a", "b", "c"), "Hello", batch_size=[])
 
         td = torch.stack(
@@ -1776,6 +1837,247 @@ class TestNesting:
         td = self.get_nested()
         td = td.to("cpu:1")
         assert isinstance(td.get("c")[0], self.TensorClass)
+
+
+def test_decorator():
+    @tensorclass
+    class MyClass:
+        X: torch.Tensor
+        y: Any
+
+    obj = MyClass(X=torch.zeros(2), y="a string!", batch_size=[])
+    assert not obj.is_locked
+    with obj.lock_():
+        assert obj.is_locked
+        with obj.unlock_():
+            assert not obj.is_locked
+        assert obj.is_locked
+    assert not obj.is_locked
+
+
+def test_to_dict():
+    @tensorclass
+    class TestClass:
+        my_tensor: torch.Tensor
+        my_str: str
+
+    test_class = TestClass(
+        my_tensor=torch.tensor([1, 2, 3]), my_str="hello", batch_size=[3]
+    )
+
+    assert (test_class == TestClass.from_dict(test_class.to_dict())).all()
+
+    # Currently we don't test non-tensor in __eq__ because __eq__ can break with arrays and such
+    # test_class2 = TestClass(
+    #     my_tensor=torch.tensor([1, 2, 3]), my_str="goodbye", batch_size=[3]
+    # )
+    #
+    # assert not (test_class == TestClass.from_dict(test_class2.to_dict())).all()
+
+    test_class3 = TestClass(
+        my_tensor=torch.tensor([1, 2, 0]), my_str="hello", batch_size=[3]
+    )
+
+    assert not (test_class == TestClass.from_dict(test_class3.to_dict())).all()
+
+
+@tensorclass
+class AutoCast:
+    tensor: torch.Tensor
+    non_tensor: str
+    td: TensorDict
+    tc: AutoCast
+
+
+@tensorclass
+class AutoCastOr:
+    tensor: torch.Tensor
+    non_tensor: str
+    td: TensorDict
+    tc: AutoCast | None = None
+
+
+@tensorclass
+class AutoCastOptional:
+    tensor: torch.Tensor
+    non_tensor: str
+    td: TensorDict
+    # DO NOT CHANGE Optional
+    tc: Optional[AutoCast] = None
+
+
+class TestAutoCasting:
+    @tensorclass
+    class ClsAutoCast:
+        tensor: torch.Tensor
+        non_tensor: str
+        td: TensorDict
+        tc: "ClsAutoCast"  # noqa: F821
+        tc_global: AutoCast
+
+    def test_autocast(self):
+        # Autocasting is implemented only for tensordict / tensorclasses.
+        # Since some type annotations are not supported such as `Tensor | None`,
+        # we don't want to encourage this feature too much, as it will break
+        # in many cases.
+        obj = AutoCast(
+            tensor=torch.zeros(()),
+            non_tensor="x",
+            td={"a": 0.0},
+            tc={
+                "tensor": torch.zeros(()),
+                "non_tensor": "y",
+                "td": {"b": 0.0},
+                "tc": None,
+            },
+        )
+
+        assert isinstance(obj.tensor, torch.Tensor)
+        assert isinstance(obj.non_tensor, str)
+        assert isinstance(obj.td, TensorDict)
+        assert isinstance(obj.tc, AutoCast), (type(obj.tc), type(obj))
+
+        assert isinstance(obj.tc.tensor, torch.Tensor)
+        assert isinstance(obj.tc.non_tensor, str)
+        assert isinstance(obj.tc.td, TensorDict)
+        assert obj.tc.tc is None
+
+    def test_autocast_cls(self):
+        obj = self.ClsAutoCast(
+            tensor=torch.zeros(()),
+            non_tensor="x",
+            td={"a": 0.0},
+            tc={
+                "tensor": torch.zeros(()),
+                "non_tensor": "y",
+                "td": {"b": 0.0},
+                "tc": None,
+            },
+            tc_global=AutoCast(
+                tensor=torch.zeros(()), non_tensor="x", td={"a": 0.0}, tc=None
+            ),
+        )
+
+        assert isinstance(obj.tensor, torch.Tensor)
+        assert isinstance(obj.non_tensor, str)
+        assert isinstance(obj.td, TensorDict)
+        if not PY8:
+            assert isinstance(obj.tc, self.ClsAutoCast), (type(obj.tc), type(obj))
+        else:
+            assert isinstance(obj.tc, dict), (type(obj.tc), type(obj))
+
+        assert isinstance(obj.tc_global, AutoCast), (type(obj.tc), type(obj))
+
+        if not PY8:
+            assert isinstance(obj.tc.tensor, torch.Tensor)
+            assert isinstance(obj.tc.non_tensor, str)
+            assert isinstance(obj.tc.td, TensorDict)
+            assert obj.tc.tc is None
+
+    def test_autocast_or(self):
+        with pytest.warns(
+            UserWarning, match="This may be caused by annotations that use plain"
+        ) if not PY10 else contextlib.nullcontext():
+            obj = AutoCastOr(
+                tensor=torch.zeros(()),
+                non_tensor="x",
+                td={"a": 0.0},
+                tc={
+                    "tensor": torch.zeros(()),
+                    "non_tensor": "y",
+                    "td": {"b": 0.0},
+                    "tc": None,
+                },
+            )
+
+        assert isinstance(obj.tensor, torch.Tensor)
+        assert isinstance(obj.non_tensor, str)
+        if not PY10:
+            assert not isinstance(obj.td, TensorDict)
+        else:
+            assert isinstance(obj.td, TensorDict)
+        assert not isinstance(obj.tc, AutoCast), (type(obj.tc), type(obj))
+
+        assert isinstance(obj.tc["tensor"], torch.Tensor)
+        assert isinstance(obj.tc["non_tensor"], str)
+        assert not isinstance(obj.tc["td"], TensorDict)
+        assert obj.tc["tc"] is None
+
+    def test_autocast_optional(self):
+        obj = AutoCastOptional(
+            tensor=torch.zeros(()),
+            non_tensor="x",
+            td={"a": 0.0},
+            tc={
+                "tensor": torch.zeros(()),
+                "non_tensor": "y",
+                "td": {"b": 0.0},
+                "tc": None,
+            },
+        )
+
+        assert isinstance(obj.tensor, torch.Tensor)
+        assert isinstance(obj.non_tensor, str)
+        # With Optional, no error is raised
+        assert isinstance(obj.td, TensorDict)
+        assert not isinstance(obj.tc, AutoCast), (type(obj.tc), type(obj))
+
+        assert isinstance(obj.tc["tensor"], torch.Tensor)
+        assert isinstance(obj.tc["non_tensor"], str)
+        assert not isinstance(obj.tc["td"], TensorDict)
+        assert obj.tc["tc"] is None
+
+    def test_autocast_func(self):
+        @tensorclass
+        class FuncAutoCast:
+            tensor: torch.Tensor
+            non_tensor: str
+            td: TensorDict
+            tc: FuncAutoCast
+            tc_global: AutoCast
+            tc_cls: TestAutoCasting.ClsAutoCast
+
+        obj = FuncAutoCast(
+            tensor=torch.zeros(()),
+            non_tensor="x",
+            td={"a": 0.0},
+            tc={
+                "tensor": torch.zeros(()),
+                "non_tensor": "y",
+                "td": {"b": 0.0},
+                "tc": None,
+            },
+            tc_global={
+                "tensor": torch.zeros(()),
+                "non_tensor": "x",
+                "td": {"a": 0.0},
+                "tc": None,
+            },
+            tc_cls={
+                "tensor": torch.zeros(()),
+                "non_tensor": "x",
+                "td": {"a": 0.0},
+                "tc": None,
+                "tc_global": {
+                    "tensor": torch.zeros(()),
+                    "non_tensor": "x",
+                    "td": {"a": 0.0},
+                    "tc": None,
+                },
+            },
+        )
+
+        assert isinstance(obj.tensor, torch.Tensor)
+        assert isinstance(obj.non_tensor, str)
+        assert isinstance(obj.td, TensorDict)
+        assert isinstance(obj.tc, FuncAutoCast), (type(obj.tc), type(obj))
+        assert isinstance(obj.tc_cls, self.ClsAutoCast), (type(obj.tc), type(obj))
+        assert isinstance(obj.tc_global, AutoCast), (type(obj.tc), type(obj))
+
+        assert isinstance(obj.tc.tensor, torch.Tensor)
+        assert isinstance(obj.tc.non_tensor, str)
+        assert isinstance(obj.tc.td, TensorDict)
+        assert obj.tc.tc is None
 
 
 if __name__ == "__main__":

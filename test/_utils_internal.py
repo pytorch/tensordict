@@ -16,6 +16,7 @@ from tensordict._torch_func import _stack as stack_td
 from tensordict.base import is_tensor_collection
 from tensordict.nn.params import TensorDictParams
 from tensordict.persistent import _has_h5 as _has_h5py
+from tensordict.utils import set_lazy_legacy
 
 
 def prod(sequence):
@@ -113,6 +114,7 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["nested_tensorclass", device]]
         TYPES_DEVICES_NOLAZY += [["nested_tensorclass", device]]
 
+    @set_lazy_legacy(True)
     def nested_stacked_td(self, device):
         td = TensorDict(
             source={
@@ -133,6 +135,7 @@ class TestTensorDictsBase:
         TYPES_DEVICES += [["nested_stacked_td", device]]
         TYPES_DEVICES_NOLAZY += [["nested_stacked_td", device]]
 
+    @set_lazy_legacy(True)
     def stacked_td(self, device):
         td1 = TensorDict(
             source={
@@ -213,6 +216,7 @@ class TestTensorDictsBase:
     TYPES_DEVICES += [["memmap_td", torch.device("cpu")]]
     TYPES_DEVICES_NOLAZY += [["memmap_td", torch.device("cpu")]]
 
+    @set_lazy_legacy(True)
     def permute_td(self, device):
         return TensorDict(
             source={
@@ -227,6 +231,7 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["permute_td", device]]
 
+    @set_lazy_legacy(True)
     def unsqueezed_td(self, device):
         td = TensorDict(
             source={
@@ -242,6 +247,7 @@ class TestTensorDictsBase:
     for device in get_available_devices():
         TYPES_DEVICES += [["unsqueezed_td", device]]
 
+    @set_lazy_legacy(True)
     def squeezed_td(self, device):
         td = TensorDict(
             source={
@@ -339,4 +345,6 @@ class DummyPicklableClass:
         self.value = value
 
     def __eq__(self, other):
-        return self.value == other.value
+        if isinstance(other, DummyPicklableClass):
+            return self.value == other.value
+        return self.value == other

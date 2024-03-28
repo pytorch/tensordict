@@ -8,6 +8,7 @@ import copy
 import pickle
 import unittest
 import warnings
+import weakref
 
 import pytest
 import torch
@@ -34,8 +35,14 @@ from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.ensemble import EnsembleModule
 from tensordict.nn.functional_modules import is_functional, make_functional
 from tensordict.nn.probabilistic import InteractionType, set_interaction_type
-from tensordict.nn.utils import Buffer, set_skip_existing, skip_existing
-from torch import distributions as d, nn
+from tensordict.nn.utils import (
+    _set_auto_make_functional,
+    _set_dispatch_td_nn_modules,
+    Buffer,
+    set_skip_existing,
+    skip_existing,
+)
+from torch import distributions, nn
 from torch.distributions import Normal
 from torch.utils._pytree import tree_map
 
@@ -157,6 +164,16 @@ class TestTDModule:
 
         seq.reset_parameters_recursive()
         assert torch.all(old_param != net[0][0].weight.data)
+
+    def test_reset_warning(self):
+        torch.manual_seed(0)
+        net = nn.ModuleList([nn.Tanh(), nn.ReLU()])
+        module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
+        with pytest.warns(
+            UserWarning,
+            match="reset_parameters_recursive was called without the parameters argument and did not find any parameters to reset",
+        ):
+            module.reset_parameters_recursive()
 
     @pytest.mark.parametrize(
         "net",
@@ -328,7 +345,7 @@ class TestTDModule:
         net = TensorDictModule(module=net, in_keys=in_keys, out_keys=out_keys)
 
         kwargs = {
-            "distribution_class": torch.distributions.Uniform,
+            "distribution_class": distributions.Uniform,
             "distribution_kwargs": {"high": max_dist},
         }
         if out_keys == ["low"]:
@@ -408,11 +425,34 @@ class TestTDModule:
         tensordict_module = TensorDictModule(
             module=net, in_keys=["in"], out_keys=["out"]
         )
+        make_functional(tensordict_module, return_params=False)
 
         td = TensorDict({"in": torch.randn(3, 3)}, [3])
         tensordict_module(td, params=TensorDict({"module": params}, []))
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
+
+    @pytest.mark.skipif(
+        not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
+    )
+    def test_functional_deactivate(self):
+        torch.manual_seed(0)
+        param_multiplier = 1
+
+        net = nn.Linear(3, 4 * param_multiplier)
+
+        td = TensorDict({"in": torch.randn(3, 3)}, [3])
+
+        with _set_auto_make_functional(False):
+            tensordict_module = TensorDictModule(
+                module=net, in_keys=["in"], out_keys=["out"]
+            )
+        assert not is_functional(tensordict_module)
+        params = TensorDict.from_module(tensordict_module)
+        with pytest.raises(TypeError):
+            tensordict_module(td, params=params)
+        make_functional(tensordict_module)
+        tensordict_module(td, params=params)
 
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
@@ -551,6 +591,7 @@ class TestTDModule:
         tdmodule = TensorDictModule(module=net, in_keys=["in"], out_keys=["out"])
 
         td = TensorDict({"in": torch.randn(3, 32 * param_multiplier)}, [3])
+        make_functional(tdmodule, return_params=False)
         tdmodule(td, params=TensorDict({"module": params}, []))
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 32])
@@ -734,6 +775,22 @@ class TestTDModule:
             tdmodule.__deepcopy__
         assert tdmodule.some_attribute == "a"
         assert isinstance(copy.deepcopy(tdmodule), TensorDictModule)
+
+    def test_dispatch_deactivate(self):
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        td = TensorDict({"a": torch.zeros(1, 1)}, 1)
+        tdm(td)
+        with _set_dispatch_td_nn_modules(True):
+            out = tdm(a=torch.zeros(1, 1))
+            assert (out == td["b"]).all()
+        with _set_dispatch_td_nn_modules(False), pytest.raises(
+            TypeError, match="missing 1 required positional argument"
+        ):
+            tdm(a=torch.zeros(1, 1))
+
+        # checks that things are back in place
+        tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
+        tdm(a=torch.zeros(1, 1))
 
     def test_dispatch(self):
         tdm = TensorDictModule(nn.Linear(1, 1), ["a"], ["b"])
@@ -1881,12 +1938,10 @@ def test_probabilistic_sequential_type_checks():
 def test_keyerr_msg():
     module = TensorDictModule(nn.Linear(2, 3), in_keys=["a"], out_keys=["b"])
     with pytest.raises(
-        RuntimeError, match="TensorDictModule failed with operation"
-    ) as err:
+        KeyError,
+        match="Some tensors that are necessary for the module call may not have not been found in the input tensordict",
+    ):
         module(TensorDict({"c": torch.randn(())}, []))
-    assert "Some tensors that are necessary for the module call" in str(
-        err.value.__cause__
-    )
 
 
 def test_input():
@@ -2623,7 +2678,6 @@ def test_module_buffer():
     ],
 )
 def test_nested_keys_probabilistic_delta(log_prob_key):
-
     policy_module = TensorDictModule(
         nn.Linear(1, 1), in_keys=[("data", "states")], out_keys=[("data", "param")]
     )
@@ -2668,7 +2722,6 @@ def test_nested_keys_probabilistic_delta(log_prob_key):
     ],
 )
 def test_nested_keys_probabilistic_normal(log_prob_key):
-
     loc_module = TensorDictModule(
         nn.Linear(1, 1),
         in_keys=[("data", "states")],
@@ -2827,7 +2880,7 @@ class TestTensorDictParams:
         m = self.CustomModule(p)
         assert (
             TensorDict(dict(m.named_parameters()), [])
-            == TensorDict({"params": params.flatten_keys("_")}, []).flatten_keys(".")
+            == TensorDict({"params": params.flatten_keys(".")}, []).flatten_keys(".")
         ).all()
 
         assert not m.params.is_locked
@@ -2930,6 +2983,87 @@ class TestTensorDictParams:
         td_clone = td.clone()
         assert td_clone["c"] is td_clone["a", "b", "c"]
 
+    @pytest.mark.parametrize("with_batch", [False, True])
+    def test_func_on_tdparams(self, with_batch):
+        # tdparams isn't represented in a nested way, so we must check that calling to_module on it works ok
+        net = nn.Sequential(
+            nn.Linear(2, 2),
+            nn.Sequential(
+                nn.Linear(2, 2),
+                nn.Dropout(),
+                nn.BatchNorm1d(2),
+                nn.Sequential(
+                    nn.Tanh(),
+                    nn.Linear(2, 2),
+                ),
+            ),
+        )
+
+        if with_batch:
+            params = TensorDict.from_modules(net, net, as_module=True)
+            params0 = params[0].expand(3).clone().apply(lambda x: x.data * 0)
+        else:
+            params = TensorDict.from_module(net, as_module=True)
+            params0 = params.apply(lambda x: x.data * 0)
+
+        assert (params0 == 0).all()
+        with params0.to_module(params):
+            assert (params == 0).all()
+        assert not (params == 0).all()
+
+        # Now with a module around it
+        class MyModule(nn.Module):
+            pass
+
+        m = MyModule()
+        m.params = params
+        params_m = TensorDict.from_module(m, as_module=True)
+        if with_batch:
+            params_m0 = params_m.clone()
+            params_m0["params"] = params_m0["params"][0].expand(3).clone()
+        else:
+            params_m0 = params_m
+        params_m0 = params_m0.apply(lambda x: x.data * 0)
+        assert (params_m0 == 0).all()
+        with params_m0.to_module(m):
+            assert (params_m == 0).all()
+        assert not (params_m == 0).all()
+
+    def test_load_state_dict(self):
+        net = nn.Sequential(
+            nn.Linear(2, 2),
+            nn.Sequential(
+                nn.Linear(2, 2),
+                nn.Dropout(),
+                nn.BatchNorm1d(2),
+                nn.Sequential(
+                    nn.Tanh(),
+                    nn.Linear(2, 2),
+                ),
+            ),
+        )
+
+        params = TensorDict.from_module(net, as_module=True)
+        assert any(isinstance(p, nn.Parameter) for p in params.values(True, True))
+        weakrefs = {weakref.ref(t) for t in params.values(True, True)}
+
+        # Now with a module around it
+        class MyModule(nn.Module):
+            pass
+
+        module = MyModule()
+        module.model = MyModule()
+        module.model.params = params
+        sd = module.state_dict()
+        sd = {
+            key: val * 0 if isinstance(val, torch.Tensor) else val
+            for key, val in sd.items()
+        }
+        module.load_state_dict(sd)
+        assert (params == 0).all()
+        assert any(isinstance(p, nn.Parameter) for p in params.values(True, True))
+        assert weakrefs == {weakref.ref(t) for t in params.values(True, True)}
+
     def test_inplace_ops(self):
         td = TensorDict(
             {
@@ -2959,7 +3093,10 @@ class TestCompositeDist:
         )
         dist = CompositeDistribution(
             params,
-            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
         )
         assert dist.batch_shape == params.shape
         assert len(dist.dists) == 2
@@ -2976,7 +3113,10 @@ class TestCompositeDist:
         )
         dist = CompositeDistribution(
             params,
-            distribution_map={"cont": d.Normal, ("nested", "disc"): d.Categorical},
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
         )
         sample = dist.sample()
         assert sample.shape == params.shape
@@ -2997,8 +3137,8 @@ class TestCompositeDist:
         dist = CompositeDistribution(
             params,
             distribution_map={
-                "cont": d.Normal,
-                ("nested", "disc"): d.RelaxedOneHotCategorical,
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
         )
@@ -3023,8 +3163,8 @@ class TestCompositeDist:
         dist = CompositeDistribution(
             params,
             distribution_map={
-                "cont": d.Normal,
-                ("nested", "disc"): d.RelaxedOneHotCategorical,
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.RelaxedOneHotCategorical,
             },
             extra_kwargs={("nested", "disc"): {"temperature": torch.tensor(1.0)}},
         )
@@ -3048,7 +3188,11 @@ class TestCompositeDist:
             [3],
         )
         dist = CompositeDistribution(
-            params, distribution_map={"cont": d.Normal, ("nested", "cont"): d.Normal}
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "cont"): distributions.Normal,
+            },
         )
         sample = dist.rsample((4,))
         sample = dist.cdf(sample)
@@ -3070,7 +3214,11 @@ class TestCompositeDist:
             [3],
         )
         dist = CompositeDistribution(
-            params, distribution_map={"cont": d.Normal, ("nested", "cont"): d.Normal}
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "cont"): distributions.Normal,
+            },
         )
         sample = dist.rsample((4,))
         sample = dist.cdf(sample)
@@ -3101,7 +3249,10 @@ class TestCompositeDist:
         )
         in_keys = ["params"]
         out_keys = ["cont", ("nested", "cont")]
-        distribution_map = {"cont": d.Normal, ("nested", "cont"): d.Normal}
+        distribution_map = {
+            "cont": distributions.Normal,
+            ("nested", "cont"): distributions.Normal,
+        }
         module = ProbabilisticTensorDictModule(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -3151,7 +3302,10 @@ class TestCompositeDist:
         )
         in_keys = ["params"]
         out_keys = ["cont", ("nested", "cont")]
-        distribution_map = {"cont": d.Normal, ("nested", "cont"): d.Normal}
+        distribution_map = {
+            "cont": distributions.Normal,
+            ("nested", "cont"): distributions.Normal,
+        }
         backbone = TensorDictModule(lambda: None, in_keys=[], out_keys=[])
         module = ProbabilisticTensorDictSequential(
             backbone,
