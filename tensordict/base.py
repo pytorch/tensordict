@@ -2313,7 +2313,6 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     def load_memmap(cls, prefix: str | Path) -> T:
         """Loads a memory-mapped tensordict from disk.
 
-
         Args:
             prefix (str or Path to folder): the path to the folder where the
                 saved tensordict should be fetched.
