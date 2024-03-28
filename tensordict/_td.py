@@ -15,7 +15,7 @@ from copy import copy
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterable, Iterator, List, Sequence, Type
+from typing import Any, Callable, Iterable, Iterator, List, Sequence, Tuple, Type
 from warnings import warn
 
 import numpy as np
@@ -1560,6 +1560,10 @@ class TensorDict(TensorDictBase):
                 "all elements must share that device."
             )
 
+    @lock_blocked
+    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
+        return self._tensordict.popitem()
+
     def pin_memory(self) -> T:
         def pin_mem(tensor):
             return tensor.pin_memory()
@@ -2818,6 +2822,12 @@ class _SubTensorDict(TensorDictBase):
     def del_(self, key: NestedKey) -> T:
         self._source = self._source.del_(key)
         return self
+
+    @lock_blocked
+    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
+        raise NotImplementedError(
+            f"popitem not implemented for class {type(self).__name__}."
+        )
 
     def _clone(self, recurse: bool = True) -> _SubTensorDict:
         """Clones the _SubTensorDict.

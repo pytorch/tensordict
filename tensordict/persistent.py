@@ -15,7 +15,7 @@ import tempfile
 import warnings
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Type
+from typing import Any, Callable, Tuple, Type
 
 import numpy as np
 import torch
@@ -696,6 +696,12 @@ class PersistentTensorDict(TensorDictBase):
             key: val.pin_memory() for key, val in out._nested_tensordicts.items()
         }
         return out
+
+    @lock_blocked
+    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
+        raise NotImplementedError(
+            f"popitem not implemented for class {type(self).__name__}."
+        )
 
     def map(
         self,

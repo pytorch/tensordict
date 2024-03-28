@@ -3693,6 +3693,15 @@ class TestTensorDicts(TestTensorDictsBase):
             ):
                 td.pop("z")
 
+    def test_popitem(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            if td_name in ("sub_td", "sub_td2", "td_h5"):
+                with pytest.raises(NotImplementedError):
+                    key, val = td.popitem()
+            else:
+                key, val = td.popitem()
+
     @pytest.mark.parametrize("call_del", [True, False])
     def test_remove(self, td_name, device, call_del):
         torch.manual_seed(1)
