@@ -377,6 +377,16 @@ class TestGeneric:
         else:
             assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
 
+    def test_dtype(self):
+        td = TensorDict(
+            {("an", "integer"): 1, ("a", "string"): "a", ("the", "float"): 1.0}
+        )
+        assert td.dtype is None
+        td = td.float()
+        assert td.dtype == torch.float
+        td = td.int()
+        assert td.dtype == torch.int
+
     def test_empty(self):
         td = TensorDict(
             {

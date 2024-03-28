@@ -730,6 +730,32 @@ class TensorDictBase(MutableMapping):
             return self.batch_size
         return self.batch_size[dim]
 
+    @property
+    def data(self):
+        """Returns a tensordict containing the .data attributes of the leaf tensors."""
+        return self._data()
+
+    @property
+    def grad(self):
+        """Returns a tensordict containing the .grad attributes of the leaf tensors."""
+        return self._grad()
+
+    @cache  # noqa
+    def _dtype(self):
+        dtype = None
+        for val in self.values(True, True):
+            val_dtype = getattr(val, "dtype", None)
+            if dtype is None and val_dtype is not None:
+                dtype = val_dtype
+            elif dtype is not None and val_dtype is not None and dtype != val_dtype:
+                return None
+        return dtype
+
+    @property
+    def dtype(self):
+        """Returns the dtype of the values in the tensordict, if it is unique."""
+        return self._dtype()
+
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
             return
