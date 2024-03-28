@@ -26,6 +26,7 @@ from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.base import (
     _is_tensor_collection,
+    _NESTED_TENSORS_AS_LISTS,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -61,6 +62,7 @@ from tensordict.utils import (
 )
 from torch import Tensor
 
+
 _has_functorch = False
 try:
     try:
@@ -88,7 +90,14 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         return len(self._keys())
 
     def _keys(self) -> list[str]:
-        return self.tensordict._key_list()
+        result = self.tensordict._key_list()
+        if self.is_leaf is _NESTED_TENSORS_AS_LISTS:
+            return [
+                (key, i)
+                for key in result
+                for i in range(len(self.tensordict.tensordicts))
+            ]
+        return result
 
     def __contains__(self, item):
         item = _unravel_key_to_tuple(item)
@@ -1413,6 +1422,31 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return keys
 
+    def values(self, include_nested=False, leaves_only=False, is_leaf=None):
+        if is_leaf is not _NESTED_TENSORS_AS_LISTS:
+            yield from super().values(
+                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            )
+        for td in self.tensordicts:
+            yield from td.values(
+                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            )
+
+    def items(self, include_nested=False, leaves_only=False, is_leaf=None):
+        if is_leaf is not _NESTED_TENSORS_AS_LISTS:
+            yield from super().items(
+                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            )
+        for i, td in enumerate(self.tensordicts):
+            for key, val in td.items(
+                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+            ):
+                if isinstance(key, str):
+                    key = (i, key)
+                else:
+                    key = (i, *key)
+                yield key, val
+
     valid_keys = keys
 
     # def _iterate_over_keys(self) -> None:
@@ -1512,7 +1546,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 default=default,
                 named=named,
                 nested_keys=nested_keys,
-                prefix=prefix,  # + (i,),
+                prefix=prefix + (i,) if is_leaf is _NESTED_TENSORS_AS_LISTS else prefix,
                 inplace=inplace,
                 filter_empty=filter_empty,
                 is_leaf=is_leaf,
@@ -1766,104 +1800,32 @@ class LazyStackedTensorDict(TensorDictBase):
                 return result
 
     def __eq__(self, other):
-        if is_tensorclass(other):
-            return other == self
-        if isinstance(other, (dict,)):
-            # we may want to broadcast it instead
-            other = TensorDict.from_dict(other, batch_size=self.batch_size)
-        if _is_tensor_collection(other.__class__):
-            if other.batch_size != self.batch_size:
-                if self.ndim < other.ndim:
-                    self_expand = self.expand(other.batch_size)
-                elif self.ndim > other.ndim:
-                    other = other.expand(self.batch_size)
-                    self_expand = self
-                else:
-                    raise RuntimeError(
-                        f"Could not compare tensordicts with shapes {self.shape} and {other.shape}"
-                    )
-            else:
-                self_expand = self
-            out = []
-            for td0, td1 in zip(
-                self_expand.tensordicts, other.unbind(self_expand.stack_dim)
-            ):
-                out.append(td0 == td1)
-            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return LazyStackedTensorDict.lazy_stack(
-                [td == other for td in self.tensordicts],
-                self.stack_dim,
-            )
-        return False
+        return self._dispatch_comparison(other, "__eq__", "__eq__")
 
     def __ne__(self, other):
-        if is_tensorclass(other):
-            return other != self
-        if isinstance(other, (dict,)):
-            # we may want to broadcast it instead
-            other = TensorDict.from_dict(other, batch_size=self.batch_size)
-        if _is_tensor_collection(other.__class__):
-            if other.batch_size != self.batch_size:
-                if self.ndim < other.ndim:
-                    self_expand = self.expand(other.batch_size)
-                elif self.ndim > other.ndim:
-                    other = other.expand(self.batch_size)
-                    self_expand = self
-                else:
-                    raise RuntimeError(
-                        f"Could not compare tensordicts with shapes {self.shape} and {other.shape}"
-                    )
-            else:
-                self_expand = self
-            out = []
-            for td0, td1 in zip(
-                self_expand.tensordicts, other.unbind(self_expand.stack_dim)
-            ):
-                out.append(td0 != td1)
-            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return LazyStackedTensorDict.lazy_stack(
-                [td != other for td in self.tensordicts],
-                self.stack_dim,
-            )
-        return True
-
-    def __xor__(self, other):
-        if is_tensorclass(other):
-            return other == self
-        if isinstance(other, (dict,)):
-            # we may want to broadcast it instead
-            other = TensorDict.from_dict(other, batch_size=self.batch_size)
-        if _is_tensor_collection(other.__class__):
-            if other.batch_size != self.batch_size:
-                if self.ndim < other.ndim:
-                    self_expand = self.expand(other.batch_size)
-                elif self.ndim > other.ndim:
-                    other = other.expand(self.batch_size)
-                    self_expand = self
-                else:
-                    raise RuntimeError(
-                        f"Could not compare tensordicts with shapes {self.shape} and {other.shape}"
-                    )
-            else:
-                self_expand = self
-            out = []
-            for td0, td1 in zip(
-                self_expand.tensordicts, other.unbind(self_expand.stack_dim)
-            ):
-                out.append(td0 ^ td1)
-            return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
-        if isinstance(other, (numbers.Number, Tensor)):
-            return LazyStackedTensorDict.lazy_stack(
-                [td ^ other for td in self.tensordicts],
-                self.stack_dim,
-            )
-        return False
+        return self._dispatch_comparison(other, "__ne__", "__ne__")
 
     def __or__(self, other):
+        return self._dispatch_comparison(other, "__or__", "__or__")
+
+    def __xor__(self, other):
+        return self._dispatch_comparison(other, "__xor__", "__xor__")
+
+    def __ge__(self, other):
+        return self._dispatch_comparison(other, "__ge__", "__le__")
+
+    def __gt__(self, other):
+        return self._dispatch_comparison(other, "__gt__", "__lt__")
+
+    def __le__(self, other):
+        return self._dispatch_comparison(other, "__le__", "__ge__")
+
+    def __lt__(self, other):
+        return self._dispatch_comparison(other, "__lt__", "__gt__")
+
+    def _dispatch_comparison(self, other, comparison_str, inverse_str):
         if is_tensorclass(other):
-            return other == self
+            return getattr(other, inverse_str)(self)
         if isinstance(other, (dict,)):
             # we may want to broadcast it instead
             other = TensorDict.from_dict(other, batch_size=self.batch_size)
@@ -1884,11 +1846,11 @@ class LazyStackedTensorDict(TensorDictBase):
             for td0, td1 in zip(
                 self_expand.tensordicts, other.unbind(self_expand.stack_dim)
             ):
-                out.append(td0 | td1)
+                out.append(getattr(td0, comparison_str)(td1))
             return LazyStackedTensorDict.lazy_stack(out, self.stack_dim)
         if isinstance(other, (numbers.Number, Tensor)):
             return LazyStackedTensorDict.lazy_stack(
-                [td | other for td in self.tensordicts],
+                [getattr(td, comparison_str)(other) for td in self.tensordicts],
                 self.stack_dim,
             )
         return False
@@ -3159,6 +3121,10 @@ class _CustomOpTensorDict(TensorDictBase):
     __or__ = TensorDict.__or__
     __eq__ = TensorDict.__eq__
     __ne__ = TensorDict.__ne__
+    __ge__ = TensorDict.__ge__
+    __gt__ = TensorDict.__gt__
+    __le__ = TensorDict.__le__
+    __lt__ = TensorDict.__lt__
     __setitem__ = TensorDict.__setitem__
     _add_batch_dim = TensorDict._add_batch_dim
     _check_device = TensorDict._check_device

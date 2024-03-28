@@ -2149,6 +2149,24 @@ class TestPointwiseOps:
         td **= other
         assert (td == 4).all()
 
+    @property
+    def _lazy_td(self):
+        tensordict = LazyStackedTensorDict(
+            TensorDict({"a": -2}), TensorDict({"a": -1, "b": -2}), stack_dim=0
+        )
+        return TensorDict({"super": tensordict})
+
+    def test_lazy_td_pointwise(self):
+        td = self._lazy_td
+        td.abs_()
+        assert (td > 0).all()
+        td = self._lazy_td
+        assert ((td + td) == td * 2).all()
+        td = self._lazy_td
+        td += self._lazy_td
+        assert (td == self._lazy_td * 2).all()
+        assert ((td.abs() ** 2).clamp_max(td) == td).all()
+
 
 @pytest.mark.parametrize(
     "td_name,device",

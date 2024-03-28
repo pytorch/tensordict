@@ -602,6 +602,30 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def __ne__(self, other: object) -> TensorDictBase:
         ...
 
+    @_fallback
+    def __xor__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __or__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __ge__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __gt__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __le__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __lt__(self, other: object) -> TensorDictBase:
+        ...
+
     def __getattr__(self, item: str) -> Any:
         if not item.startswith("_"):
             try:
@@ -883,14 +907,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_carry_over
     def _legacy_unsqueeze(self, dim: int) -> TensorDictBase:
-        ...
-
-    @_fallback
-    def __xor__(self, other):
-        ...
-
-    @_fallback
-    def __or__(self, other):
         ...
 
     _check_device = TensorDict._check_device

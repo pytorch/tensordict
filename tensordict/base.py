@@ -90,6 +90,24 @@ class _NoDefault:
 
 NO_DEFAULT = _NoDefault()
 
+
+class _NestedTensorsAsLists:
+    """Class used to iterate over leaves of lazily stacked tensordicts."""
+
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(_NestedTensorsAsLists, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+    def __call__(self, val):
+        return _default_is_leaf(val)
+
+
+_NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
+
 T = TypeVar("T", bound="TensorDictBase")
 
 
@@ -180,6 +198,50 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def __eq__(self, other: object) -> T:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __ge__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "greater or equal" operator, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __gt__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "greater than" operator, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __le__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "lower or equal" operator, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __lt__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "lower than" operator, for every key. The two tensordicts must have the same key set.
 
         Returns:
             a new TensorDict instance with all tensors are boolean
@@ -3279,11 +3341,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
-        is_leaf=None,
     ) -> List:
         return list(
             self.values(
-                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=_NESTED_TENSORS_AS_LISTS,
             )
         )
 
@@ -3292,7 +3355,6 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
-        is_leaf=None,
     ) -> Tuple[List, List]:
         return tuple(
             list(key_or_val)
@@ -3300,18 +3362,24 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 *self.items(
                     include_nested=include_nested,
                     leaves_only=leaves_only,
-                    is_leaf=is_leaf,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS,
                 )
             )
         )
 
     @cache  # noqa: B019
     def _grad(self):
-        return self._fast_apply(lambda x: x.grad)
+        result = self._fast_apply(lambda x: x.grad)
+        if self.is_locked:
+            return result.lock_()
+        return result
 
     @cache  # noqa: B019
     def _data(self):
-        return self._fast_apply(lambda x: x.data)
+        result = self._fast_apply(lambda x: x.data)
+        if self.is_locked:
+            return result.lock_()
+        return result
 
     @abc.abstractmethod
     def keys(
@@ -4656,7 +4724,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_abs(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def abs_(self) -> T:
@@ -4668,7 +4739,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_acos(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def acos_(self) -> T:
@@ -4680,7 +4754,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_exp(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def exp_(self) -> T:
@@ -4692,7 +4769,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_neg(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def neg_(self) -> T:
@@ -4704,7 +4784,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_reciprocal(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def reciprocal_(self) -> T:
@@ -4716,7 +4799,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_sigmoid(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def sigmoid_(self) -> T:
@@ -4728,7 +4814,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_sign(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def sign_(self) -> T:
@@ -4740,7 +4829,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_sin(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def sin_(self) -> T:
@@ -4752,7 +4844,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_sinh(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def sinh_(self) -> T:
@@ -4764,7 +4859,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_tan(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def tan_(self) -> T:
@@ -4776,7 +4874,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_tanh(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def tanh_(self) -> T:
@@ -4788,7 +4889,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_trunc(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def trunc_(self) -> T:
@@ -4804,6 +4908,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             batch_size=[],
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def lgamma(self) -> T:
@@ -4811,7 +4916,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_lgamma(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def lgamma_(self) -> T:
@@ -4823,7 +4931,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_frac(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def frac_(self) -> T:
@@ -4835,7 +4946,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_expm1(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def expm1_(self) -> T:
@@ -4847,7 +4961,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_log(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def log_(self) -> T:
@@ -4859,7 +4976,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_log10(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def log10_(self) -> T:
@@ -4871,7 +4991,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_log1p(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def log1p_(self) -> T:
@@ -4883,7 +5006,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_log2(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def log2_(self) -> T:
@@ -4895,7 +5021,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_ceil(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def ceil_(self) -> T:
@@ -4907,7 +5036,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_floor(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def floor_(self) -> T:
@@ -4919,7 +5051,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_round(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def round_(self) -> T:
@@ -4931,7 +5066,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_erf(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def erf_(self) -> T:
@@ -4943,7 +5081,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_erfc(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def erfc_(self) -> T:
@@ -4955,7 +5096,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_asin(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def asin_(self) -> T:
@@ -4967,7 +5111,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_atan(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def atan_(self) -> T:
@@ -4979,7 +5126,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_cos(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def cos_(self) -> T:
@@ -4991,7 +5141,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_cosh(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def cosh_(self) -> T:
@@ -5010,7 +5163,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             vals = torch._foreach_add(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def add_(self, other: TensorDictBase | float, alpha: float | None = None):
@@ -5037,7 +5193,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_lerp(vals, end_val, weight_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def lerp_(self, end: TensorDictBase | float, weight: TensorDictBase | float):
@@ -5065,7 +5224,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_addcdiv(vals, other1_val, other2_val, value=value)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def addcdiv_(self, other1, other2, value: float | None = 1):
@@ -5095,7 +5257,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_addcmul(vals, other1_val, other2_val, value=value)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def addcmul_(self, other1, other2, value: float | None = 1):
@@ -5124,7 +5289,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             vals = torch._foreach_sub(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
@@ -5155,7 +5323,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_mul(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def maximum_(self, other: TensorDictBase | float) -> T:
@@ -5175,7 +5346,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_maximum(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def minimum_(self, other: TensorDictBase | float) -> T:
@@ -5195,7 +5369,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_minimum(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def clamp_max_(self, other: TensorDictBase | float) -> T:
@@ -5215,7 +5392,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_clamp_max(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def clamp_min_(self, other: TensorDictBase | float) -> T:
@@ -5235,7 +5415,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_clamp_min(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def pow_(self, other: TensorDictBase | float) -> T:
@@ -5255,7 +5438,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_pow(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def div_(self, other: TensorDictBase | float) -> T:
@@ -5275,7 +5461,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_div(vals, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     def sqrt_(self):
@@ -5287,7 +5476,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         vals = torch._foreach_sqrt(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
-            lambda name, val: items[name], named=True, nested_keys=True
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
 
     # Functorch compatibility
