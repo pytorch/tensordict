@@ -5647,6 +5647,59 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         """
         return self.clone(recurse=False)
 
+    def to_padded_tensor(self, padding=0.0, mask_key: NestedKey | None = None):
+        """Converts all nested tensors to a padded version and adapts the batch-size accordingly.
+
+        Args:
+            padding (float): the padding value for the tensors in the tensordict.
+                Defaults to ``0.0``.
+            mask_key (NestedKey, optional): if provided, the key where a
+                mask for valid values will be written.
+                Will result in an error if the heterogeneous dimension
+                isn't part of the tensordict batch-size.
+                Defaults to ``None``
+
+        """
+        batch_size = self.batch_size
+        if any(shape == -1 for shape in batch_size):
+            new_batch_size = []
+        else:
+            new_batch_size = None
+            if mask_key is not None:
+                raise RuntimeError(
+                    "mask_key should only be provided if the "
+                    "heterogenous dimension is part of the batch-size."
+                )
+        padded_names = []
+
+        def to_padded(name, x):
+            if x.is_nested:
+                padded_names.append(name)
+                return torch.nested.to_padded_tensor(x, padding=padding)
+            return x
+
+        result = self._apply_nest(
+            to_padded,
+            batch_size=new_batch_size,
+            named=True,
+            nested_keys=True,
+        )
+        if new_batch_size is not None:
+            result = result.auto_batch_size_(batch_dims=self.batch_dims)
+
+            if mask_key:
+                # take the first of the padded keys
+                padded_key = padded_names[0]
+                # write the mask
+                val = self.get(padded_key)
+                val = torch.nested.to_padded_tensor(
+                    torch.ones_like(val, dtype=torch.bool), padding=False
+                )
+                if val.ndim > result.ndim:
+                    val = val.flatten(result.ndim, -1)[..., -1].clone()
+                result.set(mask_key, val)
+        return result
+
     def as_tensor(self):
         def as_tensor(tensor):
             try:
