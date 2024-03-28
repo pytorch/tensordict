@@ -140,7 +140,7 @@ You can also store non-tensor data in tensordicts:
 
 ### Tensor-like features
 
-TensorDict supports many common point-wise arithmetic operations such as `==` or `+`, `+=`
+**\[Nightly feature\]** TensorDict supports many common point-wise arithmetic operations such as `==` or `+`, `+=`
 and similar (provided that the underlying tensors support the said operation):
 ```python
 >>> td = TensorDict.fromkeys(["a", "b", "c"], 0)
