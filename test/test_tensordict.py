@@ -1867,6 +1867,22 @@ class TestGeneric:
         assert set(params_reg.flatten_keys(".").keys()) == set(sd.keys())
         assert_allclose_td(params_reg.flatten_keys("."), TensorDict(sd, []))
 
+    @pytest.mark.parametrize("mask_key", [None, "mask"])
+    def test_to_padded_tensor(self, mask_key):
+        td = TensorDict(
+            {
+                "nested": torch.nested.nested_tensor(
+                    [torch.ones(3, 4, 5), torch.ones(3, 6, 5)]
+                )
+            },
+            batch_size=[2, 3, -1],
+        )
+        assert td.shape == torch.Size([2, 3, -1])
+        td_padded = td.to_padded_tensor(padding=0, mask_key=mask_key)
+        assert td_padded.shape == torch.Size([2, 3, 6])
+        if mask_key:
+            assert (td_padded[td_padded["mask"]] != 0).all()
+
     def test_unbind_batchsize(self):
         td = TensorDict({"a": TensorDict({"b": torch.zeros(2, 3)}, [2, 3])}, [2])
         td["a"].batch_size
