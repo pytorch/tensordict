@@ -31,6 +31,7 @@ from typing import (
     OrderedDict,
     overload,
     Sequence,
+    Tuple,
     Type,
     TypeVar,
     Union,
@@ -207,16 +208,17 @@ class TensorDictBase(MutableMapping):
         return self.shape[0] if self.batch_dims else 0
 
     def __contains__(self, key: NestedKey) -> bool:
-        # by default a Mapping will implement __contains__ by calling __getitem__ and
-        # returning False if a KeyError is raised, True otherwise. TensorDict has a
-        # complex __getitem__ method since we support more than just retrieval of values
-        # by key, and so this can be quite inefficient, particularly if values are
-        # evaluated lazily on access. Hence, we don't support use of __contains__ and
-        # direct the user to use TensorDict.keys() instead
-        raise NotImplementedError(
-            "TensorDict does not support membership checks with the `in` keyword. If "
-            "you want to check if a particular key is in your TensorDict, please use "
-            "`key in tensordict.keys()` instead."
+        if isinstance(key, str):
+            return key in self.keys()
+        if isinstance(key, tuple):
+            key = unravel_key(key)
+            if not key:
+                raise RuntimeError(
+                    "key must be a NestedKey (a str or a possibly tuple of str)."
+                )
+            return key in self.keys(True)
+        raise RuntimeError(
+            "key must be a NestedKey (a str or a possibly tuple of str)."
         )
 
     def __getitem__(self, index: IndexType) -> T:
@@ -1482,6 +1484,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     @property
     @abc.abstractmethod
     def names(self):
+        """The dimension names of the tensordict.
+
+        The names can be set at construction time using the ``names`` argument.
+
+        See also :meth:`~.refine_names` for details on how to set the names after
+        construction.
+        """
         ...
 
     @abc.abstractmethod
@@ -1691,6 +1700,33 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     @device.setter
     @abc.abstractmethod
     def device(self, value: DeviceType) -> None:
+        ...
+
+    @lock_blocked
+    def clear(self) -> T:
+        """Erases the content of the tensordict."""
+        for key in list(self.keys()):
+            del self[key]
+        return self
+
+    @classmethod
+    def fromkeys(cls, keys: List[NestedKey], value: Any = 0):
+        """Creates a tensordict from a list of keys and a single value.
+
+        Args:
+            keys (list of NestedKey): An iterable specifying the keys of the new dictionary.
+            value (compatible type, optional): The value for all keys. Defaults to ``0``.
+        """
+        from tensordict._td import TensorDict
+
+        return TensorDict(dict.fromkeys(keys, value), batch_size=[])
+
+    @abc.abstractmethod
+    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
+        """Removes the item that was last inserted into the TensorDict.
+
+        ``popitem`` will only return non-nested values.
+        """
         ...
 
     def clear_device_(self) -> T:
@@ -2061,6 +2097,29 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             share_non_tensor=share_non_tensor,
         ).lock_()
 
+    def save(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        *,
+        num_threads: int = 0,
+        return_early: bool = False,
+        share_non_tensor: bool = False,
+    ) -> T:
+        """Saves the tensordict to disk.
+
+        This function is a proxy to :meth:`~.memmap`.
+        """
+        return self.memmap(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            num_threads=num_threads,
+            return_early=return_early,
+            share_non_tensor=share_non_tensor,
+        )
+
+    dumps = save
+
     def memmap(
         self,
         prefix: str | None = None,
@@ -2243,7 +2302,34 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         ).lock_()
 
     @classmethod
+    def load(cls, prefix: str | Path) -> T:
+        """Loads a tensordict from disk.
+
+        This class method is a proxy to :meth:`~.load_memmap`.
+        """
+        return cls.load_memmap(prefix)
+
+    @classmethod
     def load_memmap(cls, prefix: str | Path) -> T:
+        """Loads a memory-mapped tensordict from disk.
+
+        Args:
+            prefix (str or Path to folder): the path to the folder where the
+                saved tensordict should be fetched.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict.fromkeys(["a", "b", "c", ("nested", "e")], 0)
+            >>> td.memmap("./saved_td")
+            >>> td_load = TensorDict.load_memmap("./saved_td")
+            >>> assert (td == td_load).all()
+
+        This method also allows loading nested tensordicts.
+
+            >>> nested = TensorDict.load_memmap("./saved_td/nested")
+            >>> assert nested["e"] == 0
+
+        """
         prefix = Path(prefix)
 
         def load_metadata(filepath):
@@ -5340,6 +5426,37 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     @as_decorator("is_locked")
     def lock_(self) -> T:
+        """Locks a tensordict for non in-place operations.
+
+        Functions such as :meth:`~.set`, :meth:`~.__setitem__`, :meth:`~.update`,
+        :meth:`~.rename_key_` or other operations that add or remove entries
+        will be blocked.
+
+        This method can be used as a decorator.
+
+        Example:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": 1, "b": 2, "c": 3}, batch_size=[])
+            >>> with td.lock_():
+            ...     assert td.is_locked
+            ...     try:
+            ...         td.set("d", 0) # error!
+            ...     except RuntimeError:
+            ...         print("td is locked!")
+            ...     try:
+            ...         del td["d"]
+            ...     except RuntimeError:
+            ...         print("td is locked!")
+            ...     try:
+            ...         td.rename_key_("a", "d")
+            ...     except RuntimeError:
+            ...         print("td is locked!")
+            ...     td.set("a", 0, inplace=True)  # No storage is added, moved or removed
+            ...     td.set_("a", 0) # No storage is added, moved or removed
+            ...     td.update({"a": 0}, inplace=True)  # No storage is added, moved or removed
+            ...     td.update_({"a": 0})  # No storage is added, moved or removed
+            >>> assert not td.is_locked
+        """
         if self.is_locked:
             return self
         self._propagate_lock()
@@ -5381,6 +5498,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     @as_decorator("is_locked")
     def unlock_(self) -> T:
+        """Unlocks a tensordict for non in-place operations.
+
+        Can be used as a decorator.
+
+        See :meth:`~.lock_` for more details.
+        """
         try:
             sub_tds = self._propagate_unlock()
             for sub_td in sub_tds:

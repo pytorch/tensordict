@@ -16,7 +16,7 @@ from copy import copy, deepcopy
 from functools import wraps
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterator, OrderedDict, Sequence, Type
+from typing import Any, Callable, Iterator, OrderedDict, Sequence, Tuple, Type
 
 import numpy as np
 import torch
@@ -1429,6 +1429,20 @@ class LazyStackedTensorDict(TensorDictBase):
         for td in self.tensordicts[1:]:
             keys = keys.intersection(td.keys())
         return sorted(keys, key=str)
+
+    @lock_blocked
+    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
+        key, val = self.tensordicts[0].popitem()
+        vals = [val]
+        for i, td in enumerate(self.tensordicts[1:]):
+            val = td.pop(key, None)
+            if val is not None:
+                vals.append(val)
+            else:
+                for j in range(i + 1):
+                    self.tensordicts[j].set(key, vals[j])
+                raise RuntimeError(f"Could not find key {key} in all tensordicts.")
+        return key, torch.stack(vals, dim=self.stack_dim)
 
     def entry_class(self, key: NestedKey) -> type:
         data_type = type(self.tensordicts[0].get(key))
@@ -2940,6 +2954,11 @@ class _CustomOpTensorDict(TensorDictBase):
     def pin_memory(self) -> _CustomOpTensorDict:
         self._source.pin_memory()
         return self
+
+    @lock_blocked
+    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
+        key, val = self._source.popitem()
+        return key, self._transform_value(val)
 
     def detach_(self) -> _CustomOpTensorDict:
         self._source.detach_()
