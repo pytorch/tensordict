@@ -392,16 +392,6 @@ class TestGeneric:
         assert len(list(td_empty.keys())) == 1
         assert len(list(td_empty.get("b").keys())) == 1
 
-    def test_error_on_contains(self):
-        td = TensorDict(
-            {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
-        )
-        with pytest.raises(
-            NotImplementedError,
-            match="TensorDict does not support membership checks with the `in` keyword",
-        ):
-            "random_string" in td  # noqa: B015
-
     @pytest.mark.parametrize("inplace", [True, False])
     def test_exclude_nested(self, inplace):
         tensor_1 = torch.rand(4, 5, 6, 7)
@@ -628,6 +618,12 @@ class TestGeneric:
         td5_flat = td5.flatten_keys(separator)
         assert (f"a{separator}b") in td5_flat.keys()
         assert (f"a{separator}b{separator}c") in td5_flat.keys()
+
+    def test_fromkeys(self):
+        td = TensorDict.fromkeys({"a", "b", "c"})
+        assert td["a"] == 0
+        td = TensorDict.fromkeys({"a", "b", "c"}, 1)
+        assert td["a"] == 1
 
     @pytest.mark.parametrize("batch_size", [None, [3, 4]])
     @pytest.mark.parametrize("batch_dims", [None, 1, 2])
@@ -893,6 +889,15 @@ class TestGeneric:
             {"a": {"b": {}, "c": NonTensorData("a string!", batch_size=[])}}, []
         ).is_empty()
         assert not TensorDict({"a": {"b": {}, "c": 1}}, []).is_empty()
+
+    def test_is_in(self):
+        td = TensorDict.fromkeys({"a", "b", "c", ("d", "e")}, 0)
+        assert "a" in td
+        assert "d" in td
+        assert ("d", "e") in td
+        assert "f" not in td
+        with pytest.raises(RuntimeError, match="NestedKey"):
+            0 in td  # noqa: B015
 
     def test_keys_view(self):
         tensor = torch.randn(4, 5, 6, 7)
@@ -2388,6 +2393,13 @@ class TestTensorDicts(TestTensorDictsBase):
         assert sum([_td.shape[dim] for _td in td_chunks]) == td.shape[dim]
         assert (torch.cat(td_chunks, dim) == td).all()
 
+    def test_clear(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            tdc = td.clear()
+            assert tdc.is_empty()
+            assert tdc is td
+
     def test_clone_td(self, td_name, device, tmp_path):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
@@ -3768,6 +3780,15 @@ class TestTensorDicts(TestTensorDictsBase):
                 match=re.escape(r"You are trying to pop key"),
             ):
                 td.pop("z")
+
+    def test_popitem(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        with td.unlock_():
+            if td_name in ("sub_td", "sub_td2", "td_h5"):
+                with pytest.raises(NotImplementedError):
+                    key, val = td.popitem()
+            else:
+                key, val = td.popitem()
 
     @pytest.mark.parametrize("call_del", [True, False])
     def test_remove(self, td_name, device, call_del):
@@ -6416,11 +6437,8 @@ class TestLazyStackedTensorDict:
         assert td in lstd
         assert td.clone() not in lstd
 
-        with pytest.raises(
-            NotImplementedError,
-            match="TensorDict does not support membership checks with the `in` keyword",
-        ):
-            "random_string" in lstd  # noqa: B015
+        assert "random_string" not in lstd
+        assert "a" in lstd
 
     @pytest.mark.parametrize("dim", range(2))
     @pytest.mark.parametrize("index", range(2))

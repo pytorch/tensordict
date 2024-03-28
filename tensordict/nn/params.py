@@ -437,6 +437,11 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @lock_blocked
     @_unlock_and_set
+    def popitem(self):
+        ...
+
+    @lock_blocked
+    @_unlock_and_set
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
     ) -> TensorDictBase:
