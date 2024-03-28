@@ -7698,9 +7698,9 @@ class TestTensorDictMP(TestTensorDictsBase):
         return x.apply(lambda x: x + 1)
 
     @staticmethod
-    def add1_app_error(x):
-        # algerbraic ops are not supported
-        return x + 1
+    def matmul_app_error(x):
+        # non point-wise ops are not supported
+        return x @ 1
 
     @pytest.mark.parametrize(
         "chunksize,num_chunks", [[None, 2], [4, None], [None, None], [2, 2]]
@@ -7713,7 +7713,7 @@ class TestTensorDictMP(TestTensorDictsBase):
             with pytest.raises(
                 RuntimeError, match="Cannot call map on a TensorDictParams object"
             ):
-                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+                td.map(self.matmul_app_error, dim=dim, pool=_pool_fixt)
             return
         if chunksize is not None and num_chunks is not None:
             with pytest.raises(ValueError, match="but not both"):
@@ -7758,10 +7758,10 @@ class TestTensorDictMP(TestTensorDictsBase):
             with pytest.raises(
                 RuntimeError, match="Cannot call map on a TensorDictParams object"
             ):
-                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+                td.map(self.matmul_app_error, dim=dim, pool=_pool_fixt)
             return
         with pytest.raises(TypeError, match="unsupported operand"):
-            td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+            td.map(self.matmul_app_error, dim=dim, pool=_pool_fixt)
 
     def test_sharing_locked_td(self, td_name, device):
         td = getattr(self, td_name)(device)
