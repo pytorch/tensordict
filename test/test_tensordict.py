@@ -392,16 +392,6 @@ class TestGeneric:
         assert len(list(td_empty.keys())) == 1
         assert len(list(td_empty.get("b").keys())) == 1
 
-    def test_error_on_contains(self):
-        td = TensorDict(
-            {"a": TensorDict({"b": torch.rand(1, 2)}, [1, 2]), "c": torch.rand(1)}, [1]
-        )
-        with pytest.raises(
-            NotImplementedError,
-            match="TensorDict does not support membership checks with the `in` keyword",
-        ):
-            "random_string" in td  # noqa: B015
-
     @pytest.mark.parametrize("inplace", [True, False])
     def test_exclude_nested(self, inplace):
         tensor_1 = torch.rand(4, 5, 6, 7)
@@ -6350,11 +6340,8 @@ class TestLazyStackedTensorDict:
         assert td in lstd
         assert td.clone() not in lstd
 
-        with pytest.raises(
-            NotImplementedError,
-            match="TensorDict does not support membership checks with the `in` keyword",
-        ):
-            "random_string" in lstd  # noqa: B015
+        assert "random_string" not in lstd
+        assert "a" in lstd
 
     @pytest.mark.parametrize("dim", range(2))
     @pytest.mark.parametrize("index", range(2))
