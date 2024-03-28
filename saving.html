@@ -404,7 +404,7 @@ data in a regular <a class="reference internal" href="reference/generated/tensor
 </ul>
 <p>tensordict’s memory-mapped API relies on four core method:
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>,
-<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code>.</p>
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_like" title="tensordict.TensorDictBase.memmap_like"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_like()</span></code></a> and <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>.</p>
 <p>The <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_" title="tensordict.TensorDictBase.memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_()</span></code></a> and <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>
 methods will write the data on disk with or without modifying the tensordict
 instance that contains the data. These methods can be used to serialize a model
@@ -451,7 +451,7 @@ methods above.</p>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">meta.json</span></code> files contain all the releant information to rebuild the
 tensordict, such as device, batch-size, but also the tensordict subtypes.
-This means that <code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code> will be able to
+This means that <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.load_memmap" title="tensordict.TensorDict.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> will be able to
 reconstruct complex nested structure where sub-tensordicts have different types
 than parents:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">tensorclass</span><span class="p">,</span> <span class="n">TensorDictBase</span>

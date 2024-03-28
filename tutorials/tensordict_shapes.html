@@ -649,7 +649,7 @@ times, consider converting to a <a class="reference internal" href="../reference
 <h2>Using tensordicts as decorators<a class="headerlink" href="#using-tensordicts-as-decorators" title="Permalink to this heading">¶</a></h2>
 <p>For a bunch of reversible operations, tensordicts can be used as decorators.
 These operations include <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.to_module" title="tensordict.TensorDictBase.to_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_module()</span></code></a> for functional
-calls, <code class="xref py py-meth docutils literal notranslate"><span class="pre">unlock_()</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code>
+calls, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.unlock_" title="tensordict.TensorDictBase.unlock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unlock_()</span></code></a> and <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.lock_" title="tensordict.TensorDictBase.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a>
 or shape operations such as <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.view" title="tensordict.TensorDictBase.view"><code class="xref py py-meth docutils literal notranslate"><span class="pre">view()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.permute" title="tensordict.TensorDictBase.permute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">permute()</span></code></a>
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.transpose" title="tensordict.TensorDictBase.transpose"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transpose()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.squeeze" title="tensordict.TensorDictBase.squeeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">squeeze()</span></code></a> and
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase.unsqueeze" title="tensordict.TensorDictBase.unsqueeze"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a>.
@@ -679,19 +679,19 @@ like <a class="reference external" href="https://pytorch.org/docs/stable/generat
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[1, 2, 1, 1],
-        [2, 3, 3, 2],
-        [3, 2, 2, 2]])
+ tensor([[0, 0, 1, 1],
+        [2, 3, 0, 2],
+        [0, 1, 0, 2]])
 
 tensordict[&#39;a&#39;]:
- tensor([[0.3138, 0.6898, 0.9527, 0.9310],
-        [0.4727, 0.4273, 0.8103, 0.3149],
-        [0.9436, 0.7686, 0.8458, 0.3754]])
+ tensor([[0.4918, 0.0755, 0.5788, 0.4920],
+        [0.2282, 0.7763, 0.7093, 0.8559],
+        [0.4530, 0.6312, 0.7657, 0.1425]])
 
 gathered_tensordict[&#39;a&#39;]:
- tensor([[0.6898, 0.9527, 0.6898, 0.6898],
-        [0.8103, 0.3149, 0.3149, 0.8103],
-        [0.3754, 0.8458, 0.8458, 0.8458]])
+ tensor([[0.4918, 0.4918, 0.0755, 0.0755],
+        [0.7093, 0.8559, 0.2282, 0.7093],
+        [0.4530, 0.6312, 0.4530, 0.7657]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.008 seconds)</p>

@@ -512,7 +512,7 @@ The saving strategy is as follows: tensor data will be saved using memory-mapped
 tensors, and non-tensor data that can be serialized using a json format will
 be saved as such. Other data types will be saved using <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.2)"><code class="xref py py-func docutils literal notranslate"><span class="pre">save()</span></code></a>, which
 relies on <cite>pickle</cite>.</p>
-<p>Deserializing a <cite>tensorclass</cite> can be done via <code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code>.
+<p>Deserializing a <cite>tensorclass</cite> can be done via <a class="reference internal" href="generated/tensordict.TensorDict.html#tensordict.TensorDict.load_memmap" title="tensordict.TensorDict.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>.
 The instance created will have the same type as the one saved provided that
 the <cite>tensorclass</cite> is available in the working environment:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="s2">&quot;path/to/saved/directory&quot;</span><span class="p">)</span>

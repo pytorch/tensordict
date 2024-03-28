@@ -743,8 +743,9 @@ tensordict. Default is 0.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.clear">
-<span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None.</span>&#160; <span class="pre">Remove</span> <span class="pre">all</span> <span class="pre">items</span> <span class="pre">from</span> <span class="pre">D.</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.clear" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.clear" title="Permalink to this definition">¶</a></dt>
+<dd><p>Erases the content of the tensordict.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.clear_device_">
@@ -955,6 +956,13 @@ are placed, or None if TensorDict does not have a device.</p>
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.double">
 <span class="sig-name descname"><span class="pre">double</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.double" title="Permalink to this definition">¶</a></dt>
 <dd><p>Casts all tensors to <code class="docutils literal notranslate"><span class="pre">torch.bool</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.dumps">
+<span class="sig-name descname"><span class="pre">dumps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_existing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_early</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">share_non_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.dumps" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the tensordict to disk.</p>
+<p>This function is a proxy to <a class="reference internal" href="#tensordict.TensorDictParams.memmap" title="tensordict.TensorDictParams.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1425,6 +1433,20 @@ to very few use cases.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">modules</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">grad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.fromkeys">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fromkeys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.12)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.12)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.12)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.12)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.fromkeys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a tensordict from a list of keys and a single value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>keys</strong> (<em>list of NestedKey</em>) – An iterable specifying the keys of the new dictionary.</p></li>
+<li><p><strong>value</strong> (<em>compatible type</em><em>, </em><em>optional</em>) – The value for all keys. Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -2013,6 +2035,38 @@ leaf or not.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.load">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.load" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads a tensordict from disk.</p>
+<p>This class method is a proxy to <a class="reference internal" href="#tensordict.TensorDictParams.load_memmap" title="tensordict.TensorDictParams.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.load_memmap">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load_memmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.load_memmap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads a memory-mapped tensordict from disk.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><em>str</em></a><em> or </em><em>Path to folder</em>) – the path to the folder where the
+saved tensordict should be fetched.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">([</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;nested&quot;</span><span class="p">,</span> <span class="s2">&quot;e&quot;</span><span class="p">)],</span> <span class="mi">0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="s2">&quot;./saved_td&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td_load</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;./saved_td&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">td</span> <span class="o">==</span> <span class="n">td_load</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This method also allows loading nested tensordicts.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">nested</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="s2">&quot;./saved_td/nested&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="n">nested</span><span class="p">[</span><span class="s2">&quot;e&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.load_state_dict">
 <span class="sig-name descname"><span class="pre">load_state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.OrderedDict" title="(in Python v3.12)"><span class="pre">OrderedDict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.12)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assign</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.load_state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads a state-dict, formatted as in <a class="reference internal" href="#tensordict.TensorDictParams.state_dict" title="tensordict.TensorDictParams.state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a>, into the tensordict.</p>
@@ -2048,6 +2102,40 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data_zeroed</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(</span><span class="n">flatten</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">from_flatten</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data_zeroed</span><span class="p">[</span><span class="s2">&quot;3&quot;</span><span class="p">,</span> <span class="s2">&quot;3&quot;</span><span class="p">])</span>
 <span class="go">tensor(3)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.lock_">
+<span class="sig-name descname"><span class="pre">lock_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.lock_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Locks a tensordict for non in-place operations.</p>
+<p>Functions such as <a class="reference internal" href="#tensordict.TensorDictParams.set" title="tensordict.TensorDictParams.set"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set()</span></code></a>, <code class="xref py py-meth docutils literal notranslate"><span class="pre">__setitem__()</span></code>, <a class="reference internal" href="#tensordict.TensorDictParams.update" title="tensordict.TensorDictParams.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>,
+<a class="reference internal" href="#tensordict.TensorDictParams.rename_key_" title="tensordict.TensorDictParams.rename_key_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">rename_key_()</span></code></a> or other operations that add or remove entries
+will be blocked.</p>
+<p>This method can be used as a decorator.</p>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">td</span><span class="o">.</span><span class="n">lock_</span><span class="p">():</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="n">td</span><span class="o">.</span><span class="n">is_locked</span>
+<span class="gp">... </span>    <span class="k">try</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;d&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="c1"># error!</span>
+<span class="gp">... </span>    <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;td is locked!&quot;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">try</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="k">del</span> <span class="n">td</span><span class="p">[</span><span class="s2">&quot;d&quot;</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;td is locked!&quot;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">try</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="n">td</span><span class="o">.</span><span class="n">rename_key_</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;td is locked!&quot;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># No storage is added, moved or removed</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="o">.</span><span class="n">set_</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="c1"># No storage is added, moved or removed</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># No storage is added, moved or removed</span>
+<span class="gp">... </span>    <span class="n">td</span><span class="o">.</span><span class="n">update_</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>  <span class="c1"># No storage is added, moved or removed</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="ow">not</span> <span class="n">td</span><span class="o">.</span><span class="n">is_locked</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2666,6 +2754,15 @@ parameters in the result. Defaults to True.</p></li>
 </dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.names">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">names</span></span><a class="headerlink" href="#tensordict.TensorDictParams.names" title="Permalink to this definition">¶</a></dt>
+<dd><p>The dimension names of the tensordict.</p>
+<p>The names can be set at construction time using the <code class="docutils literal notranslate"><span class="pre">names</span></code> argument.</p>
+<p>See also <a class="reference internal" href="#tensordict.TensorDictParams.refine_names" title="tensordict.TensorDictParams.refine_names"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refine_names()</span></code></a> for details on how to set the names after
+construction.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.ndim">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ndim</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></em><a class="headerlink" href="#tensordict.TensorDictParams.ndim" title="Permalink to this definition">¶</a></dt>
 <dd><p>See <a class="reference internal" href="#tensordict.TensorDictParams.batch_dims" title="tensordict.TensorDictParams.batch_dims"><code class="xref py py-meth docutils literal notranslate"><span class="pre">batch_dims()</span></code></a>.</p>
@@ -2792,8 +2889,9 @@ is thrown.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.popitem">
-<span class="sig-name descname"><span class="pre">popitem</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">(k,</span> <span class="pre">v),</span> <span class="pre">remove</span> <span class="pre">and</span> <span class="pre">return</span> <span class="pre">some</span> <span class="pre">(key,</span> <span class="pre">value)</span> <span class="pre">pair</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.popitem" title="Permalink to this definition">¶</a></dt>
-<dd><p>as a 2-tuple; but raise KeyError if D is empty.</p>
+<span class="sig-name descname"><span class="pre">popitem</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.popitem" title="Permalink to this definition">¶</a></dt>
+<dd><p>Removes the item that was last inserted into the TensorDict.</p>
+<p><code class="docutils literal notranslate"><span class="pre">popitem</span></code> will only return non-nested values.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -3264,6 +3362,13 @@ parameters in this module. Default: <code class="docutils literal notranslate"><
 <span class="go">torch.Tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.save">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_existing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_early</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">share_non_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.save" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the tensordict to disk.</p>
+<p>This function is a proxy to <a class="reference internal" href="#tensordict.TensorDictParams.memmap" title="tensordict.TensorDictParams.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -4088,6 +4193,14 @@ model.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">model_state_dict</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)))</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.unlock_">
+<span class="sig-name descname"><span class="pre">unlock_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.TensorDictParams.unlock_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unlocks a tensordict for non in-place operations.</p>
+<p>Can be used as a decorator.</p>
+<p>See <a class="reference internal" href="#tensordict.TensorDictParams.lock_" title="tensordict.TensorDictParams.lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">lock_()</span></code></a> for more details.</p>
 </dd></dl>
 
 <dl class="py method">
