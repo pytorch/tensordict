@@ -1910,12 +1910,17 @@ class TensorDict(TensorDictBase):
                     dest=dest, value=value, key=key, copy_existing=copy_existing
                 ):
                     filename = None if prefix is None else str(prefix / f"{key}.memmap")
+                    if value.is_nested:
+                        shape = torch.tensor([val.shape for val in value])
+                    else:
+                        shape = None
                     dest._tensordict[key] = MemoryMappedTensor.from_tensor(
                         value.data if value.requires_grad else value,
                         filename=filename,
                         copy_existing=copy_existing,
                         existsok=True,
                         copy_data=not like,
+                        shape=shape,
                     )
 
                 if executor is None:
@@ -1925,7 +1930,9 @@ class TensorDict(TensorDictBase):
                 if prefix is not None:
                     metadata[key] = {
                         "device": str(value.device),
-                        "shape": list(value.shape),
+                        "shape": list(value.shape)
+                        if not value.is_nested
+                        else [list(item.shape) for item in value],
                         "dtype": str(value.dtype),
                     }
 
