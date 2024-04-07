@@ -11,14 +11,11 @@ namespace py = pybind11;
 py::tuple _unravel_key_to_tuple(const py::object &key) {
   bool is_tuple = py::isinstance<py::tuple>(key);
   bool is_str = py::isinstance<py::str>(key);
-  bool is_int = py::isinstance<py::int_>(key);
 
   if (is_tuple) {
     py::list newkey;
     for (const auto &subkey : key) {
       if (py::isinstance<py::str>(subkey)) {
-        newkey.append(subkey);
-      } else if (py::isinstance<py::int_>(subkey)) {
         newkey.append(subkey);
       } else {
         auto _key = _unravel_key_to_tuple(subkey.cast<py::object>());
@@ -31,8 +28,6 @@ py::tuple _unravel_key_to_tuple(const py::object &key) {
     return py::tuple(newkey);
   }
   if (is_str) {
-    return py::make_tuple(key);
-  } else if (is_int) {
     return py::make_tuple(key);
   } else {
     return py::make_tuple();

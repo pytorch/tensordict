@@ -93,7 +93,7 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         result = self.tensordict._key_list()
         if self.is_leaf is _NESTED_TENSORS_AS_LISTS:
             return [
-                (key, i)
+                (key, str(i))
                 for key in result
                 for i in range(len(self.tensordict.tensordicts))
             ]
@@ -1442,9 +1442,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             ):
                 if isinstance(key, str):
-                    key = (i, key)
+                    key = (str(i), key)
                 else:
-                    key = (i, *key)
+                    key = (str(i), *key)
                 yield key, val
 
     valid_keys = keys
@@ -1546,7 +1546,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 default=default,
                 named=named,
                 nested_keys=nested_keys,
-                prefix=prefix + (i,) if is_leaf is _NESTED_TENSORS_AS_LISTS else prefix,
+                prefix=prefix + (str(i),) if is_leaf is _NESTED_TENSORS_AS_LISTS else prefix,
                 inplace=inplace,
                 filter_empty=filter_empty,
                 is_leaf=is_leaf,
