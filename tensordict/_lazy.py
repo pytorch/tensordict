@@ -1427,25 +1427,31 @@ class LazyStackedTensorDict(TensorDictBase):
             yield from super().values(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             )
-        for td in self.tensordicts:
-            yield from td.values(
-                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
-            )
+        else:
+            for td in self.tensordicts:
+                yield from td.values(
+                    include_nested=include_nested,
+                    leaves_only=leaves_only,
+                    is_leaf=is_leaf,
+                )
 
     def items(self, include_nested=False, leaves_only=False, is_leaf=None):
         if is_leaf is not _NESTED_TENSORS_AS_LISTS:
             yield from super().items(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             )
-        for i, td in enumerate(self.tensordicts):
-            for key, val in td.items(
-                include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
-            ):
-                if isinstance(key, str):
-                    key = (str(i), key)
-                else:
-                    key = (str(i), *key)
-                yield key, val
+        else:
+            for i, td in enumerate(self.tensordicts):
+                for key, val in td.items(
+                    include_nested=include_nested,
+                    leaves_only=leaves_only,
+                    is_leaf=is_leaf,
+                ):
+                    if isinstance(key, str):
+                        key = (str(i), key)
+                    else:
+                        key = (str(i), *key)
+                    yield key, val
 
     valid_keys = keys
 
@@ -1546,7 +1552,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 default=default,
                 named=named,
                 nested_keys=nested_keys,
-                prefix=prefix + (str(i),) if is_leaf is _NESTED_TENSORS_AS_LISTS else prefix,
+                prefix=prefix + (str(i),)
+                if is_leaf is _NESTED_TENSORS_AS_LISTS
+                else prefix,
                 inplace=inplace,
                 filter_empty=filter_empty,
                 is_leaf=is_leaf,
@@ -1800,30 +1808,32 @@ class LazyStackedTensorDict(TensorDictBase):
                 return result
 
     def __eq__(self, other):
-        return self._dispatch_comparison(other, "__eq__", "__eq__")
+        return self._dispatch_comparison(other, "__eq__", "__eq__", default=False)
 
     def __ne__(self, other):
-        return self._dispatch_comparison(other, "__ne__", "__ne__")
+        return self._dispatch_comparison(other, "__ne__", "__ne__", default=True)
 
     def __or__(self, other):
-        return self._dispatch_comparison(other, "__or__", "__or__")
+        return self._dispatch_comparison(other, "__or__", "__or__", default=NO_DEFAULT)
 
     def __xor__(self, other):
-        return self._dispatch_comparison(other, "__xor__", "__xor__")
+        return self._dispatch_comparison(
+            other, "__xor__", "__xor__", default=NO_DEFAULT
+        )
 
     def __ge__(self, other):
-        return self._dispatch_comparison(other, "__ge__", "__le__")
+        return self._dispatch_comparison(other, "__ge__", "__le__", default=NO_DEFAULT)
 
     def __gt__(self, other):
-        return self._dispatch_comparison(other, "__gt__", "__lt__")
+        return self._dispatch_comparison(other, "__gt__", "__lt__", default=NO_DEFAULT)
 
     def __le__(self, other):
-        return self._dispatch_comparison(other, "__le__", "__ge__")
+        return self._dispatch_comparison(other, "__le__", "__ge__", default=NO_DEFAULT)
 
     def __lt__(self, other):
-        return self._dispatch_comparison(other, "__lt__", "__gt__")
+        return self._dispatch_comparison(other, "__lt__", "__gt__", default=NO_DEFAULT)
 
-    def _dispatch_comparison(self, other, comparison_str, inverse_str):
+    def _dispatch_comparison(self, other, comparison_str, inverse_str, default):
         if is_tensorclass(other):
             return getattr(other, inverse_str)(self)
         if isinstance(other, (dict,)):
@@ -1853,7 +1863,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 [getattr(td, comparison_str)(other) for td in self.tensordicts],
                 self.stack_dim,
             )
-        return False
+        if default is NO_DEFAULT:
+            raise ValueError(
+                f"Incompatible value {type(other)} for op {comparison_str}."
+            )
+        return default
 
     def all(self, dim: int = None) -> bool | TensorDictBase:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
