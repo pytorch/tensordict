@@ -2466,6 +2466,10 @@ class NonTensorStack(LazyStackedTensorDict):
             _BREAK_ON_MEMMAP = True
         return self
 
+    @property
+    def data(self):
+        raise AttributeError
+
 
 _register_tensor_class(NonTensorStack)
 
