@@ -377,6 +377,16 @@ class TestGeneric:
         else:
             assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
 
+    def test_dtype(self):
+        td = TensorDict(
+            {("an", "integer"): 1, ("a", "string"): "a", ("the", "float"): 1.0}
+        )
+        assert td.dtype is None
+        td = td.float()
+        assert td.dtype == torch.float
+        td = td.int()
+        assert td.dtype == torch.int
+
     def test_empty(self):
         td = TensorDict(
             {
@@ -1940,6 +1950,222 @@ class TestGeneric:
         assert ("a", "b") in t.keys(include_nested=True)
         assert t["a", "b"].shape == torch.Size([2, 3, 1])
         t.update({"a": {"d": [[[1]] * 3] * 2}})
+
+
+class TestPointwiseOps:
+    @property
+    def dummy_td_0(self):
+        return TensorDict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.zeros(3, 5, dtype=torch.int)}}
+        )
+
+    @property
+    def dummy_td_1(self):
+        return self.dummy_td_0.apply(lambda x: x + 1)
+
+    @property
+    def dummy_td_2(self):
+        return self.dummy_td_0.apply(lambda x: x + 2)
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_add(self, locked):
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        assert (td.add(1) == 1).all()
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        assert (td.add(other) == 1).all()
+
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        assert (td + 1 == 1).all()
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        assert (td + other == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_add_(self, locked):
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        assert (td.add_(1) == 1).all()
+        assert td.add_(1) is td
+        td = self.dummy_td_0
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        assert (td.add_(other) == 1).all()
+
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        td += 1
+        assert (td == 1).all()
+        td = self.dummy_td_0
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        td += other
+        assert (td == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_mul(self, locked):
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        assert (td.mul(0) == 0).all()
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        assert (td.mul(other) == 0).all()
+
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        td = td * 0
+        assert (td == 0).all()
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        td = td * other
+        assert (td == 0).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_mul_(self, locked):
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        assert (td.mul_(0) == 0).all()
+        assert td.mul_(0) is td
+        td = self.dummy_td_1
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        assert (td.mul_(other) == 0).all()
+
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        td *= 0
+        assert (td == 0).all()
+        td = self.dummy_td_1
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        td *= other
+        assert (td == 0).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_div(self, locked):
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td.div(2) == 1).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td.div(other) == 1).all()
+
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td / 2 == 1).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td / other == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_div_(self, locked):
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        assert (td.div_(2) == 1).all()
+        assert td.div_(2) is td
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        assert (td.div_(other) == 1).all()
+
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        td /= 2
+        assert (td == 1).all()
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        td /= other
+        assert (td == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_pow(self, locked):
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td.pow(2) == 4).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td.pow(other) == 4).all()
+
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td**2 == 4).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td**other == 4).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_pow_(self, locked):
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        assert (td.pow_(2) == 4).all()
+        assert td.pow_(2) is td
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        assert (td.pow_(other) == 4).all()
+
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        td **= 2
+        assert (td == 4).all()
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        td **= other
+        assert (td == 4).all()
+
+    @property
+    def _lazy_td(self):
+        tensordict = LazyStackedTensorDict(
+            TensorDict({"a": -2}), TensorDict({"a": -1, "b": -2}), stack_dim=0
+        )
+        return TensorDict({"super": tensordict})
+
+    def test_lazy_td_pointwise(self):
+        td = self._lazy_td
+        td.abs_()
+        assert (td > 0).all()
+        td = self._lazy_td
+        assert ((td + td) == td * 2).all()
+        td = self._lazy_td
+        td += self._lazy_td
+        assert (td == self._lazy_td * 2).all()
+        assert ((td.abs() ** 2).clamp_max(td) == td).all()
 
 
 @pytest.mark.parametrize(
@@ -7500,9 +7726,9 @@ class TestTensorDictMP(TestTensorDictsBase):
         return x.apply(lambda x: x + 1)
 
     @staticmethod
-    def add1_app_error(x):
-        # algerbraic ops are not supported
-        return x + 1
+    def matmul_app_error(x):
+        # non point-wise ops are not supported
+        return x @ 1
 
     @pytest.mark.parametrize(
         "chunksize,num_chunks", [[None, 2], [4, None], [None, None], [2, 2]]
@@ -7515,7 +7741,7 @@ class TestTensorDictMP(TestTensorDictsBase):
             with pytest.raises(
                 RuntimeError, match="Cannot call map on a TensorDictParams object"
             ):
-                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+                td.map(self.matmul_app_error, dim=dim, pool=_pool_fixt)
             return
         if chunksize is not None and num_chunks is not None:
             with pytest.raises(ValueError, match="but not both"):
@@ -7560,10 +7786,10 @@ class TestTensorDictMP(TestTensorDictsBase):
             with pytest.raises(
                 RuntimeError, match="Cannot call map on a TensorDictParams object"
             ):
-                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+                td.map(self.matmul_app_error, dim=dim, pool=_pool_fixt)
             return
         with pytest.raises(TypeError, match="unsupported operand"):
-            td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+            td.map(self.matmul_app_error, dim=dim, pool=_pool_fixt)
 
     def test_sharing_locked_td(self, td_name, device):
         td = getattr(self, td_name)(device)

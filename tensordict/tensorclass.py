@@ -172,7 +172,7 @@ def tensorclass(cls: T) -> T:
     expected_keys = set(cls.__dataclass_fields__)
 
     for attr in cls.__dataclass_fields__:
-        if attr in dir(TensorDict) and attr != "_is_non_tensor":
+        if attr in dir(TensorDict) and attr not in ("_is_non_tensor", "data"):
             raise AttributeError(
                 f"Attribute name {attr} can't be used with @tensorclass"
             )
@@ -2465,6 +2465,10 @@ class NonTensorStack(LazyStackedTensorDict):
         finally:
             _BREAK_ON_MEMMAP = True
         return self
+
+    @property
+    def data(self):
+        raise AttributeError
 
 
 _register_tensor_class(NonTensorStack)

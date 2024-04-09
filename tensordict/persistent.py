@@ -1233,6 +1233,10 @@ class PersistentTensorDict(TensorDictBase):
     __ne__ = TensorDict.__ne__
     __xor__ = TensorDict.__xor__
     __or__ = TensorDict.__or__
+    __ge__ = TensorDict.__ge__
+    __gt__ = TensorDict.__gt__
+    __le__ = TensorDict.__le__
+    __lt__ = TensorDict.__lt__
     _apply_nest = TensorDict._apply_nest
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared

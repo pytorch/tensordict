@@ -560,6 +560,126 @@ class TensorDict(TensorDictBase):
             )
         return False
 
+    def __ge__(self, other: object) -> T | bool:
+        if is_tensorclass(other):
+            return other <= self
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                keys1 = sorted(
+                    keys1,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                keys2 = sorted(
+                    keys2,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 >= other.get(key)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value >= other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
+    def __gt__(self, other: object) -> T | bool:
+        if is_tensorclass(other):
+            return other < self
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                keys1 = sorted(
+                    keys1,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                keys2 = sorted(
+                    keys2,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 > other.get(key)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value > other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
+    def __le__(self, other: object) -> T | bool:
+        if is_tensorclass(other):
+            return other >= self
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                keys1 = sorted(
+                    keys1,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                keys2 = sorted(
+                    keys2,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 <= other.get(key)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value <= other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
+    def __lt__(self, other: object) -> T | bool:
+        if is_tensorclass(other):
+            return other > self
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                keys1 = sorted(
+                    keys1,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                keys2 = sorted(
+                    keys2,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 < other.get(key)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value < other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
     def __setitem__(
         self,
         index: IndexType,
@@ -758,7 +878,9 @@ class TensorDict(TensorDictBase):
                 _others = [_other._get_str(key, default=default) for _other in others]
                 if named:
                     if nested_keys:
-                        item_trsf = fn(unravel_key(prefix + (key,)), item, *_others)
+                        item_trsf = fn(
+                            prefix + (key,) if prefix != () else key, item, *_others
+                        )
                     else:
                         item_trsf = fn(key, item, *_others)
                 else:
@@ -3076,6 +3198,10 @@ class _SubTensorDict(TensorDictBase):
     # TODO: check these implementations
     __eq__ = TensorDict.__eq__
     __ne__ = TensorDict.__ne__
+    __ge__ = TensorDict.__ge__
+    __gt__ = TensorDict.__gt__
+    __le__ = TensorDict.__le__
+    __lt__ = TensorDict.__lt__
     __setitem__ = TensorDict.__setitem__
     __xor__ = TensorDict.__xor__
     __or__ = TensorDict.__or__
