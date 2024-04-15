@@ -39,7 +39,7 @@ Some operations offered by TensorDict can be done via tree_map too, but with a g
 >>> td0, td1, td2 = td.unbind(0)
 >>> # similar structure with pytree
 >>> regular_dicts = tree_map(lambda x: x.unbind(0))
->>> regular_dict1, regular_dict2 regular_dict3 = [
+>>> regular_dict1, regular_dict2, regular_dict3 = [
 ...     {"a": regular_dicts["a"][i], "b": regular_dicts["b"][i]}
 ...     for i in range(3)]
 
@@ -52,7 +52,7 @@ The nested case is even more compelling:
 >>> td0, td1, td2 = td.unbind(0)
 >>> # similar structure with pytree
 >>> regular_dicts = tree_map(lambda x: x.unbind(0))
->>> regular_dict1, regular_dict2 regular_dict3 = [
+>>> regular_dict1, regular_dict2, regular_dict3 = [
 ...     {"a": {"c": regular_dicts["a"]["c"][i]}, "b": regular_dicts["b"][i]}
 ...     for i in range(3)
 
