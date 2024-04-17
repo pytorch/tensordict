@@ -1017,10 +1017,16 @@ def _unfold_sequence(seq):
 
 def _make_cache_key(args, kwargs):
     """Creats a key for the cache such that memory footprint is minimized."""
-    return (
-        tuple(_unfold_sequence(args)),
-        tuple(_unfold_sequence(sorted(kwargs.items()))),
-    )
+    # Fast path for the common args
+    if not args and not kwargs:
+        key = ((), ())
+    elif not kwargs and len(args) == 1 and type(args[0]) is str:
+        key = (args, ())
+    else:
+        return (
+            tuple(_unfold_sequence(args)),
+            tuple(_unfold_sequence(sorted(kwargs.items()))),
+        )
 
 
 def cache(fun):
