@@ -3329,8 +3329,7 @@ class _TensorDictKeysView:
             cls = value.__class__
             is_leaf = self.is_leaf(cls)
             if self.include_nested and not is_leaf:
-                subkeys = tuple(self._iter_helper(value, prefix=full_key))
-                yield from subkeys
+                yield from self._iter_helper(value, prefix=full_key)
             if not self.leaves_only or is_leaf:
                 yield full_key
 
