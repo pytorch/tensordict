@@ -1727,6 +1727,15 @@ class TensorDict(TensorDictBase):
                 ) from err
         return self
 
+    def _set_dict(
+        self,
+        d: dict[str, CompatibleType],
+        *,
+        validated: bool,
+    ):
+        assert validated == True, "Not Implemented for non-validated inputs"
+        self._tensordict = d
+
     def _set_tuple(
         self,
         key: NestedKey,
