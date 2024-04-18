@@ -1727,6 +1727,16 @@ class TensorDict(TensorDictBase):
                 ) from err
         return self
 
+    def _set_dict(
+        self,
+        d: dict[str, CompatibleType],
+        *,
+        validated: bool,
+    ):
+        if not validated:
+            raise RuntimeError("Not Implemented for non-validated inputs")
+        self._tensordict = d
+
     def _set_tuple(
         self,
         key: NestedKey,
@@ -2439,6 +2449,24 @@ class TensorDict(TensorDictBase):
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
             return self._tensordict.items()
+        elif include_nested and leaves_only:
+            is_leaf = _default_is_leaf if is_leaf is None else is_leaf
+
+            def fast_iter():
+                for k, val in self._tensordict.items():
+                    if not is_leaf(val.__class__):
+                        yield from (
+                            ((k, *((_key,) if isinstance(_key, str) else _key)), _val)
+                            for _key, _val in val.items(
+                                include_nested=include_nested,
+                                leaves_only=leaves_only,
+                                is_leaf=is_leaf,
+                            )
+                        )
+                    else:
+                        yield k, val
+
+            return fast_iter()
         else:
             return super().items(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf

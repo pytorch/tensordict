@@ -6225,12 +6225,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 )
             )
         )
-        all_leaves_flat = [separator.join(key) for key in all_leaves]
-        if len(set(all_leaves_flat)) < len(set(all_leaves)):
+        all_leaves_flat = [separator.join(key) for key, _ in all_leaves_items
+        ]
+
+        if len(set(all_leaves_flat)) < len(all_leaves_flat):
             # find duplicates
             seen = set()
             conflicts = []
-            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
+            for (leaf, _), leaf_flat in zip(all_leaves_items, all_leaves_flat):
                 if leaf_flat in seen:
                     conflicts.append(leaf)
                 else:
@@ -6239,14 +6241,20 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 f"Flattening keys in tensordict causes keys {conflicts} to collide."
             )
         result = self.empty()
-        for val, leaf_flat in zip(all_vals, all_leaves_flat):
-            result._set_str(
-                leaf_flat,
-                val,
+        if hasattr(result, "_set_dict"):
+            result._set_dict(
+                {k: v for v, k in zip(all_vals, all_leaves_flat)},
                 validated=True,
-                inplace=False,
-                non_blocking=False,
             )
+        else:
+            for val, leaf_flat in zip(all_vals, all_leaves_flat):
+                result._set_str(
+                    leaf_flat,
+                    val,
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
+                )
         # Uncomment if you want key operations to propagate the shared status
         # self._maybe_set_shared_attributes(result)
         if result._is_shared or result._is_memmap:
