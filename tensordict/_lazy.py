@@ -1202,6 +1202,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
                 batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
                 names=[name for i, name in enumerate(td.names) if i != in_dim],
+                propagate_lock=True,
             )
             for td in td.tensordicts
         ]
@@ -1493,7 +1494,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def apply_(self, fn: Callable, *others, **kwargs):
         others = (other.unbind(self.stack_dim) for other in others)
         for td, *_others in zip(self.tensordicts, *others):
-            td._fast_apply(fn, *_others, inplace=True, **kwargs)
+            td._fast_apply(fn, *_others, inplace=True, propagate_lock=True, **kwargs)
         return self
 
     def _apply_nest(
@@ -2896,7 +2897,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def contiguous(self) -> T:
-        return self._fast_apply(lambda x: x.contiguous())
+        return self._fast_apply(lambda x: x.contiguous(), propagate_lock=True)
 
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False

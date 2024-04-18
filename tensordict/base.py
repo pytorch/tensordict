@@ -668,7 +668,7 @@ class TensorDictBase(MutableMapping):
                     return nn.Parameter(param.detach(), orig_param.requires_grad)
                 return Buffer(param)
 
-            params = params._fast_apply(make_param, param_list[0])
+            params = params._fast_apply(make_param, param_list[0], propagate_lock=True)
         if as_module:
             from tensordict.nn import TensorDictParams
 
@@ -3369,14 +3369,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     @cache  # noqa: B019
     def _grad(self):
-        result = self._fast_apply(lambda x: x.grad)
+        result = self._fast_apply(lambda x: x.grad, propagate_lock=True)
         if self.is_locked:
             return result.lock_()
         return result
 
     @cache  # noqa: B019
     def _data(self):
-        result = self._fast_apply(lambda x: x.data)
+        result = self._fast_apply(lambda x: x.data, propagate_lock=True)
         if self.is_locked:
             return result.lock_()
         return result
@@ -3512,7 +3512,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         else:
             batch_size = [nelt] + list(self.batch_size[end_dim + 1 :])
         # TODO: check that this works with nested tds of different batch size
-        out = self._fast_apply(flatten, batch_size=batch_size)
+        out = self._fast_apply(flatten, batch_size=batch_size, propagate_lock=True)
         if self._has_names():
             names = [
                 name
@@ -3564,7 +3564,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         else:
             batch_size = list(unflattened_size) + list(self.batch_size[1:])
         # TODO: check that this works with nested tds of different batch size
-        out = self._fast_apply(unflatten, batch_size=batch_size)
+        out = self._fast_apply(unflatten, batch_size=batch_size, propagate_lock=True)
         if self._has_names():
             names = copy(self.names)
             for _ in range(len(unflattened_size) - 1):
@@ -4154,6 +4154,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
+        propagate_lock: bool = False,
         **constructor_kwargs,
     ) -> T | None:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
@@ -4189,6 +4190,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 is considered as a leaf and thereby will be kept in the tensordict even
                 if left untouched by the function.
                 Defaults to ``False`` for backward compatibility.
+            propagate_lock (bool, optional): if ``True``, a locked tensordict will produce
+                another locked tensordict. Defaults to ``False``.
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
 
@@ -4249,7 +4252,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             filter_empty=filter_empty,
             **constructor_kwargs,
         )
-        if not inplace and self.is_locked and result is not None:
+        if propagate_lock and not inplace and self.is_locked and result is not None:
             result.lock_()
         return result
 
@@ -4264,6 +4267,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
+        propagate_lock: bool = False,
         **constructor_kwargs,
     ) -> T | None:
         """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new atensordict.
@@ -4299,6 +4303,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 filtered out. This also comes with a lower computational cost as
                 empty data structures won't be created and destroyed. Defaults to
                 ``False`` for backward compatibility.
+            propagate_lock (bool, optional): if ``True``, a locked tensordict will produce
+                another locked tensordict. Defaults to ``False``.
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
 
@@ -4386,7 +4392,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             filter_empty=filter_empty,
             **constructor_kwargs,
         )
-        if not inplace and self.is_locked and result is not None:
+        if propagate_lock and not inplace and self.is_locked and result is not None:
             result.lock_()
         return result
 
@@ -4427,6 +4433,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # and non-tensor data will disappear if we use True by default.
         filter_empty: bool | None = False,
         is_leaf: Callable = None,
+        propagate_lock: bool = False,
         **constructor_kwargs,
     ) -> T | None:
         """A faster apply method.
@@ -4452,7 +4459,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             is_leaf=is_leaf,
             **constructor_kwargs,
         )
-        if not inplace and self.is_locked and result is not None:
+        if propagate_lock and not inplace and self.is_locked and result is not None:
             result.lock_()
         return result
 
@@ -4737,6 +4744,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def abs_(self) -> T:
@@ -4752,6 +4760,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def acos_(self) -> T:
@@ -4767,6 +4776,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def exp_(self) -> T:
@@ -4782,6 +4792,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def neg_(self) -> T:
@@ -4797,6 +4808,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def reciprocal_(self) -> T:
@@ -4812,6 +4824,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def sigmoid_(self) -> T:
@@ -4827,6 +4840,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def sign_(self) -> T:
@@ -4842,6 +4856,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def sin_(self) -> T:
@@ -4857,6 +4872,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def sinh_(self) -> T:
@@ -4872,6 +4888,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def tan_(self) -> T:
@@ -4887,6 +4904,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def tanh_(self) -> T:
@@ -4902,6 +4920,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def trunc_(self) -> T:
@@ -4918,6 +4937,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             nested_keys=True,
             batch_size=[],
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def lgamma(self) -> T:
@@ -4929,6 +4949,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def lgamma_(self) -> T:
@@ -4944,6 +4965,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def frac_(self) -> T:
@@ -4959,6 +4981,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def expm1_(self) -> T:
@@ -4974,6 +4997,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def log_(self) -> T:
@@ -4989,6 +5013,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def log10_(self) -> T:
@@ -5004,6 +5029,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def log1p_(self) -> T:
@@ -5019,6 +5045,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def log2_(self) -> T:
@@ -5034,6 +5061,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def ceil_(self) -> T:
@@ -5049,6 +5077,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def floor_(self) -> T:
@@ -5064,6 +5093,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def round_(self) -> T:
@@ -5079,6 +5109,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def erf_(self) -> T:
@@ -5094,6 +5125,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def erfc_(self) -> T:
@@ -5109,6 +5141,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def asin_(self) -> T:
@@ -5124,6 +5157,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def atan_(self) -> T:
@@ -5139,6 +5173,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def cos_(self) -> T:
@@ -5154,6 +5189,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def cosh_(self) -> T:
@@ -5176,6 +5212,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def add_(self, other: TensorDictBase | float, alpha: float | None = None):
@@ -5206,6 +5243,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def lerp_(self, end: TensorDictBase | float, weight: TensorDictBase | float):
@@ -5237,6 +5275,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def addcdiv_(self, other1, other2, value: float | None = 1):
@@ -5270,6 +5309,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def addcmul_(self, other1, other2, value: float | None = 1):
@@ -5302,6 +5342,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
@@ -5336,6 +5377,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def maximum_(self, other: TensorDictBase | float) -> T:
@@ -5359,6 +5401,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def minimum_(self, other: TensorDictBase | float) -> T:
@@ -5382,6 +5425,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def clamp_max_(self, other: TensorDictBase | float) -> T:
@@ -5405,6 +5449,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def clamp_min_(self, other: TensorDictBase | float) -> T:
@@ -5428,6 +5473,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def pow_(self, other: TensorDictBase | float) -> T:
@@ -5451,6 +5497,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def div_(self, other: TensorDictBase | float) -> T:
@@ -5474,6 +5521,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     def sqrt_(self):
@@ -5489,6 +5537,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
         )
 
     # Functorch compatibility
@@ -5938,7 +5987,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             except AttributeError:
                 return tensor
 
-        return self._fast_apply(as_tensor)
+        return self._fast_apply(as_tensor, propagate_lock=True)
 
     def to_dict(self) -> dict[str, Any]:
         """Returns a dictionary with key-value pairs matching those of the tensordict."""
@@ -6025,7 +6074,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         def fn(item):
             item.zero_()
 
-        self._fast_apply(fn=fn, call_on_nested=True)
+        self._fast_apply(fn=fn, call_on_nested=True, propagate_lock=True)
         return self
 
     def fill_(self, key: NestedKey, value: float | bool) -> T:
@@ -6620,27 +6669,27 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     def double(self):
         r"""Casts all tensors to ``torch.bool``."""
-        return self._fast_apply(lambda x: x.double())
+        return self._fast_apply(lambda x: x.double(), propagate_lock=True)
 
     def float(self):
         r"""Casts all tensors to ``torch.float``."""
-        return self._fast_apply(lambda x: x.float())
+        return self._fast_apply(lambda x: x.float(), propagate_lock=True)
 
     def int(self):
         r"""Casts all tensors to ``torch.int``."""
-        return self._fast_apply(lambda x: x.int())
+        return self._fast_apply(lambda x: x.int(), propagate_lock=True)
 
     def bool(self):
         r"""Casts all tensors to ``torch.bool``."""
-        return self._fast_apply(lambda x: x.bool())
+        return self._fast_apply(lambda x: x.bool(), propagate_lock=True)
 
     def half(self):
         r"""Casts all tensors to ``torch.half``."""
-        return self._fast_apply(lambda x: x.half())
+        return self._fast_apply(lambda x: x.half(), propagate_lock=True)
 
     def bfloat16(self):
         r"""Casts all tensors to ``torch.bfloat16``."""
-        return self._fast_apply(lambda x: x.bfloat16())
+        return self._fast_apply(lambda x: x.bfloat16(), propagate_lock=True)
 
     def type(self, dst_type):
         r"""Casts all tensors to :attr:`dst_type`.
@@ -6674,7 +6723,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             a new tensordict with no tensor requiring gradient.
 
         """
-        return self._fast_apply(lambda x: x.detach())
+        return self._fast_apply(
+            lambda x: x.detach(), propagate_lock=True,
+        )
 
 
 _ACCEPTED_CLASSES = (
