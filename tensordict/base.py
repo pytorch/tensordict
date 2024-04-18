@@ -6724,7 +6724,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
         """
         return self._fast_apply(
-            lambda x: x.detach(), propagate_lock=True,
+            lambda x: x.detach(),
+            propagate_lock=True,
         )
 
 
