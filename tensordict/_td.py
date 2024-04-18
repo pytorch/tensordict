@@ -952,6 +952,7 @@ class TensorDict(TensorDictBase):
             ),
             names=[name for i, name in enumerate(td.names) if i != in_dim],
             _run_checks=False,
+            lock=self.is_locked,
         )
         return out
 
@@ -972,6 +973,7 @@ class TensorDict(TensorDictBase):
             },
             batch_size=new_batch_size,
             names=new_names,
+            lock=self.is_locked,
         )
         return out
 
