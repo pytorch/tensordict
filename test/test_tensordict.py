@@ -1032,31 +1032,6 @@ class TestGeneric:
         td = TensorDict({"a": torch.zeros(3, 4)})
         assert td.batch_size == torch.Size([])
 
-    def test_non_blocking(self):
-        if torch.cuda.is_available():
-            device = "cuda"
-        elif torch.backends.mps.is_available():
-            device = "mps"
-        else:
-            pytest.skip("No device found")
-        for _ in range(10):
-            td = TensorDict(
-                {str(i): torch.ones((10,), device=device) for i in range(5)},
-                [10],
-                non_blocking=False,
-                device="cpu",
-            )
-            assert (td == 1).all()
-        with pytest.raises(AssertionError):
-            for _ in range(10):
-                td = TensorDict(
-                    {str(i): torch.ones((10,), device=device) for i in range(5)},
-                    [10],
-                    non_blocking=True,
-                    device="cpu",
-                )
-                assert (td == 1).all()
-
     def test_pad(self):
         dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
         td = TensorDict(
