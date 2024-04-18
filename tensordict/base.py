@@ -2783,7 +2783,6 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> td.get("y", default=None)
             None
         """
-        raise RuntimeError
         key = _unravel_key_to_tuple(key)
         if not key:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
