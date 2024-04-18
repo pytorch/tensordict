@@ -6217,9 +6217,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     def _flatten_keys_outplace(self, separator, is_leaf):
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
-        all_leaves, all_vals = zip(
+        all_leaves_all_vals = zip(
             *self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
         )
+        try:
+            all_leaves, all_vals = all_leaves_all_vals
+        except ValueError:
+            return self.empty()
         all_leaves_flat = [
             key if isinstance(key, str) else separator.join(key) for key in all_leaves
         ]
