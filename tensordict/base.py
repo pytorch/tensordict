@@ -6210,21 +6210,25 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 is_shared=False)
             >>> model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
         """
+        if inplace:
+            return self._flatten_keys_inplace(separator=separator, is_leaf=is_leaf)
+        return self._flatten_keys_outplace(separator=separator, is_leaf=is_leaf)
+
+    def _flatten_keys_outplace(self, separator, is_leaf):
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
-        all_leaves_items = list(
-            self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        all_leaves, all_vals = zip(
+            *self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
         )
         all_leaves_flat = [
-            separator.join(key) if isinstance(key, tuple) else key
-            for key, _ in all_leaves_items
+            key if isinstance(key, str) else separator.join(key) for key in all_leaves
         ]
 
         if len(set(all_leaves_flat)) < len(all_leaves_flat):
             # find duplicates
             seen = set()
             conflicts = []
-            for (leaf, _), leaf_flat in zip(all_leaves_items, all_leaves_flat):
+            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
                 if leaf_flat in seen:
                     conflicts.append(leaf)
                 else:
@@ -6232,36 +6236,56 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             raise KeyError(
                 f"Flattening keys in tensordict causes keys {conflicts} to collide."
             )
-        if inplace:
-            # we will need to remove the empty tensordicts later on
-            root_keys = set(self.keys())
-            for (leaf, _), leaf_flat in zip(all_leaves_items, all_leaves_flat):
-                self.rename_key_(leaf, leaf_flat)
-                if isinstance(leaf, str):
-                    root_keys.discard(leaf)
-            self.exclude(*root_keys, inplace=True)
-            return self
+        result = self.empty()
+        _set_dict = getattr(result, "_set_dict", None)
+        if _set_dict is not None:
+            _set_dict(
+                dict(zip(all_leaves_flat, all_vals)),
+                validated=True,
+            )
         else:
-            result = self.empty()
-            if hasattr(result, "_set_dict"):
-                result._set_dict(
-                    {k: v for (_, v), k in zip(all_leaves_items, all_leaves_flat)},
+            for val, leaf_flat in zip(all_vals, all_leaves_flat):
+                result._set_str(
+                    leaf_flat,
+                    val,
                     validated=True,
+                    inplace=False,
+                    non_blocking=False,
                 )
-            else:
-                for (leaf, _), leaf_flat in zip(all_leaves_items, all_leaves_flat):
-                    result._set_str(
-                        leaf_flat,
-                        self.get(leaf),
-                        validated=True,
-                        inplace=False,
-                        non_blocking=False,
-                    )
-            # Uncomment if you want key operations to propagate the shared status
-            # self._maybe_set_shared_attributes(result)
-            if result._is_shared or result._is_memmap:
-                result.lock_()
-            return result
+        # Uncomment if you want key operations to propagate the shared status
+        # self._maybe_set_shared_attributes(result)
+        # if result._is_shared or result._is_memmap:
+        #     result.lock_()
+        return result
+
+    def _flatten_keys_inplace(self, separator, is_leaf):
+        if is_leaf is None:
+            is_leaf = _is_leaf_nontensor
+        all_leaves = [
+            _unravel_key_to_tuple(key)
+            for key in self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        ]
+        all_leaves_flat = [separator.join(key) for key in all_leaves]
+        if len(set(all_leaves_flat)) < len(set(all_leaves)):
+            # find duplicates
+            seen = set()
+            conflicts = []
+            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
+                if leaf_flat in seen:
+                    conflicts.append(leaf)
+                else:
+                    seen.add(leaf_flat)
+            raise KeyError(
+                f"Flattening keys in tensordict causes keys {conflicts} to collide."
+            )
+        # we will need to remove the empty tensordicts later on
+        root_keys = set(self.keys())
+        for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
+            self.rename_key_(leaf, leaf_flat)
+            if isinstance(leaf, str):
+                root_keys.discard(leaf)
+        self.exclude(*root_keys, inplace=True)
+        return self
 
     @cache  # noqa: B019
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
