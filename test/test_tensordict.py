@@ -7398,7 +7398,9 @@ class TestNamedDims(TestTensorDictsBase):
         assert td["a"].names == ["a", "b"]
 
     def test_split(self):
-        td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"], lock=True)
+        td = TensorDict(
+            {}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"], lock=True
+        )
         _, tdu = td.split(dim=-1, split_size=[3, 3])
         assert tdu.names == ["a", "b", "c", "d"]
         _, tdu = td.split(dim=1, split_size=[1, 3])
