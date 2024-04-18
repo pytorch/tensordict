@@ -168,6 +168,10 @@ class TensorDict(TensorDictBase):
             tensordict. If provided, its length must match the one of the
             ``batch_size``. Defaults to ``None`` (no dimension name, or ``None``
             for every dimension).
+        non_blocking (bool, optional): if ``True`` and a device is passed, the tensordict
+            is delivered without synchronization. If ``False``, a global synchronization
+            will be made before passing the tensordict, making sure that all the stored
+            tensors are ready to be read. Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -204,8 +208,10 @@ class TensorDict(TensorDictBase):
         non_blocking: bool = False,
         _run_checks: bool = True,
     ) -> None:
+        has_device = False
         if device is not None and isinstance(device, (int, str)):
             device = torch.device(device)
+            has_device = True
         self._device = device
 
         self._tensordict = _tensordict = _StringOnlyDict()
@@ -219,7 +225,7 @@ class TensorDict(TensorDictBase):
                             batch_size=self._batch_size,
                             device=self._device,
                             _run_checks=_run_checks,
-                            non_blocking=non_blocking,
+                            non_blocking=True,
                         )
                     _tensordict[key] = value
             self._td_dim_names = names
@@ -234,7 +240,14 @@ class TensorDict(TensorDictBase):
 
             if source is not None:
                 for key, value in source.items():
-                    self.set(key, value, non_blocking=non_blocking)
+                    self.set(key, value, non_blocking=True)
+        if not non_blocking and has_device:
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            elif torch.backends.mps.is_available():
+                torch.mps.synchronize()
+            elif torch.backends.mha.is_available():
+                torch.mha.synchronize()
 
     @classmethod
     def from_module(
