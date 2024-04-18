@@ -1985,7 +1985,9 @@ class TestPointwiseOps:
         other = self.dummy_td_1
         if locked:
             other.lock_()
-        assert (td + other == 1).all()
+        r = td + other
+        assert r.is_locked is locked
+        assert (r == 1).all()
 
     @pytest.mark.parametrize("locked", [True, False])
     def test_add_(self, locked):
@@ -2032,6 +2034,7 @@ class TestPointwiseOps:
         if locked:
             other.lock_()
         td = td * other
+        assert td.is_locked is locked
         assert (td == 0).all()
 
     @pytest.mark.parametrize("locked", [True, False])
@@ -2077,7 +2080,9 @@ class TestPointwiseOps:
         other = self.dummy_td_2
         if locked:
             other.lock_()
-        assert (td / other == 1).all()
+        r = td / other
+        assert r.is_locked is locked
+        assert (r == 1).all()
 
     @pytest.mark.parametrize("locked", [True, False])
     def test_div_(self, locked):
@@ -2122,7 +2127,11 @@ class TestPointwiseOps:
         other = self.dummy_td_2
         if locked:
             other.lock_()
-        assert (td**other == 4).all()
+
+        r = td**other
+        assert r.is_locked is locked
+
+        assert (r == 4).all()
 
     @pytest.mark.parametrize("locked", [True, False])
     def test_pow_(self, locked):

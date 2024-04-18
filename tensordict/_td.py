@@ -168,6 +168,8 @@ class TensorDict(TensorDictBase):
             tensordict. If provided, its length must match the one of the
             ``batch_size``. Defaults to ``None`` (no dimension name, or ``None``
             for every dimension).
+        lock (bool, optional): if ``True``, the resulting tensordict will be
+            locked.
 
     Examples:
         >>> import torch
@@ -202,6 +204,7 @@ class TensorDict(TensorDictBase):
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
         non_blocking: bool = False,
+        lock: bool = False,
         _run_checks: bool = True,
     ) -> None:
         if device is not None and isinstance(device, (int, str)):
@@ -235,6 +238,8 @@ class TensorDict(TensorDictBase):
             if source is not None:
                 for key, value in source.items():
                     self.set(key, value, non_blocking=non_blocking)
+        if lock:
+            self.lock_()
 
     @classmethod
     def from_module(

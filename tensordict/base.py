@@ -4237,7 +4237,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
 
         """
-        return self._apply_nest(
+        result = self._apply_nest(
             fn,
             *others,
             batch_size=batch_size,
@@ -4249,6 +4249,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             filter_empty=filter_empty,
             **constructor_kwargs,
         )
+        if not inplace and self.is_locked and result is not None:
+            result.lock_()
+        return result
 
     def named_apply(
         self,
@@ -4369,7 +4372,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 is_shared=False)
 
         """
-        return self._apply_nest(
+        result = self._apply_nest(
             fn,
             *others,
             batch_size=batch_size,
@@ -4383,6 +4386,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             filter_empty=filter_empty,
             **constructor_kwargs,
         )
+        if not inplace and self.is_locked and result is not None:
+            result.lock_()
+        return result
 
     @abc.abstractmethod
     def _apply_nest(
@@ -4430,7 +4436,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         (device, shape etc.) match the :meth:`~.apply` ones.
 
         """
-        return self._apply_nest(
+        result = self._apply_nest(
             fn,
             *others,
             batch_size=batch_size,
@@ -4446,6 +4452,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             is_leaf=is_leaf,
             **constructor_kwargs,
         )
+        if not inplace and self.is_locked and result is not None:
+            result.lock_()
+        return result
 
     def map(
         self,
