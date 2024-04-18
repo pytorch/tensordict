@@ -5857,6 +5857,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 TensorDict will be copied too. Otherwise only the TensorDict
                 tree structure will be copied. Defaults to ``True``.
 
+        .. note:: Unlike many other ops (pointwise arithmetic, shape operations, ...) ``clone`` does not inherit the
+            original lock attribute. This design choice is made such that a clone can be created to be modified,
+            which is the most frequent usage.
+
         """
         result = self._clone(recurse=recurse, **kwargs)
         if not recurse and (result._is_shared or result._is_memmap):

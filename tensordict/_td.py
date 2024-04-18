@@ -1020,13 +1020,12 @@ class TensorDict(TensorDictBase):
             device=self.device,
             names=names,
             _run_checks=False,
+            lock=self.is_locked,
         )
         if self._is_memmap and _index_preserve_data_ptr(index):
             result._is_memmap = True
-            result.lock_()
         elif self._is_shared and _index_preserve_data_ptr(index):
             result._is_shared = True
-            result.lock_()
         return result
 
     def expand(self, *args, **kwargs) -> T:

@@ -4027,8 +4027,13 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         _ = str(td)
 
-    def test_reshape(self, td_name, device):
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_reshape(self, td_name, device, lock):
         td = getattr(self, td_name)(device)
+        if lock:
+            if td_name in ("sub_td", "sub_td2"):
+                pytest.skip()
+            td.lock_()
         td_reshape = td.reshape(td.shape)
         # assert isinstance(td_reshape, TensorDict)
         assert td_reshape.shape.numel() == td.shape.numel()
@@ -4053,6 +4058,8 @@ class TestTensorDicts(TestTensorDictsBase):
         assert isinstance(td_reshape, TensorDict)
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == torch.Size([td.shape.numel()])
+        if td.is_locked:
+            assert td_reshape.is_locked
 
     @pytest.mark.parametrize("strict", [True, False])
     @pytest.mark.parametrize("inplace", [True, False])
@@ -7316,12 +7323,14 @@ class TestNamedDims(TestTensorDictsBase):
             td.names = ["a", "b", "c"]
 
     def test_permute(self):
-        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        td = TensorDict({"sub": {}}, batch_size=[3, 4, 5, 6], names=None, lock=True)
         td.names = ["a", "b", "c", "d"]
         tdp = td.permute(-1, -2, -3, -4)
         assert tdp.names == list("dcba")
         tdp = td.permute(-1, 1, 2, -4)
         assert tdp.names == list("dbca")
+        assert tdp.is_locked
+        assert tdp["sub"].is_locked
 
     def test_permute_td(self):
         td = self.unsqueezed_td("cpu")
@@ -7389,11 +7398,12 @@ class TestNamedDims(TestTensorDictsBase):
         assert td["a"].names == ["a", "b"]
 
     def test_split(self):
-        td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
+        td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"], lock=True)
         _, tdu = td.split(dim=-1, split_size=[3, 3])
         assert tdu.names == ["a", "b", "c", "d"]
         _, tdu = td.split(dim=1, split_size=[1, 3])
         assert tdu.names == ["a", "b", "c", "d"]
+        assert tdu.is_locked
 
     def test_squeeze(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
