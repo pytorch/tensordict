@@ -186,6 +186,21 @@ class TestGeneric:
                 td_u.batch_size = [1]
             td_u.to_tensordict().batch_size = [1]
 
+    def test_depth(self):
+        td = TensorDict({"a": {"b": {"c": {"d": 0}, "e": 0}, "f": 0}, "g": 0}).lock_()
+        assert td.depth == 3
+        with td.unlock_():
+            del td["a", "b", "c", "d"]
+        assert td.depth == 2
+        with td.unlock_():
+            del td["a", "b", "c"]
+            del td["a", "b", "e"]
+        assert td.depth == 1
+        with td.unlock_():
+            del td["a", "b"]
+            del td["a", "f"]
+        assert td.depth == 0
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_cat_td(self, device):
         torch.manual_seed(1)
