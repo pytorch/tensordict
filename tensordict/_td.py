@@ -170,7 +170,7 @@ class TensorDict(TensorDictBase):
             for every dimension).
         non_blocking (bool, optional): if ``True`` and a device is passed, the tensordict
             is delivered without synchronization. If ``False``, a global synchronization
-            will be made before passing the tensordict, making sure that all the stored
+            will be made before delivering the tensordict, making sure that all the stored
             tensors are ready to be read. Defaults to ``False``.
 
     Examples:
@@ -246,8 +246,6 @@ class TensorDict(TensorDictBase):
                 torch.cuda.synchronize()
             elif torch.backends.mps.is_available():
                 torch.mps.synchronize()
-            elif torch.backends.mha.is_available():
-                torch.mha.synchronize()
 
     @classmethod
     def from_module(
