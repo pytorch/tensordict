@@ -1733,7 +1733,8 @@ class TensorDict(TensorDictBase):
         *,
         validated: bool,
     ):
-        assert validated == True, "Not Implemented for non-validated inputs"
+        if not validated:
+            raise RuntimeError("Not Implemented for non-validated inputs")
         self._tensordict = d
 
     def _set_tuple(
@@ -2450,6 +2451,7 @@ class TensorDict(TensorDictBase):
             return self._tensordict.items()
         elif include_nested and leaves_only:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
+
             def fast_iter():
                 for k, val in self._tensordict.items():
                     if not is_leaf(val.__class__):
@@ -2463,6 +2465,7 @@ class TensorDict(TensorDictBase):
                         )
                     else:
                         yield k, val
+
             return fast_iter()
         else:
             return super().items(

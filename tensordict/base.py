@@ -6216,7 +6216,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
         )
         all_leaves_flat = [
-            separator.join(key) if isinstance(key, tuple) else key for key, _ in all_leaves_items
+            separator.join(key) if isinstance(key, tuple) else key
+            for key, _ in all_leaves_items
         ]
 
         if len(set(all_leaves_flat)) < len(all_leaves_flat):
@@ -6243,9 +6244,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         else:
             result = self.empty()
             if hasattr(result, "_set_dict"):
-                result._set_dict({
-                    k: v for (_, v), k in zip(all_leaves_items, all_leaves_flat)
-                }, validated=True)
+                result._set_dict(
+                    {k: v for (_, v), k in zip(all_leaves_items, all_leaves_flat)},
+                    validated=True,
+                )
             else:
                 for (leaf, _), leaf_flat in zip(all_leaves_items, all_leaves_flat):
                     result._set_str(
