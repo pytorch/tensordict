@@ -6225,14 +6225,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 )
             )
         )
-        all_leaves_flat = [separator.join(key) for key, _ in all_leaves_items
-        ]
+        all_leaves_flat = [separator.join(key) for key in all_leaves]
 
         if len(set(all_leaves_flat)) < len(all_leaves_flat):
             # find duplicates
             seen = set()
             conflicts = []
-            for (leaf, _), leaf_flat in zip(all_leaves_items, all_leaves_flat):
+            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
                 if leaf_flat in seen:
                     conflicts.append(leaf)
                 else:
