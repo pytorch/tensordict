@@ -199,6 +199,7 @@ class TensorDict(TensorDictBase):
     _is_memmap = False
     _has_exclusive_keys = False
 
+    @torch.compiler.disable()
     def __init__(
         self,
         source: T | dict[str, CompatibleType],
@@ -332,6 +333,7 @@ class TensorDict(TensorDictBase):
                 return False
         return True
 
+    @torch.compiler.disable()
     def _to_module(
         self,
         module,
@@ -469,6 +471,7 @@ class TensorDict(TensorDictBase):
             else:
                 return TensorDict(_swap, batch_size=[], _run_checks=False)
 
+    @torch.compiler.disable()
     def __ne__(self, other: object) -> T | bool:
         if _is_tensorclass(other):
             return other != self
@@ -541,6 +544,7 @@ class TensorDict(TensorDictBase):
             )
         return False
 
+    @torch.compiler.disable()
     def __eq__(self, other: object) -> T | bool:
         if is_tensorclass(other):
             return other == self

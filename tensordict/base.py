@@ -283,6 +283,7 @@ class TensorDictBase(MutableMapping):
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
 
+    @torch.compiler.disable()
     def __getitem__(self, index: IndexType) -> T:
         """Indexes all tensors according to the provided index.
 
@@ -2472,6 +2473,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         """
         ...
 
+    @torch.compiler.disable()
     def set(
         self,
         key: NestedKey,
@@ -2784,6 +2786,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 _KEY_ERROR.format(key, self.__class__.__name__, sorted(self.keys()))
             )
 
+    @torch.compiler.disable()
     def get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
         """Gets the value stored with the input key.
 
@@ -3213,6 +3216,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         """See :obj:`TensorDictBase.update_at_`."""
         return self.update_at_(tensordict, idx, non_blocking=non_blocking)
 
+    @torch.compiler.disable()
     def is_empty(self) -> bool:
         """Checks if the tensordict contains any leaf."""
         for _ in self.keys(True, True):

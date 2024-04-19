@@ -183,6 +183,7 @@ class TestTDModule:
             nn.Sequential(nn.Tanh(), nn.Linear(1, 1), nn.Linear(2, 1)),
         ],
     )
+    @_set_auto_make_functional(True)
     def test_reset_functional(self, net):
         torch.manual_seed(0)
         module = TensorDictModule(net, in_keys=["in"], out_keys=["out"])
@@ -215,6 +216,7 @@ class TestTDModule:
                 p.all()
             ), f"Discrepancy between returned weights and those in-place updated {p}"
 
+    @_set_auto_make_functional(True)
     def test_reset_functional_called_once(self):
         import unittest.mock
 
@@ -414,6 +416,7 @@ class TestTDModule:
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )
+    @_set_auto_make_functional(True)
     def test_functional_before(self):
         torch.manual_seed(0)
         param_multiplier = 1
@@ -581,6 +584,7 @@ class TestTDModule:
     @pytest.mark.skipif(
         not _has_functorch, reason=f"functorch not found: err={FUNCTORCH_ERR}"
     )
+    @_set_auto_make_functional(True)
     def test_functional_with_buffer(self):
         torch.manual_seed(0)
         param_multiplier = 1

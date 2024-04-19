@@ -843,6 +843,7 @@ class TensorDictModuleBase(nn.Module):
             lambda x: x.detach().requires_grad_(), inplace=False
         )
 
+        is_stateless = False
         if _auto_make_functional() and not is_functional(self):
             make_functional(self, keep_params=True)
             is_stateless = self._is_stateless
