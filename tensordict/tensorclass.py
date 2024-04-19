@@ -24,6 +24,7 @@ from pathlib import Path
 from textwrap import indent
 from typing import Any, Callable, get_type_hints, List, Sequence, TypeVar
 
+import numpy as np
 import tensordict as tensordict_lib
 
 import torch
@@ -1068,7 +1069,10 @@ def _set(
                 f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
             )
 
-        if isinstance(value, tuple(tensordict_lib.base._ACCEPTED_CLASSES)):
+        # TODO: Use type annotation?
+        if isinstance(
+            value, (*tensordict_lib.base._ACCEPTED_CLASSES, numbers.Number, np.ndarray)
+        ):
             # Avoiding key clash, honoring the user input to assign tensor type data to the key
             if key in self._non_tensordict.keys():
                 if inplace:
