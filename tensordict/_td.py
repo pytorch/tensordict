@@ -20,7 +20,15 @@ from warnings import warn
 
 import numpy as np
 import torch
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -1561,7 +1569,11 @@ class TensorDict(TensorDictBase):
         else:
 
             def is_boolean(idx):
-                from functorch import dim as ftdim
+                try:
+                    from functorch import dim as ftdim
+
+                except ImportError:
+                    from tensordict.utils import _ftdim_mock as ftdim
 
                 if isinstance(idx, ftdim.Dim):
                     return None

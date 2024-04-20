@@ -29,7 +29,15 @@ from _utils_internal import (
     prod,
     TestTensorDictsBase,
 )
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 from tensordict import LazyStackedTensorDict, make_tensordict, TensorDict
 from tensordict._lazy import _CustomOpTensorDict
@@ -7869,6 +7877,7 @@ def _pool_fixt():
         yield pool
 
 
+@pytest.mark.skipif(not _has_funcdim, reason="functorch.dim could not be found")
 class TestFCD(TestTensorDictsBase):
     """Test stack for first-class dimension."""
 
