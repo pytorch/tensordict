@@ -31,6 +31,7 @@ from typing import (
     OrderedDict,
     overload,
     Sequence,
+    Tuple,
     Type,
     TypeVar,
     Union,
@@ -61,7 +62,6 @@ from tensordict.utils import (
     infer_size_impl,
     int_generator,
     is_non_tensor,
-    KeyedJaggedTensor,
     lazy_legacy,
     lock_blocked,
     NestedKey,
@@ -75,9 +75,38 @@ from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
+
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key, default=None)` is a valid usage.
-NO_DEFAULT = "_no_default_"
+class _NoDefault:
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(_NoDefault, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+
+NO_DEFAULT = _NoDefault()
+
+
+class _NestedTensorsAsLists:
+    """Class used to iterate over leaves of lazily stacked tensordicts."""
+
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(_NestedTensorsAsLists, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+    def __call__(self, val):
+        return _default_is_leaf(val)
+
+
+_NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
 
 T = TypeVar("T", bound="TensorDictBase")
 
@@ -107,12 +136,13 @@ _TENSOR_COLLECTION_MEMO = {}
 class TensorDictBase(MutableMapping):
     """TensorDictBase is an abstract parent class for TensorDicts, a torch.Tensor data container."""
 
-    _safe = False
-    _lazy = False
-    _inplace_set = False
-    is_meta = False
-    _is_locked = False
-    _cache = None
+    _safe: bool = False
+    _lazy: bool = False
+    _inplace_set: bool = False
+    is_meta: bool = False
+    _is_locked: bool = False
+    _cache: bool = None
+    _is_non_tensor: bool = False
 
     def __bool__(self) -> bool:
         raise RuntimeError("Converting a tensordict to boolean value is not permitted")
@@ -134,7 +164,7 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def __xor__(self, other):
+    def __xor__(self, other: TensorDictBase | float):
         """XOR operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -150,7 +180,7 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def __or__(self, other):
+    def __or__(self, other: TensorDictBase | float) -> T:
         """OR operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -168,6 +198,50 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def __eq__(self, other: object) -> T:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __ge__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "greater or equal" operator, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __gt__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "greater than" operator, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __le__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "lower or equal" operator, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __lt__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "lower than" operator, for every key. The two tensordicts must have the same key set.
 
         Returns:
             a new TensorDict instance with all tensors are boolean
@@ -196,16 +270,17 @@ class TensorDictBase(MutableMapping):
         return self.shape[0] if self.batch_dims else 0
 
     def __contains__(self, key: NestedKey) -> bool:
-        # by default a Mapping will implement __contains__ by calling __getitem__ and
-        # returning False if a KeyError is raised, True otherwise. TensorDict has a
-        # complex __getitem__ method since we support more than just retrieval of values
-        # by key, and so this can be quite inefficient, particularly if values are
-        # evaluated lazily on access. Hence, we don't support use of __contains__ and
-        # direct the user to use TensorDict.keys() instead
-        raise NotImplementedError(
-            "TensorDict does not support membership checks with the `in` keyword. If "
-            "you want to check if a particular key is in your TensorDict, please use "
-            "`key in tensordict.keys()` instead."
+        if isinstance(key, str):
+            return key in self.keys()
+        if isinstance(key, tuple):
+            key = unravel_key(key)
+            if not key:
+                raise RuntimeError(
+                    "key must be a NestedKey (a str or a possibly tuple of str)."
+                )
+            return key in self.keys(True)
+        raise RuntimeError(
+            "key must be a NestedKey (a str or a possibly tuple of str)."
         )
 
     def __getitem__(self, index: IndexType) -> T:
@@ -368,6 +443,57 @@ class TensorDictBase(MutableMapping):
         """
         _set_max_batch_size(self, batch_dims)
         return self
+
+    @abc.abstractmethod
+    def from_dict_instance(
+        self, input_dict, batch_size=None, device=None, batch_dims=None
+    ):
+        """Instance method version of :meth:`~tensordict.TensorDict.from_dict`.
+
+        Unlike :meth:`~tensordict.TensorDict.from_dict`, this method will
+        attempt to keep the tensordict types within the existing tree (for
+        any existing leaf).
+
+        Examples:
+            >>> from tensordict import TensorDict, tensorclass
+            >>> import torch
+            >>>
+            >>> @tensorclass
+            >>> class MyClass:
+            ...     x: torch.Tensor
+            ...     y: int
+            >>>
+            >>> td = TensorDict({"a": torch.randn(()), "b": MyClass(x=torch.zeros(()), y=1)})
+            >>> print(td.from_dict_instance(td.to_dict()))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: MyClass(
+                        x=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                        y=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> print(td.from_dict(td.to_dict()))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            x: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            y: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+
+        """
+        ...
 
     # Module interaction
     @classmethod
@@ -560,6 +686,7 @@ class TensorDictBase(MutableMapping):
         return_swap: bool = True,
         swap_dest=None,
         use_state_dict: bool = False,
+        non_blocking: bool = False,
         memo=None,  # deprecated
     ):
         """Writes the content of a TensorDictBase instance onto a given nn.Module attributes, recursively.
@@ -577,6 +704,9 @@ class TensorDictBase(MutableMapping):
             use_state_dict (bool, optional): if ``True``, state-dict API will be
                 used to load the parameters (including the state-dict hooks).
                 Defaults to ``False``.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Examples:
             >>> from torch import nn
@@ -601,6 +731,7 @@ class TensorDictBase(MutableMapping):
             swap_dest=swap_dest,
             memo=memo,
             use_state_dict=use_state_dict,
+            non_blocking=non_blocking,
         )
 
     @abc.abstractmethod
@@ -613,6 +744,7 @@ class TensorDictBase(MutableMapping):
         swap_dest=None,
         memo=None,
         use_state_dict: bool = False,
+        non_blocking: bool = False,
     ):
         ...
 
@@ -660,6 +792,32 @@ class TensorDictBase(MutableMapping):
             return self.batch_size
         return self.batch_size[dim]
 
+    @property
+    def data(self):
+        """Returns a tensordict containing the .data attributes of the leaf tensors."""
+        return self._data()
+
+    @property
+    def grad(self):
+        """Returns a tensordict containing the .grad attributes of the leaf tensors."""
+        return self._grad()
+
+    @cache  # noqa
+    def _dtype(self):
+        dtype = None
+        for val in self.values(True, True):
+            val_dtype = getattr(val, "dtype", None)
+            if dtype is None and val_dtype is not None:
+                dtype = val_dtype
+            elif dtype is not None and val_dtype is not None and dtype != val_dtype:
+                return None
+        return dtype
+
+    @property
+    def dtype(self):
+        """Returns the dtype of the values in the tensordict, if it is unique."""
+        return self._dtype()
+
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
             return
@@ -672,13 +830,14 @@ class TensorDictBase(MutableMapping):
             )
         if not isinstance(new_batch_size, torch.Size):
             new_batch_size = torch.Size(new_batch_size)
-        for key in self.keys():
-            if _is_tensor_collection(self.entry_class(key)):
-                tensordict = self.get(key)
-                if len(tensordict.batch_size) < len(new_batch_size):
+        for key, value in self.items():
+            if _is_tensor_collection(type(value)):
+                if len(value.batch_size) < len(new_batch_size):
                     # document as edge case
-                    tensordict.batch_size = new_batch_size
-                    self._set_str(key, tensordict, inplace=True, validated=True)
+                    value.batch_size = new_batch_size
+                    self._set_str(
+                        key, value, inplace=True, validated=True, non_blocking=False
+                    )
         self._check_new_batch_size(new_batch_size)
         self._change_batch_size(new_batch_size)
         if self._has_names():
@@ -722,6 +881,22 @@ class TensorDictBase(MutableMapping):
         1-element big.
         """
         return max(1, self.batch_size.numel())
+
+    @property
+    def depth(self) -> int:
+        """Returns the depth - maximum number of levels - of a tensordict.
+
+        The minimum depth is 0 (no nested tensordict).
+        """
+        return self._depth()
+
+    @cache  # noqa: B019
+    def _depth(self):
+        depth = 0
+        for key in self.keys(True, True, is_leaf=_is_leaf_nontensor):
+            if isinstance(key, tuple):
+                depth = max(depth, len(key) - 1)
+        return depth
 
     @overload
     def expand(self, *shape: int) -> T:
@@ -1413,6 +1588,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     @property
     @abc.abstractmethod
     def names(self):
+        """The dimension names of the tensordict.
+
+        The names can be set at construction time using the ``names`` argument.
+
+        See also :meth:`~.refine_names` for details on how to set the names after
+        construction.
+        """
         ...
 
     @abc.abstractmethod
@@ -1622,6 +1804,33 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     @device.setter
     @abc.abstractmethod
     def device(self, value: DeviceType) -> None:
+        ...
+
+    @lock_blocked
+    def clear(self) -> T:
+        """Erases the content of the tensordict."""
+        for key in list(self.keys()):
+            del self[key]
+        return self
+
+    @classmethod
+    def fromkeys(cls, keys: List[NestedKey], value: Any = 0):
+        """Creates a tensordict from a list of keys and a single value.
+
+        Args:
+            keys (list of NestedKey): An iterable specifying the keys of the new dictionary.
+            value (compatible type, optional): The value for all keys. Defaults to ``0``.
+        """
+        from tensordict._td import TensorDict
+
+        return TensorDict(dict.fromkeys(keys, value), batch_size=[])
+
+    @abc.abstractmethod
+    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
+        """Removes the item that was last inserted into the TensorDict.
+
+        ``popitem`` will only return non-nested values.
+        """
         ...
 
     def clear_device_(self) -> T:
@@ -1909,6 +2118,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         futures,
         inplace,
         like,
+        share_non_tensor,
     ) -> T:
         ...
 
@@ -1919,6 +2129,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         *,
         num_threads: int = 0,
         return_early: bool = False,
+        share_non_tensor: bool = False,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor, in-place.
 
@@ -1936,6 +2147,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 tensors. Defaults to `0`.
             return_early (bool, optional): if ``True`` and ``num_threads>0``,
                 the method will return a future of the tensordict.
+            share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
+                shared between the processes and writing operation (such as inplace update
+                or set) on any of the workers within a single node will update the value
+                on all other workers. If the number of non-tensor leaves is high (e.g.,
+                sharing large stacks of non-tensor data) this may result in OOM or similar
+                errors. Defaults to ``False``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -1950,6 +2167,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
+        prefix = Path(prefix) if prefix is not None else None
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -1966,6 +2184,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     futures=futures,
                     inplace=True,
                     like=False,
+                    share_non_tensor=share_non_tensor,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -1979,7 +2198,31 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             futures=None,
             executor=None,
             like=False,
+            share_non_tensor=share_non_tensor,
         ).lock_()
+
+    def save(
+        self,
+        prefix: str | None = None,
+        copy_existing: bool = False,
+        *,
+        num_threads: int = 0,
+        return_early: bool = False,
+        share_non_tensor: bool = False,
+    ) -> T:
+        """Saves the tensordict to disk.
+
+        This function is a proxy to :meth:`~.memmap`.
+        """
+        return self.memmap(
+            prefix=prefix,
+            copy_existing=copy_existing,
+            num_threads=num_threads,
+            return_early=return_early,
+            share_non_tensor=share_non_tensor,
+        )
+
+    dumps = save
 
     def memmap(
         self,
@@ -1988,6 +2231,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         *,
         num_threads: int = 0,
         return_early: bool = False,
+        share_non_tensor: bool = False,
     ) -> T:
         """Writes all tensors onto a corresponding memory-mapped Tensor in a new tensordict.
 
@@ -2005,6 +2249,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 tensors. Defaults to `0`.
             return_early (bool, optional): if ``True`` and ``num_threads>0``,
                 the method will return a future of the tensordict.
+            share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
+                shared between the processes and writing operation (such as inplace update
+                or set) on any of the workers within a single node will update the value
+                on all other workers. If the number of non-tensor leaves is high (e.g.,
+                sharing large stacks of non-tensor data) this may result in OOM or similar
+                errors. Defaults to ``False``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -2020,6 +2270,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
+        prefix = Path(prefix) if prefix is not None else None
+
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -2036,12 +2288,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     futures=futures,
                     inplace=False,
                     like=False,
+                    share_non_tensor=share_non_tensor,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
                     return result
                 else:
                     return TensorDictFuture(futures, result)
+
         return self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
@@ -2049,6 +2303,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             executor=None,
             like=False,
             futures=None,
+            share_non_tensor=share_non_tensor,
         ).lock_()
 
     def memmap_like(
@@ -2058,6 +2313,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         *,
         num_threads: int = 0,
         return_early: bool = False,
+        share_non_tensor: bool = False,
     ) -> T:
         """Creates a contentless Memory-mapped tensordict with the same shapes as the original one.
 
@@ -2075,6 +2331,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 tensors. Defaults to `0`.
             return_early (bool, optional): if ``True`` and ``num_threads>0``,
                 the method will return a future of the tensordict.
+            share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
+                shared between the processes and writing operation (such as inplace update
+                or set) on any of the workers within a single node will update the value
+                on all other workers. If the number of non-tensor leaves is high (e.g.,
+                sharing large stacks of non-tensor data) this may result in OOM or similar
+                errors. Defaults to ``False``.
 
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
@@ -2098,6 +2360,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> buffer = td.memmap_like("/path/to/dataset")
 
         """
+        prefix = Path(prefix) if prefix is not None else None
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -2122,6 +2385,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     futures=futures,
                     inplace=False,
                     like=True,
+                    share_non_tensor=share_non_tensor,
                 )
                 if not return_early:
                     concurrent.futures.wait(futures)
@@ -2138,10 +2402,38 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             like=True,
             executor=None,
             futures=None,
+            share_non_tensor=share_non_tensor,
         ).lock_()
 
     @classmethod
+    def load(cls, prefix: str | Path) -> T:
+        """Loads a tensordict from disk.
+
+        This class method is a proxy to :meth:`~.load_memmap`.
+        """
+        return cls.load_memmap(prefix)
+
+    @classmethod
     def load_memmap(cls, prefix: str | Path) -> T:
+        """Loads a memory-mapped tensordict from disk.
+
+        Args:
+            prefix (str or Path to folder): the path to the folder where the
+                saved tensordict should be fetched.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict.fromkeys(["a", "b", "c", ("nested", "e")], 0)
+            >>> td.memmap("./saved_td")
+            >>> td_load = TensorDict.load_memmap("./saved_td")
+            >>> assert (td == td_load).all()
+
+        This method also allows loading nested tensordicts.
+
+            >>> nested = TensorDict.load_memmap("./saved_td/nested")
+            >>> assert nested["e"] == 0
+
+        """
         prefix = Path(prefix)
 
         def load_metadata(filepath):
@@ -2159,7 +2451,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                     return other_cls._load_memmap(prefix, metadata)
             else:
                 raise RuntimeError(
-                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. Did you call _register_tensor_class(cls) on {type_name}?"
+                    f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. "
+                    f"Did you call _register_tensor_class(cls) on {type_name}?"
                 )
         return cls._load_memmap(prefix, metadata)
 
@@ -2180,7 +2473,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         ...
 
     def set(
-        self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
+        self,
+        key: NestedKey,
+        item: CompatibleType,
+        inplace: bool = False,
+        *,
+        non_blocking: bool = False,
+        **kwargs: Any,
     ) -> T:
         """Sets a new key-value pair.
 
@@ -2194,6 +2493,11 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 the entry cannot be found, it will be added. For a more restrictive
                 in-place operation, use :meth:`~.set_` instead.
                 Defaults to ``False``.
+
+        Keyword Args:
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2212,14 +2516,25 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # inplace is loose here, but for set_ it is constraining. We translate it
         # to None to tell _set_str and others to drop it if the key isn't found
         inplace = BEST_ATTEMPT_INPLACE if inplace else False
-        return self._set_tuple(key, item, inplace=inplace, validated=False)
+        return self._set_tuple(
+            key, item, inplace=inplace, validated=False, non_blocking=non_blocking
+        )
 
     @abc.abstractmethod
-    def _set_str(self, key, value, *, inplace, validated):
+    def _set_str(
+        self,
+        key: str,
+        value: Any,
+        *,
+        inplace: bool,
+        validated: bool,
+        ignore_lock: bool = False,
+        non_blocking: bool = False,
+    ):
         ...
 
     @abc.abstractmethod
-    def _set_tuple(self, key, value, *, inplace, validated):
+    def _set_tuple(self, key, value, *, inplace, validated, non_blocking: bool):
         ...
 
     @lock_blocked
@@ -2269,6 +2584,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             ),
             validated=True,
             inplace=False,
+            non_blocking=False,
         )
         return self
 
@@ -2347,13 +2663,25 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             inplace = has_key
         return inplace
 
-    def set_at_(self, key: NestedKey, value: CompatibleType, index: IndexType) -> T:
+    def set_at_(
+        self,
+        key: NestedKey,
+        value: CompatibleType,
+        index: IndexType,
+        *,
+        non_blocking: bool = False,
+    ) -> T:
         """Sets the values in-place at the index indicated by ``index``.
 
         Args:
             key (str, tuple of str): key to be modified.
             value (torch.Tensor): value to be set at the index `index`
             index (int, tensor or tuple): index where to write the values.
+
+        Keyword Args:
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2366,20 +2694,24 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> assert (x[0] == 1).all()
         """
         key = _unravel_key_to_tuple(key)
-        return self._set_at_tuple(key, value, index, validated=False)
+        return self._set_at_tuple(
+            key, value, index, validated=False, non_blocking=non_blocking
+        )
 
     @abc.abstractmethod
-    def _set_at_str(self, key, value, idx, *, validated):
+    def _set_at_str(self, key, value, idx, *, validated, non_blocking: bool):
         ...
 
     @abc.abstractmethod
-    def _set_at_tuple(self, key, value, idx, *, validated):
+    def _set_at_tuple(self, key, value, idx, *, validated, non_blocking: bool):
         ...
 
     def set_(
         self,
         key: NestedKey,
         item: CompatibleType,
+        *,
+        non_blocking: bool = False,
     ) -> T:
         """Sets a value to an existing key while keeping the original storage.
 
@@ -2387,6 +2719,11 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             key (str): name of the value
             item (torch.Tensor or compatible type, TensorDictBase): value to
                 be stored in the tensordict
+
+        Keyword Args:
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2400,7 +2737,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
         """
         key = _unravel_key_to_tuple(key)
-        return self._set_tuple(key, item, inplace=True, validated=False)
+        return self._set_tuple(
+            key, item, inplace=True, validated=False, non_blocking=non_blocking
+        )
 
     # Stack functionality
     @abc.abstractmethod
@@ -2522,6 +2861,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         clone: bool = False,
         inplace: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         """Updates the TensorDict with values from either a dictionary or another TensorDict.
@@ -2542,6 +2882,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 the list of keys in ``key_to_update`` will be updated.
                 This is aimed at avoiding calls to
                 ``data_dest.update(data_src.select(*keys_to_update))``.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2558,8 +2901,6 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> assert td['a'] is not other_td['a']
 
         """
-        from tensordict._lazy import LazyStackedTensorDict
-
         if input_dict_or_td is self:
             # no op
             return self
@@ -2592,11 +2933,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                             inplace=inplace,
                             clone=clone,
                             keys_to_update=sub_keys_to_update,
+                            non_blocking=non_blocking,
                         )
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
                         value.__class__
                     ):
+                        from tensordict._lazy import LazyStackedTensorDict
+
                         if isinstance(value, LazyStackedTensorDict) and not isinstance(
                             target, LazyStackedTensorDict
                         ):
@@ -2613,9 +2957,11 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                                     inplace=inplace,
                                     clone=clone,
                                     keys_to_update=sub_keys_to_update,
+                                    non_blocking=non_blocking,
                                 ),
                                 validated=True,
                                 inplace=False,
+                                non_blocking=non_blocking,
                             )
                         else:
                             sub_keys_to_update = _prune_selected_keys(
@@ -2625,6 +2971,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                                 value,
                                 inplace=inplace,
                                 clone=clone,
+                                non_blocking=non_blocking,
                                 keys_to_update=sub_keys_to_update,
                             )
                         continue
@@ -2633,6 +2980,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 value,
                 inplace=BEST_ATTEMPT_INPLACE if inplace else False,
                 validated=False,
+                non_blocking=non_blocking,
             )
         return self
 
@@ -2641,6 +2989,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         input_dict_or_td: dict[str, CompatibleType] | T,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         """Updates the TensorDict in-place with values from either a dictionary or another TensorDict.
@@ -2658,6 +3007,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 the list of keys in ``key_to_update`` will be updated.
                 This is aimed at avoiding calls to
                 ``data_dest.update_(data_src.select(*keys_to_update))``.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2680,41 +3032,41 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             if len(keys_to_update) == 0:
                 return self
             keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
-        if keys_to_update:
+
             named = True
 
             def inplace_update(name, dest, source):
                 if source is None:
-                    return dest
+                    return None
                 name = _unravel_key_to_tuple(name)
                 for key in keys_to_update:
                     if key == name[: len(key)]:
-                        return dest.copy_(source, non_blocking=True)
-                else:
-                    return dest
+                        dest.copy_(source, non_blocking=non_blocking)
 
         else:
             named = False
 
             def inplace_update(dest, source):
                 if source is None:
-                    return dest
-                return dest.copy_(source, non_blocking=True)
+                    return None
+                dest.copy_(source, non_blocking=non_blocking)
 
-        if not is_tensor_collection(input_dict_or_td):
+        if not _is_tensor_collection(type(input_dict_or_td)):
             from tensordict import TensorDict
 
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-        return self._apply_nest(
+        self._apply_nest(
             inplace_update,
             input_dict_or_td,
             nested_keys=True,
             default=None,
-            inplace=True,
+            filter_empty=True,
             named=named,
+            is_leaf=_is_leaf_nontensor,
         )
+        return self
 
     def update_at_(
         self,
@@ -2722,6 +3074,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         idx: IndexType,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         """Updates the TensorDict in-place at the specified index with values from either a dictionary or another TensorDict.
@@ -2740,6 +3093,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         Keyword Args:
             keys_to_update (sequence of NestedKeys, optional): if provided, only
                 the list of keys in ``key_to_update`` will be updated.
+            non_blocking (bool, optional): if ``True`` and this copy is between
+                different devices, the copy may occur asynchronously with respect
+                to the host.
 
         Returns:
             self
@@ -2763,6 +3119,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> assert (td[1] == 1).all()
 
         """
+        if idx == ():
+            return self.update_(
+                input_dict_or_td=input_dict_or_td,
+                keys_to_update=keys_to_update,
+                clone=clone,
+                non_blocking=non_blocking,
+            )
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
@@ -2781,7 +3144,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 )
             if clone:
                 value = value.clone()
-            self.set_at_((firstkey, *nextkeys), value, idx)
+            self.set_at_((firstkey, *nextkeys), value, idx, non_blocking=non_blocking)
         return self
 
     @lock_blocked
@@ -2830,7 +3193,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     def _create_nested_str(self, key):
         out = self.empty()
-        self._set_str(key, out, inplace=False, validated=True)
+        self._set_str(key, out, inplace=False, validated=True, non_blocking=False)
         return out
 
     def _create_nested_tuple(self, key):
@@ -2838,19 +3201,17 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         if len(key) > 1:
             td._create_nested_tuple(key[1:])
 
-    def copy_(self, tensordict: T, non_blocking: bool = None) -> T:
+    def copy_(self, tensordict: T, non_blocking: bool = False) -> T:
         """See :obj:`TensorDictBase.update_`.
 
         The non-blocking argument will be ignored and is just present for
         compatibility with :func:`torch.Tensor.copy_`.
         """
-        if non_blocking is False:
-            raise ValueError("non_blocking=False isn't supported in TensorDict.")
-        return self.update_(tensordict)
+        return self.update_(tensordict, non_blocking=non_blocking)
 
-    def copy_at_(self, tensordict: T, idx: IndexType) -> T:
+    def copy_at_(self, tensordict: T, idx: IndexType, non_blocking: bool = False) -> T:
         """See :obj:`TensorDictBase.update_at_`."""
-        return self.update_at_(tensordict, idx)
+        return self.update_at_(tensordict, idx, non_blocking=non_blocking)
 
     def is_empty(self) -> bool:
         """Checks if the tensordict contains any leaf."""
@@ -2990,6 +3351,51 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         else:
             for k in self.keys():
                 yield self._get_str(k, NO_DEFAULT)
+
+    @cache  # noqa: B019
+    def _values_list(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+    ) -> List:
+        return list(
+            self.values(
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=_NESTED_TENSORS_AS_LISTS,
+            )
+        )
+
+    @cache  # noqa: B019
+    def _items_list(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+    ) -> Tuple[List, List]:
+        return tuple(
+            list(key_or_val)
+            for key_or_val in zip(
+                *self.items(
+                    include_nested=include_nested,
+                    leaves_only=leaves_only,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS,
+                )
+            )
+        )
+
+    @cache  # noqa: B019
+    def _grad(self):
+        result = self._fast_apply(lambda x: x.grad)
+        if self.is_locked:
+            return result.lock_()
+        return result
+
+    @cache  # noqa: B019
+    def _data(self):
+        result = self._fast_apply(lambda x: x.data)
+        if self.is_locked:
+            return result.lock_()
+        return result
 
     @abc.abstractmethod
     def keys(
@@ -3437,6 +3843,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         _tag: int = -1,
         pseudo_rand: bool = False,
         group: "dist.ProcessGroup" | None = None,
+        non_blocking: bool = False,
     ) -> int:
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
@@ -3452,7 +3859,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             else:
                 _tag = int_generator(_tag + 1)
             dist.recv(value, src=src, tag=_tag, group=group)
-            self._set_str(key, value, inplace=True, validated=True)
+            self._set_str(
+                key, value, inplace=True, validated=True, non_blocking=non_blocking
+            )
 
         return _tag
 
@@ -3756,7 +4165,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         fn: Callable,
         *others: T,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
@@ -3863,7 +4272,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         *others: T,
         nested_keys: bool = False,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
@@ -3997,7 +4406,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         fn: Callable,
         *others: T,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         checked: bool = False,
@@ -4007,6 +4416,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         nested_keys: bool = False,
         prefix: tuple = (),
         filter_empty: bool | None = None,
+        is_leaf: Callable = None,
         **constructor_kwargs,
     ) -> T | None:
         ...
@@ -4016,7 +4426,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         fn: Callable,
         *others: T,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         call_on_nested: bool = False,
@@ -4026,6 +4436,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # filter_empty must be False because we use _fast_apply for all sorts of ops like expand etc
         # and non-tensor data will disappear if we use True by default.
         filter_empty: bool | None = False,
+        is_leaf: Callable = None,
         **constructor_kwargs,
     ) -> T | None:
         """A faster apply method.
@@ -4048,12 +4459,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             default=default,
             nested_keys=nested_keys,
             filter_empty=filter_empty,
+            is_leaf=is_leaf,
             **constructor_kwargs,
         )
 
     def map(
         self,
-        fn: Callable,
+        fn: Callable[[TensorDictBase], TensorDictBase | None],
         dim: int = 0,
         num_workers: int | None = None,
         *,
@@ -4066,6 +4478,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         worker_threads: int = 1,
         index_with_generator: bool = False,
         pbar: bool = False,
+        mp_start_method: str | None = None,
     ):
         """Maps a function to splits of the tensordict across one dimension.
 
@@ -4149,6 +4562,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 impact on the total runtime. Defaults to ``False``.
             pbar (bool, optional): if ``True``, a progress bar will be displayed.
                 Requires tqdm to be available. Defaults to ``False``.
+            mp_start_method (str, optional): the start method for multiprocessing.
+                If not provided, the default start method will be used.
+                Accepted strings are ``"fork"`` and ``"spawn"``. Keep in mind that
+                ``"cuda"`` tensors cannot be shared between processes with the
+                ``"fork"`` start method. This is without effect if the ``pool``
+                is passed to the ``map`` method.
 
         Examples:
             >>> import torch
@@ -4182,11 +4601,15 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             seed = (
                 torch.empty((), dtype=torch.int64).random_(generator=generator).item()
             )
+            if mp_start_method is not None:
+                ctx = mp.get_context(mp_start_method)
+            else:
+                ctx = mp.get_context()
 
-            queue = mp.Queue(maxsize=num_workers)
+            queue = ctx.Queue(maxsize=num_workers)
             for i in range(num_workers):
                 queue.put(i)
-            with mp.Pool(
+            with ctx.Pool(
                 processes=num_workers,
                 initializer=_proc_init,
                 initargs=(seed, queue, worker_threads),
@@ -4277,6 +4700,803 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             else:
                 out = torch.cat(imaplist, dim)
         return out
+
+    # point-wise arithmetic ops
+    def __add__(self, other: TensorDictBase | float) -> T:
+        return self.add(other)
+
+    def __iadd__(self, other: TensorDictBase | float) -> T:
+        return self.add_(other)
+
+    def __abs__(self):
+        return self.abs()
+
+    def __truediv__(self, other: TensorDictBase | float) -> T:
+        return self.div(other)
+
+    def __itruediv__(self, other: TensorDictBase | float) -> T:
+        return self.div_(other)
+
+    def __mul__(self, other: TensorDictBase | float) -> T:
+        return self.mul(other)
+
+    def __imul__(self, other: TensorDictBase | float) -> T:
+        return self.mul_(other)
+
+    def __sub__(self, other: TensorDictBase | float) -> T:
+        return self.sub(other)
+
+    def __isub__(self, other: TensorDictBase | float) -> T:
+        return self.sub_(other)
+
+    def __pow__(self, other: TensorDictBase | float) -> T:
+        return self.pow(other)
+
+    def __ipow__(self, other: TensorDictBase | float) -> T:
+        return self.pow_(other)
+
+    def abs(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_abs(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def abs_(self) -> T:
+        torch._foreach_abs_(self._values_list(True, True))
+        return self
+
+    def acos(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_acos(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def acos_(self) -> T:
+        torch._foreach_acos_(self._values_list(True, True))
+        return self
+
+    def exp(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_exp(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def exp_(self) -> T:
+        torch._foreach_exp_(self._values_list(True, True))
+        return self
+
+    def neg(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_neg(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def neg_(self) -> T:
+        torch._foreach_neg_(self._values_list(True, True))
+        return self
+
+    def reciprocal(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_reciprocal(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def reciprocal_(self) -> T:
+        torch._foreach_reciprocal_(self._values_list(True, True))
+        return self
+
+    def sigmoid(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sigmoid(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def sigmoid_(self) -> T:
+        torch._foreach_sigmoid_(self._values_list(True, True))
+        return self
+
+    def sign(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sign(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def sign_(self) -> T:
+        torch._foreach_sign_(self._values_list(True, True))
+        return self
+
+    def sin(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sin(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def sin_(self) -> T:
+        torch._foreach_sin_(self._values_list(True, True))
+        return self
+
+    def sinh(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sinh(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def sinh_(self) -> T:
+        torch._foreach_sinh_(self._values_list(True, True))
+        return self
+
+    def tan(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_tan(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def tan_(self) -> T:
+        torch._foreach_tan_(self._values_list(True, True))
+        return self
+
+    def tanh(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_tanh(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def tanh_(self) -> T:
+        torch._foreach_tanh_(self._values_list(True, True))
+        return self
+
+    def trunc(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_trunc(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def trunc_(self) -> T:
+        torch._foreach_trunc_(self._values_list(True, True))
+        return self
+
+    def norm(self, p="fro", dim=None, keepdim=False, out=None, dtype=None):
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_norm(vals, p=p, dim=dim, keepdim=keepdim, dtype=dtype)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            batch_size=[],
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def lgamma(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_lgamma(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def lgamma_(self) -> T:
+        torch._foreach_lgamma_(self._values_list(True, True))
+        return self
+
+    def frac(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_frac(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def frac_(self) -> T:
+        torch._foreach_frac_(self._values_list(True, True))
+        return self
+
+    def expm1(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_expm1(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def expm1_(self) -> T:
+        torch._foreach_expm1_(self._values_list(True, True))
+        return self
+
+    def log(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_log(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def log_(self) -> T:
+        torch._foreach_log_(self._values_list(True, True))
+        return self
+
+    def log10(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_log10(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def log10_(self) -> T:
+        torch._foreach_log10_(self._values_list(True, True))
+        return self
+
+    def log1p(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_log1p(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def log1p_(self) -> T:
+        torch._foreach_log1p_(self._values_list(True, True))
+        return self
+
+    def log2(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_log2(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def log2_(self) -> T:
+        torch._foreach_log2_(self._values_list(True, True))
+        return self
+
+    def ceil(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_ceil(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def ceil_(self) -> T:
+        torch._foreach_ceil_(self._values_list(True, True))
+        return self
+
+    def floor(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_floor(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def floor_(self) -> T:
+        torch._foreach_floor_(self._values_list(True, True))
+        return self
+
+    def round(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_round(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def round_(self) -> T:
+        torch._foreach_round_(self._values_list(True, True))
+        return self
+
+    def erf(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_erf(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def erf_(self) -> T:
+        torch._foreach_erf_(self._values_list(True, True))
+        return self
+
+    def erfc(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_erfc(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def erfc_(self) -> T:
+        torch._foreach_erfc_(self._values_list(True, True))
+        return self
+
+    def asin(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_asin(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def asin_(self) -> T:
+        torch._foreach_asin_(self._values_list(True, True))
+        return self
+
+    def atan(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_atan(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def atan_(self) -> T:
+        torch._foreach_atan_(self._values_list(True, True))
+        return self
+
+    def cos(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_cos(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def cos_(self) -> T:
+        torch._foreach_cos_(self._values_list(True, True))
+        return self
+
+    def cosh(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_cosh(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def cosh_(self) -> T:
+        torch._foreach_cosh_(self._values_list(True, True))
+        return self
+
+    def add(self, other: TensorDictBase | float, alpha: float | None = None):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            vals = torch._foreach_add(vals, other_val, alpha=alpha)
+        else:
+            vals = torch._foreach_add(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def add_(self, other: TensorDictBase | float, alpha: float | None = None):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            torch._foreach_add_(self._values_list(True, True), other_val, alpha=alpha)
+        else:
+            torch._foreach_add_(self._values_list(True, True), other_val)
+        return self
+
+    def lerp(self, end: TensorDictBase | float, weight: TensorDictBase | float):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(end)):
+            end_val = end._values_list(True, True)
+        else:
+            end_val = end
+        if _is_tensor_collection(type(weight)):
+            weight_val = weight._values_list(True, True)
+        else:
+            weight_val = weight
+        vals = torch._foreach_lerp(vals, end_val, weight_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def lerp_(self, end: TensorDictBase | float, weight: TensorDictBase | float):
+        if _is_tensor_collection(type(end)):
+            end_val = end._values_list(True, True)
+        else:
+            end_val = end
+        if _is_tensor_collection(type(weight)):
+            weight_val = weight._values_list(True, True)
+        else:
+            weight_val = weight
+        torch._foreach_lerp_(self._values_list(True, True), end_val, weight_val)
+        return self
+
+    def addcdiv(self, other1, other2, value: float | None = 1):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other1)):
+            other1_val = other1._values_list(True, True)
+        else:
+            other1_val = other1
+        if _is_tensor_collection(type(other2)):
+            other2_val = other2._values_list(True, True)
+        else:
+            other2_val = other2
+        vals = torch._foreach_addcdiv(vals, other1_val, other2_val, value=value)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def addcdiv_(self, other1, other2, value: float | None = 1):
+        if _is_tensor_collection(type(other1)):
+            other1_val = other1._values_list(True, True)
+        else:
+            other1_val = other1
+        if _is_tensor_collection(type(other2)):
+            other2_val = other2._values_list(True, True)
+        else:
+            other2_val = other2
+        torch._foreach_addcdiv_(
+            self._values_list(True, True), other1_val, other2_val, value=value
+        )
+        return self
+
+    def addcmul(self, other1, other2, value: float | None = 1):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other1)):
+            other1_val = other1._values_list(True, True)
+        else:
+            other1_val = other1
+        if _is_tensor_collection(type(other2)):
+            other2_val = other2._values_list(True, True)
+        else:
+            other2_val = other2
+        vals = torch._foreach_addcmul(vals, other1_val, other2_val, value=value)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def addcmul_(self, other1, other2, value: float | None = 1):
+        if _is_tensor_collection(type(other1)):
+            other1_val = other1._values_list(True, True)
+        else:
+            other1_val = other1
+        if _is_tensor_collection(type(other2)):
+            other2_val = other2._values_list(True, True)
+        else:
+            other2_val = other2
+        torch._foreach_addcmul_(
+            self._values_list(True, True), other1_val, other2_val, value=value
+        )
+        return self
+
+    def sub(self, other: TensorDictBase | float, alpha: float | None = None):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            vals = torch._foreach_sub(vals, other_val, alpha=alpha)
+        else:
+            vals = torch._foreach_sub(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            torch._foreach_sub_(self._values_list(True, True), other_val, alpha=alpha)
+        else:
+            torch._foreach_sub_(self._values_list(True, True), other_val)
+        return self
+
+    def mul_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_mul_(self._values_list(True, True), other_val)
+        return self
+
+    def mul(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_mul(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def maximum_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_maximum_(self._values_list(True, True), other_val)
+        return self
+
+    def maximum(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_maximum(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def minimum_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_minimum_(self._values_list(True, True), other_val)
+        return self
+
+    def minimum(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_minimum(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def clamp_max_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_clamp_max_(self._values_list(True, True), other_val)
+        return self
+
+    def clamp_max(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_clamp_max(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def clamp_min_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_clamp_min_(self._values_list(True, True), other_val)
+        return self
+
+    def clamp_min(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_clamp_min(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def pow_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_pow_(self._values_list(True, True), other_val)
+        return self
+
+    def pow(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_pow(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def div_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_div_(self._values_list(True, True), other_val)
+        return self
+
+    def div(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_div(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+
+    def sqrt_(self):
+        torch._foreach_sqrt_(self._values_list(True, True))
+        return self
+
+    def sqrt(self):
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sqrt(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
 
     # Functorch compatibility
     @abc.abstractmethod
@@ -4531,6 +5751,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 device=None,
                 is_shared=False)
         """
+        keys = unravel_key_list(keys)
         result = self._select(*keys, inplace=inplace, strict=strict)
         if not inplace and (result._is_memmap or result._is_shared):
             result.lock_()
@@ -4585,6 +5806,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 is_shared=False)
 
         """
+        keys = unravel_key_list(keys)
         result = self._exclude(*keys, inplace=inplace)
         if not inplace and (result._is_memmap or result._is_shared):
             result.lock_()
@@ -4658,6 +5880,59 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         Equivalent to `TensorDictBase.clone(recurse=False)`
         """
         return self.clone(recurse=False)
+
+    def to_padded_tensor(self, padding=0.0, mask_key: NestedKey | None = None):
+        """Converts all nested tensors to a padded version and adapts the batch-size accordingly.
+
+        Args:
+            padding (float): the padding value for the tensors in the tensordict.
+                Defaults to ``0.0``.
+            mask_key (NestedKey, optional): if provided, the key where a
+                mask for valid values will be written.
+                Will result in an error if the heterogeneous dimension
+                isn't part of the tensordict batch-size.
+                Defaults to ``None``
+
+        """
+        batch_size = self.batch_size
+        if any(shape == -1 for shape in batch_size):
+            new_batch_size = []
+        else:
+            new_batch_size = None
+            if mask_key is not None:
+                raise RuntimeError(
+                    "mask_key should only be provided if the "
+                    "heterogenous dimension is part of the batch-size."
+                )
+        padded_names = []
+
+        def to_padded(name, x):
+            if x.is_nested:
+                padded_names.append(name)
+                return torch.nested.to_padded_tensor(x, padding=padding)
+            return x
+
+        result = self._apply_nest(
+            to_padded,
+            batch_size=new_batch_size,
+            named=True,
+            nested_keys=True,
+        )
+        if new_batch_size is not None:
+            result = result.auto_batch_size_(batch_dims=self.batch_dims)
+
+            if mask_key:
+                # take the first of the padded keys
+                padded_key = padded_names[0]
+                # write the mask
+                val = self.get(padded_key)
+                val = torch.nested.to_padded_tensor(
+                    torch.ones_like(val, dtype=torch.bool), padding=False
+                )
+                if val.ndim > result.ndim:
+                    val = val.flatten(result.ndim, -1)[..., -1].clone()
+                result.set(mask_key, val)
+        return result
 
     def as_tensor(self):
         def as_tensor(tensor):
@@ -4773,7 +6048,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             data._fast_apply(lambda x: x.fill_(value), inplace=True)
         else:
             data = data.fill_(value)
-            self._set_tuple(key, data, inplace=True, validated=True)
+            self._set_tuple(key, data, inplace=True, validated=True, non_blocking=False)
         return self
 
     # Masking
@@ -4951,14 +6226,66 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 is_shared=False)
             >>> model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
         """
+        if inplace:
+            return self._flatten_keys_inplace(separator=separator, is_leaf=is_leaf)
+        return self._flatten_keys_outplace(separator=separator, is_leaf=is_leaf)
+
+    def _flatten_keys_outplace(self, separator, is_leaf):
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
-        all_leaves = list(
-            self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        all_leaves_all_vals = zip(
+            *self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
         )
+        try:
+            all_leaves, all_vals = all_leaves_all_vals
+        except ValueError:
+            return self.empty()
         all_leaves_flat = [
-            separator.join(key) if isinstance(key, tuple) else key for key in all_leaves
+            key if isinstance(key, str) else separator.join(key) for key in all_leaves
         ]
+
+        if len(set(all_leaves_flat)) < len(all_leaves_flat):
+            # find duplicates
+            seen = set()
+            conflicts = []
+            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
+                if leaf_flat in seen:
+                    conflicts.append(leaf)
+                else:
+                    seen.add(leaf_flat)
+            raise KeyError(
+                f"Flattening keys in tensordict causes keys {conflicts} to collide."
+            )
+        result = self.empty()
+        _set_dict = getattr(result, "_set_dict", None)
+        if _set_dict is not None:
+            _set_dict(
+                dict(zip(all_leaves_flat, all_vals)),
+                validated=True,
+            )
+        else:
+            for val, leaf_flat in zip(all_vals, all_leaves_flat):
+                result._set_str(
+                    leaf_flat,
+                    val,
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
+                )
+        # Uncomment if you want key operations to propagate the shared status
+        # self._maybe_set_shared_attributes(result)
+        # if result._is_shared or result._is_memmap:
+        #     result.lock_()
+        return result
+
+    def _flatten_keys_inplace(self, separator, is_leaf):
+        if is_leaf is None:
+            is_leaf = _is_leaf_nontensor
+        all_leaves = [
+            _unravel_key_to_tuple(key)
+            for key in self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        ]
+        all_leaves_flat = [separator.join(key) for key in all_leaves]
         if len(set(all_leaves_flat)) < len(set(all_leaves)):
             # find duplicates
             seen = set()
@@ -4971,26 +6298,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             raise KeyError(
                 f"Flattening keys in tensordict causes keys {conflicts} to collide."
             )
-        if inplace:
-            # we will need to remove the empty tensordicts later on
-            root_keys = set(self.keys())
-            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
-                self.rename_key_(leaf, leaf_flat)
-                if isinstance(leaf, str):
-                    root_keys.discard(leaf)
-            self.exclude(*root_keys, inplace=True)
-            return self
-        else:
-            result = self.empty()
-            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
-                result._set_str(
-                    leaf_flat, self.get(leaf), validated=True, inplace=False
-                )
-            # Uncomment if you want key operations to propagate the shared status
-            # self._maybe_set_shared_attributes(result)
-            if result._is_shared or result._is_memmap:
-                result.lock_()
-            return result
+        # we will need to remove the empty tensordicts later on
+        root_keys = set(self.keys())
+        for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
+            self.rename_key_(leaf, leaf_flat)
+            if isinstance(leaf, str):
+                root_keys.discard(leaf)
+        self.exclude(*root_keys, inplace=True)
+        return self
 
     @cache  # noqa: B019
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
@@ -5146,6 +6461,37 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     @as_decorator("is_locked")
     def lock_(self) -> T:
+        """Locks a tensordict for non in-place operations.
+
+        Functions such as :meth:`~.set`, :meth:`~.__setitem__`, :meth:`~.update`,
+        :meth:`~.rename_key_` or other operations that add or remove entries
+        will be blocked.
+
+        This method can be used as a decorator.
+
+        Example:
+            >>> from tensordict import TensorDict
+            >>> td = TensorDict({"a": 1, "b": 2, "c": 3}, batch_size=[])
+            >>> with td.lock_():
+            ...     assert td.is_locked
+            ...     try:
+            ...         td.set("d", 0) # error!
+            ...     except RuntimeError:
+            ...         print("td is locked!")
+            ...     try:
+            ...         del td["d"]
+            ...     except RuntimeError:
+            ...         print("td is locked!")
+            ...     try:
+            ...         td.rename_key_("a", "d")
+            ...     except RuntimeError:
+            ...         print("td is locked!")
+            ...     td.set("a", 0, inplace=True)  # No storage is added, moved or removed
+            ...     td.set_("a", 0) # No storage is added, moved or removed
+            ...     td.update({"a": 0}, inplace=True)  # No storage is added, moved or removed
+            ...     td.update_({"a": 0})  # No storage is added, moved or removed
+            >>> assert not td.is_locked
+        """
         if self.is_locked:
             return self
         self._propagate_lock()
@@ -5187,6 +6533,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     @as_decorator("is_locked")
     def unlock_(self) -> T:
+        """Unlocks a tensordict for non in-place operations.
+
+        Can be used as a decorator.
+
+        See :meth:`~.lock_` for more details.
+        """
         try:
             sub_tds = self._propagate_unlock()
             for sub_td in sub_tds:
@@ -5346,8 +6698,9 @@ def _register_tensor_class(cls):
 
 
 def _is_tensor_collection(datatype):
-    out = _TENSOR_COLLECTION_MEMO.get(datatype, None)
-    if out is None:
+    try:
+        out = _TENSOR_COLLECTION_MEMO[datatype]
+    except KeyError:
         if issubclass(datatype, TensorDictBase):
             out = True
         elif _is_tensorclass(datatype):
@@ -5387,8 +6740,8 @@ def _default_is_leaf(cls: Type) -> bool:
 
 
 def _is_leaf_nontensor(cls: Type) -> bool:
-    if issubclass(cls, KeyedJaggedTensor):
-        return False
     if _is_tensor_collection(cls):
-        return cls.__dict__.get("_non_tensor", False)
+        return cls._is_non_tensor
+    # if issubclass(cls, KeyedJaggedTensor):
+    #     return False
     return issubclass(cls, torch.Tensor)

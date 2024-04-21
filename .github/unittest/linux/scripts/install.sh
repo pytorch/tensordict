@@ -28,15 +28,15 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      python -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
+      python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu
   else
-      python -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+      python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+      python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
   else
-      python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/$CU_VERSION
+      python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/$CU_VERSION
   fi
 else
   printf "Failed to install pytorch"
@@ -46,11 +46,11 @@ fi
 printf "* Installing tensordict\n"
 python setup.py develop
 
-# install torchsnapshot nightly
-if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  python -m pip install git+https://github.com/pytorch/torchsnapshot --no-build-isolation
-elif [[ "$TORCH_VERSION" == "stable" ]]; then
-  python -m pip install torchsnapshot
-fi
+# # install torchsnapshot nightly
+# if [[ "$TORCH_VERSION" == "nightly" ]]; then
+#   python -m pip install git+https://github.com/pytorch/torchsnapshot --no-build-isolation
+# elif [[ "$TORCH_VERSION" == "stable" ]]; then
+#   python -m pip install torchsnapshot
+# fi
 # smoke test
-python -c "import functorch;import torchsnapshot"
+python -c "import functorch"

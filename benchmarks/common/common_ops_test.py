@@ -530,6 +530,16 @@ def test_update_nested(benchmark, td):
     benchmark(exec_update_nested)
 
 
+def test_update__nested(benchmark, td):
+    td2 = td.clone()
+
+    def exec_update__nested():
+        tdc = td.clone()
+        tdc.update_(td2)
+
+    benchmark(exec_update__nested)
+
+
 def test_set_nested(benchmark, td, b):
     def exec_set_nested():
         tdc = td.clone()

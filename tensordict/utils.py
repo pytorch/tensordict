@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import collections
 import concurrent.futures
-import dataclasses
 import inspect
 import logging
 
@@ -40,7 +39,13 @@ from typing import (
 
 import numpy as np
 import torch
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    _has_funcdim = False
 from packaging.version import parse
 from tensordict._contextlib import _DecoratorContextManager
 from tensordict._tensordict import (  # noqa: F401
@@ -119,6 +124,21 @@ _LOCK_ERROR = (
     "Cannot modify locked TensorDict. For in-place modification, consider "
     "using the `set_()` method and make sure the key is present."
 )
+
+
+LOGGING_LEVEL = os.environ.get("TD_LOGGING_LEVEL", "DEBUG")
+logger = logging.getLogger("tensordict")
+logger.setLevel(getattr(logging, LOGGING_LEVEL))
+# Disable propagation to the root logger
+logger.propagate = False
+# Remove all attached handlers
+while logger.hasHandlers():
+    logger.removeHandler(logger.handlers[0])
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 
 def _sub_index(tensor: Tensor, idx: IndexType) -> Tensor:
@@ -649,7 +669,9 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
         return tensor[index]
 
 
-def _set_item(tensor: Tensor, index: IndexType, value: Tensor, *, validated) -> Tensor:
+def _set_item(
+    tensor: Tensor, index: IndexType, value: Tensor, *, validated, non_blocking
+) -> Tensor:
     # the tensor must be validated
     if not validated:
         raise RuntimeError
@@ -729,7 +751,7 @@ class timeit:
             strings.append(
                 f"{name} took {timeit._REG[name][0] * 1000:4.4} msec (total = {timeit._REG[name][1]} sec)"
             )
-            logging.info(" -- ".join(strings))
+            logger.info(" -- ".join(strings))
 
     @staticmethod
     def erase():
@@ -784,12 +806,8 @@ def is_tensorclass(obj: type | Any) -> bool:
     return _is_tensorclass(cls)
 
 
-def _is_tensorclass(cls) -> bool:
-    return (
-        dataclasses.is_dataclass(cls)
-        and "to_tensordict" in cls.__dict__
-        and "_from_tensordict" in cls.__dict__
-    )
+def _is_tensorclass(cls: type) -> bool:
+    return getattr(cls, "_is_tensorclass", False)
 
 
 class implement_for:
@@ -1004,11 +1022,17 @@ def _unfold_sequence(seq):
 
 
 def _make_cache_key(args, kwargs):
-    """Creats a key for the cache such that memory footprint is minimized."""
-    return (
-        tuple(_unfold_sequence(args)),
-        tuple(_unfold_sequence(sorted(kwargs.items()))),
-    )
+    """Creates a key for the cache such that memory footprint is minimized."""
+    # Fast path for the common args
+    if not args and not kwargs:
+        return ((), ())
+    elif not kwargs and len(args) == 1 and type(args[0]) is str:
+        return (args, ())
+    else:
+        return (
+            tuple(_unfold_sequence(args)),
+            tuple(_unfold_sequence(sorted(kwargs.items()))),
+        )
 
 
 def cache(fun):
@@ -1367,8 +1391,17 @@ def assert_allclose_td(
             assert_allclose_td(sub_actual, sub_expected, rtol=rtol, atol=atol)
         return True
 
-    set1 = set(actual.keys())
-    set2 = set(expected.keys())
+    try:
+        set1 = set(
+            actual.keys(is_leaf=lambda x: not is_non_tensor(x), leaves_only=True)
+        )
+        set2 = set(
+            expected.keys(is_leaf=lambda x: not is_non_tensor(x), leaves_only=True)
+        )
+    except ValueError:
+        # Persistent tensordicts do not work with is_leaf
+        set1 = set(actual.keys())
+        set2 = set(expected.keys())
     if not (len(set1.difference(set2)) == 0 and len(set2) == len(set1)):
         raise KeyError(
             "actual and expected tensordict keys mismatch, "
@@ -1501,7 +1534,9 @@ def _expand_to_match_shape(
     self_batch_dims: int,
     self_device: DeviceType,
 ) -> Tensor | TensorDictBase:
-    if hasattr(tensor, "dtype"):
+    from tensordict.base import _is_tensor_collection
+
+    if not _is_tensor_collection(type(tensor)):
         return torch.zeros(
             (
                 *parent_batch_size,
@@ -1521,11 +1556,11 @@ def _expand_to_match_shape(
 
 def _set_max_batch_size(source: T, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
+    from tensordict.base import _is_tensor_collection
+
     tensor_data = [val for val in source.values() if not is_non_tensor(val)]
 
     for val in tensor_data:
-        from tensordict.base import _is_tensor_collection
-
         if _is_tensor_collection(val.__class__):
             _set_max_batch_size(val, batch_dims=batch_dims)
 
@@ -1919,17 +1954,17 @@ def print_directory_tree(path, indent="", display_metadata=True):
 
         total_size_bytes = get_directory_size(path)
         formatted_size = format_size(total_size_bytes)
-        logging.info(f"Directory size: {formatted_size}")
+        logger.info(f"Directory size: {formatted_size}")
 
     if os.path.isdir(path):
-        logging.info(indent + os.path.basename(path) + "/")
+        logger.info(indent + os.path.basename(path) + "/")
         indent += "    "
         for item in os.listdir(path):
             print_directory_tree(
                 os.path.join(path, item), indent=indent, display_metadata=False
             )
     else:
-        logging.info(indent + os.path.basename(path))
+        logger.info(indent + os.path.basename(path))
 
 
 def isin(
@@ -2173,4 +2208,21 @@ class _add_batch_dim_pre_hook:
 
 def is_non_tensor(data):
     """Checks if an item is a non-tensor."""
-    return type(data).__dict__.get("_non_tensor", False)
+    return getattr(type(data), "_is_non_tensor", False)
+
+
+def _is_non_tensor(cls: type):
+    return getattr(cls, "_is_non_tensor", False)
+
+
+if not _has_funcdim:
+
+    class _ftdim_mock:
+        class Dim:
+            pass
+
+        class Tensor:
+            pass
+
+        def dims(self, *args, **kwargs):
+            raise ImportError("functorch.dim not found")

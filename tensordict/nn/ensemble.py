@@ -26,8 +26,7 @@ class EnsembleModule(TensorDictModuleBase):
     Examples:
         >>> import torch
         >>> from torch import nn
-        >>> from tensordict.nn import TensorDictModule
-        >>> from torchrl.modules import EnsembleModule
+        >>> from tensordict.nn import TensorDictModule, EnsembleModule
         >>> from tensordict import TensorDict
         >>> net = nn.Sequential(nn.Linear(4, 32), nn.ReLU(), nn.Linear(32, 2))
         >>> mod = TensorDictModule(net, in_keys=['a'], out_keys=['b'])
@@ -46,8 +45,7 @@ class EnsembleModule(TensorDictModuleBase):
 
     Examples:
         >>> import torch
-        >>> from tensordict.nn import TensorDictModule, TensorDictSequential
-        >>> from torchrl.modules import EnsembleModule
+        >>> from tensordict.nn import TensorDictModule, TensorDictSequential, EnsembleModule
         >>> from tensordict import TensorDict
         >>> module = TensorDictModule(torch.nn.Linear(2,3), in_keys=['bork'], out_keys=['dork'])
         >>> next_module = TensorDictModule(torch.nn.Linear(3,1), in_keys=['dork'], out_keys=['spork'])

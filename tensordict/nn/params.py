@@ -14,7 +14,15 @@ from functools import wraps
 from typing import Any, Callable, Iterator, OrderedDict, Sequence, Type
 
 import torch
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict
@@ -46,7 +54,11 @@ def _apply_leaves(data, fn):
         with data.unlock_():
             for key, val in list(data.items()):
                 data._set_str(
-                    key, _apply_leaves(val, fn), validated=True, inplace=False
+                    key,
+                    _apply_leaves(val, fn),
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
                 )
         return data
     elif isinstance(data, LazyStackedTensorDict):
@@ -403,6 +415,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         clone: bool = False,
         inplace: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> TensorDictBase:
         if not self.no_convert:
@@ -420,6 +433,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 clone=clone,
                 inplace=inplace,
                 keys_to_update=keys_to_update,
+                non_blocking=non_blocking,
             )
             self._reset_params()
         return self
@@ -427,6 +441,11 @@ class TensorDictParams(TensorDictBase, nn.Module):
     @lock_blocked
     @_unlock_and_set
     def pop(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
+        ...
+
+    @lock_blocked
+    @_unlock_and_set
+    def popitem(self):
         ...
 
     @lock_blocked
@@ -447,6 +466,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         generator: torch.Generator | None = None,
         max_tasks_per_child: int | None = None,
         worker_threads: int = 1,
+        mp_start_method: str | None = None,
     ):
         raise RuntimeError(
             "Cannot call map on a TensorDictParams object. Convert it "
@@ -460,7 +480,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         fn: Callable,
         *others: TensorDictBase,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
@@ -475,7 +495,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         fn: Callable,
         *others: TensorDictBase,
         batch_size: Sequence[int] | None = None,
-        device: torch.device | None = None,
+        device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
@@ -588,6 +608,30 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_fallback
     def __ne__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __xor__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __or__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __ge__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __gt__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __le__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __lt__(self, other: object) -> TensorDictBase:
         ...
 
     def __getattr__(self, item: str) -> Any:
@@ -799,7 +843,11 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @property
     def data(self):
-        return self._param_td.detach()
+        return self._param_td._data()
+
+    @property
+    def grad(self):
+        return self._param_td._grad()
 
     @_unlock_and_set(inplace=True)
     def flatten_keys(
@@ -817,6 +865,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _exclude(
         self, *keys: NestedKey, inplace: bool = False, set_shared: bool = True
     ) -> TensorDictBase:
+        ...
+
+    @_carry_over
+    def from_dict_instance(
+        self, input_dict, batch_size=None, device=None, batch_dims=None
+    ):
         ...
 
     @_carry_over
@@ -861,14 +915,6 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_carry_over
     def _legacy_unsqueeze(self, dim: int) -> TensorDictBase:
-        ...
-
-    @_fallback
-    def __xor__(self, other):
-        ...
-
-    @_fallback
-    def __or__(self, other):
         ...
 
     _check_device = TensorDict._check_device
@@ -917,6 +963,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         swap_dest=None,
         memo=None,
         use_state_dict: bool = False,
+        non_blocking: bool = False,
     ):
         ...
 
@@ -1065,6 +1112,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         input_dict_or_td: dict[str, CompatibleType] | T,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         ...
@@ -1076,6 +1124,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         idx: IndexType,
         clone: bool = False,
         *,
+        non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> T:
         ...

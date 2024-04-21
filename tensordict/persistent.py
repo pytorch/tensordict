@@ -15,7 +15,7 @@ import tempfile
 import warnings
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Type
+from typing import Any, Callable, Tuple, Type
 
 import numpy as np
 import torch
@@ -517,7 +517,11 @@ class PersistentTensorDict(TensorDictBase):
             for key, val in self.items():
                 if is_tensor_collection(val):
                     out._set_str(
-                        key, val.empty(recurse=True), inplace=False, validated=True
+                        key,
+                        val.empty(recurse=True),
+                        inplace=False,
+                        validated=True,
+                        non_blocking=False,
                     )
             return out
         return TensorDict(
@@ -578,6 +582,7 @@ class PersistentTensorDict(TensorDictBase):
         futures,
         inplace,
         like,
+        share_non_tensor,
     ) -> T:
         if inplace:
             raise RuntimeError("Cannot call memmap inplace in a persistent tensordict.")
@@ -625,9 +630,11 @@ class PersistentTensorDict(TensorDictBase):
                         copy_existing=copy_existing,
                         futures=futures,
                         inplace=inplace,
+                        share_non_tensor=share_non_tensor,
                     ),
                     inplace=False,
                     validated=True,
+                    non_blocking=False,
                 )
                 continue
             else:
@@ -656,6 +663,7 @@ class PersistentTensorDict(TensorDictBase):
                         val,
                         inplace=False,
                         validated=True,
+                        non_blocking=False,
                     )
 
                 if executor is None:
@@ -689,6 +697,12 @@ class PersistentTensorDict(TensorDictBase):
         }
         return out
 
+    @lock_blocked
+    def popitem(self) -> Tuple[NestedKey, CompatibleType]:
+        raise NotImplementedError(
+            f"popitem not implemented for class {type(self).__name__}."
+        )
+
     def map(
         self,
         fn: Callable,
@@ -704,6 +718,7 @@ class PersistentTensorDict(TensorDictBase):
         worker_threads: int = 1,
         index_with_generator: bool = False,
         pbar: bool = False,
+        mp_start_method: str | None = None,
     ):
         if pool is None:
             if num_workers is None:
@@ -713,11 +728,15 @@ class PersistentTensorDict(TensorDictBase):
             seed = (
                 torch.empty((), dtype=torch.int64).random_(generator=generator).item()
             )
+            if mp_start_method is not None:
+                ctx = mp.get_context(mp_start_method)
+            else:
+                ctx = mp.get_context()
 
-            queue = mp.Queue(maxsize=num_workers)
+            queue = ctx.Queue(maxsize=num_workers)
             for i in range(num_workers):
                 queue.put(i)
-            with mp.Pool(
+            with ctx.Pool(
                 processes=num_workers,
                 initializer=_proc_init,
                 initargs=(seed, queue, worker_threads),
@@ -917,9 +936,12 @@ class PersistentTensorDict(TensorDictBase):
         self,
         key: NestedKey,
         value: Any,
+        *,
         inplace: bool = False,
         idx=None,
-        validated=False,
+        validated: bool = False,
+        ignore_lock: bool = False,
+        non_blocking: bool = False,
     ) -> PersistentTensorDict:
         if not validated:
             value = self._validate_value(value, check_shape=idx is None)
@@ -927,7 +949,7 @@ class PersistentTensorDict(TensorDictBase):
         if not inplace:
             if idx is not None:
                 raise RuntimeError("Cannot pass an index to _set when inplace=False.")
-            elif self.is_locked:
+            elif self.is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
         # shortcut set if we're placing a tensordict
         if is_tensor_collection(value):
@@ -1019,25 +1041,67 @@ class PersistentTensorDict(TensorDictBase):
             f"set_non_tensor is not compatible with the tensordict type {type(self)}."
         )
 
-    def _set_str(self, key, value, *, inplace, validated):
+    def _set_str(
+        self,
+        key: str,
+        value: Any,
+        *,
+        inplace: bool,
+        validated: bool,
+        ignore_lock: bool = False,
+        non_blocking: bool = False,
+    ):
         inplace = self._convert_inplace(inplace, key)
-        return self._set(key, value, inplace=inplace, validated=validated)
+        return self._set(
+            key,
+            value,
+            inplace=inplace,
+            validated=validated,
+            ignore_lock=ignore_lock,
+            non_blocking=non_blocking,
+        )
 
-    def _set_tuple(self, key, value, *, inplace, validated):
+    def _set_tuple(self, key, value, *, inplace, validated, non_blocking):
         if len(key) == 1:
-            return self._set_str(key[0], value, inplace=inplace, validated=validated)
+            return self._set_str(
+                key[0],
+                value,
+                inplace=inplace,
+                validated=validated,
+                non_blocking=non_blocking,
+            )
         elif key[0] in self.keys():
             return self._get_str(key[0])._set_tuple(
-                key[1:], value, inplace=inplace, validated=validated
+                key[1:],
+                value,
+                inplace=inplace,
+                validated=validated,
+                non_blocking=non_blocking,
             )
         inplace = self._convert_inplace(inplace, key)
-        return self._set(key, value, inplace=inplace, validated=validated)
+        return self._set(
+            key, value, inplace=inplace, validated=validated, non_blocking=non_blocking
+        )
 
-    def _set_at_str(self, key, value, idx, *, validated):
-        return self._set(key, value, inplace=True, idx=idx, validated=validated)
+    def _set_at_str(self, key, value, idx, *, validated, non_blocking):
+        return self._set(
+            key,
+            value,
+            inplace=True,
+            idx=idx,
+            validated=validated,
+            non_blocking=non_blocking,
+        )
 
-    def _set_at_tuple(self, key, value, idx, *, validated):
-        return self._set(key, value, inplace=True, idx=idx, validated=validated)
+    def _set_at_tuple(self, key, value, idx, *, validated, non_blocking):
+        return self._set(
+            key,
+            value,
+            inplace=True,
+            idx=idx,
+            validated=validated,
+            non_blocking=non_blocking,
+        )
 
     def _set_metadata(self, orig_metadata_container: PersistentTensorDict):
         for key, td in orig_metadata_container._nested_tensordicts.items():
@@ -1169,6 +1233,10 @@ class PersistentTensorDict(TensorDictBase):
     __ne__ = TensorDict.__ne__
     __xor__ = TensorDict.__xor__
     __or__ = TensorDict.__or__
+    __ge__ = TensorDict.__ge__
+    __gt__ = TensorDict.__gt__
+    __le__ = TensorDict.__le__
+    __lt__ = TensorDict.__lt__
     _apply_nest = TensorDict._apply_nest
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
@@ -1183,6 +1251,7 @@ class PersistentTensorDict(TensorDictBase):
     _to_module = TensorDict._to_module
     _unbind = TensorDict._unbind
     _get_names_idx = TensorDict._get_names_idx
+    from_dict_instance = TensorDict.from_dict_instance
 
 
 def _set_max_batch_size(source: PersistentTensorDict):

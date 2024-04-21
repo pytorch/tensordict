@@ -436,6 +436,26 @@ To silence this warning, choose one of the following options:
                         return _stack(list_of_tensordicts, dim=dim)
                 raise
 
+            if all(
+                isinstance(_tensordict, LazyStackedTensorDict)
+                for _tensordict in list_of_tensordicts
+            ):
+                lazy_stack_dim = list_of_tensordicts[0].stack_dim
+                if dim <= lazy_stack_dim:
+                    lazy_stack_dim += 1
+                else:
+                    dim = dim - 1
+
+                return LazyStackedTensorDict(
+                    *[
+                        torch.stack(list_of_td, dim)
+                        for list_of_td in zip(
+                            *[td.tensordicts for td in list_of_tensordicts]
+                        )
+                    ],
+                    stack_dim=lazy_stack_dim,
+                )
+
             out = {}
             for key in keys:
                 out[key] = []
