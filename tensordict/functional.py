@@ -84,7 +84,7 @@ def pad_sequence(
     padding_value: float = 0.0,
     out: T | None = None,
     device: DeviceType | None = None,
-    return_mask: bool | None = False,
+    return_mask: bool | str = False,
 ) -> T:
     """Pads a list of tensordicts in order for them to be stacked together in a contiguous format.
 
@@ -132,6 +132,11 @@ def pad_sequence(
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
+    masks_key = "masks"
+    if isinstance(return_mask, str):
+        masks_key = return_mask
+        return_mask = True
+
     # check that all tensordict match
     update_batch_size = True
     max_seq_length = float("-inf")
@@ -144,6 +149,10 @@ def pad_sequence(
 
         for key in keys:
             tensor_shape = td.get(key).shape
+
+            if len(tensor_shape) == 0:
+                raise RuntimeError("Cannot pad scalars")
+            
             pos_pad_dim = pad_dim if pad_dim >= 0 else len(tensor_shape) + pad_dim
 
             # track the maximum sequence length to update batch_size accordingly
@@ -160,7 +169,7 @@ def pad_sequence(
 
             if return_mask:
                 tmp_list_of_tensordicts[-1].set(
-                    ("masks", key),
+                    (masks_key, key),
                     torch.ones(mask_shape, dtype=torch.bool),
                 )
     if return_mask:
