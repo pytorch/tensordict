@@ -378,6 +378,7 @@ def _stack(
     out: T | None = None,
     strict: bool = False,
     contiguous: bool = False,
+    maybe_dense_stack: bool = False,
 ) -> T:
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
@@ -432,8 +433,14 @@ To silence this warning, choose one of the following options:
                 keys = _check_keys(list_of_tensordicts, strict=True)
             except KeyError:
                 if not _lazy_legacy and not contiguous:
-                    with set_lazy_legacy(True):
-                        return _stack(list_of_tensordicts, dim=dim)
+                    if maybe_dense_stack:
+                        with set_lazy_legacy(True):
+                            return _stack(list_of_tensordicts, dim=dim)
+                    else:
+                        raise RuntimeError(
+                            "The sets of keys in the tensordicts to stack are exclusive. "
+                            "Consider using `LazyStackedTensorDict.maybe_lazy_stack` instead."
+                        )
                 raise
 
             if all(
@@ -468,8 +475,13 @@ To silence this warning, choose one of the following options:
                     elif tensor_shape is None:
                         tensor_shape = tensor.shape
                     elif tensor.shape != tensor_shape:
-                        with set_lazy_legacy(True):
-                            return _stack(list_of_tensordicts, dim=dim)
+                        if maybe_dense_stack:
+                            with set_lazy_legacy(True):
+                                return _stack(list_of_tensordicts, dim=dim)
+                        else:
+                            raise RuntimeError(
+                                "The shapes of the tensors to stack is incompatible."
+                            )
                     out[key].append(tensor)
                 out[key] = (out[key], is_lazy)
 
