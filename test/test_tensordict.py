@@ -1085,7 +1085,7 @@ class TestGeneric:
         assert torch.equal(padded_td["a"], expected_a)
         padded_td._check_batch_size()
 
-    @pytest.mark.parametrize("make_mask", [True, "bibbidi-bobbidi-boo", False])
+    @pytest.mark.parametrize("make_mask", [True, ("bibbidi", "bobbidi", "boo"), False])
     def test_pad_sequence_pad_dim0(self, make_mask):
         pad_dim = 0
         list_td = [
