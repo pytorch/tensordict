@@ -5581,7 +5581,7 @@ class TestTensorDictRepr:
             device=device,
         )
 
-        return stack_td([td1, td2], 2)
+        return stack_td([td1, td2], 2, maybe_dense_stack=True)
 
     def td(self, device, dtype):
         if device is not None:
