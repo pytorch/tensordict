@@ -38,7 +38,6 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor as MemmapTensor
 from tensordict.utils import (
     _broadcast_tensors,
-    _check_keys,
     _get_shape_from_args,
     _getitem_batch_size,
     _is_number,
