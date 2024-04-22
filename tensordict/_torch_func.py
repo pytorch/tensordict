@@ -365,7 +365,7 @@ def _lazy_cat(
             for td_in in list_of_tensordicts:
                 sub_dest = out.tensordicts[init_idx : init_idx + td_in.shape[dim]]
                 init_idx += init_idx + td_in.shape[dim]
-                torch.stack(sub_dest, out.stack_dim).update(td_in, inplace=True)
+                LazyStackedTensorDict.maybe_dense_stack(sub_dest, out.stack_dim).update(td_in, inplace=True)
 
         return out
 
@@ -439,7 +439,7 @@ To silence this warning, choose one of the following options:
                     else:
                         raise RuntimeError(
                             "The sets of keys in the tensordicts to stack are exclusive. "
-                            "Consider using `LazyStackedTensorDict.maybe_lazy_stack` instead."
+                            "Consider using `LazyStackedTensorDict.maybe_dense_stack` instead."
                         )
                 raise
 
