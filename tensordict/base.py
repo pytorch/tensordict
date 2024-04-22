@@ -6618,6 +6618,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         """
         ...
 
+    def _sync_all(self):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elif torch.backends.mps.is_available():
+            torch.mps.synchronize()
+
     def is_floating_point(self):
         for item in self.values(include_nested=True, leaves_only=True):
             if not item.is_floating_point():
