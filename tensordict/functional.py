@@ -13,7 +13,13 @@ import torch
 
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-from tensordict.base import _is_tensor_collection, CompatibleType, T, TensorDictBase
+from tensordict.base import (
+    _is_tensor_collection,
+    CompatibleType,
+    NestedKey,
+    T,
+    TensorDictBase,
+)
 from tensordict.utils import _check_keys, _shape, DeviceType, unravel_key
 
 
