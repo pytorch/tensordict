@@ -1114,9 +1114,6 @@ def _set(
         def _is_castable(datatype):
             return issubclass(datatype, (int, float, np.ndarray))
 
-        if isinstance(value, tuple(tensordict_lib.base._ACCEPTED_CLASSES)):
-            return set_tensor()
-
         if cls.autocast:
             type_hints = cls._type_hints
             if type_hints is not None:
@@ -1139,7 +1136,10 @@ def _set(
                 and target_cls in tensordict_lib.base._ACCEPTED_CLASSES
             ):
                 try:
-                    cast_val = _cast_funcs[target_cls](value)
+                    if not issubclass(type(value), target_cls):
+                        cast_val = _cast_funcs[target_cls](value)
+                    else:
+                        cast_val = value
                 except TypeError:
                     raise TypeError(
                         f"Failed to cast the value {key} to the type annotation {target_cls}."
@@ -1148,6 +1148,9 @@ def _set(
             elif value is not None and target_cls is not Any:
                 value = _cast_funcs[target_cls](value)
             elif target_cls is Any and _is_castable(type(value)):
+                return set_tensor()
+        else:
+            if isinstance(value, tuple(tensordict_lib.base._ACCEPTED_CLASSES)):
                 return set_tensor()
 
         # Avoiding key clash, honoring the user input to assign non-tensor data to the key

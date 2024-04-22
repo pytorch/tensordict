@@ -1020,7 +1020,7 @@ class TestTensorClass:
         data.set("k", torch.zeros(3, 4, 5))
 
     def test_set_dict(self):
-        @tensorclass
+        @tensorclass(autocast=True)
         class MyClass:
             x: torch.Tensor
             y: MyClass = None
