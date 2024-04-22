@@ -29,7 +29,15 @@ from _utils_internal import (
     prod,
     TestTensorDictsBase,
 )
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 from tensordict import LazyStackedTensorDict, make_tensordict, TensorDict
 from tensordict._lazy import _CustomOpTensorDict
@@ -185,6 +193,21 @@ class TestGeneric:
             ):
                 td_u.batch_size = [1]
             td_u.to_tensordict().batch_size = [1]
+
+    def test_depth(ggself):
+        td = TensorDict({"a": {"b": {"c": {"d": 0}, "e": 0}, "f": 0}, "g": 0}).lock_()
+        assert td.depth == 3
+        with td.unlock_():
+            del td["a", "b", "c", "d"]
+        assert td.depth == 2
+        with td.unlock_():
+            del td["a", "b", "c"]
+            del td["a", "b", "e"]
+        assert td.depth == 1
+        with td.unlock_():
+            del td["a", "b"]
+            del td["a", "f"]
+        assert td.depth == 0
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_cat_td(self, device):
@@ -1016,6 +1039,48 @@ class TestGeneric:
     def test_no_batch_size(self):
         td = TensorDict({"a": torch.zeros(3, 4)})
         assert td.batch_size == torch.Size([])
+
+    def test_non_blocking(self):
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            pytest.skip("No device found")
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
+                non_blocking=False,
+                device="cpu",
+            )
+            assert (td == 1).all()
+        # This is too flaky
+        # with pytest.raises(AssertionError):
+        #     for _ in range(10):
+        #         td = TensorDict(
+        #             {str(i): torch.ones((10,), device=device) for i in range(5)},
+        #             [10],
+        #             non_blocking=True,
+        #             device="cpu",
+        #         )
+        #         assert (td == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device="cpu") for i in range(5)},
+                [10],
+                non_blocking=False,
+                device="cpu",
+            )
+            assert (td.to(device, non_blocking=False) == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
+                non_blocking=False,
+                device=device,
+            )
+            assert (td.to("cpu", non_blocking=False) == 1).all()
 
     def test_pad(self):
         dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
@@ -7829,6 +7894,7 @@ def _pool_fixt():
         yield pool
 
 
+@pytest.mark.skipif(not _has_funcdim, reason="functorch.dim could not be found")
 class TestFCD(TestTensorDictsBase):
     """Test stack for first-class dimension."""
 

@@ -20,7 +20,15 @@ from warnings import warn
 
 import numpy as np
 import torch
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -168,6 +176,10 @@ class TensorDict(TensorDictBase):
             tensordict. If provided, its length must match the one of the
             ``batch_size``. Defaults to ``None`` (no dimension name, or ``None``
             for every dimension).
+        non_blocking (bool, optional): if ``True`` and a device is passed, the tensordict
+            is delivered without synchronization. If ``False``, a global synchronization
+            will be made before delivering the tensordict, making sure that all the stored
+            tensors are ready to be read. Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -204,8 +216,10 @@ class TensorDict(TensorDictBase):
         non_blocking: bool = False,
         _run_checks: bool = True,
     ) -> None:
+        has_device = False
         if device is not None and isinstance(device, (int, str)):
             device = torch.device(device)
+            has_device = True
         self._device = device
 
         self._tensordict = _tensordict = _StringOnlyDict()
@@ -219,7 +233,7 @@ class TensorDict(TensorDictBase):
                             batch_size=self._batch_size,
                             device=self._device,
                             _run_checks=_run_checks,
-                            non_blocking=non_blocking,
+                            non_blocking=True,
                         )
                     _tensordict[key] = value
             self._td_dim_names = names
@@ -234,7 +248,9 @@ class TensorDict(TensorDictBase):
 
             if source is not None:
                 for key, value in source.items():
-                    self.set(key, value, non_blocking=non_blocking)
+                    self.set(key, value, non_blocking=True)
+        if not non_blocking and has_device:
+            self._sync_all()
 
     @classmethod
     def from_module(
@@ -1550,7 +1566,11 @@ class TensorDict(TensorDictBase):
         else:
 
             def is_boolean(idx):
-                from functorch import dim as ftdim
+                try:
+                    from functorch import dim as ftdim
+
+                except ImportError:
+                    from tensordict.utils import _ftdim_mock as ftdim
 
                 if isinstance(idx, ftdim.Dim):
                     return None
@@ -2133,12 +2153,17 @@ class TensorDict(TensorDictBase):
         if convert_to_format is not None:
 
             def to(tensor):
-                return tensor.to(device, dtype, non_blocking, convert_to_format)
+                return tensor.to(
+                    device,
+                    dtype,
+                    non_blocking=True,
+                    convert_to_format=convert_to_format,
+                )
 
         else:
 
             def to(tensor):
-                return tensor.to(device=device, dtype=dtype, non_blocking=non_blocking)
+                return tensor.to(device=device, dtype=dtype, non_blocking=True)
 
         apply_kwargs = {}
         if device is not None or dtype is not None:
@@ -2147,6 +2172,8 @@ class TensorDict(TensorDictBase):
             result = result._fast_apply(to, **apply_kwargs)
         elif batch_size is not None:
             result.batch_size = batch_size
+        if device is not None and not non_blocking:
+            self._sync_all()
         return result
 
     def where(self, condition, other, *, out=None, pad=None):

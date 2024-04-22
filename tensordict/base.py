@@ -882,6 +882,22 @@ class TensorDictBase(MutableMapping):
         """
         return max(1, self.batch_size.numel())
 
+    @property
+    def depth(self) -> int:
+        """Returns the depth - maximum number of levels - of a tensordict.
+
+        The minimum depth is 0 (no nested tensordict).
+        """
+        return self._depth()
+
+    @cache  # noqa: B019
+    def _depth(self):
+        depth = 0
+        for key in self.keys(True, True, is_leaf=_is_leaf_nontensor):
+            if isinstance(key, tuple):
+                depth = max(depth, len(key) - 1)
+        return depth
+
     @overload
     def expand(self, *shape: int) -> T:
         ...
@@ -6601,6 +6617,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # using a tensordict example
         """
         ...
+
+    def _sync_all(self):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elif torch.backends.mps.is_available():
+            torch.mps.synchronize()
 
     def is_floating_point(self):
         for item in self.values(include_nested=True, leaves_only=True):
