@@ -47,6 +47,7 @@ from tensordict.utils import (
     IndexType,
     is_non_tensor,
     is_tensorclass,
+    KeyDependentDefaultDict,
     NestedKey,
 )
 from torch import multiprocessing as mp, Tensor
@@ -77,7 +78,7 @@ _TD_PASS_THROUGH = {
 }
 
 
-def tensorclass(cls: T) -> T:
+class tensorclass:
     """A decorator to create :obj:`tensorclass` classes.
 
     :obj:`tensorclass` classes are specialized :obj:`dataclass` instances that
@@ -134,6 +135,24 @@ def tensorclass(cls: T) -> T:
 
     """
 
+    def __new__(cls, autocast: bool = False):
+        if not isinstance(autocast, bool):
+            clz = autocast
+            self = super().__new__(cls)
+            self.__init__(autocast=False)
+            return self.__call__(clz)
+        return super().__new__(cls)
+
+    def __init__(self, autocast: bool):
+        self.autocast = autocast
+
+    def __call__(self, clz):
+        clz = _tensorclass(clz)
+        clz.autocast = self.autocast
+        return clz
+
+
+def _tensorclass(cls: T) -> T:
     def __torch_function__(
         cls,
         func: Callable,
@@ -368,6 +387,11 @@ def _init_wrapper(init: Callable) -> Callable:
     return wrapper
 
 
+_cast_funcs = KeyDependentDefaultDict(lambda cls: cls)
+_cast_funcs[torch.Tensor] = torch.as_tensor
+_cast_funcs[np.ndarray] = np.asarray
+
+
 def _get_type_hints(cls, with_locals=False):
     #######
     # Set proper type annotations for autocasting to tensordict/tensorclass
@@ -423,6 +447,10 @@ def _get_type_hints(cls, with_locals=False):
             localns=localns,
             # globalns=globals(),
         )
+        cls._type_hints = {
+            key: val if isinstance(val, type) else Any
+            for key, val in cls._type_hints.items()
+        }
     except NameError:
         if not with_locals:
             return _get_type_hints(cls, with_locals=True)
@@ -1057,21 +1085,21 @@ def _set(
 
     """
     if isinstance(key, str):
+        cls = type(self)
         __dict__ = self.__dict__
         if __dict__["_tensordict"].is_locked:
             raise RuntimeError(_LOCK_ERROR)
         if key in ("batch_size", "names", "device"):
             # handled by setattr
             return
-        expected_keys = self.__dataclass_fields__
+        expected_keys = cls.__dataclass_fields__
         if key not in expected_keys:
             raise AttributeError(
                 f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
             )
 
-        # TODO: Use type annotation?
-        if isinstance(
-            value, (*tensordict_lib.base._ACCEPTED_CLASSES, numbers.Number, np.ndarray)
+        def set_tensor(
+            key=key, value=value, inplace=inplace, non_blocking=non_blocking
         ):
             # Avoiding key clash, honoring the user input to assign tensor type data to the key
             if key in self._non_tensordict.keys():
@@ -1082,18 +1110,45 @@ def _set(
                 del self._non_tensordict[key]
             self._tensordict.set(key, value, inplace=inplace, non_blocking=non_blocking)
             return self
-        if isinstance(value, dict):
-            type_hints = self._type_hints
+
+        def _is_castable(datatype):
+            return issubclass(datatype, (int, float, np.ndarray))
+
+        if isinstance(value, tuple(tensordict_lib.base._ACCEPTED_CLASSES)):
+            return set_tensor()
+
+        if cls.autocast:
+            type_hints = cls._type_hints
             if type_hints is not None:
-                target_cls = type_hints.get(key, None)
-                if isinstance(target_cls, type) and _is_tensor_collection(target_cls):
+                target_cls = type_hints.get(key, Any)
+            else:
+                warnings.warn("type_hints are none, cannot perform auto-casting")
+                target_cls = Any
+
+            if isinstance(value, dict):
+                if _is_tensor_collection(target_cls):
                     value = target_cls.from_dict(value)
                     self._tensordict.set(
                         key, value, inplace=inplace, non_blocking=non_blocking
                     )
                     return self
-            else:
-                warnings.warn(self._set_dict_warn_msg)
+                elif type_hints is None:
+                    warnings.warn(type(self)._set_dict_warn_msg)
+            elif (
+                value is not None
+                and target_cls in tensordict_lib.base._ACCEPTED_CLASSES
+            ):
+                try:
+                    cast_val = _cast_funcs[target_cls](value)
+                except TypeError:
+                    raise TypeError(
+                        f"Failed to cast the value {key} to the type annotation {target_cls}."
+                    )
+                return set_tensor(value=cast_val)
+            elif value is not None and target_cls is not Any:
+                value = _cast_funcs[target_cls](value)
+            elif target_cls is Any and _is_castable(type(value)):
+                return set_tensor()
 
         # Avoiding key clash, honoring the user input to assign non-tensor data to the key
         if key in self._tensordict.keys():
