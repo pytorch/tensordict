@@ -13,7 +13,7 @@ import weakref
 import pytest
 import torch
 
-from tensordict import tensorclass, TensorDict
+from tensordict import LazyStackedTensorDict, tensorclass, TensorDict
 from tensordict._tensordict import unravel_key_list
 from tensordict.nn import (
     dispatch,
@@ -1776,7 +1776,7 @@ class TestTDSequence:
             params = None
 
         if stack:
-            td = torch.stack(
+            td = LazyStackedTensorDict.maybe_dense_stack(
                 [
                     TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, []),
                     TensorDict({"a": torch.randn(3), "c": torch.randn(4)}, []),
@@ -1854,7 +1854,7 @@ class TestTDSequence:
             params = None
 
         if stack:
-            td = torch.stack(
+            td = LazyStackedTensorDict.maybe_dense_stack(
                 [
                     TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, []),
                     TensorDict({"a": torch.randn(3), "c": torch.randn(4)}, []),
