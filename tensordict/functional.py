@@ -84,7 +84,7 @@ def pad_sequence(
     padding_value: float = 0.0,
     out: T | None = None,
     device: DeviceType | None = None,
-    return_mask: bool | str = False,
+    return_mask: bool | NestedKey = False,
 ) -> T:
     """Pads a list of tensordicts in order for them to be stacked together in a contiguous format.
 
@@ -97,7 +97,7 @@ def pad_sequence(
             written.
         device (device compatible type, optional): if provded, the device where the
             TensorDict output will be created.
-        return_mask (bool, str): if ``True``, a "masks" entry will be returned. If ``return_mask`` is a string, it will be return the masks and be used as the key for the masks entry.
+        return_mask (bool or NestedKey, optional): if ``True``, a "masks" entry will be returned. If ``return_mask`` is a nested key (string or tuple of strings), it will be return the masks and be used as the key for the masks entry.
             It contains a tensordict with the same structure as the stacked tensordict where every entry contains the mask of valid values with size ``torch.Size([stack_len, *new_shape])``,
             where `new_shape[pad_dim] = max_seq_length` and the rest of the `new_shape` matches the previous shape of the contained tensors.
 
