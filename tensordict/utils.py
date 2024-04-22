@@ -39,7 +39,13 @@ from typing import (
 
 import numpy as np
 import torch
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    _has_funcdim = False
 from packaging.version import parse
 from tensordict._contextlib import _DecoratorContextManager
 from tensordict._tensordict import (  # noqa: F401
@@ -2207,3 +2213,16 @@ def is_non_tensor(data):
 
 def _is_non_tensor(cls: type):
     return getattr(cls, "_is_non_tensor", False)
+
+
+if not _has_funcdim:
+
+    class _ftdim_mock:
+        class Dim:
+            pass
+
+        class Tensor:
+            pass
+
+        def dims(self, *args, **kwargs):
+            raise ImportError("functorch.dim not found")

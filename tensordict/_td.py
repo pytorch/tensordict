@@ -20,7 +20,15 @@ from warnings import warn
 
 import numpy as np
 import torch
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -242,10 +250,7 @@ class TensorDict(TensorDictBase):
                 for key, value in source.items():
                     self.set(key, value, non_blocking=True)
         if not non_blocking and has_device:
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-            elif torch.backends.mps.is_available():
-                torch.mps.synchronize()
+            self._sync_all()
 
     @classmethod
     def from_module(
@@ -1561,7 +1566,11 @@ class TensorDict(TensorDictBase):
         else:
 
             def is_boolean(idx):
-                from functorch import dim as ftdim
+                try:
+                    from functorch import dim as ftdim
+
+                except ImportError:
+                    from tensordict.utils import _ftdim_mock as ftdim
 
                 if isinstance(idx, ftdim.Dim):
                     return None
@@ -2144,12 +2153,17 @@ class TensorDict(TensorDictBase):
         if convert_to_format is not None:
 
             def to(tensor):
-                return tensor.to(device, dtype, non_blocking, convert_to_format)
+                return tensor.to(
+                    device,
+                    dtype,
+                    non_blocking=True,
+                    convert_to_format=convert_to_format,
+                )
 
         else:
 
             def to(tensor):
-                return tensor.to(device=device, dtype=dtype, non_blocking=non_blocking)
+                return tensor.to(device=device, dtype=dtype, non_blocking=True)
 
         apply_kwargs = {}
         if device is not None or dtype is not None:
@@ -2158,6 +2172,8 @@ class TensorDict(TensorDictBase):
             result = result._fast_apply(to, **apply_kwargs)
         elif batch_size is not None:
             result.batch_size = batch_size
+        if device is not None and not non_blocking:
+            self._sync_all()
         return result
 
     def where(self, condition, other, *, out=None, pad=None):

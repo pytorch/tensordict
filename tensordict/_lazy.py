@@ -21,7 +21,15 @@ from typing import Any, Callable, Iterator, OrderedDict, Sequence, Tuple, Type
 import numpy as np
 import torch
 import torch.distributed as dist
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.base import (
@@ -1279,12 +1287,17 @@ class LazyStackedTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
 
-        return type(self)(
+        non_blocking = kwargs.pop("non_blocking", False)
+        kwargs["non_blocking"] = True
+        result = type(self)(
             *[td.to(*args, **kwargs) for td in self.tensordicts],
             stack_dim=self.stack_dim,
             hook_out=self.hook_out,
             hook_in=self.hook_in,
         )
+        if device is not None and not non_blocking:
+            self._sync_all()
+        return result
 
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         if len(new_size) <= self.stack_dim:
