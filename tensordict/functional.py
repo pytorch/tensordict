@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 from __future__ import annotations
 
 import warnings
@@ -9,7 +14,7 @@ import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.base import _is_tensor_collection, CompatibleType, T, TensorDictBase
-from tensordict.utils import _check_keys, _shape, DeviceType
+from tensordict.utils import _check_keys, _shape, DeviceType, unravel_key
 
 
 def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
@@ -95,8 +100,6 @@ def pad_sequence(
         padding_value (number, optional): the padding value. Defaults to ``0.0``.
         out (TensorDictBase, optional): if provided, the destination where the data will be
             written.
-        device (device compatible type, optional): if provded, the device where the
-            TensorDict output will be created.
         return_mask (bool or NestedKey, optional): if ``True``, a "masks" entry will be returned. If ``return_mask`` is a nested key (string or tuple of strings), it will be return the masks and be used as the key for the masks entry.
             It contains a tensordict with the same structure as the stacked tensordict where every entry contains the mask of valid values with size ``torch.Size([stack_len, *new_shape])``,
             where `new_shape[pad_dim] = max_seq_length` and the rest of the `new_shape` matches the previous shape of the contained tensors.
@@ -123,6 +126,11 @@ def pad_sequence(
             device=None,
             is_shared=False)
     """
+    if device is not None:
+        warnings.warn(
+            "The device argument is ignored by this function and will be removed in v0.5. To cast your"
+            " result to a different device, call `tensordict.to(device)` instead."
+        )
     if batch_first is not None:
         warnings.warn(
             "The batch_first argument is deprecated and will be removed in a future release. The output will always be batch_first.",
@@ -152,7 +160,7 @@ def pad_sequence(
 
             if len(tensor_shape) == 0:
                 raise RuntimeError("Cannot pad scalars")
-            
+
             pos_pad_dim = pad_dim if pad_dim >= 0 else len(tensor_shape) + pad_dim
 
             # track the maximum sequence length to update batch_size accordingly

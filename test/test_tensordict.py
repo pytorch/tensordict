@@ -1132,14 +1132,14 @@ class TestGeneric:
             [2, 4, 3]
         )  # check the shape of the padded tensor
         assert torch.all(padded_td["b", "c"][0, 2:, :] == 0)  # check the padding
-        if isinstance(make_mask, str) or make_mask:
+        if make_mask:
             masks_key = "masks"
-            if isinstance(make_mask, str):
+            if not isinstance(make_mask, bool):
                 masks_key = make_mask
             padded_td_without_masks = pad_sequence(
                 list_td, pad_dim=pad_dim, return_mask=False
             )
-            assert masks_key in padded_td.keys()
+            assert masks_key in padded_td.keys(True)
             assert set(
                 padded_td_without_masks.keys(include_nested=True, leaves_only=True)
             ) == set(padded_td[masks_key].keys(include_nested=True, leaves_only=True))
