@@ -1393,12 +1393,17 @@ class LazyStackedTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
 
-        return type(self)(
+        non_blocking = kwargs.pop("non_blocking", False)
+        kwargs["non_blocking"] = True
+        result = type(self)(
             *[td.to(*args, **kwargs) for td in self.tensordicts],
             stack_dim=self.stack_dim,
             hook_out=self.hook_out,
             hook_in=self.hook_in,
         )
+        if device is not None and not non_blocking:
+            self._sync_all()
+        return result
 
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         if len(new_size) <= self.stack_dim:
