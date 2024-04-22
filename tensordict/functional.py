@@ -133,8 +133,8 @@ def pad_sequence(
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
     masks_key = "masks"
-    if isinstance(return_mask, str):
-        masks_key = return_mask
+    if not isinstance(return_mask, bool):
+        masks_key = unravel_key(return_mask)
         return_mask = True
 
     # check that all tensordict match
