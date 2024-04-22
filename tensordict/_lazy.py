@@ -1079,7 +1079,7 @@ class LazyStackedTensorDict(TensorDictBase):
         """
         from ._torch_func import _stack
 
-        return _stack(*items, dim=dim, out=out, strict=strict, maybe_dense_stack=True)
+        return _stack(items, dim=dim, out=out, strict=strict, maybe_dense_stack=True)
 
     @cache  # noqa: B019
     def _add_batch_dim(self, *, in_dim, vmap_level):

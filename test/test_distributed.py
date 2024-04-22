@@ -15,7 +15,7 @@ from packaging import version
 
 from packaging.version import parse
 
-from tensordict import MemoryMappedTensor, TensorDict
+from tensordict import MemoryMappedTensor, TensorDict, LazyStackedTensorDict
 from tensordict.utils import logger as tdlogger
 from torch import distributed as dist, multiprocessing as mp, nn
 from torch.distributed._tensor import (
@@ -466,7 +466,7 @@ class TestSendLazyStackRoot(SendBase):
         td2 = td.clone()
         td2["c"] = fun(2, 3, 2)
         td2["g"] = fun(2, 1, 5)
-        td = torch.stack([td1, td2], 0)
+        td = LazyStackedTensorDict.maybe_lazy_stack([td1, td2], 0)
         return td
 
 
@@ -492,7 +492,7 @@ class TestSendLazyStackNest(SendBase):
         td2 = td.clone()
         td2["c"] = fun(2, 3, 2)
         td2["g"] = fun(2, 1, 5)
-        td = TensorDict({"ls": torch.stack([td1, td2], 0)}, [2, 2])
+        td = TensorDict({"ls": LazyStackedTensorDict.maybe_lazy_stack([td1, td2], 0)}, [2, 2])
         return td
 
 
@@ -600,7 +600,7 @@ class TestiRecvLazyStackRoot(iRecvBase):
         td2 = td1.clone()
         td2["c"] = td2["c"].unsqueeze(-1).expand(2, 3, 10).contiguous()
         td2["g"] = td1["c"].clone()
-        td = torch.stack([td1, td2], 0)
+        td = LazyStackedTensorDict.maybe_lazy_stack([td1, td2], 0)
         return td
 
 
@@ -623,7 +623,7 @@ class TestiRecvLazyStackNest(iRecvBase):
         td2 = td1.clone()
         td2["c"] = td2["c"].unsqueeze(-1).expand(2, 3, 10).contiguous()
         td2["g"] = td1["c"].clone()
-        td = torch.stack([td1, td2], 0)
+        td = LazyStackedTensorDict.maybe_lazy_stack([td1, td2], 0)
         td = TensorDict({"td": td}, [2, 2])
         return td
 
@@ -731,7 +731,7 @@ class TestiSendLazyStackRoot(iSendBase):
         td2 = td1.clone()
         td2["c"] = td2["c"].unsqueeze(-1).expand(2, 3, 10).contiguous()
         td2["g"] = td1["c"].clone()
-        td = torch.stack([td1, td2], 0)
+        td = LazyStackedTensorDict.maybe_lazy_stack([td1, td2], 0)
         return td
 
 
@@ -754,7 +754,7 @@ class TestiSendLazyStackNest(iSendBase):
         td2 = td1.clone()
         td2["c"] = td2["c"].unsqueeze(-1).expand(2, 3, 10).contiguous()
         td2["g"] = td1["c"].clone()
-        td = torch.stack([td1, td2], 0)
+        td = LazyStackedTensorDict.maybe_lazy_stack([td1, td2], 0)
         td = TensorDict({"td": td}, [2, 2])
         return td
 
