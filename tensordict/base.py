@@ -43,6 +43,7 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
+    _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
     _proc_init,
@@ -6747,7 +6748,7 @@ def _default_is_leaf(cls: Type) -> bool:
 
 def _is_leaf_nontensor(cls: Type) -> bool:
     if _is_tensor_collection(cls):
-        return cls._is_non_tensor
+        return _is_non_tensor(cls)
     # if issubclass(cls, KeyedJaggedTensor):
     #     return False
     return issubclass(cls, torch.Tensor)
