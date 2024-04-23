@@ -900,6 +900,20 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.update_at_(td, idx)
         return self
 
+    def _maybe_get_list(self, key):
+        vals = []
+        for td in self.tensordicts:
+            if isinstance(td, LazyStackedTensorDict):
+                val = td._maybe_get_list(key)
+            else:
+                val = td._get_str(key, None)
+                if _is_tensor_collection(type(val)):
+                    return self._get_str(key, NO_DEFAULT)
+                elif val is None:
+                    return None
+            vals.append(val)
+        return vals
+
     @cache  # noqa: B019
     def _get_str(
         self,
@@ -3413,21 +3427,9 @@ def _iter_items_lazystack(
     #             raise err
     #     yield key, value
     for key in tensordict.tensordicts[0].keys():
-        shapes = set()
-        values = []
-        is_tc = None
-        for td in tensordict.tensordicts:
-            val = td._get_str(key, None)
-            val_shape = getattr(val, "shape", None)
-            shapes.add(val_shape)
-            if is_tc is None:
-                is_tc = _is_tensor_collection(type(val))
-            values.append(val)
-        if None not in shapes:
-            if not is_tc:
-                yield key, values
-            else:
-                yield key, tensordict._get_str(key, NO_DEFAULT)
+        values = tensordict._maybe_get_list(key)
+        if values is not None:
+            yield key, values
 
 
 _register_tensor_class(LazyStackedTensorDict)
