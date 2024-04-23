@@ -3382,6 +3382,8 @@ class _TensorDictKeysView:
         for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
             cls = value.__class__
+            if cls is list:
+                cls = value[0].__class__
             is_leaf = self.is_leaf(cls)
             if self.include_nested and not is_leaf:
                 yield from self._iter_helper(value, prefix=full_key)
