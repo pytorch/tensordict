@@ -43,6 +43,7 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
+    _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
     _proc_init,
@@ -4696,7 +4697,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # support inplace modif
         if imaplist:
             if chunksize == 0:
-                out = torch.stack(imaplist, dim)
+                from tensordict._lazy import LazyStackedTensorDict
+
+                # We want to be able to return whichever data structure
+                out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
             else:
                 out = torch.cat(imaplist, dim)
         return out
@@ -6747,7 +6751,7 @@ def _default_is_leaf(cls: Type) -> bool:
 
 def _is_leaf_nontensor(cls: Type) -> bool:
     if _is_tensor_collection(cls):
-        return cls._is_non_tensor
+        return _is_non_tensor(cls)
     # if issubclass(cls, KeyedJaggedTensor):
     #     return False
     return issubclass(cls, torch.Tensor)

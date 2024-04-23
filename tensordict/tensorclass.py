@@ -1841,6 +1841,14 @@ class NonTensorData:
                 data = self.data.tolist()
             self.data = data
 
+        def __repr__(self):
+            data_str = str(self.data)
+            if len(data_str) > 200:
+                data_str = data_str[:20] + "  ...  " + data_str[-20:]
+            return f"{type(self).__name__}(data={data_str}, batch_size={self.batch_size}, device={self.device})"
+
+        self.__class__.__repr__ = __repr__
+
         old_eq = self.__class__.__eq__
         if old_eq is _eq:
             global NONTENSOR_HANDLED_FUNCTIONS
@@ -2051,6 +2059,8 @@ class NonTensorData:
         def _check_equal(a, b):
             if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
                 return (a == b).all()
+            if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+                return (a == b).all()
             try:
                 iseq = a == b
             except Exception:
@@ -2209,9 +2219,6 @@ class NonTensorData:
         if _metadata is None:
             return False
         return _metadata.get("memmaped", False)
-
-    def __repr__(self):
-        return f"{type(self).__name__}(data={self.data}, batch_size={self.batch_size}, device={self.device})"
 
 
 # For __setitem__ and _update_at_ we don't pass a kwarg but use a global variable instead
