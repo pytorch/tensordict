@@ -478,6 +478,8 @@ To silence this warning, choose one of the following options:
                 is_tensor = False
                 for _tensordict in list_of_tensordicts:
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
+                    if not _is_tensor_collection(type(tensor)):
+                        is_tensor = True
                     if isinstance(tensor, UninitializedTensorMixin):
                         is_not_init = True
                     elif tensor_shape is None:
@@ -490,8 +492,6 @@ To silence this warning, choose one of the following options:
                             raise RuntimeError(
                                 "The shapes of the tensors to stack is incompatible."
                             )
-                    elif not _is_tensor_collection(type(tensor)):
-                        is_tensor = True
                     out[key].append(tensor)
                 out[key] = (out[key], is_not_init, is_tensor)
 
