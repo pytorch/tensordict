@@ -1783,7 +1783,7 @@ class NonTensorData:
         def __repr__(self):
             data_str = str(self.data)
             if len(data_str) > 200:
-                data_str = data_str[:20] + "..."
+                data_str = data_str[:20] + "  ...  " + data_str[-20:]
             return f"{type(self).__name__}(data={data_str}, batch_size={self.batch_size}, device={self.device})"
 
         self.__class__.__repr__ = __repr__
