@@ -25,6 +25,7 @@ from tensordict.utils import (
     _ErrorInteceptor,
     DeviceType,
     is_non_tensor,
+    is_tensorclass,
     lazy_legacy,
     set_lazy_legacy,
 )
@@ -473,16 +474,19 @@ To silence this warning, choose one of the following options:
             out = {}
             for key in keys:
                 out[key] = []
-                is_not_init = False
+                is_not_init = None
                 tensor_shape = None
-                is_tensor = False
+                is_tensor = None
                 for _tensordict in list_of_tensordicts:
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
-                    if not _is_tensor_collection(type(tensor)):
-                        is_tensor = True
-                    if isinstance(tensor, UninitializedTensorMixin):
-                        is_not_init = True
-                    elif tensor_shape is None:
+                    if is_tensor is None:
+                        tensor_cls = type(tensor)
+                        is_tensor = (
+                            not _is_tensor_collection(tensor_cls)
+                        ) or is_tensorclass(tensor_cls)
+                    if is_not_init is None:
+                        is_not_init = isinstance(tensor, UninitializedTensorMixin)
+                    if not is_not_init and tensor_shape is None:
                         tensor_shape = tensor.shape
                     elif tensor.shape != tensor_shape:
                         if maybe_dense_stack:
@@ -495,10 +499,10 @@ To silence this warning, choose one of the following options:
                     out[key].append(tensor)
                 out[key] = (out[key], is_not_init, is_tensor)
 
-            def stack_fn(key, values, is_lazy, is_tensor):
-                if is_lazy:
+            def stack_fn(key, values, is_not_init, is_tensor):
+                if is_not_init:
                     return _stack_uninit_params(values, dim)
-                elif is_tensor:
+                if is_tensor:
                     return torch.stack(values, dim)
                 with _ErrorInteceptor(
                     key, "Attempted to stack tensors on different devices at key"
