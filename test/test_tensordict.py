@@ -5581,7 +5581,7 @@ class TestTensorDictRepr:
             device=device,
         )
 
-        return stack_td([td1, td2], 2)
+        return stack_td([td1, td2], 2, maybe_dense_stack=True)
 
     def td(self, device, dtype):
         if device is not None:
@@ -6417,12 +6417,12 @@ class TestLazyStackedTensorDict:
         td0 = TensorDict({"a": 1, "b": TensorDict({"c": 2}, [])}, [])
         td1 = TensorDict({"a": 1, "b": TensorDict({"d": 2}, [])}, [])
         with set_lazy_legacy(False):
-            td = torch.stack([td0, td1])
+            td = LazyStackedTensorDict.maybe_dense_stack([td0, td1])
         assert isinstance(td, TensorDict)
         assert isinstance(td.get("b"), LazyStackedTensorDict)
         td1 = TensorDict({"a": 1, "b": TensorDict({"c": [2]}, [])}, [])
         with set_lazy_legacy(False):
-            td = torch.stack([td0, td1])
+            td = LazyStackedTensorDict.maybe_dense_stack([td0, td1])
         assert isinstance(td, TensorDict)
         assert isinstance(td.get("b"), LazyStackedTensorDict)
 
@@ -6822,7 +6822,7 @@ class TestLazyStackedTensorDict:
             },
             batch_size=[],
         )
-        td = stack_td([td1, td2], 0)
+        td = LazyStackedTensorDict.maybe_dense_stack([td1, td2], 0)
         assert "a" in td.keys()
         assert "b" not in td.keys()
         assert "b" in td[1].keys()

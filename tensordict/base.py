@@ -4697,7 +4697,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # support inplace modif
         if imaplist:
             if chunksize == 0:
-                out = torch.stack(imaplist, dim)
+                from tensordict._lazy import LazyStackedTensorDict
+
+                # We want to be able to return whichever data structure
+                out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
             else:
                 out = torch.cat(imaplist, dim)
         return out
