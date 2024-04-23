@@ -488,7 +488,7 @@ To silence this warning, choose one of the following options:
                         is_not_init = isinstance(tensor, UninitializedTensorMixin)
                     if not is_not_init and tensor_shape is None:
                         tensor_shape = tensor.shape
-                    elif tensor.shape != tensor_shape:
+                    elif not is_not_init and tensor.shape != tensor_shape:
                         if maybe_dense_stack:
                             with set_lazy_legacy(True):
                                 return _stack(list_of_tensordicts, dim=dim)
