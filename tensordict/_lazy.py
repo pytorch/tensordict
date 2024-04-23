@@ -3414,18 +3414,6 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 def _iter_items_lazystack(
     tensordict: LazyStackedTensorDict, return_none_for_het_values: bool = False
 ) -> Iterator[tuple[str, CompatibleType]]:
-    # for key in tensordict.keys():
-    #     try:
-    #         value = tensordict.get(key)
-    #     except RuntimeError as err:
-    #         if return_none_for_het_values and re.match(
-    #             r"Found more than one unique shape in the tensors", str(err)
-    #         ):
-    #             # this is a het key
-    #             value = None
-    #         else:
-    #             raise err
-    #     yield key, value
     for key in tensordict.tensordicts[0].keys():
         values = tensordict._maybe_get_list(key)
         if values is not None:
