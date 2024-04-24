@@ -177,9 +177,13 @@ class TensorDict(TensorDictBase):
             ``batch_size``. Defaults to ``None`` (no dimension name, or ``None``
             for every dimension).
         non_blocking (bool, optional): if ``True`` and a device is passed, the tensordict
-            is delivered without synchronization. If ``False``, a global synchronization
-            will be made before delivering the tensordict, making sure that all the stored
-            tensors are ready to be read. Defaults to ``False``.
+            is delivered without synchronization. This is the fastest option but is only
+            safe when casting from cpu to cuda (otherwise a synchronization call must be
+            implemented by the user).
+            If ``False`` is passed, every tensor movement will be done synchronously.
+            If ``None`` (default), the device casting will be done asynchronously but
+            a synchronization will be executed after creation if required. This option
+            should generally be faster than ``False`` and potentially slower than ``True``.
         lock (bool, optional): if ``True``, the resulting tensordict will be
             locked.
 
@@ -215,11 +219,16 @@ class TensorDict(TensorDictBase):
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
-        non_blocking: bool = False,
+        non_blocking: bool = None,
         lock: bool = False,
         _run_checks: bool = True,
     ) -> None:
         has_device = False
+        if non_blocking is None:
+            sub_non_blocking = True
+            non_blocking = False
+        else:
+            sub_non_blocking = non_blocking
         if device is not None and isinstance(device, (int, str)):
             device = torch.device(device)
             has_device = True
@@ -236,7 +245,7 @@ class TensorDict(TensorDictBase):
                             batch_size=self._batch_size,
                             device=self._device,
                             _run_checks=_run_checks,
-                            non_blocking=True,
+                            non_blocking=sub_non_blocking,
                         )
                     _tensordict[key] = value
             self._td_dim_names = names
@@ -251,8 +260,8 @@ class TensorDict(TensorDictBase):
 
             if source is not None:
                 for key, value in source.items():
-                    self.set(key, value, non_blocking=True)
-        if not non_blocking and has_device:
+                    self.set(key, value, non_blocking=sub_non_blocking)
+        if not non_blocking and sub_non_blocking and has_device:
             self._sync_all()
         if lock:
             self.lock_()
@@ -2165,13 +2174,18 @@ class TensorDict(TensorDictBase):
         return out
 
     def to(self, *args, **kwargs: Any) -> T:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+        non_blocking = kwargs.pop("non_blocking", None)
+        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
         result = self
 
         if device is not None and dtype is None and device == self.device:
             return result
+
+        if non_blocking is None:
+            sub_non_blocking = True
+            non_blocking = False
+        else:
+            sub_non_blocking = non_blocking
 
         if convert_to_format is not None:
 
@@ -2179,14 +2193,16 @@ class TensorDict(TensorDictBase):
                 return tensor.to(
                     device,
                     dtype,
-                    non_blocking=True,
+                    non_blocking=sub_non_blocking,
                     convert_to_format=convert_to_format,
                 )
 
         else:
 
             def to(tensor):
-                return tensor.to(device=device, dtype=dtype, non_blocking=True)
+                return tensor.to(
+                    device=device, dtype=dtype, non_blocking=sub_non_blocking
+                )
 
         apply_kwargs = {}
         if device is not None or dtype is not None:
@@ -2195,7 +2211,7 @@ class TensorDict(TensorDictBase):
             result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         elif batch_size is not None:
             result.batch_size = batch_size
-        if device is not None and not non_blocking:
+        if device is not None and sub_non_blocking and not non_blocking:
             self._sync_all()
         return result
 
