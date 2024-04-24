@@ -490,63 +490,7 @@ sizes are compatible.</p>
     is_shared=False)
 </pre></div>
 </div>
-</section>
-<section id="subtensordict">
-<h2>SubTensorDict<a class="headerlink" href="#subtensordict" title="Permalink to this heading">¶</a></h2>
-<p>When we index a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with a contiguous index, we obtain a new
-<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> whose values are all views on the values of the original
-<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>. That means updates to the indexed <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> are
-applied to the original also.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
-    <span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
-<span class="p">)</span>
-<span class="n">td2</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
-<span class="n">td2</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-
-<span class="k">assert</span> <span class="p">(</span><span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">][</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">])</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[0., 0., 0., 0.],
-        [1., 1., 1., 1.],
-        [1., 1., 1., 1.]])
-</pre></div>
-</div>
-<p>This doesn’t work however if we use a non-contiguous index</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
-    <span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
-<span class="p">)</span>
-<span class="n">td2</span> <span class="o">=</span> <span class="n">tensordict</span><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">]]</span>
-<span class="n">td2</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-
-<span class="k">assert</span> <span class="p">(</span><span class="n">tensordict</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">])</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[0., 0., 0., 0.],
-        [0., 0., 0., 0.],
-        [0., 0., 0., 0.]])
-</pre></div>
-</div>
-<p>In case such functionality is needed, one can use
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">TensorDict.get_sub_tensordict</span></code>
-instead. The <a class="reference internal" href="../reference/generated/tensordict.SubTensorDict.html#tensordict.SubTensorDict" title="tensordict.SubTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">SubTensorDict</span></code></a> holds a reference to the orgiinal
-<a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> so that updates to the sub-tensordict can be written back to the
-source.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">tensordict</span> <span class="o">=</span> <a href="https://docs.python.org/3/library/collections.abc.html#collections.abc.MutableMapping" title="collections.abc.MutableMapping" class="sphx-glr-backref-module-collections-abc sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
-    <span class="p">{</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <a href="https://pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
-<span class="p">)</span>
-<span class="n">td2</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get_sub_tensordict</span><span class="p">(([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">],))</span>
-<span class="n">td2</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">tensordict</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">])</span>
-</pre></div>
-</div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>tensor([[1., 1., 1., 1.],
-        [0., 0., 0., 0.],
-        [1., 1., 1., 1.]])
-</pre></div>
-</div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.196 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.180 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-tensordict-slicing-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/245c7aad3c5052fda391900ac51962d9/tensordict_slicing.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">tensordict_slicing.ipynb</span></code></a></p>
@@ -605,7 +549,6 @@ source.</p>
 <li><a class="reference internal" href="#">Slicing, Indexing, and Masking</a><ul>
 <li><a class="reference internal" href="#setting-values-with-indexing">Setting Values with Indexing</a></li>
 <li><a class="reference internal" href="#masking">Masking</a></li>
-<li><a class="reference internal" href="#subtensordict">SubTensorDict</a></li>
 </ul>
 </li>
 </ul>

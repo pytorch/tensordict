@@ -228,14 +228,13 @@ Masking
 -------
 We mask :class:`TensorDict` as we mask tensors.
 
-.. GENERATED FROM PYTHON SOURCE LINES 78-82
+.. GENERATED FROM PYTHON SOURCE LINES 78-81
 
 .. code-block:: Python
 
 
     mask = torch.BoolTensor([[1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0]])
     tensordict[mask]
-
 
 
 
@@ -255,115 +254,10 @@ We mask :class:`TensorDict` as we mask tensors.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 83-89
-
-SubTensorDict
--------------
-When we index a :class:`~.TensorDict` with a contiguous index, we obtain a new
-:class:`~.TensorDict` whose values are all views on the values of the original
-:class:`~.TensorDict`. That means updates to the indexed :class:`~.TensorDict` are
-applied to the original also.
-
-.. GENERATED FROM PYTHON SOURCE LINES 89-99
-
-.. code-block:: Python
-
-
-    tensordict = TensorDict(
-        {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
-    )
-    td2 = tensordict[1:]
-    td2.fill_("b", 1)
-
-    assert (tensordict["b"][1:] == 1).all()
-    print(tensordict["b"])
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    tensor([[0., 0., 0., 0.],
-            [1., 1., 1., 1.],
-            [1., 1., 1., 1.]])
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 100-101
-
-This doesn't work however if we use a non-contiguous index
-
-.. GENERATED FROM PYTHON SOURCE LINES 101-111
-
-.. code-block:: Python
-
-
-    tensordict = TensorDict(
-        {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
-    )
-    td2 = tensordict[[0, 2]]
-    td2.fill_("b", 1)
-
-    assert (tensordict == 0).all()
-    print(tensordict["b"])
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    tensor([[0., 0., 0., 0.],
-            [0., 0., 0., 0.],
-            [0., 0., 0., 0.]])
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 112-117
-
-In case such functionality is needed, one can use
-:meth:`TensorDict.get_sub_tensordict <tensordict.TensorDict.get_sub_tensordict>`
-instead. The :class:`~.SubTensorDict` holds a reference to the orgiinal
-:class:`~.TensorDict` so that updates to the sub-tensordict can be written back to the
-source.
-
-.. GENERATED FROM PYTHON SOURCE LINES 117-124
-
-.. code-block:: Python
-
-
-    tensordict = TensorDict(
-        {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
-    )
-    td2 = tensordict.get_sub_tensordict(([0, 2],))
-    td2.fill_("b", 1)
-    print(tensordict["b"])
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    tensor([[1., 1., 1., 1.],
-            [0., 0., 0., 0.],
-            [1., 1., 1., 1.]])
-
-
-
-
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.196 seconds)
+   **Total running time of the script:** (0 minutes 0.180 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_slicing.py:

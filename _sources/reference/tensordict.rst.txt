@@ -14,7 +14,6 @@ regular pytorch tensors.
 
     TensorDictBase
     TensorDict
-    SubTensorDict
     LazyStackedTensorDict
     PersistentTensorDict
     TensorDictParams

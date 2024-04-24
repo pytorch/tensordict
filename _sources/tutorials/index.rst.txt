@@ -29,23 +29,6 @@ README Tutos
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to take advantage of memory pre-allocation in TensorDict.">
-
-.. only:: html
-
-  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_preallocation_thumb.png
-    :alt:
-
-  :ref:`sphx_glr_tutorials_tensordict_preallocation.py`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Pre-allocating memory with TensorDict</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to slice, index, and mask a TensorDict.">
 
 .. only:: html
@@ -58,6 +41,23 @@ README Tutos
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Slicing, Indexing, and Masking</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="In this tutorial you will learn how to take advantage of memory pre-allocation in TensorDict.">
+
+.. only:: html
+
+  .. image:: /tutorials/images/thumb/sphx_glr_tensordict_preallocation_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_tutorials_tensordict_preallocation.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Pre-allocating memory with TensorDict</div>
     </div>
 
 
@@ -189,8 +189,8 @@ README Tutos
    :hidden:
 
    /tutorials/tensordict_memory
-   /tutorials/tensordict_preallocation
    /tutorials/tensordict_slicing
+   /tutorials/tensordict_preallocation
    /tutorials/tensordict_module_functional
    /tutorials/tensordict_keys
    /tutorials/tensordict_shapes
