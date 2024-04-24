@@ -17,6 +17,8 @@ import numbers
 import os
 import pickle
 import shutil
+
+import sys
 import warnings
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -54,6 +56,16 @@ from torch import multiprocessing as mp, Tensor
 from torch.multiprocessing import Manager
 
 T = TypeVar("T", bound=TensorDictBase)
+# We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
+major, minor = sys.version_info[:2]
+if (major, minor) < (3, 11):
+
+    class _AnyType:
+        def __subclasscheck__(self, subclass):
+            return False
+
+else:
+    _AnyType = Any
 
 # methods where non_tensordict data should be cleared in the return value
 _CLEAR_METADATA = {"all", "any"}
@@ -448,7 +460,7 @@ def _get_type_hints(cls, with_locals=False):
             # globalns=globals(),
         )
         cls._type_hints = {
-            key: val if isinstance(val, type) else Any
+            key: val if isinstance(val, type) else _AnyType
             for key, val in cls._type_hints.items()
         }
     except NameError:
@@ -1117,10 +1129,10 @@ def _set(
         if cls.autocast:
             type_hints = cls._type_hints
             if type_hints is not None:
-                target_cls = type_hints.get(key, Any)
+                target_cls = type_hints.get(key, _AnyType)
             else:
                 warnings.warn("type_hints are none, cannot perform auto-casting")
-                target_cls = Any
+                target_cls = _AnyType
 
             if isinstance(value, dict):
                 if _is_tensor_collection(target_cls):
@@ -1145,9 +1157,9 @@ def _set(
                         f"Failed to cast the value {key} to the type annotation {target_cls}."
                     )
                 return set_tensor(value=cast_val)
-            elif value is not None and target_cls is not Any:
+            elif value is not None and target_cls is not _AnyType:
                 value = _cast_funcs[target_cls](value)
-            elif target_cls is Any and _is_castable(type(value)):
+            elif target_cls is _AnyType and _is_castable(type(value)):
                 return set_tensor()
         else:
             if isinstance(value, tuple(tensordict_lib.base._ACCEPTED_CLASSES)):
