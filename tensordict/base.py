@@ -43,6 +43,7 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
+    _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
     _proc_init,
@@ -881,6 +882,22 @@ class TensorDictBase(MutableMapping):
         1-element big.
         """
         return max(1, self.batch_size.numel())
+
+    @property
+    def depth(self) -> int:
+        """Returns the depth - maximum number of levels - of a tensordict.
+
+        The minimum depth is 0 (no nested tensordict).
+        """
+        return self._depth()
+
+    @cache  # noqa: B019
+    def _depth(self):
+        depth = 0
+        for key in self.keys(True, True, is_leaf=_is_leaf_nontensor):
+            if isinstance(key, tuple):
+                depth = max(depth, len(key) - 1)
+        return depth
 
     @overload
     def expand(self, *shape: int) -> T:
@@ -4696,7 +4713,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # support inplace modif
         if imaplist:
             if chunksize == 0:
-                out = torch.stack(imaplist, dim)
+                from tensordict._lazy import LazyStackedTensorDict
+
+                # We want to be able to return whichever data structure
+                out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
             else:
                 out = torch.cat(imaplist, dim)
         return out
@@ -6279,9 +6299,13 @@ To temporarily permute a tensordict you can still user permute() as a context ma
     def _flatten_keys_outplace(self, separator, is_leaf):
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
-        all_leaves, all_vals = zip(
+        all_leaves_all_vals = zip(
             *self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
         )
+        try:
+            all_leaves, all_vals = all_leaves_all_vals
+        except ValueError:
+            return self.empty()
         all_leaves_flat = [
             key if isinstance(key, str) else separator.join(key) for key in all_leaves
         ]
@@ -6660,6 +6684,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         """
         ...
 
+    def _sync_all(self):
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elif torch.backends.mps.is_available():
+            torch.mps.synchronize()
+
     def is_floating_point(self):
         for item in self.values(include_nested=True, leaves_only=True):
             if not item.is_floating_point():
@@ -6786,7 +6816,7 @@ def _default_is_leaf(cls: Type) -> bool:
 
 def _is_leaf_nontensor(cls: Type) -> bool:
     if _is_tensor_collection(cls):
-        return cls._is_non_tensor
+        return _is_non_tensor(cls)
     # if issubclass(cls, KeyedJaggedTensor):
     #     return False
     return issubclass(cls, torch.Tensor)

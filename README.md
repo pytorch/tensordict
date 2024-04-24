@@ -3,6 +3,7 @@
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat)](https://pytorch.github.io/tensordict/)
 --->
 [![Docs - GitHub.io](https://img.shields.io/static/v1?logo=github&style=flat&color=pink&label=docs&message=tensordict)][#docs-package]
+[![Discord Shield](https://dcbadge.vercel.app/api/server/tz3TgTAe3D)](https://discord.gg/tz3TgTAe3D)
 [![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)][#docs-package-benchmark]
 [![Python version](https://img.shields.io/pypi/pyversions/tensordict.svg)](https://www.python.org/downloads/)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)][#github-license]
