@@ -5748,7 +5748,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 return out.update(self.unsqueeze(dim))
             elif last_op == self.__class__.to_module.__name__:
                 if is_tensor_collection(out):
-                    return self.to_module(*args, **kwargs, swap_dest=out)
+                    with out.unlock_():
+                        return self.to_module(*args, **kwargs, swap_dest=out)
                 else:
                     raise RuntimeError(
                         "to_module cannot be used as a decorator when return_swap=False."
