@@ -1040,7 +1040,7 @@ class TensorDict(TensorDictBase):
             device=self.device,
             names=names,
             _run_checks=False,
-            lock=self.is_locked,
+            # lock=self.is_locked,
         )
         if self._is_memmap and _index_preserve_data_ptr(index):
             result._is_memmap = True
