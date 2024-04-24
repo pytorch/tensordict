@@ -14,7 +14,6 @@ from tensordict.functional import (
     pad_sequence,
 )
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.memmap_deprec import is_memmap, MemmapTensor, set_transfer_ownership
 from tensordict.persistent import PersistentTensorDict
 from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
 from tensordict.utils import (

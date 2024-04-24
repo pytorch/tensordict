@@ -692,9 +692,6 @@ def _reduce_memmap(memmap_tensor):
 
 ForkingPickler.register(MemoryMappedTensor, _reduce_memmap)
 
-# For backward compatibility in imports
-from tensordict.memmap_deprec import MemmapTensor  # noqa: F401
-
 
 def _proc_args_const(*args, **kwargs):
     if len(args) > 0:

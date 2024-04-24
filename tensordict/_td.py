@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import abc
-
 import json
 import numbers
 import os
@@ -44,7 +42,6 @@ from tensordict.base import (
 )
 
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
     _add_batch_dim_pre_hook,
     _BatchedUninitializedBuffer,
@@ -927,7 +924,7 @@ class TensorDict(TensorDictBase):
                 "Your resulting tensordict has no leaves but you did not specify filter_empty=False. "
                 "Currently, this returns an empty tree (filter_empty=True), but from v0.5 it will return "
                 "a None unless filter_empty=False. "
-                "To silcence this warning, set filter_empty to the desired value in your call to `apply`.",
+                "To silence this warning, set filter_empty to the desired value in your call to `apply`.",
                 category=DeprecationWarning,
             )
         if result is None:
@@ -3456,7 +3453,7 @@ class _TensorDictKeysView:
                 item_root = self.tensordict._get_str(key[0], default=None)
                 if item_root is not None:
                     entry_type = type(item_root)
-                    if issubclass(entry_type, (Tensor, _MemmapTensor)):
+                    if issubclass(entry_type, Tensor):
                         return False
                     elif entry_type is KeyedJaggedTensor:
                         if len(key) > 2:
@@ -3533,15 +3530,6 @@ def _set_tensor_dict(  # noqa: F811
     return out
 
 
-class _subtd_meta_deprec(abc.ABCMeta):
-    def __call__(self, *args, **kwargs):
-        warn(
-            "SubTensorDict will become a private feature in v0.4. Please refrain from using it directly."
-        )
-        instance = _SubTensorDict(*args, **kwargs)
-        return instance
-
-
 def _index_to_str(index):
     if isinstance(index, tuple):
         return tuple(_index_to_str(elt) for elt in index)
@@ -3569,15 +3557,6 @@ def _str_to_index(index):
             return torch.tensor(index, device=device)
         return tuple(_index_to_str(elt) for elt in index)
     return index
-
-
-class SubTensorDict(_SubTensorDict, metaclass=_subtd_meta_deprec):
-    """Deprecated public version of _SubTensorDict class.
-
-    See :class:`~tensordict._SubTensorDict`.
-    """
-
-    ...
 
 
 _register_tensor_class(TensorDict)

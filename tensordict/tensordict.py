@@ -18,7 +18,6 @@ from tensordict.functional import (  # noqa: F401
     pad_sequence,
 )
 from tensordict.memmap import MemoryMappedTensor  # noqa: F401
-from tensordict.memmap_deprec import is_memmap, MemmapTensor  # noqa: F401
 from tensordict.utils import (  # noqa: F401
     assert_allclose_td,
     cache,

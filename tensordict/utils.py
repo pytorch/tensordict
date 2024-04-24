@@ -66,7 +66,6 @@ from torch.nn.parameter import (
 from torch.utils.data._utils.worker import _generate_state
 
 if TYPE_CHECKING:
-    from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
     from tensordict.tensordict import TensorDictBase
 
 try:
@@ -299,9 +298,9 @@ else:
 
 
 def expand_as_right(
-    tensor: torch.Tensor | _MemmapTensor | TensorDictBase,
-    dest: torch.Tensor | _MemmapTensor | TensorDictBase,
-) -> torch.Tensor | _MemmapTensor | TensorDictBase:
+    tensor: torch.Tensor | TensorDictBase,
+    dest: torch.Tensor | TensorDictBase,
+) -> torch.Tensor | TensorDictBase:
     """Expand a tensor on the right to match another tensor shape.
 
     Args:
@@ -1058,7 +1057,6 @@ def cache(fun):
         >>> print(timeit.timeit("set(td.all_keys())", globals={'td': td}))
         0.88
     """
-    from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
     @wraps(fun)
     def newfun(_self: "TensorDictBase", *args, **kwargs):
@@ -1071,7 +1069,7 @@ def cache(fun):
         key = _make_cache_key(args, kwargs)
         if key not in cache:
             out = fun(_self, *args, **kwargs)
-            if not isinstance(out, (Tensor, _MemmapTensor, KeyedJaggedTensor)):
+            if not isinstance(out, (Tensor, KeyedJaggedTensor)):
                 # we don't cache tensors to avoid filling the mem and / or
                 # stacking them from their origin
                 cache[key] = out
