@@ -17,6 +17,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Optional, Tuple, Union
 
+import numpy as np
 import pytest
 import torch
 
@@ -1019,7 +1020,7 @@ class TestTensorClass:
         data.set("k", torch.zeros(3, 4, 5))
 
     def test_set_dict(self):
-        @tensorclass
+        @tensorclass(autocast=True)
         class MyClass:
             x: torch.Tensor
             y: MyClass = None
@@ -1881,7 +1882,7 @@ def test_to_dict():
     assert not (test_class == TestClass.from_dict(test_class3.to_dict())).all()
 
 
-@tensorclass
+@tensorclass(autocast=True)
 class AutoCast:
     tensor: torch.Tensor
     non_tensor: str
@@ -1889,7 +1890,7 @@ class AutoCast:
     tc: AutoCast
 
 
-@tensorclass
+@tensorclass(autocast=True)
 class AutoCastOr:
     tensor: torch.Tensor
     non_tensor: str
@@ -1897,7 +1898,7 @@ class AutoCastOr:
     tc: AutoCast | None = None
 
 
-@tensorclass
+@tensorclass(autocast=True)
 class AutoCastOptional:
     tensor: torch.Tensor
     non_tensor: str
@@ -1906,14 +1907,66 @@ class AutoCastOptional:
     tc: Optional[AutoCast] = None
 
 
+@tensorclass(autocast=True)
+class AutoCastTensor:
+    tensor: torch.Tensor
+    integer: int
+    string: str
+    floating: float
+    numpy: np.ndarray
+    anything: Any
+
+
 class TestAutoCasting:
-    @tensorclass
+    @tensorclass(autocast=True)
     class ClsAutoCast:
         tensor: torch.Tensor
         non_tensor: str
         td: TensorDict
         tc: "ClsAutoCast"  # noqa: F821
         tc_global: AutoCast
+
+    def test_autocast_attr(self):
+        @tensorclass(autocast=False)
+        class T:
+            X: torch.Tensor
+
+        assert not T.autocast
+
+        @tensorclass
+        class T:
+            X: torch.Tensor
+
+        assert not T.autocast
+
+        @tensorclass(autocast=True)
+        class T:
+            X: torch.Tensor
+
+        assert T.autocast
+
+    def test_autocast_simple(self):
+        obj = AutoCastTensor(
+            tensor=1,
+            integer=1,
+            string=1,
+            floating=1,
+            numpy=1,
+            anything=1,
+        )
+        assert isinstance(obj.tensor, torch.Tensor)
+        assert isinstance(obj.integer, int)
+        assert isinstance(obj.string, str)
+        assert isinstance(obj.floating, float)
+        assert isinstance(obj.numpy, np.ndarray)
+        assert isinstance(obj.anything, torch.Tensor)
+        obj.tensor = 1.0
+        assert isinstance(obj.tensor, torch.Tensor)
+        with pytest.raises(TypeError):
+            obj.tensor = "str"
+        obj.anything = 1.0
+        assert isinstance(obj.anything, torch.Tensor)
+        obj.anything = "str"
 
     def test_autocast(self):
         # Autocasting is implemented only for tensordict / tensorclasses.
@@ -2028,7 +2081,7 @@ class TestAutoCasting:
         assert obj.tc["tc"] is None
 
     def test_autocast_func(self):
-        @tensorclass
+        @tensorclass(autocast=True)
         class FuncAutoCast:
             tensor: torch.Tensor
             non_tensor: str
