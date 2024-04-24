@@ -12,7 +12,6 @@ import contextlib
 import importlib
 import json
 import numbers
-import warnings
 import weakref
 from collections.abc import MutableMapping
 
@@ -355,13 +354,6 @@ class TensorDictBase(MutableMapping):
         from tensordict._td import _SubTensorDict
 
         return _SubTensorDict(source=self, idx=idx)
-
-    def get_sub_tensordict(self, idx: IndexType) -> T:
-        warnings.warn(
-            "get_sub_tensordict will be made private in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self._get_sub_tensordict(idx)
 
     @abc.abstractmethod
     def __setitem__(
@@ -1021,25 +1013,7 @@ class TensorDictBase(MutableMapping):
             >>> assert td.get("y").shape == [3, 4]
 
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.unsqueeze was to return a dense or lazy
-version of the unsqueezed tensordict. Up until v0.3 included, a lazy unsqueezed tensordict was returned.
-From v0.4 onward, a dense unsqueeze will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where unsqueeze is used.
-
-To temporarily unsqueeze a tensordict you can still user unsqueeze() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_unsqueeze(*args, **kwargs)
@@ -1110,25 +1084,7 @@ To temporarily unsqueeze a tensordict you can still user unsqueeze() as a contex
             >>> assert td.get("y").shape == [3, 1, 4]
 
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.squeeze was to return a dense or lazy
-version of the squeezed tensordict. Up until v0.3 included, a lazy squeezed tensordict was returned.
-From v0.4 onward, a dense squeeze will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where squeeze is used.
-
-To temporarily squeeze a tensordict you can still user squeeze() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_squeeze(*args, **kwargs)
@@ -1322,25 +1278,7 @@ To temporarily squeeze a tensordict you can still user squeeze() as a context ma
             >>> print(td_view.get("b").shape)  # torch.Size([1, 4, 3, 10, 1])
 
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.view was to return a dense or lazy
-version of the viewed tensordict. Up until v0.3 included, a lazy view of the tensordict was returned.
-From v0.4 onward, a proper view will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where view is used.
-
-To temporarily view a tensordict you can still user view() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_view(*shape, size=size)
@@ -1391,25 +1329,7 @@ To temporarily view a tensordict you can still user view() as a context manager 
             >>> print(tensordict.get("b").shape)
             torch.Size([3, 4])
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.transpose was to return a dense or lazy
-version of the transposed tensordict. Up until v0.3 included, a lazy transpose of the tensordict was returned.
-From v0.4 onward, a proper transpose will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where transpose is used.
-
-To temporarily transpose a tensordict you can still user transpose() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_transpose(dim0, dim1)
@@ -1506,25 +1426,7 @@ To temporarily transpose a tensordict you can still user transpose() as a contex
                     is_shared=False),
                 op=permute(dims=[1, 0]))
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.permute was to return a dense or lazy
-version of the permuted tensordict. Up until v0.3 included, a lazy permute of the tensordict was returned.
-From v0.4 onward, a proper permute will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where permute is used.
-
-To temporarily permute a tensordict you can still user permute() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_permute(*args, **kwargs)

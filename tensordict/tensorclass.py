@@ -40,7 +40,6 @@ from tensordict.base import (
     _register_tensor_class,
     CompatibleType,
 )
-from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
     _get_repr,
     _is_json_serializable,
@@ -900,7 +899,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         raise ValueError(f"Invalid indexing arguments: {item}.")
 
     if not is_tensorclass(value) and not isinstance(
-        value, (TensorDictBase, numbers.Number, Tensor, _MemmapTensor)
+        value, (TensorDictBase, numbers.Number, Tensor)
     ):
         raise ValueError(
             f"__setitem__ only supports tensorclasses, tensordicts,"
@@ -1393,7 +1392,7 @@ def _eq(self, other: object) -> bool:
 
     """
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor, _MemmapTensor)
+        other, (dict, numbers.Number, Tensor)
     ):
         return False
     if is_tensorclass(other):
@@ -1454,7 +1453,7 @@ def _ne(self, other: object) -> bool:
 
     """
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor, _MemmapTensor)
+        other, (dict, numbers.Number, Tensor)
     ):
         return True
     if is_tensorclass(other):
@@ -1482,7 +1481,7 @@ def _or(self, other: object) -> bool:
 
     """
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor, _MemmapTensor)
+        other, (dict, numbers.Number, Tensor)
     ):
         return False
     if is_tensorclass(other):
@@ -1510,7 +1509,7 @@ def _xor(self, other: object) -> bool:
 
     """
     if not is_tensor_collection(other) and not isinstance(
-        other, (dict, numbers.Number, Tensor, _MemmapTensor)
+        other, (dict, numbers.Number, Tensor)
     ):
         return False
     if is_tensorclass(other):

@@ -8,10 +8,10 @@ import torch
 from tensordict import (
     LazyStackedTensorDict,
     PersistentTensorDict,
-    SubTensorDict,
     TensorDict,
     TensorDictBase,
 )
+from tensordict._td import _SubTensorDict
 from tensordict.utils import implement_for
 
 try:
@@ -24,7 +24,7 @@ except ImportError:
 
 PYTREE_REGISTERED_TDS = (
     LazyStackedTensorDict,
-    SubTensorDict,
+    _SubTensorDict,
     TensorDict,
     PersistentTensorDict,
 )
