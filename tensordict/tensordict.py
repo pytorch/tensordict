@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict._lazy import LazyStackedTensorDict  # noqa: F401
-from tensordict._td import SubTensorDict, TensorDict  # noqa: F401
+from tensordict._td import TensorDict  # noqa: F401
 from tensordict.base import (  # noqa: F401
     is_tensor_collection,
     NO_DEFAULT,

@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from tensordict._lazy import LazyStackedTensorDict
-from tensordict._td import is_tensor_collection, SubTensorDict, TensorDict
+from tensordict._td import is_tensor_collection, TensorDict
 from tensordict.base import TensorDictBase
 from tensordict.functional import (
     dense_stack_tds,
@@ -36,7 +36,6 @@ except ImportError:
 __all__ = [
     "LazyStackedTensorDict",
     "MemmapTensor",
-    "SubTensorDict",
     "make_tensordict",
     "assert_allclose_td",
     "TensorDict",
