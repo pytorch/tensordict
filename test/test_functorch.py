@@ -315,7 +315,13 @@ class TestVmap:
             x.lock_()
         if lock_y:
             y.lock_()
-        out = fun(x, y)
+        if lock_x:
+            with pytest.raises(RuntimeError, match="Cannot modify"):
+                fun(x, y)
+            return
+        else:
+            out = fun(x, y)
+        assert (out[key] == 3).all()
         assert isinstance(out, LazyStackedTensorDict)
         if out_dim == 0:
             assert out.shape[out_dim] == x.shape[in_dim]

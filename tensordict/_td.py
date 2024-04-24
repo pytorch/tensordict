@@ -180,6 +180,8 @@ class TensorDict(TensorDictBase):
             is delivered without synchronization. If ``False``, a global synchronization
             will be made before delivering the tensordict, making sure that all the stored
             tensors are ready to be read. Defaults to ``False``.
+        lock (bool, optional): if ``True``, the resulting tensordict will be
+            locked.
 
     Examples:
         >>> import torch
@@ -214,6 +216,7 @@ class TensorDict(TensorDictBase):
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
         non_blocking: bool = False,
+        lock: bool = False,
         _run_checks: bool = True,
     ) -> None:
         has_device = False
@@ -251,6 +254,8 @@ class TensorDict(TensorDictBase):
                     self.set(key, value, non_blocking=True)
         if not non_blocking and has_device:
             self._sync_all()
+        if lock:
+            self.lock_()
 
     @classmethod
     def from_module(
@@ -397,7 +402,9 @@ class TensorDict(TensorDictBase):
                     return Buffer(x)
                 return x
 
-            input = state_dict.unflatten_keys(".")._fast_apply(convert_type, self)
+            input = state_dict.unflatten_keys(".")._fast_apply(
+                convert_type, self, propagate_lock=True
+            )
         else:
             input = self
             inplace = bool(inplace)
@@ -961,6 +968,7 @@ class TensorDict(TensorDictBase):
             ),
             names=[name for i, name in enumerate(td.names) if i != in_dim],
             _run_checks=False,
+            lock=self.is_locked,
         )
         return out
 
@@ -981,6 +989,7 @@ class TensorDict(TensorDictBase):
             },
             batch_size=new_batch_size,
             names=new_names,
+            lock=self.is_locked,
         )
         return out
 
@@ -1031,6 +1040,7 @@ class TensorDict(TensorDictBase):
             device=self.device,
             names=names,
             _run_checks=False,
+            # lock=self.is_locked,
         )
         if self._is_memmap and _index_preserve_data_ptr(index):
             result._is_memmap = True
@@ -1075,6 +1085,7 @@ class TensorDict(TensorDictBase):
             batch_size=shape,
             call_on_nested=True,
             names=names,
+            propagate_lock=True,
         )
 
     def _unbind(self, dim: int):
@@ -1224,7 +1235,9 @@ class TensorDict(TensorDictBase):
         def _view(tensor):
             return tensor.view((*shape, *tensor.shape[batch_dims:]))
 
-        result = self._fast_apply(_view, batch_size=shape, call_on_nested=True)
+        result = self._fast_apply(
+            _view, batch_size=shape, call_on_nested=True, propagate_lock=True
+        )
         self._maybe_set_shared_attributes(result)
         return result
 
@@ -1244,7 +1257,9 @@ class TensorDict(TensorDictBase):
         def _reshape(tensor):
             return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
 
-        return self._fast_apply(_reshape, batch_size=shape, call_on_nested=True)
+        return self._fast_apply(
+            _reshape, batch_size=shape, call_on_nested=True, propagate_lock=True
+        )
 
     def _transpose(self, dim0, dim1):
         def _transpose(tensor):
@@ -1268,6 +1283,7 @@ class TensorDict(TensorDictBase):
             batch_size=torch.Size(batch_size),
             call_on_nested=True,
             names=names,
+            propagate_lock=True,
         )
         self._maybe_set_shared_attributes(result)
         return result
@@ -1303,7 +1319,11 @@ class TensorDict(TensorDictBase):
         else:
             names = None
         result = self._fast_apply(
-            _permute, batch_size=batch_size, call_on_nested=True, names=names
+            _permute,
+            batch_size=batch_size,
+            call_on_nested=True,
+            names=names,
+            propagate_lock=True,
         )
         self._maybe_set_shared_attributes(result)
         return result
@@ -1330,6 +1350,7 @@ class TensorDict(TensorDictBase):
                 names=names,
                 inplace=False,
                 call_on_nested=True,
+                propagate_lock=True,
             )
         # make the dim positive
         if dim < 0:
@@ -1357,6 +1378,7 @@ class TensorDict(TensorDictBase):
             names=names,
             inplace=False,
             call_on_nested=True,
+            propagate_lock=True,
         )
         self._maybe_set_shared_attributes(result)
         return result
@@ -1390,6 +1412,7 @@ class TensorDict(TensorDictBase):
             names=names,
             inplace=False,
             call_on_nested=True,
+            propagate_lock=True,
         )
         self._maybe_set_shared_attributes(result)
         return result
@@ -1710,7 +1733,7 @@ class TensorDict(TensorDictBase):
         def pin_mem(tensor):
             return tensor.pin_memory()
 
-        return self._fast_apply(pin_mem)
+        return self._fast_apply(pin_mem, propagate_lock=True)
 
     def _set_str(
         self,
@@ -2169,7 +2192,7 @@ class TensorDict(TensorDictBase):
         if device is not None or dtype is not None:
             apply_kwargs["device"] = device if device is not None else self.device
             apply_kwargs["batch_size"] = batch_size
-            result = result._fast_apply(to, **apply_kwargs)
+            result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         elif batch_size is not None:
             result.batch_size = batch_size
         if device is not None and not non_blocking:
@@ -2252,7 +2275,7 @@ class TensorDict(TensorDictBase):
                         other=other,
                     )
 
-                return self._fast_apply(func)
+                return self._fast_apply(func, propagate_lock=True)
             else:
 
                 def func(tensor, _out):
@@ -2263,7 +2286,7 @@ class TensorDict(TensorDictBase):
                         out=_out,
                     )
 
-                return self._fast_apply(func, out)
+                return self._fast_apply(func, out, propagate_lock=True)
 
     def masked_fill_(self, mask: Tensor, value: float | int | bool) -> T:
         for item in self.values():
@@ -3095,7 +3118,9 @@ class _SubTensorDict(TensorDictBase):
         else:
             shape = args
         return self._fast_apply(
-            lambda x: x.expand((*shape, *x.shape[self.ndim :])), batch_size=shape
+            lambda x: x.expand((*shape, *x.shape[self.ndim :])),
+            batch_size=shape,
+            propagate_lock=True,
         )
 
     def is_shared(self) -> bool:
