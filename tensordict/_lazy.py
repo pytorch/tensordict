@@ -43,7 +43,7 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.memmap import MemoryMappedTensor as MemmapTensor
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _broadcast_tensors,
     _get_shape_from_args,
@@ -926,9 +926,7 @@ class LazyStackedTensorDict(TensorDictBase):
             tensors.append(td._get_str(key, default=default))
             if (
                 tensors[-1] is default
-                and not isinstance(
-                    default, (MemmapTensor, KeyedJaggedTensor, torch.Tensor)
-                )
+                and not isinstance(default, (KeyedJaggedTensor, torch.Tensor))
                 and not is_tensor_collection(default)
             ):
                 # then we consider this default as non-stackable and return prematurly
