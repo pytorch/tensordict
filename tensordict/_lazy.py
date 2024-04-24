@@ -43,7 +43,6 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _broadcast_tensors,
     _get_shape_from_args,
