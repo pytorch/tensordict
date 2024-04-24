@@ -1055,6 +1055,13 @@ class TestGeneric:
                 device="cpu",
             )
             assert (td == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
+                device="cpu",
+            )
+            assert (td == 1).all()
         # This is too flaky
         # with pytest.raises(AssertionError):
         #     for _ in range(10):
@@ -1078,6 +1085,20 @@ class TestGeneric:
                 {str(i): torch.ones((10,), device=device) for i in range(5)},
                 [10],
                 non_blocking=False,
+                device=device,
+            )
+            assert (td.to("cpu", non_blocking=False) == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device="cpu") for i in range(5)},
+                [10],
+                device="cpu",
+            )
+            assert (td.to(device, non_blocking=False) == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
                 device=device,
             )
             assert (td.to("cpu", non_blocking=False) == 1).all()

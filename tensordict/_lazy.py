@@ -1291,9 +1291,8 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> T:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+        non_blocking = kwargs.pop("non_blocking", None)
+        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
         if batch_size is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
         result = self
@@ -1301,8 +1300,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
 
-        non_blocking = kwargs.pop("non_blocking", False)
-        kwargs["non_blocking"] = True
+        if non_blocking in (None, True):
+            kwargs["non_blocking"] = True
+        else:
+            kwargs["non_blocking"] = False
+        non_blocking = bool(non_blocking)
         result = type(self)(
             *[td.to(*args, **kwargs) for td in self.tensordicts],
             stack_dim=self.stack_dim,
@@ -2833,9 +2835,8 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> T:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+        non_blocking = kwargs.pop("non_blocking", None)
+        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
         if batch_size is not None:
             raise TypeError(f"Cannot pass batch-size to a {type(self)}.")
         result = self
@@ -2843,7 +2844,7 @@ class _CustomOpTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
 
-        td = self._source.to(*args, **kwargs)
+        td = self._source.to(*args, non_blocking=non_blocking, **kwargs)
         self_copy = copy(self)
         self_copy._source = td
         return self_copy
