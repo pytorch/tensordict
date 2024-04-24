@@ -1055,6 +1055,13 @@ class TestGeneric:
                 device="cpu",
             )
             assert (td == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
+                device="cpu",
+            )
+            assert (td == 1).all()
         # This is too flaky
         # with pytest.raises(AssertionError):
         #     for _ in range(10):
@@ -1078,6 +1085,20 @@ class TestGeneric:
                 {str(i): torch.ones((10,), device=device) for i in range(5)},
                 [10],
                 non_blocking=False,
+                device=device,
+            )
+            assert (td.to("cpu", non_blocking=False) == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device="cpu") for i in range(5)},
+                [10],
+                device="cpu",
+            )
+            assert (td.to(device, non_blocking=False) == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
                 device=device,
             )
             assert (td.to("cpu", non_blocking=False) == 1).all()
@@ -2056,7 +2077,9 @@ class TestPointwiseOps:
         other = self.dummy_td_1
         if locked:
             other.lock_()
-        assert (td + other == 1).all()
+        r = td + other
+        assert r.is_locked is locked
+        assert (r == 1).all()
 
     @pytest.mark.parametrize("locked", [True, False])
     def test_add_(self, locked):
@@ -2103,6 +2126,7 @@ class TestPointwiseOps:
         if locked:
             other.lock_()
         td = td * other
+        assert td.is_locked is locked
         assert (td == 0).all()
 
     @pytest.mark.parametrize("locked", [True, False])
@@ -2148,7 +2172,9 @@ class TestPointwiseOps:
         other = self.dummy_td_2
         if locked:
             other.lock_()
-        assert (td / other == 1).all()
+        r = td / other
+        assert r.is_locked is locked
+        assert (r == 1).all()
 
     @pytest.mark.parametrize("locked", [True, False])
     def test_div_(self, locked):
@@ -2193,7 +2219,11 @@ class TestPointwiseOps:
         other = self.dummy_td_2
         if locked:
             other.lock_()
-        assert (td**other == 4).all()
+
+        r = td**other
+        assert r.is_locked is locked
+
+        assert (r == 4).all()
 
     @pytest.mark.parametrize("locked", [True, False])
     def test_pow_(self, locked):
@@ -4089,8 +4119,13 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         _ = str(td)
 
-    def test_reshape(self, td_name, device):
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_reshape(self, td_name, device, lock):
         td = getattr(self, td_name)(device)
+        if lock:
+            if td_name in ("sub_td", "sub_td2"):
+                pytest.skip()
+            td.lock_()
         td_reshape = td.reshape(td.shape)
         # assert isinstance(td_reshape, TensorDict)
         assert td_reshape.shape.numel() == td.shape.numel()
@@ -4115,6 +4150,8 @@ class TestTensorDicts(TestTensorDictsBase):
         assert isinstance(td_reshape, TensorDict)
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == torch.Size([td.shape.numel()])
+        if td.is_locked:
+            assert td_reshape.is_locked
 
     @pytest.mark.parametrize("strict", [True, False])
     @pytest.mark.parametrize("inplace", [True, False])
@@ -7378,12 +7415,14 @@ class TestNamedDims(TestTensorDictsBase):
             td.names = ["a", "b", "c"]
 
     def test_permute(self):
-        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        td = TensorDict({"sub": {}}, batch_size=[3, 4, 5, 6], names=None, lock=True)
         td.names = ["a", "b", "c", "d"]
         tdp = td.permute(-1, -2, -3, -4)
         assert tdp.names == list("dcba")
         tdp = td.permute(-1, 1, 2, -4)
         assert tdp.names == list("dbca")
+        assert tdp.is_locked
+        assert tdp["sub"].is_locked
 
     def test_permute_td(self):
         td = self.unsqueezed_td("cpu")
@@ -7451,11 +7490,14 @@ class TestNamedDims(TestTensorDictsBase):
         assert td["a"].names == ["a", "b"]
 
     def test_split(self):
-        td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
+        td = TensorDict(
+            {}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"], lock=True
+        )
         _, tdu = td.split(dim=-1, split_size=[3, 3])
         assert tdu.names == ["a", "b", "c", "d"]
         _, tdu = td.split(dim=1, split_size=[1, 3])
         assert tdu.names == ["a", "b", "c", "d"]
+        # assert tdu.is_locked
 
     def test_squeeze(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)

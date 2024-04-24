@@ -1106,22 +1106,28 @@ class LazyStackedTensorDict(TensorDictBase):
         if in_dim < 0:
             in_dim = self.ndim + in_dim
         if in_dim == self.stack_dim:
-            return self._cached_add_batch_dims(td, in_dim=in_dim, vmap_level=vmap_level)
-        if in_dim < td.stack_dim:
-            # then we'll stack along a dim before
-            stack_dim = td.stack_dim - 1
-        else:
-            in_dim = in_dim - 1
-            stack_dim = td.stack_dim
-        tds = [
-            td._fast_apply(
-                lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
-                batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
-                names=[name for i, name in enumerate(td.names) if i != in_dim],
+            result = self._cached_add_batch_dims(
+                td, in_dim=in_dim, vmap_level=vmap_level
             )
-            for td in td.tensordicts
-        ]
-        return LazyStackedTensorDict(*tds, stack_dim=stack_dim)
+        else:
+            if in_dim < td.stack_dim:
+                # then we'll stack along a dim before
+                stack_dim = td.stack_dim - 1
+            else:
+                in_dim = in_dim - 1
+                stack_dim = td.stack_dim
+            tds = [
+                td._fast_apply(
+                    lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
+                    batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
+                    names=[name for i, name in enumerate(td.names) if i != in_dim],
+                )
+                for td in td.tensordicts
+            ]
+            result = LazyStackedTensorDict(*tds, stack_dim=stack_dim)
+        if self.is_locked:
+            result.lock_()
+        return result
 
     @classmethod
     def _cached_add_batch_dims(cls, td, in_dim, vmap_level):
@@ -1160,7 +1166,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if self.hook_out is not None:
             # this is the hacked version. We just need to remove the hook_out and
             # reset a proper batch size
-            return LazyStackedTensorDict(
+            result = LazyStackedTensorDict(
                 *self.tensordicts,
                 stack_dim=out_dim,
             )
@@ -1182,7 +1188,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 out_dim = out_dim - 1
             else:
                 stack_dim = self.stack_dim + 1
-            out = LazyStackedTensorDict(
+            result = LazyStackedTensorDict(
                 *[
                     td._remove_batch_dim(
                         vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
@@ -1191,7 +1197,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 ],
                 stack_dim=stack_dim,
             )
-        return out
+        if self.is_locked:
+            result.lock_()
+        return result
 
     def get_nestedtensor(
         self,
@@ -1259,6 +1267,7 @@ class LazyStackedTensorDict(TensorDictBase):
             device=device,
             names=self.names,
             _run_checks=False,
+            lock=self.is_locked,
         )
         return out
 
@@ -1291,9 +1300,8 @@ class LazyStackedTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> T:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+        non_blocking = kwargs.pop("non_blocking", None)
+        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
         if batch_size is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
         result = self
@@ -1301,8 +1309,11 @@ class LazyStackedTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
 
-        non_blocking = kwargs.pop("non_blocking", False)
-        kwargs["non_blocking"] = True
+        if non_blocking in (None, True):
+            kwargs["non_blocking"] = True
+        else:
+            kwargs["non_blocking"] = False
+        non_blocking = bool(non_blocking)
         result = type(self)(
             *[td.to(*args, **kwargs) for td in self.tensordicts],
             stack_dim=self.stack_dim,
@@ -1311,6 +1322,8 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         if device is not None and not non_blocking:
             self._sync_all()
+        if self.is_locked:
+            result.lock_()
         return result
 
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
@@ -1414,7 +1427,7 @@ class LazyStackedTensorDict(TensorDictBase):
     def apply_(self, fn: Callable, *others, **kwargs):
         others = (other.unbind(self.stack_dim) for other in others)
         for td, *_others in zip(self.tensordicts, *others):
-            td._fast_apply(fn, *_others, inplace=True, **kwargs)
+            td._fast_apply(fn, *_others, inplace=True, propagate_lock=True, **kwargs)
         return self
 
     def _apply_nest(
@@ -1700,6 +1713,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 result = LazyStackedTensorDict.lazy_stack(
                     stack, stack_dim, stack_dim_name=self._td_dim_name
                 )
+                if self.is_locked:
+                    result.lock_()
                 return result
 
             return recompose(converted_idx)
@@ -1726,6 +1741,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 result = LazyStackedTensorDict.lazy_stack(
                     result, new_stack_dim, stack_dim_name=self._td_dim_name
                 )
+                if self.is_locked:
+                    result.lock_()
                 return result
 
     def __eq__(self, other):
@@ -2817,7 +2834,7 @@ class _CustomOpTensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def contiguous(self) -> T:
-        return self._fast_apply(lambda x: x.contiguous())
+        return self._fast_apply(lambda x: x.contiguous(), propagate_lock=True)
 
     def rename_key_(
         self, old_key: NestedKey, new_key: NestedKey, safe: bool = False
@@ -2833,9 +2850,8 @@ class _CustomOpTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs) -> T:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+        non_blocking = kwargs.pop("non_blocking", None)
+        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
         if batch_size is not None:
             raise TypeError(f"Cannot pass batch-size to a {type(self)}.")
         result = self
@@ -2843,7 +2859,7 @@ class _CustomOpTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
 
-        td = self._source.to(*args, **kwargs)
+        td = self._source.to(*args, non_blocking=non_blocking, **kwargs)
         self_copy = copy(self)
         self_copy._source = td
         return self_copy
