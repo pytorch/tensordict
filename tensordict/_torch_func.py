@@ -144,7 +144,7 @@ def _full_like(td: T, fill_value: float, **kwargs: Any) -> T:
 
 @implements_for_td(torch.zeros_like)
 def _zeros_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(torch.zeros_like)
+    td_clone = td._fast_apply(torch.zeros_like, propagate_lock=True)
     if "dtype" in kwargs:
         raise ValueError("Cannot pass dtype to full_like with TensorDict")
     if "device" in kwargs:
@@ -159,7 +159,7 @@ def _zeros_like(td: T, **kwargs: Any) -> T:
 
 @implements_for_td(torch.ones_like)
 def _ones_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(lambda x: torch.ones_like(x))
+    td_clone = td._fast_apply(lambda x: torch.ones_like(x), propagate_lock=True)
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -172,7 +172,7 @@ def _ones_like(td: T, **kwargs: Any) -> T:
 
 @implements_for_td(torch.rand_like)
 def _rand_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(lambda x: torch.rand_like(x))
+    td_clone = td._fast_apply(lambda x: torch.rand_like(x), propagate_lock=True)
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -185,7 +185,7 @@ def _rand_like(td: T, **kwargs: Any) -> T:
 
 @implements_for_td(torch.randn_like)
 def _randn_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(lambda x: torch.randn_like(x))
+    td_clone = td._fast_apply(lambda x: torch.randn_like(x), propagate_lock=True)
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -207,7 +207,9 @@ def _empty_like(td: T, *args, **kwargs) -> T:
             "Consider calling tensordict.to_tensordict() first."
         ) from err
     return tdclone._fast_apply(
-        lambda x: torch.empty_like(x, *args, **kwargs), inplace=True
+        lambda x: torch.empty_like(x, *args, **kwargs),
+        inplace=True,
+        propagate_lock=True,
     )
 
 
