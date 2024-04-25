@@ -92,6 +92,8 @@ _register_tensor_class(ftdim.Tensor)
 
 __base__setattr__ = torch.nn.Module.__setattr__
 
+_has_mps = torch.backends.mps.is_available()
+_has_cuda = torch.cuda.is_available()
 _has_functorch = False
 try:
     try:
@@ -221,14 +223,18 @@ class TensorDict(TensorDictBase):
         _run_checks: bool = True,
     ) -> None:
         has_device = False
-        if non_blocking is None:
-            sub_non_blocking = True
-            non_blocking = False
-        else:
-            sub_non_blocking = non_blocking
-        if device is not None and isinstance(device, (int, str)):
-            device = torch.device(device)
+        sub_non_blocking = False
+        if device is not None:
             has_device = True
+            if non_blocking is None:
+                sub_non_blocking = True
+                non_blocking = False
+            else:
+                sub_non_blocking = non_blocking
+            device = torch.device(device)
+            if _has_mps:
+                # With MPS, an explicit sync is required
+                sub_non_blocking = True
         self._device = device
 
         self._tensordict = _tensordict = _StringOnlyDict()
@@ -816,6 +822,97 @@ class TensorDict(TensorDictBase):
                 names=names,
             )
         return any([value.any() for value in self.values()])
+
+    def _cast_reduction(
+        self,
+        *,
+        reduction_name,
+        dim=NO_DEFAULT,
+        keepdim=NO_DEFAULT,
+        tuple_ok=True,
+        **kwargs,
+    ):
+        def proc_dim(dim, tuple_ok=True):
+            if dim is None:
+                return dim
+            if isinstance(dim, tuple):
+                if tuple_ok:
+                    return tuple(_d for d in dim for _d in proc_dim(d, tuple_ok=False))
+                return dim
+            if dim >= self.batch_dims or dim < -self.batch_dims:
+                raise RuntimeError(
+                    "dim must be greater than or equal to -tensordict.batch_dims and "
+                    "smaller than tensordict.batch_dims"
+                )
+            if dim < 0:
+                return (self.batch_dims + dim,)
+            return (dim,)
+
+        if dim is not NO_DEFAULT:
+            dim = proc_dim(dim, tuple_ok=tuple_ok)
+            if not tuple_ok:
+                dim = dim[0]
+        if dim is not NO_DEFAULT or keepdim:
+            names = None
+            if self._has_names():
+                names = copy(self.names)
+                if not keepdim and isinstance(dim, tuple):
+                    names = [name for i, name in enumerate(names) if i not in dim]
+                else:
+                    names = [name for i, name in enumerate(names) if i != dim]
+            if dim is not NO_DEFAULT:
+                kwargs["dim"] = dim
+            if keepdim is not NO_DEFAULT:
+                kwargs["keepdim"] = keepdim
+
+            def reduction(val):
+                result = getattr(val, reduction_name)(
+                    **kwargs,
+                )
+                return result
+
+            if dim not in (None, NO_DEFAULT):
+                if not keepdim:
+                    if isinstance(dim, tuple):
+                        batch_size = [
+                            b for i, b in enumerate(self.batch_size) if i not in dim
+                        ]
+                    else:
+                        batch_size = [
+                            b for i, b in enumerate(self.batch_size) if i != dim
+                        ]
+                else:
+                    if isinstance(dim, tuple):
+                        batch_size = [
+                            b if i not in dim else 1
+                            for i, b in enumerate(self.batch_size)
+                        ]
+                    else:
+                        batch_size = [
+                            b if i != dim else 1 for i, b in enumerate(self.batch_size)
+                        ]
+
+            else:
+                batch_size = [1 for b in self.batch_size]
+
+            return self._fast_apply(
+                reduction,
+                call_on_nested=True,
+                batch_size=torch.Size(batch_size),
+                device=self.device,
+                names=names,
+            )
+
+        def reduction(val):
+            return getattr(val, reduction_name)(**kwargs)
+
+        return self._fast_apply(
+            reduction,
+            call_on_nested=True,
+            batch_size=torch.Size([]),
+            device=self.device,
+            names=None,
+        )
 
     def _apply_nest(
         self,
@@ -3287,6 +3384,31 @@ class _SubTensorDict(TensorDictBase):
         )
         # the id of out changes
         return self._get_str(key, default=NO_DEFAULT)
+
+    def _cast_reduction(
+        self,
+        *,
+        reduction_name,
+        dim=NO_DEFAULT,
+        keepdim=NO_DEFAULT,
+        tuple_ok=True,
+        **kwargs,
+    ):
+        try:
+            td = self.to_tensordict()
+        except Exception:
+            raise RuntimeError(
+                f"{reduction_name} requires this object to be cast to a regular TensorDict. "
+                f"If you need {type(self)} to support {reduction_name}, help us by filing an issue"
+                f" on github!"
+            )
+        return td._cast_reduction(
+            reduction_name=reduction_name,
+            dim=dim,
+            keepdim=keepdim,
+            tuple_ok=tuple_ok,
+            **kwargs,
+        )
 
     # TODO: check these implementations
     __eq__ = TensorDict.__eq__

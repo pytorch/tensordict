@@ -1804,6 +1804,31 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return default
 
+    def _cast_reduction(
+        self,
+        *,
+        reduction_name,
+        dim=NO_DEFAULT,
+        keepdim=NO_DEFAULT,
+        tuple_ok=True,
+        **kwargs,
+    ):
+        try:
+            td = self.to_tensordict()
+        except Exception:
+            raise RuntimeError(
+                f"{reduction_name} requires this object to be cast to a regular TensorDict. "
+                f"If you need {type(self)} to support {reduction_name}, help us by filing an issue"
+                f" on github!"
+            )
+        return td._cast_reduction(
+            reduction_name=reduction_name,
+            dim=dim,
+            keepdim=keepdim,
+            tuple_ok=tuple_ok,
+            **kwargs,
+        )
+
     def all(self, dim: int = None) -> bool | TensorDictBase:
         if dim is not None and (dim >= self.batch_dims or dim < -self.batch_dims):
             raise RuntimeError(
@@ -3063,6 +3088,31 @@ class _CustomOpTensorDict(TensorDictBase):
     def _unsqueeze(self, dim):
         raise RuntimeError(
             "Cannot call `unsqueeze` on a lazy tensordict. Make it dense before calling this method by calling `to_tensordict`."
+        )
+
+    def _cast_reduction(
+        self,
+        *,
+        reduction_name,
+        dim=NO_DEFAULT,
+        keepdim=NO_DEFAULT,
+        tuple_ok=True,
+        **kwargs,
+    ):
+        try:
+            td = self.to_tensordict()
+        except Exception:
+            raise RuntimeError(
+                f"{reduction_name} requires this object to be cast to a regular TensorDict. "
+                f"If you need {type(self)} to support {reduction_name}, help us by filing an issue"
+                f" on github!"
+            )
+        return td._cast_reduction(
+            reduction_name=reduction_name,
+            dim=dim,
+            keepdim=keepdim,
+            tuple_ok=tuple_ok,
+            **kwargs,
         )
 
     __xor__ = TensorDict.__xor__
