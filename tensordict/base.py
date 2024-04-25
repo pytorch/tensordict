@@ -389,7 +389,7 @@ class TensorDictBase(MutableMapping):
         """Checks if all values are True/non-null in the tensordict.
 
         Args:
-            dim (int, optional): if None, returns a boolean indicating
+            dim (int, optional): if ``None``, returns a boolean indicating
                 whether all tensors return `tensor.all() == True`
                 If integer, all is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
@@ -403,13 +403,239 @@ class TensorDictBase(MutableMapping):
         """Checks if any value is True/non-null in the tensordict.
 
         Args:
-            dim (int, optional): if None, returns a boolean indicating
+            dim (int, optional): if ``None``, returns a boolean indicating
                 whether all tensors return `tensor.any() == True`.
                 If integer, all is called upon the dimension specified if
                 and only if this dimension is compatible with
                 the tensordict shape.
 
         """
+        ...
+
+    def mean(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the mean value of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the mean value of all leaves (if this can be computed).
+                If integer or tuple of integers, `mean` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="mean", dim=dim, keepdim=keepdim, dtype=dtype
+        )
+
+    def nanmean(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the mean of all non-NaN elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the mean value of all leaves (if this can be computed).
+                If integer or tuple of integers, `mean` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="nanmean", keepdim=keepdim, dim=dim, dtype=dtype
+        )
+
+    def prod(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the produce of values of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the prod value of all leaves (if this can be computed).
+                If integer or tuple of integers, `prod` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        result = self._cast_reduction(
+            reduction_name="prod", dim=dim, keepdim=False, tuple_ok=False, dtype=dtype
+        )
+        if keepdim:
+            if isinstance(dim, tuple):
+                dim = dim[0]
+            if dim not in (None, NO_DEFAULT):
+                result = result.unsqueeze(dim)
+            else:
+                result = result.reshape([1 for _ in self.shape])
+        return result
+
+    def sum(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the sum value of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the sum value of all leaves (if this can be computed).
+                If integer or tuple of integers, `sum` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="sum", dim=dim, keepdim=keepdim, dtype=dtype
+        )
+
+    def nansum(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the sum of all non-NaN elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the sum value of all leaves (if this can be computed).
+                If integer or tuple of integers, `sum` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="nansum", dim=dim, keepdim=keepdim, dtype=dtype
+        )
+
+    def std(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the standard deviation value of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the sum value of all leaves (if this can be computed).
+                If integer or tuple of integers, `std` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            correction (int): difference between the sample size and sample degrees of freedom.
+                Defaults to Bessel’s correction, correction=1.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="std",
+            dim=dim,
+            keepdim=keepdim,
+            correction=correction,
+        )
+
+    def var(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the variance value of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the sum value of all leaves (if this can be computed).
+                If integer or tuple of integers, `var` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            correction (int): difference between the sample size and sample degrees of freedom.
+                Defaults to Bessel’s correction, correction=1.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="var",
+            dim=dim,
+            keepdim=keepdim,
+            correction=correction,
+        )
+
+    @abc.abstractmethod
+    def _cast_reduction(
+        self,
+        *,
+        reduction_name,
+        dim=NO_DEFAULT,
+        keepdim=NO_DEFAULT,
+        dtype,
+        tuple_ok=True,
+        **kwargs,
+    ):
         ...
 
     def auto_batch_size_(self, batch_dims: int | None = None) -> T:
@@ -4849,7 +5075,14 @@ class TensorDictBase(MutableMapping):
         torch._foreach_trunc_(self._values_list(True, True))
         return self
 
-    def norm(self, p="fro", dim=None, keepdim=False, out=None, dtype=None):
+    def norm(
+        self,
+        p="fro",
+        dim=None,
+        keepdim=False,
+        out=None,
+        dtype: torch.dtype | None = None,
+    ):
         keys, vals = self._items_list(True, True)
         vals = torch._foreach_norm(vals, p=p, dim=dim, keepdim=keepdim, dtype=dtype)
         items = dict(zip(keys, vals))
