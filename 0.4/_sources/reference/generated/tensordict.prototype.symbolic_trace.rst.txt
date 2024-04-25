@@ -1,0 +1,6 @@
+﻿tensordict.prototype.symbolic\_trace
+====================================
+
+.. currentmodule:: tensordict.prototype
+
+.. autofunction:: symbolic_trace
