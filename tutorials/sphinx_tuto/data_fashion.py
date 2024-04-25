@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Using TensorDict for datasets
 =============================
