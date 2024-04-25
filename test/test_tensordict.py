@@ -348,6 +348,26 @@ class TestGeneric:
         assert viewedtd.get("a").device == device
         assert (a.to(device) == viewedtd.get("a")).all()
 
+    def test_data_grad(self):
+        td = TensorDict(
+            {
+                "a": torch.randn(3, 4, requires_grad=True),
+                "b": {"c": torch.randn(3, 4, 5, requires_grad=True)},
+            },
+            [3, 4],
+        )
+        td1 = td + 1
+        td1.apply(lambda x: x.sum().backward(retain_graph=True))
+        assert not td.grad.is_locked
+        assert td.grad is not td.grad
+        assert not td.data.is_locked
+        assert td.data is not td.grad
+        td.lock_()
+        assert td.grad.is_locked
+        assert td.grad is td.grad
+        assert td.data.is_locked
+        assert td.data is td.data
+
     @pytest.mark.parametrize(
         "stack_dim",
         [0, 1, 2, 3],
