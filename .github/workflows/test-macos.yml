@@ -19,34 +19,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests-intel:
-    strategy:
-      matrix:
-        python_version: ["3.8", "3.11"]
-      fail-fast: false
-    uses: pytorch/test-infra/.github/workflows/macos_job.yml@main
-    with:
-      repository: pytorch/tensordict
-      timeout: 120
-      script: |
-        # Set env vars from matrix
-        set -e
-        set -v
-        export PYTHON_VERSION=${{ matrix.python_version }}
-        export CU_VERSION="cpu"
-        export SYSTEM_VERSION_COMPAT=0
-        export TORCH_VERSION=nightly
-        export ARCH=x86_64
-
-        echo "PYTHON_VERSION: $PYTHON_VERSION"
-        echo "CU_VERSION: $CU_VERSION"
-
-        ## setup_env.sh
-        bash .github/unittest/linux/scripts/setup_env.sh
-        bash .github/unittest/linux/scripts/install.sh
-        bash .github/unittest/linux/scripts/run_test.sh
-        bash .github/unittest/linux/scripts/post_process.sh
-
   tests-silicon:
     strategy:
       matrix:
