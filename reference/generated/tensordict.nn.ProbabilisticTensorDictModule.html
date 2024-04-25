@@ -459,7 +459,7 @@ mean when it is not available. Defaults to 1000.</p></li>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn.distributions</span> <span class="kn">import</span> <span class="n">NormalParamExtractor</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict.nn.functional_modules</span> <span class="kn">import</span> <span class="n">make_functional</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">Normal</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch.distributions</span> <span class="kn">import</span> <span class="n">Normal</span><span class="p">,</span> <span class="n">Independent</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;input&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="s2">&quot;hidden&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">]</span>
 <span class="gp">... </span><span class="p">)</span>
@@ -470,10 +470,12 @@ mean when it is not available. Defaults to 1000.</p></li>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">normal_params</span> <span class="o">=</span> <span class="n">TensorDictModule</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">NormalParamExtractor</span><span class="p">(),</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;params&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">]</span>
 <span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">IndepNormal</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">Independent</span><span class="p">(</span><span class="n">Normal</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">prob_module</span> <span class="o">=</span> <span class="n">ProbabilisticTensorDictModule</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;loc&quot;</span><span class="p">,</span> <span class="s2">&quot;scale&quot;</span><span class="p">],</span>
 <span class="gp">... </span>    <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">distribution_class</span><span class="o">=</span><span class="n">Normal</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">distribution_class</span><span class="o">=</span><span class="n">IndepNormal</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">return_log_prob</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">td_module</span> <span class="o">=</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">(</span>
@@ -485,20 +487,20 @@ mean when it is not available. Defaults to 1000.</p></li>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
-<span class="go">        action: Tensor(torch.Size([3, 4]), dtype=torch.float32),</span>
-<span class="go">        hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),</span>
-<span class="go">        input: Tensor(torch.Size([3, 4]), dtype=torch.float32),</span>
-<span class="go">        loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),</span>
-<span class="go">        params: Tensor(torch.Size([3, 8]), dtype=torch.float32),</span>
-<span class="go">        sample_log_prob: Tensor(torch.Size([3, 4]), dtype=torch.float32),</span>
-<span class="go">        scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},</span>
+<span class="go">        action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        params: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
 <span class="go">    batch_size=torch.Size([3]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">td_module</span><span class="p">):</span>
 <span class="gp">... </span>    <span class="n">dist</span> <span class="o">=</span> <span class="n">td_module</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">td</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">dist</span><span class="p">)</span>
-<span class="go">Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4]))</span>
+<span class="go">Independent(Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4])), 1)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="c1"># we can also apply the module to the TensorDict with vmap</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">vmap</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
@@ -509,13 +511,13 @@ mean when it is not available. Defaults to 1000.</p></li>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">td_vmap</span><span class="p">)</span>
 <span class="go">TensorDict(</span>
 <span class="go">    fields={</span>
-<span class="go">        action: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),</span>
-<span class="go">        hidden: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),</span>
-<span class="go">        input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),</span>
-<span class="go">        loc: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),</span>
-<span class="go">        params: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),</span>
-<span class="go">        sample_log_prob: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),</span>
-<span class="go">        scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32)},</span>
+<span class="go">        action: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        hidden: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        loc: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        params: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        sample_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        scale: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
 <span class="go">    batch_size=torch.Size([4, 3]),</span>
 <span class="go">    device=None,</span>
 <span class="go">    is_shared=False)</span>
