@@ -78,6 +78,15 @@ jobs:
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python3 -c """from tensordict import *"""
         cd ..
         
+        # 9. Set sanitize version
+        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+          echo '::group::Enable version string sanitization'
+          # This environment variable just has to exist and must not be empty. The actual value is arbitrary.
+          # See docs/source/conf.py for details
+          export TENSORDICT_SANITIZE_VERSION_STR_IN_DOCS=1
+          echo '::endgroup::'
+        fi
+
         # 10. Build doc
         cd ./docs
         make docs
