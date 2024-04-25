@@ -98,34 +98,6 @@ jobs:
               /tmp/wheels/tensordict_nightly-*.whl \
               --verbose
 
-  upload-wheel-mac:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
-    needs: test-wheel-mac
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
-    steps:
-      - name: Checkout tensordict
-        uses: actions/checkout@v2
-      - name: Download built wheels
-        uses: actions/download-artifact@v2
-        with:
-          name: tensordict-mac-${{ matrix.python_version[0] }}.whl
-          path: /tmp/wheels
-      - name: Push tensordict Binary to PYPI
-        env:
-            PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          python3 -mpip install twine
-          python3 -m twine upload \
-              --username __token__ \
-              --password "$PYPI_TOKEN" \
-              --skip-existing \
-              /tmp/wheels/tensordict_nightly-*.whl \
-              --verbose
-
   test-wheel-linux:
     # Don't run on forked repos.
     if: github.repository_owner == 'pytorch'
