@@ -118,6 +118,9 @@ class _BEST_ATTEMPT_INPLACE:
         raise NotImplementedError
 
 
+_has_mps = torch.backends.mps.is_available()
+_has_cuda = torch.cuda.is_available()
+
 BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 # some complex string used as separator to concatenate and split keys in
@@ -6817,9 +6820,9 @@ class TensorDictBase(MutableMapping):
         ...
 
     def _sync_all(self):
-        if torch.cuda.is_available():
+        if _has_cuda:
             torch.cuda.synchronize()
-        elif torch.backends.mps.is_available():
+        elif _has_mps:
             torch.mps.synchronize()
 
     def is_floating_point(self):

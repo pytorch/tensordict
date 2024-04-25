@@ -92,6 +92,8 @@ _register_tensor_class(ftdim.Tensor)
 
 __base__setattr__ = torch.nn.Module.__setattr__
 
+_has_mps = torch.backends.mps.is_available()
+_has_cuda = torch.cuda.is_available()
 _has_functorch = False
 try:
     try:
@@ -221,14 +223,18 @@ class TensorDict(TensorDictBase):
         _run_checks: bool = True,
     ) -> None:
         has_device = False
-        if non_blocking is None:
-            sub_non_blocking = True
-            non_blocking = False
-        else:
-            sub_non_blocking = non_blocking
-        if device is not None and isinstance(device, (int, str)):
-            device = torch.device(device)
+        sub_non_blocking = False
+        if device is not None:
             has_device = True
+            if non_blocking is None:
+                sub_non_blocking = True
+                non_blocking = False
+            else:
+                sub_non_blocking = non_blocking
+            device = torch.device(device)
+            if _has_mps:
+                # With MPS, an explicit sync is required
+                sub_non_blocking = True
         self._device = device
 
         self._tensordict = _tensordict = _StringOnlyDict()
@@ -3378,6 +3384,31 @@ class _SubTensorDict(TensorDictBase):
         )
         # the id of out changes
         return self._get_str(key, default=NO_DEFAULT)
+
+    def _cast_reduction(
+        self,
+        *,
+        reduction_name,
+        dim=NO_DEFAULT,
+        keepdim=NO_DEFAULT,
+        tuple_ok=True,
+        **kwargs,
+    ):
+        try:
+            td = self.to_tensordict()
+        except Exception:
+            raise RuntimeError(
+                f"{reduction_name} requires this object to be cast to a regular TensorDict. "
+                f"If you need {type(self)} to support {reduction_name}, help us by filing an issue"
+                f" on github!"
+            )
+        return td._cast_reduction(
+            reduction_name=reduction_name,
+            dim=dim,
+            keepdim=keepdim,
+            tuple_ok=tuple_ok,
+            **kwargs,
+        )
 
     # TODO: check these implementations
     __eq__ = TensorDict.__eq__

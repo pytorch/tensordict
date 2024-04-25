@@ -921,6 +921,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
     _check_is_shared = TensorDict._check_is_shared
 
     @_fallback
+    def _cast_reduction(self, **kwargs):
+        ...
+
+    @_fallback
     def all(self, dim: int = None) -> bool | TensorDictBase:
         ...
 
