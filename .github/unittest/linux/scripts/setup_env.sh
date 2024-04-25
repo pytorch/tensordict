@@ -26,8 +26,8 @@ esac
 # 1. Install conda at ./conda
 if [ ! -d "${conda_dir}" ]; then
     printf "* Installing conda\n"
-    if [ "${os}" == "MaxOSX" ] then
-      curl -o miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-${ARCH}.sh"
+    if [ "${os}" == "MacOSX" ]; then
+      curl -L -o miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-${ARCH}.sh"
     else
       wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-${ARCH}.sh"
     fi
