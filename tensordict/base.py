@@ -3289,15 +3289,11 @@ class TensorDictBase(MutableMapping):
     @cache  # noqa: B019
     def _grad(self):
         result = self._fast_apply(lambda x: x.grad, propagate_lock=True)
-        if self.is_locked:
-            return result.lock_()
         return result
 
     @cache  # noqa: B019
     def _data(self):
         result = self._fast_apply(lambda x: x.data, propagate_lock=True)
-        if self.is_locked:
-            return result.lock_()
         return result
 
     @abc.abstractmethod
