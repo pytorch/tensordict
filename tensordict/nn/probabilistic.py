@@ -211,7 +211,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         ... )
         >>> from tensordict.nn.distributions import NormalParamExtractor
         >>> from tensordict.nn.functional_modules import make_functional
-        >>> from torch.distributions import Normal, Independent
+        >>> from torch.distributions import Normal
         >>> td = TensorDict(
         ...     {"input": torch.randn(3, 4), "hidden": torch.randn(3, 8)}, [3]
         ... )
@@ -222,12 +222,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         >>> normal_params = TensorDictModule(
         ...     NormalParamExtractor(), in_keys=["params"], out_keys=["loc", "scale"]
         ... )
-        >>> def IndepNormal(**kwargs):
-        ...     return Independent(Normal(**kwargs), 1)
         >>> prob_module = ProbabilisticTensorDictModule(
         ...     in_keys=["loc", "scale"],
         ...     out_keys=["action"],
-        ...     distribution_class=IndepNormal,
+        ...     distribution_class=Normal,
         ...     return_log_prob=True,
         ... )
         >>> td_module = ProbabilisticTensorDictSequential(
@@ -239,20 +237,20 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         >>> print(td)
         TensorDict(
             fields={
-                action: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                hidden: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                input: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                loc: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                params: Tensor(shape=torch.Size([3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample_log_prob: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                scale: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                action: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                hidden: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                params: Tensor(torch.Size([3, 8]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([3, 4]), dtype=torch.float32),
+                scale: Tensor(torch.Size([3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([3]),
             device=None,
             is_shared=False)
         >>> with params.to_module(td_module):
         ...     dist = td_module.get_dist(td)
         >>> print(dist)
-        Independent(Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4])), 1)
+        Normal(loc: torch.Size([3, 4]), scale: torch.Size([3, 4]))
         >>> # we can also apply the module to the TensorDict with vmap
         >>> from torch import vmap
         >>> params = params.expand(4)
@@ -263,13 +261,13 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         >>> print(td_vmap)
         TensorDict(
             fields={
-                action: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                hidden: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                input: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                loc: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                params: Tensor(shape=torch.Size([4, 3, 8]), device=cpu, dtype=torch.float32, is_shared=False),
-                sample_log_prob: Tensor(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False),
-                scale: Tensor(shape=torch.Size([4, 3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                action: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                hidden: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
+                input: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                loc: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                params: Tensor(torch.Size([4, 3, 8]), dtype=torch.float32),
+                sample_log_prob: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32),
+                scale: Tensor(torch.Size([4, 3, 4]), dtype=torch.float32)},
             batch_size=torch.Size([4, 3]),
             device=None,
             is_shared=False)
