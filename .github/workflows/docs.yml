@@ -103,9 +103,8 @@ jobs:
         if [[ "${REF_TYPE}" == branch ]]; then
           if [[ "${REF_NAME}" == main ]]; then
             TARGET_FOLDER="${REF_NAME}"
-          # Bebug:
-          # else
-          #   TARGET_FOLDER="release-doc"
+          else
+            TARGET_FOLDER="release-doc"
           fi
         elif [[ "${REF_TYPE}" == tag ]]; then
           case "${REF_NAME}" in
@@ -131,8 +130,8 @@ jobs:
         git add "${TARGET_FOLDER}" || true
 
         # Debug
-        # if [[ "${TARGET_FOLDER}" == "main" ]] || [[ "${TARGET_FOLDER}" == "release-doc" ]]; then
-        if [[ "${TARGET_FOLDER}" == "main" ]] ; then
+        if [[ "${TARGET_FOLDER}" == "main" ]] || [[ "${TARGET_FOLDER}" == "release-doc" ]]; then
+        # if [[ "${TARGET_FOLDER}" == "main" ]] ; then
           mkdir -p _static
           rm -rf _static/*
           cp -r "${TARGET_FOLDER}"/_static/* _static
