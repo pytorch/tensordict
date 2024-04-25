@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Simplifying PyTorch Memory Management with TensorDict
 =====================================================

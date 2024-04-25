@@ -24,7 +24,7 @@ Slicing, Indexing, and Masking
 
 In this tutorial you will learn how to slice, index, and mask a :class:`~.TensorDict`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-24
+.. GENERATED FROM PYTHON SOURCE LINES 10-23
 
 As discussed in the tutorial
 `Manipulating the shape of a TensorDict <./tensordict_shapes.html>`_, when we create a
@@ -40,7 +40,7 @@ For example, given a :class:`~.TensorDict` with two batch dimensions,
 whose values correspond to the first "row" of each entry in the original
 :class:`~.TensorDict`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-34
+.. GENERATED FROM PYTHON SOURCE LINES 23-33
 
 .. code-block:: Python
 
@@ -73,12 +73,12 @@ whose values correspond to the first "row" of each entry in the original
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-37
+.. GENERATED FROM PYTHON SOURCE LINES 34-36
 
 The same syntax applies as for regular tensors. For example if we wanted to drop the
 first row of each entry we could index as follows
 
-.. GENERATED FROM PYTHON SOURCE LINES 37-40
+.. GENERATED FROM PYTHON SOURCE LINES 36-39
 
 .. code-block:: Python
 
@@ -104,11 +104,11 @@ first row of each entry we could index as follows
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 41-42
+.. GENERATED FROM PYTHON SOURCE LINES 40-41
 
 We can index multiple dimensions simultaneously
 
-.. GENERATED FROM PYTHON SOURCE LINES 42-45
+.. GENERATED FROM PYTHON SOURCE LINES 41-44
 
 .. code-block:: Python
 
@@ -134,12 +134,12 @@ We can index multiple dimensions simultaneously
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 46-48
+.. GENERATED FROM PYTHON SOURCE LINES 45-47
 
 We can also use ``Ellipsis`` to represent as many ``:`` as would be needed to make
 the selection tuple the same length as ``tensordict.batch_dims``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 48-51
+.. GENERATED FROM PYTHON SOURCE LINES 47-50
 
 .. code-block:: Python
 
@@ -165,7 +165,7 @@ the selection tuple the same length as ``tensordict.batch_dims``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 52-65
+.. GENERATED FROM PYTHON SOURCE LINES 51-64
 
 .. note:
 
@@ -181,7 +181,7 @@ Setting Values with Indexing
 In general, ``tensordict[index] = new_tensordict`` will work as long as the batch
 sizes are compatible.
 
-.. GENERATED FROM PYTHON SOURCE LINES 65-74
+.. GENERATED FROM PYTHON SOURCE LINES 64-73
 
 .. code-block:: Python
 
@@ -222,13 +222,13 @@ sizes are compatible.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 75-78
+.. GENERATED FROM PYTHON SOURCE LINES 74-77
 
 Masking
 -------
 We mask :class:`TensorDict` as we mask tensors.
 
-.. GENERATED FROM PYTHON SOURCE LINES 78-81
+.. GENERATED FROM PYTHON SOURCE LINES 77-80
 
 .. code-block:: Python
 
@@ -257,7 +257,7 @@ We mask :class:`TensorDict` as we mask tensors.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.180 seconds)
+   **Total running time of the script:** (0 minutes 0.178 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_slicing.py:

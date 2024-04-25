@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Batched data loading with tensorclasses
 =======================================

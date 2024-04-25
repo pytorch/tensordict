@@ -26,7 +26,7 @@ In this tutorial you will learn how to control where the contents of a
 :class:`TensorDict` are stored in memory, either by sending those contents to a device,
 or by utilizing memory maps.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-113
+.. GENERATED FROM PYTHON SOURCE LINES 12-112
 
 Devices
 -------
@@ -129,7 +129,7 @@ example of this in action.
 To convert the :class:`TensorDict` to a collection of memory-mapped tensors, use the
 :meth:`TensorDict.memmap_ <tensordict.TensorDict.memmap_>`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-120
+.. GENERATED FROM PYTHON SOURCE LINES 112-119
 
 .. code-block:: Python
 
@@ -164,7 +164,7 @@ To convert the :class:`TensorDict` to a collection of memory-mapped tensors, use
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 129-137
+.. GENERATED FROM PYTHON SOURCE LINES 128-136
 
 Alternatively one can use the
 :meth:`TensorDict.memmap_like <tensordict.TensorDict.memmap_like>` method. This will
@@ -175,7 +175,7 @@ memory-mapped tensors. This allows you to create the memory-mapped
 :class:`~.TensorDict` and then populate it slowly, and hence should generally be
 preferred to ``memmap_``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 137-143
+.. GENERATED FROM PYTHON SOURCE LINES 136-142
 
 .. code-block:: Python
 
@@ -198,7 +198,7 @@ preferred to ``memmap_``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 144-162
+.. GENERATED FROM PYTHON SOURCE LINES 143-161
 
 By default the contents of the :class:`TensorDict` will be saved to a temporary
 location on disk, however if you would like to control where they are saved you can
@@ -222,7 +222,7 @@ the above :class:`TensorDict` is saved as follows:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.021 seconds)
+   **Total running time of the script:** (0 minutes 0.025 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensordict_memory.py:
