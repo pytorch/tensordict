@@ -784,7 +784,7 @@ def _update_(
         input_dict_or_td = self.from_dict(input_dict_or_td, batch_size=self.batch_size)
 
     if is_tensorclass(input_dict_or_td):
-        self._tensordict.update(input_dict_or_td._tensordict)
+        self._tensordict.update_(input_dict_or_td._tensordict)
         self._non_tensordict.update(input_dict_or_td._non_tensordict)
         return self
 
