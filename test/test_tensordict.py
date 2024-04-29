@@ -8265,7 +8265,9 @@ class TestMap:
 
     @pytest.mark.parametrize("chunksize", [0, 5])
     @pytest.mark.parametrize("mmap", [True, False])
-    @pytest.mark.parametrize("start_method", [None, "fork"])
+    @pytest.mark.parametrize(
+        "start_method", [None, "spawn" if torch.cuda.is_available() else "fork"]
+    )
     def test_map_with_out(self, mmap, chunksize, tmpdir, start_method):
         tmpdir = Path(tmpdir)
         input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
