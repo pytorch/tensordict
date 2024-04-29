@@ -3,6 +3,7 @@
 [![Documentation](https://img.shields.io/badge/Documentation-blue.svg?style=flat)](https://pytorch.github.io/tensordict/)
 --->
 [![Docs - GitHub.io](https://img.shields.io/static/v1?logo=github&style=flat&color=pink&label=docs&message=tensordict)][#docs-package]
+[![Discord Shield](https://dcbadge.vercel.app/api/server/tz3TgTAe3D)](https://discord.gg/tz3TgTAe3D)
 [![Benchmarks](https://img.shields.io/badge/Benchmarks-blue.svg)][#docs-package-benchmark]
 [![Python version](https://img.shields.io/pypi/pyversions/tensordict.svg)](https://www.python.org/downloads/)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)][#github-license]
@@ -139,6 +140,14 @@ You can also store non-tensor data in tensordicts:
 ```
 
 ### Tensor-like features
+
+**\[Nightly feature\]** TensorDict supports many common point-wise arithmetic operations such as `==` or `+`, `+=`
+and similar (provided that the underlying tensors support the said operation):
+```python
+>>> td = TensorDict.fromkeys(["a", "b", "c"], 0)
+>>> td += 1
+>>> assert (td==1).all()
+```
 
 TensorDict objects can be indexed exactly like tensors. The resulting of indexing
 a TensorDict is another TensorDict containing tensors indexed along the required dimension:

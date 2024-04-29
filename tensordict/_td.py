@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import abc
-
 import json
 import numbers
 import os
@@ -20,7 +18,15 @@ from warnings import warn
 
 import numpy as np
 import torch
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -36,7 +42,6 @@ from tensordict.base import (
 )
 
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
     _add_batch_dim_pre_hook,
     _BatchedUninitializedBuffer,
@@ -87,6 +92,8 @@ _register_tensor_class(ftdim.Tensor)
 
 __base__setattr__ = torch.nn.Module.__setattr__
 
+_has_mps = torch.backends.mps.is_available()
+_has_cuda = torch.cuda.is_available()
 _has_functorch = False
 try:
     try:
@@ -168,6 +175,16 @@ class TensorDict(TensorDictBase):
             tensordict. If provided, its length must match the one of the
             ``batch_size``. Defaults to ``None`` (no dimension name, or ``None``
             for every dimension).
+        non_blocking (bool, optional): if ``True`` and a device is passed, the tensordict
+            is delivered without synchronization. This is the fastest option but is only
+            safe when casting from cpu to cuda (otherwise a synchronization call must be
+            implemented by the user).
+            If ``False`` is passed, every tensor movement will be done synchronously.
+            If ``None`` (default), the device casting will be done asynchronously but
+            a synchronization will be executed after creation if required. This option
+            should generally be faster than ``False`` and potentially slower than ``True``.
+        lock (bool, optional): if ``True``, the resulting tensordict will be
+            locked.
 
     Examples:
         >>> import torch
@@ -201,11 +218,23 @@ class TensorDict(TensorDictBase):
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
-        non_blocking: bool = False,
+        non_blocking: bool = None,
+        lock: bool = False,
         _run_checks: bool = True,
     ) -> None:
-        if device is not None and isinstance(device, (int, str)):
+        has_device = False
+        sub_non_blocking = False
+        if device is not None:
+            has_device = True
+            if non_blocking is None:
+                sub_non_blocking = True
+                non_blocking = False
+            else:
+                sub_non_blocking = non_blocking
             device = torch.device(device)
+            if _has_mps:
+                # With MPS, an explicit sync is required
+                sub_non_blocking = True
         self._device = device
 
         self._tensordict = _tensordict = _StringOnlyDict()
@@ -219,7 +248,7 @@ class TensorDict(TensorDictBase):
                             batch_size=self._batch_size,
                             device=self._device,
                             _run_checks=_run_checks,
-                            non_blocking=non_blocking,
+                            non_blocking=sub_non_blocking,
                         )
                     _tensordict[key] = value
             self._td_dim_names = names
@@ -234,7 +263,11 @@ class TensorDict(TensorDictBase):
 
             if source is not None:
                 for key, value in source.items():
-                    self.set(key, value, non_blocking=non_blocking)
+                    self.set(key, value, non_blocking=sub_non_blocking)
+        if not non_blocking and sub_non_blocking and has_device:
+            self._sync_all()
+        if lock:
+            self.lock_()
 
     @classmethod
     def from_module(
@@ -381,7 +414,9 @@ class TensorDict(TensorDictBase):
                     return Buffer(x)
                 return x
 
-            input = state_dict.unflatten_keys(".")._fast_apply(convert_type, self)
+            input = state_dict.unflatten_keys(".")._fast_apply(
+                convert_type, self, propagate_lock=True
+            )
         else:
             input = self
             inplace = bool(inplace)
@@ -560,6 +595,126 @@ class TensorDict(TensorDictBase):
             )
         return False
 
+    def __ge__(self, other: object) -> T | bool:
+        if is_tensorclass(other):
+            return other <= self
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                keys1 = sorted(
+                    keys1,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                keys2 = sorted(
+                    keys2,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 >= other.get(key)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value >= other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
+    def __gt__(self, other: object) -> T | bool:
+        if is_tensorclass(other):
+            return other < self
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                keys1 = sorted(
+                    keys1,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                keys2 = sorted(
+                    keys2,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 > other.get(key)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value > other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
+    def __le__(self, other: object) -> T | bool:
+        if is_tensorclass(other):
+            return other >= self
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                keys1 = sorted(
+                    keys1,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                keys2 = sorted(
+                    keys2,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 <= other.get(key)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value <= other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
+    def __lt__(self, other: object) -> T | bool:
+        if is_tensorclass(other):
+            return other > self
+        if isinstance(other, (dict,)):
+            other = self.from_dict_instance(other)
+        if _is_tensor_collection(other.__class__):
+            keys1 = set(self.keys())
+            keys2 = set(other.keys())
+            if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
+                keys1 = sorted(
+                    keys1,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                keys2 = sorted(
+                    keys2,
+                    key=lambda key: "".join(key) if isinstance(key, tuple) else key,
+                )
+                raise KeyError(f"keys in tensordicts mismatch, got {keys1} and {keys2}")
+            d = {}
+            for key, item1 in self.items():
+                d[key] = item1 < other.get(key)
+            return TensorDict(source=d, batch_size=self.batch_size, device=self.device)
+        if isinstance(other, (numbers.Number, Tensor)):
+            return TensorDict(
+                {key: value < other for key, value in self.items()},
+                self.batch_size,
+                device=self.device,
+            )
+        return False
+
     def __setitem__(
         self,
         index: IndexType,
@@ -668,6 +823,97 @@ class TensorDict(TensorDictBase):
             )
         return any([value.any() for value in self.values()])
 
+    def _cast_reduction(
+        self,
+        *,
+        reduction_name,
+        dim=NO_DEFAULT,
+        keepdim=NO_DEFAULT,
+        tuple_ok=True,
+        **kwargs,
+    ):
+        def proc_dim(dim, tuple_ok=True):
+            if dim is None:
+                return dim
+            if isinstance(dim, tuple):
+                if tuple_ok:
+                    return tuple(_d for d in dim for _d in proc_dim(d, tuple_ok=False))
+                return dim
+            if dim >= self.batch_dims or dim < -self.batch_dims:
+                raise RuntimeError(
+                    "dim must be greater than or equal to -tensordict.batch_dims and "
+                    "smaller than tensordict.batch_dims"
+                )
+            if dim < 0:
+                return (self.batch_dims + dim,)
+            return (dim,)
+
+        if dim is not NO_DEFAULT:
+            dim = proc_dim(dim, tuple_ok=tuple_ok)
+            if not tuple_ok:
+                dim = dim[0]
+        if dim is not NO_DEFAULT or keepdim:
+            names = None
+            if self._has_names():
+                names = copy(self.names)
+                if not keepdim and isinstance(dim, tuple):
+                    names = [name for i, name in enumerate(names) if i not in dim]
+                else:
+                    names = [name for i, name in enumerate(names) if i != dim]
+            if dim is not NO_DEFAULT:
+                kwargs["dim"] = dim
+            if keepdim is not NO_DEFAULT:
+                kwargs["keepdim"] = keepdim
+
+            def reduction(val):
+                result = getattr(val, reduction_name)(
+                    **kwargs,
+                )
+                return result
+
+            if dim not in (None, NO_DEFAULT):
+                if not keepdim:
+                    if isinstance(dim, tuple):
+                        batch_size = [
+                            b for i, b in enumerate(self.batch_size) if i not in dim
+                        ]
+                    else:
+                        batch_size = [
+                            b for i, b in enumerate(self.batch_size) if i != dim
+                        ]
+                else:
+                    if isinstance(dim, tuple):
+                        batch_size = [
+                            b if i not in dim else 1
+                            for i, b in enumerate(self.batch_size)
+                        ]
+                    else:
+                        batch_size = [
+                            b if i != dim else 1 for i, b in enumerate(self.batch_size)
+                        ]
+
+            else:
+                batch_size = [1 for b in self.batch_size]
+
+            return self._fast_apply(
+                reduction,
+                call_on_nested=True,
+                batch_size=torch.Size(batch_size),
+                device=self.device,
+                names=names,
+            )
+
+        def reduction(val):
+            return getattr(val, reduction_name)(**kwargs)
+
+        return self._fast_apply(
+            reduction,
+            call_on_nested=True,
+            batch_size=torch.Size([]),
+            device=self.device,
+            names=None,
+        )
+
     def _apply_nest(
         self,
         fn: Callable,
@@ -758,7 +1004,9 @@ class TensorDict(TensorDictBase):
                 _others = [_other._get_str(key, default=default) for _other in others]
                 if named:
                     if nested_keys:
-                        item_trsf = fn(unravel_key(prefix + (key,)), item, *_others)
+                        item_trsf = fn(
+                            prefix + (key,) if prefix != () else key, item, *_others
+                        )
                     else:
                         item_trsf = fn(key, item, *_others)
                 else:
@@ -789,7 +1037,7 @@ class TensorDict(TensorDictBase):
                 "Your resulting tensordict has no leaves but you did not specify filter_empty=False. "
                 "Currently, this returns an empty tree (filter_empty=True), but from v0.5 it will return "
                 "a None unless filter_empty=False. "
-                "To silcence this warning, set filter_empty to the desired value in your call to `apply`.",
+                "To silence this warning, set filter_empty to the desired value in your call to `apply`.",
                 category=DeprecationWarning,
             )
         if result is None:
@@ -823,6 +1071,7 @@ class TensorDict(TensorDictBase):
             ),
             names=[name for i, name in enumerate(td.names) if i != in_dim],
             _run_checks=False,
+            lock=self.is_locked,
         )
         return out
 
@@ -843,6 +1092,7 @@ class TensorDict(TensorDictBase):
             },
             batch_size=new_batch_size,
             names=new_names,
+            lock=self.is_locked,
         )
         return out
 
@@ -893,6 +1143,7 @@ class TensorDict(TensorDictBase):
             device=self.device,
             names=names,
             _run_checks=False,
+            # lock=self.is_locked,
         )
         if self._is_memmap and _index_preserve_data_ptr(index):
             result._is_memmap = True
@@ -937,6 +1188,7 @@ class TensorDict(TensorDictBase):
             batch_size=shape,
             call_on_nested=True,
             names=names,
+            propagate_lock=True,
         )
 
     def _unbind(self, dim: int):
@@ -1086,7 +1338,9 @@ class TensorDict(TensorDictBase):
         def _view(tensor):
             return tensor.view((*shape, *tensor.shape[batch_dims:]))
 
-        result = self._fast_apply(_view, batch_size=shape, call_on_nested=True)
+        result = self._fast_apply(
+            _view, batch_size=shape, call_on_nested=True, propagate_lock=True
+        )
         self._maybe_set_shared_attributes(result)
         return result
 
@@ -1106,7 +1360,9 @@ class TensorDict(TensorDictBase):
         def _reshape(tensor):
             return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
 
-        return self._fast_apply(_reshape, batch_size=shape, call_on_nested=True)
+        return self._fast_apply(
+            _reshape, batch_size=shape, call_on_nested=True, propagate_lock=True
+        )
 
     def _transpose(self, dim0, dim1):
         def _transpose(tensor):
@@ -1130,6 +1386,7 @@ class TensorDict(TensorDictBase):
             batch_size=torch.Size(batch_size),
             call_on_nested=True,
             names=names,
+            propagate_lock=True,
         )
         self._maybe_set_shared_attributes(result)
         return result
@@ -1165,7 +1422,11 @@ class TensorDict(TensorDictBase):
         else:
             names = None
         result = self._fast_apply(
-            _permute, batch_size=batch_size, call_on_nested=True, names=names
+            _permute,
+            batch_size=batch_size,
+            call_on_nested=True,
+            names=names,
+            propagate_lock=True,
         )
         self._maybe_set_shared_attributes(result)
         return result
@@ -1192,6 +1453,7 @@ class TensorDict(TensorDictBase):
                 names=names,
                 inplace=False,
                 call_on_nested=True,
+                propagate_lock=True,
             )
         # make the dim positive
         if dim < 0:
@@ -1219,6 +1481,7 @@ class TensorDict(TensorDictBase):
             names=names,
             inplace=False,
             call_on_nested=True,
+            propagate_lock=True,
         )
         self._maybe_set_shared_attributes(result)
         return result
@@ -1252,6 +1515,7 @@ class TensorDict(TensorDictBase):
             names=names,
             inplace=False,
             call_on_nested=True,
+            propagate_lock=True,
         )
         self._maybe_set_shared_attributes(result)
         return result
@@ -1428,7 +1692,11 @@ class TensorDict(TensorDictBase):
         else:
 
             def is_boolean(idx):
-                from functorch import dim as ftdim
+                try:
+                    from functorch import dim as ftdim
+
+                except ImportError:
+                    from tensordict.utils import _ftdim_mock as ftdim
 
                 if isinstance(idx, ftdim.Dim):
                     return None
@@ -1568,7 +1836,7 @@ class TensorDict(TensorDictBase):
         def pin_mem(tensor):
             return tensor.pin_memory()
 
-        return self._fast_apply(pin_mem)
+        return self._fast_apply(pin_mem, propagate_lock=True)
 
     def _set_str(
         self,
@@ -1604,6 +1872,16 @@ class TensorDict(TensorDictBase):
                     f"Failed to update '{key}' in tensordict {self}"
                 ) from err
         return self
+
+    def _set_dict(
+        self,
+        d: dict[str, CompatibleType],
+        *,
+        validated: bool,
+    ):
+        if not validated:
+            raise RuntimeError("Not Implemented for non-validated inputs")
+        self._tensordict = d
 
     def _set_tuple(
         self,
@@ -1997,31 +2275,45 @@ class TensorDict(TensorDictBase):
         return out
 
     def to(self, *args, **kwargs: Any) -> T:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+        non_blocking = kwargs.pop("non_blocking", None)
+        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
         result = self
 
         if device is not None and dtype is None and device == self.device:
             return result
 
+        if non_blocking is None:
+            sub_non_blocking = True
+            non_blocking = False
+        else:
+            sub_non_blocking = non_blocking
+
         if convert_to_format is not None:
 
             def to(tensor):
-                return tensor.to(device, dtype, non_blocking, convert_to_format)
+                return tensor.to(
+                    device,
+                    dtype,
+                    non_blocking=sub_non_blocking,
+                    convert_to_format=convert_to_format,
+                )
 
         else:
 
             def to(tensor):
-                return tensor.to(device=device, dtype=dtype, non_blocking=non_blocking)
+                return tensor.to(
+                    device=device, dtype=dtype, non_blocking=sub_non_blocking
+                )
 
         apply_kwargs = {}
         if device is not None or dtype is not None:
             apply_kwargs["device"] = device if device is not None else self.device
             apply_kwargs["batch_size"] = batch_size
-            result = result._fast_apply(to, **apply_kwargs)
+            result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         elif batch_size is not None:
             result.batch_size = batch_size
+        if device is not None and sub_non_blocking and not non_blocking:
+            self._sync_all()
         return result
 
     def where(self, condition, other, *, out=None, pad=None):
@@ -2100,7 +2392,7 @@ class TensorDict(TensorDictBase):
                         other=other,
                     )
 
-                return self._fast_apply(func)
+                return self._fast_apply(func, propagate_lock=True)
             else:
 
                 def func(tensor, _out):
@@ -2111,7 +2403,7 @@ class TensorDict(TensorDictBase):
                         out=_out,
                     )
 
-                return self._fast_apply(func, out)
+                return self._fast_apply(func, out, propagate_lock=True)
 
     def masked_fill_(self, mask: Tensor, value: float | int | bool) -> T:
         for item in self.values():
@@ -2324,6 +2616,24 @@ class TensorDict(TensorDictBase):
     ) -> Iterator[tuple[str, CompatibleType]]:
         if not include_nested and not leaves_only:
             return self._tensordict.items()
+        elif include_nested and leaves_only:
+            is_leaf = _default_is_leaf if is_leaf is None else is_leaf
+
+            def fast_iter():
+                for k, val in self._tensordict.items():
+                    if not is_leaf(val.__class__):
+                        yield from (
+                            ((k, *((_key,) if isinstance(_key, str) else _key)), _val)
+                            for _key, _val in val.items(
+                                include_nested=include_nested,
+                                leaves_only=leaves_only,
+                                is_leaf=is_leaf,
+                            )
+                        )
+                    else:
+                        yield k, val
+
+            return fast_iter()
         else:
             return super().items(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
@@ -2925,7 +3235,9 @@ class _SubTensorDict(TensorDictBase):
         else:
             shape = args
         return self._fast_apply(
-            lambda x: x.expand((*shape, *x.shape[self.ndim :])), batch_size=shape
+            lambda x: x.expand((*shape, *x.shape[self.ndim :])),
+            batch_size=shape,
+            propagate_lock=True,
         )
 
     def is_shared(self) -> bool:
@@ -3080,9 +3392,38 @@ class _SubTensorDict(TensorDictBase):
         # the id of out changes
         return self._get_str(key, default=NO_DEFAULT)
 
+    def _cast_reduction(
+        self,
+        *,
+        reduction_name,
+        dim=NO_DEFAULT,
+        keepdim=NO_DEFAULT,
+        tuple_ok=True,
+        **kwargs,
+    ):
+        try:
+            td = self.to_tensordict()
+        except Exception:
+            raise RuntimeError(
+                f"{reduction_name} requires this object to be cast to a regular TensorDict. "
+                f"If you need {type(self)} to support {reduction_name}, help us by filing an issue"
+                f" on github!"
+            )
+        return td._cast_reduction(
+            reduction_name=reduction_name,
+            dim=dim,
+            keepdim=keepdim,
+            tuple_ok=tuple_ok,
+            **kwargs,
+        )
+
     # TODO: check these implementations
     __eq__ = TensorDict.__eq__
     __ne__ = TensorDict.__ne__
+    __ge__ = TensorDict.__ge__
+    __gt__ = TensorDict.__gt__
+    __le__ = TensorDict.__le__
+    __lt__ = TensorDict.__lt__
     __setitem__ = TensorDict.__setitem__
     __xor__ = TensorDict.__xor__
     __or__ = TensorDict.__or__
@@ -3208,10 +3549,13 @@ class _TensorDictKeysView:
         for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
             cls = value.__class__
+            while cls is list:
+                # For lazy stacks
+                value = value[0]
+                cls = value.__class__
             is_leaf = self.is_leaf(cls)
             if self.include_nested and not is_leaf:
-                subkeys = tuple(self._iter_helper(value, prefix=full_key))
-                yield from subkeys
+                yield from self._iter_helper(value, prefix=full_key)
             if not self.leaves_only or is_leaf:
                 yield full_key
 
@@ -3279,7 +3623,7 @@ class _TensorDictKeysView:
                 item_root = self.tensordict._get_str(key[0], default=None)
                 if item_root is not None:
                     entry_type = type(item_root)
-                    if issubclass(entry_type, (Tensor, _MemmapTensor)):
+                    if issubclass(entry_type, Tensor):
                         return False
                     elif entry_type is KeyedJaggedTensor:
                         if len(key) > 2:
@@ -3356,15 +3700,6 @@ def _set_tensor_dict(  # noqa: F811
     return out
 
 
-class _subtd_meta_deprec(abc.ABCMeta):
-    def __call__(self, *args, **kwargs):
-        warn(
-            "SubTensorDict will become a private feature in v0.4. Please refrain from using it directly."
-        )
-        instance = _SubTensorDict(*args, **kwargs)
-        return instance
-
-
 def _index_to_str(index):
     if isinstance(index, tuple):
         return tuple(_index_to_str(elt) for elt in index)
@@ -3392,15 +3727,6 @@ def _str_to_index(index):
             return torch.tensor(index, device=device)
         return tuple(_index_to_str(elt) for elt in index)
     return index
-
-
-class SubTensorDict(_SubTensorDict, metaclass=_subtd_meta_deprec):
-    """Deprecated public version of _SubTensorDict class.
-
-    See :class:`~tensordict._SubTensorDict`.
-    """
-
-    ...
 
 
 _register_tensor_class(TensorDict)

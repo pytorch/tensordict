@@ -44,8 +44,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 
 def get_version():
     version = (ROOT_DIR / "version.txt").read_text().strip()
-    if os.getenv("BUILD_VERSION"):
-        version = os.getenv("BUILD_VERSION")
+    if os.getenv("TENSORDICT_BUILD_VERSION"):
+        version = os.getenv("TENSORDICT_BUILD_VERSION")
     elif sha != "Unknown":
         version += "+" + sha[:7]
     return version
@@ -62,12 +62,14 @@ def write_version_file(version):
         f.write(f"git_version = {repr(sha)}\n")
 
 
-def _get_pytorch_version(is_nightly):
+def _get_pytorch_version(is_nightly, is_local):
     # if "PYTORCH_VERSION" in os.environ:
     #     return f"torch=={os.environ['PYTORCH_VERSION']}"
     if is_nightly:
-        return "torch>=2.2.0.dev"
-    return "torch>=2.1.0"
+        return "torch>=2.4.0.dev"
+    if is_local:
+        return "torch"
+    return "torch>=2.3.0"
 
 
 def _get_packages():
@@ -153,9 +155,11 @@ def _main(argv):
 
     write_version_file(version)
     logging.info(f"Building wheel {package_name}-{version}")
-    logging.info(f"BUILD_VERSION is {os.getenv('BUILD_VERSION')}")
+    BUILD_VERSION = os.getenv("TENSORDICT_BUILD_VERSION")
+    logging.info(f"TENSORDICT_BUILD_VERSION is {BUILD_VERSION}")
+    local_build = BUILD_VERSION is None
 
-    pytorch_package_dep = _get_pytorch_version(is_nightly)
+    pytorch_package_dep = _get_pytorch_version(is_nightly, local_build)
     logging.info("-- PyTorch dependency:", pytorch_package_dep)
 
     long_description = (ROOT_DIR / "README.md").read_text()

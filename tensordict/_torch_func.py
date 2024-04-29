@@ -7,19 +7,24 @@ from __future__ import annotations
 
 import functools
 
-import warnings
 from typing import Any, Callable, Sequence, TypeVar
 
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-from tensordict.base import _is_leaf_nontensor, NO_DEFAULT, TensorDictBase
+from tensordict.base import (
+    _is_leaf_nontensor,
+    _is_tensor_collection,
+    NO_DEFAULT,
+    TensorDictBase,
+)
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
     DeviceType,
     is_non_tensor,
+    is_tensorclass,
     lazy_legacy,
     set_lazy_legacy,
 )
@@ -138,7 +143,7 @@ def _full_like(td: T, fill_value: float, **kwargs: Any) -> T:
 
 @implements_for_td(torch.zeros_like)
 def _zeros_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(torch.zeros_like)
+    td_clone = td._fast_apply(torch.zeros_like, propagate_lock=True)
     if "dtype" in kwargs:
         raise ValueError("Cannot pass dtype to full_like with TensorDict")
     if "device" in kwargs:
@@ -153,7 +158,7 @@ def _zeros_like(td: T, **kwargs: Any) -> T:
 
 @implements_for_td(torch.ones_like)
 def _ones_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(lambda x: torch.ones_like(x))
+    td_clone = td._fast_apply(lambda x: torch.ones_like(x), propagate_lock=True)
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -166,7 +171,7 @@ def _ones_like(td: T, **kwargs: Any) -> T:
 
 @implements_for_td(torch.rand_like)
 def _rand_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(lambda x: torch.rand_like(x))
+    td_clone = td._fast_apply(lambda x: torch.rand_like(x), propagate_lock=True)
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -179,7 +184,7 @@ def _rand_like(td: T, **kwargs: Any) -> T:
 
 @implements_for_td(torch.randn_like)
 def _randn_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(lambda x: torch.randn_like(x))
+    td_clone = td._fast_apply(lambda x: torch.randn_like(x), propagate_lock=True)
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -201,7 +206,9 @@ def _empty_like(td: T, *args, **kwargs) -> T:
             "Consider calling tensordict.to_tensordict() first."
         ) from err
     return tdclone._fast_apply(
-        lambda x: torch.empty_like(x, *args, **kwargs), inplace=True
+        lambda x: torch.empty_like(x, *args, **kwargs),
+        inplace=True,
+        propagate_lock=True,
     )
 
 
@@ -365,7 +372,9 @@ def _lazy_cat(
             for td_in in list_of_tensordicts:
                 sub_dest = out.tensordicts[init_idx : init_idx + td_in.shape[dim]]
                 init_idx += init_idx + td_in.shape[dim]
-                torch.stack(sub_dest, out.stack_dim).update(td_in, inplace=True)
+                LazyStackedTensorDict.maybe_dense_stack(sub_dest, out.stack_dim).update(
+                    td_in, inplace=True
+                )
 
         return out
 
@@ -378,6 +387,7 @@ def _stack(
     out: T | None = None,
     strict: bool = False,
     contiguous: bool = False,
+    maybe_dense_stack: bool = False,
 ) -> T:
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
@@ -401,24 +411,7 @@ def _stack(
 
     # check that all tensordict match
     # Read lazy_legacy
-    _lazy_legacy = lazy_legacy(allow_none=True)
-    if _lazy_legacy is None:
-        warnings.warn(
-            """You did not define if torch.stack was to return a dense or lazy
-stack of tensordicts. Up until v0.3 included, a lazy stack was returned.
-From v0.4 onward, a dense stack will be returned and to build a
-lazy stack, an explicit call to LazyStackedTensorDict.lazy_stack will be required.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where stack is used.
-- Use `LazyStackedTensorDict.lazy_stack()` if it is a lazy stack that you wish to use.""",
-            category=DeprecationWarning,
-        )
-        # get default
-        _lazy_legacy = lazy_legacy()
+    _lazy_legacy = lazy_legacy()
 
     if out is None:
         # We need to handle tensordicts with exclusive keys and tensordicts with
@@ -432,8 +425,14 @@ To silence this warning, choose one of the following options:
                 keys = _check_keys(list_of_tensordicts, strict=True)
             except KeyError:
                 if not _lazy_legacy and not contiguous:
-                    with set_lazy_legacy(True):
-                        return _stack(list_of_tensordicts, dim=dim)
+                    if maybe_dense_stack:
+                        with set_lazy_legacy(True):
+                            return _stack(list_of_tensordicts, dim=dim)
+                    else:
+                        raise RuntimeError(
+                            "The sets of keys in the tensordicts to stack are exclusive. "
+                            "Consider using `LazyStackedTensorDict.maybe_dense_stack` instead."
+                        )
                 raise
 
             if all(
@@ -459,31 +458,44 @@ To silence this warning, choose one of the following options:
             out = {}
             for key in keys:
                 out[key] = []
-                is_lazy = False
+                is_not_init = None
                 tensor_shape = None
+                is_tensor = None
                 for _tensordict in list_of_tensordicts:
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
-                    if isinstance(tensor, UninitializedTensorMixin):
-                        is_lazy = True
-                    elif tensor_shape is None:
+                    if is_tensor is None:
+                        tensor_cls = type(tensor)
+                        is_tensor = (
+                            not _is_tensor_collection(tensor_cls)
+                        ) or is_tensorclass(tensor_cls)
+                    if is_not_init is None:
+                        is_not_init = isinstance(tensor, UninitializedTensorMixin)
+                    if not is_not_init and tensor_shape is None:
                         tensor_shape = tensor.shape
-                    elif tensor.shape != tensor_shape:
-                        with set_lazy_legacy(True):
-                            return _stack(list_of_tensordicts, dim=dim)
+                    elif not is_not_init and tensor.shape != tensor_shape:
+                        if maybe_dense_stack:
+                            with set_lazy_legacy(True):
+                                return _stack(list_of_tensordicts, dim=dim)
+                        else:
+                            raise RuntimeError(
+                                "The shapes of the tensors to stack is incompatible."
+                            )
                     out[key].append(tensor)
-                out[key] = (out[key], is_lazy)
+                out[key] = (out[key], is_not_init, is_tensor)
 
-            def stack_fn(key, values, is_lazy):
-                if is_lazy:
+            def stack_fn(key, values, is_not_init, is_tensor):
+                if is_not_init:
                     return _stack_uninit_params(values, dim)
+                if is_tensor:
+                    return torch.stack(values, dim)
                 with _ErrorInteceptor(
                     key, "Attempted to stack tensors on different devices at key"
                 ):
-                    return torch.stack(values, dim)
+                    return _stack(values, dim, maybe_dense_stack=maybe_dense_stack)
 
             out = {
-                key: stack_fn(key, values, is_lazy)
-                for key, (values, is_lazy) in out.items()
+                key: stack_fn(key, values, is_not_init, is_tensor)
+                for key, (values, is_not_init, is_tensor) in out.items()
             }
 
             return TensorDict(

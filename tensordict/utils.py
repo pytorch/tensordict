@@ -39,7 +39,13 @@ from typing import (
 
 import numpy as np
 import torch
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    _has_funcdim = False
 from packaging.version import parse
 from tensordict._contextlib import _DecoratorContextManager
 from tensordict._tensordict import (  # noqa: F401
@@ -60,7 +66,6 @@ from torch.nn.parameter import (
 from torch.utils.data._utils.worker import _generate_state
 
 if TYPE_CHECKING:
-    from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
     from tensordict.tensordict import TensorDictBase
 
 try:
@@ -293,9 +298,9 @@ else:
 
 
 def expand_as_right(
-    tensor: torch.Tensor | _MemmapTensor | TensorDictBase,
-    dest: torch.Tensor | _MemmapTensor | TensorDictBase,
-) -> torch.Tensor | _MemmapTensor | TensorDictBase:
+    tensor: torch.Tensor | TensorDictBase,
+    dest: torch.Tensor | TensorDictBase,
+) -> torch.Tensor | TensorDictBase:
     """Expand a tensor on the right to match another tensor shape.
 
     Args:
@@ -1016,11 +1021,17 @@ def _unfold_sequence(seq):
 
 
 def _make_cache_key(args, kwargs):
-    """Creats a key for the cache such that memory footprint is minimized."""
-    return (
-        tuple(_unfold_sequence(args)),
-        tuple(_unfold_sequence(sorted(kwargs.items()))),
-    )
+    """Creates a key for the cache such that memory footprint is minimized."""
+    # Fast path for the common args
+    if not args and not kwargs:
+        return ((), ())
+    elif not kwargs and len(args) == 1 and type(args[0]) is str:
+        return (args, ())
+    else:
+        return (
+            tuple(_unfold_sequence(args)),
+            tuple(_unfold_sequence(sorted(kwargs.items()))),
+        )
 
 
 def cache(fun):
@@ -1046,7 +1057,6 @@ def cache(fun):
         >>> print(timeit.timeit("set(td.all_keys())", globals={'td': td}))
         0.88
     """
-    from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 
     @wraps(fun)
     def newfun(_self: "TensorDictBase", *args, **kwargs):
@@ -1059,7 +1069,7 @@ def cache(fun):
         key = _make_cache_key(args, kwargs)
         if key not in cache:
             out = fun(_self, *args, **kwargs)
-            if not isinstance(out, (Tensor, _MemmapTensor, KeyedJaggedTensor)):
+            if not isinstance(out, (Tensor, KeyedJaggedTensor)):
                 # we don't cache tensors to avoid filling the mem and / or
                 # stacking them from their origin
                 cache[key] = out
@@ -1522,7 +1532,9 @@ def _expand_to_match_shape(
     self_batch_dims: int,
     self_device: DeviceType,
 ) -> Tensor | TensorDictBase:
-    if hasattr(tensor, "dtype"):
+    from tensordict.base import _is_tensor_collection
+
+    if not _is_tensor_collection(type(tensor)):
         return torch.zeros(
             (
                 *parent_batch_size,
@@ -1542,11 +1554,11 @@ def _expand_to_match_shape(
 
 def _set_max_batch_size(source: T, batch_dims=None):
     """Updates a tensordict with its maximium batch size."""
+    from tensordict.base import _is_tensor_collection
+
     tensor_data = [val for val in source.values() if not is_non_tensor(val)]
 
     for val in tensor_data:
-        from tensordict.base import _is_tensor_collection
-
         if _is_tensor_collection(val.__class__):
             _set_max_batch_size(val, batch_dims=batch_dims)
 
@@ -2199,3 +2211,35 @@ def is_non_tensor(data):
 
 def _is_non_tensor(cls: type):
     return getattr(cls, "_is_non_tensor", False)
+
+
+if not _has_funcdim:
+
+    class _ftdim_mock:
+        class Dim:
+            pass
+
+        class Tensor:
+            pass
+
+        def dims(self, *args, **kwargs):
+            raise ImportError("functorch.dim not found")
+
+
+class KeyDependentDefaultDict(collections.defaultdict):
+    """A key-dependent default dict.
+
+    Examples:
+        >>> my_dict = KeyDependentDefaultDict(lambda key: "foo_" + key)
+        >>> print(my_dict["bar"])
+        foo_bar
+    """
+
+    def __init__(self, fun):
+        self.fun = fun
+        super().__init__()
+
+    def __missing__(self, key):
+        value = self.fun(key)
+        self[key] = value
+        return value

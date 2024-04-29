@@ -29,7 +29,6 @@ from tensordict._td import (
 )
 from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
 from tensordict.memmap import MemoryMappedTensor
-from tensordict.memmap_deprec import MemmapTensor as _MemmapTensor
 from tensordict.utils import (
     _CloudpickleWrapper,
     _KEY_ERROR,
@@ -918,8 +917,6 @@ class PersistentTensorDict(TensorDictBase):
             raise RuntimeError("Cannot set a tensor that has requires_grad=True.")
         if isinstance(value, torch.Tensor):
             out = value.cpu().detach().numpy()
-        elif isinstance(value, _MemmapTensor):
-            out = value._memmap_array
         elif isinstance(value, dict):
             out = TensorDict(value, [])
         elif is_tensor_collection(value):
@@ -1233,6 +1230,12 @@ class PersistentTensorDict(TensorDictBase):
     __ne__ = TensorDict.__ne__
     __xor__ = TensorDict.__xor__
     __or__ = TensorDict.__or__
+    __ge__ = TensorDict.__ge__
+    __gt__ = TensorDict.__gt__
+    __le__ = TensorDict.__le__
+    __lt__ = TensorDict.__lt__
+
+    _cast_reduction = TensorDict._cast_reduction
     _apply_nest = TensorDict._apply_nest
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared

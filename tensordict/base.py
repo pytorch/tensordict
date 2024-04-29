@@ -12,7 +12,6 @@ import contextlib
 import importlib
 import json
 import numbers
-import warnings
 import weakref
 from collections.abc import MutableMapping
 
@@ -43,6 +42,7 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
+    _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
     _proc_init,
@@ -90,6 +90,24 @@ class _NoDefault:
 
 NO_DEFAULT = _NoDefault()
 
+
+class _NestedTensorsAsLists:
+    """Class used to iterate over leaves of lazily stacked tensordicts."""
+
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(_NestedTensorsAsLists, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+    def __call__(self, val):
+        return _default_is_leaf(val)
+
+
+_NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
+
 T = TypeVar("T", bound="TensorDictBase")
 
 
@@ -99,6 +117,9 @@ class _BEST_ATTEMPT_INPLACE:
         # more than once
         raise NotImplementedError
 
+
+_has_mps = torch.backends.mps.is_available()
+_has_cuda = torch.cuda.is_available()
 
 BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
@@ -146,7 +167,7 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def __xor__(self, other):
+    def __xor__(self, other: TensorDictBase | float):
         """XOR operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -162,7 +183,7 @@ class TensorDictBase(MutableMapping):
         ...
 
     @abc.abstractmethod
-    def __or__(self, other):
+    def __or__(self, other: TensorDictBase | float) -> T:
         """OR operation over two tensordicts, for evey key.
 
         The two tensordicts must have the same key set.
@@ -180,6 +201,50 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def __eq__(self, other: object) -> T:
         """Compares two tensordicts against each other, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __ge__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "greater or equal" operator, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __gt__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "greater than" operator, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __le__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "lower or equal" operator, for every key. The two tensordicts must have the same key set.
+
+        Returns:
+            a new TensorDict instance with all tensors are boolean
+            tensors of the same shape as the original tensors.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def __lt__(self, other: object) -> T:
+        """Compares two tensordicts against each other using the "lower than" operator, for every key. The two tensordicts must have the same key set.
 
         Returns:
             a new TensorDict instance with all tensors are boolean
@@ -293,13 +358,6 @@ class TensorDictBase(MutableMapping):
 
         return _SubTensorDict(source=self, idx=idx)
 
-    def get_sub_tensordict(self, idx: IndexType) -> T:
-        warnings.warn(
-            "get_sub_tensordict will be made private in v0.4.",
-            category=DeprecationWarning,
-        )
-        return self._get_sub_tensordict(idx)
-
     @abc.abstractmethod
     def __setitem__(
         self,
@@ -334,7 +392,7 @@ class TensorDictBase(MutableMapping):
         """Checks if all values are True/non-null in the tensordict.
 
         Args:
-            dim (int, optional): if None, returns a boolean indicating
+            dim (int, optional): if ``None``, returns a boolean indicating
                 whether all tensors return `tensor.all() == True`
                 If integer, all is called upon the dimension specified if
                 and only if this dimension is compatible with the tensordict
@@ -348,13 +406,239 @@ class TensorDictBase(MutableMapping):
         """Checks if any value is True/non-null in the tensordict.
 
         Args:
-            dim (int, optional): if None, returns a boolean indicating
+            dim (int, optional): if ``None``, returns a boolean indicating
                 whether all tensors return `tensor.any() == True`.
                 If integer, all is called upon the dimension specified if
                 and only if this dimension is compatible with
                 the tensordict shape.
 
         """
+        ...
+
+    def mean(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the mean value of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the mean value of all leaves (if this can be computed).
+                If integer or tuple of integers, `mean` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="mean", dim=dim, keepdim=keepdim, dtype=dtype
+        )
+
+    def nanmean(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the mean of all non-NaN elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the mean value of all leaves (if this can be computed).
+                If integer or tuple of integers, `mean` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="nanmean", keepdim=keepdim, dim=dim, dtype=dtype
+        )
+
+    def prod(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the produce of values of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the prod value of all leaves (if this can be computed).
+                If integer or tuple of integers, `prod` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        result = self._cast_reduction(
+            reduction_name="prod", dim=dim, keepdim=False, tuple_ok=False, dtype=dtype
+        )
+        if keepdim:
+            if isinstance(dim, tuple):
+                dim = dim[0]
+            if dim not in (None, NO_DEFAULT):
+                result = result.unsqueeze(dim)
+            else:
+                result = result.reshape([1 for _ in self.shape])
+        return result
+
+    def sum(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the sum value of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the sum value of all leaves (if this can be computed).
+                If integer or tuple of integers, `sum` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="sum", dim=dim, keepdim=keepdim, dtype=dtype
+        )
+
+    def nansum(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the sum of all non-NaN elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the sum value of all leaves (if this can be computed).
+                If integer or tuple of integers, `sum` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            dtype (torch.dtype, optional) – the desired data type of returned tensor.
+                If specified, the input tensor is casted to dtype before the operation is performed.
+                This is useful for preventing data type overflows. Default: ``None``.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="nansum", dim=dim, keepdim=keepdim, dtype=dtype
+        )
+
+    def std(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the standard deviation value of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the sum value of all leaves (if this can be computed).
+                If integer or tuple of integers, `std` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            correction (int): difference between the sample size and sample degrees of freedom.
+                Defaults to Bessel’s correction, correction=1.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="std",
+            dim=dim,
+            keepdim=keepdim,
+            correction=correction,
+        )
+
+    def var(
+        self,
+        dim: int | Tuple[int] = NO_DEFAULT,
+        keepdim: bool = NO_DEFAULT,
+        *,
+        correction: int = 1,
+    ) -> bool | TensorDictBase:  # noqa: D417
+        """Returns the variance value of all elements in the input tensordit.
+
+        Args:
+            dim (int, tuple of int, optional): if ``None``, returns a dimensionless
+                tensordict containing the sum value of all leaves (if this can be computed).
+                If integer or tuple of integers, `var` is called upon the dimension specified if
+                and only if this dimension is compatible with the tensordict
+                shape.
+            keepdim (bool) – whether the output tensor has dim retained or not.
+
+        Keyword Args:
+            correction (int): difference between the sample size and sample degrees of freedom.
+                Defaults to Bessel’s correction, correction=1.
+
+        """
+        if dim is NO_DEFAULT and keepdim:
+            dim = None
+        return self._cast_reduction(
+            reduction_name="var",
+            dim=dim,
+            keepdim=keepdim,
+            correction=correction,
+        )
+
+    @abc.abstractmethod
+    def _cast_reduction(
+        self,
+        *,
+        reduction_name,
+        dim=NO_DEFAULT,
+        keepdim=NO_DEFAULT,
+        dtype,
+        tuple_ok=True,
+        **kwargs,
+    ):
         ...
 
     def auto_batch_size_(self, batch_dims: int | None = None) -> T:
@@ -606,7 +890,7 @@ class TensorDictBase(MutableMapping):
                     return nn.Parameter(param.detach(), orig_param.requires_grad)
                 return Buffer(param)
 
-            params = params._fast_apply(make_param, param_list[0])
+            params = params._fast_apply(make_param, param_list[0], propagate_lock=True)
         if as_module:
             from tensordict.nn import TensorDictParams
 
@@ -730,6 +1014,32 @@ class TensorDictBase(MutableMapping):
             return self.batch_size
         return self.batch_size[dim]
 
+    @property
+    def data(self):
+        """Returns a tensordict containing the .data attributes of the leaf tensors."""
+        return self._data()
+
+    @property
+    def grad(self):
+        """Returns a tensordict containing the .grad attributes of the leaf tensors."""
+        return self._grad()
+
+    @cache  # noqa
+    def _dtype(self):
+        dtype = None
+        for val in self.values(True, True):
+            val_dtype = getattr(val, "dtype", None)
+            if dtype is None and val_dtype is not None:
+                dtype = val_dtype
+            elif dtype is not None and val_dtype is not None and dtype != val_dtype:
+                return None
+        return dtype
+
+    @property
+    def dtype(self):
+        """Returns the dtype of the values in the tensordict, if it is unique."""
+        return self._dtype()
+
     def _batch_size_setter(self, new_batch_size: torch.Size) -> None:
         if new_batch_size == self.batch_size:
             return
@@ -793,6 +1103,22 @@ class TensorDictBase(MutableMapping):
         1-element big.
         """
         return max(1, self.batch_size.numel())
+
+    @property
+    def depth(self) -> int:
+        """Returns the depth - maximum number of levels - of a tensordict.
+
+        The minimum depth is 0 (no nested tensordict).
+        """
+        return self._depth()
+
+    @cache  # noqa: B019
+    def _depth(self):
+        depth = 0
+        for key in self.keys(True, True, is_leaf=_is_leaf_nontensor):
+            if isinstance(key, tuple):
+                depth = max(depth, len(key) - 1)
+        return depth
 
     @overload
     def expand(self, *shape: int) -> T:
@@ -916,25 +1242,7 @@ class TensorDictBase(MutableMapping):
             >>> assert td.get("y").shape == [3, 4]
 
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.unsqueeze was to return a dense or lazy
-version of the unsqueezed tensordict. Up until v0.3 included, a lazy unsqueezed tensordict was returned.
-From v0.4 onward, a dense unsqueeze will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where unsqueeze is used.
-
-To temporarily unsqueeze a tensordict you can still user unsqueeze() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_unsqueeze(*args, **kwargs)
@@ -1005,25 +1313,7 @@ To temporarily unsqueeze a tensordict you can still user unsqueeze() as a contex
             >>> assert td.get("y").shape == [3, 1, 4]
 
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.squeeze was to return a dense or lazy
-version of the squeezed tensordict. Up until v0.3 included, a lazy squeezed tensordict was returned.
-From v0.4 onward, a dense squeeze will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where squeeze is used.
-
-To temporarily squeeze a tensordict you can still user squeeze() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_squeeze(*args, **kwargs)
@@ -1217,25 +1507,7 @@ To temporarily squeeze a tensordict you can still user squeeze() as a context ma
             >>> print(td_view.get("b").shape)  # torch.Size([1, 4, 3, 10, 1])
 
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.view was to return a dense or lazy
-version of the viewed tensordict. Up until v0.3 included, a lazy view of the tensordict was returned.
-From v0.4 onward, a proper view will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where view is used.
-
-To temporarily view a tensordict you can still user view() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_view(*shape, size=size)
@@ -1286,25 +1558,7 @@ To temporarily view a tensordict you can still user view() as a context manager 
             >>> print(tensordict.get("b").shape)
             torch.Size([3, 4])
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.transpose was to return a dense or lazy
-version of the transposed tensordict. Up until v0.3 included, a lazy transpose of the tensordict was returned.
-From v0.4 onward, a proper transpose will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where transpose is used.
-
-To temporarily transpose a tensordict you can still user transpose() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_transpose(dim0, dim1)
@@ -1401,25 +1655,7 @@ To temporarily transpose a tensordict you can still user transpose() as a contex
                     is_shared=False),
                 op=permute(dims=[1, 0]))
         """
-        _lazy_legacy = lazy_legacy(allow_none=True)
-        if _lazy_legacy is None:
-            warnings.warn(
-                """You did not define if TensorDict.permute was to return a dense or lazy
-version of the permuted tensordict. Up until v0.3 included, a lazy permute of the tensordict was returned.
-From v0.4 onward, a proper permute will be returned.
-To silence this warning, choose one of the following options:
-- set the LAZY_LEGACY_OP environment variable to 'False' (recommended, default) or 'True' depending on
-  the behaviour you want to use. Another way to achieve this is to call
-  `tensordict.set_lazy_legacy(False).set()` at the beginning of your script.
-- set the decorator/context manager `tensordict.set_lazy_legacy(False)` (recommended) around
-  the function or code block where permute is used.
-
-To temporarily permute a tensordict you can still user permute() as a context manager (see docstrings).
-""",
-                category=DeprecationWarning,
-            )
-            # get default
-            _lazy_legacy = lazy_legacy()
+        _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
             return self._legacy_permute(*args, **kwargs)
@@ -3248,6 +3484,47 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             for k in self.keys():
                 yield self._get_str(k, NO_DEFAULT)
 
+    @cache  # noqa: B019
+    def _values_list(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+    ) -> List:
+        return list(
+            self.values(
+                include_nested=include_nested,
+                leaves_only=leaves_only,
+                is_leaf=_NESTED_TENSORS_AS_LISTS,
+            )
+        )
+
+    @cache  # noqa: B019
+    def _items_list(
+        self,
+        include_nested: bool = False,
+        leaves_only: bool = False,
+    ) -> Tuple[List, List]:
+        return tuple(
+            list(key_or_val)
+            for key_or_val in zip(
+                *self.items(
+                    include_nested=include_nested,
+                    leaves_only=leaves_only,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS,
+                )
+            )
+        )
+
+    @cache  # noqa: B019
+    def _grad(self):
+        result = self._fast_apply(lambda x: x.grad, propagate_lock=True)
+        return result
+
+    @cache  # noqa: B019
+    def _data(self):
+        result = self._fast_apply(lambda x: x.data, propagate_lock=True)
+        return result
+
     @abc.abstractmethod
     def keys(
         self,
@@ -3379,7 +3656,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         else:
             batch_size = [nelt] + list(self.batch_size[end_dim + 1 :])
         # TODO: check that this works with nested tds of different batch size
-        out = self._fast_apply(flatten, batch_size=batch_size)
+        out = self._fast_apply(flatten, batch_size=batch_size, propagate_lock=True)
         if self._has_names():
             names = [
                 name
@@ -3431,7 +3708,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         else:
             batch_size = list(unflattened_size) + list(self.batch_size[1:])
         # TODO: check that this works with nested tds of different batch size
-        out = self._fast_apply(unflatten, batch_size=batch_size)
+        out = self._fast_apply(unflatten, batch_size=batch_size, propagate_lock=True)
         if self._has_names():
             names = copy(self.names)
             for _ in range(len(unflattened_size) - 1):
@@ -4021,6 +4298,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
+        propagate_lock: bool = False,
         **constructor_kwargs,
     ) -> T | None:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
@@ -4056,6 +4334,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 is considered as a leaf and thereby will be kept in the tensordict even
                 if left untouched by the function.
                 Defaults to ``False`` for backward compatibility.
+            propagate_lock (bool, optional): if ``True``, a locked tensordict will produce
+                another locked tensordict. Defaults to ``False``.
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
 
@@ -4104,7 +4384,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
 
         """
-        return self._apply_nest(
+        result = self._apply_nest(
             fn,
             *others,
             batch_size=batch_size,
@@ -4116,6 +4396,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             filter_empty=filter_empty,
             **constructor_kwargs,
         )
+        if propagate_lock and not inplace and self.is_locked and result is not None:
+            result.lock_()
+        return result
 
     def named_apply(
         self,
@@ -4128,6 +4411,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
+        propagate_lock: bool = False,
         **constructor_kwargs,
     ) -> T | None:
         """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new atensordict.
@@ -4163,6 +4447,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 filtered out. This also comes with a lower computational cost as
                 empty data structures won't be created and destroyed. Defaults to
                 ``False`` for backward compatibility.
+            propagate_lock (bool, optional): if ``True``, a locked tensordict will produce
+                another locked tensordict. Defaults to ``False``.
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
 
@@ -4236,7 +4522,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 is_shared=False)
 
         """
-        return self._apply_nest(
+        result = self._apply_nest(
             fn,
             *others,
             batch_size=batch_size,
@@ -4250,6 +4536,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             filter_empty=filter_empty,
             **constructor_kwargs,
         )
+        if propagate_lock and not inplace and self.is_locked and result is not None:
+            result.lock_()
+        return result
 
     @abc.abstractmethod
     def _apply_nest(
@@ -4288,6 +4577,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # and non-tensor data will disappear if we use True by default.
         filter_empty: bool | None = False,
         is_leaf: Callable = None,
+        propagate_lock: bool = False,
         **constructor_kwargs,
     ) -> T | None:
         """A faster apply method.
@@ -4297,7 +4587,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         (device, shape etc.) match the :meth:`~.apply` ones.
 
         """
-        return self._apply_nest(
+        result = self._apply_nest(
             fn,
             *others,
             batch_size=batch_size,
@@ -4313,6 +4603,9 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             is_leaf=is_leaf,
             **constructor_kwargs,
         )
+        if propagate_lock and not inplace and self.is_locked and result is not None:
+            result.lock_()
+        return result
 
     def map(
         self,
@@ -4547,10 +4840,859 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         # support inplace modif
         if imaplist:
             if chunksize == 0:
-                out = torch.stack(imaplist, dim)
+                from tensordict._lazy import LazyStackedTensorDict
+
+                # We want to be able to return whichever data structure
+                out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
             else:
                 out = torch.cat(imaplist, dim)
         return out
+
+    # point-wise arithmetic ops
+    def __add__(self, other: TensorDictBase | float) -> T:
+        return self.add(other)
+
+    def __iadd__(self, other: TensorDictBase | float) -> T:
+        return self.add_(other)
+
+    def __abs__(self):
+        return self.abs()
+
+    def __truediv__(self, other: TensorDictBase | float) -> T:
+        return self.div(other)
+
+    def __itruediv__(self, other: TensorDictBase | float) -> T:
+        return self.div_(other)
+
+    def __mul__(self, other: TensorDictBase | float) -> T:
+        return self.mul(other)
+
+    def __imul__(self, other: TensorDictBase | float) -> T:
+        return self.mul_(other)
+
+    def __sub__(self, other: TensorDictBase | float) -> T:
+        return self.sub(other)
+
+    def __isub__(self, other: TensorDictBase | float) -> T:
+        return self.sub_(other)
+
+    def __pow__(self, other: TensorDictBase | float) -> T:
+        return self.pow(other)
+
+    def __ipow__(self, other: TensorDictBase | float) -> T:
+        return self.pow_(other)
+
+    def abs(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_abs(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def abs_(self) -> T:
+        torch._foreach_abs_(self._values_list(True, True))
+        return self
+
+    def acos(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_acos(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def acos_(self) -> T:
+        torch._foreach_acos_(self._values_list(True, True))
+        return self
+
+    def exp(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_exp(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def exp_(self) -> T:
+        torch._foreach_exp_(self._values_list(True, True))
+        return self
+
+    def neg(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_neg(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def neg_(self) -> T:
+        torch._foreach_neg_(self._values_list(True, True))
+        return self
+
+    def reciprocal(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_reciprocal(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def reciprocal_(self) -> T:
+        torch._foreach_reciprocal_(self._values_list(True, True))
+        return self
+
+    def sigmoid(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sigmoid(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def sigmoid_(self) -> T:
+        torch._foreach_sigmoid_(self._values_list(True, True))
+        return self
+
+    def sign(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sign(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def sign_(self) -> T:
+        torch._foreach_sign_(self._values_list(True, True))
+        return self
+
+    def sin(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sin(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def sin_(self) -> T:
+        torch._foreach_sin_(self._values_list(True, True))
+        return self
+
+    def sinh(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sinh(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def sinh_(self) -> T:
+        torch._foreach_sinh_(self._values_list(True, True))
+        return self
+
+    def tan(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_tan(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def tan_(self) -> T:
+        torch._foreach_tan_(self._values_list(True, True))
+        return self
+
+    def tanh(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_tanh(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def tanh_(self) -> T:
+        torch._foreach_tanh_(self._values_list(True, True))
+        return self
+
+    def trunc(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_trunc(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def trunc_(self) -> T:
+        torch._foreach_trunc_(self._values_list(True, True))
+        return self
+
+    def norm(
+        self,
+        p="fro",
+        dim=None,
+        keepdim=False,
+        out=None,
+        dtype: torch.dtype | None = None,
+    ):
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_norm(vals, p=p, dim=dim, keepdim=keepdim, dtype=dtype)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            batch_size=[],
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def lgamma(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_lgamma(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def lgamma_(self) -> T:
+        torch._foreach_lgamma_(self._values_list(True, True))
+        return self
+
+    def frac(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_frac(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def frac_(self) -> T:
+        torch._foreach_frac_(self._values_list(True, True))
+        return self
+
+    def expm1(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_expm1(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def expm1_(self) -> T:
+        torch._foreach_expm1_(self._values_list(True, True))
+        return self
+
+    def log(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_log(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def log_(self) -> T:
+        torch._foreach_log_(self._values_list(True, True))
+        return self
+
+    def log10(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_log10(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def log10_(self) -> T:
+        torch._foreach_log10_(self._values_list(True, True))
+        return self
+
+    def log1p(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_log1p(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def log1p_(self) -> T:
+        torch._foreach_log1p_(self._values_list(True, True))
+        return self
+
+    def log2(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_log2(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def log2_(self) -> T:
+        torch._foreach_log2_(self._values_list(True, True))
+        return self
+
+    def ceil(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_ceil(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def ceil_(self) -> T:
+        torch._foreach_ceil_(self._values_list(True, True))
+        return self
+
+    def floor(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_floor(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def floor_(self) -> T:
+        torch._foreach_floor_(self._values_list(True, True))
+        return self
+
+    def round(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_round(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def round_(self) -> T:
+        torch._foreach_round_(self._values_list(True, True))
+        return self
+
+    def erf(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_erf(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def erf_(self) -> T:
+        torch._foreach_erf_(self._values_list(True, True))
+        return self
+
+    def erfc(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_erfc(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def erfc_(self) -> T:
+        torch._foreach_erfc_(self._values_list(True, True))
+        return self
+
+    def asin(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_asin(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def asin_(self) -> T:
+        torch._foreach_asin_(self._values_list(True, True))
+        return self
+
+    def atan(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_atan(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def atan_(self) -> T:
+        torch._foreach_atan_(self._values_list(True, True))
+        return self
+
+    def cos(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_cos(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def cos_(self) -> T:
+        torch._foreach_cos_(self._values_list(True, True))
+        return self
+
+    def cosh(self) -> T:
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_cosh(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def cosh_(self) -> T:
+        torch._foreach_cosh_(self._values_list(True, True))
+        return self
+
+    def add(self, other: TensorDictBase | float, alpha: float | None = None):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            vals = torch._foreach_add(vals, other_val, alpha=alpha)
+        else:
+            vals = torch._foreach_add(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def add_(self, other: TensorDictBase | float, alpha: float | None = None):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            torch._foreach_add_(self._values_list(True, True), other_val, alpha=alpha)
+        else:
+            torch._foreach_add_(self._values_list(True, True), other_val)
+        return self
+
+    def lerp(self, end: TensorDictBase | float, weight: TensorDictBase | float):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(end)):
+            end_val = end._values_list(True, True)
+        else:
+            end_val = end
+        if _is_tensor_collection(type(weight)):
+            weight_val = weight._values_list(True, True)
+        else:
+            weight_val = weight
+        vals = torch._foreach_lerp(vals, end_val, weight_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def lerp_(self, end: TensorDictBase | float, weight: TensorDictBase | float):
+        if _is_tensor_collection(type(end)):
+            end_val = end._values_list(True, True)
+        else:
+            end_val = end
+        if _is_tensor_collection(type(weight)):
+            weight_val = weight._values_list(True, True)
+        else:
+            weight_val = weight
+        torch._foreach_lerp_(self._values_list(True, True), end_val, weight_val)
+        return self
+
+    def addcdiv(self, other1, other2, value: float | None = 1):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other1)):
+            other1_val = other1._values_list(True, True)
+        else:
+            other1_val = other1
+        if _is_tensor_collection(type(other2)):
+            other2_val = other2._values_list(True, True)
+        else:
+            other2_val = other2
+        vals = torch._foreach_addcdiv(vals, other1_val, other2_val, value=value)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def addcdiv_(self, other1, other2, value: float | None = 1):
+        if _is_tensor_collection(type(other1)):
+            other1_val = other1._values_list(True, True)
+        else:
+            other1_val = other1
+        if _is_tensor_collection(type(other2)):
+            other2_val = other2._values_list(True, True)
+        else:
+            other2_val = other2
+        torch._foreach_addcdiv_(
+            self._values_list(True, True), other1_val, other2_val, value=value
+        )
+        return self
+
+    def addcmul(self, other1, other2, value: float | None = 1):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other1)):
+            other1_val = other1._values_list(True, True)
+        else:
+            other1_val = other1
+        if _is_tensor_collection(type(other2)):
+            other2_val = other2._values_list(True, True)
+        else:
+            other2_val = other2
+        vals = torch._foreach_addcmul(vals, other1_val, other2_val, value=value)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def addcmul_(self, other1, other2, value: float | None = 1):
+        if _is_tensor_collection(type(other1)):
+            other1_val = other1._values_list(True, True)
+        else:
+            other1_val = other1
+        if _is_tensor_collection(type(other2)):
+            other2_val = other2._values_list(True, True)
+        else:
+            other2_val = other2
+        torch._foreach_addcmul_(
+            self._values_list(True, True), other1_val, other2_val, value=value
+        )
+        return self
+
+    def sub(self, other: TensorDictBase | float, alpha: float | None = None):
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            vals = torch._foreach_sub(vals, other_val, alpha=alpha)
+        else:
+            vals = torch._foreach_sub(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        if alpha is not None:
+            torch._foreach_sub_(self._values_list(True, True), other_val, alpha=alpha)
+        else:
+            torch._foreach_sub_(self._values_list(True, True), other_val)
+        return self
+
+    def mul_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_mul_(self._values_list(True, True), other_val)
+        return self
+
+    def mul(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_mul(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def maximum_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_maximum_(self._values_list(True, True), other_val)
+        return self
+
+    def maximum(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_maximum(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def minimum_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_minimum_(self._values_list(True, True), other_val)
+        return self
+
+    def minimum(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_minimum(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def clamp_max_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_clamp_max_(self._values_list(True, True), other_val)
+        return self
+
+    def clamp_max(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_clamp_max(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def clamp_min_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_clamp_min_(self._values_list(True, True), other_val)
+        return self
+
+    def clamp_min(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_clamp_min(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def pow_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_pow_(self._values_list(True, True), other_val)
+        return self
+
+    def pow(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_pow(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def div_(self, other: TensorDictBase | float) -> T:
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        torch._foreach_div_(self._values_list(True, True), other_val)
+        return self
+
+    def div(self, other: TensorDictBase | float) -> T:
+        keys, vals = self._items_list(True, True)
+        if _is_tensor_collection(type(other)):
+            other_val = other._values_list(True, True)
+        else:
+            other_val = other
+        vals = torch._foreach_div(vals, other_val)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def sqrt_(self):
+        torch._foreach_sqrt_(self._values_list(True, True))
+        return self
+
+    def sqrt(self):
+        keys, vals = self._items_list(True, True)
+        vals = torch._foreach_sqrt(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
 
     # Functorch compatibility
     @abc.abstractmethod
@@ -4740,7 +5882,8 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 return out.update(self.unsqueeze(dim))
             elif last_op == self.__class__.to_module.__name__:
                 if is_tensor_collection(out):
-                    return self.to_module(*args, **kwargs, swap_dest=out)
+                    with out.unlock_():
+                        return self.to_module(*args, **kwargs, swap_dest=out)
                 else:
                     raise RuntimeError(
                         "to_module cannot be used as a decorator when return_swap=False."
@@ -4918,6 +6061,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 TensorDict will be copied too. Otherwise only the TensorDict
                 tree structure will be copied. Defaults to ``True``.
 
+        .. note:: Unlike many other ops (pointwise arithmetic, shape operations, ...) ``clone`` does not inherit the
+            original lock attribute. This design choice is made such that a clone can be created to be modified,
+            which is the most frequent usage.
+
         """
         result = self._clone(recurse=recurse, **kwargs)
         if not recurse and (result._is_shared or result._is_memmap):
@@ -4995,7 +6142,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             except AttributeError:
                 return tensor
 
-        return self._fast_apply(as_tensor)
+        return self._fast_apply(as_tensor, propagate_lock=True)
 
     def to_dict(self) -> dict[str, Any]:
         """Returns a dictionary with key-value pairs matching those of the tensordict."""
@@ -5082,7 +6229,7 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         def fn(item):
             item.zero_()
 
-        self._fast_apply(fn=fn, call_on_nested=True)
+        self._fast_apply(fn=fn, call_on_nested=True, propagate_lock=True)
         return self
 
     def fill_(self, key: NestedKey, value: float | bool) -> T:
@@ -5280,14 +6427,66 @@ To temporarily permute a tensordict you can still user permute() as a context ma
                 is_shared=False)
             >>> model.load_state_dict(dict(model_state_dict.flatten_keys(".")))
         """
+        if inplace:
+            return self._flatten_keys_inplace(separator=separator, is_leaf=is_leaf)
+        return self._flatten_keys_outplace(separator=separator, is_leaf=is_leaf)
+
+    def _flatten_keys_outplace(self, separator, is_leaf):
         if is_leaf is None:
             is_leaf = _is_leaf_nontensor
-        all_leaves = list(
-            self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        all_leaves_all_vals = zip(
+            *self.items(include_nested=True, leaves_only=True, is_leaf=is_leaf)
         )
+        try:
+            all_leaves, all_vals = all_leaves_all_vals
+        except ValueError:
+            return self.empty()
         all_leaves_flat = [
-            separator.join(key) if isinstance(key, tuple) else key for key in all_leaves
+            key if isinstance(key, str) else separator.join(key) for key in all_leaves
         ]
+
+        if len(set(all_leaves_flat)) < len(all_leaves_flat):
+            # find duplicates
+            seen = set()
+            conflicts = []
+            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
+                if leaf_flat in seen:
+                    conflicts.append(leaf)
+                else:
+                    seen.add(leaf_flat)
+            raise KeyError(
+                f"Flattening keys in tensordict causes keys {conflicts} to collide."
+            )
+        result = self.empty()
+        _set_dict = getattr(result, "_set_dict", None)
+        if _set_dict is not None:
+            _set_dict(
+                dict(zip(all_leaves_flat, all_vals)),
+                validated=True,
+            )
+        else:
+            for val, leaf_flat in zip(all_vals, all_leaves_flat):
+                result._set_str(
+                    leaf_flat,
+                    val,
+                    validated=True,
+                    inplace=False,
+                    non_blocking=False,
+                )
+        # Uncomment if you want key operations to propagate the shared status
+        # self._maybe_set_shared_attributes(result)
+        # if result._is_shared or result._is_memmap:
+        #     result.lock_()
+        return result
+
+    def _flatten_keys_inplace(self, separator, is_leaf):
+        if is_leaf is None:
+            is_leaf = _is_leaf_nontensor
+        all_leaves = [
+            _unravel_key_to_tuple(key)
+            for key in self.keys(include_nested=True, leaves_only=True, is_leaf=is_leaf)
+        ]
+        all_leaves_flat = [separator.join(key) for key in all_leaves]
         if len(set(all_leaves_flat)) < len(set(all_leaves)):
             # find duplicates
             seen = set()
@@ -5300,30 +6499,14 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             raise KeyError(
                 f"Flattening keys in tensordict causes keys {conflicts} to collide."
             )
-        if inplace:
-            # we will need to remove the empty tensordicts later on
-            root_keys = set(self.keys())
-            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
-                self.rename_key_(leaf, leaf_flat)
-                if isinstance(leaf, str):
-                    root_keys.discard(leaf)
-            self.exclude(*root_keys, inplace=True)
-            return self
-        else:
-            result = self.empty()
-            for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
-                result._set_str(
-                    leaf_flat,
-                    self.get(leaf),
-                    validated=True,
-                    inplace=False,
-                    non_blocking=False,
-                )
-            # Uncomment if you want key operations to propagate the shared status
-            # self._maybe_set_shared_attributes(result)
-            if result._is_shared or result._is_memmap:
-                result.lock_()
-            return result
+        # we will need to remove the empty tensordicts later on
+        root_keys = set(self.keys())
+        for leaf, leaf_flat in zip(all_leaves, all_leaves_flat):
+            self.rename_key_(leaf, leaf_flat)
+            if isinstance(leaf, str):
+                root_keys.discard(leaf)
+        self.exclude(*root_keys, inplace=True)
+        return self
 
     @cache  # noqa: B019
     def unflatten_keys(self, separator: str = ".", inplace: bool = False) -> T:
@@ -5636,6 +6819,12 @@ To temporarily permute a tensordict you can still user permute() as a context ma
         """
         ...
 
+    def _sync_all(self):
+        if _has_cuda:
+            torch.cuda.synchronize()
+        elif _has_mps:
+            torch.mps.synchronize()
+
     def is_floating_point(self):
         for item in self.values(include_nested=True, leaves_only=True):
             if not item.is_floating_point():
@@ -5645,27 +6834,27 @@ To temporarily permute a tensordict you can still user permute() as a context ma
 
     def double(self):
         r"""Casts all tensors to ``torch.bool``."""
-        return self._fast_apply(lambda x: x.double())
+        return self._fast_apply(lambda x: x.double(), propagate_lock=True)
 
     def float(self):
         r"""Casts all tensors to ``torch.float``."""
-        return self._fast_apply(lambda x: x.float())
+        return self._fast_apply(lambda x: x.float(), propagate_lock=True)
 
     def int(self):
         r"""Casts all tensors to ``torch.int``."""
-        return self._fast_apply(lambda x: x.int())
+        return self._fast_apply(lambda x: x.int(), propagate_lock=True)
 
     def bool(self):
         r"""Casts all tensors to ``torch.bool``."""
-        return self._fast_apply(lambda x: x.bool())
+        return self._fast_apply(lambda x: x.bool(), propagate_lock=True)
 
     def half(self):
         r"""Casts all tensors to ``torch.half``."""
-        return self._fast_apply(lambda x: x.half())
+        return self._fast_apply(lambda x: x.half(), propagate_lock=True)
 
     def bfloat16(self):
         r"""Casts all tensors to ``torch.bfloat16``."""
-        return self._fast_apply(lambda x: x.bfloat16())
+        return self._fast_apply(lambda x: x.bfloat16(), propagate_lock=True)
 
     def type(self, dst_type):
         r"""Casts all tensors to :attr:`dst_type`.
@@ -5699,7 +6888,10 @@ To temporarily permute a tensordict you can still user permute() as a context ma
             a new tensordict with no tensor requiring gradient.
 
         """
-        return self._fast_apply(lambda x: x.detach())
+        return self._fast_apply(
+            lambda x: x.detach(),
+            propagate_lock=True,
+        )
 
 
 _ACCEPTED_CLASSES = (
@@ -5759,7 +6951,7 @@ def _default_is_leaf(cls: Type) -> bool:
 
 def _is_leaf_nontensor(cls: Type) -> bool:
     if _is_tensor_collection(cls):
-        return cls._is_non_tensor
+        return _is_non_tensor(cls)
     # if issubclass(cls, KeyedJaggedTensor):
     #     return False
     return issubclass(cls, torch.Tensor)

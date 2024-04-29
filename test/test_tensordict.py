@@ -29,7 +29,15 @@ from _utils_internal import (
     prod,
     TestTensorDictsBase,
 )
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 from tensordict import LazyStackedTensorDict, make_tensordict, TensorDict
 from tensordict._lazy import _CustomOpTensorDict
@@ -186,6 +194,21 @@ class TestGeneric:
                 td_u.batch_size = [1]
             td_u.to_tensordict().batch_size = [1]
 
+    def test_depth(ggself):
+        td = TensorDict({"a": {"b": {"c": {"d": 0}, "e": 0}, "f": 0}, "g": 0}).lock_()
+        assert td.depth == 3
+        with td.unlock_():
+            del td["a", "b", "c", "d"]
+        assert td.depth == 2
+        with td.unlock_():
+            del td["a", "b", "c"]
+            del td["a", "b", "e"]
+        assert td.depth == 1
+        with td.unlock_():
+            del td["a", "b"]
+            del td["a", "f"]
+        assert td.depth == 0
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_cat_td(self, device):
         torch.manual_seed(1)
@@ -325,6 +348,26 @@ class TestGeneric:
         assert viewedtd.get("a").device == device
         assert (a.to(device) == viewedtd.get("a")).all()
 
+    def test_data_grad(self):
+        td = TensorDict(
+            {
+                "a": torch.randn(3, 4, requires_grad=True),
+                "b": {"c": torch.randn(3, 4, 5, requires_grad=True)},
+            },
+            [3, 4],
+        )
+        td1 = td + 1
+        td1.apply(lambda x: x.sum().backward(retain_graph=True))
+        assert not td.grad.is_locked
+        assert td.grad is not td.grad
+        assert not td.data.is_locked
+        assert td.data is not td.grad
+        td.lock_()
+        assert td.grad.is_locked
+        assert td.grad is td.grad
+        assert td.data.is_locked
+        assert td.data is td.data
+
     @pytest.mark.parametrize(
         "stack_dim",
         [0, 1, 2, 3],
@@ -376,6 +419,16 @@ class TestGeneric:
             assert dense_td_stack["lazy"].stack_dim == nested_stack_dim
         else:
             assert dense_td_stack["lazy"].stack_dim == nested_stack_dim + 1
+
+    def test_dtype(self):
+        td = TensorDict(
+            {("an", "integer"): 1, ("a", "string"): "a", ("the", "float"): 1.0}
+        )
+        assert td.dtype is None
+        td = td.float()
+        assert td.dtype == torch.float
+        td = td.int()
+        assert td.dtype == torch.int
 
     def test_empty(self):
         td = TensorDict(
@@ -1007,6 +1060,69 @@ class TestGeneric:
         td = TensorDict({"a": torch.zeros(3, 4)})
         assert td.batch_size == torch.Size([])
 
+    def test_non_blocking(self):
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif torch.backends.mps.is_available():
+            device = "mps"
+        else:
+            pytest.skip("No device found")
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
+                non_blocking=False,
+                device="cpu",
+            )
+            assert (td == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
+                device="cpu",
+            )
+            assert (td == 1).all()
+        # This is too flaky
+        # with pytest.raises(AssertionError):
+        #     for _ in range(10):
+        #         td = TensorDict(
+        #             {str(i): torch.ones((10,), device=device) for i in range(5)},
+        #             [10],
+        #             non_blocking=True,
+        #             device="cpu",
+        #         )
+        #         assert (td == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device="cpu") for i in range(5)},
+                [10],
+                non_blocking=False,
+                device="cpu",
+            )
+            assert (td.to(device, non_blocking=False) == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
+                non_blocking=False,
+                device=device,
+            )
+            assert (td.to("cpu", non_blocking=False) == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device="cpu") for i in range(5)},
+                [10],
+                device="cpu",
+            )
+            assert (td.to(device, non_blocking=False) == 1).all()
+        for _ in range(10):
+            td = TensorDict(
+                {str(i): torch.ones((10,), device=device) for i in range(5)},
+                [10],
+                device=device,
+            )
+            assert (td.to("cpu", non_blocking=False) == 1).all()
+
     def test_pad(self):
         dim0_left, dim0_right, dim1_left, dim1_right = [0, 1, 0, 2]
         td = TensorDict(
@@ -1027,7 +1143,7 @@ class TestGeneric:
         assert torch.equal(padded_td["a"], expected_a)
         padded_td._check_batch_size()
 
-    @pytest.mark.parametrize("make_mask", [True, False])
+    @pytest.mark.parametrize("make_mask", [True, ("bibbidi", "bobbidi", "boo"), False])
     def test_pad_sequence_pad_dim0(self, make_mask):
         pad_dim = 0
         list_td = [
@@ -1058,21 +1174,24 @@ class TestGeneric:
         )  # check the shape of the padded tensor
         assert torch.all(padded_td["b", "c"][0, 2:, :] == 0)  # check the padding
         if make_mask:
+            masks_key = "masks"
+            if not isinstance(make_mask, bool):
+                masks_key = make_mask
             padded_td_without_masks = pad_sequence(
                 list_td, pad_dim=pad_dim, return_mask=False
             )
-            assert "masks" in padded_td.keys()
+            assert masks_key in padded_td.keys(True)
             assert set(
                 padded_td_without_masks.keys(include_nested=True, leaves_only=True)
-            ) == set(padded_td["masks"].keys(include_nested=True, leaves_only=True))
-            assert not padded_td["masks", "a"].all()
-            assert padded_td["masks", "a"].ndim == pad_dim + 2
-            assert (padded_td["a"][padded_td["masks", "a"]] != 0).all()
-            assert (padded_td["a"][~padded_td["masks", "a"]] == 0).all()
-            assert not padded_td["masks", "b", "c"].all()
-            assert padded_td["masks", "b", "c"].ndim == pad_dim + 2
-            assert (padded_td["b", "c"][padded_td["masks", "b", "c"]] != 0).all()
-            assert (padded_td["b", "c"][~padded_td["masks", "b", "c"]] == 0).all()
+            ) == set(padded_td[masks_key].keys(include_nested=True, leaves_only=True))
+            assert not padded_td[masks_key, "a"].all()
+            assert padded_td[masks_key, "a"].ndim == pad_dim + 2
+            assert (padded_td["a"][padded_td[masks_key, "a"]] != 0).all()
+            assert (padded_td["a"][~padded_td[masks_key, "a"]] == 0).all()
+            assert not padded_td[masks_key, "b", "c"].all()
+            assert padded_td[masks_key, "b", "c"].ndim == pad_dim + 2
+            assert (padded_td["b", "c"][padded_td[masks_key, "b", "c"]] != 0).all()
+            assert (padded_td["b", "c"][~padded_td[masks_key, "b", "c"]] == 0).all()
         else:
             assert "masks" not in padded_td.keys()
 
@@ -1106,22 +1225,25 @@ class TestGeneric:
             [2, 6, 7]
         )  # check the shape of the padded tensor
         assert torch.all(padded_td["b", "c"][0, :, 3:] == 0)  # check the padding
-        if make_mask:
+        if isinstance(make_mask, str) or make_mask:
+            masks_key = "masks"
+            if isinstance(make_mask, str):
+                masks_key = make_mask
             padded_td_without_masks = pad_sequence(
                 list_td, pad_dim=pad_dim, return_mask=False
             )
-            assert "masks" in padded_td.keys()
+            assert masks_key in padded_td.keys()
             assert set(
                 padded_td_without_masks.keys(include_nested=True, leaves_only=True)
-            ) == set(padded_td["masks"].keys(include_nested=True, leaves_only=True))
-            assert not padded_td["masks", "a"].all()
-            assert padded_td["masks", "a"].ndim == pad_dim + 2
-            assert (padded_td["a"][padded_td["masks", "a"]] != 0).all()
-            assert (padded_td["a"][~padded_td["masks", "a"]] == 0).all()
-            assert not padded_td["masks", "b", "c"].all()
-            assert padded_td["masks", "b", "c"].ndim == pad_dim + 2
-            assert (padded_td["b", "c"][padded_td["masks", "b", "c"]] != 0).all()
-            assert (padded_td["b", "c"][~padded_td["masks", "b", "c"]] == 0).all()
+            ) == set(padded_td[masks_key].keys(include_nested=True, leaves_only=True))
+            assert not padded_td[masks_key, "a"].all()
+            assert padded_td[masks_key, "a"].ndim == pad_dim + 2
+            assert (padded_td["a"][padded_td[masks_key, "a"]] != 0).all()
+            assert (padded_td["a"][~padded_td[masks_key, "a"]] == 0).all()
+            assert not padded_td[masks_key, "b", "c"].all()
+            assert padded_td[masks_key, "b", "c"].ndim == pad_dim + 2
+            assert (padded_td["b", "c"][padded_td[masks_key, "b", "c"]] != 0).all()
+            assert (padded_td["b", "c"][~padded_td[masks_key, "b", "c"]] == 0).all()
         else:
             assert "masks" not in padded_td.keys()
 
@@ -1940,6 +2062,231 @@ class TestGeneric:
         assert ("a", "b") in t.keys(include_nested=True)
         assert t["a", "b"].shape == torch.Size([2, 3, 1])
         t.update({"a": {"d": [[[1]] * 3] * 2}})
+
+
+class TestPointwiseOps:
+    @property
+    def dummy_td_0(self):
+        return TensorDict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.zeros(3, 5, dtype=torch.int)}}
+        )
+
+    @property
+    def dummy_td_1(self):
+        return self.dummy_td_0.apply(lambda x: x + 1)
+
+    @property
+    def dummy_td_2(self):
+        return self.dummy_td_0.apply(lambda x: x + 2)
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_add(self, locked):
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        assert (td.add(1) == 1).all()
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        assert (td.add(other) == 1).all()
+
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        assert (td + 1 == 1).all()
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        r = td + other
+        assert r.is_locked is locked
+        assert (r == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_add_(self, locked):
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        assert (td.add_(1) == 1).all()
+        assert td.add_(1) is td
+        td = self.dummy_td_0
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        assert (td.add_(other) == 1).all()
+
+        td = self.dummy_td_0
+        if locked:
+            td.lock_()
+        td += 1
+        assert (td == 1).all()
+        td = self.dummy_td_0
+        other = self.dummy_td_1
+        if locked:
+            other.lock_()
+        td += other
+        assert (td == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_mul(self, locked):
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        assert (td.mul(0) == 0).all()
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        assert (td.mul(other) == 0).all()
+
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        td = td * 0
+        assert (td == 0).all()
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        td = td * other
+        assert td.is_locked is locked
+        assert (td == 0).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_mul_(self, locked):
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        assert (td.mul_(0) == 0).all()
+        assert td.mul_(0) is td
+        td = self.dummy_td_1
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        assert (td.mul_(other) == 0).all()
+
+        td = self.dummy_td_1
+        if locked:
+            td.lock_()
+        td *= 0
+        assert (td == 0).all()
+        td = self.dummy_td_1
+        other = self.dummy_td_0
+        if locked:
+            other.lock_()
+        td *= other
+        assert (td == 0).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_div(self, locked):
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td.div(2) == 1).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td.div(other) == 1).all()
+
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td / 2 == 1).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        r = td / other
+        assert r.is_locked is locked
+        assert (r == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_div_(self, locked):
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        assert (td.div_(2) == 1).all()
+        assert td.div_(2) is td
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        assert (td.div_(other) == 1).all()
+
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        td /= 2
+        assert (td == 1).all()
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        td /= other
+        assert (td == 1).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_pow(self, locked):
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td.pow(2) == 4).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+        assert (td.pow(other) == 4).all()
+
+        td = self.dummy_td_2
+        if locked:
+            td.lock_()
+        assert (td**2 == 4).all()
+        other = self.dummy_td_2
+        if locked:
+            other.lock_()
+
+        r = td**other
+        assert r.is_locked is locked
+
+        assert (r == 4).all()
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_pow_(self, locked):
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        assert (td.pow_(2) == 4).all()
+        assert td.pow_(2) is td
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        assert (td.pow_(other) == 4).all()
+
+        td = self.dummy_td_2.float()
+        if locked:
+            td.lock_()
+        td **= 2
+        assert (td == 4).all()
+        td = self.dummy_td_2.float()
+        other = self.dummy_td_2.float()
+        if locked:
+            other.lock_()
+        td **= other
+        assert (td == 4).all()
+
+    @property
+    def _lazy_td(self):
+        tensordict = LazyStackedTensorDict(
+            TensorDict({"a": -2}), TensorDict({"a": -1, "b": -2}), stack_dim=0
+        )
+        return TensorDict({"super": tensordict})
+
+    def test_lazy_td_pointwise(self):
+        td = self._lazy_td
+        td.abs_()
+        assert (td > 0).all()
+        td = self._lazy_td
+        assert ((td + td) == td * 2).all()
+        td = self._lazy_td
+        td += self._lazy_td
+        assert (td == self._lazy_td * 2).all()
+        assert ((td.abs() ** 2).clamp_max(td) == td).all()
 
 
 @pytest.mark.parametrize(
@@ -3792,8 +4139,13 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         _ = str(td)
 
-    def test_reshape(self, td_name, device):
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_reshape(self, td_name, device, lock):
         td = getattr(self, td_name)(device)
+        if lock:
+            if td_name in ("sub_td", "sub_td2"):
+                pytest.skip()
+            td.lock_()
         td_reshape = td.reshape(td.shape)
         # assert isinstance(td_reshape, TensorDict)
         assert td_reshape.shape.numel() == td.shape.numel()
@@ -3818,6 +4170,8 @@ class TestTensorDicts(TestTensorDictsBase):
         assert isinstance(td_reshape, TensorDict)
         assert td_reshape.shape.numel() == td.shape.numel()
         assert td_reshape.shape == torch.Size([td.shape.numel()])
+        if td.is_locked:
+            assert td_reshape.is_locked
 
     @pytest.mark.parametrize("strict", [True, False])
     @pytest.mark.parametrize("inplace", [True, False])
@@ -5284,7 +5638,7 @@ class TestTensorDictRepr:
             device=device,
         )
 
-        return stack_td([td1, td2], 2)
+        return stack_td([td1, td2], 2, maybe_dense_stack=True)
 
     def td(self, device, dtype):
         if device is not None:
@@ -6120,12 +6474,12 @@ class TestLazyStackedTensorDict:
         td0 = TensorDict({"a": 1, "b": TensorDict({"c": 2}, [])}, [])
         td1 = TensorDict({"a": 1, "b": TensorDict({"d": 2}, [])}, [])
         with set_lazy_legacy(False):
-            td = torch.stack([td0, td1])
+            td = LazyStackedTensorDict.maybe_dense_stack([td0, td1])
         assert isinstance(td, TensorDict)
         assert isinstance(td.get("b"), LazyStackedTensorDict)
         td1 = TensorDict({"a": 1, "b": TensorDict({"c": [2]}, [])}, [])
         with set_lazy_legacy(False):
-            td = torch.stack([td0, td1])
+            td = LazyStackedTensorDict.maybe_dense_stack([td0, td1])
         assert isinstance(td, TensorDict)
         assert isinstance(td.get("b"), LazyStackedTensorDict)
 
@@ -6525,7 +6879,7 @@ class TestLazyStackedTensorDict:
             },
             batch_size=[],
         )
-        td = stack_td([td1, td2], 0)
+        td = LazyStackedTensorDict.maybe_dense_stack([td1, td2], 0)
         assert "a" in td.keys()
         assert "b" not in td.keys()
         assert "b" in td[1].keys()
@@ -7081,12 +7435,14 @@ class TestNamedDims(TestTensorDictsBase):
             td.names = ["a", "b", "c"]
 
     def test_permute(self):
-        td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
+        td = TensorDict({"sub": {}}, batch_size=[3, 4, 5, 6], names=None, lock=True)
         td.names = ["a", "b", "c", "d"]
         tdp = td.permute(-1, -2, -3, -4)
         assert tdp.names == list("dcba")
         tdp = td.permute(-1, 1, 2, -4)
         assert tdp.names == list("dbca")
+        assert tdp.is_locked
+        assert tdp["sub"].is_locked
 
     def test_permute_td(self):
         td = self.unsqueezed_td("cpu")
@@ -7154,11 +7510,14 @@ class TestNamedDims(TestTensorDictsBase):
         assert td["a"].names == ["a", "b"]
 
     def test_split(self):
-        td = TensorDict({}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"])
+        td = TensorDict(
+            {}, batch_size=[3, 4, 1, 6], names=["a", "b", "c", "d"], lock=True
+        )
         _, tdu = td.split(dim=-1, split_size=[3, 3])
         assert tdu.names == ["a", "b", "c", "d"]
         _, tdu = td.split(dim=1, split_size=[1, 3])
         assert tdu.names == ["a", "b", "c", "d"]
+        # assert tdu.is_locked
 
     def test_squeeze(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
@@ -7500,9 +7859,9 @@ class TestTensorDictMP(TestTensorDictsBase):
         return x.apply(lambda x: x + 1)
 
     @staticmethod
-    def add1_app_error(x):
-        # algerbraic ops are not supported
-        return x + 1
+    def matmul_app_error(x):
+        # non point-wise ops are not supported
+        return x @ 1
 
     @pytest.mark.parametrize(
         "chunksize,num_chunks", [[None, 2], [4, None], [None, None], [2, 2]]
@@ -7515,7 +7874,7 @@ class TestTensorDictMP(TestTensorDictsBase):
             with pytest.raises(
                 RuntimeError, match="Cannot call map on a TensorDictParams object"
             ):
-                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+                td.map(self.matmul_app_error, dim=dim, pool=_pool_fixt)
             return
         if chunksize is not None and num_chunks is not None:
             with pytest.raises(ValueError, match="but not both"):
@@ -7560,10 +7919,10 @@ class TestTensorDictMP(TestTensorDictsBase):
             with pytest.raises(
                 RuntimeError, match="Cannot call map on a TensorDictParams object"
             ):
-                td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+                td.map(self.matmul_app_error, dim=dim, pool=_pool_fixt)
             return
         with pytest.raises(TypeError, match="unsupported operand"):
-            td.map(self.add1_app_error, dim=dim, pool=_pool_fixt)
+            td.map(self.matmul_app_error, dim=dim, pool=_pool_fixt)
 
     def test_sharing_locked_td(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -7603,6 +7962,7 @@ def _pool_fixt():
         yield pool
 
 
+@pytest.mark.skipif(not _has_funcdim, reason="functorch.dim could not be found")
 class TestFCD(TestTensorDictsBase):
     """Test stack for first-class dimension."""
 
@@ -7905,7 +8265,9 @@ class TestMap:
 
     @pytest.mark.parametrize("chunksize", [0, 5])
     @pytest.mark.parametrize("mmap", [True, False])
-    @pytest.mark.parametrize("start_method", [None, "fork"])
+    @pytest.mark.parametrize(
+        "start_method", [None, "spawn" if torch.cuda.is_available() else "fork"]
+    )
     def test_map_with_out(self, mmap, chunksize, tmpdir, start_method):
         tmpdir = Path(tmpdir)
         input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])

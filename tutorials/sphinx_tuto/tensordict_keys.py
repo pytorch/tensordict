@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Manipulating the keys of a TensorDict
 =====================================

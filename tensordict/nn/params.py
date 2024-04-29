@@ -14,7 +14,15 @@ from functools import wraps
 from typing import Any, Callable, Iterator, OrderedDict, Sequence, Type
 
 import torch
-from functorch import dim as ftdim
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict
@@ -602,6 +610,30 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def __ne__(self, other: object) -> TensorDictBase:
         ...
 
+    @_fallback
+    def __xor__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __or__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __ge__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __gt__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __le__(self, other: object) -> TensorDictBase:
+        ...
+
+    @_fallback
+    def __lt__(self, other: object) -> TensorDictBase:
+        ...
+
     def __getattr__(self, item: str) -> Any:
         if not item.startswith("_"):
             try:
@@ -811,7 +843,11 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @property
     def data(self):
-        return self._param_td.detach()
+        return self._param_td._data()
+
+    @property
+    def grad(self):
+        return self._param_td._grad()
 
     @_unlock_and_set(inplace=True)
     def flatten_keys(
@@ -881,16 +917,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _legacy_unsqueeze(self, dim: int) -> TensorDictBase:
         ...
 
-    @_fallback
-    def __xor__(self, other):
-        ...
-
-    @_fallback
-    def __or__(self, other):
-        ...
-
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
+
+    @_fallback
+    def _cast_reduction(self, **kwargs):
+        ...
 
     @_fallback
     def all(self, dim: int = None) -> bool | TensorDictBase:

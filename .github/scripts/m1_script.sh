@@ -1,3 +1,3 @@
 #!/bin/bash
 
-export BUILD_VERSION=0.4.0
+export TENSORDICT_BUILD_VERSION=0.4.0

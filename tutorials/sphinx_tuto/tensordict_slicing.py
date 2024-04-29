@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Slicing, Indexing, and Masking
 ==============================
@@ -78,46 +77,3 @@ print(tensordict["a"], tensordict["b"])
 
 mask = torch.BoolTensor([[1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0]])
 tensordict[mask]
-
-##############################################################################
-# SubTensorDict
-# -------------
-# When we index a :class:`~.TensorDict` with a contiguous index, we obtain a new
-# :class:`~.TensorDict` whose values are all views on the values of the original
-# :class:`~.TensorDict`. That means updates to the indexed :class:`~.TensorDict` are
-# applied to the original also.
-
-tensordict = TensorDict(
-    {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
-)
-td2 = tensordict[1:]
-td2.fill_("b", 1)
-
-assert (tensordict["b"][1:] == 1).all()
-print(tensordict["b"])
-
-##############################################################################
-# This doesn't work however if we use a non-contiguous index
-
-tensordict = TensorDict(
-    {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
-)
-td2 = tensordict[[0, 2]]
-td2.fill_("b", 1)
-
-assert (tensordict == 0).all()
-print(tensordict["b"])
-
-##############################################################################
-# In case such functionality is needed, one can use
-# :meth:`TensorDict.get_sub_tensordict <tensordict.TensorDict.get_sub_tensordict>`
-# instead. The :class:`~.SubTensorDict` holds a reference to the orgiinal
-# :class:`~.TensorDict` so that updates to the sub-tensordict can be written back to the
-# source.
-
-tensordict = TensorDict(
-    {"a": torch.zeros(3, 4, 5), "b": torch.zeros(3, 4)}, batch_size=[3, 4]
-)
-td2 = tensordict.get_sub_tensordict(([0, 2],))
-td2.fill_("b", 1)
-print(tensordict["b"])
