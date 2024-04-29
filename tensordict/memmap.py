@@ -680,7 +680,6 @@ class MemoryMappedTensor(torch.Tensor):
         t0 = time.time()
         if index is not None:
             out = out[index]
-        t0 = time.time()
         out = cls(out)
         out._filename = None
         out._handler = handler
