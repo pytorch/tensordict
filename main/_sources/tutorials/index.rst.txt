@@ -9,6 +9,7 @@ README Tutos
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
@@ -179,6 +180,8 @@ README Tutos
       <div class="sphx-glr-thumbnail-title">Batched data loading with tensorclasses</div>
     </div>
 
+
+.. thumbnail-parent-div-close
 
 .. raw:: html
 
