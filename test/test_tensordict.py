@@ -1008,9 +1008,9 @@ class TestGeneric:
         meta_state_dict.apply(check_meta, filter_empty=True)
 
         if torch.cuda.is_available():
-            device = "cuda"
+            device = "cuda:0"
         elif torch.backends.mps.is_available():
-            device = "mps"
+            device = "mps:0"
         else:
             pytest.skip("no device to test")
         device_state_dict = TensorDict.load(tmpdir, device=device)
