@@ -29,7 +29,7 @@ from _utils_internal import (
     prod,
     TestTensorDictsBase,
 )
-from torch._subclasses import FakeTensorMode, FakeTensor
+from torch._subclasses import FakeTensor, FakeTensorMode
 
 try:
     from functorch import dim as ftdim
@@ -1026,8 +1026,10 @@ class TestGeneric:
 
         with FakeTensorMode():
             fake_state_dict = TensorDict.load(tmpdir)
+
             def assert_fake(tensor):
                 assert isinstance(tensor, FakeTensor)
+
             fake_state_dict.apply(assert_fake)
 
     def test_load_state_dict_incomplete(self):
