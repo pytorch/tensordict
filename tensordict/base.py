@@ -2538,20 +2538,33 @@ class TensorDictBase(MutableMapping):
         ).lock_()
 
     @classmethod
-    def load(cls, prefix: str | Path) -> T:
+    def load(cls, prefix: str | Path, *args, **kwargs) -> T:
         """Loads a tensordict from disk.
 
         This class method is a proxy to :meth:`~.load_memmap`.
         """
-        return cls.load_memmap(prefix)
+        return cls.load_memmap(prefix, *args, **kwargs)
 
     @classmethod
-    def load_memmap(cls, prefix: str | Path) -> T:
+    def load_memmap(
+        cls,
+        prefix: str | Path,
+        device: torch.device | None = None,
+        non_blocking: bool = False,
+    ) -> T:
         """Loads a memory-mapped tensordict from disk.
 
         Args:
             prefix (str or Path to folder): the path to the folder where the
                 saved tensordict should be fetched.
+            device (torch.device or equivalent, optional): if provided, the
+                data will be asynchronously cast to that device.
+                Supports `"meta"` device, in which case the data isn't loaded
+                but a set of empty "meta" tensors are created. This is
+                useful to get a sense of the total model size and structure
+                without actually opening any file.
+            non_blocking (bool, optional): if ``True``, synchronize won't be
+                called after loading tensors on device. Defaults to ``False``.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -2586,7 +2599,12 @@ class TensorDictBase(MutableMapping):
                     f"Could not find name {type_name} in {tensordict.base._ACCEPTED_CLASSES}. "
                     f"Did you call _register_tensor_class(cls) on {type_name}?"
                 )
-        return cls._load_memmap(prefix, metadata)
+        if device is not None:
+            device = torch.device(device)
+        out = cls._load_memmap(prefix, metadata, device=device)
+        if not non_blocking and device is not None and device != torch.device("meta"):
+            out._sync_all()
+        return out
 
     @classmethod
     @abc.abstractmethod
