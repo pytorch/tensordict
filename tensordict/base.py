@@ -6821,7 +6821,8 @@ class TensorDictBase(MutableMapping):
 
     def _sync_all(self):
         if _has_cuda:
-            torch.cuda.synchronize()
+            if torch.cuda.is_initialized():
+                torch.cuda.synchronize()
         elif _has_mps:
             torch.mps.synchronize()
 
