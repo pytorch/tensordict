@@ -1015,6 +1015,7 @@ class TestGeneric:
             pytest.skip("no device to test")
         device_state_dict = TensorDict.load(tmpdir, device=device)
         assert (device_state_dict == 0).all()
+
         def assert_device(item):
             assert item.device == torch.device(device)
             if is_tensor_collection(item):
