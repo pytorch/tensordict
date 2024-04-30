@@ -2578,6 +2578,43 @@ class TensorDictBase(MutableMapping):
             >>> nested = TensorDict.load_memmap("./saved_td/nested")
             >>> assert nested["e"] == 0
 
+        A tensordict can also be loaded on "meta" device or, alternatively,
+        as a fake tensor:
+            >>> import tempfile
+            >>> td = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
+            >>> with tempfile.TemporaryDirectory() as path:
+            ...     td.save(path)
+            ...     td_load = TensorDict.load_memmap(path, device="meta")
+            ...     print("meta:", td_load)
+            ...     from torch._subclasses import FakeTensorMode
+            ...     with FakeTensorMode():
+            ...         td_load = TensorDict.load_memmap(path)
+            ...         print("fake:", td_load)
+            meta: TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([]), device=meta, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=meta,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=meta,
+                is_shared=False)
+            fake: TensorDict(
+                fields={
+                    a: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: FakeTensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([]),
+                        device=cpu,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=cpu,
+                is_shared=False)
+
         """
         prefix = Path(prefix)
 

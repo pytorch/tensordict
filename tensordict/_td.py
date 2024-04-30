@@ -2255,7 +2255,9 @@ class TensorDict(TensorDictBase):
             ):
                 # invalid dict means
                 continue
-            if device is None or device != torch.device("meta"):
+            if (
+                device is None or device != torch.device("meta")
+            ) and not torch._guards.active_fake_mode():
                 tensor = MemoryMappedTensor.from_filename(
                     dtype=_STRDTYPE2DTYPE[dtype],
                     shape=torch.Size(entry_metadata["shape"]),
@@ -2266,7 +2268,7 @@ class TensorDict(TensorDictBase):
             else:
                 tensor = torch.zeros(
                     torch.Size(entry_metadata["shape"]),
-                    device=torch.device("meta"),
+                    device=device,
                     dtype=_STRDTYPE2DTYPE[dtype],
                 )
             out._set_str(
