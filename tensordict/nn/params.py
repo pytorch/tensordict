@@ -485,6 +485,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
+        call_on_nested: bool = False,
         **constructor_kwargs,
     ) -> TensorDictBase | None:
         ...
@@ -500,6 +501,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
+        call_on_nested: bool = False,
         **constructor_kwargs,
     ) -> TensorDictBase | None:
         ...
