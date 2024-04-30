@@ -2051,13 +2051,17 @@ class LazyStackedTensorDict(TensorDictBase):
         return results
 
     @classmethod
-    def _load_memmap(cls, prefix: str, metadata: dict) -> LazyStackedTensorDict:
+    def _load_memmap(
+        cls, prefix: str, metadata: dict, **kwargs
+    ) -> LazyStackedTensorDict:
         tensordicts = []
         i = 0
         while (prefix / str(i)).exists():
-            tensordicts.append(TensorDict.load_memmap(prefix / str(i)))
+            tensordicts.append(
+                TensorDict.load_memmap(prefix / str(i), **kwargs, non_blocking=False)
+            )
             i += 1
-        return cls(*tensordicts, stack_dim=metadata["stack_dim"])
+        return cls(*tensordicts, stack_dim=metadata["stack_dim"], **kwargs)
 
     def expand(self, *args: int, inplace: bool = False) -> T:
         if len(args) == 1 and isinstance(args[0], Sequence):
@@ -2990,13 +2994,13 @@ class _CustomOpTensorDict(TensorDictBase):
         return dest
 
     @classmethod
-    def _load_memmap(cls, prefix: str, metadata: dict) -> _CustomOpTensorDict:
+    def _load_memmap(cls, prefix: str, metadata: dict, **kwargs) -> _CustomOpTensorDict:
         custom_op = metadata.pop("custom_op")
         inv_op = metadata.pop("inv_op")
         custom_op_kwargs = metadata.pop("custom_op_kwargs")
         inv_op_kwargs = metadata.pop("inv_op_kwargs")
 
-        source = TensorDict.load_memmap(prefix / "_source")
+        source = TensorDict.load_memmap(prefix / "_source", **kwargs, non_blocking=True)
 
         return cls(
             source,

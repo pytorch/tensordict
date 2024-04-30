@@ -2608,7 +2608,9 @@ class TensorDictBase(MutableMapping):
 
     @classmethod
     @abc.abstractmethod
-    def _load_memmap(cls, prefix: Path, metadata: dict):
+    def _load_memmap(
+        cls, prefix: Path, metadata: dict, device: torch.device | None = None
+    ):
         ...
 
     # Key functionality: set, get, set_, set_at_, update, update_
