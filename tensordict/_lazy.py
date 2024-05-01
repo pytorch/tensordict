@@ -2052,13 +2052,15 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @classmethod
     def _load_memmap(
-        cls, prefix: str, metadata: dict, **kwargs
+        cls, prefix: str, metadata: dict, device: torch.device | None = None, **kwargs
     ) -> LazyStackedTensorDict:
         tensordicts = []
         i = 0
         while (prefix / str(i)).exists():
             tensordicts.append(
-                TensorDict.load_memmap(prefix / str(i), **kwargs, non_blocking=False)
+                TensorDict.load_memmap(
+                    prefix / str(i), device=device, **kwargs, non_blocking=True
+                )
             )
             i += 1
         return cls(*tensordicts, stack_dim=metadata["stack_dim"], **kwargs)
