@@ -609,13 +609,13 @@ def _share_memory_(self):
     return self
 
 
-def _load_memmap(cls, prefix: Path, metadata: dict):
+def _load_memmap(cls, prefix: Path, metadata: dict, **kwargs):
     non_tensordict = copy(metadata)
     del non_tensordict["_type"]
     if os.path.exists(prefix / "other.pickle"):
         with open(prefix / "other.pickle", "rb") as pickle_file:
             non_tensordict.update(pickle.load(pickle_file))
-    td = TensorDict.load_memmap(prefix / "_tensordict")
+    td = TensorDict.load_memmap(prefix / "_tensordict", **kwargs, non_blocking=False)
     return cls._from_tensordict(td, non_tensordict)
 
 
@@ -2390,7 +2390,9 @@ class NonTensorStack(LazyStackedTensorDict):
         return results
 
     @classmethod
-    def _load_memmap(cls, prefix: str, metadata: dict) -> LazyStackedTensorDict:
+    def _load_memmap(
+        cls, prefix: str, metadata: dict, **kwargs
+    ) -> LazyStackedTensorDict:
         data = metadata.get("data", None)
         if data is not None:
             if isinstance(data, str):
@@ -2400,7 +2402,7 @@ class NonTensorStack(LazyStackedTensorDict):
             if device is not None:
                 device = torch.device(device)
             return cls._from_list(data, device=device)
-        return super()._load_memmap(prefix=prefix, metadata=metadata)
+        return super()._load_memmap(prefix=prefix, metadata=metadata, **kwargs)
 
     @classmethod
     def _from_list(cls, datalist: List, device: torch.device):

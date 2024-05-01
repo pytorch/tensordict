@@ -2222,14 +2222,20 @@ class TensorDict(TensorDictBase):
         return dest
 
     @classmethod
-    def _load_memmap(cls, prefix: str, metadata: dict) -> T:
+    def _load_memmap(
+        cls, prefix: str, metadata: dict, device: torch.device | None = None
+    ) -> T:
         if metadata["device"] == "None":
             metadata["device"] = None
         else:
             metadata["device"] = torch.device(metadata["device"])
         metadata["shape"] = torch.Size(metadata["shape"])
 
-        out = cls({}, batch_size=metadata.pop("shape"), device=metadata.pop("device"))
+        out = cls(
+            {},
+            batch_size=metadata.pop("shape"),
+            device=metadata.pop("device") if device is None else device,
+        )
 
         paths = set()
         for key, entry_metadata in metadata.items():
@@ -2249,13 +2255,25 @@ class TensorDict(TensorDictBase):
             ):
                 # invalid dict means
                 continue
-            out._set_str(
-                key,
-                MemoryMappedTensor.from_filename(
+            if (
+                device is None or device != torch.device("meta")
+            ) and not torch._guards.active_fake_mode():
+                tensor = MemoryMappedTensor.from_filename(
                     dtype=_STRDTYPE2DTYPE[dtype],
                     shape=torch.Size(entry_metadata["shape"]),
                     filename=str(prefix / f"{key}.memmap"),
-                ),
+                )
+                if device is not None:
+                    tensor = tensor.to(device, non_blocking=True)
+            else:
+                tensor = torch.zeros(
+                    torch.Size(entry_metadata["shape"]),
+                    device=device,
+                    dtype=_STRDTYPE2DTYPE[dtype],
+                )
+            out._set_str(
+                key,
+                tensor,
                 validated=True,
                 inplace=False,
                 non_blocking=False,
@@ -2264,7 +2282,9 @@ class TensorDict(TensorDictBase):
         for path in prefix.iterdir():
             if path.is_dir() and path.parts[-1] in paths:
                 key = path.parts[len(prefix.parts) :]
-                out.set(key, TensorDict.load_memmap(path))
+                out.set(
+                    key, TensorDict.load_memmap(path, device=device, non_blocking=True)
+                )
         return out
 
     def to(self, *args, **kwargs: Any) -> T:
@@ -3323,10 +3343,13 @@ class _SubTensorDict(TensorDictBase):
         return result
 
     @classmethod
-    def _load_memmap(cls, prefix: Path, metadata: dict):
+    def _load_memmap(
+        cls, prefix: Path, metadata: dict, device: torch.device | None = None
+    ):
         index = metadata["index"]
         return _SubTensorDict(
-            TensorDict.load_memmap(prefix / "_source"), _str_to_index(index)
+            TensorDict.load_memmap(prefix / "_source", device=device),
+            _str_to_index(index),
         )
 
     def share_memory_(self) -> T:

@@ -29,6 +29,7 @@ from _utils_internal import (
     prod,
     TestTensorDictsBase,
 )
+from torch._subclasses import FakeTensor, FakeTensorMode
 
 try:
     from functorch import dim as ftdim
@@ -990,6 +991,46 @@ class TestGeneric:
 
         assert leaves == set()
         assert leaves_nested == {("a", "b", "c")}
+
+    def test_load_device(self, tmpdir):
+        t = nn.Transformer(
+            d_model=64, nhead=4, num_encoder_layers=3, dim_feedforward=128
+        )
+
+        state_dict = TensorDict.from_module(t)
+        state_dict.data.zero_()
+
+        state_dict.save(tmpdir)
+        meta_state_dict = TensorDict.load(tmpdir, device="meta")
+
+        def check_meta(tensor):
+            assert tensor.device == torch.device("meta")
+
+        meta_state_dict.apply(check_meta, filter_empty=True)
+
+        if torch.cuda.is_available():
+            device = "cuda:0"
+        elif torch.backends.mps.is_available():
+            device = "mps:0"
+        else:
+            pytest.skip("no device to test")
+        device_state_dict = TensorDict.load(tmpdir, device=device)
+        assert (device_state_dict == 0).all()
+
+        def assert_device(item):
+            assert item.device == torch.device(device)
+            if is_tensor_collection(item):
+                item.apply(assert_device, filter_empty=True, call_on_nested=True)
+
+        device_state_dict.apply(assert_device, filter_empty=True, call_on_nested=True)
+
+        with FakeTensorMode():
+            fake_state_dict = TensorDict.load(tmpdir)
+
+            def assert_fake(tensor):
+                assert isinstance(tensor, FakeTensor)
+
+            fake_state_dict.apply(assert_fake)
 
     def test_load_state_dict_incomplete(self):
         data = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, [])
