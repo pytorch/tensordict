@@ -489,7 +489,9 @@ class MemoryMappedTensor(torch.Tensor):
                     shape,
                     *offsets_strides,
                 )
-                return MemoryMappedTensor(result)
+                result = cls(result)
+                result._handler = handler
+                return result
             else:
                 result = torch.from_file(
                     str(filename), shared=True, dtype=dtype, size=shape_numel
@@ -506,7 +508,9 @@ class MemoryMappedTensor(torch.Tensor):
                     shape,
                     *offsets_strides,
                 )
-                return MemoryMappedTensor(result)
+                result = cls(result)
+                result._filename = filename
+                return result
             return result
 
         if shape:
@@ -669,7 +673,6 @@ class MemoryMappedTensor(torch.Tensor):
                     "nested tensors. Please upgrade to a more recent "
                     "version."
                 )
-            t0 = time.time()
             out = torch._nested_view_from_buffer(
                 out,
                 shape,
