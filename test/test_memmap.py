@@ -579,6 +579,35 @@ class TestOps:
         assert (memmap != ~memmap).all()
 
 
+class TestNestedTensor:
+    shape = torch.tensor([[2, 3], [2, 4], [3, 2]])
+
+    def test_with_filename(self, tmpdir):
+        filename = tmpdir + "/test_file2.memmap"
+        tensor = MemoryMappedTensor.empty(
+            self.shape, filename=filename, dtype=torch.int
+        )
+        assert isinstance(tensor, MemoryMappedTensor)
+        assert tensor.dtype == torch.int
+        tensor.fill_(2)
+        assert (tensor == 2).all()
+        assert not isinstance(tensor.cpu(), MemoryMappedTensor)
+        filename = tmpdir + "/test_file0.memmap"
+        tensor = MemoryMappedTensor.zeros(
+            self.shape, filename=filename, dtype=torch.bool
+        )
+        assert isinstance(tensor, MemoryMappedTensor)
+        assert tensor.dtype == torch.bool
+        assert not tensor.any()
+        assert not isinstance(tensor.cpu(), MemoryMappedTensor)
+        filename = tmpdir + "/test_file1.memmap"
+        tensor = MemoryMappedTensor.ones(self.shape, filename=filename, dtype=torch.int)
+        # assert isinstance(tensor, MemoryMappedTensor)
+        assert tensor.dtype == torch.int
+        assert (tensor == 1).all()
+        assert not isinstance(tensor.cpu(), MemoryMappedTensor)
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

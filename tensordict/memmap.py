@@ -489,6 +489,7 @@ class MemoryMappedTensor(torch.Tensor):
                     shape,
                     *offsets_strides,
                 )
+                return MemoryMappedTensor(result)
             else:
                 result = torch.from_file(
                     str(filename), shared=True, dtype=dtype, size=shape_numel
@@ -505,6 +506,7 @@ class MemoryMappedTensor(torch.Tensor):
                     shape,
                     *offsets_strides,
                 )
+                return MemoryMappedTensor(result)
             return result
 
         if shape:
@@ -677,7 +679,6 @@ class MemoryMappedTensor(torch.Tensor):
             shape = torch.Size(shape)
             out = torch.reshape(out, shape)
 
-        t0 = time.time()
         if index is not None:
             out = out[index]
         out = cls(out)
