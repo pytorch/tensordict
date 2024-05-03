@@ -12,7 +12,6 @@ import os
 
 import sys
 import tempfile
-import time
 from multiprocessing import util
 from multiprocessing.context import reduction
 from pathlib import Path
@@ -173,9 +172,10 @@ class MemoryMappedTensor(torch.Tensor):
             )
         if shape is None:
             shape = _shape(input)
-            shape_numel = shape.numel()
-        elif isinstance(shape, torch.Tensor):
+        if isinstance(shape, torch.Tensor):
             shape_numel = shape.prod(-1).sum()
+        elif isinstance(shape, torch.Size):
+            shape_numel = shape.numel()
         else:
             shape_numel = torch.Size(shape).numel()
         if filename is None:
@@ -199,23 +199,23 @@ class MemoryMappedTensor(torch.Tensor):
                     offsets_strides = func_offset_stride(shape)
                 else:
                     raise RuntimeError(NESTED_TENSOR_ERR)
-                out = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
+                result = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
                 if copy_data:
-                    out.untyped_storage().copy_(input.untyped_storage())
-                out = torch._nested_view_from_buffer(
-                    out,
+                    result.untyped_storage().copy_(input.untyped_storage())
+                result = torch._nested_view_from_buffer(
+                    result,
                     shape,
                     *offsets_strides,
                 )
             else:
-                out = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
-                out = out.view(shape)
-            out = cls(out)
+                result = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
+                result = result.view(shape)
+            result = cls(result)
         else:
             handler = None
             if not existsok and os.path.exists(str(filename)):
                 raise RuntimeError(f"The file {filename} already exists.")
-            out = torch.from_file(
+            result = torch.from_file(
                 str(filename), shared=True, dtype=input.dtype, size=shape_numel
             )
             if isinstance(shape, torch.Tensor):
@@ -227,27 +227,26 @@ class MemoryMappedTensor(torch.Tensor):
                 else:
                     raise RuntimeError(NESTED_TENSOR_ERR)
                 if copy_data:
-                    # TODO: Check that views work ok and that dtype is passed
-                    out.untyped_storage().copy_(input.untyped_storage())
-                out = torch._nested_view_from_buffer(
-                    out,
+                    result.untyped_storage().copy_(input.untyped_storage())
+                result = torch._nested_view_from_buffer(
+                    result,
                     shape,
                     *offsets_strides,
                 )
             else:
-                out = out.view(shape)
-            out = cls(out)
-        out._handler = handler
-        out._filename = filename
-        out.index = None
-        out.parent_shape = shape
+                result = result.view(shape)
+            result = cls(result)
+        result._handler = handler
+        result._filename = filename
+        result.index = None
+        result.parent_shape = shape
         if copy_data:
             if hasattr(input, "full_tensor"):
                 # for DTensors, cheaper than importing DTensor every time
                 input = input.full_tensor()
-            if not out.is_nested:
-                out.copy_(input)
-        return out
+            if not result.is_nested:
+                result.copy_(input)
+        return result
 
     @property
     def filename(self):
@@ -645,7 +644,7 @@ class MemoryMappedTensor(torch.Tensor):
         return out
 
     @classmethod
-    def from_handler(cls, handler, dtype, shape, index):
+    def from_handler(cls, handler, dtype, shape, index=None):
         # noqa: D417
         """Loads a MemoryMappedTensor from a given handler.
 
@@ -655,11 +654,10 @@ class MemoryMappedTensor(torch.Tensor):
             shape (torch.Size or torch.Tensor): the shape of the tensor. If
                 a tensor is provided, it is assumed that the tensor is a nested_tensor
                 instance.
-            index (torch-compatible index type): an index to use to build the
+            index (torch-compatible index type, optional): an index to use to build the
                 tensor.
 
         """
-        t0 = time.time()
         out = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
         if isinstance(shape, torch.Tensor):
             func_offset_stride = getattr(

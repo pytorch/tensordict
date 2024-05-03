@@ -591,8 +591,6 @@ class TestNestedTensor:
         assert tensor.dtype == torch.int
         tensor.fill_(2)
         assert (tensor == 2)[0].all()
-        # assert not isinstance(tensor.to("meta"), MemoryMappedTensor)
-        # assert not isinstance(tensor.meta(), MemoryMappedTensor)
         assert tensor.filename is not None
 
         filename = tmpdir + "/test_file0.memmap"
@@ -601,17 +599,62 @@ class TestNestedTensor:
         )
         assert isinstance(tensor, MemoryMappedTensor)
         assert tensor.dtype == torch.bool
-        # assert not tensor.any()
-        # assert not isinstance(tensor.cpu(), MemoryMappedTensor)
         assert tensor.filename is not None
 
         filename = tmpdir + "/test_file1.memmap"
         tensor = MemoryMappedTensor.ones(self.shape, filename=filename, dtype=torch.int)
-        # assert isinstance(tensor, MemoryMappedTensor)
         assert tensor.dtype == torch.int
         assert (tensor == 1)[0].all()
-        # assert not isinstance(tensor.cpu(), MemoryMappedTensor)
         assert tensor.filename is not None
+
+        filename = tmpdir + "/test_file3.memmap"
+        tensor = torch.nested.nested_tensor(
+            [torch.zeros(shape.tolist()) + i for i, shape in enumerate(self.shape)]
+        )
+        memmap_tensor = MemoryMappedTensor.from_tensor(tensor, filename=filename)
+        for t1, t2 in zip(tensor, memmap_tensor):
+            assert t1.dtype == t2.dtype
+            assert (t1 == t2).all()
+
+        memmap_tensor2 = MemoryMappedTensor.from_filename(
+            filename, dtype=memmap_tensor.dtype, shape=self.shape
+        )
+        for t1, t2 in zip(memmap_tensor2, memmap_tensor):
+            assert t1.dtype == t2.dtype
+            assert (t1 == t2).all()
+
+    def test_with_handler(self):
+        tensor = MemoryMappedTensor.empty(self.shape, dtype=torch.int)
+        assert isinstance(tensor, MemoryMappedTensor)
+        assert tensor.dtype == torch.int
+        tensor.fill_(2)
+        assert (tensor == 2)[0].all()
+        assert tensor._handler is not None
+
+        tensor = MemoryMappedTensor.zeros(self.shape, dtype=torch.bool)
+        assert isinstance(tensor, MemoryMappedTensor)
+        assert tensor.dtype == torch.bool
+        assert tensor._handler is not None
+
+        tensor = MemoryMappedTensor.ones(self.shape, dtype=torch.int)
+        assert tensor.dtype == torch.int
+        assert (tensor == 1)[0].all()
+        assert tensor._handler is not None
+
+        tensor = torch.nested.nested_tensor(
+            [torch.zeros(shape.tolist()) + i for i, shape in enumerate(self.shape)]
+        )
+        memmap_tensor = MemoryMappedTensor.from_tensor(tensor)
+        for t1, t2 in zip(tensor, memmap_tensor):
+            assert t1.dtype == t2.dtype
+            assert (t1 == t2).all()
+
+        memmap_tensor2 = MemoryMappedTensor.from_handler(
+            memmap_tensor._handler, dtype=memmap_tensor.dtype, shape=self.shape
+        )
+        for t1, t2 in zip(memmap_tensor2, memmap_tensor):
+            assert t1.dtype == t2.dtype
+            assert (t1 == t2).all()
 
 
 if __name__ == "__main__":
