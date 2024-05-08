@@ -20,9 +20,15 @@ from typing import Any, Callable, overload
 import numpy as np
 import torch
 
-from tensordict.utils import implement_for
+from tensordict.utils import _shape, implement_for
 
 from torch.multiprocessing.reductions import ForkingPickler
+
+NESTED_TENSOR_ERR = (
+    "The PyTorch version isn't compatible with memmap "
+    "nested tensors. Please upgrade to a more recent "
+    "version."
+)
 
 
 class MemoryMappedTensor(torch.Tensor):
@@ -60,30 +66,46 @@ class MemoryMappedTensor(torch.Tensor):
           ...     memmap_tensor = MemoryMappedTensor.ones_like(tensor, filename=file.name)
     """
 
-    _filename: str | Path
-    _handler: _FileHandler
+    _filename: str | Path = None
+    _handler: _FileHandler = None
     _clear: bool
     index: Any
     parent_shape: torch.Size
 
     def __new__(
         cls,
-        tensor_or_file,
+        source,
         *,
         dtype=None,
         shape=None,
         index=None,
         device=None,
         handler=None,
+        filename=None,
     ):
         if device is not None and torch.device(device).type != "cpu":
             raise ValueError(f"{cls} device must be cpu!")
-        if isinstance(tensor_or_file, str):
+        if isinstance(source, str):
+            if filename is not None:
+                raise TypeError("Duplicated filename argument.")
+            filename = source
+            source = None
+        if filename is not None:
             return cls.from_filename(
-                tensor_or_file,
+                filename,
                 dtype,
                 shape,
                 index,
+            )
+        elif isinstance(source, torch.StorageBase):
+            return cls.from_storage(
+                source,
+                dtype=dtype,
+                shape=shape,
+                index=index,
+                device=device,
+                handler=handler,
+                filename=filename,
             )
         elif handler is not None:
             return cls.from_handler(
@@ -92,11 +114,9 @@ class MemoryMappedTensor(torch.Tensor):
                 shape,
                 index,
             )
-        return super().__new__(cls, tensor_or_file)
+        return super().__new__(cls, source)
 
-    def __init__(
-        self, tensor_or_file, handler=None, dtype=None, shape=None, device=None
-    ):
+    def __init__(self, source, handler=None, dtype=None, shape=None, device=None):
         ...
 
     __torch_function__ = torch._C._disabled_torch_function_impl
@@ -110,6 +130,7 @@ class MemoryMappedTensor(torch.Tensor):
         existsok=False,
         copy_existing=False,
         copy_data=True,
+        shape=None,
     ):
         """Creates a MemoryMappedTensor with the same content as another tensor.
 
@@ -127,12 +148,14 @@ class MemoryMappedTensor(torch.Tensor):
                 an existing file. Defaults to ``False``.
             copy_existing (bool, optional): if ``True`` and the provided input
                 is a MemoryMappedTensor with an associated filename, copying
-                the content to the new location is permitted. Otherwise an
-                exception is thown. This behaviour exists to prevent
-                unadvertedly duplicating data on disk.
+                the content to the new location is permitted. Otherwise, an
+                exception is thrown. This behaviour exists to prevent
+                inadvertently duplicating data on disk.
             copy_data (bool, optional): if ``True``, the content of the tensor
                 will be copied on the storage. Defaults to ``True``.
-
+            shape (torch.Size or torch.Tensor): a shape to override the tensor
+                shape. If a tensor is passed, it must represent the nested shapes of a
+                nested tensor.
         """
         if isinstance(input, MemoryMappedTensor):
             if (filename is None and input._filename is None) or (
@@ -161,41 +184,126 @@ class MemoryMappedTensor(torch.Tensor):
             raise RuntimeError(
                 "MemoryMappedTensor.from_tensor is incompatible with tensor.requires_grad."
             )
-        shape = input.shape
+        if shape is None:
+            shape = _shape(input, nested_shape=True)
+        if isinstance(shape, torch.Tensor):
+            shape_numel = shape.prod(-1).sum()
+        elif isinstance(shape, torch.Size):
+            shape_numel = shape.numel()
+        else:
+            shape_numel = torch.Size(shape).numel()
         if filename is None:
             if input.dtype.is_floating_point:
-                size = torch.finfo(input.dtype).bits // 8 * shape.numel()
+                size = torch.finfo(input.dtype).bits // 8 * shape_numel
             elif input.dtype.is_complex:
                 raise ValueError(
                     "Complex-valued tensors are not supported by MemoryMappedTensor."
                 )
             elif input.dtype == torch.bool:
-                size = shape.numel()
+                size = shape_numel
             else:
                 # assume integer
-                size = torch.iinfo(input.dtype).bits // 8 * shape.numel()
+                size = torch.iinfo(input.dtype).bits // 8 * shape_numel
             handler = _FileHandler(size)
-            out = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
-            out = out.view(shape)
-            out = cls(out)
+            if isinstance(shape, torch.Tensor):
+                func_offset_stride = getattr(
+                    torch, "_nested_compute_contiguous_strides_offsets", None
+                )
+                if func_offset_stride is not None:
+                    offsets_strides = func_offset_stride(shape)
+                else:
+                    raise RuntimeError(NESTED_TENSOR_ERR)
+                result = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
+                if copy_data:
+                    result.untyped_storage().copy_(input.untyped_storage())
+                result = torch._nested_view_from_buffer(
+                    result,
+                    shape,
+                    *offsets_strides,
+                )
+            else:
+                result = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
+                result = result.view(shape)
+            result = cls(result)
         else:
             handler = None
             if not existsok and os.path.exists(str(filename)):
                 raise RuntimeError(f"The file {filename} already exists.")
-            out = cls(
-                torch.from_file(
-                    str(filename), shared=True, dtype=input.dtype, size=shape.numel()
-                ).view(input.shape)
+            result = torch.from_file(
+                str(filename), shared=True, dtype=input.dtype, size=shape_numel
             )
-        out._handler = handler
-        out._filename = filename
-        out.index = None
-        out.parent_shape = input.shape
+            if isinstance(shape, torch.Tensor):
+                func_offset_stride = getattr(
+                    torch, "_nested_compute_contiguous_strides_offsets", None
+                )
+                if func_offset_stride is not None:
+                    offsets_strides = func_offset_stride(shape)
+                else:
+                    raise RuntimeError(NESTED_TENSOR_ERR)
+                if copy_data:
+                    result.untyped_storage().copy_(input.untyped_storage())
+                result = torch._nested_view_from_buffer(
+                    result,
+                    shape,
+                    *offsets_strides,
+                )
+            else:
+                result = result.view(shape)
+            result = cls(result)
+        result._handler = handler
+        result._filename = filename
+        result.index = None
+        result.parent_shape = shape
         if copy_data:
             if hasattr(input, "full_tensor"):
+                # for DTensors, cheaper than importing DTensor every time
                 input = input.full_tensor()
-            out.copy_(input)
-        return out
+            if not result.is_nested:
+                result.copy_(input)
+        return result
+
+    @classmethod
+    def from_storage(
+        cls,
+        storage,
+        *,
+        shape=None,
+        dtype=None,
+        device=None,
+        index=None,
+        filename=None,
+        handler=None,
+    ):
+        tensor = torch.tensor(storage, dtype=dtype, device=device)
+        if shape is not None:
+            if isinstance(shape, torch.Tensor):
+                func_offset_stride = getattr(
+                    torch, "_nested_compute_contiguous_strides_offsets", None
+                )
+                if func_offset_stride is not None:
+                    offsets_strides = func_offset_stride(shape)
+                else:
+                    raise RuntimeError(
+                        "The PyTorch version isn't compatible with memmap "
+                        "nested tensors. Please upgrade to a more recent "
+                        "version."
+                    )
+                tensor = torch._nested_view_from_buffer(
+                    tensor,
+                    shape,
+                    *offsets_strides,
+                )
+            else:
+                tensor = tensor.view(shape)
+
+        tensor = cls(tensor)
+        if filename is not None:
+            tensor._filename = filename
+        elif handler is not None:
+            tensor._handler = handler
+        if index is not None:
+            return tensor[index]
+        return tensor
 
     @property
     def filename(self):
@@ -312,6 +420,10 @@ class MemoryMappedTensor(torch.Tensor):
             if device.type != "cpu":
                 raise RuntimeError("Only CPU tensors are supported.")
         result = torch.ones((), dtype=dtype, device=device)
+        if isinstance(shape, torch.Tensor):
+            return cls.empty(
+                shape, device=device, dtype=dtype, filename=filename
+            ).fill_(1)
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
                 shape = torch.Size(shape[0])
@@ -353,6 +465,10 @@ class MemoryMappedTensor(torch.Tensor):
             device = torch.device(device)
             if device.type != "cpu":
                 raise RuntimeError("Only CPU tensors are supported.")
+        if isinstance(shape, torch.Tensor):
+            return cls.empty(
+                shape, device=device, dtype=dtype, filename=filename
+            ).fill_(0)
         result = torch.zeros((), dtype=dtype, device=device)
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
@@ -392,6 +508,94 @@ class MemoryMappedTensor(torch.Tensor):
                 is provided, a handler is used.
         """
         shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
+        if device is not None:
+            device = torch.device(device)
+            if device.type != "cpu":
+                raise RuntimeError("Only CPU tensors are supported.")
+        result = torch.zeros((), dtype=dtype, device=device)
+        if isinstance(shape, torch.Tensor):
+            # nested tensor
+            shape_numel = shape.prod(-1).sum()
+
+            if filename is None:
+                if dtype.is_floating_point:
+                    size = torch.finfo(dtype).bits // 8 * shape_numel
+                elif dtype.is_complex:
+                    raise ValueError(
+                        "Complex-valued tensors are not supported by MemoryMappedTensor."
+                    )
+                elif dtype == torch.bool:
+                    size = shape_numel
+                else:
+                    # assume integer
+                    size = torch.iinfo(dtype).bits // 8 * shape_numel
+                handler = _FileHandler(size)
+
+                # buffer
+                func_offset_stride = getattr(
+                    torch, "_nested_compute_contiguous_strides_offsets", None
+                )
+                if func_offset_stride is not None:
+                    offsets_strides = func_offset_stride(shape)
+                else:
+                    raise RuntimeError(NESTED_TENSOR_ERR)
+                result = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
+                result = torch._nested_view_from_buffer(
+                    result,
+                    shape,
+                    *offsets_strides,
+                )
+                result = cls(result)
+                result._handler = handler
+                return result
+            else:
+                result = torch.from_file(
+                    str(filename), shared=True, dtype=dtype, size=shape_numel
+                )
+                func_offset_stride = getattr(
+                    torch, "_nested_compute_contiguous_strides_offsets", None
+                )
+                if func_offset_stride is not None:
+                    offsets_strides = func_offset_stride(shape)
+                else:
+                    raise RuntimeError(NESTED_TENSOR_ERR)
+                result = torch._nested_view_from_buffer(
+                    result,
+                    shape,
+                    *offsets_strides,
+                )
+                result = cls(result)
+                result._filename = filename
+                return result
+            return result
+
+        if shape:
+            if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
+                shape = torch.Size(shape[0])
+            else:
+                shape = torch.Size(shape)
+            result = result.expand(shape)
+        result = cls.from_tensor(result, filename=filename)
+        return result
+
+    @classmethod
+    def empty_nested(cls, *args, **kwargs):
+        # noqa: D417
+        """Creates a tensor with empty content, specific shape, dtype and filename.
+
+        Args:
+            shape (nested_shape): the shapes of the tensors.
+
+        Keyword Args:
+            dtype (torch.dtype): the dtype of the tensor.
+            device (torch.device): the device of the tensor. Only `None` and `"cpu"`
+                are accepted, any other device will raise an exception.
+            filename (path or equivalent): the path to the file, if any. If none
+                is provided, a handler is used.
+        """
+        shape = kwargs.pop("shape", args[0])
+        args = (torch.Size([]), *args)
+        _, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
         if device is not None:
             device = torch.device(device)
             if device.type != "cpu":
@@ -454,15 +658,39 @@ class MemoryMappedTensor(torch.Tensor):
         Args:
             filename (path or equivalent): the path to the file.
             dtype (torch.dtype): the dtype of the tensor.
-            shape (integers or torch.Size): the shape of the tensor.
+            shape (torch.Size or torch.Tensor): the shape of the tensor. If
+                a tensor is provided, it is assumed that the tensor is a nested_tensor
+                instance.
             index (torch-compatible index type): an index to use to build the
                 tensor.
 
         """
-        shape = torch.Size(shape)
-        tensor = torch.from_file(
-            str(filename), shared=True, dtype=dtype, size=shape.numel()
-        ).view(shape)
+        if isinstance(shape, torch.Tensor):
+            func_offset_stride = getattr(
+                torch, "_nested_compute_contiguous_strides_offsets", None
+            )
+            if func_offset_stride is not None:
+                offsets_strides = func_offset_stride(shape)
+            else:
+                raise RuntimeError(
+                    "The PyTorch version isn't compatible with memmap "
+                    "nested tensors. Please upgrade to a more recent "
+                    "version."
+                )
+            tensor = torch.from_file(
+                str(filename), shared=True, dtype=dtype, size=shape.prod(-1).sum().int()
+            )
+            tensor = torch._nested_view_from_buffer(
+                tensor,
+                shape,
+                *offsets_strides,
+            )
+        else:
+            shape = torch.Size(shape)
+            tensor = torch.from_file(
+                str(filename), shared=True, dtype=dtype, size=shape.numel()
+            ).view(shape)
+
         if index is not None:
             tensor = tensor[index]
         out = cls(tensor)
@@ -473,21 +701,42 @@ class MemoryMappedTensor(torch.Tensor):
         return out
 
     @classmethod
-    def from_handler(cls, handler, dtype, shape, index):
+    def from_handler(cls, handler, dtype, shape, index=None):
         # noqa: D417
         """Loads a MemoryMappedTensor from a given handler.
 
         Args:
             handler (compatible file handler): the handler for the tensor.
             dtype (torch.dtype): the dtype of the tensor.
-            shape (integers or torch.Size): the shape of the tensor.
-            index (torch-compatible index type): an index to use to build the
+            shape (torch.Size or torch.Tensor): the shape of the tensor. If
+                a tensor is provided, it is assumed that the tensor is a nested_tensor
+                instance.
+            index (torch-compatible index type, optional): an index to use to build the
                 tensor.
 
         """
-        shape = torch.Size(shape)
         out = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
-        out = torch.reshape(out, shape)
+        if isinstance(shape, torch.Tensor):
+            func_offset_stride = getattr(
+                torch, "_nested_compute_contiguous_strides_offsets", None
+            )
+            if func_offset_stride is not None:
+                offsets_strides = func_offset_stride(shape)
+            else:
+                raise RuntimeError(
+                    "The PyTorch version isn't compatible with memmap "
+                    "nested tensors. Please upgrade to a more recent "
+                    "version."
+                )
+            out = torch._nested_view_from_buffer(
+                out,
+                shape,
+                *offsets_strides,
+            )
+        else:
+            shape = torch.Size(shape)
+            out = torch.reshape(out, shape)
+
         if index is not None:
             out = out[index]
         out = cls(out)
@@ -583,10 +832,10 @@ class MemoryMappedTensor(torch.Tensor):
                 return self._index_wrap(tensor, item)
             return tensor
         tensor = MemoryMappedTensor(tensor)
-        tensor._handler = self._handler
-        tensor._filename = self._filename
+        tensor._handler = getattr(self, "_handler", None)
+        tensor._filename = getattr(self, "_filename", None)
         tensor.index = item
-        tensor.parent_shape = self.parent_shape
+        tensor.parent_shape = getattr(self, "parent_shape", None)
         return tensor
 
     def unbind(self, dim):
@@ -696,7 +945,9 @@ ForkingPickler.register(MemoryMappedTensor, _reduce_memmap)
 def _proc_args_const(*args, **kwargs):
     if len(args) > 0:
         # then the first (or the N first) args are the shape
-        if len(args) == 1 and not isinstance(args[0], int):
+        if len(args) == 1 and isinstance(args[0], torch.Tensor):
+            shape = args[0]
+        elif len(args) == 1 and not isinstance(args[0], int):
             shape = torch.Size(args[0])
         else:
             shape = torch.Size(args)
@@ -705,7 +956,8 @@ def _proc_args_const(*args, **kwargs):
         shape = kwargs.pop("shape", None)
         if shape is None:
             raise TypeError("Could not find the shape argument in the arguments.")
-        shape = torch.Size(shape)
+        if not isinstance(shape, torch.Tensor):
+            shape = torch.Size(shape)
     return (
         shape,
         kwargs.pop("device", None),

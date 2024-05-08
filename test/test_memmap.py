@@ -3,11 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import gc
 from contextlib import nullcontext
+from pathlib import Path
 
 import pytest
 import torch
 from _utils_internal import get_available_devices
+from tensordict import TensorDict
 
 from tensordict.memmap import MemoryMappedTensor
 from torch import multiprocessing as mp
@@ -577,6 +580,131 @@ class TestOps:
     def test_ne(self):
         memmap = MemoryMappedTensor.from_tensor(torch.ones(10, 11, dtype=torch.bool))
         assert (memmap != ~memmap).all()
+
+
+class TestNestedTensor:
+    shape = torch.tensor([[2, 3], [2, 4], [3, 2]])
+
+    def test_with_filename(self, tmpdir):
+        filename = tmpdir + "/test_file2.memmap"
+        tensor = MemoryMappedTensor.empty(
+            self.shape, filename=filename, dtype=torch.int
+        )
+        assert isinstance(tensor, MemoryMappedTensor)
+        assert tensor.dtype == torch.int
+        tensor.fill_(2)
+        assert (tensor[0] == 2).all()
+        assert tensor.filename is not None
+
+        filename = tmpdir + "/test_file0.memmap"
+        tensor = MemoryMappedTensor.zeros(
+            self.shape, filename=filename, dtype=torch.bool
+        )
+        assert isinstance(tensor, MemoryMappedTensor)
+        assert tensor.dtype == torch.bool
+        assert tensor.filename is not None
+
+        filename = tmpdir + "/test_file1.memmap"
+        tensor = MemoryMappedTensor.ones(self.shape, filename=filename, dtype=torch.int)
+        assert type(tensor) is MemoryMappedTensor
+        assert tensor.dtype == torch.int
+        assert (tensor[0] == 1).all()
+        assert tensor.filename is not None
+
+        filename = tmpdir + "/test_file3.memmap"
+        tensor = torch.nested.nested_tensor(
+            [torch.zeros(shape.tolist()) + i for i, shape in enumerate(self.shape)]
+        )
+        memmap_tensor = MemoryMappedTensor.from_tensor(tensor, filename=filename)
+        assert type(memmap_tensor) is MemoryMappedTensor
+        for t1, t2 in zip(tensor, memmap_tensor):
+            assert t1.dtype == t2.dtype
+            assert (t1 == t2).all()
+
+        memmap_tensor2 = MemoryMappedTensor.from_filename(
+            filename, dtype=memmap_tensor.dtype, shape=self.shape
+        )
+        assert type(memmap_tensor2) is MemoryMappedTensor
+        for t1, t2 in zip(memmap_tensor2, memmap_tensor):
+            assert t1.dtype == t2.dtype
+            assert (t1 == t2).all()
+
+    def test_with_handler(self):
+        tensor = MemoryMappedTensor.empty(self.shape, dtype=torch.int)
+        assert isinstance(tensor, MemoryMappedTensor)
+        assert tensor.dtype == torch.int
+        tensor.fill_(2)
+        assert (tensor[0] == 2).all()
+        assert tensor._handler is not None
+
+        tensor = MemoryMappedTensor.zeros(self.shape, dtype=torch.bool)
+        assert isinstance(tensor, MemoryMappedTensor)
+        assert tensor.dtype == torch.bool
+        assert tensor._handler is not None
+
+        tensor = MemoryMappedTensor.ones(self.shape, dtype=torch.int)
+        assert type(tensor) is MemoryMappedTensor
+        assert tensor.dtype == torch.int
+        assert (tensor[0] == 1).all()
+        assert tensor._handler is not None
+
+        tensor = torch.nested.nested_tensor(
+            [torch.zeros(shape.tolist()) + i for i, shape in enumerate(self.shape)]
+        )
+        memmap_tensor = MemoryMappedTensor.from_tensor(tensor)
+        assert type(memmap_tensor) is MemoryMappedTensor
+        for t1, t2 in zip(tensor, memmap_tensor):
+            assert t1.dtype == t2.dtype
+            assert (t1 == t2).all()
+
+        memmap_tensor2 = MemoryMappedTensor.from_handler(
+            memmap_tensor._handler, dtype=memmap_tensor.dtype, shape=self.shape
+        )
+        assert type(memmap_tensor2) is MemoryMappedTensor
+        for t1, t2 in zip(memmap_tensor2, memmap_tensor):
+            assert t1.dtype == t2.dtype
+            assert (t1 == t2).all()
+
+    @pytest.mark.parametrize("with_filename", [False, True])
+    def test_from_storage(self, with_filename, tmpdir):
+        if with_filename:
+            filename = Path(tmpdir) / "file.memmap"
+            filename = str(filename)
+        else:
+            filename = None
+        a = MemoryMappedTensor.from_tensor(
+            torch.arange(10, dtype=torch.float64), filename=filename
+        )
+        assert type(a) is MemoryMappedTensor
+        shape = torch.tensor([[2, 2], [2, 3]])
+        b = MemoryMappedTensor.from_storage(
+            a.untyped_storage(), filename=filename, shape=shape, dtype=a.dtype
+        )
+        assert type(b) is MemoryMappedTensor
+        assert (b._nested_tensor_size() == shape).all()
+        assert (b[0] == torch.arange(4).view(2, 2)).all()
+        assert (b[1] == torch.arange(4, 10).view(2, 3)).all()
+
+    def test_save_td_with_nested(self, tmpdir):
+        td = TensorDict(
+            {
+                "a": torch.nested.nested_tensor(
+                    [
+                        torch.arange(12, dtype=torch.float64).view(3, 4),
+                        torch.arange(15, dtype=torch.float64).view(3, 5),
+                    ]
+                )
+            },
+            batch_size=[2, 3],
+        )
+        tdsave = td.clone()
+        td.memmap(tmpdir)
+        del td
+        gc.collect()
+        td = TensorDict.load(tmpdir)
+        for i in range(2):
+            for j in range(3):
+                assert (td[i, j] == tdsave[i, j]).all()
 
 
 if __name__ == "__main__":
