@@ -2188,28 +2188,12 @@ class TensorDict(TensorDictBase):
                     dest=dest, value=value, key=key, copy_existing=copy_existing
                 ):
                     filename = None if prefix is None else str(prefix / f"{key}.memmap")
-                    if value.is_nested:
-                        shape = value._nested_tensor_size()
-                        # Make the shape a memmap tensor too
-                        if prefix is not None:
-                            shape_filename = Path(filename)
-                            shape_filename = shape_filename.with_suffix(".shape.memmap")
-                            MemoryMappedTensor.from_tensor(
-                                shape,
-                                filename=shape_filename,
-                                copy_existing=copy_existing,
-                                existsok=True,
-                                copy_data=not like,
-                            )
-                    else:
-                        shape = None
                     dest._tensordict[key] = MemoryMappedTensor.from_tensor(
                         value.data if value.requires_grad else value,
                         filename=filename,
                         copy_existing=copy_existing,
                         existsok=True,
                         copy_data=not like,
-                        shape=shape,
                     )
 
                 if executor is None:
@@ -2219,11 +2203,8 @@ class TensorDict(TensorDictBase):
                 if prefix is not None:
                     metadata[key] = {
                         "device": str(value.device),
-                        "shape": list(value.shape)
-                        if not value.is_nested
-                        else value._nested_tensor_size().shape,
+                        "shape": list(value.shape),
                         "dtype": str(value.dtype),
-                        "is_nested": value.is_nested,
                     }
 
         if prefix is not None:
@@ -2277,25 +2258,16 @@ class TensorDict(TensorDictBase):
             if (
                 device is None or device != torch.device("meta")
             ) and not torch._guards.active_fake_mode():
-                if entry_metadata.get("is_nested", False):
-                    # The shape is the shape of the shape, get the shape from it
-                    shape = MemoryMappedTensor.from_filename(
-                        (prefix / f"{key}.memmap").with_suffix(".shape.memmap"),
-                        shape=shape,
-                        dtype=torch.long,
-                    )
-                else:
-                    shape = torch.Size(shape)
                 tensor = MemoryMappedTensor.from_filename(
                     dtype=_STRDTYPE2DTYPE[dtype],
-                    shape=shape,
+                    shape=torch.Size(entry_metadata["shape"]),
                     filename=str(prefix / f"{key}.memmap"),
                 )
                 if device is not None:
                     tensor = tensor.to(device, non_blocking=True)
             else:
                 tensor = torch.zeros(
-                    torch.Size(shape),
+                    torch.Size(entry_metadata["shape"]),
                     device=device,
                     dtype=_STRDTYPE2DTYPE[dtype],
                 )

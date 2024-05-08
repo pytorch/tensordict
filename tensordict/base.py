@@ -6143,10 +6143,8 @@ class TensorDictBase(MutableMapping):
             {
                 key: value.clone()
                 if not _is_tensor_collection(value.__class__)
-                else value
-                if is_non_tensor(value)
                 else value.to_tensordict()
-                for key, value in self.items(is_leaf=_is_leaf_nontensor)
+                for key, value in self.items()
             },
             device=self.device,
             batch_size=self.batch_size,

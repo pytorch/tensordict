@@ -72,7 +72,10 @@ class _PersistentTDKeysView(_TensorDictKeysView):
             self.tensordict.file.visit(visitor)
             if self.leaves_only:
                 for key in visitor:
-                    if self.tensordict._get_metadata(key).get("array", None):
+                    metadata = self.tensordict._get_metadata(key)
+                    if metadata.get("array", False) or metadata.get(
+                        "non_tensor", False
+                    ):
                         yield key
             else:
                 yield from visitor
@@ -240,7 +243,10 @@ class PersistentTensorDict(TensorDictBase):
     def _check_batch_size(self, batch_size) -> None:
         for key in self.keys(include_nested=True, leaves_only=True):
             key = self._process_key(key)
-            size = self.file[key].shape
+            array = self.file[key]
+            if _is_non_tensor_h5(array):
+                continue
+            size = array.shape
             if torch.Size(size[: len(batch_size)]) != batch_size:
                 raise ValueError(
                     f"batch size and array size mismatch: array.shape={size}, batch_size={batch_size}."
@@ -265,15 +271,18 @@ class PersistentTensorDict(TensorDictBase):
             else:
                 device = torch.device("cpu")
             # we convert to an array first to avoid "Creating a tensor from a list of numpy.ndarrays is extremely slow."
-            array = array[()]
-            try:
+            if not _is_non_tensor_h5(array):
+                array = array[()]
                 out = torch.as_tensor(array, device=device)
                 if self._pin_mem:
-                    return out.pin_memory()
-            except Exception:
+                    out = out.pin_memory()
+            else:
                 from tensordict.tensorclass import NonTensorData
 
-                return NonTensorData(data=array)
+                array = array[()]
+                out = NonTensorData(
+                    data=array, device=device, batch_size=self.batch_size
+                )
             return out
         else:
             out = self._nested_tensordicts.get(key, None)
@@ -365,7 +374,8 @@ class PersistentTensorDict(TensorDictBase):
         ):
             return {"non_tensor": True}
         else:
-            shape = self.get(key).shape
+            val = self.get(key)
+            shape = val.shape
             return {
                 "dtype": None,
                 "shape": shape,
@@ -935,7 +945,10 @@ class PersistentTensorDict(TensorDictBase):
             value = value.data
             if isinstance(value, str):
                 return value
-            out = np.asarray(value)
+            import h5py
+
+            out = np.array(value)
+            out = out.astype(h5py.opaque_dtype(out.dtype))
         elif is_tensor_collection(value):
             out = value
         elif isinstance(value, (np.ndarray,)):
@@ -1296,3 +1309,17 @@ def _set_max_batch_size(source: PersistentTensorDict):
                 return
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def _is_non_tensor_h5(val):
+    import h5py
+
+    dt = val.dtype
+    if (
+        h5py.check_string_dtype(dt)
+        or h5py.check_vlen_dtype(dt)
+        or h5py.check_enum_dtype(dt)
+        or h5py.check_opaque_dtype(dt)
+    ):
+        return True
+    return False
