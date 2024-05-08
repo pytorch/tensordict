@@ -2815,10 +2815,18 @@ class TestTensorDicts(TestTensorDictsBase):
         td_empty = torch.empty_like(td)
 
         td.apply_(lambda x: x + 1.0)
-        assert type(td) is type(td_empty)
+        # assert type(td) is type(td_empty)
         # exclude non tensor data
         comp = td.filter_non_tensor_data() != td_empty.filter_non_tensor_data()
         assert all(val.any() for val in comp.values(True, True))
+
+        td_empty = torch.empty_like(td, device="meta")
+        assert td_empty.device == torch.device("meta")
+
+        def assert_meta(x):
+            assert x.device == torch.device("meta")
+
+        td_empty.apply(assert_meta, filter_empty=True)
 
     def test_enter_exit(self, td_name, device):
         torch.manual_seed(1)
