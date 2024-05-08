@@ -369,7 +369,7 @@
 <h1>MemoryMappedTensor<a class="headerlink" href="#memorymappedtensor" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">MemoryMappedTensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor_or_file</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">handler</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">MemoryMappedTensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">handler</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor" title="Permalink to this definition">¶</a></dt>
 <dd><p>A Memory-mapped Tensor.</p>
 <p>Supports filenames or file handlers.</p>
 <p>The main advantage of MemoryMappedTensor resides in its serialization methods,
@@ -1732,6 +1732,26 @@ is provided, a handler is used.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.empty_nested">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">empty_nested</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.empty_nested" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a tensor with empty content, specific shape, dtype and filename.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>shape</strong> (<em>nested_shape</em>) – the shapes of the tensors.</p>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.3)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.3)"><em>torch.device</em></a>) – the device of the tensor. Only <cite>None</cite> and <cite>“cpu”</cite>
+are accepted, any other device will raise an exception.</p></li>
+<li><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file, if any. If none
+is provided, a handler is used.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.eq">
 <span class="sig-name descname"><span class="pre">eq</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#tensordict.MemoryMappedTensor.eq" title="Permalink to this definition">¶</a></dt>
 <dd><p>See <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.eq.html#torch.eq" title="(in PyTorch v2.3)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.eq()</span></code></a></p>
@@ -2084,7 +2104,9 @@ returned Tensor. Default: <code class="docutils literal notranslate"><span class
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>filename</strong> (<em>path</em><em> or </em><em>equivalent</em>) – the path to the file.</p></li>
 <li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.3)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
-<li><p><strong>shape</strong> (<em>integers</em><em> or </em><em>torch.Size</em>) – the shape of the tensor.</p></li>
+<li><p><strong>shape</strong> (<em>torch.Size</em><em> or </em><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><em>torch.Tensor</em></a>) – the shape of the tensor. If
+a tensor is provided, it is assumed that the tensor is a nested_tensor
+instance.</p></li>
 <li><p><strong>index</strong> (<em>torch-compatible index type</em>) – an index to use to build the
 tensor.</p></li>
 </ul>
@@ -2094,15 +2116,17 @@ tensor.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.from_handler">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handler</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.from_handler" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">handler</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.from_handler" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads a MemoryMappedTensor from a given handler.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>handler</strong> (<em>compatible file handler</em>) – the handler for the tensor.</p></li>
 <li><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.3)"><em>torch.dtype</em></a>) – the dtype of the tensor.</p></li>
-<li><p><strong>shape</strong> (<em>integers</em><em> or </em><em>torch.Size</em>) – the shape of the tensor.</p></li>
-<li><p><strong>index</strong> (<em>torch-compatible index type</em>) – an index to use to build the
+<li><p><strong>shape</strong> (<em>torch.Size</em><em> or </em><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><em>torch.Tensor</em></a>) – the shape of the tensor. If
+a tensor is provided, it is assumed that the tensor is a nested_tensor
+instance.</p></li>
+<li><p><strong>index</strong> (<em>torch-compatible index type</em><em>, </em><em>optional</em>) – an index to use to build the
 tensor.</p></li>
 </ul>
 </dd>
@@ -2111,7 +2135,7 @@ tensor.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.MemoryMappedTensor.from_tensor">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existsok</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_existing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.from_tensor" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existsok</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_existing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.MemoryMappedTensor.from_tensor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Creates a MemoryMappedTensor with the same content as another tensor.</p>
 <p>If the tensor is already a MemoryMappedTensor the original tensor is
 returned if the <cite>filename</cite> argument is <cite>None</cite> or if the two paths match.
@@ -2128,11 +2152,14 @@ instead.</p></li>
 an existing file. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>copy_existing</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and the provided input
 is a MemoryMappedTensor with an associated filename, copying
-the content to the new location is permitted. Otherwise an
-exception is thown. This behaviour exists to prevent
-unadvertedly duplicating data on disk.</p></li>
+the content to the new location is permitted. Otherwise, an
+exception is thrown. This behaviour exists to prevent
+inadvertently duplicating data on disk.</p></li>
 <li><p><strong>copy_data</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the content of the tensor
 will be copied on the storage. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>shape</strong> (<em>torch.Size</em><em> or </em><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><em>torch.Tensor</em></a>) – a shape to override the tensor
+shape. If a tensor is passed, it must represent the nested shapes of a
+nested tensor.</p></li>
 </ul>
 </dd>
 </dl>
