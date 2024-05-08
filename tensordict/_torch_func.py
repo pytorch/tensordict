@@ -125,25 +125,22 @@ def _gather(
 
 
 @implements_for_td(torch.full_like)
-def _full_like(td: T, fill_value: float, **kwargs: Any) -> T:
-    td_clone = td.clone()
-    for key in td_clone.keys():
-        td_clone.fill_(key, fill_value)
-    if "dtype" in kwargs:
-        raise ValueError("Cannot pass dtype to full_like with TensorDict")
-    if "device" in kwargs:
-        td_clone = td_clone.to(kwargs.pop("device"))
-    if len(kwargs):
-        raise RuntimeError(
-            f"keyword arguments {list(kwargs.keys())} are not "
-            f"supported with full_like with TensorDict"
-        )
-    return td_clone
+def _full_like(td: T, fill_value: float, *args, **kwargs: Any) -> T:
+    return td._fast_apply(
+        lambda x: torch.full_like(x, fill_value, *args, **kwargs),
+        inplace=True,
+        propagate_lock=True,
+        device=kwargs.get("device", NO_DEFAULT),
+    )
 
 
 @implements_for_td(torch.zeros_like)
-def _zeros_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(torch.zeros_like, propagate_lock=True)
+def _zeros_like(td: T, *args, **kwargs: Any) -> T:
+    td_clone = td._fast_apply(
+        lambda x: torch.zeros_like(x, *args, **kwargs),
+        propagate_lock=True,
+        device=kwargs.get("device", NO_DEFAULT),
+    )
     if "dtype" in kwargs:
         raise ValueError("Cannot pass dtype to full_like with TensorDict")
     if "device" in kwargs:
@@ -157,8 +154,12 @@ def _zeros_like(td: T, **kwargs: Any) -> T:
 
 
 @implements_for_td(torch.ones_like)
-def _ones_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(lambda x: torch.ones_like(x), propagate_lock=True)
+def _ones_like(td: T, *args, **kwargs: Any) -> T:
+    td_clone = td._fast_apply(
+        lambda x: torch.ones_like(x, *args, **kwargs),
+        propagate_lock=True,
+        device=kwargs.get("device", NO_DEFAULT),
+    )
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -170,8 +171,12 @@ def _ones_like(td: T, **kwargs: Any) -> T:
 
 
 @implements_for_td(torch.rand_like)
-def _rand_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(lambda x: torch.rand_like(x), propagate_lock=True)
+def _rand_like(td: T, *args, **kwargs: Any) -> T:
+    td_clone = td._fast_apply(
+        lambda x: torch.rand_like(x, *args, **kwargs),
+        propagate_lock=True,
+        device=kwargs.get("device", NO_DEFAULT),
+    )
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -183,8 +188,12 @@ def _rand_like(td: T, **kwargs: Any) -> T:
 
 
 @implements_for_td(torch.randn_like)
-def _randn_like(td: T, **kwargs: Any) -> T:
-    td_clone = td._fast_apply(lambda x: torch.randn_like(x), propagate_lock=True)
+def _randn_like(td: T, *args, **kwargs: Any) -> T:
+    td_clone = td._fast_apply(
+        lambda x: torch.randn_like(x, *args, **kwargs),
+        propagate_lock=True,
+        device=kwargs.get("device", NO_DEFAULT),
+    )
     if "device" in kwargs:
         td_clone = td_clone.to(kwargs.pop("device"))
     if len(kwargs):
@@ -197,18 +206,10 @@ def _randn_like(td: T, **kwargs: Any) -> T:
 
 @implements_for_td(torch.empty_like)
 def _empty_like(td: T, *args, **kwargs) -> T:
-    try:
-        tdclone = td.clone()
-    except Exception as err:
-        raise RuntimeError(
-            "The tensordict passed to torch.empty_like cannot be "
-            "cloned, preventing empty_like to be called. "
-            "Consider calling tensordict.to_tensordict() first."
-        ) from err
-    return tdclone._fast_apply(
+    return td._fast_apply(
         lambda x: torch.empty_like(x, *args, **kwargs),
-        inplace=True,
         propagate_lock=True,
+        device=kwargs.get("device", NO_DEFAULT),
     )
 
 

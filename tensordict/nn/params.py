@@ -1236,15 +1236,10 @@ def implements_for_tdparam(torch_function: Callable) -> Callable[[Callable], Cal
 
 @implements_for_tdparam(torch.empty_like)
 def _empty_like(td: TensorDictBase, *args, **kwargs) -> TensorDictBase:
-    try:
-        tdclone = td.clone()
-    except Exception as err:
-        raise RuntimeError(
-            "The tensordict passed to torch.empty_like cannot be "
-            "cloned, preventing empty_like to be called. "
-            "Consider calling tensordict.to_tensordict() first."
-        ) from err
-    return tdclone.apply_(lambda x: torch.empty_like(x, *args, **kwargs))
+    return td.apply(
+        lambda x: torch.empty_like(x, *args, **kwargs),
+        device=kwargs.pop("device", NO_DEFAULT),
+    )
 
 
 _register_tensor_class(TensorDictParams)
