@@ -3,15 +3,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
-
 from tensordict import PersistentTensorDict
+from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
 
 TIMEOUT = 100
+from tensordict import TensorDict
 
 try:
     import h5py
@@ -65,6 +67,22 @@ class TestH5Serialization:
             q2.close()
         finally:
             p.join()
+
+    def test_h5_nontensor(self, tmpdir):
+        file = Path(tmpdir) / "file.h5"
+        td = TensorDict(
+            {
+                "a": 0,
+                "b": 1,
+                "c": "a string!",
+            },
+            [],
+        )
+        td = td.expand(10)
+        h5td = PersistentTensorDict.from_dict(td, filename=file)
+        assert h5td["c"] == b"a string!"
+        td_recover = h5td.to_tensordict()
+        assert is_non_tensor(td_recover.get("c"))
 
 
 if __name__ == "__main__":

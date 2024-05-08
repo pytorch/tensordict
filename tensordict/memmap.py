@@ -66,30 +66,46 @@ class MemoryMappedTensor(torch.Tensor):
           ...     memmap_tensor = MemoryMappedTensor.ones_like(tensor, filename=file.name)
     """
 
-    _filename: str | Path
-    _handler: _FileHandler
+    _filename: str | Path = None
+    _handler: _FileHandler = None
     _clear: bool
     index: Any
     parent_shape: torch.Size
 
     def __new__(
         cls,
-        tensor_or_file,
+        source,
         *,
         dtype=None,
         shape=None,
         index=None,
         device=None,
         handler=None,
+        filename=None,
     ):
         if device is not None and torch.device(device).type != "cpu":
             raise ValueError(f"{cls} device must be cpu!")
-        if isinstance(tensor_or_file, str):
+        if isinstance(source, str):
+            if filename is not None:
+                raise TypeError("Duplicated filename argument.")
+            filename = source
+            source = None
+        if filename is not None:
             return cls.from_filename(
-                tensor_or_file,
+                filename,
                 dtype,
                 shape,
                 index,
+            )
+        elif isinstance(source, torch.StorageBase):
+            return cls.from_storage(
+                source,
+                dtype=dtype,
+                shape=shape,
+                index=index,
+                device=device,
+                handler=handler,
+                filename=filename,
             )
         elif handler is not None:
             return cls.from_handler(
@@ -98,11 +114,9 @@ class MemoryMappedTensor(torch.Tensor):
                 shape,
                 index,
             )
-        return super().__new__(cls, tensor_or_file)
+        return super().__new__(cls, source)
 
-    def __init__(
-        self, tensor_or_file, handler=None, dtype=None, shape=None, device=None
-    ):
+    def __init__(self, source, handler=None, dtype=None, shape=None, device=None):
         ...
 
     __torch_function__ = torch._C._disabled_torch_function_impl
@@ -171,7 +185,7 @@ class MemoryMappedTensor(torch.Tensor):
                 "MemoryMappedTensor.from_tensor is incompatible with tensor.requires_grad."
             )
         if shape is None:
-            shape = _shape(input)
+            shape = _shape(input, nested_shape=True)
         if isinstance(shape, torch.Tensor):
             shape_numel = shape.prod(-1).sum()
         elif isinstance(shape, torch.Size):
@@ -247,6 +261,49 @@ class MemoryMappedTensor(torch.Tensor):
             if not result.is_nested:
                 result.copy_(input)
         return result
+
+    @classmethod
+    def from_storage(
+        cls,
+        storage,
+        *,
+        shape=None,
+        dtype=None,
+        device=None,
+        index=None,
+        filename=None,
+        handler=None,
+    ):
+        tensor = torch.tensor(storage, dtype=dtype, device=device)
+        if shape is not None:
+            if isinstance(shape, torch.Tensor):
+                func_offset_stride = getattr(
+                    torch, "_nested_compute_contiguous_strides_offsets", None
+                )
+                if func_offset_stride is not None:
+                    offsets_strides = func_offset_stride(shape)
+                else:
+                    raise RuntimeError(
+                        "The PyTorch version isn't compatible with memmap "
+                        "nested tensors. Please upgrade to a more recent "
+                        "version."
+                    )
+                tensor = torch._nested_view_from_buffer(
+                    tensor,
+                    shape,
+                    *offsets_strides,
+                )
+            else:
+                tensor = tensor.view(shape)
+
+        tensor = cls(tensor)
+        if filename is not None:
+            tensor._filename = filename
+        elif handler is not None:
+            tensor._handler = handler
+        if index is not None:
+            return tensor[index]
+        return tensor
 
     @property
     def filename(self):
@@ -775,10 +832,10 @@ class MemoryMappedTensor(torch.Tensor):
                 return self._index_wrap(tensor, item)
             return tensor
         tensor = MemoryMappedTensor(tensor)
-        tensor._handler = self._handler
-        tensor._filename = self._filename
+        tensor._handler = getattr(self, "_handler", None)
+        tensor._filename = getattr(self, "_filename", None)
         tensor.index = item
-        tensor.parent_shape = self.parent_shape
+        tensor.parent_shape = getattr(self, "parent_shape", None)
         return tensor
 
     def unbind(self, dim):

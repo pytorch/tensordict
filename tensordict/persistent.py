@@ -39,6 +39,7 @@ from tensordict.utils import (
     cache,
     expand_right,
     IndexType,
+    is_non_tensor,
     lock_blocked,
     NestedKey,
     NUMPY_TO_TORCH_DTYPE_DICT,
@@ -265,9 +266,14 @@ class PersistentTensorDict(TensorDictBase):
                 device = torch.device("cpu")
             # we convert to an array first to avoid "Creating a tensor from a list of numpy.ndarrays is extremely slow."
             array = array[()]
-            out = torch.as_tensor(array, device=device)
-            if self._pin_mem:
-                return out.pin_memory()
+            try:
+                out = torch.as_tensor(array, device=device)
+                if self._pin_mem:
+                    return out.pin_memory()
+            except Exception:
+                from tensordict.tensorclass import NonTensorData
+
+                return NonTensorData(data=array)
             return out
         else:
             out = self._nested_tensordicts.get(key, None)
@@ -357,7 +363,7 @@ class PersistentTensorDict(TensorDictBase):
             isinstance(array, (h5py.Dataset,))
             and array.dtype not in NUMPY_TO_TORCH_DTYPE_DICT
         ):
-            return {}
+            return {"non_tensor": True}
         else:
             shape = self.get(key).shape
             return {
@@ -379,9 +385,15 @@ class PersistentTensorDict(TensorDictBase):
 
     def __getitem__(self, item):
         if isinstance(item, str) or (
-            isinstance(item, tuple) and all(isinstance(val, str) for val in item)
+            isinstance(item, tuple) and _unravel_key_to_tuple(item)
         ):
-            return self.get(item)
+            result = self.get(item)
+            if is_non_tensor(result):
+                result_data = getattr(result, "data", NO_DEFAULT)
+                if result_data is NO_DEFAULT:
+                    return result.tolist()
+                return result_data
+            return result
         if isinstance(item, list):
             # convert to tensor
             item = torch.tensor(item)
@@ -919,6 +931,11 @@ class PersistentTensorDict(TensorDictBase):
             out = value.cpu().detach().numpy()
         elif isinstance(value, dict):
             out = TensorDict(value, [])
+        elif is_non_tensor(value):
+            value = value.data
+            if isinstance(value, str):
+                return value
+            out = np.asarray(value)
         elif is_tensor_collection(value):
             out = value
         elif isinstance(value, (np.ndarray,)):

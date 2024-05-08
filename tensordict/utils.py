@@ -586,7 +586,7 @@ def _ndimension(tensor: Tensor) -> int:
         return tensor.ndimension()
 
 
-def _shape(tensor: Tensor) -> torch.Size:
+def _shape(tensor: Tensor, nested_shape=False) -> torch.Size:
     if isinstance(tensor, UninitializedTensorMixin):
         return torch.Size([*getattr(tensor, "batch_size", ()), -1])
     elif not isinstance(tensor, Tensor):
@@ -594,7 +594,15 @@ def _shape(tensor: Tensor) -> torch.Size:
             return torch.Size([len(tensor.lengths()) // len(tensor.keys())])
         return tensor.shape
     if tensor.is_nested:
-        return torch.tensor([t.shape for t in tensor])
+        if nested_shape:
+            return torch._nested_tensor_size()
+        shape = []
+        for i in range(tensor.ndim):
+            try:
+                shape.append(tensor.size(i))
+            except RuntimeError:
+                shape.append(-1)
+        return torch.Size(shape)
     return tensor.shape
 
 
@@ -1547,7 +1555,7 @@ def _expand_to_match_shape(
 
 
 def _set_max_batch_size(source: T, batch_dims=None):
-    """Updates a tensordict with its maximium batch size."""
+    """Updates a tensordict with its maximum batch size."""
     from tensordict.base import _is_tensor_collection
 
     tensor_data = [val for val in source.values() if not is_non_tensor(val)]
@@ -1565,17 +1573,19 @@ def _set_max_batch_size(source: T, batch_dims=None):
             return source
 
     curr_dim = 0
+    tensor_shapes = [_shape(_tensor_data) for _tensor_data in tensor_data]
+
     while True:
-        if tensor_data[0].dim() > curr_dim:
-            curr_dim_size = tensor_data[0].size(curr_dim)
+        if len(tensor_shapes[0]) > curr_dim:
+            curr_dim_size = tensor_shapes[0][curr_dim]
         else:
             source.batch_size = batch_size
             return
-        for leaf in tensor_data[1:]:
+        for leaf, shape in zip(tensor_data[1:], tensor_shapes[1:]):
             # if we have a nested empty tensordict we can modify its batch size at will
             if _is_tensor_collection(type(leaf)) and leaf.is_empty():
                 continue
-            if (leaf.dim() <= curr_dim) or (leaf.size(curr_dim) != curr_dim_size):
+            if (len(shape) <= curr_dim) or (shape[curr_dim] != curr_dim_size):
                 source.batch_size = batch_size
                 return
         if batch_dims is None or len(batch_size) < batch_dims:
