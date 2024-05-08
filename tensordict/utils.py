@@ -595,7 +595,7 @@ def _shape(tensor: Tensor, nested_shape=False) -> torch.Size:
         return tensor.shape
     if tensor.is_nested:
         if nested_shape:
-            return torch._nested_tensor_size()
+            return tensor._nested_tensor_size()
         shape = []
         for i in range(tensor.ndim):
             try:
