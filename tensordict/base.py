@@ -3336,6 +3336,41 @@ class TensorDictBase(MutableMapping):
             self.set_at_((firstkey, *nextkeys), value, idx, non_blocking=non_blocking)
         return self
 
+    def replace(self, *args, **kwargs):
+        """Creates a shallow copy of the tensordict where entries have been replaced.
+
+        Accepts one unnamed argument which must be a dictionary of a :class:`~tensordict.TensorDictBase` subclass.
+        Additionaly, first-level entries can be updated with the named keyword arguments.
+
+        Returns:
+            a copy of ``self`` with updated entries.
+
+        """
+        if args:
+            if len(args) > 1:
+                raise RuntimeError("Only a single argument containing a dictionary-like "
+                                   f"structure of entries to replace can be passed to replace. Received {len(args)} "
+                                   f"arguments instead.")
+            dict_to_replace = args[0]
+        else:
+            dict_to_replace = {}
+        if kwargs:
+            dict_to_replace.update(kwargs)
+        is_dict = isinstance(dict_to_replace, dict)
+        if is_dict:
+            if not dict_to_replace:
+                return self
+        else:
+            if not is_tensor_collection(dict_to_replace):
+                raise RuntimeError(f"Cannot use object type {type(dict_to_replace)} to update values in tensordict.")
+            if dict_to_replace.is_empty():
+                return self
+        result = self.copy()
+        # using update makes sure that any optimization (e.g. for lazy stacks) is done properly
+        result.update(dict_to_replace)
+        return result
+
+
     @lock_blocked
     def create_nested(self, key):
         """Creates a nested tensordict of the same shape, device and dim names as the current tensordict.
