@@ -15,15 +15,6 @@ from typing import Any, Callable, Iterator, OrderedDict, Sequence, Type
 
 import torch
 
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
-
 from tensordict._lazy import _CustomOpTensorDict, LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
@@ -37,6 +28,8 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
+
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _LOCK_ERROR,
     Buffer,
@@ -47,6 +40,16 @@ from tensordict.utils import (
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.utils._pytree import tree_map
+
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 
 def _apply_leaves(data, fn):
@@ -775,6 +778,39 @@ class TensorDictParams(TensorDictBase, nn.Module):
     _memmap_ = TensorDict._memmap_
 
     _load_memmap = TensorDict._load_memmap
+
+    def make_memmap(
+        self,
+        key: NestedKey,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for TensorDictParams."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_storage(
+        self,
+        key: NestedKey,
+        storage: torch.UntypedStorage,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for TensorDictParams."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_tensor(
+        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for TensorDictParams."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
 
     @_fallback_property
     def names(self):

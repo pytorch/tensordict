@@ -2396,7 +2396,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
     @classmethod
     def _load_memmap(
-        cls, prefix: str, metadata: dict, **kwargs
+        cls, prefix: str, metadata: dict, *, out=None, **kwargs
     ) -> LazyStackedTensorDict:
         data = metadata.get("data", None)
         if data is not None:

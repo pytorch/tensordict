@@ -584,6 +584,39 @@ class PersistentTensorDict(TensorDictBase):
             array[expand_right(mask, array.shape).cpu().numpy()] = value
         return self
 
+    def make_memmap(
+        self,
+        key: NestedKey,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_storage(
+        self,
+        key: NestedKey,
+        storage: torch.UntypedStorage,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_tensor(
+        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't allowed for persistent tensordicts."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
     def memmap_(
         self,
         prefix: str | None = None,

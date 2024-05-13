@@ -32,6 +32,7 @@ from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
     _is_tensor_collection,
+    _load_metadata,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -214,7 +215,7 @@ class TensorDict(TensorDictBase):
 
     def __init__(
         self,
-        source: T | dict[str, CompatibleType],
+        source: T | dict[str, CompatibleType] = None,
         batch_size: Sequence[int] | torch.Size | int | None = None,
         device: DeviceType | None = None,
         names: Sequence[str] | None = None,
@@ -253,6 +254,8 @@ class TensorDict(TensorDictBase):
                     _tensordict[key] = value
             self._td_dim_names = names
         else:
+            if source is None:
+                source = {}
             if not isinstance(source, (TensorDictBase, dict)):
                 raise ValueError(
                     "A TensorDict source is expected to be a TensorDictBase "
@@ -261,9 +264,8 @@ class TensorDict(TensorDictBase):
             self._batch_size = self._parse_batch_size(source, batch_size)
             self.names = names
 
-            if source is not None:
-                for key, value in source.items():
-                    self.set(key, value, non_blocking=sub_non_blocking)
+            for key, value in source.items():
+                self.set(key, value, non_blocking=sub_non_blocking)
         if not non_blocking and sub_non_blocking and has_device:
             self._sync_all()
         if lock:
@@ -2122,18 +2124,6 @@ class TensorDict(TensorDictBase):
         like,
         share_non_tensor,
     ) -> T:
-        def save_metadata(data: TensorDictBase, filepath, metadata=None):
-            if metadata is None:
-                metadata = {}
-            metadata.update(
-                {
-                    "shape": list(data.shape),
-                    "device": str(data.device),
-                    "_type": str(data.__class__),
-                }
-            )
-            with open(filepath, "w") as json_metadata:
-                json.dump(metadata, json_metadata)
 
         if prefix is not None:
             prefix = Path(prefix)
@@ -2178,71 +2168,58 @@ class TensorDict(TensorDictBase):
                     share_non_tensor=share_non_tensor,
                 )
                 if prefix is not None:
-                    metadata[key] = {
-                        "type": type_value.__name__,
-                    }
+                    _update_metadata(
+                        metadata=metadata, key=key, value=value, is_collection=True
+                    )
                 continue
             else:
-                # user did specify location and memmap is in wrong place, so we copy
-                def _populate(
-                    dest=dest, value=value, key=key, copy_existing=copy_existing
-                ):
-                    filename = None if prefix is None else str(prefix / f"{key}.memmap")
-                    if value.is_nested:
-                        shape = value._nested_tensor_size()
-                        # Make the shape a memmap tensor too
-                        if prefix is not None:
-                            shape_filename = Path(filename)
-                            shape_filename = shape_filename.with_suffix(".shape.memmap")
-                            MemoryMappedTensor.from_tensor(
-                                shape,
-                                filename=shape_filename,
-                                copy_existing=copy_existing,
-                                existsok=True,
-                                copy_data=not like,
-                            )
-                    else:
-                        shape = None
-                    dest._tensordict[key] = MemoryMappedTensor.from_tensor(
-                        value.data if value.requires_grad else value,
-                        filename=filename,
-                        copy_existing=copy_existing,
-                        existsok=True,
-                        copy_data=not like,
-                        shape=shape,
-                    )
 
                 if executor is None:
-                    _populate()
+                    _populate_memmap(
+                        dest=dest,
+                        value=value,
+                        key=key,
+                        copy_existing=copy_existing,
+                        prefix=prefix,
+                        like=like,
+                    )
                 else:
-                    futures.append(executor.submit(_populate))
+                    futures.append(
+                        executor.submit(
+                            _populate_memmap,
+                            dest=dest,
+                            value=value,
+                            key=key,
+                            copy_existing=copy_existing,
+                            prefix=prefix,
+                            like=like,
+                        )
+                    )
                 if prefix is not None:
-                    metadata[key] = {
-                        "device": str(value.device),
-                        "shape": list(value.shape)
-                        if not value.is_nested
-                        else value._nested_tensor_size().shape,
-                        "dtype": str(value.dtype),
-                        "is_nested": value.is_nested,
-                    }
+                    _update_metadata(
+                        metadata=metadata, key=key, value=value, is_collection=False
+                    )
 
         if prefix is not None:
             if executor is None:
-                save_metadata(
+                _save_metadata(
                     dest,
-                    prefix / "meta.json",
+                    prefix,
                     metadata=metadata,
                 )
             else:
-                futures.append(
-                    executor.submit(save_metadata, dest, prefix / "meta.json", metadata)
-                )
+                futures.append(executor.submit(_save_metadata, dest, prefix, metadata))
         dest._is_locked = True
+        dest._memmap_prefix = prefix
         return dest
 
     @classmethod
     def _load_memmap(
-        cls, prefix: str, metadata: dict, device: torch.device | None = None
+        cls,
+        prefix: str,
+        metadata: dict,
+        device: torch.device | None = None,
+        out=None,
     ) -> T:
         if metadata["device"] == "None":
             metadata["device"] = None
@@ -2250,11 +2227,14 @@ class TensorDict(TensorDictBase):
             metadata["device"] = torch.device(metadata["device"])
         metadata["shape"] = torch.Size(metadata["shape"])
 
-        out = cls(
-            {},
-            batch_size=metadata.pop("shape"),
-            device=metadata.pop("device") if device is None else device,
-        )
+        if out is None:
+            result = cls(
+                {},
+                batch_size=metadata.pop("shape"),
+                device=metadata.pop("device") if device is None else device,
+            )
+        else:
+            result = out
 
         paths = set()
         for key, entry_metadata in metadata.items():
@@ -2299,7 +2279,7 @@ class TensorDict(TensorDictBase):
                     device=device,
                     dtype=_STRDTYPE2DTYPE[dtype],
                 )
-            out._set_str(
+            result._set_str(
                 key,
                 tensor,
                 validated=True,
@@ -2309,11 +2289,202 @@ class TensorDict(TensorDictBase):
         # iterate over folders and load them
         for path in prefix.iterdir():
             if path.is_dir() and path.parts[-1] in paths:
-                key = path.parts[len(prefix.parts) :]
-                out.set(
-                    key, TensorDict.load_memmap(path, device=device, non_blocking=True)
-                )
-        return out
+                key = path.parts[-1]  # path.parts[len(prefix.parts) :]
+                existing_elt = result._get_str(key, default=None)
+                if existing_elt is not None:
+                    existing_elt.load_memmap_(path)
+                else:
+                    result._set_str(
+                        key,
+                        TensorDict.load_memmap(path, device=device, non_blocking=True),
+                        inplace=False,
+                        validated=False,
+                    )
+        result._memmap_prefix = prefix
+        return result
+
+    def _make_memmap_subtd(self, key):
+        """Creates a sub-tensordict given a tuple key."""
+        result = self
+        for key_str in key:
+            result_tmp = result._get_str(key_str, default=None)
+            if result_tmp is None:
+                result_tmp = result.empty()
+                if result._memmap_prefix is not None:
+                    result_tmp.memmap_(prefix=result._memmap_prefix / key_str)
+                    metadata = _load_metadata(result._memmap_prefix)
+                    _update_metadata(
+                        metadata=metadata,
+                        key=key_str,
+                        value=result_tmp,
+                        is_collection=True,
+                    )
+                    _save_metadata(
+                        result, prefix=result._memmap_prefix, metadata=metadata
+                    )
+                result._tensordict[key_str] = result_tmp
+            result = result_tmp
+        return result
+
+    def make_memmap(
+        self,
+        key: NestedKey,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        if not self.is_memmap():
+            raise RuntimeError(
+                "Can only make a memmap tensor within a memory-mapped tensordict."
+            )
+
+        key = unravel_key(key)
+        if isinstance(key, tuple):
+            last_node = self._make_memmap_subtd(key[:-1])
+            last_key = key[-1]
+        else:
+            last_node = self
+            last_key = key
+        if last_key in last_node.keys():
+            raise RuntimeError(
+                f"The key {last_key} already exists within the target tensordict. Delete that entry before "
+                f"overwriting it."
+            )
+        if dtype is None:
+            dtype = torch.get_default_dtype()
+        if last_node._memmap_prefix is not None:
+            metadata = _load_metadata(last_node._memmap_prefix)
+            memmap_tensor = _populate_empty(
+                key=last_key,
+                dest=last_node,
+                prefix=last_node._memmap_prefix,
+                shape=shape,
+                dtype=dtype,
+            )
+            _update_metadata(
+                metadata=metadata,
+                key=last_key,
+                value=memmap_tensor,
+                is_collection=False,
+            )
+            _save_metadata(
+                last_node, prefix=last_node._memmap_prefix, metadata=metadata
+            )
+        else:
+            memmap_tensor = MemoryMappedTensor.empty(shape=shape, dtype=dtype)
+
+        last_node._set_str(
+            last_key, memmap_tensor, validated=False, inplace=False, ignore_lock=True
+        )
+
+        return memmap_tensor
+
+    def make_memmap_from_storage(
+        self,
+        key: NestedKey,
+        storage: torch.UntypedStorage,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        if not self.is_memmap():
+            raise RuntimeError(
+                "Can only make a memmap tensor within a memory-mapped tensordict."
+            )
+
+        key = unravel_key(key)
+        if isinstance(key, tuple):
+            last_node = self._make_memmap_subtd(key[:-1])
+            last_key = key[-1]
+        else:
+            last_node = self
+            last_key = key
+        if last_key in last_node.keys():
+            raise RuntimeError(
+                f"The key {last_key} already exists within the target tensordict. Delete that entry before "
+                f"overwriting it."
+            )
+        if dtype is None:
+            dtype = torch.get_default_dtype()
+
+        if last_node._memmap_prefix is not None:
+            metadata = _load_metadata(last_node._memmap_prefix)
+            memmap_tensor = _populate_storage(
+                key=last_key,
+                dest=last_node,
+                prefix=last_node._memmap_prefix,
+                storage=storage,
+                shape=shape,
+                dtype=dtype,
+            )
+            _update_metadata(
+                metadata=metadata,
+                key=last_key,
+                value=memmap_tensor,
+                is_collection=False,
+            )
+            _save_metadata(
+                last_node, prefix=last_node._memmap_prefix, metadata=metadata
+            )
+        else:
+            memmap_tensor = MemoryMappedTensor.from_storage(
+                storage=storage, shape=shape, dtype=dtype
+            )
+
+        last_node._set_str(
+            last_key, memmap_tensor, validated=False, inplace=False, ignore_lock=True
+        )
+
+        return memmap_tensor
+
+    def make_memmap_from_tensor(
+        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+    ) -> MemoryMappedTensor:
+        if not self.is_memmap():
+            raise RuntimeError(
+                "Can only make a memmap tensor within a memory-mapped tensordict."
+            )
+
+        key = unravel_key(key)
+        if isinstance(key, tuple):
+            last_node = self._make_memmap_subtd(key[:-1])
+            last_key = key[-1]
+        else:
+            last_node = self
+            last_key = key
+        if last_key in last_node.keys():
+            raise RuntimeError(
+                f"The key {last_key} already exists within the target tensordict. Delete that entry before "
+                f"overwriting it."
+            )
+
+        if last_node._memmap_prefix is not None:
+            metadata = _load_metadata(last_node._memmap_prefix)
+            memmap_tensor = _populate_memmap(
+                dest=last_node,
+                value=tensor,
+                key=last_key,
+                copy_existing=True,
+                prefix=last_node._memmap_prefix,
+                like=not copy_data,
+            )
+            _update_metadata(
+                metadata=metadata,
+                key=last_key,
+                value=memmap_tensor,
+                is_collection=False,
+            )
+            _save_metadata(
+                last_node, prefix=last_node._memmap_prefix, metadata=metadata
+            )
+        else:
+            memmap_tensor = MemoryMappedTensor.from_tensor(tensor)
+
+        last_node._set_str(
+            last_key, memmap_tensor, validated=False, inplace=False, ignore_lock=True
+        )
+
+        return memmap_tensor
 
     def to(self, *args, **kwargs: Any) -> T:
         non_blocking = kwargs.pop("non_blocking", None)
@@ -3380,6 +3551,39 @@ class _SubTensorDict(TensorDictBase):
             _str_to_index(index),
         )
 
+    def make_memmap(
+        self,
+        key: NestedKey,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_storage(
+        self,
+        key: NestedKey,
+        storage: torch.UntypedStorage,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_tensor(
+        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for _SubTensorDict."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
     def share_memory_(self) -> T:
         raise RuntimeError(
             "Casting a sub-tensordict values to shared memory cannot be done."
@@ -3775,3 +3979,125 @@ def _str_to_index(index):
 
 _register_tensor_class(TensorDict)
 _register_tensor_class(_SubTensorDict)
+
+
+def _save_metadata(data: TensorDictBase, prefix: Path, metadata=None):
+    """Saves the metadata of a memmap tensordict on disk."""
+    filepath = prefix / "meta.json"
+    if metadata is None:
+        metadata = {}
+    metadata.update(
+        {
+            "shape": list(data.shape),
+            "device": str(data.device),
+            "_type": str(data.__class__),
+        }
+    )
+    with open(filepath, "w") as json_metadata:
+        json.dump(metadata, json_metadata)
+
+
+# user did specify location and memmap is in wrong place, so we copy
+def _populate_memmap(*, dest, value, key, copy_existing, prefix, like):
+    filename = None if prefix is None else str(prefix / f"{key}.memmap")
+    if value.is_nested:
+        shape = value._nested_tensor_size()
+        # Make the shape a memmap tensor too
+        if prefix is not None:
+            shape_filename = Path(filename)
+            shape_filename = shape_filename.with_suffix(".shape.memmap")
+            MemoryMappedTensor.from_tensor(
+                shape,
+                filename=shape_filename,
+                copy_existing=copy_existing,
+                existsok=True,
+                copy_data=True,
+            )
+    else:
+        shape = None
+    memmap_tensor = MemoryMappedTensor.from_tensor(
+        value.data if value.requires_grad else value,
+        filename=filename,
+        copy_existing=copy_existing,
+        existsok=True,
+        copy_data=not like,
+        shape=shape,
+    )
+    dest._tensordict[key] = memmap_tensor
+    return memmap_tensor
+
+
+def _populate_empty(
+    *,
+    dest,
+    key,
+    shape,
+    dtype,
+    prefix,
+):
+    filename = None if prefix is None else str(prefix / f"{key}.memmap")
+    if isinstance(shape, torch.Tensor):
+        # Make the shape a memmap tensor too
+        if prefix is not None:
+            shape_filename = Path(filename)
+            shape_filename = shape_filename.with_suffix(".shape.memmap")
+            MemoryMappedTensor.from_tensor(
+                shape,
+                filename=shape_filename,
+                existsok=True,
+                copy_data=True,
+            )
+    memmap_tensor = MemoryMappedTensor.empty(
+        shape=shape,
+        dtype=dtype,
+        filename=filename,
+    )
+    dest._tensordict[key] = memmap_tensor
+    return memmap_tensor
+
+
+def _populate_storage(
+    *,
+    dest,
+    key,
+    shape,
+    dtype,
+    prefix,
+    storage,
+):
+    filename = None if prefix is None else str(prefix / f"{key}.memmap")
+    if isinstance(shape, torch.Tensor):
+        # Make the shape a memmap tensor too
+        if prefix is not None:
+            shape_filename = Path(filename)
+            shape_filename = shape_filename.with_suffix(".shape.memmap")
+            MemoryMappedTensor.from_tensor(
+                shape,
+                filename=shape_filename,
+                existsok=True,
+                copy_data=True,
+            )
+    memmap_tensor = MemoryMappedTensor.from_storage(
+        storage=storage,
+        shape=shape,
+        dtype=dtype,
+        filename=filename,
+    )
+    dest._tensordict[key] = memmap_tensor
+    return memmap_tensor
+
+
+def _update_metadata(*, metadata, key, value, is_collection):
+    if not is_collection:
+        metadata[key] = {
+            "device": str(value.device),
+            "shape": list(value.shape)
+            if not value.is_nested
+            else value._nested_tensor_size().shape,
+            "dtype": str(value.dtype),
+            "is_nested": value.is_nested,
+        }
+    else:
+        metadata[key] = {
+            "type": type(value).__name__,
+        }
