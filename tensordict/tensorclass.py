@@ -208,6 +208,7 @@ def _tensorclass(cls: T) -> T:
                 f"Attribute name {attr} can't be used with @tensorclass"
             )
 
+    cls.fields = classmethod(lambda cls: dataclasses.fields(cls))
     cls.__init__ = _init_wrapper(cls.__init__)
     cls._from_tensordict = classmethod(_from_tensordict_wrapper(expected_keys))
     cls.from_tensordict = cls._from_tensordict
@@ -1142,12 +1143,14 @@ def _set(
                     return self
                 elif type_hints is None:
                     warnings.warn(type(self)._set_dict_warn_msg)
-            elif (
-                value is not None
-                and target_cls in tensordict_lib.base._ACCEPTED_CLASSES
+            elif value is not None and issubclass(
+                target_cls, tuple(tensordict_lib.base._ACCEPTED_CLASSES)
             ):
                 try:
                     if not issubclass(type(value), target_cls):
+                        if issubclass(target_cls, torch.Tensor):
+                            # first convert to tensor to make sure that the dtype is preserved
+                            value = torch.as_tensor(value)
                         cast_val = _cast_funcs[target_cls](value)
                     else:
                         cast_val = value
