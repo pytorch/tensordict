@@ -1315,9 +1315,7 @@ class TestTensorClass:
             X=torch.rand(10), y=torch.rand(10), z="test_tensorclass", batch_size=[10]
         )
 
-    def test_split(
-        self,
-    ):
+    def test_split(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
@@ -1382,9 +1380,37 @@ class TestTensorClass:
         assert (data0.y.X == 1).all()
         assert data0.y.z == "test_tensorclass1"
 
-    def test_squeeze(
-        self,
-    ):
+    def test_replace(self):
+        @tensorclass
+        class MyDataNested:
+            X: torch.Tensor
+            z: str
+            y: "MyDataNested" = None
+
+        X = torch.ones(1, 4, 5)
+        z = "test_tensorclass"
+        batch_size = [1, 4]
+        data_nest = MyDataNested(X=X, z=z, batch_size=batch_size)
+        data = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
+
+        replacement = data.clone().zero_()
+        replacement.z = "replacement"
+        replacement.y.z = "replacement"
+        assert data.z == "test_tensorclass"
+        assert data.y.z == "test_tensorclass"
+        data_replace = data.replace(replacement)
+        assert isinstance(data_replace, MyDataNested)
+        assert isinstance(data_replace.y, MyDataNested)
+        assert data.z == "test_tensorclass"
+        assert data.y.z == "test_tensorclass"
+        assert data_replace.z == "replacement"
+        assert data_replace.y.z == "replacement"
+        assert (data.X == 1).all()
+        assert (data.y.X == 1).all()
+        assert (data_replace.X == 0).all()
+        assert (data_replace.y.X == 0).all()
+
+    def test_squeeze(self):
         @tensorclass
         class MyDataNested:
             X: torch.Tensor
