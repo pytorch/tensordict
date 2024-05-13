@@ -258,6 +258,8 @@ def _tensorclass(cls: T) -> T:
         cls.share_memory_ = _share_memory_
     if not hasattr(cls, "update"):
         cls.update = _update
+    if not hasattr(cls, "replace"):
+        cls.replace = TensorDictBase.replace
     if not hasattr(cls, "update_"):
         cls.update_ = _update_
     if not hasattr(cls, "update_at_"):

@@ -3348,9 +3348,11 @@ class TensorDictBase(MutableMapping):
         """
         if args:
             if len(args) > 1:
-                raise RuntimeError("Only a single argument containing a dictionary-like "
-                                   f"structure of entries to replace can be passed to replace. Received {len(args)} "
-                                   f"arguments instead.")
+                raise RuntimeError(
+                    "Only a single argument containing a dictionary-like "
+                    f"structure of entries to replace can be passed to replace. Received {len(args)} "
+                    f"arguments instead."
+                )
             dict_to_replace = args[0]
         else:
             dict_to_replace = {}
@@ -3362,14 +3364,15 @@ class TensorDictBase(MutableMapping):
                 return self
         else:
             if not is_tensor_collection(dict_to_replace):
-                raise RuntimeError(f"Cannot use object type {type(dict_to_replace)} to update values in tensordict.")
+                raise RuntimeError(
+                    f"Cannot use object type {type(dict_to_replace)} to update values in tensordict."
+                )
             if dict_to_replace.is_empty():
                 return self
         result = self.copy()
         # using update makes sure that any optimization (e.g. for lazy stacks) is done properly
         result.update(dict_to_replace)
         return result
-
 
     @lock_blocked
     def create_nested(self, key):

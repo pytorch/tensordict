@@ -4187,7 +4187,9 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_replace(self, td_name, device):
         td = getattr(self, td_name)(device)
         td_dict = td.to_dict()
-        td_dict = torch.utils._pytree.tree_map(lambda x: torch.zeros_like(x) if isinstance(x, torch.Tensor) else x, td_dict)
+        td_dict = torch.utils._pytree.tree_map(
+            lambda x: torch.zeros_like(x) if isinstance(x, torch.Tensor) else x, td_dict
+        )
         td_replace = td.replace(td_dict)
         assert td_replace is not td
         assert (td_replace == 0).all()
