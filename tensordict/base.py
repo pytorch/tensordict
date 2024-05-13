@@ -3343,7 +3343,8 @@ class TensorDictBase(MutableMapping):
         Additionaly, first-level entries can be updated with the named keyword arguments.
 
         Returns:
-            a copy of ``self`` with updated entries.
+            a copy of ``self`` with updated entries if the input is non-empty. If an empty dict or no dict is provided
+            and the kwargs are empty, ``self`` is returned.
 
         """
         if args:
