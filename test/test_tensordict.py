@@ -29,16 +29,6 @@ from _utils_internal import (
     prod,
     TestTensorDictsBase,
 )
-from torch._subclasses import FakeTensor, FakeTensorMode
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
 
 from tensordict import LazyStackedTensorDict, make_tensordict, TensorDict
 from tensordict._lazy import _CustomOpTensorDict
@@ -62,7 +52,17 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import multiprocessing as mp, nn
+from torch._subclasses import FakeTensor, FakeTensorMode
 from torch.nn.parameter import UninitializedTensorMixin
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 try:
     import torchsnapshot
@@ -83,6 +83,9 @@ except ImportError:
 _IS_OSX = platform.system() == "Darwin"
 
 TD_BATCH_SIZE = 4
+HAS_NESTED_TENSOR = (
+    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
+)
 
 
 def _compare_tensors_identity(td0, td1):
@@ -1065,10 +1068,11 @@ class TestGeneric:
         ):
             td.make_memmap(("b", "c"), shape=[5, 6], dtype=torch.float32)
 
-        # test update
-        mmap = td.make_memmap(("e", "f"), shape=torch.tensor([[1, 2], [1, 3]]))
-        td_load.memmap_refresh_()
-        assert td_load["e", "f"].is_nested
+        if HAS_NESTED_TENSOR:
+            # test update
+            mmap = td.make_memmap(("e", "f"), shape=torch.tensor([[1, 2], [1, 3]]))
+            td_load.memmap_refresh_()
+            assert td_load["e", "f"].is_nested
 
     def test_make_memmap_from_storage(self, tmpdir):
         td_base = TensorDict(
@@ -1138,13 +1142,14 @@ class TestGeneric:
         assert d_copy.untyped_storage().data_ptr() != d.untyped_storage().data_ptr()
         assert (d_copy == 1).all()
 
-        # test update
-        td.make_memmap_from_tensor(
-            ("e", "f"),
-            torch.nested.nested_tensor([torch.zeros((1, 2)), torch.zeros((1, 3))]),
-        )
-        td_load.memmap_refresh_()
-        assert td_load["e", "f"].is_nested
+        if HAS_NESTED_TENSOR:
+            # test update
+            td.make_memmap_from_tensor(
+                ("e", "f"),
+                torch.nested.nested_tensor([torch.zeros((1, 2)), torch.zeros((1, 3))]),
+            )
+            td_load.memmap_refresh_()
+            assert td_load["e", "f"].is_nested
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mask_td(self, device):
