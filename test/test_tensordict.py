@@ -20,8 +20,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import torch
 
+import torch
 from _utils_internal import (
     decompose,
     DummyPicklableClass,
@@ -29,16 +29,6 @@ from _utils_internal import (
     prod,
     TestTensorDictsBase,
 )
-from torch._subclasses import FakeTensor, FakeTensorMode
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
 
 from tensordict import LazyStackedTensorDict, make_tensordict, TensorDict
 from tensordict._lazy import _CustomOpTensorDict
@@ -62,7 +52,17 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from torch import multiprocessing as mp, nn
+from torch._subclasses import FakeTensor, FakeTensorMode
 from torch.nn.parameter import UninitializedTensorMixin
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 try:
     import torchsnapshot
@@ -83,6 +83,9 @@ except ImportError:
 _IS_OSX = platform.system() == "Darwin"
 
 TD_BATCH_SIZE = 4
+HAS_NESTED_TENSOR = (
+    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
+)
 
 
 def _compare_tensors_identity(td0, td1):
@@ -1041,6 +1044,112 @@ class TestGeneric:
         data = TensorDict({"d": 0}, [])
         data.load_state_dict(sd, strict=True)
         assert data["d"] == 1
+
+    def test_make_memmap(self, tmpdir):
+        td = TensorDict()
+        td.memmap_(tmpdir)
+        mmap = td.make_memmap("a", shape=[3, 4], dtype=torch.float32)
+        mmap.fill_(1)
+        assert td.is_memmap()
+        mmap = td.make_memmap(("b", "c"), shape=[5, 6], dtype=torch.float32)
+        mmap.fill_(1)
+        assert td.is_memmap()
+
+        assert td.is_locked
+        assert td["b"].is_locked
+
+        td_load = TensorDict.load_memmap(tmpdir).memmap_()
+        assert td_load.saved_path is not None
+        assert (td == td_load).all()
+        assert (td_load == 1).all()
+
+        with pytest.raises(
+            RuntimeError, match="already exists within the target tensordict"
+        ):
+            td.make_memmap(("b", "c"), shape=[5, 6], dtype=torch.float32)
+
+        if HAS_NESTED_TENSOR:
+            # test update
+            mmap = td.make_memmap(("e", "f"), shape=torch.tensor([[1, 2], [1, 3]]))
+            td_load.memmap_refresh_()
+            assert td_load["e", "f"].is_nested
+
+    def test_make_memmap_from_storage(self, tmpdir):
+        td_base = TensorDict(
+            {"a": torch.zeros((3, 4)), ("b", "c"): torch.zeros((5, 6))}
+        ).memmap_(tmpdir)
+
+        td = TensorDict()
+        td.memmap_(tmpdir)
+        td.make_memmap_from_storage(
+            "a", td_base["a"].untyped_storage(), shape=[3, 4], dtype=torch.float32
+        )
+        assert td.is_memmap()
+        td.make_memmap_from_storage(
+            ("b", "c"),
+            td_base["b", "c"].untyped_storage(),
+            shape=[5, 6],
+            dtype=torch.float32,
+        )
+        assert td.is_memmap()
+        assert (td == 0).all()
+
+        assert td.is_locked
+        assert td["b"].is_locked
+
+        td_load = TensorDict.load_memmap(tmpdir).memmap_()
+        assert td_load.saved_path is not None
+        assert (td == td_load).all()
+        assert (td_load == 0).all()
+
+        with pytest.raises(
+            RuntimeError, match="Providing a storage with an associated filename"
+        ):
+            another_d = MemoryMappedTensor.ones(
+                [5, 6], filename=Path(tmpdir) / "another_d.memmap"
+            )
+            td.make_memmap_from_storage(
+                ("b", "d"),
+                another_d.untyped_storage(),
+                shape=[5, 6],
+                dtype=torch.float32,
+            )
+
+    def test_make_memmap_from_tensor(self, tmpdir):
+        td = TensorDict()
+        td.memmap_(tmpdir)
+        a = torch.ones((3, 4))
+        td.make_memmap_from_tensor("a", a)
+        assert td.is_memmap()
+        c = torch.ones((5, 6))
+        td.make_memmap_from_tensor(("b", "c"), c)
+        assert td.is_memmap()
+        assert (td == 1).all()
+
+        assert td.is_locked
+        assert td["b"].is_locked
+
+        td_load = TensorDict.load_memmap(tmpdir).memmap_()
+        assert td_load.saved_path is not None
+        assert (td == td_load).all()
+        assert (td_load == 1).all()
+
+        # Should work too if the tensor is memmap
+        d = MemoryMappedTensor.ones(
+            1, 2, filename=tmpdir + "/some_random_tensor.memmap"
+        )
+        d_copy = td.make_memmap_from_tensor("d", d)
+        assert d_copy.untyped_storage().data_ptr() != d.untyped_storage().data_ptr()
+        assert (d_copy == 1).all()
+
+        if HAS_NESTED_TENSOR:
+            # test update
+            td.make_memmap_from_tensor(
+                ("e", "f"),
+                torch.nested.nested_tensor([torch.zeros((1, 2)), torch.zeros((1, 3))]),
+            )
+            td_load.memmap_refresh_()
+            assert td_load["e", "f"].is_nested
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_mask_td(self, device):
@@ -3619,7 +3728,12 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert v1 == v2
             else:
                 assert v1 is not v2
-        assert (tdmemmap == 0).all()
+                if isinstance(v1, torch.Tensor):
+                    assert (
+                        v1.untyped_storage().data_ptr()
+                        != v2.untyped_storage().data_ptr()
+                    )
+        # assert (td != tdmemmap).any()
         assert tdmemmap.is_memmap()
 
     def test_memmap_prefix(self, td_name, device, tmp_path):

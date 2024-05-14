@@ -22,6 +22,8 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
+from tensordict.memmap import MemoryMappedTensor
+
 try:
     from functorch import dim as ftdim
 
@@ -2052,18 +2054,67 @@ class LazyStackedTensorDict(TensorDictBase):
 
     @classmethod
     def _load_memmap(
-        cls, prefix: str, metadata: dict, device: torch.device | None = None, **kwargs
+        cls,
+        prefix: str,
+        metadata: dict,
+        device: torch.device | None = None,
+        *,
+        out=None,
+        **kwargs,
     ) -> LazyStackedTensorDict:
         tensordicts = []
         i = 0
+        stack_dim = metadata["stack_dim"]
+        if out is not None:
+            out = out.unbind(stack_dim)
         while (prefix / str(i)).exists():
             tensordicts.append(
                 TensorDict.load_memmap(
-                    prefix / str(i), device=device, **kwargs, non_blocking=True
+                    prefix / str(i),
+                    device=device,
+                    **kwargs,
+                    non_blocking=True,
+                    out=out[i] if out is not None else None,
                 )
             )
             i += 1
-        return cls(*tensordicts, stack_dim=metadata["stack_dim"], **kwargs)
+        return cls(*tensordicts, stack_dim=stack_dim, **kwargs)
+
+    def make_memmap(
+        self,
+        key: NestedKey,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
+            "it can't return a contiguous view of the lazy stacked tensors. "
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_storage(
+        self,
+        key: NestedKey,
+        storage: torch.UntypedStorage,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
+            "it can't return a contiguous view of the lazy stacked tensors. "
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_tensor(
+        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for LazyStack as "
+            "it can't return a contiguous view of the lazy stacked tensors. "
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
 
     def expand(self, *args: int, inplace: bool = False) -> T:
         if len(args) == 1 and isinstance(args[0], Sequence):
@@ -3010,6 +3061,39 @@ class _CustomOpTensorDict(TensorDictBase):
             inv_op=inv_op,
             custom_op_kwargs=custom_op_kwargs,
             inv_op_kwargs=inv_op_kwargs,
+        )
+
+    def make_memmap(
+        self,
+        key: NestedKey,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for lazy tensordicts."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_storage(
+        self,
+        key: NestedKey,
+        storage: torch.UntypedStorage,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for lazy tensordicts."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
+        )
+
+    def make_memmap_from_tensor(
+        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+    ) -> MemoryMappedTensor:
+        raise RuntimeError(
+            "Making a memory-mapped tensor after instantiation isn't currently allowed for lazy tensordicts."
+            "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
         )
 
     def share_memory_(self) -> _CustomOpTensorDict:

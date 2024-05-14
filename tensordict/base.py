@@ -38,6 +38,8 @@ from typing import (
 
 import numpy as np
 import torch
+
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _CloudpickleWrapper,
     _GENERIC_NESTED_ERR,
@@ -146,6 +148,7 @@ class TensorDictBase(MutableMapping):
     _is_locked: bool = False
     _cache: bool = None
     _is_non_tensor: bool = False
+    _memmap_prefix = None
 
     def __bool__(self) -> bool:
         raise RuntimeError("Converting a tensordict to boolean value is not permitted")
@@ -2254,6 +2257,19 @@ class TensorDictBase(MutableMapping):
     ) -> T:
         ...
 
+    @property
+    def saved_path(self):
+        """Returns the path where a memmap saved TensorDict is being stored.
+
+        This argument valishes as soon as is_memmap() returns ``False`` (e.g., when the tensordict is unlocked).
+        """
+        if self.is_memmap():
+            path = self._memmap_prefix
+            return path
+        raise AttributeError(
+            f"The tensordict has no saved path (memmap={self.is_memmap()}, path={self._memmap_prefix})."
+        )
+
     def memmap_(
         self,
         prefix: str | None = None,
@@ -2299,7 +2315,7 @@ class TensorDictBase(MutableMapping):
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
-        prefix = Path(prefix) if prefix is not None else None
+        prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -2332,6 +2348,95 @@ class TensorDictBase(MutableMapping):
             like=False,
             share_non_tensor=share_non_tensor,
         ).lock_()
+
+    @abc.abstractmethod
+    def make_memmap(
+        self,
+        key: NestedKey,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        """Creates an empty memory-mapped tensor given a shape and possibly a dtype.
+
+        .. warning:: This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+            will need to be updated using the method :meth:`~tensordict.TensorDictBase.memmap_refresh_`.
+
+        Writing an existing entry will result in an error.
+
+        Args:
+            key (NestedKey): the key of the new entry to write. If the key is already present in the tensordict, an
+                exception is raised.
+            shape (torch.Size or equivalent, torch.Tensor for nested tensors): the shape of the tensor to write.
+
+        Keyword arguments:
+            dtype (torch.dtype, optional): the dtype of the new tensor.
+
+        Returns:
+            A new memory mapped tensor.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def make_memmap_from_storage(
+        self,
+        key: NestedKey,
+        storage: torch.UntypedStorage,
+        shape: torch.Size | torch.Tensor,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> MemoryMappedTensor:
+        """Creates an empty memory-mapped tensor given a storage, a shape and possibly a dtype.
+
+        .. warning:: This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+            will need to be updated using the method :meth:`~tensordict.TensorDictBase.memmap_refresh_`.
+
+        .. note:: If the storage has a filename associated, it must match the new filename for the file.
+            If it has not a filename associated but the tensordict has an associated path, this will result in an
+            exception.
+
+        Args:
+            key (NestedKey): the key of the new entry to write. If the key is already present in the tensordict, an
+                exception is raised.
+            storage (torch.UntypedStorage): the storage to use for the new MemoryMappedTensor. Must be a physical memory
+                storage.
+            shape (torch.Size or equivalent, torch.Tensor for nested tensors): the shape of the tensor to write.
+
+        Keyword arguments:
+            dtype (torch.dtype, optional): the dtype of the new tensor.
+
+        Returns:
+            A new memory mapped tensor with the given storage.
+
+        """
+        ...
+
+    @abc.abstractmethod
+    def make_memmap_from_tensor(
+        self, key: NestedKey, tensor: torch.Tensor, *, copy_data: bool = True
+    ) -> MemoryMappedTensor:
+        """Creates an empty memory-mapped tensor given a tensor.
+
+        .. warning:: This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+            will need to be updated using the method :meth:`~tensordict.TensorDictBase.memmap_refresh_`.
+
+        This method always copies the storage content if ``copy_data`` is ``True`` (i.e., the storage is not shared).
+
+        Args:
+            key (NestedKey): the key of the new entry to write. If the key is already present in the tensordict, an
+                exception is raised.
+            tensor (torch.Tensor): the tensor to replicate on physical memory.
+
+        Keyword arguments:
+            copy_data (bool, optionaL): if ``False``, the new tensor will share the metadata of the input such as
+                shape and dtype, but the content will be empty. Defaults to ``True``.
+
+        Returns:
+            A new memory mapped tensor with the given storage.
+
+        """
+        ...
 
     def save(
         self,
@@ -2402,7 +2507,7 @@ class TensorDictBase(MutableMapping):
             Serialising in this fashion might be slow with deeply nested tensordicts, so
             it is not recommended to call this method inside a training loop.
         """
-        prefix = Path(prefix) if prefix is not None else None
+        prefix = Path(prefix) if prefix is not None else self._memmap_prefix
 
         if num_threads > 1:
             with (
@@ -2492,7 +2597,7 @@ class TensorDictBase(MutableMapping):
             >>> buffer = td.memmap_like("/path/to/dataset")
 
         """
-        prefix = Path(prefix) if prefix is not None else None
+        prefix = Path(prefix) if prefix is not None else self._memmap_prefix
         if num_threads > 1:
             with (
                 ThreadPoolExecutor(max_workers=num_threads)
@@ -2545,12 +2650,21 @@ class TensorDictBase(MutableMapping):
         """
         return cls.load_memmap(prefix, *args, **kwargs)
 
+    def load_(self, prefix: str | Path, *args, **kwargs):
+        """Loads a tensordict from disk within the current tensordict.
+
+        This class method is a proxy to :meth:`~.load_memmap_`.
+        """
+        return self.load_memmap_(prefix, *args, **kwargs)
+
     @classmethod
     def load_memmap(
         cls,
         prefix: str | Path,
         device: torch.device | None = None,
         non_blocking: bool = False,
+        *,
+        out: TensorDictBase | None = None,
     ) -> T:
         """Loads a memory-mapped tensordict from disk.
 
@@ -2565,6 +2679,8 @@ class TensorDictBase(MutableMapping):
                 without actually opening any file.
             non_blocking (bool, optional): if ``True``, synchronize won't be
                 called after loading tensors on device. Defaults to ``False``.
+            out (TensorDictBase, optional): optional tensordict where the data
+                should be written.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -2618,12 +2734,7 @@ class TensorDictBase(MutableMapping):
         """
         prefix = Path(prefix)
 
-        def load_metadata(filepath):
-            with open(filepath) as json_metadata:
-                metadata = json.load(json_metadata)
-            return metadata
-
-        metadata = load_metadata(prefix / "meta.json")
+        metadata = _load_metadata(prefix)
         type_name = metadata["_type"]
         if type_name != str(cls):
             import tensordict
@@ -2638,15 +2749,47 @@ class TensorDictBase(MutableMapping):
                 )
         if device is not None:
             device = torch.device(device)
-        out = cls._load_memmap(prefix, metadata, device=device)
+        out = cls._load_memmap(prefix, metadata, device=device, out=out)
         if not non_blocking and device is not None and device != torch.device("meta"):
             out._sync_all()
         return out
 
+    def load_memmap_(
+        self,
+        prefix: str | Path,
+    ):
+        """Loads the content of a memory-mapped tensordict within the tensordict where ``load_memmap_`` is called.
+
+        See :meth:`~tensordict.TensorDictBase.load_memmap` for more info.
+        """
+        is_memmap = self.is_memmap()
+        with self.unlock_() if is_memmap else contextlib.nullcontext():
+            self.load_memmap(prefix=prefix, device=self.device, out=self)
+        if is_memmap:
+            self.memmap_()
+        return self
+
+    def memmap_refresh_(self):
+        """Refreshes the content of the memory-mapped tensordict if it has a :attr:`~tensordict.TensorDict.saved_path`.
+
+        This method will raise an exception if no path is associated with it.
+
+        """
+        if not self.is_memmap() or self._memmap_prefix is None:
+            raise RuntimeError(
+                "Cannot refresh a TensorDict that is not memory mapped or has no path associated."
+            )
+        return self.load_memmap_(prefix=self.saved_path)
+
     @classmethod
     @abc.abstractmethod
     def _load_memmap(
-        cls, prefix: Path, metadata: dict, device: torch.device | None = None
+        cls,
+        prefix: Path,
+        metadata: dict,
+        device: torch.device | None = None,
+        *,
+        out=None,
     ):
         ...
 
@@ -7098,3 +7241,10 @@ def _is_leaf_nontensor(cls: Type) -> bool:
     # if issubclass(cls, KeyedJaggedTensor):
     #     return False
     return issubclass(cls, torch.Tensor)
+
+
+def _load_metadata(prefix: Path):
+    filepath = prefix / "meta.json"
+    with open(filepath) as json_metadata:
+        metadata = json.load(json_metadata)
+    return metadata
