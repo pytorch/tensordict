@@ -2265,8 +2265,7 @@ class TensorDictBase(MutableMapping):
         """
         if self.is_memmap():
             path = self._memmap_prefix
-            if path is not None:
-                return path
+            return path
         raise AttributeError(
             f"The tensordict has no saved path (memmap={self.is_memmap()}, path={self._memmap_prefix})."
         )

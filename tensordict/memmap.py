@@ -436,6 +436,8 @@ class MemoryMappedTensor(torch.Tensor):
                 are accepted, any other device will raise an exception.
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
+            existsok (bool, optional): whether it is ok to overwrite an existing file.
+                Defaults to ``False``.
         """
         shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
         if device is not None:
@@ -456,6 +458,7 @@ class MemoryMappedTensor(torch.Tensor):
         return cls.from_tensor(
             result,
             filename=filename,
+            existsok=kwargs.pop("existsok", False),
         )
 
     @classmethod
@@ -482,6 +485,8 @@ class MemoryMappedTensor(torch.Tensor):
                 are accepted, any other device will raise an exception.
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
+            existsok (bool, optional): whether it is ok to overwrite an existing file.
+                Defaults to ``False``.
         """
         shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
         if device is not None:
@@ -502,6 +507,7 @@ class MemoryMappedTensor(torch.Tensor):
         result = cls.from_tensor(
             result,
             filename=filename,
+            existsok=kwargs.pop("existsok", False),
         )
         return result
 
@@ -529,6 +535,8 @@ class MemoryMappedTensor(torch.Tensor):
                 are accepted, any other device will raise an exception.
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
+            existsok (bool, optional): whether it is ok to overwrite an existing file.
+                Defaults to ``False``.
         """
         shape, device, dtype, _, filename = _proc_args_const(*args, **kwargs)
         if device is not None:
@@ -598,7 +606,12 @@ class MemoryMappedTensor(torch.Tensor):
             else:
                 shape = torch.Size(shape)
             result = result.expand(shape)
-        result = cls.from_tensor(result, filename=filename)
+        result = cls.from_tensor(
+            result,
+            filename=filename,
+            copy_data=False,
+            existsok=kwargs.pop("existsok", False),
+        )
         return result
 
     @classmethod
@@ -615,6 +628,8 @@ class MemoryMappedTensor(torch.Tensor):
                 are accepted, any other device will raise an exception.
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
+            existsok (bool, optional): whether it is ok to overwrite an existing file.
+                Defaults to ``False``.
         """
         shape = kwargs.pop("shape", args[0])
         args = (torch.Size([]), *args)
@@ -630,7 +645,12 @@ class MemoryMappedTensor(torch.Tensor):
             else:
                 shape = torch.Size(shape)
             result = result.expand(shape)
-        result = cls.from_tensor(result, filename=filename)
+        result = cls.from_tensor(
+            result,
+            filename=filename,
+            copy_data=False,
+            existsok=kwargs.pop("existsok", False),
+        )
         return result
 
     @classmethod
@@ -658,6 +678,8 @@ class MemoryMappedTensor(torch.Tensor):
                 are accepted, any other device will raise an exception.
             filename (path or equivalent): the path to the file, if any. If none
                 is provided, a handler is used.
+            existsok (bool, optional): whether it is ok to overwrite an existing file.
+                Defaults to ``False``.
         """
         shape, device, dtype, fill_value, filename = _proc_args_const(*args, **kwargs)
         if device is not None:
@@ -671,7 +693,9 @@ class MemoryMappedTensor(torch.Tensor):
             else:
                 shape = torch.Size(shape)
             result = result.expand(shape)
-        return cls.from_tensor(result, filename=filename)
+        return cls.from_tensor(
+            result, filename=filename, existsok=kwargs.pop("existsok", False)
+        )
 
     @classmethod
     def from_filename(cls, filename, dtype, shape, index=None):

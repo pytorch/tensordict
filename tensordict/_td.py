@@ -4051,6 +4051,7 @@ def _populate_empty(
         shape=shape,
         dtype=dtype,
         filename=filename,
+        existsok=True,
     )
     dest._tensordict[key] = memmap_tensor
     return memmap_tensor
