@@ -1857,8 +1857,15 @@ leaf or not.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.load_">
+<span class="sig-name descname"><span class="pre">load_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.PersistentTensorDict.load_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads a tensordict from disk within the current tensordict.</p>
+<p>This class method is a proxy to <a class="reference internal" href="#tensordict.PersistentTensorDict.load_memmap_" title="tensordict.PersistentTensorDict.load_memmap_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap_()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.PersistentTensorDict.load_memmap">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load_memmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.3)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.load_memmap" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load_memmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.3)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.load_memmap" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads a memory-mapped tensordict from disk.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1873,6 +1880,8 @@ useful to get a sense of the total model size and structure
 without actually opening any file.</p></li>
 <li><p><strong>non_blocking</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, synchronize won’t be
 called after loading tensors on device. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>out</strong> (<a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – optional tensordict where the data
+should be written.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1927,6 +1936,13 @@ as a fake tensor:</p>
 <span class="go">    is_shared=False)</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.load_memmap_">
+<span class="sig-name descname"><span class="pre">load_memmap_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.PersistentTensorDict.load_memmap_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads the content of a memory-mapped tensordict within the tensordict where <code class="docutils literal notranslate"><span class="pre">load_memmap_</span></code> is called.</p>
+<p>See <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase.load_memmap" title="tensordict.TensorDictBase.load_memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_memmap()</span></code></a> for more info.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -2001,6 +2017,95 @@ will be blocked.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="ow">not</span> <span class="n">td</span><span class="o">.</span><span class="n">is_locked</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.make_memmap">
+<span class="sig-name descname"><span class="pre">make_memmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Size</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><span class="pre">torch.Tensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.3)"><span class="pre">torch.dtype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><span class="pre">MemoryMappedTensor</span></a></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.make_memmap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates an empty memory-mapped tensor given a shape and possibly a dtype.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+will need to be updated using the method <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_refresh_" title="tensordict.TensorDictBase.memmap_refresh_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_refresh_()</span></code></a>.</p>
+</div>
+<p>Writing an existing entry will result in an error.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<em>NestedKey</em>) – the key of the new entry to write. If the key is already present in the tensordict, an
+exception is raised.</p></li>
+<li><p><strong>shape</strong> (<em>torch.Size</em><em> or </em><em>equivalent</em><em>, </em><em>torch.Tensor for nested tensors</em>) – the shape of the tensor to write.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.3)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – the dtype of the new tensor.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A new memory mapped tensor.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.make_memmap_from_storage">
+<span class="sig-name descname"><span class="pre">make_memmap_from_storage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/storage.html#torch.UntypedStorage" title="(in PyTorch v2.3)"><span class="pre">torch.UntypedStorage</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Size</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><span class="pre">torch.Tensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.3)"><span class="pre">torch.dtype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.MemoryMappedTensor"><span class="pre">MemoryMappedTensor</span></a></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.make_memmap_from_storage" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates an empty memory-mapped tensor given a storage, a shape and possibly a dtype.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+will need to be updated using the method <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_refresh_" title="tensordict.TensorDictBase.memmap_refresh_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_refresh_()</span></code></a>.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the storage has a filename associated, it must match the new filename for the file.
+If it has not a filename associated but the tensordict has an associated path, this will result in an
+exception.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<em>NestedKey</em>) – the key of the new entry to write. If the key is already present in the tensordict, an
+exception is raised.</p></li>
+<li><p><strong>storage</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/storage.html#torch.UntypedStorage" title="(in PyTorch v2.3)"><em>torch.UntypedStorage</em></a>) – the storage to use for the new MemoryMappedTensor. Must be a physical memory
+storage.</p></li>
+<li><p><strong>shape</strong> (<em>torch.Size</em><em> or </em><em>equivalent</em><em>, </em><em>torch.Tensor for nested tensors</em>) – the shape of the tensor to write.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>dtype</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.3)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – the dtype of the new tensor.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A new memory mapped tensor with the given storage.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.make_memmap_from_tensor">
+<span class="sig-name descname"><span class="pre">make_memmap_from_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.12)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.12)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor" title="tensordict.memmap.MemoryMappedTensor"><span class="pre">MemoryMappedTensor</span></a></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.make_memmap_from_tensor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates an empty memory-mapped tensor given a tensor.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>This method is not lock-safe by design. A memory-mapped TensorDict instance present on multiple nodes
+will need to be updated using the method <a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase.memmap_refresh_" title="tensordict.TensorDictBase.memmap_refresh_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap_refresh_()</span></code></a>.</p>
+</div>
+<p>This method always copies the storage content if <code class="docutils literal notranslate"><span class="pre">copy_data</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> (i.e., the storage is not shared).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<em>NestedKey</em>) – the key of the new entry to write. If the key is already present in the tensordict, an
+exception is raised.</p></li>
+<li><p><strong>tensor</strong> (<a class="reference external" href="https://pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.3)"><em>torch.Tensor</em></a>) – the tensor to replicate on physical memory.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>copy_data</strong> (<a class="reference internal" href="#tensordict.PersistentTensorDict.bool" title="tensordict.PersistentTensorDict.bool"><em>bool</em></a><em>, </em><em>optionaL</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the new tensor will share the metadata of the input such as
+shape and dtype, but the content will be empty. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A new memory mapped tensor with the given storage.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -2382,6 +2487,13 @@ be slow for large content.</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">buffer</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">memmap_like</span><span class="p">(</span><span class="s2">&quot;/path/to/dataset&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.memmap_refresh_">
+<span class="sig-name descname"><span class="pre">memmap_refresh_</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.PersistentTensorDict.memmap_refresh_" title="Permalink to this definition">¶</a></dt>
+<dd><p>Refreshes the content of the memory-mapped tensordict if it has a <a class="reference internal" href="tensordict.TensorDict.html#tensordict.TensorDict.saved_path" title="tensordict.TensorDict.saved_path"><code class="xref py py-attr docutils literal notranslate"><span class="pre">saved_path</span></code></a>.</p>
+<p>This method will raise an exception if no path is associated with it.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -2851,6 +2963,13 @@ and the kwargs are empty, <code class="docutils literal notranslate"><span class
 <span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_existing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_threads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_early</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">share_non_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.save" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the tensordict to disk.</p>
 <p>This function is a proxy to <a class="reference internal" href="#tensordict.PersistentTensorDict.memmap" title="tensordict.PersistentTensorDict.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.saved_path">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">saved_path</span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.saved_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the path where a memmap saved TensorDict is being stored.</p>
+<p>This argument valishes as soon as is_memmap() returns <code class="docutils literal notranslate"><span class="pre">False</span></code> (e.g., when the tensordict is unlocked).</p>
 </dd></dl>
 
 <dl class="py method">
