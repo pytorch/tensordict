@@ -89,6 +89,20 @@ except ImportError as err:
 
     TORCHREC_ERR = err
 
+if not _has_funcdim:
+
+    class _ftdim_mock:
+        class Dim:
+            pass
+
+        class Tensor:
+            pass
+
+        def dims(self, *args, **kwargs):
+            raise ImportError("functorch.dim not found")
+
+    ftdim = _ftdim_mock  # noqa: F811
+
 T = TypeVar("T", bound="TensorDictBase")
 
 _STRDTYPE2DTYPE = {
@@ -2215,19 +2229,6 @@ def is_non_tensor(data):
 
 def _is_non_tensor(cls: type):
     return getattr(cls, "_is_non_tensor", False)
-
-
-if not _has_funcdim:
-
-    class _ftdim_mock:
-        class Dim:
-            pass
-
-        class Tensor:
-            pass
-
-        def dims(self, *args, **kwargs):
-            raise ImportError("functorch.dim not found")
 
 
 class KeyDependentDefaultDict(collections.defaultdict):

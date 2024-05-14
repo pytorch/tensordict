@@ -17,6 +17,10 @@ from torch import multiprocessing as mp
 
 TIMEOUT = 100
 
+HAS_NESTED_TENSOR = (
+    getattr(torch, "_nested_compute_contiguous_strides_offsets", None) is not None
+)
+
 
 @pytest.mark.parametrize(
     "dtype",
@@ -585,6 +589,7 @@ class TestOps:
 class TestNestedTensor:
     shape = torch.tensor([[2, 3], [2, 4], [3, 2]])
 
+    @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
     def test_with_filename(self, tmpdir):
         filename = tmpdir + "/test_file2.memmap"
         tensor = MemoryMappedTensor.empty(
@@ -629,6 +634,7 @@ class TestNestedTensor:
             assert t1.dtype == t2.dtype
             assert (t1 == t2).all()
 
+    @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
     def test_with_handler(self):
         tensor = MemoryMappedTensor.empty(self.shape, dtype=torch.int)
         assert isinstance(tensor, MemoryMappedTensor)
@@ -665,6 +671,7 @@ class TestNestedTensor:
             assert t1.dtype == t2.dtype
             assert (t1 == t2).all()
 
+    @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
     @pytest.mark.parametrize("with_filename", [False, True])
     def test_from_storage(self, with_filename, tmpdir):
         if with_filename:
@@ -685,6 +692,7 @@ class TestNestedTensor:
         assert (b[0] == torch.arange(4).view(2, 2)).all()
         assert (b[1] == torch.arange(4, 10).view(2, 3)).all()
 
+    @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
     def test_save_td_with_nested(self, tmpdir):
         td = TensorDict(
             {
