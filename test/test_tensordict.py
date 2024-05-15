@@ -3191,6 +3191,35 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (td.to_tensordict() == td_unflat).all()
         assert td.batch_size == td_unflat.batch_size
 
+    @pytest.mark.parametrize("start_dim", [0, 1, -2, -3])
+    def test_flatten_unflatten_decorator(self, td_name, device, start_dim):
+        td = getattr(self, td_name)(device)
+        with td.unlock_(), td.flatten(start_dim=start_dim, end_dim=3) as td_flat:
+            assert (td_flat == td.flatten(start_dim, 3)).all()
+            new_start_dim = -1 if start_dim in (-2, -3) else start_dim
+            with td_flat.unflatten(
+                dim=new_start_dim, unflattened_size=td.shape[start_dim:]
+            ) as td_unflat:
+                assert (td_unflat == td).all()
+
+        with td.unlock_(), td.flatten(start_dim, end_dim=3) as td_flat:
+            assert (td_flat == td.flatten(start_dim, 3)).all()
+            new_start_dim = (
+                -1 if start_dim == -2 else -1 if start_dim == -3 else start_dim
+            )
+            with td_flat.unflatten(
+                new_start_dim, unflattened_size=td.shape[start_dim:]
+            ) as td_unflat:
+                assert (td_unflat == td).all()
+
+        with td.unlock_(), td.flatten(start_dim, -1) as td_flat:
+            assert (td_flat == td.flatten(start_dim, -1)).all()
+            new_start_dim = (
+                -1 if start_dim == -2 else -1 if start_dim == -3 else start_dim
+            )
+            with td_flat.unflatten(new_start_dim, td.shape[start_dim:]) as td_unflat:
+                assert (td_unflat == td).all()
+
     def test_flatten_unflatten_bis(self, td_name, device):
         td = getattr(self, td_name)(device)
         shape = td.shape[1:4]

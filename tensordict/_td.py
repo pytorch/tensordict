@@ -1866,7 +1866,16 @@ class TensorDict(TensorDictBase):
                     dest.update(value, inplace=True, non_blocking=non_blocking)
                 else:
                     if dest is not value:
-                        dest.copy_(value, non_blocking=non_blocking)
+                        try:
+                            dest.copy_(value, non_blocking=non_blocking)
+                        except RuntimeError:
+                            # if we're updating a param and the storages match, nothing needs to be done
+                            if not (
+                                isinstance(dest, torch.Tensor)
+                                and dest.data.untyped_storage().data_ptr()
+                                == value.data.untyped_storage().data_ptr()
+                            ):
+                                raise
             except KeyError as err:
                 raise err
             except Exception as err:

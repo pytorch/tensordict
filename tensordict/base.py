@@ -3850,6 +3850,7 @@ class TensorDictBase(MutableMapping):
         """
         return sorted(self.keys())
 
+    @as_decorator()
     def flatten(self, start_dim=0, end_dim=-1):
         """Flattens all the tensors of a tensordict.
 
@@ -3881,6 +3882,8 @@ class TensorDictBase(MutableMapping):
             tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])
 
         """
+        if start_dim < 0:
+            start_dim = self.ndim + start_dim
         if end_dim < 0:
             end_dim = self.ndim + end_dim
             if end_dim < 0:
@@ -3916,6 +3919,7 @@ class TensorDictBase(MutableMapping):
             out.names = names
         return out
 
+    @as_decorator()
     def unflatten(self, dim, unflattened_size):
         """Unflattens a tensordict dim expanding it to a desired shape.
 
@@ -6138,21 +6142,71 @@ class TensorDictBase(MutableMapping):
         _last_op = self._last_op_queue.pop()
         if _last_op is not None:
             last_op, (args, kwargs, out) = _last_op
+            # TODO: transpose, flatten etc. as decorator should lock the content to make sure that no key is
+            #  added or deleted
             if last_op == self.__class__.lock_.__name__:
                 return self.unlock_()
             elif last_op == self.__class__.unlock_.__name__:
                 return self.lock_()
             elif last_op == self.__class__.transpose.__name__:
                 dim0, dim1 = args
-                return out.update(self.transpose(dim0, dim1))
+                if not out.is_locked:
+                    return out.update(self.transpose(dim0, dim1), inplace=True)
+                else:
+                    return out.update_(self.transpose(dim0, dim1))
+            elif last_op == self.__class__.flatten.__name__:
+                if len(args) == 2:
+                    dim0, dim1 = args
+                elif len(args) == 1:
+                    dim0 = args[0]
+                    dim1 = kwargs.get("end_dim", -1)
+                else:
+                    dim0 = kwargs.get("start_dim", 0)
+                    dim1 = kwargs.get("end_dim", -1)
+                if dim1 < 0:
+                    dim1 = out.ndim + dim1
+                if dim0 < 0:
+                    dim0 = out.ndim + dim0
+
+                if not out.is_locked:
+                    return out.update(
+                        self.unflatten(dim0, out.shape[dim0 : dim1 + 1]), inplace=True
+                    )
+                else:
+                    return out.update_(self.unflatten(dim0, out.shape[dim0 : dim1 + 1]))
+
+            elif last_op == self.__class__.unflatten.__name__:
+                if args:
+                    dim0 = args[0]
+                    if len(args) > 1:
+                        unflattened_size = args[1]
+                    else:
+                        unflattened_size = kwargs.get("unflattened_size")
+                else:
+                    dim0 = kwargs.get("dim")
+                    unflattened_size = kwargs.get("unflattened_size")
+                if dim0 < 0:
+                    dim0 = out.ndim + dim0
+                dim1 = dim0 + len(unflattened_size) - 1
+                if not out.is_locked:
+                    return out.update(self.flatten(dim0, dim1), inplace=True)
+                else:
+                    return out.update_(self.flatten(dim0, dim1))
+
             elif last_op == self.__class__.permute.__name__:
                 dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
                 dims_list = [dim if dim >= 0 else self.ndim + dim for dim in dims_list]
                 # inverse map
                 inv_dims_list = np.argsort(dims_list)
-                return out.update(self.permute(inv_dims_list))
+                if not out.is_locked:
+                    return out.update(self.permute(inv_dims_list), inplace=True)
+                else:
+                    return out.update_(self.permute(inv_dims_list))
             elif last_op == self.__class__.view.__name__:
-                return out.update(self.view(out.shape))
+                if not out.is_locked:
+                    return out.update(self.view(out.shape), inplace=True)
+                else:
+                    return out.update_(self.view(out.shape))
             elif last_op == self.__class__.unsqueeze.__name__:
                 if args:
                     (dim,) = args
@@ -6162,7 +6216,10 @@ class TensorDictBase(MutableMapping):
                     raise RuntimeError(
                         "Cannot use td.unsqueeze() as a decorator if the dimension is implicit."
                     )
-                return out.update(self.squeeze(dim))
+                if not out.is_locked:
+                    return out.update(self.squeeze(dim), inplace=True)
+                else:
+                    return out.update_(self.squeeze(dim))
             elif last_op == self.__class__.squeeze.__name__:
                 if args:
                     (dim,) = args
@@ -6172,7 +6229,10 @@ class TensorDictBase(MutableMapping):
                     raise RuntimeError(
                         "Cannot use td.squeeze() as a decorator if the dimension is implicit."
                     )
-                return out.update(self.unsqueeze(dim))
+                if not out.is_locked:
+                    return out.update(self.unsqueeze(dim), inplace=True)
+                else:
+                    return out.update_(self.unsqueeze(dim))
             elif last_op == self.__class__.to_module.__name__:
                 if is_tensor_collection(out):
                     with out.unlock_():
