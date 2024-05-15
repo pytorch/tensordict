@@ -341,11 +341,12 @@ class MemoryMappedTensor(torch.Tensor):
 
     @filename.setter
     def filename(self, value):
-        if self._filename is not None and str(value) != self._filename:
+        value = str(Path(value).absolute())
+        if self._filename is not None and value != self._filename:
             raise RuntimeError(
                 "the MemoryMappedTensor has already a filename associated."
             )
-        self._filename = str(Path(value).absolute())
+        self._filename = value
 
     @classmethod
     def empty_like(cls, input, *, filename=None):
