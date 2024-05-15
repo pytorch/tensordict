@@ -2159,6 +2159,50 @@ class TestAutoCasting:
         assert obj.tc.tc is None
 
 
+class TestVMAP:
+    def test_regular_vmap(self):
+        @tensorclass
+        class VmappableClass:
+            x: torch.Tensor
+            y: torch.Tensor
+
+        data = VmappableClass(
+            x=torch.zeros(3, 4), y=torch.ones(3, 4), batch_size=[3, 4]
+        )
+
+        def assert_is_data(x):
+            assert isinstance(x, VmappableClass)
+            return x
+
+        data_bis = torch.vmap(assert_is_data)(data)
+        assert isinstance(data_bis, VmappableClass)
+        assert (data_bis == data).all()
+
+    def test_non_tensor_vmap(self):
+        @tensorclass
+        class VmappableClass:
+            x: torch.Tensor
+            y: torch.Tensor
+            non_tensor: Any
+
+        data = VmappableClass(
+            x=torch.zeros(3, 4),
+            y=torch.ones(3, 4),
+            non_tensor="a string!",
+            batch_size=[3, 4],
+        )
+
+        def assert_is_data(x):
+            assert isinstance(x, VmappableClass)
+            return x
+
+        data_bis = torch.vmap(assert_is_data)(data)
+        assert isinstance(data_bis, VmappableClass)
+        assert "non_tensor" not in data_bis._tensordict
+        assert (data_bis == data).all()
+        assert data_bis.non_tensor == "a string!"
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

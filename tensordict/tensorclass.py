@@ -31,6 +31,7 @@ import tensordict as tensordict_lib
 
 import torch
 from tensordict import LazyStackedTensorDict
+from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
@@ -229,6 +230,7 @@ def _tensorclass(cls: T) -> T:
     cls.__or__ = _or
     cls.__xor__ = _xor
     cls.__bool__ = _bool
+    cls.non_tensor_items = _non_tensor_items
     # if not hasattr(cls, "keys"):
     #     cls.keys = _keys
     # if not hasattr(cls, "values"):
@@ -305,6 +307,7 @@ def _tensorclass(cls: T) -> T:
     cls.__doc__ = f"{cls.__name__}{inspect.signature(cls)}"
 
     _register_tensor_class(cls)
+    _register_td_node(cls)
 
     # faster than doing instance checks
     cls._is_non_tensor = _is_non_tensor
@@ -1526,6 +1529,15 @@ def _xor(self, other: object) -> bool:
     else:
         tensor = self._tensordict ^ other
     return _from_tensordict_with_none(self, tensor)
+
+
+def _non_tensor_items(self, include_nested=False):
+    if include_nested:
+        return self.non_tensor_items() + self._tensordict.non_tensor_items(
+            include_nested=True
+        )
+    else:
+        return list(self._non_tensordict.items())
 
 
 def _bool(self):
