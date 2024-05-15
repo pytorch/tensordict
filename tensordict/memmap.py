@@ -720,7 +720,7 @@ class MemoryMappedTensor(torch.Tensor):
         except PermissionError:
             # An exception was raised, so the file is not writable
             writable = False
-
+        print('writable', writable)
         if isinstance(shape, torch.Tensor):
             func_offset_stride = getattr(
                 torch, "_nested_compute_contiguous_strides_offsets", None
@@ -758,12 +758,11 @@ class MemoryMappedTensor(torch.Tensor):
                 tensor = torch.from_file(
                     str(filename), shared=True, dtype=dtype, size=shape.numel()
                 )
-                tensor = tensor.view(shape)
             else:
                 with open(str(filename), "rb") as f:
                     mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
                     tensor = torch.frombuffer(mm, dtype=dtype)
-                    tensor = tensor.view(shape)
+            tensor = tensor.view(shape)
 
         if index is not None:
             tensor = tensor[index]

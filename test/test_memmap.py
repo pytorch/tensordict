@@ -711,6 +711,7 @@ class TestNestedTensor:
         del td
         gc.collect()
         td = TensorDict.load(tmpdir)
+        print('td', td)
         for i in range(2):
             for j in range(3):
                 assert (td[i, j] == tdsave[i, j]).all()
