@@ -266,7 +266,7 @@ class MemoryMappedTensor(torch.Tensor):
                 result = result.view(shape)
             result = cls(result)
         result._handler = handler
-        result._filename = filename
+        result.filename = filename
         result.index = None
         result.parent_shape = shape
         if copy_data:
@@ -321,7 +321,7 @@ class MemoryMappedTensor(torch.Tensor):
 
         tensor = cls(tensor)
         if filename is not None:
-            tensor._filename = filename
+            tensor.filename = filename
         elif handler is not None:
             tensor._handler = handler
         if index is not None:
@@ -338,6 +338,14 @@ class MemoryMappedTensor(torch.Tensor):
         if filename is None:
             raise RuntimeError("The MemoryMappedTensor has no file associated.")
         return filename
+
+    @filename.setter
+    def filename(self, value):
+        if self._filename is not None and str(value) != self._filename:
+            raise RuntimeError(
+                "the MemoryMappedTensor has already a filename associated."
+            )
+        self._filename = str(Path(value).absolute())
 
     @classmethod
     def empty_like(cls, input, *, filename=None):
@@ -596,7 +604,7 @@ class MemoryMappedTensor(torch.Tensor):
                     *offsets_strides,
                 )
                 result = cls(result)
-                result._filename = filename
+                result.filename = filename
                 return result
             return result
 
@@ -765,7 +773,7 @@ class MemoryMappedTensor(torch.Tensor):
         if index is not None:
             tensor = tensor[index]
         out = cls(tensor)
-        out._filename = filename
+        out.filename = filename
         out._handler = None
         out.index = index
         out.parent_shape = shape
@@ -811,7 +819,7 @@ class MemoryMappedTensor(torch.Tensor):
         if index is not None:
             out = out[index]
         out = cls(out)
-        out._filename = None
+        out.filename = None
         out._handler = handler
         out.index = index
         out.parent_shape = shape
@@ -904,7 +912,7 @@ class MemoryMappedTensor(torch.Tensor):
             return tensor
         tensor = MemoryMappedTensor(tensor)
         tensor._handler = getattr(self, "_handler", None)
-        tensor._filename = getattr(self, "_filename", None)
+        tensor.filename = getattr(self, "_filename", None)
         tensor.index = item
         tensor.parent_shape = getattr(self, "parent_shape", None)
         return tensor

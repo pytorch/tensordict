@@ -707,12 +707,10 @@ class TestNestedTensor:
             batch_size=[2, 3],
         )
         tdsave = td.clone()
-        print("tdsave", tdsave)
         td.memmap(tmpdir)
         del td
         gc.collect()
         td = TensorDict.load(tmpdir)
-        print("td", td)
         for i in range(2):
             for j in range(3):
                 assert (td[i, j] == tdsave[i, j]).all()
@@ -747,7 +745,7 @@ class TestReadWrite:
         tmpdir = Path(tmpdir)
         file_path = tmpdir / "elt.mmap"
         data = MemoryMappedTensor.from_tensor(torch.arange(26), filename=file_path)
-        MemoryMappedTensor.from_storage(
+        mmap = MemoryMappedTensor.from_storage(
             data.untyped_storage(),
             filename=file_path,
             shape=torch.tensor([[2, 3], [4, 5]]),
@@ -768,6 +766,12 @@ class TestReadWrite:
         )
         assert (mmap1[0].view(-1) == torch.arange(6)).all()
         assert (mmap1[1].view(-1) == torch.arange(6, 26)).all()
+        # test filename
+        assert mmap1.filename == mmap.filename
+        assert mmap1.filename == data.filename
+        assert mmap1.filename == data.untyped_storage().filename
+        with pytest.raises(AssertionError):
+            assert mmap1.untyped_storage().filename == data.untyped_storage().filename
 
         os.chmod(str(file_path), 0o444)
         data.fill_(0)
