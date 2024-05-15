@@ -712,6 +712,15 @@ class MemoryMappedTensor(torch.Tensor):
                 tensor.
 
         """
+        try:
+            # Try opening the file in write mode
+            with open(filename, "w"):
+                # If we get here, the file is writable
+                writable = True
+        except PermissionError:
+            # An exception was raised, so the file is not writable
+            writable = False
+
         if isinstance(shape, torch.Tensor):
             func_offset_stride = getattr(
                 torch, "_nested_compute_contiguous_strides_offsets", None
@@ -724,9 +733,19 @@ class MemoryMappedTensor(torch.Tensor):
                     "nested tensors. Please upgrade to a more recent "
                     "version."
                 )
-            tensor = torch.from_file(
-                str(filename), shared=True, dtype=dtype, size=shape.prod(-1).sum().int()
-            )
+            if writable:
+                tensor = torch.from_file(
+                    str(filename),
+                    shared=True,
+                    dtype=dtype,
+                    size=shape.prod(-1).sum().int(),
+                )
+            else:
+                with open(str(filename), "rb") as f:
+                    mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                    tensor = torch.frombuffer(mm, dtype=dtype)
+                    # mm.close()
+
             tensor = torch._nested_view_from_buffer(
                 tensor,
                 shape,
@@ -734,9 +753,17 @@ class MemoryMappedTensor(torch.Tensor):
             )
         else:
             shape = torch.Size(shape)
-            tensor = torch.from_file(
-                str(filename), shared=True, dtype=dtype, size=shape.numel()
-            ).view(shape)
+            # whether the file already existed
+            if writable:
+                tensor = torch.from_file(
+                    str(filename), shared=True, dtype=dtype, size=shape.numel()
+                )
+                tensor = tensor.view(shape)
+            else:
+                with open(str(filename), "rb") as f:
+                    mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                    tensor = torch.frombuffer(mm, dtype=dtype)
+                    tensor = tensor.view(shape)
 
         if index is not None:
             tensor = tensor[index]

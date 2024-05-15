@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import gc
+import os
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -713,6 +714,65 @@ class TestNestedTensor:
         for i in range(2):
             for j in range(3):
                 assert (td[i, j] == tdsave[i, j]).all()
+
+
+class TestReadWrite:
+    def test_read_only(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        file_path = tmpdir / "elt.mmap"
+        mmap = MemoryMappedTensor.from_filename(
+            filename=file_path, shape=[2, 3], dtype=torch.float64
+        )
+        mmap.copy_(torch.arange(6).view(2, 3))
+
+        # change permission
+        os.chmod(str(file_path), 0o444)
+        # check read only
+        with pytest.raises(PermissionError):
+            with open(file_path, "w"):
+                pass
+        with open(file_path, "r"):
+            pass
+        del mmap
+
+        # load file
+        mmap = MemoryMappedTensor.from_filename(
+            filename=file_path, shape=[2, 3], dtype=torch.float64
+        )
+        assert (mmap.reshape(-1) == torch.arange(6)).all()
+
+    def test_read_only_nested(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        file_path = tmpdir / "elt.mmap"
+        data = MemoryMappedTensor.from_tensor(torch.arange(26), filename=file_path)
+        MemoryMappedTensor.from_storage(
+            data.untyped_storage(),
+            filename=file_path,
+            shape=torch.tensor([[2, 3], [4, 5]]),
+            dtype=data.dtype,
+        )
+        # change permission
+        os.chmod(str(file_path), 0o444)
+        # check read only
+        with pytest.raises(PermissionError):
+            with open(file_path, "w"):
+                pass
+        with open(file_path, "r"):
+            pass
+
+        # load file
+        mmap1 = MemoryMappedTensor.from_filename(
+            filename=file_path, shape=torch.tensor([[2, 3], [4, 5]]), dtype=data.dtype
+        )
+        assert (mmap1[0].view(-1) == torch.arange(6)).all()
+        assert (mmap1[1].view(-1) == torch.arange(6, 26)).all()
+
+        os.chmod(str(file_path), 0o444)
+        data.fill_(0)
+        os.chmod(str(file_path), 0o444)
+
+        assert (mmap1[0].view(-1) == 0).all()
+        assert (mmap1[1].view(-1) == 0).all()
 
 
 if __name__ == "__main__":
