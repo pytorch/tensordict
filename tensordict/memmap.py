@@ -714,13 +714,12 @@ class MemoryMappedTensor(torch.Tensor):
         """
         try:
             # Try opening the file in write mode
-            with open(filename, "w"):
+            with open(filename, "a+"):
                 # If we get here, the file is writable
                 writable = True
         except PermissionError:
             # An exception was raised, so the file is not writable
             writable = False
-        print('writable', writable)
         if isinstance(shape, torch.Tensor):
             func_offset_stride = getattr(
                 torch, "_nested_compute_contiguous_strides_offsets", None
@@ -745,7 +744,6 @@ class MemoryMappedTensor(torch.Tensor):
                     mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
                     tensor = torch.frombuffer(mm, dtype=dtype)
                     # mm.close()
-
             tensor = torch._nested_view_from_buffer(
                 tensor,
                 shape,
