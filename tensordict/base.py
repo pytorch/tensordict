@@ -6140,7 +6140,10 @@ class TensorDictBase(MutableMapping):
                 return self.lock_()
             elif last_op == self.__class__.transpose.__name__:
                 dim0, dim1 = args
-                return out.update(self.transpose(dim0, dim1), inplace=True)
+                if not out.is_locked:
+                    return out.update(self.transpose(dim0, dim1), inplace=True)
+                else:
+                    return out.update_(self.transpose(dim0, dim1))
             elif last_op == self.__class__.flatten.__name__:
                 if len(args) == 2:
                     dim0, dim1 = args
@@ -6154,9 +6157,14 @@ class TensorDictBase(MutableMapping):
                     dim1 = out.ndim + dim1
                 if dim0 < 0:
                     dim0 = out.ndim + dim0
-                return out.update(
-                    self.unflatten(dim0, out.shape[dim0 : dim1 + 1]), inplace=True
-                )
+
+                if not out.is_locked:
+                    return out.update(
+                        self.unflatten(dim0, out.shape[dim0 : dim1 + 1]), inplace=True
+                    )
+                else:
+                    return out.update_(self.unflatten(dim0, out.shape[dim0 : dim1 + 1]))
+
             elif last_op == self.__class__.unflatten.__name__:
                 if args:
                     dim0 = args[0]
@@ -6170,15 +6178,25 @@ class TensorDictBase(MutableMapping):
                 if dim0 < 0:
                     dim0 = out.ndim + dim0
                 dim1 = dim0 + len(unflattened_size) - 1
-                return out.update(self.flatten(dim0, dim1), inplace=True)
+                if not out.is_locked:
+                    return out.update(self.flatten(dim0, dim1), inplace=True)
+                else:
+                    return out.update_(self.flatten(dim0, dim1))
+
             elif last_op == self.__class__.permute.__name__:
                 dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
                 dims_list = [dim if dim >= 0 else self.ndim + dim for dim in dims_list]
                 # inverse map
                 inv_dims_list = np.argsort(dims_list)
-                return out.update(self.permute(inv_dims_list))
+                if not out.is_locked:
+                    return out.update(self.permute(inv_dims_list), inplace=True)
+                else:
+                    return out.update_(self.permute(inv_dims_list))
             elif last_op == self.__class__.view.__name__:
-                return out.update(self.view(out.shape), inplace=True)
+                if not out.is_locked:
+                    return out.update(self.view(out.shape), inplace=True)
+                else:
+                    return out.update_(self.view(out.shape))
             elif last_op == self.__class__.unsqueeze.__name__:
                 if args:
                     (dim,) = args
@@ -6188,7 +6206,10 @@ class TensorDictBase(MutableMapping):
                     raise RuntimeError(
                         "Cannot use td.unsqueeze() as a decorator if the dimension is implicit."
                     )
-                return out.update(self.squeeze(dim), inplace=True)
+                if not out.is_locked:
+                    return out.update(self.squeeze(dim), inplace=True)
+                else:
+                    return out.update_(self.squeeze(dim))
             elif last_op == self.__class__.squeeze.__name__:
                 if args:
                     (dim,) = args
@@ -6198,7 +6219,10 @@ class TensorDictBase(MutableMapping):
                     raise RuntimeError(
                         "Cannot use td.squeeze() as a decorator if the dimension is implicit."
                     )
-                return out.update(self.unsqueeze(dim), inplace=True)
+                if not out.is_locked:
+                    return out.update(self.unsqueeze(dim), inplace=True)
+                else:
+                    return out.update_(self.unsqueeze(dim))
             elif last_op == self.__class__.to_module.__name__:
                 if is_tensor_collection(out):
                     with out.unlock_():
