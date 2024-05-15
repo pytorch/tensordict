@@ -158,7 +158,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 0).all()
 
     @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
@@ -192,7 +192,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 1).all()
 
     @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
@@ -226,7 +226,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
 
     @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
     def test_full(self, shape, dtype, device, tmp_path, from_path, shape_arg):
@@ -259,7 +259,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 2).all()
 
     def test_zeros_like(self, shape, dtype, device, tmp_path, from_path):
@@ -273,7 +273,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 0).all()
 
     def test_ones_like(self, shape, dtype, device, tmp_path, from_path):
@@ -287,7 +287,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 1).all()
 
     def test_full_like(self, shape, dtype, device, tmp_path, from_path):
@@ -301,7 +301,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 2).all()
 
     def test_from_filename(self, shape, dtype, device, tmp_path, from_path):

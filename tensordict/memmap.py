@@ -341,6 +341,8 @@ class MemoryMappedTensor(torch.Tensor):
 
     @filename.setter
     def filename(self, value):
+        if value is None and self._filename is None:
+            return
         value = str(Path(value).absolute())
         if self._filename is not None and value != self._filename:
             raise RuntimeError(
