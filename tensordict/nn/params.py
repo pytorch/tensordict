@@ -421,14 +421,15 @@ class TensorDictParams(TensorDictBase, nn.Module):
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
     ) -> TensorDictBase:
-        if not self.no_convert:
-            func = _maybe_make_param
-        else:
-            func = _maybe_make_param_or_buffer
-        if isinstance(input_dict_or_td, TensorDictBase):
-            input_dict_or_td = input_dict_or_td.apply(func)
-        else:
-            input_dict_or_td = tree_map(func, input_dict_or_td)
+        # Deprecating this since _set_tuple will do it thx to the decorator
+        # if not self.no_convert:
+        #     func = _maybe_make_param
+        # else:
+        #     func = _maybe_make_param_or_buffer
+        # if _is_tensor_collection(type(input_dict_or_td)):
+        #     input_dict_or_td = input_dict_or_td.apply(func)
+        # else:
+        #     input_dict_or_td = tree_map(func, input_dict_or_td)
         with self._param_td.unlock_():
             TensorDictBase.update(
                 self,

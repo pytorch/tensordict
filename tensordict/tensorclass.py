@@ -1531,10 +1531,10 @@ def _xor(self, other: object) -> bool:
     return _from_tensordict_with_none(self, tensor)
 
 
-def _non_tensor_items(self, include_nested=False, leaves_only=False):
+def _non_tensor_items(self, include_nested=False):
     if include_nested:
         return self.non_tensor_items() + self._tensordict.non_tensor_items(
-            include_nested=include_nested, leaves_only=leaves_only
+            include_nested=True
         )
     else:
         return list(self._non_tensordict.items())

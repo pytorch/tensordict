@@ -3673,10 +3673,13 @@ class TensorDictBase(MutableMapping):
             for k in self.keys():
                 yield k, self._get_str(k, NO_DEFAULT)
 
-    def non_tensor_items(self, include_nested: bool = False, leaves_only: bool = False):
+    def non_tensor_items(self, include_nested: bool = False):
+        """Returns all non-tensor leaves, maybe recursively."""
         return tuple(
             self.items(
-                include_nested, leaves_only, is_leaf=lambda cls: _is_non_tensor(cls)
+                include_nested,
+                leaves_only=True,
+                is_leaf=lambda cls: _is_non_tensor(cls),
             )
         )
 
