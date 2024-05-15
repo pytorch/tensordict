@@ -5,6 +5,7 @@
 import argparse
 import gc
 import os
+import time
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -726,10 +727,12 @@ class TestReadWrite:
         mmap.copy_(torch.arange(6).view(2, 3))
 
         # change permission
-        os.chmod(str(file_path), 0o444)
+        os.chmod(str(file_path.absolute()), 0o444)
+
+        time.sleep(0.02)
         # check read only
         with pytest.raises(PermissionError):
-            with open(file_path, "w"):
+            with open(file_path, "w+"):
                 pass
         with open(file_path, "r"):
             pass
@@ -752,10 +755,12 @@ class TestReadWrite:
             dtype=data.dtype,
         )
         # change permission
-        os.chmod(str(file_path), 0o444)
+        os.chmod(str(file_path.absolute()), 0o444)
+
+        time.sleep(0.02)
         # check read only
         with pytest.raises(PermissionError):
-            with open(file_path, "w"):
+            with open(file_path, "w+"):
                 pass
         with open(file_path, "r"):
             pass
