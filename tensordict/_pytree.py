@@ -12,7 +12,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict._td import _SubTensorDict
-from tensordict.utils import implement_for
+from tensordict.utils import _is_tensorclass, _shape, implement_for
 
 try:
     from torch.utils._pytree import Context, MappingKey, register_pytree_node
@@ -85,7 +85,7 @@ def _str_to_tensordictdict(str_spec: str) -> Tuple[List[str], str]:
 def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
     items = tuple(d.items())
     if items:
-        keys, values = zip(*d.items())
+        keys, values = zip(*items)
         keys = list(keys)
         values = list(values)
     else:
@@ -96,6 +96,9 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
         "batch_size": d.batch_size,
         "names": d.names,
         "device": d.device,
+        "constructor": _constructor(type(d)),
+        "non_tensor_data": d.non_tensor_items(),
+        "cls": type(d),
     }
 
 
@@ -110,16 +113,21 @@ def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, 
     batch_size = context["batch_size"]
     names = context["names"]
     keys = context["keys"]
+    constructor = context["constructor"]
+    non_tensor_items = context["non_tensor_data"]
+    cls = context["cls"]
     batch_dims = len(batch_size)
-    if any(tensor.shape[:batch_dims] != batch_size for tensor in values):
+    if any(_shape(tensor)[:batch_dims] != batch_size for tensor in values):
         batch_size = torch.Size([])
         names = None
-    return TensorDict(
-        dict(zip(keys, values)),
+    return constructor(
+        cls=cls,
+        keys=keys,
+        values=values,
         batch_size=batch_size,
         names=names,
         device=device,
-        _run_checks=False,
+        non_tensor_items=non_tensor_items,
     )
 
 
@@ -128,7 +136,7 @@ def _td_flatten_with_keys(
 ):
     items = tuple(d.items())
     if items:
-        keys, values = zip(*d.items())
+        keys, values = zip(*items)
         keys = list(keys)
         values = list(values)
     else:
@@ -139,6 +147,9 @@ def _td_flatten_with_keys(
         "batch_size": d.batch_size,
         "names": d.names,
         "device": d.device,
+        "constructor": _constructor(type(d)),
+        "non_tensor_data": d.non_tensor_items(),
+        "cls": type(d),
     }
 
 
@@ -159,6 +170,43 @@ def _register_td_node(cls):  # noqa: F811
         _tensordictdict_unflatten,
         flatten_with_keys_fn=_td_flatten_with_keys,
     )
+
+
+def _constructor(cls):
+    if _is_tensorclass(cls):
+        return _tensorclass_constructor
+    return _tensordict_constructor
+
+
+def _tensorclass_constructor(
+    *, cls, keys, values, batch_size, names, device, non_tensor_items
+):
+    result = _tensordict_constructor(
+        cls=TensorDict,
+        keys=keys,
+        values=values,
+        batch_size=batch_size,
+        names=names,
+        device=device,
+        non_tensor_items=(),
+    )
+    result = cls._from_tensordict(result, dict(non_tensor_items))
+    return result
+
+
+def _tensordict_constructor(
+    *, cls, keys, values, batch_size, names, device, non_tensor_items
+):
+    result = cls(
+        dict(zip(keys, values)),
+        batch_size=batch_size,
+        names=names,
+        device=device,
+        _run_checks=False,
+    )
+    for key, item in non_tensor_items:
+        result.set_non_tensor(key, item)
+    return result
 
 
 for cls in PYTREE_REGISTERED_TDS:
