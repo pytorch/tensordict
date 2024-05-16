@@ -746,6 +746,7 @@ class TestReadWrite:
         )
         assert (mmap.reshape(-1) == torch.arange(6)).all()
 
+    @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
     def test_read_only_nested(self, tmpdir):
         tmpdir = Path(tmpdir)
         file_path = tmpdir / "elt.mmap"
