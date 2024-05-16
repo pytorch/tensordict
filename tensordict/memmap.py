@@ -724,7 +724,6 @@ class MemoryMappedTensor(torch.Tensor):
                 tensor.
 
         """
-
         writable = _is_writable(filename)
 
         if isinstance(shape, torch.Tensor):
