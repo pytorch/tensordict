@@ -6,7 +6,6 @@ import argparse
 import gc
 import os
 import stat
-import time
 from contextlib import nullcontext
 from pathlib import Path
 
