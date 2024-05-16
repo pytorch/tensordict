@@ -5,6 +5,7 @@
 import argparse
 import gc
 import os
+import stat
 import time
 from contextlib import nullcontext
 from pathlib import Path
@@ -726,10 +727,18 @@ class TestReadWrite:
         )
         mmap.copy_(torch.arange(6).view(2, 3))
 
-        # change permission
-        os.chmod(str(file_path.absolute()), 0o444)
+        file_path = str(file_path.absolute())
+        # Modify the permissions field to set the desired permissions
+        new_permissions = stat.S_IREAD  # | stat.S_IWRITE | stat.S_IEXEC
 
-        time.sleep(0.02)
+        # change permission
+        os.chmod(file_path, new_permissions)
+
+        # Get the current file status
+        st = os.stat(file_path)
+        is_writable = bool(st.st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+        assert not is_writable, st
+
         # check read only
         with pytest.raises(PermissionError):
             with open(file_path, "w+"):
@@ -754,16 +763,19 @@ class TestReadWrite:
             shape=torch.tensor([[2, 3], [4, 5]]),
             dtype=data.dtype,
         )
-        # change permission
-        os.chmod(str(file_path.absolute()), 0o444)
 
-        time.sleep(0.02)
-        # check read only
-        with pytest.raises(PermissionError):
-            with open(file_path, "w+"):
-                pass
-        with open(file_path, "r"):
-            pass
+        file_path = str(file_path.absolute())
+
+        # Modify the permissions field to set the desired permissions
+        new_permissions = stat.S_IREAD  # | stat.S_IWRITE | stat.S_IEXEC
+
+        # change permission
+        os.chmod(file_path, new_permissions)
+
+        # Get the current file status
+        st = os.stat(file_path)
+        is_writable = bool(st.st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+        assert not is_writable, st
 
         # load file
         mmap1 = MemoryMappedTensor.from_filename(
