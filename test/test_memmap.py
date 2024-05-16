@@ -14,7 +14,7 @@ import torch
 from _utils_internal import get_available_devices
 from tensordict import TensorDict
 
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _is_writable, MemoryMappedTensor
 from torch import multiprocessing as mp
 
 TIMEOUT = 100
@@ -727,6 +727,8 @@ class TestReadWrite:
         mmap.copy_(torch.arange(6).view(2, 3))
 
         file_path = str(file_path.absolute())
+
+        assert _is_writable(file_path)
         # Modify the permissions field to set the desired permissions
         new_permissions = stat.S_IREAD  # | stat.S_IWRITE | stat.S_IEXEC
 
@@ -734,16 +736,8 @@ class TestReadWrite:
         os.chmod(file_path, new_permissions)
 
         # Get the current file status
-        st = os.stat(file_path)
-        is_writable = bool(st.st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
-        assert not is_writable, st
+        assert not _is_writable(file_path)
 
-        # check read only
-        with pytest.raises(PermissionError):
-            with open(file_path, "w+"):
-                pass
-        with open(file_path, "r"):
-            pass
         del mmap
 
         # load file
@@ -764,6 +758,7 @@ class TestReadWrite:
         )
 
         file_path = str(file_path.absolute())
+        assert _is_writable(file_path)
 
         # Modify the permissions field to set the desired permissions
         new_permissions = stat.S_IREAD  # | stat.S_IWRITE | stat.S_IEXEC
@@ -772,9 +767,7 @@ class TestReadWrite:
         os.chmod(file_path, new_permissions)
 
         # Get the current file status
-        st = os.stat(file_path)
-        is_writable = bool(st.st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
-        assert not is_writable, st
+        assert not _is_writable(file_path)
 
         # load file
         mmap1 = MemoryMappedTensor.from_filename(

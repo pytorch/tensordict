@@ -9,6 +9,7 @@ import functools
 
 import mmap
 import os
+import stat
 
 import sys
 import tempfile
@@ -723,14 +724,9 @@ class MemoryMappedTensor(torch.Tensor):
                 tensor.
 
         """
-        try:
-            # Try opening the file in write mode
-            with open(filename, "a+"):
-                # If we get here, the file is writable
-                writable = True
-        except PermissionError:
-            # An exception was raised, so the file is not writable
-            writable = False
+
+        writable = _is_writable(filename)
+
         if isinstance(shape, torch.Tensor):
             func_offset_stride = getattr(
                 torch, "_nested_compute_contiguous_strides_offsets", None
@@ -1073,3 +1069,12 @@ def _unbind(tensor, dim):
 @implements_for_memmap(torch.chunk)
 def _chunk(input, chunks, dim=0):
     return input.chunk(chunks, dim=dim)
+
+
+def _is_writable(file_path):
+    file_path = str(file_path)
+    if os.path.exists(file_path):
+        st = os.stat(file_path)
+        return bool(st.st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+    # Assume that the file can be written in the directory
+    return True
