@@ -9,7 +9,6 @@ import functools
 
 import mmap
 import os
-import stat
 
 import sys
 import tempfile
