@@ -9,7 +9,6 @@ import functools
 
 import mmap
 import os
-import stat
 
 import sys
 import tempfile
@@ -1073,7 +1072,6 @@ def _chunk(input, chunks, dim=0):
 def _is_writable(file_path):
     file_path = str(file_path)
     if os.path.exists(file_path):
-        st = os.stat(file_path)
-        return bool(st.st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+        return os.access(file_path, os.W_OK)
     # Assume that the file can be written in the directory
     return True

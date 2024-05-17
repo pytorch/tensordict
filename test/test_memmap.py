@@ -718,6 +718,7 @@ class TestNestedTensor:
 
 
 class TestReadWrite:
+    @pytest.mark.skipif(os.getuid() == 0, reason="root can write to read-only files")
     def test_read_only(self, tmpdir):
         tmpdir = Path(tmpdir)
         file_path = tmpdir / "elt.mmap"
@@ -747,6 +748,7 @@ class TestReadWrite:
         assert (mmap.reshape(-1) == torch.arange(6)).all()
 
     @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
+    @pytest.mark.skipif(os.getuid() == 0, reason="root can write to read-only files")
     def test_read_only_nested(self, tmpdir):
         tmpdir = Path(tmpdir)
         file_path = tmpdir / "elt.mmap"
