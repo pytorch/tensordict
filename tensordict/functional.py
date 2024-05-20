@@ -155,12 +155,9 @@ def pad_sequence(
     update_batch_size = True
     max_seq_length = float("-inf")
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
-    tmp_list_of_tensordicts = []
     list_of_dicts = [{} for _ in range(len(list_of_tensordicts))]
+    keys_copy = list(keys)
     for i, td in enumerate(list_of_tensordicts):
-
-        if return_mask:
-            tmp_list_of_tensordicts.append(td.clone(False))
 
         for key in keys:
             item = td.get(key)
@@ -187,14 +184,11 @@ def pad_sequence(
                 update_batch_size = False
 
             if return_mask:
-                tmp_list_of_tensordicts[-1].set(
-                    (masks_key, key),
-                    torch.ones(mask_shape, dtype=torch.bool),
-                )
-    if return_mask:
-        list_of_tensordicts = tmp_list_of_tensordicts
+                mask_key = unravel_key((masks_key, key))
+                list_of_dicts[i][mask_key] = torch.ones(mask_shape, dtype=torch.bool)
+                keys_copy.append(mask_key)
 
-    keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
+    keys = keys_copy
 
     old_batch_size = list(list_of_tensordicts[0].batch_size)
     if update_batch_size and len(old_batch_size) > 0:
