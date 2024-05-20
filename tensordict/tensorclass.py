@@ -210,6 +210,8 @@ def _tensorclass(cls: T) -> T:
             )
 
     cls.fields = classmethod(lambda cls: dataclasses.fields(cls))
+
+    _get_type_hints(cls)
     cls.__init__ = _init_wrapper(cls.__init__)
     cls._from_tensordict = classmethod(_from_tensordict_wrapper(expected_keys))
     cls.from_tensordict = cls._from_tensordict
@@ -358,7 +360,6 @@ def _init_wrapper(init: Callable) -> Callable:
         names: List[str] | None = None,
         **kwargs,
     ):
-        _get_type_hints(type(self))
 
         for value, key in zip(args, self.__dataclass_fields__):
             if key in kwargs:
@@ -523,13 +524,16 @@ def _from_tensordict_wrapper(expected_keys):
         # Validating non-tensor keys and for key clash
         tensor_keys = set(tensordict.keys())
         if non_tensordict is not None:
-            for key in non_tensordict.keys():
+            for key in list(non_tensordict.keys()):
                 if key not in expected_keys:
                     raise ValueError(
                         f"Keys from the non-tensor data ({set(non_tensordict.keys())}) must "
                         f"correspond to the class attributes ({expected_keys})."
                     )
                 if key in tensor_keys:
+                    if non_tensordict[key] is None:
+                        del non_tensordict[key]
+                        continue
                     raise KeyError(
                         f"{key} is present in both tensor and non-tensor dicts"
                     )

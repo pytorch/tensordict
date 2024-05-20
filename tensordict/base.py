@@ -6016,8 +6016,6 @@ class TensorDictBase(MutableMapping):
         try:
             return torch.as_tensor(array, device=self.device)
         except Exception:
-            if hasattr(array, "shape"):
-                return torch.full(array.shape, float("NaN"))
             from tensordict.tensorclass import NonTensorData
 
             return NonTensorData(
