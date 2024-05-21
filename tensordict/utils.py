@@ -49,7 +49,7 @@ except ImportError:
 from packaging.version import parse
 from tensordict._contextlib import _DecoratorContextManager
 from tensordict._tensordict import (  # noqa: F401
-    _unravel_key_to_tuple,
+    # _unravel_key_to_tuple,
     unravel_key,
     unravel_key_list,
     unravel_keys,
@@ -1129,32 +1129,32 @@ class _StringKeys(KeysView):
                 item = unravel_item[0]
         return super().__contains__(item)
 
-
-class _StringOnlyDict(dict):
-    """A dict class where contains is restricted to strings."""
-
-    # kept here for debugging
-    # def __setitem__(self, key, value):
-    #     if not isinstance(key, str):
-    #         raise RuntimeError
-    #     return super().__setitem__(key, value)
-
-    def __contains__(self, item):
-        if not isinstance(item, str):
-            try:
-                unravel_item = _unravel_key_to_tuple(item)
-                if not unravel_item:  # catch errors during unravel
-                    raise TypeError
-            except Exception:
-                raise TypeError(_NON_STR_KEY_ERR)
-            if len(unravel_item) > 1:
-                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
-            else:
-                item = unravel_item[0]
-        return super().__contains__(item)
-
-    def keys(self):
-        return _StringKeys(self)
+_StringOnlyDict = dict
+# class _StringOnlyDict(dict):
+#     """A dict class where contains is restricted to strings."""
+#
+#     # kept here for debugging
+#     # def __setitem__(self, key, value):
+#     #     if not isinstance(key, str):
+#     #         raise RuntimeError
+#     #     return super().__setitem__(key, value)
+#
+#     def __contains__(self, item):
+#         if not isinstance(item, str):
+#             try:
+#                 unravel_item = _unravel_key_to_tuple(item)
+#                 if not unravel_item:  # catch errors during unravel
+#                     raise TypeError
+#             except Exception:
+#                 raise TypeError(_NON_STR_KEY_ERR)
+#             if len(unravel_item) > 1:
+#                 raise TypeError(_NON_STR_KEY_TUPLE_ERR)
+#             else:
+#                 item = unravel_item[0]
+#         return super().__contains__(item)
+#
+#     def keys(self):
+#         return _StringKeys(self)
 
 
 def lock_blocked(func):
@@ -2248,3 +2248,10 @@ class KeyDependentDefaultDict(collections.defaultdict):
         value = self.fun(key)
         self[key] = value
         return value
+
+def _unravel_key_to_tuple(key):
+    if isinstance(key, str):
+        return (key,)
+    if not isinstance(key, tuple):
+        return ()
+    return tuple(subk for k in key for subk in _unravel_key_to_tuple(k))

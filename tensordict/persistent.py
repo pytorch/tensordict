@@ -27,7 +27,7 @@ from tensordict._td import (
     NO_DEFAULT,
     TensorDict,
 )
-from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
+from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase, _is_leaf_nontensor
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _CloudpickleWrapper,

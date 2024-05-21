@@ -416,7 +416,7 @@ class TensorDictSequential(TensorDictModule):
         return tensordict
 
     @dispatch(auto_batch_size=False)
-    @set_skip_existing(None)
+    # @set_skip_existing(None)
     def forward(
         self,
         tensordict: TensorDictBase,
