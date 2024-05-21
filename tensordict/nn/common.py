@@ -501,6 +501,11 @@ class TensorDictModuleBase(nn.Module):
         out = super().__new__(cls)
         return out
 
+    @staticmethod
+    def is_tdmodule_compatible(module):
+        """Checks if a module is compatible with TensorDictModule API."""
+        return hasattr(module, "in_keys") and hasattr(module, "out_keys")
+
     @property
     def in_keys(self):
         return self._in_keys
@@ -1242,17 +1247,17 @@ class TensorDictModule(TensorDictModuleBase):
 
         return f"{self.__class__.__name__}(\n{fields})"
 
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return super().__getattr__(name)
-        except AttributeError as err1:
-            if not name.startswith("_"):
-                # no fallback for private attributes
-                try:
-                    return getattr(super().__getattr__("module"), name)
-                except Exception as err2:
-                    raise err2 from err1
-            raise
+    # def __getattr__(self, name: str) -> Any:
+    #     try:
+    #         return super().__getattr__(name)
+    #     except AttributeError as err1:
+    #         if not name.startswith("_"):
+    #             # no fallback for private attributes
+    #             try:
+    #                 return getattr(super().__getattr__("module"), name)
+    #             except Exception as err2:
+    #                 raise err2 from err1
+    #         raise
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -1285,16 +1290,28 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
             for pre_hook in self.td_module._forward_hooks:
                 self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
 
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            if name not in self.__dict__ and not name.startswith("__"):
-                return getattr(self._modules["td_module"], name)
-            else:
-                raise AttributeError(
-                    f"attribute {name} not recognised in {type(self).__name__}"
-                )
+    # def __getattr__(self, name: str) -> Any:
+    #     try:
+    #         return super().__getattr__(name)
+    #     except AttributeError:
+    #         if name not in self.__dict__ and not name.startswith("__"):
+    #             return getattr(self._modules["td_module"], name)
+    #         else:
+    #             raise AttributeError(
+    #                 f"attribute {name} not recognised in {type(self).__name__}"
+    #             )
 
     def forward(self, *args: Any, **kwargs: Any) -> TensorDictBase:
         return self.td_module.forward(*args, **kwargs)
+
+
+class WrapModule(TensorDictModuleBase):
+    in_keys = []
+    out_keys = []
+
+    def __init__(self, func):
+        self.func = func
+        super().__init__()
+
+    def forward(self, data):
+        return self.func(data)

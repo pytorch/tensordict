@@ -90,7 +90,7 @@ class _NoDefault:
         return False
 
 
-NO_DEFAULT = _NoDefault()
+NO_DEFAULT = "-TO_REPLACE-"  # _NoDefault()
 
 
 class _NestedTensorsAsLists:

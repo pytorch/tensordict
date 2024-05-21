@@ -1129,6 +1129,7 @@ class _StringKeys(KeysView):
                 item = unravel_item[0]
         return super().__contains__(item)
 
+
 _StringOnlyDict = dict
 # class _StringOnlyDict(dict):
 #     """A dict class where contains is restricted to strings."""
@@ -2248,6 +2249,7 @@ class KeyDependentDefaultDict(collections.defaultdict):
         value = self.fun(key)
         self[key] = value
         return value
+
 
 def _unravel_key_to_tuple(key):
     if isinstance(key, str):

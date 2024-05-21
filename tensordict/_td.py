@@ -2644,7 +2644,7 @@ class TensorDict(TensorDictBase):
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
-            names=copy(self._td_dim_names),
+            names=[name for name in self._td_dim_names] if self._has_names() else None,
             _run_checks=False,
         )
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
@@ -3784,18 +3784,33 @@ class _TensorDictKeysView:
             is_leaf = _default_is_leaf
         self.is_leaf = is_leaf
 
+    #     self.items = []
+    #     self._iter()
+    #
+    # def __getitem__(self, i):
+    #     return self.items[i]
+
     def __iter__(self) -> Iterable[str] | Iterable[tuple[str, ...]]:
+        #     yield from self.items
+        #
+        # def _iter(self):
         if not self.include_nested:
             if self.leaves_only:
                 for key in self._keys():
                     target_class = self.tensordict.entry_class(key)
                     if _is_tensor_collection(target_class):
                         continue
+                    # self.items.append(key)
                     yield key
             else:
                 yield from self._keys()
+                # self.items += self._keys()
         else:
             yield from (
+                #     key if len(key) > 1 else key[0]
+                #     for key in self._iter_helper(self.tensordict)
+                # )
+                # self.items += (
                 key if len(key) > 1 else key[0]
                 for key in self._iter_helper(self.tensordict)
             )
