@@ -27,7 +27,13 @@ from tensordict._td import (
     NO_DEFAULT,
     TensorDict,
 )
-from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
+from tensordict.base import (
+    _default_is_leaf,
+    _is_leaf_nontensor,
+    is_tensor_collection,
+    T,
+    TensorDictBase,
+)
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _CloudpickleWrapper,
@@ -455,7 +461,7 @@ class PersistentTensorDict(TensorDictBase):
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> _PersistentTDKeysView:
-        if is_leaf not in (None, _default_is_leaf):
+        if is_leaf not in (None, _default_is_leaf, _is_leaf_nontensor):
             raise ValueError(
                 f"is_leaf {is_leaf} is not supported within tensordicts of type {type(self)}."
             )
@@ -463,6 +469,7 @@ class PersistentTensorDict(TensorDictBase):
             tensordict=self,
             include_nested=include_nested,
             leaves_only=leaves_only,
+            is_leaf=_is_leaf_nontensor,
         )
 
     def _items_metadata(self, include_nested=False, leaves_only=False):
