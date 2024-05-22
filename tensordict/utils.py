@@ -40,6 +40,7 @@ from typing import (
 import numpy as np
 import torch
 
+
 try:
     from functorch import dim as ftdim
 
@@ -1524,15 +1525,23 @@ def _check_keys(
     include_nested: bool = False,
     leaves_only: bool = False,
 ) -> set[str]:
+    from tensordict.base import _is_leaf_nontensor
+
     if not len(list_of_tensordicts):
         return set()
     keys: set[str] = set(
         list_of_tensordicts[0].keys(
-            include_nested=include_nested, leaves_only=leaves_only
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=_is_leaf_nontensor,
         )
     )
     for td in list_of_tensordicts[1:]:
-        k = td.keys(include_nested=include_nested, leaves_only=leaves_only)
+        k = td.keys(
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=_is_leaf_nontensor,
+        )
         if not strict:
             keys = keys.intersection(k)
         else:
