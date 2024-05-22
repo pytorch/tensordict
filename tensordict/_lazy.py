@@ -33,7 +33,7 @@ except ImportError:
 
     _has_funcdim = False
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
+from tensordict._tensordict import unravel_key_list
 from tensordict.base import (
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
@@ -54,6 +54,7 @@ from tensordict.utils import (
     _renamed_inplace_method,
     _shape,
     _td_fields,
+    _unravel_key_to_tuple,
     as_decorator,
     cache,
     convert_ellipsis_to_idx,

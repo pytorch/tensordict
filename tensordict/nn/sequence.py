@@ -18,7 +18,6 @@ from tensordict.nn.common import (
     WrapModule,
 )
 
-from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import nn

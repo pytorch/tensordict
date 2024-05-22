@@ -27,7 +27,6 @@ from tensordict.nn.functional_modules import (
 from tensordict.nn.utils import (
     _auto_make_functional,
     _dispatch_td_nn_modules,
-    set_skip_existing,
 )
 from tensordict.utils import implement_for, NestedKey
 from torch import nn, Tensor
