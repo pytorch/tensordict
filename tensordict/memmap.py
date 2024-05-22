@@ -266,7 +266,7 @@ class MemoryMappedTensor(torch.Tensor):
                 result = result.view(shape)
             result = cls(result)
         result._handler = handler
-        result._filename = filename
+        result.filename = filename
         result.index = None
         result.parent_shape = shape
         if copy_data:
@@ -321,7 +321,7 @@ class MemoryMappedTensor(torch.Tensor):
 
         tensor = cls(tensor)
         if filename is not None:
-            tensor._filename = filename
+            tensor.filename = filename
         elif handler is not None:
             tensor._handler = handler
         if index is not None:
@@ -338,6 +338,17 @@ class MemoryMappedTensor(torch.Tensor):
         if filename is None:
             raise RuntimeError("The MemoryMappedTensor has no file associated.")
         return filename
+
+    @filename.setter
+    def filename(self, value):
+        if value is None and self._filename is None:
+            return
+        value = str(Path(value).absolute())
+        if self._filename is not None and value != self._filename:
+            raise RuntimeError(
+                "the MemoryMappedTensor has already a filename associated."
+            )
+        self._filename = value
 
     @classmethod
     def empty_like(cls, input, *, filename=None):
@@ -596,7 +607,7 @@ class MemoryMappedTensor(torch.Tensor):
                     *offsets_strides,
                 )
                 result = cls(result)
-                result._filename = filename
+                result.filename = filename
                 return result
             return result
 
@@ -712,6 +723,8 @@ class MemoryMappedTensor(torch.Tensor):
                 tensor.
 
         """
+        writable = _is_writable(filename)
+
         if isinstance(shape, torch.Tensor):
             func_offset_stride = getattr(
                 torch, "_nested_compute_contiguous_strides_offsets", None
@@ -724,9 +737,18 @@ class MemoryMappedTensor(torch.Tensor):
                     "nested tensors. Please upgrade to a more recent "
                     "version."
                 )
-            tensor = torch.from_file(
-                str(filename), shared=True, dtype=dtype, size=shape.prod(-1).sum().int()
-            )
+            if writable:
+                tensor = torch.from_file(
+                    str(filename),
+                    shared=True,
+                    dtype=dtype,
+                    size=shape.prod(-1).sum().int(),
+                )
+            else:
+                with open(str(filename), "rb") as f:
+                    mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                    tensor = torch.frombuffer(mm, dtype=dtype)
+                    # mm.close()
             tensor = torch._nested_view_from_buffer(
                 tensor,
                 shape,
@@ -734,14 +756,21 @@ class MemoryMappedTensor(torch.Tensor):
             )
         else:
             shape = torch.Size(shape)
-            tensor = torch.from_file(
-                str(filename), shared=True, dtype=dtype, size=shape.numel()
-            ).view(shape)
+            # whether the file already existed
+            if writable:
+                tensor = torch.from_file(
+                    str(filename), shared=True, dtype=dtype, size=shape.numel()
+                )
+            else:
+                with open(str(filename), "rb") as f:
+                    mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                    tensor = torch.frombuffer(mm, dtype=dtype)
+            tensor = tensor.view(shape)
 
         if index is not None:
             tensor = tensor[index]
         out = cls(tensor)
-        out._filename = filename
+        out.filename = filename
         out._handler = None
         out.index = index
         out.parent_shape = shape
@@ -787,7 +816,7 @@ class MemoryMappedTensor(torch.Tensor):
         if index is not None:
             out = out[index]
         out = cls(out)
-        out._filename = None
+        out.filename = None
         out._handler = handler
         out.index = index
         out.parent_shape = shape
@@ -880,7 +909,7 @@ class MemoryMappedTensor(torch.Tensor):
             return tensor
         tensor = MemoryMappedTensor(tensor)
         tensor._handler = getattr(self, "_handler", None)
-        tensor._filename = getattr(self, "_filename", None)
+        tensor.filename = getattr(self, "_filename", None)
         tensor.index = item
         tensor.parent_shape = getattr(self, "parent_shape", None)
         return tensor
@@ -1038,3 +1067,11 @@ def _unbind(tensor, dim):
 @implements_for_memmap(torch.chunk)
 def _chunk(input, chunks, dim=0):
     return input.chunk(chunks, dim=dim)
+
+
+def _is_writable(file_path):
+    file_path = str(file_path)
+    if os.path.exists(file_path):
+        return os.access(file_path, os.W_OK)
+    # Assume that the file can be written in the directory
+    return True

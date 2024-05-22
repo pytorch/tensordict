@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import gc
+import os
+import stat
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -12,7 +14,7 @@ import torch
 from _utils_internal import get_available_devices
 from tensordict import TensorDict
 
-from tensordict.memmap import MemoryMappedTensor
+from tensordict.memmap import _is_writable, MemoryMappedTensor
 from torch import multiprocessing as mp
 
 TIMEOUT = 100
@@ -157,7 +159,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 0).all()
 
     @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
@@ -191,7 +193,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 1).all()
 
     @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
@@ -225,7 +227,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
 
     @pytest.mark.parametrize("shape_arg", ["expand", "arg", "kwarg"])
     def test_full(self, shape, dtype, device, tmp_path, from_path, shape_arg):
@@ -258,7 +260,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 2).all()
 
     def test_zeros_like(self, shape, dtype, device, tmp_path, from_path):
@@ -272,7 +274,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 0).all()
 
     def test_ones_like(self, shape, dtype, device, tmp_path, from_path):
@@ -286,7 +288,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 1).all()
 
     def test_full_like(self, shape, dtype, device, tmp_path, from_path):
@@ -300,7 +302,7 @@ class TestConstructors:
         if dtype is not None:
             assert t.dtype is dtype
         if filename is not None:
-            assert t.filename == filename
+            assert t.filename == str(Path(filename).absolute())
         assert (t == 2).all()
 
     def test_from_filename(self, shape, dtype, device, tmp_path, from_path):
@@ -713,6 +715,82 @@ class TestNestedTensor:
         for i in range(2):
             for j in range(3):
                 assert (td[i, j] == tdsave[i, j]).all()
+
+
+class TestReadWrite:
+    @pytest.mark.skipif(os.getuid() == 0, reason="root can write to read-only files")
+    def test_read_only(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        file_path = tmpdir / "elt.mmap"
+        mmap = MemoryMappedTensor.from_filename(
+            filename=file_path, shape=[2, 3], dtype=torch.float64
+        )
+        mmap.copy_(torch.arange(6).view(2, 3))
+
+        file_path = str(file_path.absolute())
+
+        assert _is_writable(file_path)
+        # Modify the permissions field to set the desired permissions
+        new_permissions = stat.S_IREAD  # | stat.S_IWRITE | stat.S_IEXEC
+
+        # change permission
+        os.chmod(file_path, new_permissions)
+
+        # Get the current file status
+        assert not _is_writable(file_path)
+
+        del mmap
+
+        # load file
+        mmap = MemoryMappedTensor.from_filename(
+            filename=file_path, shape=[2, 3], dtype=torch.float64
+        )
+        assert (mmap.reshape(-1) == torch.arange(6)).all()
+
+    @pytest.mark.skipif(not HAS_NESTED_TENSOR, reason="Nested tensor incomplete")
+    @pytest.mark.skipif(os.getuid() == 0, reason="root can write to read-only files")
+    def test_read_only_nested(self, tmpdir):
+        tmpdir = Path(tmpdir)
+        file_path = tmpdir / "elt.mmap"
+        data = MemoryMappedTensor.from_tensor(torch.arange(26), filename=file_path)
+        mmap = MemoryMappedTensor.from_storage(
+            data.untyped_storage(),
+            filename=file_path,
+            shape=torch.tensor([[2, 3], [4, 5]]),
+            dtype=data.dtype,
+        )
+
+        file_path = str(file_path.absolute())
+        assert _is_writable(file_path)
+
+        # Modify the permissions field to set the desired permissions
+        new_permissions = stat.S_IREAD  # | stat.S_IWRITE | stat.S_IEXEC
+
+        # change permission
+        os.chmod(file_path, new_permissions)
+
+        # Get the current file status
+        assert not _is_writable(file_path)
+
+        # load file
+        mmap1 = MemoryMappedTensor.from_filename(
+            filename=file_path, shape=torch.tensor([[2, 3], [4, 5]]), dtype=data.dtype
+        )
+        assert (mmap1[0].view(-1) == torch.arange(6)).all()
+        assert (mmap1[1].view(-1) == torch.arange(6, 26)).all()
+        # test filename
+        assert mmap1.filename == mmap.filename
+        assert mmap1.filename == data.filename
+        assert mmap1.filename == data.untyped_storage().filename
+        with pytest.raises(AssertionError):
+            assert mmap1.untyped_storage().filename == data.untyped_storage().filename
+
+        os.chmod(str(file_path), 0o444)
+        data.fill_(0)
+        os.chmod(str(file_path), 0o444)
+
+        assert (mmap1[0].view(-1) == 0).all()
+        assert (mmap1[1].view(-1) == 0).all()
 
 
 if __name__ == "__main__":
