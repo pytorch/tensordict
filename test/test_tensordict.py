@@ -1293,6 +1293,13 @@ class TestGeneric:
         assert torch.equal(padded_td["a"], expected_a)
         padded_td._check_batch_size()
 
+    def test_pad_sequence_nontensor(self):
+        d1 = TensorDict({"a": torch.tensor([1, 1]), "b": "asd"})
+        d2 = TensorDict({"a": torch.tensor([2]), "b": "efg"})
+        d = pad_sequence([d1, d2])
+        assert (d["a"] == torch.tensor([[1, 1], [2, 0]])).all()
+        assert d["b"] == ["asd", "efg"]
+
     @pytest.mark.parametrize("make_mask", [True, ("bibbidi", "bobbidi", "boo"), False])
     def test_pad_sequence_pad_dim0(self, make_mask):
         pad_dim = 0

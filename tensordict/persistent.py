@@ -27,7 +27,13 @@ from tensordict._td import (
     NO_DEFAULT,
     TensorDict,
 )
-from tensordict.base import _default_is_leaf, is_tensor_collection, T, TensorDictBase
+from tensordict.base import (
+    _default_is_leaf,
+    _is_leaf_nontensor,
+    is_tensor_collection,
+    T,
+    TensorDictBase,
+)
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _CloudpickleWrapper,
@@ -43,6 +49,7 @@ from tensordict.utils import (
     lock_blocked,
     NestedKey,
     NUMPY_TO_TORCH_DTYPE_DICT,
+    unravel_key,
 )
 from torch import multiprocessing as mp
 
@@ -67,32 +74,32 @@ class _Visitor:
 
 class _PersistentTDKeysView(_TensorDictKeysView):
     def __iter__(self):
+        # For consistency with tensordict where currently a non-tensor is stored in a
+        # tensorclass and hence can be seen as a nested tensordict
+        # that situation should be clarified
+        read_non_tensor = self.is_leaf is _is_leaf_nontensor or not self.leaves_only
         if self.include_nested:
-            visitor = _Visitor(lambda key: tuple(key.split("/")))
+            visitor = _Visitor(lambda key: unravel_key(tuple(key.split("/"))))
             self.tensordict.file.visit(visitor)
-            if self.leaves_only:
-                for key in visitor:
-                    metadata = self.tensordict._get_metadata(key)
-                    if metadata.get("array", False) or metadata.get(
-                        "non_tensor", False
-                    ):
-                        yield key
-            else:
-                yield from visitor
         else:
-            yield from self.tensordict._valid_keys()
+            visitor = self.tensordict.file.keys()
+        for key in visitor:
+            metadata = self.tensordict._get_metadata(key)
+            if metadata.get("non_tensor"):
+                if read_non_tensor:
+                    yield key
+                else:
+                    continue
+            elif metadata.get("array"):
+                yield key
+            elif not self.leaves_only and (
+                not isinstance(key, tuple) or self.include_nested
+            ):
+                yield key
 
     def __contains__(self, key):
-        key = _unravel_key_to_tuple(key)
-        if len(key) == 1:
-            key = key[0]
-        for a_key in self:
-            if isinstance(a_key, tuple) and len(a_key) == 1:
-                a_key = a_key[0]
-            if key == a_key:
-                return True
-        else:
-            return False
+        key = unravel_key(key)
+        return key in list(self)
 
 
 class PersistentTensorDict(TensorDictBase):
@@ -444,7 +451,8 @@ class PersistentTensorDict(TensorDictBase):
     def _valid_keys(self):
         keys = []
         for key in self.file.keys():
-            if self._get_metadata(key):
+            metadata = self._get_metadata(key)
+            if not metadata.get("non_tensor"):
                 keys.append(key)
         return keys
 
@@ -455,7 +463,7 @@ class PersistentTensorDict(TensorDictBase):
         leaves_only: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> _PersistentTDKeysView:
-        if is_leaf not in (None, _default_is_leaf):
+        if is_leaf not in (None, _default_is_leaf, _is_leaf_nontensor):
             raise ValueError(
                 f"is_leaf {is_leaf} is not supported within tensordicts of type {type(self)}."
             )
@@ -463,6 +471,7 @@ class PersistentTensorDict(TensorDictBase):
             tensordict=self,
             include_nested=include_nested,
             leaves_only=leaves_only,
+            is_leaf=is_leaf,
         )
 
     def _items_metadata(self, include_nested=False, leaves_only=False):
@@ -1320,7 +1329,7 @@ def _set_max_batch_size(source: PersistentTensorDict):
     """Updates a tensordict with its maximium batch size."""
     tensor_data = list(source._items_metadata())
     for key, val in tensor_data:
-        if not val["array"]:
+        if not val.get("non_tensor") and not val.get("array"):
             _set_max_batch_size(source.get(key))
 
     batch_size = []

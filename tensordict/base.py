@@ -284,7 +284,7 @@ class TensorDictBase(MutableMapping):
                 raise RuntimeError(
                     "key must be a NestedKey (a str or a possibly tuple of str)."
                 )
-            return key in self.keys(True)
+            return key in self.keys(True, is_leaf=_is_leaf_nontensor)
         raise RuntimeError(
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
@@ -6016,8 +6016,6 @@ class TensorDictBase(MutableMapping):
         try:
             return torch.as_tensor(array, device=self.device)
         except Exception:
-            if hasattr(array, "shape"):
-                return torch.full(array.shape, float("NaN"))
             from tensordict.tensorclass import NonTensorData
 
             return NonTensorData(

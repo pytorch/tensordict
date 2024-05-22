@@ -20,7 +20,7 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.utils import _check_keys, _shape, DeviceType, unravel_key
+from tensordict.utils import _check_keys, _shape, DeviceType, is_non_tensor, unravel_key
 
 
 def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
@@ -155,14 +155,16 @@ def pad_sequence(
     update_batch_size = True
     max_seq_length = float("-inf")
     keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
-    tmp_list_of_tensordicts = []
-    for td in list_of_tensordicts:
-
-        if return_mask:
-            tmp_list_of_tensordicts.append(td.clone(False))
+    list_of_dicts = [{} for _ in range(len(list_of_tensordicts))]
+    keys_copy = list(keys)
+    for i, td in enumerate(list_of_tensordicts):
 
         for key in keys:
-            tensor_shape = td.get(key).shape
+            item = td.get(key)
+            list_of_dicts[i][key] = item
+            if is_non_tensor(item):
+                continue
+            tensor_shape = item.shape
 
             if len(tensor_shape) == 0:
                 raise RuntimeError("Cannot pad scalars")
@@ -182,14 +184,11 @@ def pad_sequence(
                 update_batch_size = False
 
             if return_mask:
-                tmp_list_of_tensordicts[-1].set(
-                    (masks_key, key),
-                    torch.ones(mask_shape, dtype=torch.bool),
-                )
-    if return_mask:
-        list_of_tensordicts = tmp_list_of_tensordicts
+                mask_key = unravel_key((masks_key, key))
+                list_of_dicts[i][mask_key] = torch.ones(mask_shape, dtype=torch.bool)
+                keys_copy.append(mask_key)
 
-    keys = _check_keys(list_of_tensordicts, leaves_only=True, include_nested=True)
+    keys = keys_copy
 
     old_batch_size = list(list_of_tensordicts[0].batch_size)
     if update_batch_size and len(old_batch_size) > 0:
@@ -203,7 +202,11 @@ def pad_sequence(
 
     for key in keys:
         try:
-            tensor_shape = list_of_tensordicts[0].get(key).shape
+            item0 = list_of_dicts[0][key]
+            if is_non_tensor(item0):
+                out.set(key, torch.stack([d[key] for d in list_of_dicts]))
+                continue
+            tensor_shape = item0.shape
             pos_pad_dim = (
                 (pad_dim if pad_dim >= 0 else len(tensor_shape) + pad_dim)
                 if len(tensor_shape) > 1
@@ -212,10 +215,7 @@ def pad_sequence(
             out.set(
                 key,
                 torch.nn.utils.rnn.pad_sequence(
-                    [
-                        td.get(key).transpose(0, pos_pad_dim)
-                        for td in list_of_tensordicts
-                    ],
+                    [d[key].transpose(0, pos_pad_dim) for d in list_of_dicts],
                     batch_first=True,
                     padding_value=padding_value,
                 ).transpose(1, pos_pad_dim + 1),
