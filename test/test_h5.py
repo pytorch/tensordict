@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 import torch
 from tensordict import NonTensorData, PersistentTensorDict
+from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
 
@@ -81,11 +82,12 @@ class TestH5Serialization:
         )
         td = td.expand(10)
         h5td = PersistentTensorDict.from_dict(td, filename=file)
+        assert "c" in h5td.keys(is_leaf=_is_leaf_nontensor)
         assert "c" in h5td.keys()
         assert "c" in h5td
         assert h5td["c"] == b"a string!"
         assert h5td.get("c").batch_size == (10,)
-        assert ("d", "e") in h5td.keys(True, True)
+        assert ("d", "e") in h5td.keys(True, True, is_leaf=_is_leaf_nontensor)
         assert ("d", "e") in h5td
         assert h5td["d", "e"] == b"another string!"
         assert h5td.get(("d", "e")).batch_size == (10,)

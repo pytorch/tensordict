@@ -284,7 +284,7 @@ class TensorDictBase(MutableMapping):
                 raise RuntimeError(
                     "key must be a NestedKey (a str or a possibly tuple of str)."
                 )
-            return key in self.keys(True)
+            return key in self.keys(True, is_leaf=_is_leaf_nontensor)
         raise RuntimeError(
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
