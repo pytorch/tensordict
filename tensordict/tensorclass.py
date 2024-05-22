@@ -269,6 +269,18 @@ def _tensorclass(cls: T) -> T:
     if not hasattr(cls, "update_at_"):
         cls.update_at_ = _update_at_
 
+    cls.__add__ = TensorDict.__add__
+    cls.__iadd__ = TensorDict.__iadd__
+    cls.__abs__ = TensorDict.__abs__
+    cls.__truediv__ = TensorDict.__truediv__
+    cls.__itruediv__ = TensorDict.__itruediv__
+    cls.__mul__ = TensorDict.__mul__
+    cls.__imul__ = TensorDict.__imul__
+    cls.__sub__ = TensorDict.__sub__
+    cls.__isub__ = TensorDict.__isub__
+    cls.__pow__ = TensorDict.__pow__
+    cls.__ipow__ = TensorDict.__ipow__
+
     cls.__enter__ = __enter__
     cls.__exit__ = __exit__
 

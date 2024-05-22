@@ -2203,6 +2203,22 @@ class TestVMAP:
         assert data_bis.non_tensor == "a string!"
 
 
+class TestPointWise:
+    def test_pointwise(self):
+        @tensorclass
+        class X:
+            a: torch.Tensor
+            b: str
+
+        x = X(torch.zeros(()), "a string")
+        assert (x + 1).b == "a string"
+        x += 1
+        assert x.a == 1
+        assert (x.add(1) == (x + 1)).all()
+        assert (x.mul(2) == (x * 2)).all()
+        assert (x.div(2) == (x / 2)).all()
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
