@@ -1431,6 +1431,43 @@ to very few use cases.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDict.from_namedtuple">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_namedtuple</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">named_tuple</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">auto_batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDict.from_namedtuple" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a namedtuple to a TensorDict recursively.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>auto_batch_size</strong> (<a class="reference internal" href="#tensordict.TensorDict.bool" title="tensordict.TensorDict.bool"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the batch size will be computed automatically.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s2">&quot;a_tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="s2">&quot;nested&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;a_tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">)),</span> <span class="s2">&quot;a_string&quot;</span><span class="p">:</span> <span class="s2">&quot;zero!&quot;</span><span class="p">}},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nt</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to_namedtuple</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">nt</span><span class="p">)</span>
+<span class="go">GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string=&#39;zero!&#39;))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">TensorDict</span><span class="o">.</span><span class="n">from_namedtuple</span><span class="p">(</span><span class="n">nt</span><span class="p">,</span> <span class="n">auto_batch_size</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">        nested: TensorDict(</span>
+<span class="go">            fields={</span>
+<span class="go">                a_string: NonTensorData(data=zero!, batch_size=torch.Size([3]), device=None),</span>
+<span class="go">                a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="go">            batch_size=torch.Size([3]),</span>
+<span class="go">            device=None,</span>
+<span class="go">            is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([3]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDict.fromkeys">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fromkeys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.12)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.12)"><span class="pre">Union</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.12)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.12)"><span class="pre">Any</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDict.fromkeys" title="Permalink to this definition">¶</a></dt>
 <dd><p>Creates a tensordict from a list of keys and a single value.</p>
@@ -2752,6 +2789,34 @@ have two elements, therefore we consider that a tensordict is at least
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDict.numpy">
+<span class="sig-name descname"><span class="pre">numpy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDict.numpy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a tensordict to a (possibly nested) dictionary of numpy arrays.</p>
+<p>Non-tensor data is exposed as such.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()),</span> <span class="s2">&quot;c&quot;</span><span class="p">:</span> <span class="s2">&quot;a string!&quot;</span><span class="p">}})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="go">TensorDict(</span>
+<span class="go">    fields={</span>
+<span class="go">        a: TensorDict(</span>
+<span class="go">            fields={</span>
+<span class="go">                b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="go">                c: NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)},</span>
+<span class="go">            batch_size=torch.Size([]),</span>
+<span class="go">            device=None,</span>
+<span class="go">            is_shared=False)},</span>
+<span class="go">    batch_size=torch.Size([]),</span>
+<span class="go">    device=None,</span>
+<span class="go">    is_shared=False)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
+<span class="go">{&#39;a&#39;: {&#39;b&#39;: array(0., dtype=float32), &#39;c&#39;: &#39;a string!&#39;}}</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDict.permute">
 <span class="sig-name descname"><span class="pre">permute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDict.permute" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a view of a tensordict with the batch dimensions permuted according to dims.</p>
@@ -3638,6 +3703,22 @@ to the host.</p></li>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">layers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">linear1</span><span class="o">.</span><span class="n">weight</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDict.to_namedtuple">
+<span class="sig-name descname"><span class="pre">to_namedtuple</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDict.to_namedtuple" title="Permalink to this definition">¶</a></dt>
+<dd><p>Converts a tensordict to a namedtuple.</p>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span>
+<span class="gp">... </span>    <span class="s2">&quot;a_tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="s2">&quot;nested&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;a_tensor&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">)),</span> <span class="s2">&quot;a_string&quot;</span><span class="p">:</span> <span class="s2">&quot;zero!&quot;</span><span class="p">}},</span> <span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="o">.</span><span class="n">to_namedtuple</span><span class="p">()</span>
+<span class="go">GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string=&#39;zero!&#39;))</span>
 </pre></div>
 </div>
 </dd></dl>
