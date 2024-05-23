@@ -20,6 +20,7 @@ from tensordict.nn.common import (
 
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import NestedKey
+from tensordict.nn.utils import _set_skip_existing_None
 from torch import nn
 
 _has_functorch = False
@@ -430,7 +431,7 @@ class TensorDictSequential(TensorDictModule):
         return tensordict
 
     @dispatch(auto_batch_size=False)
-    # @set_skip_existing(None)
+    @_set_skip_existing_None()
     def forward(
         self,
         tensordict: TensorDictBase,
