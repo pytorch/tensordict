@@ -5208,6 +5208,16 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td_dict["data"]["non_tensor"] == "some text data"
         assert (TensorDict.from_dict(td_dict) == td).all()
 
+    def test_to_namedtuple(self, td_name, device):
+        def is_namedtuple(obj):
+            """Check if obj is a namedtuple."""
+            return isinstance(obj, tuple) and hasattr(obj, "_fields")
+
+        td = getattr(self, td_name)(device)
+        td_namedtuple = td.to_namedtuple()
+        assert is_namedtuple(td_namedtuple)
+        assert_allclose_td(TensorDict.from_namedtuple(td_namedtuple), td)
+
     def test_to_tensordict(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
