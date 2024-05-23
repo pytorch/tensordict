@@ -1939,7 +1939,7 @@ class AutoCastTensor:
     integer: int
     string: str
     floating: float
-    numpy_array_array: np.ndarray
+    numpy_array: np.ndarray
     anything: Any
 
 
