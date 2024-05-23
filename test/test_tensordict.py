@@ -4101,6 +4101,16 @@ class TestTensorDicts(TestTensorDictsBase):
             lambda x: check(x, val="succeed"), loaded.get_non_tensor(("this", "will"))
         )
 
+    def test_numpy(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_numpy = td.data.numpy()
+
+        def assert_leaves(leaf):
+            assert not isinstance(leaf, torch.Tensor)
+
+        torch.utils._pytree.tree_map(assert_leaves, td_numpy)
+        assert_allclose_td(TensorDict(td_numpy), td)
+
     def test_pad(self, td_name, device):
         td = getattr(self, td_name)(device)
         paddings = [
