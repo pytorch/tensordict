@@ -6504,6 +6504,117 @@ class TensorDictBase(MutableMapping):
             for key, value in self.items()
         }
 
+    def numpy(self):
+        """Converts a tensordict to a (possibly nested) dictionary of numpy arrays.
+
+        Non-tensor data is exposed as such.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> data = TensorDict({"a": {"b": torch.zeros(()), "c": "a string!"}})
+            >>> print(data)
+            TensorDict(
+                fields={
+                    a: TensorDict(
+                        fields={
+                            b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            c: NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> print(data.numpy())
+            {'a': {'b': array(0., dtype=float32), 'c': 'a string!'}}
+
+        """
+        as_dict = self.to_dict()
+
+        def to_numpy(x):
+            if hasattr(x, "numpy"):
+                return x.numpy()
+            return x
+
+        return torch.utils._pytree.tree_map(to_numpy, as_dict)
+
+    def to_namedtuple(self):
+        """Converts a tensordict to a namedtuple.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> data = TensorDict({
+            ...     "a_tensor": torch.zeros((3)),
+            ...     "nested": {"a_tensor": torch.zeros((3)), "a_string": "zero!"}}, [3])
+            >>> data.to_namedtuple()
+            GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
+
+        """
+
+        def dict_to_namedtuple(dictionary):
+            for key, value in dictionary.items():
+                if isinstance(value, dict):
+                    dictionary[key] = dict_to_namedtuple(value)
+            return collections.namedtuple("GenericDict", dictionary.keys())(
+                **dictionary
+            )
+
+        return dict_to_namedtuple(self.to_dict())
+
+    @classmethod
+    def from_namedtuple(cls, named_tuple, *, auto_batch_size: bool = False):
+        """Converts a namedtuple to a TensorDict recursively.
+
+        Keyword Args:
+            auto_batch_size (bool, optional): if ``True``, the batch size will be computed automatically.
+                Defaults to ``False``.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> data = TensorDict({
+            ...     "a_tensor": torch.zeros((3)),
+            ...     "nested": {"a_tensor": torch.zeros((3)), "a_string": "zero!"}}, [3])
+            >>> nt = data.to_namedtuple()
+            >>> print(nt)
+            GenericDict(a_tensor=tensor([0., 0., 0.]), nested=GenericDict(a_tensor=tensor([0., 0., 0.]), a_string='zero!'))
+            >>> TensorDict.from_namedtuple(nt, auto_batch_size=True)
+            TensorDict(
+                fields={
+                    a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    nested: TensorDict(
+                        fields={
+                            a_string: NonTensorData(data=zero!, batch_size=torch.Size([3]), device=None),
+                            a_tensor: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+
+        """
+        from tensordict import TensorDict
+
+        def is_namedtuple(obj):
+            """Check if obj is a namedtuple."""
+            return isinstance(obj, tuple) and hasattr(obj, "_fields")
+
+        def namedtuple_to_dict(namedtuple_obj):
+            if is_namedtuple(namedtuple_obj):
+                namedtuple_obj = namedtuple_obj._asdict()
+            for key, value in namedtuple_obj.items():
+                if is_namedtuple(value):
+                    namedtuple_obj[key] = namedtuple_to_dict(value)
+            return dict(namedtuple_obj)
+
+        result = TensorDict(namedtuple_to_dict(named_tuple))
+        if auto_batch_size:
+            result.auto_batch_size_()
+        return result
+
     def to_h5(
         self,
         filename,

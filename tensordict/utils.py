@@ -1429,6 +1429,9 @@ def assert_allclose_td(
         input1 = actual.get(key)
         input2 = expected.get(key)
         if _is_tensor_collection(input1.__class__):
+            if is_non_tensor(input1):
+                # We skip non-tensor data
+                continue
             assert_allclose_td(input1, input2, rtol=rtol, atol=atol)
             continue
 
