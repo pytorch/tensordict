@@ -1270,6 +1270,27 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return out
 
+    def densify(self):
+        """Attempts to represent the lazy stack with contiguous tensors (plain tensors or nested)."""
+        out = TensorDict(batch_size=self.batch_size, device=self.device, names=self.names)
+        for key in self._iterate_over_keys():
+            list_of_entries = [td._get_str(key, default=None) for td in self.tensordicts]
+            is_tensor = all(isinstance(item, torch.Tensor) or item is None for item in list_of_entries)
+            if is_tensor:
+                shapes = [tensor.shape for tensor in list_of_entries if tensor is not None]
+                if len(set(shapes)) == 1:
+                    # TODO: account for None here
+                    tensor = torch.stack(list_of_entries, self.stack_dim)
+                else:
+                    if self.stack_dim == 0:
+                        tensor = torch.nested.nested_tensor(list_of_entries)
+                    else:
+                        raise NotImplementedError
+            else:
+                tensor = self._get_str(key).densify()
+            out._set_str(key, tensor, validated=True, inplace=False)
+        return out
+
     def empty(self, recurse=False) -> T:
         return type(self)(
             *[td.empty(recurse=recurse) for td in self.tensordicts],
