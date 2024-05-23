@@ -6504,6 +6504,16 @@ class TensorDictBase(MutableMapping):
             for key, value in self.items()
         }
 
+    def numpy(self):
+        as_dict = self.to_dict()
+
+        def to_numpy(x):
+            if hasattr(x, "numpy"):
+                return x.numpy()
+            return x
+
+        return torch.utils._pytree.tree_map(to_numpy, as_dict)
+
     def to_h5(
         self,
         filename,
