@@ -6505,6 +6505,31 @@ class TensorDictBase(MutableMapping):
         }
 
     def numpy(self):
+        """Converts a tensordict to a (possibly nested) dictionary of numpy arrays.
+
+        Non-tensor data is exposed as such.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> data = TensorDict({"a": {"b": torch.zeros(()), "c": "a string!"}})
+            >>> print(data)
+            TensorDict(
+                fields={
+                    a: TensorDict(
+                        fields={
+                            b: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
+                            c: NonTensorData(data=a string!, batch_size=torch.Size([]), device=None)},
+                        batch_size=torch.Size([]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([]),
+                device=None,
+                is_shared=False)
+            >>> print(data.numpy())
+            {'a': {'b': array(0., dtype=float32), 'c': 'a string!'}}
+
+        """
         as_dict = self.to_dict()
 
         def to_numpy(x):
