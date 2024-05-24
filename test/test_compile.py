@@ -7,7 +7,7 @@ import argparse
 import pytest
 
 import torch
-from tensordict import assert_close, nn, TensorDict
+from tensordict import assert_close, TensorDict
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
 
@@ -186,19 +186,25 @@ class TestFunc:
         td_zero.zero_()
 
         def call(x, td):
-            # with needs registering
+            # TOFIX: `with` needs registering
+            # with td.to_module(module):
+            #     return module(x)
+
             params = td.to_module(module, return_swap=True)
             result = module(x)
             params.to_module(module, return_swap=True, swap_dest=td)
             return result
 
-        call_compile = torch.compile(call, fullgraph=True)
+        call_compile = torch.compile(call, fullgraph=True)  # , backend="eager")
         x = torch.randn(2, 3)
+        assert (call(x, td_zero) == 0).all()
         assert (call(x, td_zero) == 0).all()
         if modif_param:
             assert td_zero["3", "param"] == 1
         else:
             assert (td_zero == 0).all()
+        # torch.testing.assert_close(call_compile(x, td_zero), module(x))
+        assert (call_compile(x, td_zero) == 0).all()
         assert (call_compile(x, td_zero) == 0).all()
         if modif_param:
             assert td_zero["3", "param"] == 2

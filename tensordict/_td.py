@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import numbers
 import os
+import weakref
 from collections import defaultdict
 from copy import copy
 from numbers import Number
@@ -383,7 +384,8 @@ class TensorDict(TensorDictBase):
         hooks = memo["hooks"]
         if return_swap:
             _swap = {}
-            memo[id(module)] = _swap
+            if not torch._dynamo.is_dynamo_compiling():
+                memo[weakref.ref(module)] = _swap
 
         if use_state_dict:
             if inplace is not None:
@@ -425,7 +427,10 @@ class TensorDict(TensorDictBase):
 
         for key, value in input.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
-                if module.__class__.__setattr__ is __base__setattr__:
+                if (
+                    module.__class__.__setattr__ is __base__setattr__
+                    and not torch._dynamo.is_dynamo_compiling()
+                ):
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                     local_out = _set_tensor_dict(
                         __dict__, hooks, module, key, value, inplace
@@ -448,9 +453,10 @@ class TensorDict(TensorDictBase):
                     # Otherwise, we just go to the next key
                     continue
                 child = __dict__["_modules"][key]
-                local_out = memo.get(id(child), NO_DEFAULT)
+                if not torch._dynamo.is_dynamo_compiling():
+                    local_out = memo.get(weakref.ref(child), NO_DEFAULT)
 
-                if local_out is NO_DEFAULT:
+                if torch._dynamo.is_dynamo_compiling() or local_out is NO_DEFAULT:
                     # if isinstance(child, TensorDictBase):
                     #     # then child is a TensorDictParams
                     #     from tensordict.nn import TensorDictParams
@@ -3929,7 +3935,7 @@ class _TensorDictKeysView:
 
 
 def _set_tensor_dict(  # noqa: F811
-    module_dict,
+    __dict__,
     hooks,
     module: torch.nn.Module,
     name: str,
@@ -3938,12 +3944,12 @@ def _set_tensor_dict(  # noqa: F811
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     was_buffer = False
-    out = module_dict["_parameters"].pop(name, None)  # type: ignore[assignment]
+    out = __dict__["_parameters"].pop(name, None)  # type: ignore[assignment]
     if out is None:
-        out = module_dict["_buffers"].pop(name, None)
+        out = __dict__["_buffers"].pop(name, None)
         was_buffer = out is not None
     if out is None:
-        out = module_dict.pop(name)
+        out = __dict__.pop(name)
     if inplace:
         # swap tensor and out after updating out
         out_tmp = out.clone()
@@ -3956,7 +3962,7 @@ def _set_tensor_dict(  # noqa: F811
             output = hook(module, name, tensor)
             if output is not None:
                 tensor = output
-        module_dict["_parameters"][name] = tensor
+        __dict__["_parameters"][name] = tensor
 
         if isinstance(
             tensor, (_BatchedUninitializedParameter, _BatchedUninitializedBuffer)
@@ -3966,9 +3972,9 @@ def _set_tensor_dict(  # noqa: F811
             )
 
     elif was_buffer and isinstance(tensor, torch.Tensor):
-        module_dict["_buffers"][name] = tensor
+        __dict__["_buffers"][name] = tensor
     else:
-        module_dict[name] = tensor
+        __dict__[name] = tensor
     return out
 
 
