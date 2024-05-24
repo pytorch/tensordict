@@ -44,13 +44,14 @@ from tensordict.base import (
 from tensordict.utils import (
     _get_repr,
     _is_json_serializable,
+    _is_non_tensor,
     _LOCK_ERROR,
     DeviceType,
     IndexType,
     is_non_tensor,
     is_tensorclass,
     KeyDependentDefaultDict,
-    NestedKey, _is_non_tensor,
+    NestedKey,
 )
 from torch import multiprocessing as mp, Tensor
 from torch.multiprocessing import Manager
@@ -161,14 +162,6 @@ class tensorclass:
     def __call__(self, cls):
         clz = _tensorclass(cls)
         clz.autocast = self.autocast
-        if self.autocast and clz._type_hints:
-            for field, th in list(clz._type_hints.items()):
-                print('field', field)
-                print('th', th)
-                print('cls', cls)
-                print('clz', clz)
-                if th == cls:
-                    clz._type_hints[field] = clz
         return clz
 
 
@@ -874,7 +867,6 @@ def _wrap_classmethod(td_cls, cls, func):
         return res
 
     return wrapped_func
-
 
 
 def _getitem(self, item: NestedKey) -> Any:
