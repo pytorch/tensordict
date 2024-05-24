@@ -210,6 +210,9 @@ def _tensorclass(cls: T) -> T:
             )
 
     cls.fields = classmethod(lambda cls: dataclasses.fields(cls))
+    for field in cls.fields():
+        if hasattr(cls, field.name):
+            delattr(cls, field.name)
 
     _get_type_hints(cls)
     cls.__init__ = _init_wrapper(cls.__init__)
@@ -219,9 +222,10 @@ def _tensorclass(cls: T) -> T:
         cls.__torch_function__ = classmethod(__torch_function__)
     cls.__getstate__ = _getstate
     cls.__setstate__ = _setstate
-    cls.__getattribute__ = _getattribute_wrapper(cls.__getattribute__)
-    cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
+    # cls.__getattribute__ = object.__getattribute__
     cls.__getattr__ = _getattr
+    cls.__setattr__ = _setattr_wrapper(cls.__setattr__, expected_keys)
+    # cls.__getattr__ = _getattr
     cls.__getitem__ = _getitem
     cls.__getitems__ = _getitem
     cls.__setitem__ = _setitem
@@ -669,41 +673,32 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
     self._non_tensordict = state.get("non_tensordict", None)
 
 
-def _getattribute_wrapper(getattribute: Callable) -> Callable:
-    """Retrieve the value of an object's attribute or raise AttributeError.
-
-    Args:
-        item (str) : name of the attribute to retrieve
-
-    Returns:
-        value of the attribute
-
-    """
-
-    @functools.wraps(getattribute)
-    def wrapper(self, item: str) -> Any:
-        if not item.startswith("__"):
-            if (
-                "_tensordict" in self.__dict__
-                and item in self.__dict__["_tensordict"].keys()
-            ):
-                out = self._tensordict.get(item)
+def _getattr(self, item: str) -> Any:
+    # if not item.startswith("__"):
+    __dict__ = self.__dict__
+    _tensordict = __dict__.get("_tensordict")
+    if _tensordict is not None:
+        out = _tensordict._get_str(item, default=None)
+        if out is not None:
+            return out
+        out = getattr(_tensordict, item, NO_DEFAULT)
+        if out is not NO_DEFAULT:
+            if not callable(out):
                 return out
-            elif (
-                "_non_tensordict" in self.__dict__
-                and item in self.__dict__["_non_tensordict"]
-            ):
-                out = self._non_tensordict[item]
-                if (
-                    isinstance(self, NonTensorData)
-                    and item == "data"
-                    and (self._is_shared or self._is_memmap)
-                ):
-                    return _from_shared_nontensor(out)
-                return out
-        return getattribute(self, item)
-
-    return wrapper
+            return _wrap_method(self, item, out)
+    _non_tensordict = __dict__.get("_non_tensordict")
+    if _non_tensordict is not None:
+        out = _non_tensordict.get(item, NO_DEFAULT)
+        if out is NO_DEFAULT:
+            raise AttributeError
+        if (
+            isinstance(self, NonTensorData)
+            and item == "data"
+            and (self._is_shared or self._is_memmap)
+        ):
+            return _from_shared_nontensor(out)
+        return out
+    raise AttributeError
 
 
 SET_ATTRIBUTES = ("batch_size", "device", "_locked_tensordicts", "names")
@@ -871,22 +866,6 @@ def _wrap_classmethod(td_cls, cls, func):
 
     return wrapped_func
 
-
-def _getattr(self, attr: str) -> Any:
-    """Retrieve the value of an object's attribute, or a method output if attr is callable.
-
-    Args:
-        attr: name of the attribute to retrieve or function to compute
-
-    Returns:
-        value of the attribute, or a method output applied on the instance
-
-    """
-    res = getattr(self._tensordict, attr)
-    if not callable(res):
-        return res
-    func = res
-    return _wrap_method(self, attr, func)
 
 
 def _getitem(self, item: NestedKey) -> Any:
