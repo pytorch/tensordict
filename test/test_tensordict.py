@@ -4101,6 +4101,16 @@ class TestTensorDicts(TestTensorDictsBase):
             lambda x: check(x, val="succeed"), loaded.get_non_tensor(("this", "will"))
         )
 
+    def test_numpy(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        td_numpy = td.data.numpy()
+
+        def assert_leaves(leaf):
+            assert not isinstance(leaf, torch.Tensor)
+
+        torch.utils._pytree.tree_map(assert_leaves, td_numpy)
+        assert_allclose_td(TensorDict(td_numpy), td)
+
     def test_pad(self, td_name, device):
         td = getattr(self, td_name)(device)
         paddings = [
@@ -5207,6 +5217,16 @@ class TestTensorDicts(TestTensorDictsBase):
         if td_name == "td_with_non_tensor":
             assert td_dict["data"]["non_tensor"] == "some text data"
         assert (TensorDict.from_dict(td_dict) == td).all()
+
+    def test_to_namedtuple(self, td_name, device):
+        def is_namedtuple(obj):
+            """Check if obj is a namedtuple."""
+            return isinstance(obj, tuple) and hasattr(obj, "_fields")
+
+        td = getattr(self, td_name)(device)
+        td_namedtuple = td.to_namedtuple()
+        assert is_namedtuple(td_namedtuple)
+        assert_allclose_td(TensorDict.from_namedtuple(td_namedtuple), td)
 
     def test_to_tensordict(self, td_name, device):
         torch.manual_seed(1)

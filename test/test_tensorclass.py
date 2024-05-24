@@ -1939,7 +1939,7 @@ class AutoCastTensor:
     integer: int
     string: str
     floating: float
-    numpy: np.ndarray
+    numpy_array: np.ndarray
     anything: Any
 
 
@@ -1977,14 +1977,14 @@ class TestAutoCasting:
             integer=1,
             string=1,
             floating=1,
-            numpy=1,
+            numpy_array=1,
             anything=1,
         )
         assert isinstance(obj.tensor, torch.Tensor)
         assert isinstance(obj.integer, int)
         assert isinstance(obj.string, str)
         assert isinstance(obj.floating, float)
-        assert isinstance(obj.numpy, np.ndarray)
+        assert isinstance(obj.numpy_array, np.ndarray)
         assert isinstance(obj.anything, torch.Tensor)
         obj.tensor = 1.0
         assert isinstance(obj.tensor, torch.Tensor)
