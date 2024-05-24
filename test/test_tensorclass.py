@@ -1369,7 +1369,7 @@ class TestTensorClass:
         data0 = MyDataNested.get_data(0)
         data0.update(data1.to_dict())
         assert (data0.X == 1).all()
-        assert data0.z == "test_tensorclass1"
+        assert data0.z == "test_tensorclass1", data0.z
         assert (data0.y.X == 1).all()
         assert data0.y.z == "test_tensorclass1"
 
@@ -2011,6 +2011,7 @@ class TestAutoCasting:
             },
         )
 
+        assert isinstance(obj, AutoCast), type(obj)
         assert isinstance(obj.tensor, torch.Tensor)
         assert isinstance(obj.non_tensor, str)
         assert isinstance(obj.td, TensorDict)
