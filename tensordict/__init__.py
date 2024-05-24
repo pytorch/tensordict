@@ -18,6 +18,7 @@ from tensordict.persistent import PersistentTensorDict
 from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
 from tensordict.utils import (
     assert_allclose_td,
+    assert_close,
     is_batchedtensor,
     is_tensorclass,
     lazy_legacy,
@@ -42,6 +43,7 @@ __all__ = [
     "TensorDict",
     "TensorDictBase",
     "assert_allclose_td",
+    "assert_close",
     "dense_stack_tds",
     "is_batchedtensor",
     "is_tensor_collection",

@@ -1402,6 +1402,52 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    @classmethod
+    def stack(cls, input, dim=0, *, out=None):
+        """Stacks tensordicts into a single tensordict along the given dimension.
+
+        This call is equivalent to calling :func:`torch.stack` but is compatible with torch.compile.
+
+        """
+        from tensordict._torch_func import _stack
+
+        if not _is_tensor_collection(type(input[0])):
+            return torch.stack(input, dim, out=out)
+        return _stack(input, dim, out=out)
+
+    @classmethod
+    def cat(cls, input, dim=0, *, out=None):
+        """Concatenates tensordicts into a single tensordict along the given dimension.
+
+        This call is equivalent to calling :func:`torch.cat` but is compatible with torch.compile.
+
+        """
+        from tensordict._torch_func import _cat
+
+        if not _is_tensor_collection(type(input[0])):
+            return torch.cat(input, dim, out=out)
+        return _cat(input, dim, out=out)
+
+    @classmethod
+    def lazy_stack(cls, input, dim=0, *, out=None):
+        """Creates a lazy stack of tensordicts.
+
+        See :meth:`~tensordict.LazyStackTensorDict.lazy_stack` for details.
+        """
+        from tensordict._lazy import LazyStackedTensorDict
+
+        return LazyStackedTensorDict.lazy_stack(input, dim=dim, out=out)
+
+    @classmethod
+    def maybe_dense_stack(cls, input, dim=0, *, out=None):
+        """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..
+
+        See :meth:`~tensordict.LazyStackTensorDict.maybe_dense_stack` for details.
+        """
+        from tensordict._lazy import LazyStackedTensorDict
+
+        return LazyStackedTensorDict.maybe_dense_stack(input, dim=dim, out=out)
+
     @abc.abstractmethod
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:
         """Splits each tensor in the TensorDict with the specified size in the given dimension, like `torch.split`.

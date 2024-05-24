@@ -1382,7 +1382,7 @@ def _get_leaf_tensordict(
     return tensordict, key[0]
 
 
-def assert_allclose_td(
+def assert_close(
     actual: T,
     expected: T,
     rtol: float | None = None,
@@ -1787,8 +1787,14 @@ def _getitem_batch_size(batch_size, index):
         boolean = False
         if isinstance(idx, (range, list)):
             shape = len(idx)
-        elif isinstance(idx, (torch.Tensor, np.ndarray)):
-            if idx.dtype == torch.bool or idx.dtype == np.dtype("bool"):
+        elif isinstance(idx, torch.Tensor):
+            if idx.dtype == torch.bool:
+                shape = torch.Size([idx.sum()])
+                boolean = True
+            else:
+                shape = idx.shape
+        elif isinstance(idx, np.ndarray):
+            if idx.dtype == np.dtype("bool"):
                 shape = torch.Size([idx.sum()])
                 boolean = True
             else:
@@ -1828,7 +1834,8 @@ def _getitem_batch_size(batch_size, index):
             continue
         elif isinstance(idx, slice):
             batch = batch_size[count]
-            out.append(len(range(*idx.indices(batch))))
+            out.append(len(range(*_slice_indices(idx, batch))))
+            # out.append(len(range(*idx.indices(batch))))
     count += 1
     if batch_size[count:]:
         out.extend(batch_size[count:])
@@ -2269,3 +2276,32 @@ def _unravel_key_to_tuple(key):
     if not isinstance(key, tuple):
         return ()
     return tuple(subk for k in key for subk in _unravel_key_to_tuple(k))
+
+
+def _slice_indices(index: slice, len: int):
+    """A pure python implementation of slice.indices(len) since torch.compile doesn't recognise it."""
+    start = index.start
+    if start is None:
+        start = 0
+    stop = index.stop
+    if stop is None:
+        stop = len
+    step = index.step
+    if step is None:
+        step = 1
+    elif step == 0:
+        raise ValueError("Step cannot be zero.")
+
+    if step > 0:
+        # Forward direction
+        lower = start
+        upper = stop - step + 1
+    else:
+        # Backward direction
+        lower = start + step - 1
+        upper = stop
+    upper = min(upper, len)
+    return lower, upper, step
+
+
+assert_allclose_td = assert_close

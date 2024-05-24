@@ -277,11 +277,13 @@ class set_skip_existing(_DecoratorContextManager):
         global _SKIP_EXISTING
         _SKIP_EXISTING = self.prev
 
+
 class _set_skip_existing_None(set_skip_existing):
     """A version of skip_existing that is constant wrt init inputs (for torch.compile compatibility).
 
     This class should only be used as a decorator, not a context manager.
     """
+
     def __call__(self, func: Callable):
 
         self._called = True
@@ -319,13 +321,15 @@ class _set_skip_existing_None(set_skip_existing):
 
         return wrapper
 
-    in_key_attr="in_keys"
-    out_key_attr="out_keys"
+    in_key_attr = "in_keys"
+    out_key_attr = "out_keys"
     __init__ = object.__init__
+
     def clone(self) -> _set_skip_existing_None:
         # override this method if your children class takes __init__ parameters
         out = self.__class__()
         return out
+
 
 def skip_existing():
     """Returns whether or not existing entries in a tensordict should be re-computed by a module."""

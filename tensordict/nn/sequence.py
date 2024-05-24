@@ -17,10 +17,10 @@ from tensordict.nn.common import (
     TensorDictModuleBase,
     WrapModule,
 )
+from tensordict.nn.utils import _set_skip_existing_None
 
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import NestedKey
-from tensordict.nn.utils import _set_skip_existing_None
 from torch import nn
 
 _has_functorch = False

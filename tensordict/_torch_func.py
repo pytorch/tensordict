@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 
 from typing import Any, Callable, Sequence, TypeVar
@@ -264,10 +265,16 @@ def _cat(
     if out is None:
         out = {}
         for key in keys:
-            with _ErrorInteceptor(
-                key, "Attempted to concatenate tensors on different devices at key"
-            ):
-                out[key] = torch.cat(
+            if not torch._dynamo.is_compiling():
+                with _ErrorInteceptor(
+                    key, "Attempted to concatenate tensors on different devices at key"
+                ):
+                    out[key] = torch.cat(
+                        [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts],
+                        dim,
+                    )
+            else:
+                out[key] = TensorDict.cat(
                     [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts], dim
                 )
         if device is None:
@@ -295,7 +302,7 @@ def _cat(
         for key in keys:
             with _ErrorInteceptor(
                 key, "Attempted to concatenate tensors on different devices at key"
-            ):
+            ) if not torch._dynamo.is_compiling() else contextlib.nullcontext():
                 if isinstance(out, TensorDict):
                     torch.cat(
                         [td.get(key) for td in list_of_tensordicts],
@@ -491,7 +498,7 @@ def _stack(
                     return torch.stack(values, dim)
                 with _ErrorInteceptor(
                     key, "Attempted to stack tensors on different devices at key"
-                ):
+                ) if not torch._dynamo.is_compiling() else contextlib.nullcontext():
                     return _stack(values, dim, maybe_dense_stack=maybe_dense_stack)
 
             out = {
