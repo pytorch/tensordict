@@ -91,7 +91,11 @@ def _gather(
             f"Cannot gather tensordict with shape {input.shape} along dim {dim_orig}."
         )
 
-    def _gather_tensor(tensor, dest=None):
+    def _gather_tensor(tensor, dest_container=None, dest_key=None):
+        if dest_container is not None:
+            dest = dest_container.get(dest_key)
+        else:
+            dest = None
         index_expand = index
         while index_expand.ndim < tensor.ndim:
             index_expand = index_expand.unsqueeze(-1)
@@ -116,7 +120,7 @@ def _gather(
         )
     TensorDict(
         {
-            key: _gather_tensor(value, out.get(key))
+            key: _gather_tensor(value, out, key)
             for key, value in input.items(is_leaf=_is_leaf_nontensor)
         },
         batch_size=index.shape,

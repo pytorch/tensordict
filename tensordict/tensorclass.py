@@ -44,7 +44,6 @@ from tensordict.base import (
 from tensordict.utils import (
     _get_repr,
     _is_json_serializable,
-    _is_non_tensor,
     _LOCK_ERROR,
     DeviceType,
     IndexType,
@@ -692,8 +691,6 @@ def _getattr(self, item: str) -> Any:
     if _tensordict is not None:
         out = _tensordict._get_str(item, default=None)
         if out is not None:
-            if _is_non_tensor(type(out)):
-                return out.data
             return out
         out = getattr(_tensordict, item, NO_DEFAULT)
         if out is not NO_DEFAULT:
@@ -1865,7 +1862,9 @@ class NonTensorData:
             data = getattr(self.data, "data", None)
             if data is None:
                 data = self.data.tolist()
-            self.data = data
+            del self._tensordict["data"]
+            self._non_tensordict["data"] = data
+        assert self._tensordict.is_empty(), self._tensordict
 
         def __repr__(self):
             data_str = str(self.data)
