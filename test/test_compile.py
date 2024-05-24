@@ -200,14 +200,14 @@ class TestFunc:
         assert (call(x, td_zero) == 0).all()
         assert (call(x, td_zero) == 0).all()
         if modif_param:
-            assert td_zero["3", "param"] == 1
+            assert td_zero["3", "param"] == 2
         else:
             assert (td_zero == 0).all()
         # torch.testing.assert_close(call_compile(x, td_zero), module(x))
         assert (call_compile(x, td_zero) == 0).all()
         assert (call_compile(x, td_zero) == 0).all()
         if modif_param:
-            assert td_zero["3", "param"] == 2
+            assert td_zero["3", "param"] == 4
         else:
             assert (td_zero == 0).all()
 

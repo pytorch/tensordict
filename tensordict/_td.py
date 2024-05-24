@@ -378,13 +378,10 @@ class TensorDict(TensorDictBase):
                 module.update(self)
                 return
 
-        # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
-        __dict__ = module.__dict__
-
         hooks = memo["hooks"]
         if return_swap:
             _swap = {}
-            if not torch._dynamo.is_dynamo_compiling():
+            if not torch.compiler.is_dynamo_compiling():
                 memo[weakref.ref(module)] = _swap
 
         if use_state_dict:
@@ -425,12 +422,18 @@ class TensorDict(TensorDictBase):
             input = self
             inplace = bool(inplace)
 
+        # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
+        if (
+            module.__class__.__setattr__ is __base__setattr__
+            and not torch.compiler.is_dynamo_compiling()
+        ):
+            __dict__ = module.__dict__
+        else:
+            __dict__ = None
+
         for key, value in input.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
-                if (
-                    module.__class__.__setattr__ is __base__setattr__
-                    and not torch._dynamo.is_dynamo_compiling()
-                ):
+                if __dict__ is not None:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                     local_out = _set_tensor_dict(
                         __dict__, hooks, module, key, value, inplace
@@ -452,11 +455,14 @@ class TensorDict(TensorDictBase):
                     # if there is at least one key, we must populate the module.
                     # Otherwise, we just go to the next key
                     continue
-                child = __dict__["_modules"][key]
-                if not torch._dynamo.is_dynamo_compiling():
+                if __dict__ is not None:
+                    child = __dict__["_modules"][key]
+                else:
+                    child = getattr(module, key)
+                if not torch.compiler.is_dynamo_compiling():
                     local_out = memo.get(weakref.ref(child), NO_DEFAULT)
 
-                if torch._dynamo.is_dynamo_compiling() or local_out is NO_DEFAULT:
+                if torch.compiler.is_dynamo_compiling() or local_out is NO_DEFAULT:
                     # if isinstance(child, TensorDictBase):
                     #     # then child is a TensorDictParams
                     #     from tensordict.nn import TensorDictParams
