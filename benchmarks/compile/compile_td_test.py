@@ -75,7 +75,7 @@ def get_flat_td():
 # Tests runtime of a simple arithmetic op over a highly nested tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
-def test_add_one_nested(mode, dict_type, benchmark):
+def test_compile_add_one_nested(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
             func = torch.compile(add_one, fullgraph=True)
@@ -95,7 +95,7 @@ def test_add_one_nested(mode, dict_type, benchmark):
 # Tests the speed of copying a nested tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
-def test_copy_nested(mode, dict_type, benchmark):
+def test_compile_copy_nested(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
             func = torch.compile(copy, fullgraph=True)
@@ -115,7 +115,7 @@ def test_copy_nested(mode, dict_type, benchmark):
 # Tests runtime of a simple arithmetic op over a flat tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
-def test_add_one_flat(mode, dict_type, benchmark):
+def test_compile_add_one_flat(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
             func = torch.compile(add_one, fullgraph=True)
@@ -135,7 +135,7 @@ def test_add_one_flat(mode, dict_type, benchmark):
 # Tests the speed of copying a flat tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
-def test_copy_flat(mode, dict_type, benchmark):
+def test_compile_copy_flat(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
             func = torch.compile(copy, fullgraph=True)
@@ -155,7 +155,7 @@ def test_copy_flat(mode, dict_type, benchmark):
 # Tests the speed of assigning entries to an empty tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
-def test_assign_and_add(mode, dict_type, benchmark):
+def test_compile_assign_and_add(mode, dict_type, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     td = TensorDict(device=device)
     if dict_type == "tensordict":
@@ -179,7 +179,7 @@ def test_assign_and_add(mode, dict_type, benchmark):
 
 
 @pytest.mark.parametrize("mode", ["compile", "eager"])
-def test_assign_and_add_stack(mode, benchmark):
+def test_compile_assign_and_add_stack(mode, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     td = LazyStackedTensorDict(TensorDict(device=device), TensorDict(device=device))
     if mode == "compile":
