@@ -388,7 +388,9 @@ def _init_wrapper(__init__: Callable) -> Callable:
                 kwargs[key] = value
         else:
             if args:
-                raise RuntimeError("dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly.")
+                raise RuntimeError(
+                    "dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly."
+                )
 
         if batch_size is None:
             batch_size = torch.Size([])
@@ -413,14 +415,17 @@ def _init_wrapper(__init__: Callable) -> Callable:
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
 
-        super(type(self), self).__setattr__('_tensordict', TensorDict(
-            {},
-            batch_size=torch.Size(batch_size),
-            device=device,
-            names=names,
-            _run_checks=False,
-        ))
-        super(type(self), self).__setattr__('_non_tensordict', {})
+        super(type(self), self).__setattr__(
+            "_tensordict",
+            TensorDict(
+                {},
+                batch_size=torch.Size(batch_size),
+                device=device,
+                names=names,
+                _run_checks=False,
+            ),
+        )
+        super(type(self), self).__setattr__("_non_tensordict", {})
         self._is_initialized = True
 
         __init__(self, **kwargs)
@@ -709,18 +714,8 @@ def _getattr(self, item: str) -> Any:
                 return _from_shared_nontensor(out)
             return out
     if not torch.compiler.is_dynamo_compiling():
-        _non_tensordict = __dict__.get("_non_tensordict")
-    if _non_tensordict is not None:
-        out = _non_tensordict.get(item, NO_DEFAULT)
-        if out is not NO_DEFAULT:
-            if (
-                isinstance(self, NonTensorData)
-                and item == "data"
-                and (self._is_shared or self._is_memmap)
-            ):
-                return _from_shared_nontensor(out)
-            return out
-    _tensordict = __dict__.get("_tensordict")else:
+        _tensordict = __dict__.get("_tensordict")
+    else:
         _tensordict = self._tensordict
     if _tensordict is not None:
         out = _tensordict._get_str(item, default=None)

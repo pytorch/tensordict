@@ -1248,27 +1248,44 @@ class TensorDictModule(TensorDictModuleBase):
         return f"{self.__class__.__name__}(\n{fields})"
 
     def __getattr__(self, name: str) -> Any:
-        __dict__ = self.__dict__
-        _parameters = __dict__.get("_parameters")
-        if _parameters:
-            # A param can be None so we use False instead to check if the key
-            # is in the _parameters dict once and only once.
-            # We use False but any non-None, non-Parameter value would do.
-            # The alternative `if name in _parameters: return _parameters[name]`
-            # accesses the value of `name` twice when only one is required
+        if not torch.compiler.is_dynamo_compiling():
+            __dict__ = self.__dict__
+            _parameters = __dict__.get("_parameters")
+            if _parameters:
+                # A param can be None so we use False instead to check if the key
+                # is in the _parameters dict once and only once.
+                # We use False but any non-None, non-Parameter value would do.
+                # The alternative `if name in _parameters: return _parameters[name]`
+                # accesses the value of `name` twice when only one is required
+                result = _parameters.get(name, False)
+                if result is not False:
+                    return result
+            _buffers = __dict__.get("_buffers")
+            if _buffers:
+                result = _buffers.get(name, False)
+                if result is not False:
+                    return result
+            _modules = __dict__.get("_modules")
+            if _modules:
+                result = _modules.get(name, False)
+                if result is not False:
+                    return result
+        # TODO: find a way to make this check work with dynamo
+        # elif hasattr(self, "_parameters"):
+        else:
+            _parameters = self._parameters
             result = _parameters.get(name, False)
             if result is not False:
                 return result
-        _buffers = __dict__.get("_buffers")
-        if _buffers:
+            _buffers = self._buffers
             result = _buffers.get(name, False)
             if result is not False:
                 return result
-        _modules = __dict__.get("_modules")
-        if _modules:
+            _modules = self._modules
             result = _modules.get(name, False)
             if result is not False:
                 return result
+
         if not name.startswith("_"):
             # no fallback for private attributes
             return getattr(super().__getattr__("module"), name)
@@ -1308,24 +1325,40 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
                 self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
 
     def __getattr__(self, name: str) -> Any:
-        __dict__ = self.__dict__
-        _parameters = __dict__.get("_parameters")
-        if _parameters:
-            # A param can be None so we use False instead to check if the key
-            # is in the _parameters dict once and only once.
-            # We use False but any non-None, non-Parameter value would do.
-            # The alternative `if name in _parameters: return _parameters[name]`
-            # accesses the value of `name` twice when only one is required
+        if not torch.compiler.is_dynamo_compiling():
+            __dict__ = self.__dict__
+            _parameters = __dict__.get("_parameters")
+            if _parameters:
+                # A param can be None so we use False instead to check if the key
+                # is in the _parameters dict once and only once.
+                # We use False but any non-None, non-Parameter value would do.
+                # The alternative `if name in _parameters: return _parameters[name]`
+                # accesses the value of `name` twice when only one is required
+                result = _parameters.get(name, False)
+                if result is not False:
+                    return result
+            _buffers = __dict__.get("_buffers")
+            if _buffers:
+                result = _buffers.get(name, False)
+                if result is not False:
+                    return result
+            _modules = __dict__.get("_modules")
+            if _modules:
+                result = _modules.get(name, False)
+                if result is not False:
+                    return result
+        # TODO: find a way to make this check work with dynamo
+        # elif hasattr(self, "_parameters"):
+        else:
+            _parameters = self._parameters
             result = _parameters.get(name, False)
             if result is not False:
                 return result
-        _buffers = __dict__.get("_buffers")
-        if _buffers:
+            _buffers = self._buffers
             result = _buffers.get(name, False)
             if result is not False:
                 return result
-        _modules = __dict__.get("_modules")
-        if _modules:
+            _modules = self._modules
             result = _modules.get(name, False)
             if result is not False:
                 return result

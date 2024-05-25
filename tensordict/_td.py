@@ -368,6 +368,7 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         non_blocking: bool = False,
     ):
+        is_dynamo = torch.compiler.is_dynamo_compiling()
 
         if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:
@@ -381,7 +382,7 @@ class TensorDict(TensorDictBase):
         hooks = memo["hooks"]
         if return_swap:
             _swap = {}
-            if not torch.compiler.is_dynamo_compiling():
+            if not is_dynamo:
                 memo[weakref.ref(module)] = _swap
 
         if use_state_dict:
@@ -423,10 +424,7 @@ class TensorDict(TensorDictBase):
             inplace = bool(inplace)
 
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
-        if (
-            module.__class__.__setattr__ is __base__setattr__
-            and not torch.compiler.is_dynamo_compiling()
-        ):
+        if not is_dynamo and module.__class__.__setattr__ is __base__setattr__:
             __dict__ = module.__dict__
         else:
             __dict__ = None
@@ -459,19 +457,10 @@ class TensorDict(TensorDictBase):
                     child = __dict__["_modules"][key]
                 else:
                     child = getattr(module, key)
-                if not torch.compiler.is_dynamo_compiling():
+                if not is_dynamo:
                     local_out = memo.get(weakref.ref(child), NO_DEFAULT)
 
-                if torch.compiler.is_dynamo_compiling() or local_out is NO_DEFAULT:
-                    # if isinstance(child, TensorDictBase):
-                    #     # then child is a TensorDictParams
-                    #     from tensordict.nn import TensorDictParams
-                    #
-                    #     local_out = child
-                    #     if not isinstance(value, TensorDictParams):
-                    #         value = TensorDictParams(value, no_convert=True)
-                    #     __dict__["_modules"][key] = value
-                    # else:
+                if is_dynamo or local_out is NO_DEFAULT:
                     local_out = value._to_module(
                         child,
                         inplace=inplace,
@@ -484,6 +473,7 @@ class TensorDict(TensorDictBase):
 
             if return_swap:
                 _swap[key] = local_out
+
         if return_swap:
             if isinstance(swap_dest, dict):
                 return _swap
@@ -2853,10 +2843,10 @@ class TensorDict(TensorDictBase):
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
 
             def fast_iter():
-                for k, val in self._tensordict.items():
+                for key, val in self._tensordict.items():
                     if not is_leaf(val.__class__):
                         yield from (
-                            ((k, *((_key,) if isinstance(_key, str) else _key)), _val)
+                            ((key, *((_key,) if isinstance(_key, str) else _key)), _val)
                             for _key, _val in val.items(
                                 include_nested=include_nested,
                                 leaves_only=leaves_only,
@@ -2864,7 +2854,7 @@ class TensorDict(TensorDictBase):
                             )
                         )
                     else:
-                        yield k, val
+                        yield key, val
 
             return fast_iter()
         else:
@@ -4138,3 +4128,13 @@ def _update_metadata(*, metadata, key, value, is_collection):
         metadata[key] = {
             "type": type(value).__name__,
         }
+
+
+# @torch._dynamo.on_compile_start
+# def _check_inline_inbuilt_module():
+#     try:
+#         assert str2bool(environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"])
+#     except (AssertionError, KeyError):
+#         raise RuntimeError(
+#             "set TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1 to use functional calls with tensordict."
+#         )

@@ -8,7 +8,8 @@ from typing import Any
 import pytest
 
 import torch
-from tensordict import assert_close, tensorclass, TensorDict
+
+from tensordict import assert_close, tensorclass, TensorDict, TensorDictParams
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
 
@@ -300,7 +301,7 @@ class TestFunc:
             module.append(MessUpParams())
 
         td = TensorDict.from_module(module)
-        td_zero = td.clone()
+        td_zero = TensorDictParams(td.data.clone())
         td_zero.zero_()
 
         def call(x, td):
