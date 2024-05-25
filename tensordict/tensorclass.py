@@ -172,6 +172,9 @@ def _tensorclass(cls: T) -> T:
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Callable:
+        # if not torch.compiler.is_dynamo_compiling() and (func not in _TD_PASS_THROUGH or not all(
+        #     issubclass(t, (Tensor, cls)) for t in types
+        # )):
         if func not in _TD_PASS_THROUGH or not all(
             issubclass(t, (Tensor, cls)) for t in types
         ):
@@ -348,7 +351,7 @@ def _from_tensordict_with_copy(tc, tensordict):
     # creates a new tensorclass with the same type as tc, and a copy of the
     # non_tensordict data
     return tc._from_tensordict(
-        tensordict=tensordict, non_tensordict=copy(tc._non_tensordict)
+        tensordict=tensordict, non_tensordict=dict(tc._non_tensordict)
     )
 
 
@@ -361,13 +364,13 @@ def _from_tensordict_with_none(tc, tensordict):
     )
 
 
-def _init_wrapper(init: Callable) -> Callable:
-    init_sig = inspect.signature(init)
+def _init_wrapper(__init__: Callable) -> Callable:
+    init_sig = inspect.signature(__init__)
     params = list(init_sig.parameters.values())
     # drop first entry of params which corresponds to self and isn't passed by the user
     required_params = [p.name for p in params[1:] if p.default is inspect._empty]
 
-    @functools.wraps(init)
+    @functools.wraps(__init__)
     def wrapper(
         self,
         *args: Any,
@@ -377,19 +380,29 @@ def _init_wrapper(init: Callable) -> Callable:
         **kwargs,
     ):
 
-        for value, key in zip(args, self.__dataclass_fields__):
-            if key in kwargs:
-                raise ValueError(f"The key {key} is already set in kwargs")
-            kwargs[key] = value
+        if not torch.compiler.is_dynamo_compiling():
+            # zip not supported by dynamo
+            for value, key in zip(args, self.__dataclass_fields__):
+                if key in kwargs:
+                    raise ValueError(f"The key {key} is already set in kwargs")
+                kwargs[key] = value
+        else:
+            if args:
+                raise RuntimeError("dynamo doesn't support arguments when building a tensorclass, pass the keyword explicitly.")
+
         if batch_size is None:
             batch_size = torch.Size([])
-        for key, field in self.__dataclass_fields__.items():
-            if field.default_factory is not dataclasses.MISSING:
-                default = field.default_factory()
-            else:
-                default = field.default
-            if default not in (None, dataclasses.MISSING):
-                kwargs.setdefault(key, default)
+        if not torch.compiler.is_dynamo_compiling():
+            for key, field in self.__dataclass_fields__.items():
+                if field.default_factory is not dataclasses.MISSING:
+                    default = field.default_factory()
+                else:
+                    default = field.default
+                if default not in (None, dataclasses.MISSING):
+                    kwargs.setdefault(key, default)
+        else:
+            # TODO: Decide what to do here
+            pass
 
         missing_params = [p for p in required_params if p not in kwargs]
         if missing_params:
@@ -400,16 +413,17 @@ def _init_wrapper(init: Callable) -> Callable:
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
 
-        self._tensordict = TensorDict(
+        super(type(self), self).__setattr__('_tensordict', TensorDict(
             {},
             batch_size=torch.Size(batch_size),
             device=device,
             names=names,
             _run_checks=False,
-        )
-        self._non_tensordict = {}
+        ))
+        super(type(self), self).__setattr__('_non_tensordict', {})
+        self._is_initialized = True
 
-        init(self, **kwargs)
+        __init__(self, **kwargs)
 
     new_params = [
         inspect.Parameter("batch_size", inspect.Parameter.KEYWORD_ONLY),
@@ -553,19 +567,22 @@ def _from_tensordict_wrapper(expected_keys):
                     raise KeyError(
                         f"{key} is present in both tensor and non-tensor dicts"
                     )
-        # bypass initialisation. this means we don't incur any overhead creating an
-        # empty tensordict and writing values to it. we can skip this because we already
-        # have a tensordict to use as the underlying tensordict
-        tc = cls.__new__(cls)
-        tc.__dict__["_tensordict"] = tensordict
-
-        tc.__dict__["_non_tensordict"] = (
-            non_tensordict if non_tensordict is not None else {}
-        )
-        # since we aren't calling the dataclass init method, we need to manually check
-        # whether a __post_init__ method has been defined and invoke it if so
-        if hasattr(tc, "__post_init__"):
-            tc.__post_init__()
+        if not torch.compiler.is_dynamo_compiling():
+            # bypass initialisation. this means we don't incur any overhead creating an
+            # empty tensordict and writing values to it. we can skip this because we already
+            # have a tensordict to use as the underlying tensordict
+            tc = cls.__new__(cls)
+            tc.__dict__["_tensordict"] = tensordict
+            tc.__dict__["_non_tensordict"] = (
+                non_tensordict if non_tensordict is not None else {}
+            )
+            # since we aren't calling the dataclass init method, we need to manually check
+            # whether a __post_init__ method has been defined and invoke it if so
+            if hasattr(tc, "__post_init__"):
+                tc.__post_init__()
+        else:
+            tddict = tensordict.to_dict()
+            return cls(**tddict, **non_tensordict)
         return tc
 
     return wrapper
@@ -675,8 +692,12 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
 
 def _getattr(self, item: str) -> Any:
     # if not item.startswith("__"):
-    __dict__ = self.__dict__
-    _non_tensordict = __dict__.get("_non_tensordict")
+    if not torch.compiler.is_dynamo_compiling():
+        __dict__ = self.__dict__
+        _non_tensordict = __dict__.get("_non_tensordict")
+    else:
+        _non_tensordict = self._non_tensordict
+
     if _non_tensordict is not None:
         out = _non_tensordict.get(item, NO_DEFAULT)
         if out is not NO_DEFAULT:
@@ -687,7 +708,20 @@ def _getattr(self, item: str) -> Any:
             ):
                 return _from_shared_nontensor(out)
             return out
-    _tensordict = __dict__.get("_tensordict")
+    if not torch.compiler.is_dynamo_compiling():
+        _non_tensordict = __dict__.get("_non_tensordict")
+    if _non_tensordict is not None:
+        out = _non_tensordict.get(item, NO_DEFAULT)
+        if out is not NO_DEFAULT:
+            if (
+                isinstance(self, NonTensorData)
+                and item == "data"
+                and (self._is_shared or self._is_memmap)
+            ):
+                return _from_shared_nontensor(out)
+            return out
+    _tensordict = __dict__.get("_tensordict")else:
+        _tensordict = self._tensordict
     if _tensordict is not None:
         out = _tensordict._get_str(item, default=None)
         if out is not None:
@@ -700,7 +734,13 @@ def _getattr(self, item: str) -> Any:
     raise AttributeError
 
 
-SET_ATTRIBUTES = ("batch_size", "device", "_locked_tensordicts", "names")
+SET_ATTRIBUTES = (
+    "batch_size",
+    "device",
+    "_locked_tensordicts",
+    "names",
+    "_is_initialized",
+)
 
 
 def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
@@ -713,13 +753,21 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
             value (any): the value to set for the attribute
 
         """
-        __dict__ = self.__dict__
-        if (
-            "_tensordict" not in __dict__
-            or "_non_tensordict" not in __dict__
-            or key in SET_ATTRIBUTES
-        ):
-            return setattr_(self, key, value)
+        if not torch.compiler.is_dynamo_compiling():
+            __dict__ = self.__dict__
+            if (
+                "_tensordict" not in __dict__
+                or "_non_tensordict" not in __dict__
+                or key in SET_ATTRIBUTES
+            ):
+                return setattr_(self, key, value)
+        else:
+            # Pass?
+            if key in SET_ATTRIBUTES:
+                # assert getattr(self, "_is_initialized", False)
+                return setattr_(self, key, value)
+            # if not hasattr(self, "_tensordict") or not hasattr(self, "_non_tensordict") or key in SET_ATTRIBUTES:
+            #     return setattr_(self, key, value)
 
         out = self.set(key, value)
         if out is not self:
