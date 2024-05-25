@@ -3,13 +3,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+from typing import Any
 
 import pytest
 
 import torch
-from tensordict import assert_close, TensorDict, tensorclass
+from tensordict import assert_close, tensorclass, TensorDict
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
-from typing import Any
 
 
 class TestTD:
@@ -111,20 +111,21 @@ class TestTD:
         else:
             assert clone_c(data)["a", "b"] is data["a", "b"]
 
+
 @tensorclass
 class MyClass:
     a: "MyClass"
-    b: Any=None
-    c: Any=None
+    b: Any = None
+    c: Any = None
+
 
 class TestTC:
-
     def test_tensor_output(self):
         def add_one(td):
             return td.a.b + 1
 
         add_one_c = torch.compile(add_one, fullgraph=True)
-        data = MyClass(MyClass(a=None, b=0))
+        data = MyClass(MyClass(a=None, b=torch.zeros(())))
         assert add_one(data) == 1
         assert add_one_c(data) == 1
         assert add_one_c(data + 1) == 2
@@ -135,7 +136,7 @@ class TestTC:
             return td
 
         add_one_c = torch.compile(add_one, fullgraph=True)
-        data = MyClass.from_tensordict(TensorDict({"a": {"b": 0}}))
+        data = MyClass(a=MyClass(a=None, b=torch.zeros(())))
         assert add_one(data.clone()).a.c == 1
         assert add_one_c(data.clone()).a.c == 1
         assert add_one_c(data) is data
@@ -158,14 +159,16 @@ class TestTC:
                 return td[0] + 1
 
         add_one_c = torch.compile(add_one, fullgraph=True)
-        data = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        data = MyClass(
+            a=MyClass(a=None, b=torch.arange(3), batch_size=[3]), batch_size=[3]
+        )
         if index_type == "int":
-            assert (add_one(data)["a", "b"] == 1).all()
-            assert (add_one_c(data)["a", "b"] == 1).all()
+            assert (add_one(data).a.b == 1).all()
+            assert (add_one_c(data).a.b == 1).all()
             assert add_one_c(data).shape == torch.Size([])
         else:
-            assert (add_one(data)["a", "b"] == torch.arange(1, 3)).all()
-            assert (add_one_c(data)["a", "b"] == torch.arange(1, 3)).all()
+            assert (add_one(data).a.b == torch.arange(1, 3)).all()
+            assert (add_one_c(data).a.b == torch.arange(1, 3)).all()
             assert add_one_c(data).shape == torch.Size([2])
 
     def test_stack(self):
@@ -174,8 +177,12 @@ class TestTC:
             # return torch.stack([td0, td1])
 
         stack_tds_c = torch.compile(stack_tds, fullgraph=True)
-        data0 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
-        data1 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        data0 = MyClass(
+            a=MyClass(a=None, b=torch.arange(3), batch_size=[3]), batch_size=[3]
+        )
+        data1 = MyClass(
+            a=MyClass(a=None, b=torch.arange(3, 6), batch_size=[3]), batch_size=[3]
+        )
         assert (stack_tds(data0, data1) == stack_tds_c(data0, data1)).all()
 
     def test_cat(self):
@@ -183,8 +190,12 @@ class TestTC:
             return TensorDict.cat([td0, td1])
 
         cat_tds_c = torch.compile(cat_tds, fullgraph=True)
-        data0 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
-        data1 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
+        data0 = MyClass(
+            a=MyClass(a=None, b=torch.arange(3), batch_size=[3]), batch_size=[3]
+        )
+        data1 = MyClass(
+            a=MyClass(a=None, b=torch.arange(3, 6), batch_size=[3]), batch_size=[3]
+        )
         assert (cat_tds(data0, data1) == cat_tds_c(data0, data1)).all()
 
     def test_reshape(self):
@@ -192,7 +203,9 @@ class TestTC:
             return td.reshape(2, 2)
 
         reshape_c = torch.compile(reshape, fullgraph=True)
-        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
+        data = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
+        )
         assert (reshape(data) == reshape_c(data)).all()
 
     def test_unbind(self):
@@ -200,7 +213,9 @@ class TestTC:
             return td.unbind(0)
 
         unbind_c = torch.compile(unbind, fullgraph=True)
-        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
+        data = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
+        )
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
 
     @pytest.mark.parametrize("recurse", [True, False])
@@ -216,7 +231,6 @@ class TestTC:
             assert clone_c(data)["a", "b"] is not data["a", "b"]
         else:
             assert clone_c(data)["a", "b"] is data["a", "b"]
-
 
 
 class TestNN:
