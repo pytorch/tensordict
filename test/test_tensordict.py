@@ -4103,7 +4103,7 @@ class TestTensorDicts(TestTensorDictsBase):
 
     def test_numpy(self, td_name, device):
         td = getattr(self, td_name)(device)
-        td_numpy = td.data.numpy()
+        td_numpy = td.data.cpu().numpy()
 
         def assert_leaves(leaf):
             assert not isinstance(leaf, torch.Tensor)

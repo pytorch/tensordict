@@ -158,8 +158,8 @@ class tensorclass:
     def __init__(self, autocast: bool):
         self.autocast = autocast
 
-    def __call__(self, clz):
-        clz = _tensorclass(clz)
+    def __call__(self, cls):
+        clz = _tensorclass(cls)
         clz.autocast = self.autocast
         return clz
 
@@ -676,6 +676,17 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
 def _getattr(self, item: str) -> Any:
     # if not item.startswith("__"):
     __dict__ = self.__dict__
+    _non_tensordict = __dict__.get("_non_tensordict")
+    if _non_tensordict is not None:
+        out = _non_tensordict.get(item, NO_DEFAULT)
+        if out is not NO_DEFAULT:
+            if (
+                isinstance(self, NonTensorData)
+                and item == "data"
+                and (self._is_shared or self._is_memmap)
+            ):
+                return _from_shared_nontensor(out)
+            return out
     _tensordict = __dict__.get("_tensordict")
     if _tensordict is not None:
         out = _tensordict._get_str(item, default=None)
@@ -686,18 +697,6 @@ def _getattr(self, item: str) -> Any:
             if not callable(out):
                 return out
             return _wrap_method(self, item, out)
-    _non_tensordict = __dict__.get("_non_tensordict")
-    if _non_tensordict is not None:
-        out = _non_tensordict.get(item, NO_DEFAULT)
-        if out is NO_DEFAULT:
-            raise AttributeError
-        if (
-            isinstance(self, NonTensorData)
-            and item == "data"
-            and (self._is_shared or self._is_memmap)
-        ):
-            return _from_shared_nontensor(out)
-        return out
     raise AttributeError
 
 
@@ -768,8 +767,8 @@ def _update(
         input_dict_or_td = self.from_dict(input_dict_or_td)
 
     if is_tensorclass(input_dict_or_td):
-        self._tensordict.update(input_dict_or_td._tensordict)
-        self._non_tensordict.update(input_dict_or_td._non_tensordict)
+        self._tensordict.update(input_dict_or_td.__dict__["_tensordict"])
+        self._non_tensordict.update(input_dict_or_td.__dict__["_non_tensordict"])
         return self
 
     non_tensordict = {}
@@ -865,7 +864,6 @@ def _wrap_classmethod(td_cls, cls, func):
         return res
 
     return wrapped_func
-
 
 
 def _getitem(self, item: NestedKey) -> Any:
@@ -997,6 +995,8 @@ def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
     )
     non_tensor = {}
 
+    # Note: this won't deal with sub-tensordicts which may or may not be tensorclasses.
+    # We don't want to enforce them to be tensorclasses so we can't do much about it...
     for key, value in list(td.items()):
         if is_non_tensor(value):
             non_tensor[key] = value.data
@@ -1862,7 +1862,9 @@ class NonTensorData:
             data = getattr(self.data, "data", None)
             if data is None:
                 data = self.data.tolist()
-            self.data = data
+            del self._tensordict["data"]
+            self._non_tensordict["data"] = data
+        assert self._tensordict.is_empty(), self._tensordict
 
         def __repr__(self):
             data_str = str(self.data)
