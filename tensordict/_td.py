@@ -2841,20 +2841,55 @@ class TensorDict(TensorDictBase):
             return self._tensordict.items()
         elif include_nested and leaves_only:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
+            result = []
+            if torch.compiler.is_dynamo_compiling():
 
-            def fast_iter():
-                for key, val in self._tensordict.items():
-                    if not is_leaf(val.__class__):
-                        yield from (
-                            ((key, *((_key,) if isinstance(_key, str) else _key)), _val)
+                def fast_iter():
+                    for key, val in self._tensordict.items():
+                        if not is_leaf(val.__class__):
                             for _key, _val in val.items(
                                 include_nested=include_nested,
                                 leaves_only=leaves_only,
                                 is_leaf=is_leaf,
+                            ):
+                                result.append(
+                                    (
+                                        (
+                                            key,
+                                            *(
+                                                (_key,)
+                                                if isinstance(_key, str)
+                                                else _key
+                                            ),
+                                        ),
+                                        _val,
+                                    )
+                                )
+                        else:
+                            result.append((key, val))
+                    return result
+
+            else:
+                # dynamo doesn't like generators
+                def fast_iter():
+                    for key, val in self._tensordict.items():
+                        if not is_leaf(val.__class__):
+                            yield from (
+                                (
+                                    (
+                                        key,
+                                        *((_key,) if isinstance(_key, str) else _key),
+                                    ),
+                                    _val,
+                                )
+                                for _key, _val in val.items(
+                                    include_nested=include_nested,
+                                    leaves_only=leaves_only,
+                                    is_leaf=is_leaf,
+                                )
                             )
-                        )
-                    else:
-                        yield key, val
+                        else:
+                            yield (key, val)
 
             return fast_iter()
         else:

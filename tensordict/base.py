@@ -9,6 +9,7 @@ import abc
 import collections
 import concurrent.futures
 import contextlib
+import enum
 import importlib
 import json
 import numbers
@@ -80,17 +81,11 @@ from torch.utils._pytree import tree_map
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key, default=None)` is a valid usage.
-class _NoDefault:
-    def __new__(cls):
-        if not hasattr(cls, "instance"):
-            cls.instance = super(_NoDefault, cls).__new__(cls)
-        return cls.instance
-
-    def __bool__(self):
-        return False
+class _NoDefault(enum.IntEnum):
+    ZERO = 0
 
 
-NO_DEFAULT = "-TO_REPLACE-"  # _NoDefault()
+NO_DEFAULT = _NoDefault.ZERO
 
 
 class _NestedTensorsAsLists:
@@ -3799,16 +3794,13 @@ class TensorDictBase(MutableMapping):
         include_nested: bool = False,
         leaves_only: bool = False,
     ) -> Tuple[List, List]:
-        return tuple(
-            list(key_or_val)
-            for key_or_val in zip(
-                *self.items(
-                    include_nested=include_nested,
-                    leaves_only=leaves_only,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS,
-                )
-            )
+        items = self.items(
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
         )
+        keys, vals = zip(*items)
+        return list(keys), list(vals)
 
     @cache  # noqa: B019
     def _grad(self):
@@ -3876,7 +3868,7 @@ class TensorDictBase(MutableMapping):
             self.del_(key)
         except KeyError as err:
             # if default provided, 'out' value will return, else raise error
-            if default == NO_DEFAULT:
+            if default is NO_DEFAULT:
                 raise KeyError(
                     f"You are trying to pop key `{key}` which is not in dict "
                     f"without providing default value."
@@ -5694,7 +5686,8 @@ class TensorDictBase(MutableMapping):
         return self
 
     def add(self, other: TensorDictBase | float, alpha: float | None = None):
-        keys, vals = self._items_list(True, True)
+        keys_vals = self._items_list(True, True)
+        keys, vals = keys_vals
         if _is_tensor_collection(type(other)):
             other_val = other._values_list(True, True)
         else:

@@ -98,6 +98,22 @@ class TestTD:
         data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
 
+    def test_items(self):
+        def items(td):
+            keys, vals = zip(*td.items(True, True))
+            return keys, vals
+
+        items_c = torch.compile(items, fullgraph=True)
+        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
+        keys, vals = items(data)
+        keys_c, vals_c = items_c(data)
+
+        def assert_eq(x, y):
+            assert (x == y).all()
+
+        assert keys == keys_c
+        torch.utils._pytree.tree_map(assert_eq, vals, vals_c)
+
     @pytest.mark.parametrize("recurse", [True, False])
     def test_clone(self, recurse):
         def clone(td: TensorDict):
@@ -121,7 +137,7 @@ class MyClass:
 
 
 class TestTC:
-    def test_tensor_output(self):
+    def test_tc_tensor_output(self):
         def add_one(td):
             return td.a.b + 1
 
@@ -131,7 +147,23 @@ class TestTC:
         assert add_one_c(data) == 1
         assert add_one_c(data + 1) == 2
 
-    def test_td_output(self):
+    def test_tc_items(self):
+        def items(td):
+            keys, vals = zip(*td.items(True, True))
+            return keys, vals
+
+        items_c = torch.compile(items, fullgraph=True)
+        data = MyClass(MyClass(a=None, b=torch.zeros(())))
+        keys, vals = items(data)
+        keys_c, vals_c = items_c(data)
+
+        def assert_eq(x, y):
+            assert (x == y).all()
+
+        assert keys == keys_c
+        torch.utils._pytree.tree_map(assert_eq, vals, vals_c)
+
+    def test_tc_output(self):
         def add_one(td):
             td.a.c = td.a.b + 1
             return td
@@ -142,37 +174,53 @@ class TestTC:
         assert add_one_c(data.clone()).a.c == 1
         assert add_one_c(data) is data
 
+    def test_tc_arithmetic(self):
+        def add_one(td):
+            return td + 1
+
+        add_one_c = torch.compile(add_one, fullgraph=True)
+        data = MyClass(a=MyClass(a=None, b=torch.zeros(())))
+        assert add_one(data.clone()).a.b == 1
+        assert add_one_c(data.clone()).a.b == 1
+        assert add_one_c(data) is data
+
     @pytest.mark.parametrize("index_type", ["slice", "tensor", "int"])
-    def test_td_index(self, index_type):
+    def test_tc_index(self, index_type):
         if index_type == "slice":
 
-            def add_one(td):
-                return td[:2] + 1
+            def index(td):
+                return td[:2]
 
         elif index_type == "tensor":
 
-            def add_one(td):
-                return td[torch.tensor([0, 1])] + 1
+            def index(td):
+                return td[torch.tensor([0, 1])]
 
         elif index_type == "int":
 
-            def add_one(td):
-                return td[0] + 1
+            def index(td):
+                return td[0]
 
-        add_one_c = torch.compile(add_one, fullgraph=True)
+        index_c = torch.compile(index, fullgraph=True)
         data = MyClass(
             a=MyClass(a=None, b=torch.arange(3), batch_size=[3]), batch_size=[3]
         )
         if index_type == "int":
-            assert (add_one(data).a.b == 1).all()
-            assert (add_one_c(data).a.b == 1).all()
-            assert add_one_c(data).shape == torch.Size([])
+            assert (index(data).a.b == 0).all()
+            assert isinstance(index_c(data), MyClass)
+            assert isinstance(index_c(data).a, MyClass)
+            assert (index_c(data).a.b == 0).all()
+            assert index_c(data).shape == torch.Size([])
         else:
-            assert (add_one(data).a.b == torch.arange(1, 3)).all()
-            assert (add_one_c(data).a.b == torch.arange(1, 3)).all()
-            assert add_one_c(data).shape == torch.Size([2])
+            assert (index(data).a.b == torch.arange(0, 2)).all()
+            assert isinstance(index(data), MyClass)
+            assert isinstance(index(data).a, MyClass)
+            assert isinstance(index_c(data), MyClass)
+            assert isinstance(index_c(data).a, MyClass)
+            assert (index_c(data).a.b == torch.arange(0, 2)).all()
+            assert index_c(data).shape == torch.Size([2])
 
-    def test_stack(self):
+    def test_tc_stack(self):
         def stack_tds(td0, td1):
             return TensorDict.stack([td0, td1])
             # return torch.stack([td0, td1])
@@ -186,7 +234,7 @@ class TestTC:
         )
         assert (stack_tds(data0, data1) == stack_tds_c(data0, data1)).all()
 
-    def test_cat(self):
+    def test_tc_cat(self):
         def cat_tds(td0, td1):
             return TensorDict.cat([td0, td1])
 
@@ -199,7 +247,7 @@ class TestTC:
         )
         assert (cat_tds(data0, data1) == cat_tds_c(data0, data1)).all()
 
-    def test_reshape(self):
+    def test_tc_reshape(self):
         def reshape(td):
             return td.reshape(2, 2)
 
@@ -209,7 +257,7 @@ class TestTC:
         )
         assert (reshape(data) == reshape_c(data)).all()
 
-    def test_unbind(self):
+    def test_tc_unbind(self):
         def unbind(td):
             return td.unbind(0)
 
@@ -220,12 +268,14 @@ class TestTC:
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
 
     @pytest.mark.parametrize("recurse", [True, False])
-    def test_clone(self, recurse):
+    def test_tc_clone(self, recurse):
         def clone(td: TensorDict):
             return td.clone(recurse=recurse)
 
         clone_c = torch.compile(clone, fullgraph=True)
-        data = TensorDict({"a": {"b": 0, "c": 1}})
+        data = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
+        )
         assert_close(clone_c(data), clone(data))
         assert clone_c(data) is not data
         if recurse:

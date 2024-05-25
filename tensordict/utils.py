@@ -2280,28 +2280,33 @@ def _unravel_key_to_tuple(key):
 
 def _slice_indices(index: slice, len: int):
     """A pure python implementation of slice.indices(len) since torch.compile doesn't recognise it."""
-    start = index.start
-    if start is None:
-        start = 0
-    stop = index.stop
-    if stop is None:
-        stop = len
     step = index.step
     if step is None:
         step = 1
     elif step == 0:
         raise ValueError("Step cannot be zero.")
 
-    if step > 0:
-        # Forward direction
-        lower = start
-        upper = stop - step + 1
-    else:
-        # Backward direction
-        lower = start + step - 1
-        upper = stop
-    upper = min(upper, len)
-    return lower, upper, step
+    start = index.start
+    stop = index.stop
+    if start is None:
+        if step > 0:
+            start = 0
+        else:
+            start = len - 1
+    elif start < 0:
+        start = len + start
+
+    if stop is None:
+        if step > 0:
+            stop = len
+        else:
+            stop = -1
+    elif stop > 0:
+        stop = min(len, stop)
+    elif step < 0 or (step > 0 and start >= 0):
+        stop = len + stop
+
+    return start, stop, step
 
 
 assert_allclose_td = assert_close

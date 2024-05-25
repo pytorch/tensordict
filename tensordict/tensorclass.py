@@ -44,6 +44,7 @@ from tensordict.base import (
 from tensordict.utils import (
     _get_repr,
     _is_json_serializable,
+    _is_tensorclass,
     _LOCK_ERROR,
     DeviceType,
     IndexType,
@@ -71,22 +72,22 @@ else:
 _CLEAR_METADATA = {"all", "any"}
 # torch functions where we can wrap the corresponding TensorDict version
 _TD_PASS_THROUGH = {
-    torch.unbind,
-    torch.full_like,
-    torch.zeros_like,
-    torch.ones_like,
-    torch.rand_like,
-    torch.empty_like,
-    torch.randn_like,
-    torch.clone,
-    torch.squeeze,
-    torch.unsqueeze,
-    torch.split,
-    torch.permute,
-    torch.split,
-    torch.stack,
-    torch.cat,
-    torch.gather,
+    torch.unbind: True,
+    torch.full_like: True,
+    torch.zeros_like: True,
+    torch.ones_like: True,
+    torch.rand_like: True,
+    torch.empty_like: True,
+    torch.randn_like: True,
+    torch.clone: True,
+    torch.squeeze: True,
+    torch.unsqueeze: True,
+    torch.split: True,
+    torch.permute: True,
+    torch.split: True,
+    torch.stack: True,
+    torch.cat: True,
+    torch.gather: True,
 }
 
 
@@ -175,9 +176,9 @@ def _tensorclass(cls: T) -> T:
         # if not torch.compiler.is_dynamo_compiling() and (func not in _TD_PASS_THROUGH or not all(
         #     issubclass(t, (Tensor, cls)) for t in types
         # )):
-        if func not in _TD_PASS_THROUGH or not all(
+        if not all(
             issubclass(t, (Tensor, cls)) for t in types
-        ):
+        ) or not _TD_PASS_THROUGH.get(func):
             return NotImplemented
 
         if kwargs is None:
@@ -204,9 +205,9 @@ def _tensorclass(cls: T) -> T:
     _is_non_tensor = getattr(cls, "_is_non_tensor", False)
 
     cls = dataclass(cls)
-    expected_keys = set(cls.__dataclass_fields__)
+    expected_keys = cls.__expected_keys__ = set(cls.__dataclass_fields__)
 
-    for attr in cls.__dataclass_fields__:
+    for attr in expected_keys:
         if attr in dir(TensorDict) and attr not in ("_is_non_tensor", "data"):
             raise AttributeError(
                 f"Attribute name {attr} can't be used with @tensorclass"
@@ -340,9 +341,20 @@ def _tensorclass(cls: T) -> T:
 def _arg_to_tensordict(arg):
     # if arg is a tensorclass or sequence of tensorclasses, extract the underlying
     # tensordicts and return those instead
-    if is_tensorclass(arg):
+
+    # since arg can be anything (e.g. callable etc) we can't ue pytree
+    # def convert(x):
+    #     if _is_tensorclass(type(x)):
+    #         return x._tensordict
+    #     return x
+    # return torch.utils._pytree.tree_map(convert, arg)
+    if callable(arg):
+        return arg
+    if _is_tensorclass(type(arg)):
         return arg._tensordict
-    elif isinstance(arg, (tuple, list)) and all(is_tensorclass(item) for item in arg):
+    elif isinstance(arg, (tuple, list)) and all(
+        _is_tensorclass(type(item)) for item in arg
+    ):
         return arg.__class__(item._tensordict for item in arg)
     return arg
 
@@ -350,7 +362,7 @@ def _arg_to_tensordict(arg):
 def _from_tensordict_with_copy(tc, tensordict):
     # creates a new tensorclass with the same type as tc, and a copy of the
     # non_tensordict data
-    return tc._from_tensordict(
+    return type(tc)._from_tensordict(
         tensordict=tensordict, non_tensordict=dict(tc._non_tensordict)
     )
 
@@ -358,7 +370,7 @@ def _from_tensordict_with_copy(tc, tensordict):
 def _from_tensordict_with_none(tc, tensordict):
     # creates a new tensorclass with the same type as tc, and all non_tensordict entries
     # set to None
-    return tc._from_tensordict(
+    return type(tc)._from_tensordict(
         tensordict=tensordict,
         non_tensordict={key: None for key in tc._non_tensordict},
     )
@@ -426,7 +438,7 @@ def _init_wrapper(__init__: Callable) -> Callable:
             ),
         )
         super(type(self), self).__setattr__("_non_tensordict", {})
-        self._is_initialized = True
+        super(type(self), self).__setattr__("_is_initialized", True)
 
         __init__(self, **kwargs)
 
@@ -775,7 +787,6 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
 
 
 def _wrap_method(self, attr, func):
-    @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
         args = tuple(_arg_to_tensordict(arg) for arg in args)
         kwargs = {key: _arg_to_tensordict(value) for key, value in kwargs.items()}
@@ -787,12 +798,15 @@ def _wrap_method(self, attr, func):
             elif attr in _CLEAR_METADATA:
                 # this is an attribute where copying the metadata makes no sense, e.g.
                 # .all or .any, so we replace all values with None
-                return self._from_tensordict(
+                return type(self)._from_tensordict(
                     res, {k: None for k in self._non_tensordict}
                 )
             # create a new tensorclass from res and copy the metadata from self
-            return self._from_tensordict(res, copy(self._non_tensordict))
+            return type(self)._from_tensordict(res, dict(self._non_tensordict))
         return res
+
+    if not torch.compiler.is_dynamo_compiling():
+        wrapped_func = functools.wraps(func)(wrapped_func)
 
     return wrapped_func
 
@@ -923,7 +937,8 @@ def _getitem(self, item: NestedKey) -> Any:
         isinstance(item, tuple) and all(isinstance(_item, str) for _item in item)
     ):
         raise ValueError(f"Invalid indexing arguments: {item}.")
-    tensor_res = self._tensordict[item]
+    # tensor_res = super(type(self), self).__getattribute__("_tensordict")[item]
+    tensor_res = self.__dict__["_tensordict"][item]
     return _from_tensordict_with_copy(self, tensor_res)  # device=res.device)
 
 
@@ -1147,7 +1162,7 @@ def _set(
         if key in ("batch_size", "names", "device"):
             # handled by setattr
             return
-        expected_keys = cls.__dataclass_fields__
+        expected_keys = cls.__expected_keys__
         if key not in expected_keys:
             raise AttributeError(
                 f"Cannot set the attribute '{key}', expected attributes are {expected_keys}."
@@ -1642,7 +1657,7 @@ def _unbind(self, dim: int):
 
     """
     return tuple(
-        self._from_tensordict(td, non_tensordict=copy(self._non_tensordict))
+        type(self)._from_tensordict(td, non_tensordict=copy(self._non_tensordict))
         for td in self._tensordict.unbind(dim)
     )
 
