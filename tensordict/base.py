@@ -1212,7 +1212,7 @@ class TensorDictBase(MutableMapping):
         if dim < 0:
             dim = batch_dims + dim
         results = self._unbind(dim)
-        if self._is_memmap or self._is_shared:
+        if self._is_locked and (self._is_memmap or self._is_shared):
             for result in results:
                 result.lock_()
         return results
@@ -2269,9 +2269,10 @@ class TensorDictBase(MutableMapping):
         return self._is_memmap
 
     @abc.abstractmethod
-    def share_memory_(self) -> T:
+    def share_memory_(self, *, lock: bool=True) -> T:
         """Places all the tensors in shared memory.
 
+        TODO: change this
         The TensorDict is then locked, meaning that any writing operations that
         isn't in-place will throw an exception (eg, rename, set or remove an
         entry).

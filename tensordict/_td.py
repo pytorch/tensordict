@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import numbers
 import os
@@ -2098,7 +2099,7 @@ class TensorDict(TensorDictBase):
                     f" for key '{key[1:]}' in tensordict:\n{self}."
                 )
 
-    def share_memory_(self) -> T:
+    def share_memory_(self, *, lock:bool=True) -> T:
         if self.is_memmap():
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
@@ -2110,11 +2111,14 @@ class TensorDict(TensorDictBase):
             if (
                 isinstance(value, Tensor)
                 and value.device.type == "cpu"
-                or _is_tensor_collection(value.__class__)
             ):
                 value.share_memory_()
+                continue
+            if _is_tensor_collection(value.__class__):
+                value.share_memory_(lock=False)
         self._is_shared = True
-        self.lock_()
+        if lock:
+            self.lock_()
         return self
 
     def detach_(self) -> T:
@@ -4111,3 +4115,47 @@ def _update_metadata(*, metadata, key, value, is_collection):
         metadata[key] = {
             "type": type(value).__name__,
         }
+
+
+# @torch._dynamo.on_compile_start
+# def _check_inline_inbuilt_module():
+#     try:
+#         assert str2bool(environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"])
+#     except (AssertionError, KeyError):
+#         raise RuntimeError(
+#             "set TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1 to use functional calls with tensordict."
+#         )
+
+from multiprocessing.reduction import ForkingPickler
+
+nt = torch.get_num_threads()
+executor = concurrent.futures.ThreadPoolExecutor(max_workers=nt)
+
+
+def rebuild_tensordict_files(cls, keys, rebuilds, args, device, shape, names):
+    # nt = torch.get_num_threads()
+    # if nt > 1:
+    #     futures = []
+    #     # executor = concurrent.futures.ThreadPoolExecutor(max_workers=nt)
+    #     for rebuild, _args in zip(rebuilds, args):
+    #         futures.append(executor.submit(rebuild, *_args))
+    #     values = [future.result() for future in futures]
+    # else:
+    values = [rebuild(*_args) for rebuild, _args in zip(rebuilds, args)]
+    return cls(dict(zip(keys, values)), device=device, batch_size=shape, names=names)
+
+def reduce_td(data):
+    metadata = data.device, data.shape, data.names
+    keys, values = zip(*data.items(True, True))
+    # nt = torch.get_num_threads()
+    # if nt > 1:
+    #     # executor = concurrent.futures.ThreadPoolExecutor(max_workers=nt)
+    #     futures = []
+    #     for value in values:
+    #         futures.append(executor.submit(torch.multiprocessing.reductions.reduce_tensor, value))
+    #     rebuilds, args = zip(*(future.result() for future in futures))
+    # else:
+    rebuilds, args = zip(*(torch.multiprocessing.reductions.reduce_tensor(value) for value in values))
+    return (rebuild_tensordict_files, (type(data), keys, rebuilds, args) + metadata)
+
+ForkingPickler.register(TensorDict, reduce_td)

@@ -1993,10 +1993,11 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return value
 
-    def share_memory_(self) -> T:
+    def share_memory_(self, *, lock: bool=True) -> T:
         for td in self.tensordicts:
-            td.share_memory_()
-        self.lock_()
+            td.share_memory_(lock=False)
+        if lock:
+            self.lock_()
         return self
 
     def detach_(self) -> T:
@@ -3096,8 +3097,8 @@ class _CustomOpTensorDict(TensorDictBase):
             "If this feature is required, open an issue on GitHub to trigger a discussion on the topic!"
         )
 
-    def share_memory_(self) -> _CustomOpTensorDict:
-        self._source.share_memory_()
+    def share_memory_(self, *, lock: bool=True) -> _CustomOpTensorDict:
+        self._source.share_memory_(lock=False)
         self.lock_()
         return self
 
