@@ -1445,6 +1445,7 @@ class LazyStackedTensorDict(TensorDictBase):
         prefix: tuple = (),
         filter_empty: bool | None = None,
         is_leaf: Callable | None = None,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         if inplace and any(
@@ -1453,7 +1454,13 @@ class LazyStackedTensorDict(TensorDictBase):
             raise ValueError(
                 "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
             )
-        if batch_size is not None:
+        if out is not None:
+            if not isinstance(out, LazyStackedTensorDict):
+                raise ValueError(
+                    "out must be a LazyStackedTensorDict instance in lazy_stack.apply(..., out=out)."
+                )
+            out = out.tensordicts
+        elif batch_size is not None:
             # any op that modifies the batch-size will result in a regular TensorDict
             return TensorDict._apply_nest(
                 self,
@@ -1491,6 +1498,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 inplace=inplace,
                 filter_empty=filter_empty,
                 is_leaf=is_leaf,
+                out=out[i] if out is not None else None,
             )
             for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
         ]

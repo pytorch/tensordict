@@ -285,6 +285,8 @@ def _tensorclass(cls: T) -> T:
     cls.__pow__ = TensorDict.__pow__
     cls.__ipow__ = TensorDict.__ipow__
 
+    cls._apply_nest = TensorDict._apply_nest
+
     cls.__enter__ = __enter__
     cls.__exit__ = __exit__
 

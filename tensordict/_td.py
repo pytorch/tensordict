@@ -932,11 +932,25 @@ class TensorDict(TensorDictBase):
         prefix: tuple = (),
         filter_empty: bool | None = None,
         is_leaf: Callable = None,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         if inplace:
             result = self
             is_locked = result.is_locked
+        elif out is not None:
+            result = out
+            if out.is_locked:
+                raise RuntimeError(_LOCK_ERROR)
+            is_locked = False
+            if batch_size is not None and batch_size != out.batch_size:
+                raise RuntimeError(
+                    "batch_size and out.batch_size must be equal when both are provided."
+                )
+            if device is not NO_DEFAULT and device != out.device:
+                raise RuntimeError(
+                    "device and out.device must be equal when both are provided."
+                )
         elif batch_size is not None:
 
             def make_result():
@@ -1000,6 +1014,7 @@ class TensorDict(TensorDictBase):
                     prefix=prefix + (key,),
                     filter_empty=filter_empty,
                     is_leaf=is_leaf,
+                    out=out._get_str(key, default=None) if out is not None else None,
                     **constructor_kwargs,
                 )
             else:

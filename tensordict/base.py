@@ -4595,6 +4595,7 @@ class TensorDictBase(MutableMapping):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
@@ -4651,6 +4652,23 @@ class TensorDictBase(MutableMapping):
                     ...         return val.apply(mean_any, call_on_nested=True)
                     ...     return val.mean()
                     >>> td_mean = td.apply(mean_any, call_on_nested=True)
+            out (TensorDictBase, optional): a tensordict where to write the results. This can be used to avoid
+                creating a new tensordict:
+
+                    >>> td = TensorDict({"a": 0})
+                    >>> td.apply(lambda x: x+1, out=td)
+                    >>> assert (td==1).all()
+
+                .. warning:: If the operation executed on the tensordict requires multiple keys to be accessed for
+                    a single computation, providing an ``out`` argument equal to ``self`` can cause the operation
+                    to provide silently wrong results.
+                    For instance:
+
+                        >>> td = TensorDict({"a": 1, "b": 1})
+                        >>> td.apply(lambda x: x+td["a"])["b"] # Right!
+                        tensor(2)
+                        >>> td.apply(lambda x: x+td["a"], out=td)["b"] # Wrong!
+                        tensor(3)
 
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
@@ -4711,6 +4729,7 @@ class TensorDictBase(MutableMapping):
             default=default,
             filter_empty=filter_empty,
             call_on_nested=call_on_nested,
+            out=out,
             **constructor_kwargs,
         )
         if propagate_lock and not inplace and self.is_locked and result is not None:
@@ -4730,6 +4749,7 @@ class TensorDictBase(MutableMapping):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new atensordict.
@@ -4786,6 +4806,24 @@ class TensorDictBase(MutableMapping):
                     ...         return val.apply(mean_any, call_on_nested=True)
                     ...     return val.mean()
                     >>> td_mean = td.apply(mean_any, call_on_nested=True)
+
+            out (TensorDictBase, optional): a tensordict where to write the results. This can be used to avoid
+                creating a new tensordict:
+
+                    >>> td = TensorDict({"a": 0})
+                    >>> td.apply(lambda x: x+1, out=td)
+                    >>> assert (td==1).all()
+
+                .. warning:: If the operation executed on the tensordict requires multiple keys to be accessed for
+                    a single computation, providing an ``out`` argument equal to ``self`` can cause the operation
+                    to provide silently wrong results.
+                    For instance:
+
+                        >>> td = TensorDict({"a": 1, "b": 1})
+                        >>> td.apply(lambda x: x+td["a"])["b"] # Right!
+                        tensor(2)
+                        >>> td.apply(lambda x: x+td["a"], out=td)["b"] # Wrong!
+                        tensor(3)
 
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
@@ -4896,6 +4934,7 @@ class TensorDictBase(MutableMapping):
         prefix: tuple = (),
         filter_empty: bool | None = None,
         is_leaf: Callable = None,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         ...
@@ -4917,6 +4956,7 @@ class TensorDictBase(MutableMapping):
         filter_empty: bool | None = False,
         is_leaf: Callable = None,
         propagate_lock: bool = False,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         """A faster apply method.
@@ -4940,6 +4980,7 @@ class TensorDictBase(MutableMapping):
             nested_keys=nested_keys,
             filter_empty=filter_empty,
             is_leaf=is_leaf,
+            out=out,
             **constructor_kwargs,
         )
         if propagate_lock and not inplace and self.is_locked and result is not None:
@@ -4952,7 +4993,7 @@ class TensorDictBase(MutableMapping):
         dim: int = 0,
         num_workers: int | None = None,
         *,
-        out: TensorDictBase = None,
+        out: TensorDictBase | None = None,
         chunksize: int | None = None,
         num_chunks: int | None = None,
         pool: mp.Pool | None = None,
