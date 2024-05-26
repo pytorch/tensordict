@@ -272,6 +272,10 @@ def _tensorclass(cls: T) -> T:
         cls.update_ = _update_
     if not hasattr(cls, "update_at_"):
         cls.update_at_ = _update_at_
+    if not hasattr(cls, "_set_str"):
+        cls._set_str = TensorDict._set_str
+    if not hasattr(cls, "_set_tuple"):
+        cls._set_tuple = TensorDict._set_tuple
 
     cls.__add__ = TensorDict.__add__
     cls.__iadd__ = TensorDict.__iadd__
@@ -285,8 +289,11 @@ def _tensorclass(cls: T) -> T:
     cls.__pow__ = TensorDict.__pow__
     cls.__ipow__ = TensorDict.__ipow__
 
-    cls._apply_nest = TensorDict._apply_nest
+    if not hasattr(cls, "_apply_nest"):
+        cls._apply_nest = TensorDict._apply_nest
 
+    if not hasattr(cls, "filter_non_tensor_data"):
+        cls.filter_non_tensor_data = _filter_non_tensor_data
     cls.__enter__ = __enter__
     cls.__exit__ = __exit__
 
@@ -334,6 +341,10 @@ def _tensorclass(cls: T) -> T:
     cls._is_tensorclass = True
 
     return cls
+
+
+def _filter_non_tensor_data(self):
+    return super(type(self), self).__getattribute__("_tensordict")
 
 
 def _arg_to_tensordict(arg):
@@ -1296,7 +1307,9 @@ def _state_dict(
 ) -> dict[str, Any]:
     """Returns a state_dict dictionary that can be used to save and load data from a tensorclass."""
     state_dict = {
-        "_tensordict": self._tensordict.state_dict(
+        "_tensordict": super(type(self), self)
+        .__getattribute__("_tensordict")
+        .state_dict(
             destination=destination, prefix=prefix, keep_vars=keep_vars, flatten=flatten
         )
     }
@@ -1326,7 +1339,9 @@ def _load_state_dict(
                         raise KeyError(
                             f"Key '{sub_key}' wasn't expected in the state-dict."
                         )
-                    self._non_tensordict[sub_key] = sub_item
+                    super(type(self), self).__getattribute__("_non_tensordict")[
+                        sub_key
+                    ] = sub_item
         elif key == "_tensordict":
             for sub_key in item.keys():
                 if (
@@ -1336,8 +1351,7 @@ def _load_state_dict(
                     raise KeyError(
                         f"Key '{sub_key}' wasn't expected in the state-dict."
                     )
-
-            self._tensordict.load_state_dict(
+            super(type(self), self).__getattribute__("_tensordict").load_state_dict(
                 item, strict=strict, assign=assign, from_flatten=from_flatten
             )
         else:
@@ -1405,7 +1419,7 @@ def _eq(self, other: object) -> bool:
     elif _is_tensor_collection(type(other)):
         # other can be a tensordict reconstruction of self, in which case we discard
         # the non-tensor data
-        tensor = self._tensordict == other.exclude(*self._non_tensordict.keys())
+        tensor = self.filter_non_tensor_data() == other.filter_non_tensor_data()
     else:
         tensor = self._tensordict == other
     return _from_tensordict_with_none(self, tensor)
@@ -2064,11 +2078,27 @@ class NonTensorData:
         )
 
     def empty(self, recurse=False, *, device=NO_DEFAULT, batch_size=None, names=None):
+        if batch_size is not None and names is None:
+            names = None
+        elif names is None and self._has_names():
+            names = self.names
+        else:
+            names = None
         return NonTensorData(
             data=self.data,
             batch_size=self.batch_size if batch_size is None else batch_size,
-            names=self.names if names is None and self._has_names() else names,
+            names=names,
             device=self.device if device is NO_DEFAULT else device,
+        )
+
+    def _apply_nest(self, *args, out=None, **kwargs):
+        # kwargs["filter_empty"] = False
+        if out is not None:
+            return out
+        return self.empty(
+            batch_size=kwargs.get("batch_size"),
+            device=kwargs.get("device", NO_DEFAULT),
+            names=kwargs.get("names"),
         )
 
     def to_dict(self):
@@ -2148,12 +2178,6 @@ class NonTensorData:
         if not escape_conversion:
             return _from_tensordict_with_copy(tensorclass_instance, result)
         return result
-
-    def _apply_nest(self, *args, **kwargs):
-        kwargs["filter_empty"] = False
-        return _wrap_method(self, "_apply_nest", self._tensordict._apply_nest)(
-            *args, **kwargs
-        )
 
     def _fast_apply(self, *args, **kwargs):
         kwargs["filter_empty"] = False

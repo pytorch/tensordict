@@ -1273,14 +1273,19 @@ class LazyStackedTensorDict(TensorDictBase):
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
+        name = None
         if batch_size is not None:
-            raise ValueError(
-                "changing the batch-size in LazyStackedTensorDict.empty() is not allowed."
+            return TensorDict.empty(
+                self,
+                recurse=recurse,
+                batch_size=batch_size,
+                device=device if device is not NO_DEFAULT else self.device,
+                names=names if names is not None else None,
             )
         if names is not None:
-            raise ValueError(
-                "changing the batch-size in LazyStackedTensorDict.empty() is not allowed."
-            )
+            if len(names) > self.stack_dim:
+                name = names[self.stack_dim]
+            names = [name for i, name in enumerate(names) if i != self.stack_dim]
         return type(self)(
             *[
                 td.empty(
@@ -1289,6 +1294,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 for td in self.tensordicts
             ],
             stack_dim=self.stack_dim,
+            stack_dim_name=name,
         )
 
     def _clone(self, recurse: bool = True) -> T:
