@@ -1148,6 +1148,48 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    def expand_as(self, other: TensorDictBase | torch.Tensor) -> TensorDictBase:
+        """Broadcasts the shape of the tensordict to the shape of `other` and expands it accordingly.
+
+        If the input is a tensor collection (tensordict or tensorclass),
+        the leaves will be expanded on a one-to-one basis.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td0 = TensorDict({
+            ...     "a": torch.ones(3, 1, 4),
+            ...     "b": {"c": torch.ones(3, 2, 1, 4)}},
+            ...     batch_size=[3],
+            ... )
+            >>> td1 = TensorDict({
+            ...     "a": torch.zeros(2, 3, 5, 4),
+            ...     "b": {"c": torch.zeros(2, 3, 2, 6, 4)}},
+            ...     batch_size=[2, 3],
+            ... )
+            >>> expanded = td0.expand_as(td1)
+            >>> assert (expanded==1).all()
+            >>> print(expanded)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([2, 3, 5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([2, 3, 2, 6, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([2, 3]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([2, 3]),
+                device=None,
+                is_shared=False)
+
+        """
+        if _is_tensor_collection(type(other)):
+            return self.apply(
+                lambda x, y: x.expand_as(y), other, batch_size=other.batch_size
+            )
+        return self.expand(other.shape)
+
     def unbind(self, dim: int) -> tuple[T, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
 

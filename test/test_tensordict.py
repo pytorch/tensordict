@@ -521,6 +521,19 @@ class TestGeneric:
         assert td2.get("key1").shape == torch.Size([3, 7, 4, 5, 6])
         assert td2.get("key2").shape == torch.Size([3, 7, 4, 5, 10])
 
+    def test_expand_as(self):
+        td0 = TensorDict(
+            {"a": torch.ones(3, 1, 4), "b": {"c": torch.ones(3, 2, 1, 4)}},
+            batch_size=[3],
+        )
+        td1 = TensorDict(
+            {"a": torch.zeros(2, 3, 5, 4), "b": {"c": torch.zeros(2, 3, 2, 6, 4)}},
+            batch_size=[2, 3],
+        )
+        expanded = td0.expand_as(td1)
+        assert (expanded == 1).all()
+        assert expanded["b", "c"].shape == torch.Size([2, 3, 2, 6, 4])
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_expand_with_singleton(self, device):
         torch.manual_seed(1)
