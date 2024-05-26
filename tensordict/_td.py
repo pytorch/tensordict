@@ -953,7 +953,10 @@ class TensorDict(TensorDictBase):
                 )
         else:
 
-            def make_result():
+            def make_result(names=names, batch_size=batch_size):
+                if batch_size is not None and names is None:
+                    # erase names
+                    names = [None] * len(batch_size)
                 return self.empty(batch_size=batch_size, device=device, names=names)
 
             result = None
@@ -2671,7 +2674,7 @@ class TensorDict(TensorDictBase):
                 if batch_size is None
                 else torch.Size(batch_size),
                 source={},
-                names=self._td_dim_names if names is not None else names,
+                names=self._td_dim_names if names is None else names,
                 _run_checks=False,
             )
         return super().empty(recurse=recurse)
