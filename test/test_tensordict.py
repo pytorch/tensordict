@@ -4133,7 +4133,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert not isinstance(leaf, torch.Tensor)
 
         torch.utils._pytree.tree_map(assert_leaves, td_numpy)
-        assert_allclose_td(TensorDict(td_numpy), td)
+        assert_allclose_td(TensorDict(td_numpy), td.data.cpu())
 
     def test_pad(self, td_name, device):
         td = getattr(self, td_name)(device)
