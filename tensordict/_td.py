@@ -932,36 +932,32 @@ class TensorDict(TensorDictBase):
         prefix: tuple = (),
         filter_empty: bool | None = None,
         is_leaf: Callable = None,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         if inplace:
             result = self
             is_locked = result.is_locked
-        elif batch_size is not None:
-
-            def make_result():
-                return TensorDict(
-                    {},
-                    batch_size=torch.Size(batch_size),
-                    names=names,
-                    device=self.device if device is NO_DEFAULT else device,
-                    _run_checks=False,
-                    **constructor_kwargs,
-                )
-
-            result = None
+        elif out is not None:
+            result = out
+            if out.is_locked:
+                raise RuntimeError(_LOCK_ERROR)
             is_locked = False
+            if batch_size is not None and batch_size != out.batch_size:
+                raise RuntimeError(
+                    "batch_size and out.batch_size must be equal when both are provided."
+                )
+            if device is not NO_DEFAULT and device != out.device:
+                raise RuntimeError(
+                    "device and out.device must be equal when both are provided."
+                )
         else:
 
-            def make_result():
-                return TensorDict(
-                    {},
-                    batch_size=self.batch_size,
-                    device=self.device if device is NO_DEFAULT else device,
-                    names=self.names if self._has_names() else None,
-                    _run_checks=False,
-                    **constructor_kwargs,
-                )
+            def make_result(names=names, batch_size=batch_size):
+                if batch_size is not None and names is None:
+                    # erase names
+                    names = [None] * len(batch_size)
+                return self.empty(batch_size=batch_size, device=device, names=names)
 
             result = None
             is_locked = False
@@ -1000,6 +996,7 @@ class TensorDict(TensorDictBase):
                     prefix=prefix + (key,),
                     filter_empty=filter_empty,
                     is_leaf=is_leaf,
+                    out=out._get_str(key, default=None) if out is not None else None,
                     **constructor_kwargs,
                 )
             else:
@@ -2544,7 +2541,7 @@ class TensorDict(TensorDictBase):
                 if tensor is None:
                     if pad is not None:
                         tensor = _other
-                        _other = pad
+                        _other = torch.tensor(pad, dtype=_other.dtype)
                     else:
                         raise KeyError(
                             f"Key {key} not found and no pad value provided."
@@ -2552,7 +2549,7 @@ class TensorDict(TensorDictBase):
                     cond = expand_as_right(~condition, tensor)
                 elif _other is None:
                     if pad is not None:
-                        _other = pad
+                        _other = torch.tensor(pad, dtype=tensor.dtype)
                     else:
                         raise KeyError(
                             f"Key {key} not found and no pad value provided."
@@ -2667,13 +2664,17 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    def empty(self, recurse=False) -> T:
+    def empty(
+        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
+    ) -> T:
         if not recurse:
             return TensorDict(
-                device=self._device,
-                batch_size=self._batch_size,
+                device=self._device if device is NO_DEFAULT else device,
+                batch_size=self._batch_size
+                if batch_size is None
+                else torch.Size(batch_size),
                 source={},
-                names=self._td_dim_names,
+                names=self._td_dim_names if names is None else names,
                 _run_checks=False,
             )
         return super().empty(recurse=recurse)

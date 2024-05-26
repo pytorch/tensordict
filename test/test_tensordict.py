@@ -2580,6 +2580,17 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert (td_c[key] * 2 != td[key]).any()
                 assert (td_1[key] == td[key] * 2).all()
 
+    def test_apply_out(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if not isinstance(td, LazyStackedTensorDict):
+            td_c = td.to_tensordict()
+        else:
+            td_c = td.clone()
+        td.apply(lambda x: x + 1, out=td_c)
+        assert_allclose_td(
+            td.filter_non_tensor_data().data + 1, td_c.filter_non_tensor_data()
+        )
+
     def test_as_tensor(self, td_name, device):
         td = getattr(self, td_name)(device)
         if "memmap" in td_name and device == torch.device("cpu"):
@@ -4122,7 +4133,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert not isinstance(leaf, torch.Tensor)
 
         torch.utils._pytree.tree_map(assert_leaves, td_numpy)
-        assert_allclose_td(TensorDict(td_numpy), td)
+        assert_allclose_td(TensorDict(td_numpy), td.data.cpu())
 
     def test_pad(self, td_name, device):
         td = getattr(self, td_name)(device)

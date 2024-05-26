@@ -541,14 +541,23 @@ class PersistentTensorDict(TensorDictBase):
     def device(self):
         return self._device
 
-    def empty(self, recurse=False) -> T:
+    def empty(
+        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
+    ) -> T:
         if recurse:
-            out = self.empty(recurse=False)
+            out = self.empty(
+                recurse=False, batch_size=batch_size, device=device, names=names
+            )
             for key, val in self.items():
                 if is_tensor_collection(val):
                     out._set_str(
                         key,
-                        val.empty(recurse=True),
+                        val.empty(
+                            recurse=True,
+                            batch_size=batch_size,
+                            device=device,
+                            names=names,
+                        ),
                         inplace=False,
                         validated=True,
                         non_blocking=False,
@@ -556,9 +565,9 @@ class PersistentTensorDict(TensorDictBase):
             return out
         return TensorDict(
             {},
-            device=self.device,
-            batch_size=self.batch_size,
-            names=self.names if self._has_names() else None,
+            device=self.device if device is NO_DEFAULT else device,
+            batch_size=self.batch_size if batch_size is None else batch_size,
+            names=self.names if names is None and self._has_names() else names,
         )
 
     def zero_(self) -> T:
