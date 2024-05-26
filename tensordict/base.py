@@ -6756,7 +6756,7 @@ class TensorDictBase(MutableMapping):
 
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
-    ) -> T:
+    ) -> T:  # noqa: D417
         """Returns a new, empty tensordict with the same device and batch size.
 
         Args:

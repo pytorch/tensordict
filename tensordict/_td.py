@@ -953,9 +953,9 @@ class TensorDict(TensorDictBase):
                 )
         else:
 
-            make_result = lambda: self.empty(
-                batch_size=batch_size, device=device, names=names
-            )
+            def make_result():
+                return self.empty(batch_size=batch_size, device=device, names=names)
+
             result = None
             is_locked = False
 
