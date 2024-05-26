@@ -1270,9 +1270,24 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return out
 
-    def empty(self, recurse=False) -> T:
+    def empty(
+        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
+    ) -> T:
+        if batch_size is not None:
+            raise ValueError(
+                "changing the batch-size in LazyStackedTensorDict.empty() is not allowed."
+            )
+        if names is not None:
+            raise ValueError(
+                "changing the batch-size in LazyStackedTensorDict.empty() is not allowed."
+            )
         return type(self)(
-            *[td.empty(recurse=recurse) for td in self.tensordicts],
+            *[
+                td.empty(
+                    recurse=recurse, batch_size=batch_size, device=device, names=names
+                )
+                for td in self.tensordicts
+            ],
             stack_dim=self.stack_dim,
         )
 

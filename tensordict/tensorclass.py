@@ -2063,12 +2063,12 @@ class NonTensorData:
             input_dict_or_td=input_dict_or_td, clone=clone, non_blocking=non_blocking
         )
 
-    def empty(self, recurse=False):
+    def empty(self, recurse=False, *, device=NO_DEFAULT, batch_size=None, names=None):
         return NonTensorData(
             data=self.data,
-            batch_size=self.batch_size,
-            names=self.names if self._has_names() else None,
-            device=self.device,
+            batch_size=self.batch_size if batch_size is None else batch_size,
+            names=self.names if names is None and self._has_names() else names,
+            device=self.device if device is NO_DEFAULT else device,
         )
 
     def to_dict(self):

@@ -951,32 +951,11 @@ class TensorDict(TensorDictBase):
                 raise RuntimeError(
                     "device and out.device must be equal when both are provided."
                 )
-        elif batch_size is not None:
-
-            def make_result():
-                return TensorDict(
-                    {},
-                    batch_size=torch.Size(batch_size),
-                    names=names,
-                    device=self.device if device is NO_DEFAULT else device,
-                    _run_checks=False,
-                    **constructor_kwargs,
-                )
-
-            result = None
-            is_locked = False
         else:
 
-            def make_result():
-                return TensorDict(
-                    {},
-                    batch_size=self.batch_size,
-                    device=self.device if device is NO_DEFAULT else device,
-                    names=self.names if self._has_names() else None,
-                    _run_checks=False,
-                    **constructor_kwargs,
-                )
-
+            make_result = lambda: self.empty(
+                batch_size=batch_size, device=device, names=names
+            )
             result = None
             is_locked = False
 
@@ -2682,13 +2661,17 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    def empty(self, recurse=False) -> T:
+    def empty(
+        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
+    ) -> T:
         if not recurse:
             return TensorDict(
-                device=self._device,
-                batch_size=self._batch_size,
+                device=self._device if device is NO_DEFAULT else device,
+                batch_size=self._batch_size
+                if batch_size is None
+                else torch.Size(batch_size),
                 source={},
-                names=self._td_dim_names,
+                names=self._td_dim_names if names is not None else names,
                 _run_checks=False,
             )
         return super().empty(recurse=recurse)

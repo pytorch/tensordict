@@ -6754,7 +6754,9 @@ class TensorDictBase(MutableMapping):
             out.names = self.names
         return out
 
-    def empty(self, recurse=False) -> T:
+    def empty(
+        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
+    ) -> T:
         """Returns a new, empty tensordict with the same device and batch size.
 
         Args:
@@ -6763,11 +6765,27 @@ class TensorDictBase(MutableMapping):
                 Otherwise, only the root will be duplicated.
                 Defaults to ``False``.
 
+        Keyword Args:
+            batch_size (torch.Size, optional): a new batch-size for the tensordict.
+            device (torch.device, optional): a new device.
+            names (list of str, optional): dimension names.
+
         """
         if not recurse:
-            return self._select(set_shared=False)
-        # simply exclude the leaves
-        return self._exclude(*self.keys(True, True), set_shared=False)
+            result = self._select(set_shared=False)
+        else:
+            # simply exclude the leaves
+            result = self._exclude(*self.keys(True, True), set_shared=False)
+        if batch_size is not None:
+            result.batch_size = batch_size
+        if device is not NO_DEFAULT:
+            if device is None:
+                result.clear_device_()
+            else:
+                result = result.to(device)
+        if names is not None:
+            result.names = names
+        return result
 
     # Filling
     def zero_(self) -> T:
