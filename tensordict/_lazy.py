@@ -2320,9 +2320,15 @@ class LazyStackedTensorDict(TensorDictBase):
             and other.shape[: self.stack_dim] == self.shape[: self.stack_dim]
         ):
             other = other.unbind(self.stack_dim)
+
+            def where(td, cond, other, pad):
+                if cond.numel() > 1:
+                    return td.where(cond, other, pad=pad)
+                return other if not cond else td
+
             result = LazyStackedTensorDict.maybe_dense_stack(
                 [
-                    td.where(cond, _other, pad=pad)
+                    where(td, cond, _other, pad=pad)
                     for td, cond, _other in zip(self.tensordicts, condition, other)
                 ],
                 self.stack_dim,

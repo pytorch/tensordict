@@ -6728,6 +6728,47 @@ class TestLazyStackedTensorDict:
         stack = LazyStackedTensorDict.lazy_stack([td, td2])
         assert set(stack.keys(True, True)) == {"a"}
 
+    @pytest.mark.parametrize("ragged", [False, True])
+    def test_arithmetic_ops(self, ragged):
+        td0 = LazyStackedTensorDict(
+            *[
+                LazyStackedTensorDict(
+                    *[
+                        TensorDict(
+                            {
+                                "a": torch.zeros(
+                                    (
+                                        2,
+                                        torch.randint(1, 5, ()).item() if ragged else 4,
+                                        3,
+                                    )
+                                ),
+                                ("b", "c"): torch.zeros(2),
+                            },
+                            [2],
+                        )
+                        for _ in range(3)
+                    ],
+                    stack_dim=1,
+                )
+            ],
+            stack_dim=0,
+        )
+        td1 = td0.clone()
+        assert (td1 + 1 == td1.apply(lambda x: x + 1)).all()
+        td1 += 1
+        assert (td1 == td0.apply(lambda x: x + 1)).all()
+        assert ((td0 + td1) == td0.apply(lambda x: x + 1)).all()
+        assert (td0 * td1 == 0).all()
+        assert ((td1 * 0) == 0).all()
+        if ragged:
+            # This doesn't work because tensors can't be reduced to a single value
+            # as they're not contiguous
+            with pytest.raises(RuntimeError, match="Found more than one unique shape"):
+                td1.norm()
+        else:
+            td1.norm()
+
     def test_best_intention_stack(self):
         td0 = TensorDict({"a": 1, "b": TensorDict({"c": 2}, [])}, [])
         td1 = TensorDict({"a": 1, "b": TensorDict({"d": 2}, [])}, [])
