@@ -78,6 +78,7 @@ from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
+
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key, default=None)` is a valid usage.
 class _NoDefault:
@@ -5522,7 +5523,7 @@ class TensorDictBase(MutableMapping):
         )
 
     @implement_for("torch", "2.3")
-    def norm(
+    def norm(  # noqa: F811
         self,
         out=None,
         dtype: torch.dtype | None = None,
