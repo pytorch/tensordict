@@ -60,6 +60,7 @@ from tensordict.utils import (
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
+    implement_for,
     IndexType,
     infer_size_impl,
     int_generator,
@@ -76,7 +77,6 @@ from tensordict.utils import (
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
-
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key, default=None)` is a valid usage.
@@ -5502,6 +5502,26 @@ class TensorDictBase(MutableMapping):
         torch._foreach_trunc_(self._values_list(True, True))
         return self
 
+    @implement_for("torch", None, "2.3")
+    def norm(
+        self,
+        out=None,
+        dtype: torch.dtype | None = None,
+    ):
+        keys, vals = self._items_list(True, True, collapse=True)
+        if dtype is not None:
+            raise RuntimeError("dtype must be None for torch <= 2.3")
+        vals = torch._foreach_norm(vals)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            batch_size=[],
+            propagate_lock=True,
+        )
+
+    @implement_for("torch", "2.3")
     def norm(
         self,
         out=None,
