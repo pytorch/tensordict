@@ -6283,6 +6283,8 @@ class TensorDictBase(MutableMapping):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # During exit, updates mustn't be made in-place as the source and dest
+        # storage location can be identical, resulting in a RuntimeError
         if exc_type is not None and issubclass(exc_type, Exception):
             return False
         _last_op = self._last_op_queue.pop()
@@ -6297,7 +6299,7 @@ class TensorDictBase(MutableMapping):
             elif last_op == self.__class__.transpose.__name__:
                 dim0, dim1 = args
                 if not out.is_locked:
-                    return out.update(self.transpose(dim0, dim1), inplace=True)
+                    return out.update(self.transpose(dim0, dim1), inplace=False)
                 else:
                     return out.update_(self.transpose(dim0, dim1))
             elif last_op == self.__class__.flatten.__name__:
@@ -6316,7 +6318,7 @@ class TensorDictBase(MutableMapping):
 
                 if not out.is_locked:
                     return out.update(
-                        self.unflatten(dim0, out.shape[dim0 : dim1 + 1]), inplace=True
+                        self.unflatten(dim0, out.shape[dim0 : dim1 + 1]), inplace=False
                     )
                 else:
                     return out.update_(self.unflatten(dim0, out.shape[dim0 : dim1 + 1]))
@@ -6335,7 +6337,7 @@ class TensorDictBase(MutableMapping):
                     dim0 = out.ndim + dim0
                 dim1 = dim0 + len(unflattened_size) - 1
                 if not out.is_locked:
-                    return out.update(self.flatten(dim0, dim1), inplace=True)
+                    return out.update(self.flatten(dim0, dim1), inplace=False)
                 else:
                     return out.update_(self.flatten(dim0, dim1))
 
@@ -6345,12 +6347,12 @@ class TensorDictBase(MutableMapping):
                 # inverse map
                 inv_dims_list = np.argsort(dims_list)
                 if not out.is_locked:
-                    return out.update(self.permute(inv_dims_list), inplace=True)
+                    return out.update(self.permute(inv_dims_list), inplace=False)
                 else:
                     return out.update_(self.permute(inv_dims_list))
             elif last_op == self.__class__.view.__name__:
                 if not out.is_locked:
-                    return out.update(self.view(out.shape), inplace=True)
+                    return out.update(self.view(out.shape), inplace=False)
                 else:
                     return out.update_(self.view(out.shape))
             elif last_op == self.__class__.unsqueeze.__name__:
@@ -6363,7 +6365,7 @@ class TensorDictBase(MutableMapping):
                         "Cannot use td.unsqueeze() as a decorator if the dimension is implicit."
                     )
                 if not out.is_locked:
-                    return out.update(self.squeeze(dim), inplace=True)
+                    return out.update(self.squeeze(dim), inplace=False)
                 else:
                     return out.update_(self.squeeze(dim))
             elif last_op == self.__class__.squeeze.__name__:
@@ -6376,7 +6378,7 @@ class TensorDictBase(MutableMapping):
                         "Cannot use td.squeeze() as a decorator if the dimension is implicit."
                     )
                 if not out.is_locked:
-                    return out.update(self.unsqueeze(dim), inplace=True)
+                    return out.update(self.unsqueeze(dim), inplace=False)
                 else:
                     return out.update_(self.unsqueeze(dim))
             elif last_op == self.__class__.to_module.__name__:
