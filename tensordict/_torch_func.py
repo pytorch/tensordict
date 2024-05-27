@@ -449,10 +449,9 @@ def _stack(
                     lazy_stack_dim += 1
                 else:
                     dim = dim - 1
-
                 return LazyStackedTensorDict(
                     *[
-                        torch.stack(list_of_td, dim)
+                        _stack(list_of_td, dim, maybe_dense_stack=maybe_dense_stack)
                         for list_of_td in zip(
                             *[td.tensordicts for td in list_of_tensordicts]
                         )

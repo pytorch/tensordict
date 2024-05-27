@@ -60,6 +60,7 @@ from tensordict.utils import (
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
+    implement_for,
     IndexType,
     infer_size_impl,
     int_generator,
@@ -3840,6 +3841,8 @@ class TensorDictBase(MutableMapping):
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
+        *,
+        collapse: bool = False,
     ) -> Tuple[List, List]:
         return tuple(
             list(key_or_val)
@@ -3847,7 +3850,7 @@ class TensorDictBase(MutableMapping):
                 *self.items(
                     include_nested=include_nested,
                     leaves_only=leaves_only,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
                 )
             )
         )
@@ -5500,23 +5503,39 @@ class TensorDictBase(MutableMapping):
         torch._foreach_trunc_(self._values_list(True, True))
         return self
 
+    @implement_for("torch", None, "2.4")
     def norm(
         self,
-        p="fro",
-        dim=None,
-        keepdim=False,
         out=None,
         dtype: torch.dtype | None = None,
     ):
-        keys, vals = self._items_list(True, True)
-        vals = torch._foreach_norm(vals, p=p, dim=dim, keepdim=keepdim, dtype=dtype)
+        keys, vals = self._items_list(True, True, collapse=True)
+        if dtype is not None:
+            raise RuntimeError("dtype must be None for torch <= 2.3")
+        vals = torch._foreach_norm(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
             lambda name, val: items[name],
             named=True,
             nested_keys=True,
             batch_size=[],
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    @implement_for("torch", "2.4")
+    def norm(  # noqa: F811
+        self,
+        out=None,
+        dtype: torch.dtype | None = None,
+    ):
+        keys, vals = self._items_list(True, True, collapse=True)
+        vals = torch._foreach_norm(vals, dtype=dtype)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            batch_size=[],
             propagate_lock=True,
         )
 
