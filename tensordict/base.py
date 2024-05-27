@@ -5503,7 +5503,7 @@ class TensorDictBase(MutableMapping):
         torch._foreach_trunc_(self._values_list(True, True))
         return self
 
-    @implement_for("torch", None, "2.3")
+    @implement_for("torch", None, "2.4")
     def norm(
         self,
         out=None,
@@ -5522,7 +5522,7 @@ class TensorDictBase(MutableMapping):
             propagate_lock=True,
         )
 
-    @implement_for("torch", "2.3")
+    @implement_for("torch", "2.4")
     def norm(  # noqa: F811
         self,
         out=None,
