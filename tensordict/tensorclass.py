@@ -432,13 +432,13 @@ def _tensorclass(cls: T) -> T:
             setattr(cls, method_name, getattr(TensorDict, method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
-            setattr(cls, method_name, _wrap_td_method(getattr(TensorDict, method_name)))
+            setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_COPY:
         if not hasattr(cls, method_name):
             setattr(
                 cls,
                 method_name,
-                _wrap_td_method(getattr(TensorDict, method_name), copy_non_tensor=True),
+                _wrap_td_method(method_name, copy_non_tensor=True),
             )
 
     if not hasattr(cls, "_apply_nest"):
@@ -896,11 +896,10 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     return wrapper
 
 
-def _wrap_td_method(func, *, copy_non_tensor=False):
-    @functools.wraps(func)
+def _wrap_td_method(funcname, *, copy_non_tensor=False):
     def wrapped_func(self, *args, **kwargs):
         td = super(type(self), self).__getattribute__("_tensordict")
-        result = func(td, *args, **kwargs)
+        result = getattr(td, funcname)(*args, **kwargs)
         if isinstance(result, TensorDictBase):
             if result is td:
                 return self

@@ -22,6 +22,7 @@ from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
+    _shape,
     DeviceType,
     is_non_tensor,
     is_tensorclass,
@@ -475,8 +476,12 @@ def _stack(
                     if is_not_init is None:
                         is_not_init = isinstance(tensor, UninitializedTensorMixin)
                     if not is_not_init and tensor_shape is None:
-                        tensor_shape = tensor.shape
-                    elif not is_not_init and tensor.shape != tensor_shape:
+                        tensor_shape = _shape(tensor)
+                    elif not is_not_init and not all(
+                        s1 == s2 and s1 != -1
+                        for s1, s2 in zip(_shape(tensor), tensor_shape)
+                    ):
+                        # Nested tensors will require a lazy stack
                         if maybe_dense_stack:
                             with set_lazy_legacy(True):
                                 return _stack(list_of_tensordicts, dim=dim)

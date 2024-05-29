@@ -40,7 +40,6 @@ from typing import (
 import numpy as np
 import torch
 
-
 try:
     from functorch import dim as ftdim
 
