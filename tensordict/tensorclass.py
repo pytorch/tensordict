@@ -716,7 +716,7 @@ def _from_tensordict_wrapper(expected_keys):
                         del non_tensordict[key]
                         continue
                     raise KeyError(
-                        f"{key} is present in both tensor and non-tensor dicts"
+                        f"{key} is present in both tensor and non-tensor dicts."
                     )
         # bypass initialisation. this means we don't incur any overhead creating an
         # empty tensordict and writing values to it. we can skip this because we already
@@ -900,7 +900,15 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False):
     def wrapped_func(self, *args, **kwargs):
         td = super(type(self), self).__getattribute__("_tensordict")
         result = getattr(td, funcname)(*args, **kwargs)
-        if isinstance(result, TensorDictBase):
+
+        def check_out(kwargs, result):
+            out = kwargs.get("out")
+            if out is result:
+                # No need to transform output
+                return True
+            return False
+
+        if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
             if result is td:
                 return self
             nontd = super(type(self), self).__getattribute__("_non_tensordict")
