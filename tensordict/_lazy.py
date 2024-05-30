@@ -1412,10 +1412,20 @@ class LazyStackedTensorDict(TensorDictBase):
 
     valid_keys = keys
 
-    # def _iterate_over_keys(self) -> None:
-    #     for key in self.tensordicts[0].keys():
-    #         if all(key in td.keys() for td in self.tensordicts):
-    #             yield key
+    def non_tensor_items(self, include_nested: bool = False):
+        """Returns all non-tensor leaves, maybe recursively."""
+        items = self.tensordicts[0].non_tensor_items(include_nested=include_nested)
+        return tuple(
+            (
+                key,
+                torch.stack(
+                    [val0, *[td.get(key) for td in self.tensordicts[1:]]],
+                    self.stack_dim,
+                ),
+            )
+            for (key, val0) in items
+        )
+
     def _iterate_over_keys(self) -> None:
         # this is about 20x faster than the version above
         yield from self._key_list()

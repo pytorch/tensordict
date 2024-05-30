@@ -492,6 +492,9 @@ def _tensorclass(cls: T) -> T:
     cls._is_non_tensor = _is_non_tensor
     cls._is_tensorclass = True
 
+    from tensordict import _pytree
+
+    _pytree._CONSTRUCTORS[cls] = _pytree._tensorclass_constructor
     return cls
 
 

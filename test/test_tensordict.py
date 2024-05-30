@@ -7231,10 +7231,63 @@ class TestLazyStackedTensorDict:
         ):
             td_a.update_(td_b.to_tensordict())
 
+    def test_stack_with_heterogeneous_stacks(self):
+        # tests that we can stack several stacks in a dense manner
+        def make_tds():
+            td0 = TensorDict(
+                {
+                    "a": torch.zeros(3),
+                    "b": torch.zeros(4),
+                    "c": {"d": 0, "e": "a string!"},
+                    "f": "another string",
+                },
+                [],
+            )
+            # we intentionally swap the order of the keys to make sure that the comparison is robust to that
+            td1 = TensorDict(
+                {
+                    "b": torch.zeros(5),
+                    "c": {"d": 0, "e": "a string!"},
+                    "f": "another string",
+                    "a": torch.zeros(3),
+                },
+                [],
+            )
+            td_a = TensorDict.maybe_dense_stack([td0, td1])
+            td_b = TensorDict.maybe_dense_stack([td0, td1]).clone()
+            td = TensorDict.maybe_dense_stack([td_a, td_b])
+            return (td, td_a, td_b, td0, td1)
+
+        td, td_a, td_b, td0, td1 = make_tds()
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[0], TensorDict)
+        assert isinstance(td.tensordicts[1], TensorDict)
+        # If we remove the "a" key from one of the tds, the resulting element of the stack cannot be dense
+        td, td_a, td_b, td0, td1 = make_tds()
+        del td_a["a"]
+        td = TensorDict.maybe_dense_stack([td_a, td_b])
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[0], LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[1], LazyStackedTensorDict)
+
+        td, td_a, td_b, td0, td1 = make_tds()
+        del td0["a"]
+        td = TensorDict.maybe_dense_stack([td_a, td_b])
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[0], LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[1], LazyStackedTensorDict)
+
+        # this isn't true if we remove ("c", "d") on one td
+        td, td_a, td_b, td0, td1 = make_tds()
+        del td0["c", "d"]
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[0], TensorDict)
+        assert isinstance(td.tensordicts[1], TensorDict)
+
     @pytest.mark.parametrize(
         "stack_order", [[0, 1, 2], [2, 1, 0], [1, 2, 0], [1, 0, 2], [2, 0, 1]]
     )
-    def test_stack_with_stack(self, stack_order):
+    def test_stack_with_homogeneous_stack(self, stack_order):
         # tests the condition where all(
         #                 isinstance(_tensordict, LazyStackedTensorDict)
         #                 for _tensordict in list_of_tensordicts
