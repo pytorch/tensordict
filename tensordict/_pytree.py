@@ -105,8 +105,7 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
 
 
 def _lazy_tensordict_flatten(d: LazyStackedTensorDict) -> Tuple[List[Any], Context]:
-    values = d.tensordicts
-    return values, {
+    return list(d.tensordicts), {
         "stack_dim_name": d._td_dim_name,
         "stack_dim": d.stack_dim,
         "constructor": _lazy_tensordict_constructor,
@@ -146,11 +145,8 @@ def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]
 
 
 def _lazy_tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]:
-    return cls(
-        *values,
-        stack_dim=context["stack_dim"],
-        stack_dim_name=context["stack_dim_name"]
-    )
+    stack_dim = context["stack_dim"]
+    return cls(*values, stack_dim=stack_dim, stack_dim_name=context["stack_dim_name"])
 
 
 def _td_flatten_with_keys(
