@@ -54,6 +54,7 @@ from tensordict.utils import (
 )
 from torch import multiprocessing as mp, Tensor
 from torch.multiprocessing import Manager
+from torch.utils._pytree import tree_map
 
 T = TypeVar("T", bound=TensorDictBase)
 # We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
@@ -88,6 +89,162 @@ _TD_PASS_THROUGH = {
     torch.cat,
     torch.gather,
 }
+# Methods to be executed from tensordict, any ref to self means 'tensorclass'
+_METHOD_FROM_TD = [
+    "gather",
+    "replace",
+]
+# Methods to be executed from tensordict, any ref to self means 'self._tensordict'
+_FALLBACK_METHOD_FROM_TD = [
+    "__abs__",
+    "__add__",
+    "__iadd__",
+    "__imul__",
+    "__ipow__",
+    "__isub__",
+    "__itruediv__",
+    "__mul__",
+    "__pow__",
+    "__sub__",
+    "__truediv__",
+    "_add_batch_dim",
+    "apply",
+    "_apply_nest",
+    "_fast_apply",
+    "apply_",
+    "named_apply",
+    "_check_unlock",
+    "unsqueeze",
+    "squeeze",
+    "_erase_names",  # TODO: must be specialized
+    "_exclude",  # TODO: must be specialized
+    "_get_str",
+    "_get_tuple",
+    "_set_at_tuple",
+    "_has_names",
+    "_propagate_lock",
+    "_propagate_unlock",
+    "_remove_batch_dim",
+    "is_memmap",
+    "is_shared",
+    "_select",  # TODO: must be specialized
+    "_set_str",
+    "_set_tuple",
+    "all",
+    "any",
+    "empty",
+    "exclude",
+    "expand",
+    "expand_as",
+    "is_empty",
+    "is_shared",
+    "items",
+    "keys",
+    "lock_",
+    "masked_fill",
+    "masked_fill_",
+    "permute",
+    "flatten",
+    "unflatten",
+    "ndimension",
+    "rename_",  # TODO: must be specialized
+    "reshape",
+    "select",
+    "to",
+    "transpose",
+    "unlock_",
+    "values",
+    "view",
+    "zero_",
+    "add",
+    "add_",
+    "mul",
+    "mul_",
+    "abs",
+    "abs_",
+    "acos",
+    "acos_",
+    "exp",
+    "exp_",
+    "neg",
+    "neg_",
+    "reciprocal",
+    "reciprocal_",
+    "sigmoid",
+    "sigmoid_",
+    "sign",
+    "sign_",
+    "sin",
+    "sin_",
+    "sinh",
+    "sinh_",
+    "tan",
+    "tan_",
+    "tanh",
+    "tanh_",
+    "trunc",
+    "trunc_",
+    "norm",
+    "lgamma",
+    "lgamma_",
+    "frac",
+    "frac_",
+    "expm1",
+    "expm1_",
+    "log",
+    "log_",
+    "log10",
+    "log10_",
+    "log1p",
+    "log1p_",
+    "log2",
+    "log2_",
+    "ceil",
+    "ceil_",
+    "floor",
+    "floor_",
+    "round",
+    "round_",
+    "erf",
+    "erf_",
+    "erfc",
+    "erfc_",
+    "asin",
+    "asin_",
+    "atan",
+    "atan_",
+    "cos",
+    "cos_",
+    "cosh",
+    "cosh_",
+    "lerp",
+    "lerp_",
+    "addcdiv",
+    "addcdiv_",
+    "addcmul",
+    "addcmul_",
+    "sub",
+    "sub_",
+    "maximum_",
+    "maximum",
+    "minimum_",
+    "minimum",
+    "clamp_max_",
+    "clamp_max",
+    "clamp_min_",
+    "clamp_min",
+    "pow",
+    "pow_",
+    "div",
+    "div_",
+    "sqrt",
+    "sqrt_",
+]
+_FALLBACK_METHOD_FROM_TD_COPY = [
+    "_clone",  # TODO: must be specialized
+    "clone",  # TODO: must be specialized
+    "copy",  # TODO: must be specialized
+]
 
 
 class tensorclass:
@@ -173,7 +330,7 @@ def _tensorclass(cls: T) -> T:
         kwargs: dict[str, Any] | None = None,
     ) -> Callable:
         if func not in _TD_PASS_THROUGH or not all(
-            issubclass(t, (Tensor, cls)) for t in types
+            issubclass(t, (Tensor, cls, TensorDictBase)) for t in types
         ):
             return NotImplemented
 
@@ -266,28 +423,23 @@ def _tensorclass(cls: T) -> T:
         cls.share_memory_ = _share_memory_
     if not hasattr(cls, "update"):
         cls.update = _update
-    if not hasattr(cls, "replace"):
-        cls.replace = TensorDictBase.replace
     if not hasattr(cls, "update_"):
         cls.update_ = _update_
     if not hasattr(cls, "update_at_"):
         cls.update_at_ = _update_at_
-    if not hasattr(cls, "_set_str"):
-        cls._set_str = TensorDict._set_str
-    if not hasattr(cls, "_set_tuple"):
-        cls._set_tuple = TensorDict._set_tuple
-
-    cls.__add__ = TensorDict.__add__
-    cls.__iadd__ = TensorDict.__iadd__
-    cls.__abs__ = TensorDict.__abs__
-    cls.__truediv__ = TensorDict.__truediv__
-    cls.__itruediv__ = TensorDict.__itruediv__
-    cls.__mul__ = TensorDict.__mul__
-    cls.__imul__ = TensorDict.__imul__
-    cls.__sub__ = TensorDict.__sub__
-    cls.__isub__ = TensorDict.__isub__
-    cls.__pow__ = TensorDict.__pow__
-    cls.__ipow__ = TensorDict.__ipow__
+    for method_name in _METHOD_FROM_TD:
+        if not hasattr(cls, method_name):
+            setattr(cls, method_name, getattr(TensorDict, method_name))
+    for method_name in _FALLBACK_METHOD_FROM_TD:
+        if not hasattr(cls, method_name):
+            setattr(cls, method_name, _wrap_td_method(method_name))
+    for method_name in _FALLBACK_METHOD_FROM_TD_COPY:
+        if not hasattr(cls, method_name):
+            setattr(
+                cls,
+                method_name,
+                _wrap_td_method(method_name, copy_non_tensor=True),
+            )
 
     if not hasattr(cls, "_apply_nest"):
         cls._apply_nest = TensorDict._apply_nest
@@ -567,7 +719,7 @@ def _from_tensordict_wrapper(expected_keys):
                         del non_tensordict[key]
                         continue
                     raise KeyError(
-                        f"{key} is present in both tensor and non-tensor dicts"
+                        f"{key} is present in both tensor and non-tensor dicts."
                     )
         # bypass initialisation. this means we don't incur any overhead creating an
         # empty tensordict and writing values to it. we can skip this because we already
@@ -747,7 +899,40 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
     return wrapper
 
 
+def _wrap_td_method(funcname, *, copy_non_tensor=False):
+    def wrapped_func(self, *args, **kwargs):
+        td = super(type(self), self).__getattribute__("_tensordict")
+        result = getattr(td, funcname)(*args, **kwargs)
+
+        def check_out(kwargs, result):
+            out = kwargs.get("out")
+            if out is result:
+                # No need to transform output
+                return True
+            return False
+
+        if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
+            if result is td:
+                return self
+            nontd = super(type(self), self).__getattribute__("_non_tensordict")
+            if copy_non_tensor:
+                # use tree_map to copy
+                nontd = tree_map(lambda x: x, nontd)
+            return super(type(self), self).__getattribute__("_from_tensordict")(
+                result, nontd
+            )
+        return result
+
+    return wrapped_func
+
+
 def _wrap_method(self, attr, func):
+    warnings.warn(
+        f"The method {func} wasn't explicitly implemented for tensorclass. "
+        f"This fallback will be deprecated in future releases because it is inefficient "
+        f"and non-compilable. Please raise an issue in tensordict repo to support this method!"
+    )
+
     @functools.wraps(func)
     def wrapped_func(*args, **kwargs):
         args = tuple(_arg_to_tensordict(arg) for arg in args)

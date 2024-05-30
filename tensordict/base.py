@@ -721,6 +721,21 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    @classmethod
+    def from_h5(cls, filename, mode="r"):
+        """Creates a PersistentTensorDict from a h5 file.
+
+        This function will automatically determine the batch-size for each nested
+        tensordict.
+
+        Args:
+            filename (str): the path to the h5 file.
+            mode (str, optional): reading mode. Defaults to ``"r"``.
+        """
+        from tensordict.persistent import PersistentTensorDict
+
+        return PersistentTensorDict.from_h5(filename, mode=mode)
+
     # Module interaction
     @classmethod
     def from_module(
@@ -6683,6 +6698,10 @@ class TensorDictBase(MutableMapping):
         as_dict = self.to_dict()
 
         def to_numpy(x):
+            if isinstance(x, torch.Tensor):
+                if x.is_nested:
+                    return tuple(_x.numpy() for _x in x)
+                return x.numpy()
             if hasattr(x, "numpy"):
                 return x.numpy()
             return x

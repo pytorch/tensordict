@@ -389,7 +389,10 @@ class LazyStackedTensorDict(TensorDictBase):
             item = self.get(key)
             return item.shape
         except RuntimeError as err:
-            if re.match(r"Found more than one unique shape in the tensors", str(err)):
+            if re.match(
+                r"Found more than one unique shape in the tensors|Could not run 'aten::stack' with arguments from the",
+                str(err),
+            ):
                 shape = None
                 for td in self.tensordicts:
                     if shape is None:
