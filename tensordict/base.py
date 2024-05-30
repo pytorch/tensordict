@@ -721,6 +721,21 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    @classmethod
+    def from_h5(cls, filename, mode="r"):
+        """Creates a PersistentTensorDict from a h5 file.
+
+        This function will automatically determine the batch-size for each nested
+        tensordict.
+
+        Args:
+            filename (str): the path to the h5 file.
+            mode (str, optional): reading mode. Defaults to ``"r"``.
+        """
+        from tensordict.persistent import PersistentTensorDict
+
+        return PersistentTensorDict.from_h5(filename, mode=mode)
+
     # Module interaction
     @classmethod
     def from_module(

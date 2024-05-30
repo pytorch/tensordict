@@ -8,13 +8,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from tensordict import NonTensorData, PersistentTensorDict
+from tensordict import NonTensorData, PersistentTensorDict, TensorDict
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
+from torch.utils._pytree import tree_map
 
 TIMEOUT = 100
-from tensordict import TensorDict
 
 try:
     import h5py
@@ -102,6 +102,45 @@ class TestH5Serialization:
         assert is_non_tensor(td_recover.get(("d", "e")))
         assert is_non_tensor(td_recover.get("f"))
         assert is_non_tensor(td_recover.get(("g", "h")))
+
+
+def test_auto_batch_size(tmpdir):
+    tmpdir = Path(tmpdir)
+    td = TensorDict(
+        {
+            "a": torch.arange(12).view((3, 4)),
+            "b": TensorDict(
+                {
+                    "c": torch.arange(60).view(3, 4, 5),
+                    "d": "a string!",
+                },
+                batch_size=[3, 4, 5],
+            ),
+            "e": "another string!",
+        },
+        batch_size=[3, 4],
+    )
+    tdh5 = td.to_h5(tmpdir / "file.h5")
+    td_recon = TensorDict.from_h5(tmpdir / "file.h5")
+    print("td_recon", td_recon)
+    assert td_recon.batch_size == torch.Size([3, 4])
+    assert td_recon["b"].batch_size == torch.Size([3, 4, 5])
+
+    assert (td_recon["a"] == td["a"]).all()
+    assert (td_recon["b", "c"] == td["b", "c"]).all()
+    # This breaks because str are loaded as bytes
+    # assert (td_recon == td).all(), (td == td_recon).to_dict()
+
+    td_dict = td.to_dict()
+    td_recon_dict = td_recon.to_dict()
+    # Checks that all items match
+    def check(x, y):
+        if isinstance(x, torch.Tensor):
+            assert (x == y).all()
+            return
+        assert str(x) == y.decode("utf-8")
+
+    tree_map(check, td_dict, td_recon_dict)
 
 
 if __name__ == "__main__":
