@@ -441,7 +441,7 @@ def _stack(
                         )
                 raise
 
-            if any(
+            if all(
                 isinstance(_tensordict, LazyStackedTensorDict)
                 for _tensordict in list_of_tensordicts
             ):

@@ -321,6 +321,9 @@ def dense_stack_tds(
     if isinstance(td_list, LazyStackedTensorDict):
         dim = td_list.stack_dim
         td_list = td_list.tensordicts
+    elif isinstance(td_list, TensorDict):
+        # then it is already dense
+        return td_list
     elif dim is None:
         raise ValueError(
             "If a list of tensordicts is provided, stack_dim must not be None"
