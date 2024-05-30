@@ -461,6 +461,10 @@ def _stack(
                         len(_leaves) == len(leaves[0]) for _leaves in leaves[1:]
                     ):
                         lazy_stack_dim = list_of_tensordicts[0].stack_dim
+                        if dim <= lazy_stack_dim:
+                            lazy_stack_dim += 1
+                        else:
+                            dim = dim - 1
                         return LazyStackedTensorDict(
                             *[
                                 _stack(list(subtds), dim=dim)
