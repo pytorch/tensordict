@@ -6699,6 +6699,8 @@ class TensorDictBase(MutableMapping):
 
         def to_numpy(x):
             if hasattr(x, "numpy"):
+                if getattr(x, "is_nested", False):
+                    return tuple(_x.numpy() for _x in x.unbind(0))
                 return x.numpy()
             return x
 

@@ -22,6 +22,7 @@ from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
+    _shape,
     DeviceType,
     is_non_tensor,
     is_tensorclass,
@@ -474,16 +475,24 @@ def _stack(
                         ) or is_tensorclass(tensor_cls)
                     if is_not_init is None:
                         is_not_init = isinstance(tensor, UninitializedTensorMixin)
-                    if not is_not_init and tensor_shape is None:
-                        tensor_shape = tensor.shape
-                    elif not is_not_init and tensor.shape != tensor_shape:
-                        if maybe_dense_stack:
-                            with set_lazy_legacy(True):
-                                return _stack(list_of_tensordicts, dim=dim)
+                    if not is_not_init:
+                        new_tensor_shape = _shape(tensor)
+                        if tensor_shape is not None:
+                            if len(new_tensor_shape) != len(tensor_shape) or not all(
+                                s1 == s2 and s1 != -1
+                                for s1, s2 in zip(_shape(tensor), tensor_shape)
+                            ):
+                                # Nested tensors will require a lazy stack
+                                if maybe_dense_stack:
+                                    with set_lazy_legacy(True):
+                                        return _stack(list_of_tensordicts, dim=dim)
+                                else:
+                                    raise RuntimeError(
+                                        "The shapes of the tensors to stack is incompatible."
+                                    )
                         else:
-                            raise RuntimeError(
-                                "The shapes of the tensors to stack is incompatible."
-                            )
+                            tensor_shape = new_tensor_shape
+
                     out[key].append(tensor)
                 out[key] = (out[key], is_not_init, is_tensor)
 
