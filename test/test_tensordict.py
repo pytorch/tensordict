@@ -7287,7 +7287,7 @@ class TestLazyStackedTensorDict:
     @pytest.mark.parametrize(
         "stack_order", [[0, 1, 2], [2, 1, 0], [1, 2, 0], [1, 0, 2], [2, 0, 1]]
     )
-    def test_stack_with_hoomogeneous_stack(self, stack_order):
+    def test_stack_with_homogeneous_stack(self, stack_order):
         # tests the condition where all(
         #                 isinstance(_tensordict, LazyStackedTensorDict)
         #                 for _tensordict in list_of_tensordicts
