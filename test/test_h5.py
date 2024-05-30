@@ -120,9 +120,8 @@ def test_auto_batch_size(tmpdir):
         },
         batch_size=[3, 4],
     )
-    tdh5 = td.to_h5(tmpdir / "file.h5")
+    td.to_h5(tmpdir / "file.h5")
     td_recon = TensorDict.from_h5(tmpdir / "file.h5")
-    print("td_recon", td_recon)
     assert td_recon.batch_size == torch.Size([3, 4])
     assert td_recon["b"].batch_size == torch.Size([3, 4, 5])
 
@@ -133,6 +132,7 @@ def test_auto_batch_size(tmpdir):
 
     td_dict = td.to_dict()
     td_recon_dict = td_recon.to_dict()
+
     # Checks that all items match
     def check(x, y):
         if isinstance(x, torch.Tensor):
