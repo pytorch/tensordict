@@ -1347,7 +1347,11 @@ def _set_max_batch_size(source: PersistentTensorDict):
         return
 
     curr_dim = 0
-    tensor_data = list(source._values_metadata())
+    # We need to reload this list because the value have changed
+    tensor_data = list(source._items_metadata())
+    tensor_keys, tensor_data = zip(*tensor_data)
+    # Filter out the non-tensor data
+    tensor_data = [data for data in tensor_data if not data.get("non_tensor")]
     while True:
         if tensor_data[0]["dim"] > curr_dim:
             curr_dim_size = tensor_data[0]["shape"][curr_dim]
