@@ -6698,9 +6698,11 @@ class TensorDictBase(MutableMapping):
         as_dict = self.to_dict()
 
         def to_numpy(x):
+            if isinstance(x, torch.Tensor):
+                if x.is_nested:
+                    return tuple(_x.numpy() for _x in x)
+                return x.numpy()
             if hasattr(x, "numpy"):
-                if getattr(x, "is_nested", False):
-                    return tuple(_x.numpy() for _x in x.unbind(0))
                 return x.numpy()
             return x
 
