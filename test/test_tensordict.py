@@ -7123,6 +7123,59 @@ class TestLazyStackedTensorDict:
         assert (tdapply["parent", "a", "b"][1]["c"] == 4).all()
         assert (tdapply["parent", "a", "b"][0]["d"] == 2).all()
 
+    def test_stack_of_stacks(self):
+        # tests that we can stack several stacks in a dense manner
+        def make_tds():
+            td0 = TensorDict(
+                {
+                    "a": torch.zeros(3),
+                    "b": torch.zeros(4),
+                    "c": {"d": 0, "e": "a string!"},
+                    "f": "another string",
+                },
+                [],
+            )
+            # we intentionally swap the order of the keys to make sure that the comparison is robust to that
+            td1 = TensorDict(
+                {
+                    "b": torch.zeros(5),
+                    "c": {"d": 0, "e": "a string!"},
+                    "f": "another string",
+                    "a": torch.zeros(3),
+                },
+                [],
+            )
+            td_a = TensorDict.maybe_dense_stack([td0, td1])
+            td_b = TensorDict.maybe_dense_stack([td0, td1]).clone()
+            td = TensorDict.maybe_dense_stack([td_a, td_b])
+            return (td, td_a, td_b, td0, td1)
+
+        td, td_a, td_b, td0, td1 = make_tds()
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td[0], TensorDict)
+        assert isinstance(td[1], TensorDict)
+        # If we remove the "a" key from one of the tds, the resulting element of the stack cannot be dense
+        td, td_a, td_b, td0, td1 = make_tds()
+        del td_a["a"]
+        td = TensorDict.maybe_dense_stack([td_a, td_b])
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td[0], LazyStackedTensorDict)
+        assert isinstance(td[1], LazyStackedTensorDict)
+
+        td, td_a, td_b, td0, td1 = make_tds()
+        del td0["a"]
+        td = TensorDict.maybe_dense_stack([td_a, td_b])
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td[0], LazyStackedTensorDict)
+        assert isinstance(td[1], LazyStackedTensorDict)
+
+        # this isn't true if we remove ("c", "d") on one td
+        td, td_a, td_b, td0, td1 = make_tds()
+        del td0["c", "d"]
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td[0], TensorDict)
+        assert isinstance(td[1], TensorDict)
+
     @pytest.mark.parametrize("batch_size", [(), (32,), (32, 4)])
     def test_stack_hetero(self, batch_size):
         obs = self.nested_lazy_het_td(batch_size)

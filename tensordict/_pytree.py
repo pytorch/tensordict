@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 
 import torch
@@ -12,7 +13,8 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict._td import _SubTensorDict
-from tensordict.utils import _is_tensorclass, _shape, implement_for
+from tensordict.base import _NESTED_TENSORS_AS_LISTS
+from tensordict.utils import _shape, implement_for
 
 try:
     from torch.utils._pytree import Context, MappingKey, register_pytree_node
@@ -23,11 +25,11 @@ except ImportError:
     )
 
 PYTREE_REGISTERED_TDS = (
-    LazyStackedTensorDict,
     _SubTensorDict,
     TensorDict,
     PersistentTensorDict,
 )
+PYTREE_REGISTERED_LAZY_TDS = (LazyStackedTensorDict,)
 
 
 def _str_to_dict(str_spec: str) -> Tuple[List[str], str]:
@@ -102,7 +104,17 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
     }
 
 
-def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]:
+def _lazy_tensordict_flatten(d: LazyStackedTensorDict) -> Tuple[List[Any], Context]:
+    values = d.tensordicts
+    return values, {
+        "stack_dim_name": d._td_dim_name,
+        "stack_dim": d.stack_dim,
+        "constructor": _lazy_tensordict_constructor,
+        "cls": type(d),
+    }
+
+
+def _tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]:
     device = context["device"]
     if device is not None:
         device = (
@@ -117,6 +129,8 @@ def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, 
     non_tensor_items = context["non_tensor_data"]
     cls = context["cls"]
     batch_dims = len(batch_size)
+    if any(tensor is None for tensor in values):
+        return
     if any(_shape(tensor)[:batch_dims] != batch_size for tensor in values):
         batch_size = torch.Size([])
         names = None
@@ -131,10 +145,18 @@ def _tensordictdict_unflatten(values: List[Any], context: Context) -> Dict[Any, 
     )
 
 
+def _lazy_tensordict_unflatten(values: List[Any], context: Context) -> Dict[Any, Any]:
+    return cls(
+        *values,
+        stack_dim=context["stack_dim"],
+        stack_dim_name=context["stack_dim_name"]
+    )
+
+
 def _td_flatten_with_keys(
     d: TensorDictBase,
 ):
-    items = tuple(d.items())
+    items = tuple(d.items(is_leaf=_NESTED_TENSORS_AS_LISTS))
     if items:
         keys, values = zip(*items)
         keys = list(keys)
@@ -153,12 +175,18 @@ def _td_flatten_with_keys(
     }
 
 
+def _lazy_td_flatten_with_keys(
+    d: LazyStackedTensorDict,
+):
+    raise NotImplementedError
+
+
 @implement_for("torch", None, "2.3")
 def _register_td_node(cls):
     register_pytree_node(
         cls,
         _tensordict_flatten,
-        _tensordictdict_unflatten,
+        _tensordict_unflatten,
     )
 
 
@@ -167,15 +195,32 @@ def _register_td_node(cls):  # noqa: F811
     register_pytree_node(
         cls,
         _tensordict_flatten,
-        _tensordictdict_unflatten,
+        _tensordict_unflatten,
         flatten_with_keys_fn=_td_flatten_with_keys,
     )
 
 
+@implement_for("torch", None, "2.3")
+def _register_lazy_td_node(cls):
+    register_pytree_node(
+        cls,
+        _lazy_tensordict_flatten,
+        _lazy_tensordict_unflatten,
+    )
+
+
+@implement_for("torch", "2.3")
+def _register_lazy_td_node(cls):  # noqa: F811
+    register_pytree_node(
+        cls,
+        _lazy_tensordict_flatten,
+        _lazy_tensordict_unflatten,
+        flatten_with_keys_fn=_lazy_td_flatten_with_keys,
+    )
+
+
 def _constructor(cls):
-    if _is_tensorclass(cls):
-        return _tensorclass_constructor
-    return _tensordict_constructor
+    return _CONSTRUCTORS[cls]
 
 
 def _tensorclass_constructor(
@@ -209,5 +254,27 @@ def _tensordict_constructor(
     return result
 
 
+def _lazy_tensordict_constructor(
+    *, cls, keys, values, batch_size, names, device, non_tensor_items
+):
+
+    result = cls(
+        dict(zip(keys, values)),
+        batch_size=batch_size,
+        names=names,
+        device=device,
+        _run_checks=False,
+    )
+    for key, item in non_tensor_items:
+        result.set_non_tensor(key, item)
+    return result
+
+
+_CONSTRUCTORS = defaultdict(lambda: _tensordict_constructor)
+_CONSTRUCTORS[LazyStackedTensorDict] = _lazy_tensordict_constructor
+
+
 for cls in PYTREE_REGISTERED_TDS:
     _register_td_node(cls)
+for cls in PYTREE_REGISTERED_LAZY_TDS:
+    _register_lazy_td_node(cls)

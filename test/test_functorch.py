@@ -669,3 +669,28 @@ class TestPyTree(TestTensorDictsBase):
         td = TensorDict({"a": {"b": {"c": [1]}, "d": [2]}}, [1])
         td_no_shape = tree_map(lambda x: x.squeeze(), td)
         assert td_no_shape.shape == torch.Size([])
+
+    def test_pytree_lazy(self):
+        td0 = TensorDict(
+            {
+                "a": torch.zeros(3),
+                "b": torch.zeros(4),
+                "c": {"d": 0, "e": "a string!"},
+                "f": "another string",
+            },
+            [],
+        )
+        td1 = TensorDict(
+            {
+                "b": torch.zeros(5),
+                "c": {"d": 0, "e": "a string!"},
+                "f": "another string",
+                "a": torch.zeros(3),
+            },
+            [],
+        )
+        td = TensorDict.lazy_stack([td0, td1])
+        assert (tree_map(lambda x: x + 1, td) == td + 1).all()
+        # With exclusive keys
+        del td0["a"]
+        assert (tree_map(lambda x: x + 1, td) == td + 1).all()

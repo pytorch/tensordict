@@ -3768,7 +3768,7 @@ class TensorDictBase(MutableMapping):
             self.items(
                 include_nested,
                 leaves_only=True,
-                is_leaf=lambda cls: _is_non_tensor(cls),
+                is_leaf=_is_non_tensor,
             )
         )
 
