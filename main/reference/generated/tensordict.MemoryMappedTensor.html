@@ -909,8 +909,8 @@ to the autograd graph. <code class="docutils literal notranslate"><span class="p
 <dd><p>Computes the gradient of current tensor wrt graph leaves.</p>
 <p>The graph is differentiated using the chain rule. If the tensor is
 non-scalar (i.e. its data has more than one element) and requires
-gradient, the function additionally requires specifying <code class="docutils literal notranslate"><span class="pre">gradient</span></code>.
-It should be a tensor of matching type and location, that contains
+gradient, the function additionally requires specifying a <code class="docutils literal notranslate"><span class="pre">gradient</span></code>.
+It should be a tensor of matching type and shape, that represents
 the gradient of the differentiated function w.r.t. <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 <p>This function accumulates gradients in the leaves - you might need to zero
 <code class="docutils literal notranslate"><span class="pre">.grad</span></code> attributes or set them to <code class="docutils literal notranslate"><span class="pre">None</span></code> before calling it.
@@ -932,12 +932,9 @@ See <a class="reference external" href="https://github.com/pytorch/pytorch/pull/
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>gradient</strong> (<em>Tensor</em><em> or </em><em>None</em>) – Gradient w.r.t. the
-tensor. If it is a tensor, it will be automatically converted
-to a Tensor that does not require grad unless <code class="docutils literal notranslate"><span class="pre">create_graph</span></code> is True.
-None values can be specified for scalar Tensors or ones that
-don’t require grad. If a None value would be acceptable then
-this argument is optional.</p></li>
+<li><p><strong>gradient</strong> (<em>Tensor</em><em>, </em><em>optional</em>) – The gradient of the function
+being differentiated w.r.t. <code class="docutils literal notranslate"><span class="pre">self</span></code>.
+This argument can be omitted if <code class="docutils literal notranslate"><span class="pre">self</span></code> is a scalar.</p></li>
 <li><p><strong>retain_graph</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">False</span></code>, the graph used to compute
 the grads will be freed. Note that in nearly all cases setting
 this option to True is not needed and often can be worked around
@@ -946,10 +943,10 @@ in a much more efficient way. Defaults to the value of
 <li><p><strong>create_graph</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, graph of the derivative will
 be constructed, allowing to compute higher order derivative
 products. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>inputs</strong> (<em>sequence of Tensor</em>) – Inputs w.r.t. which the gradient will be
-accumulated into <code class="docutils literal notranslate"><span class="pre">.grad</span></code>. All other Tensors will be ignored. If not
+<li><p><strong>inputs</strong> (<em>sequence of Tensor</em><em>, </em><em>optional</em>) – Inputs w.r.t. which the gradient will be
+accumulated into <code class="docutils literal notranslate"><span class="pre">.grad</span></code>. All other tensors will be ignored. If not
 provided, the gradient is accumulated into all the leaf Tensors that were
-used to compute the attr::tensors.</p></li>
+used to compute the <code class="xref py py-attr docutils literal notranslate"><span class="pre">tensors</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
