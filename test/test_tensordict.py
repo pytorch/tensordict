@@ -521,6 +521,19 @@ class TestGeneric:
         assert td2.get("key1").shape == torch.Size([3, 7, 4, 5, 6])
         assert td2.get("key2").shape == torch.Size([3, 7, 4, 5, 10])
 
+    def test_expand_as(self):
+        td0 = TensorDict(
+            {"a": torch.ones(3, 1, 4), "b": {"c": torch.ones(3, 2, 1, 4)}},
+            batch_size=[3],
+        )
+        td1 = TensorDict(
+            {"a": torch.zeros(2, 3, 5, 4), "b": {"c": torch.zeros(2, 3, 2, 6, 4)}},
+            batch_size=[2, 3],
+        )
+        expanded = td0.expand_as(td1)
+        assert (expanded == 1).all()
+        assert expanded["b", "c"].shape == torch.Size([2, 3, 2, 6, 4])
+
     @pytest.mark.parametrize("device", get_available_devices())
     def test_expand_with_singleton(self, device):
         torch.manual_seed(1)
@@ -2567,6 +2580,17 @@ class TestTensorDicts(TestTensorDictsBase):
                 assert (td_c[key] * 2 != td[key]).any()
                 assert (td_1[key] == td[key] * 2).all()
 
+    def test_apply_out(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if not isinstance(td, LazyStackedTensorDict):
+            td_c = td.to_tensordict()
+        else:
+            td_c = td.clone()
+        td.apply(lambda x: x + 1, out=td_c)
+        assert_allclose_td(
+            td.filter_non_tensor_data().data + 1, td_c.filter_non_tensor_data()
+        )
+
     def test_as_tensor(self, td_name, device):
         td = getattr(self, td_name)(device)
         if "memmap" in td_name and device == torch.device("cpu"):
@@ -4109,7 +4133,7 @@ class TestTensorDicts(TestTensorDictsBase):
             assert not isinstance(leaf, torch.Tensor)
 
         torch.utils._pytree.tree_map(assert_leaves, td_numpy)
-        assert_allclose_td(TensorDict(td_numpy), td)
+        assert_allclose_td(TensorDict(td_numpy), td.data.cpu())
 
     def test_pad(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -6704,6 +6728,47 @@ class TestLazyStackedTensorDict:
         stack = LazyStackedTensorDict.lazy_stack([td, td2])
         assert set(stack.keys(True, True)) == {"a"}
 
+    @pytest.mark.parametrize("ragged", [False, True])
+    def test_arithmetic_ops(self, ragged):
+        td0 = LazyStackedTensorDict(
+            *[
+                LazyStackedTensorDict(
+                    *[
+                        TensorDict(
+                            {
+                                "a": torch.zeros(
+                                    (
+                                        2,
+                                        torch.randint(1, 5, ()).item() if ragged else 4,
+                                        3,
+                                    )
+                                ),
+                                ("b", "c"): torch.zeros(2),
+                            },
+                            [2],
+                        )
+                        for _ in range(3)
+                    ],
+                    stack_dim=1,
+                )
+            ],
+            stack_dim=0,
+        )
+        td1 = td0.clone()
+        assert (td1 + 1 == td1.apply(lambda x: x + 1)).all()
+        td1 += 1
+        assert (td1 == td0.apply(lambda x: x + 1)).all()
+        assert ((td0 + td1) == td0.apply(lambda x: x + 1)).all()
+        assert (td0 * td1 == 0).all()
+        assert ((td1 * 0) == 0).all()
+        if ragged:
+            # This doesn't work because tensors can't be reduced to a single value
+            # as they're not contiguous
+            with pytest.raises(RuntimeError, match="Found more than one unique shape"):
+                td1.norm()
+        else:
+            td1.norm()
+
     def test_best_intention_stack(self):
         td0 = TensorDict({"a": 1, "b": TensorDict({"c": 2}, [])}, [])
         td1 = TensorDict({"a": 1, "b": TensorDict({"d": 2}, [])}, [])
@@ -7166,10 +7231,63 @@ class TestLazyStackedTensorDict:
         ):
             td_a.update_(td_b.to_tensordict())
 
+    def test_stack_with_heterogeneous_stacks(self):
+        # tests that we can stack several stacks in a dense manner
+        def make_tds():
+            td0 = TensorDict(
+                {
+                    "a": torch.zeros(3),
+                    "b": torch.zeros(4),
+                    "c": {"d": 0, "e": "a string!"},
+                    "f": "another string",
+                },
+                [],
+            )
+            # we intentionally swap the order of the keys to make sure that the comparison is robust to that
+            td1 = TensorDict(
+                {
+                    "b": torch.zeros(5),
+                    "c": {"d": 0, "e": "a string!"},
+                    "f": "another string",
+                    "a": torch.zeros(3),
+                },
+                [],
+            )
+            td_a = TensorDict.maybe_dense_stack([td0, td1])
+            td_b = TensorDict.maybe_dense_stack([td0, td1]).clone()
+            td = TensorDict.maybe_dense_stack([td_a, td_b])
+            return (td, td_a, td_b, td0, td1)
+
+        td, td_a, td_b, td0, td1 = make_tds()
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[0], TensorDict)
+        assert isinstance(td.tensordicts[1], TensorDict)
+        # If we remove the "a" key from one of the tds, the resulting element of the stack cannot be dense
+        td, td_a, td_b, td0, td1 = make_tds()
+        del td_a["a"]
+        td = TensorDict.maybe_dense_stack([td_a, td_b])
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[0], LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[1], LazyStackedTensorDict)
+
+        td, td_a, td_b, td0, td1 = make_tds()
+        del td0["a"]
+        td = TensorDict.maybe_dense_stack([td_a, td_b])
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[0], LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[1], LazyStackedTensorDict)
+
+        # this isn't true if we remove ("c", "d") on one td
+        td, td_a, td_b, td0, td1 = make_tds()
+        del td0["c", "d"]
+        assert isinstance(td, LazyStackedTensorDict)
+        assert isinstance(td.tensordicts[0], TensorDict)
+        assert isinstance(td.tensordicts[1], TensorDict)
+
     @pytest.mark.parametrize(
         "stack_order", [[0, 1, 2], [2, 1, 0], [1, 2, 0], [1, 0, 2], [2, 0, 1]]
     )
-    def test_stack_with_stack(self, stack_order):
+    def test_stack_with_homogeneous_stack(self, stack_order):
         # tests the condition where all(
         #                 isinstance(_tensordict, LazyStackedTensorDict)
         #                 for _tensordict in list_of_tensordicts

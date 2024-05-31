@@ -14,7 +14,7 @@ from functools import wraps
 from typing import Any, Callable, Iterable
 
 import torch
-from tensordict._pytree import PYTREE_REGISTERED_TDS
+from tensordict._pytree import PYTREE_REGISTERED_LAZY_TDS, PYTREE_REGISTERED_TDS
 
 from tensordict._td import TensorDict
 from tensordict.base import _is_tensor_collection, TensorDictBase
@@ -146,11 +146,11 @@ class _exclude_td_from_pytree:
         self.tdnodes = {}
 
     def __enter__(self):
-        for tdtype in PYTREE_REGISTERED_TDS:
+        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
             self.tdnodes[tdtype] = SUPPORTED_NODES.pop(tdtype)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        for tdtype in PYTREE_REGISTERED_TDS:
+        for tdtype in PYTREE_REGISTERED_TDS + PYTREE_REGISTERED_LAZY_TDS:
             SUPPORTED_NODES[tdtype] = self.tdnodes[tdtype]
 
 

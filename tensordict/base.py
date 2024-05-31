@@ -61,6 +61,7 @@ from tensordict.utils import (
     convert_ellipsis_to_idx,
     DeviceType,
     erase_cache,
+    implement_for,
     IndexType,
     infer_size_impl,
     int_generator,
@@ -715,6 +716,21 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    @classmethod
+    def from_h5(cls, filename, mode="r"):
+        """Creates a PersistentTensorDict from a h5 file.
+
+        This function will automatically determine the batch-size for each nested
+        tensordict.
+
+        Args:
+            filename (str): the path to the h5 file.
+            mode (str, optional): reading mode. Defaults to ``"r"``.
+        """
+        from tensordict.persistent import PersistentTensorDict
+
+        return PersistentTensorDict.from_h5(filename, mode=mode)
+
     # Module interaction
     @classmethod
     def from_module(
@@ -1142,6 +1158,48 @@ class TensorDictBase(MutableMapping):
 
         """
         ...
+
+    def expand_as(self, other: TensorDictBase | torch.Tensor) -> TensorDictBase:
+        """Broadcasts the shape of the tensordict to the shape of `other` and expands it accordingly.
+
+        If the input is a tensor collection (tensordict or tensorclass),
+        the leaves will be expanded on a one-to-one basis.
+
+        Examples:
+            >>> from tensordict import TensorDict
+            >>> import torch
+            >>> td0 = TensorDict({
+            ...     "a": torch.ones(3, 1, 4),
+            ...     "b": {"c": torch.ones(3, 2, 1, 4)}},
+            ...     batch_size=[3],
+            ... )
+            >>> td1 = TensorDict({
+            ...     "a": torch.zeros(2, 3, 5, 4),
+            ...     "b": {"c": torch.zeros(2, 3, 2, 6, 4)}},
+            ...     batch_size=[2, 3],
+            ... )
+            >>> expanded = td0.expand_as(td1)
+            >>> assert (expanded==1).all()
+            >>> print(expanded)
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([2, 3, 5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([2, 3, 2, 6, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([2, 3]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([2, 3]),
+                device=None,
+                is_shared=False)
+
+        """
+        if _is_tensor_collection(type(other)):
+            return self.apply(
+                lambda x, y: x.expand_as(y), other, batch_size=other.batch_size
+            )
+        return self.expand(other.shape)
 
     def unbind(self, dim: int) -> tuple[T, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
@@ -3720,7 +3778,7 @@ class TensorDictBase(MutableMapping):
             self.items(
                 include_nested,
                 leaves_only=True,
-                is_leaf=lambda cls: _is_non_tensor(cls),
+                is_leaf=_is_non_tensor,
             )
         )
 
@@ -3793,11 +3851,13 @@ class TensorDictBase(MutableMapping):
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
+        *,
+        collapse: bool = False,
     ) -> Tuple[List, List]:
         items = self.items(
             include_nested=include_nested,
             leaves_only=leaves_only,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
         )
         keys, vals = zip(*items)
         return list(keys), list(vals)
@@ -4591,6 +4651,7 @@ class TensorDictBase(MutableMapping):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         """Applies a callable to all values stored in the tensordict and sets them in a new tensordict.
@@ -4647,6 +4708,23 @@ class TensorDictBase(MutableMapping):
                     ...         return val.apply(mean_any, call_on_nested=True)
                     ...     return val.mean()
                     >>> td_mean = td.apply(mean_any, call_on_nested=True)
+            out (TensorDictBase, optional): a tensordict where to write the results. This can be used to avoid
+                creating a new tensordict:
+
+                    >>> td = TensorDict({"a": 0})
+                    >>> td.apply(lambda x: x+1, out=td)
+                    >>> assert (td==1).all()
+
+                .. warning:: If the operation executed on the tensordict requires multiple keys to be accessed for
+                    a single computation, providing an ``out`` argument equal to ``self`` can cause the operation
+                    to provide silently wrong results.
+                    For instance:
+
+                        >>> td = TensorDict({"a": 1, "b": 1})
+                        >>> td.apply(lambda x: x+td["a"])["b"] # Right!
+                        tensor(2)
+                        >>> td.apply(lambda x: x+td["a"], out=td)["b"] # Wrong!
+                        tensor(3)
 
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
@@ -4707,6 +4785,7 @@ class TensorDictBase(MutableMapping):
             default=default,
             filter_empty=filter_empty,
             call_on_nested=call_on_nested,
+            out=out,
             **constructor_kwargs,
         )
         if propagate_lock and not inplace and self.is_locked and result is not None:
@@ -4726,6 +4805,7 @@ class TensorDictBase(MutableMapping):
         filter_empty: bool | None = None,
         propagate_lock: bool = False,
         call_on_nested: bool = False,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         """Applies a key-conditioned callable to all values stored in the tensordict and sets them in a new atensordict.
@@ -4782,6 +4862,24 @@ class TensorDictBase(MutableMapping):
                     ...         return val.apply(mean_any, call_on_nested=True)
                     ...     return val.mean()
                     >>> td_mean = td.apply(mean_any, call_on_nested=True)
+
+            out (TensorDictBase, optional): a tensordict where to write the results. This can be used to avoid
+                creating a new tensordict:
+
+                    >>> td = TensorDict({"a": 0})
+                    >>> td.apply(lambda x: x+1, out=td)
+                    >>> assert (td==1).all()
+
+                .. warning:: If the operation executed on the tensordict requires multiple keys to be accessed for
+                    a single computation, providing an ``out`` argument equal to ``self`` can cause the operation
+                    to provide silently wrong results.
+                    For instance:
+
+                        >>> td = TensorDict({"a": 1, "b": 1})
+                        >>> td.apply(lambda x: x+td["a"])["b"] # Right!
+                        tensor(2)
+                        >>> td.apply(lambda x: x+td["a"], out=td)["b"] # Wrong!
+                        tensor(3)
 
             **constructor_kwargs: additional keyword arguments to be passed to the
                 TensorDict constructor.
@@ -4892,6 +4990,7 @@ class TensorDictBase(MutableMapping):
         prefix: tuple = (),
         filter_empty: bool | None = None,
         is_leaf: Callable = None,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         ...
@@ -4913,6 +5012,7 @@ class TensorDictBase(MutableMapping):
         filter_empty: bool | None = False,
         is_leaf: Callable = None,
         propagate_lock: bool = False,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> T | None:
         """A faster apply method.
@@ -4936,6 +5036,7 @@ class TensorDictBase(MutableMapping):
             nested_keys=nested_keys,
             filter_empty=filter_empty,
             is_leaf=is_leaf,
+            out=out,
             **constructor_kwargs,
         )
         if propagate_lock and not inplace and self.is_locked and result is not None:
@@ -4948,7 +5049,7 @@ class TensorDictBase(MutableMapping):
         dim: int = 0,
         num_workers: int | None = None,
         *,
-        out: TensorDictBase = None,
+        out: TensorDictBase | None = None,
         chunksize: int | None = None,
         num_chunks: int | None = None,
         pool: mp.Pool | None = None,
@@ -5409,23 +5510,39 @@ class TensorDictBase(MutableMapping):
         torch._foreach_trunc_(self._values_list(True, True))
         return self
 
+    @implement_for("torch", None, "2.4")
     def norm(
         self,
-        p="fro",
-        dim=None,
-        keepdim=False,
         out=None,
         dtype: torch.dtype | None = None,
     ):
-        keys, vals = self._items_list(True, True)
-        vals = torch._foreach_norm(vals, p=p, dim=dim, keepdim=keepdim, dtype=dtype)
+        keys, vals = self._items_list(True, True, collapse=True)
+        if dtype is not None:
+            raise RuntimeError("dtype must be None for torch <= 2.3")
+        vals = torch._foreach_norm(vals)
         items = dict(zip(keys, vals))
         return self._fast_apply(
             lambda name, val: items[name],
             named=True,
             nested_keys=True,
             batch_size=[],
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    @implement_for("torch", "2.4")
+    def norm(  # noqa: F811
+        self,
+        out=None,
+        dtype: torch.dtype | None = None,
+    ):
+        keys, vals = self._items_list(True, True, collapse=True)
+        vals = torch._foreach_norm(vals, dtype=dtype)
+        items = dict(zip(keys, vals))
+        return self._fast_apply(
+            lambda name, val: items[name],
+            named=True,
+            nested_keys=True,
+            batch_size=[],
             propagate_lock=True,
         )
 
@@ -6174,6 +6291,8 @@ class TensorDictBase(MutableMapping):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # During exit, updates mustn't be made in-place as the source and dest
+        # storage location can be identical, resulting in a RuntimeError
         if exc_type is not None and issubclass(exc_type, Exception):
             return False
         _last_op = self._last_op_queue.pop()
@@ -6188,7 +6307,7 @@ class TensorDictBase(MutableMapping):
             elif last_op == self.__class__.transpose.__name__:
                 dim0, dim1 = args
                 if not out.is_locked:
-                    return out.update(self.transpose(dim0, dim1), inplace=True)
+                    return out.update(self.transpose(dim0, dim1), inplace=False)
                 else:
                     return out.update_(self.transpose(dim0, dim1))
             elif last_op == self.__class__.flatten.__name__:
@@ -6207,7 +6326,7 @@ class TensorDictBase(MutableMapping):
 
                 if not out.is_locked:
                     return out.update(
-                        self.unflatten(dim0, out.shape[dim0 : dim1 + 1]), inplace=True
+                        self.unflatten(dim0, out.shape[dim0 : dim1 + 1]), inplace=False
                     )
                 else:
                     return out.update_(self.unflatten(dim0, out.shape[dim0 : dim1 + 1]))
@@ -6226,7 +6345,7 @@ class TensorDictBase(MutableMapping):
                     dim0 = out.ndim + dim0
                 dim1 = dim0 + len(unflattened_size) - 1
                 if not out.is_locked:
-                    return out.update(self.flatten(dim0, dim1), inplace=True)
+                    return out.update(self.flatten(dim0, dim1), inplace=False)
                 else:
                     return out.update_(self.flatten(dim0, dim1))
 
@@ -6236,12 +6355,12 @@ class TensorDictBase(MutableMapping):
                 # inverse map
                 inv_dims_list = np.argsort(dims_list)
                 if not out.is_locked:
-                    return out.update(self.permute(inv_dims_list), inplace=True)
+                    return out.update(self.permute(inv_dims_list), inplace=False)
                 else:
                     return out.update_(self.permute(inv_dims_list))
             elif last_op == self.__class__.view.__name__:
                 if not out.is_locked:
-                    return out.update(self.view(out.shape), inplace=True)
+                    return out.update(self.view(out.shape), inplace=False)
                 else:
                     return out.update_(self.view(out.shape))
             elif last_op == self.__class__.unsqueeze.__name__:
@@ -6254,7 +6373,7 @@ class TensorDictBase(MutableMapping):
                         "Cannot use td.unsqueeze() as a decorator if the dimension is implicit."
                     )
                 if not out.is_locked:
-                    return out.update(self.squeeze(dim), inplace=True)
+                    return out.update(self.squeeze(dim), inplace=False)
                 else:
                     return out.update_(self.squeeze(dim))
             elif last_op == self.__class__.squeeze.__name__:
@@ -6267,7 +6386,7 @@ class TensorDictBase(MutableMapping):
                         "Cannot use td.squeeze() as a decorator if the dimension is implicit."
                     )
                 if not out.is_locked:
-                    return out.update(self.unsqueeze(dim), inplace=True)
+                    return out.update(self.unsqueeze(dim), inplace=False)
                 else:
                     return out.update_(self.unsqueeze(dim))
             elif last_op == self.__class__.to_module.__name__:
@@ -6572,6 +6691,10 @@ class TensorDictBase(MutableMapping):
         as_dict = self.to_dict()
 
         def to_numpy(x):
+            if isinstance(x, torch.Tensor):
+                if x.is_nested:
+                    return tuple(_x.numpy() for _x in x)
+                return x.numpy()
             if hasattr(x, "numpy"):
                 return x.numpy()
             return x
@@ -6710,7 +6833,9 @@ class TensorDictBase(MutableMapping):
             out.names = self.names
         return out
 
-    def empty(self, recurse=False) -> T:
+    def empty(
+        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
+    ) -> T:  # noqa: D417
         """Returns a new, empty tensordict with the same device and batch size.
 
         Args:
@@ -6719,11 +6844,27 @@ class TensorDictBase(MutableMapping):
                 Otherwise, only the root will be duplicated.
                 Defaults to ``False``.
 
+        Keyword Args:
+            batch_size (torch.Size, optional): a new batch-size for the tensordict.
+            device (torch.device, optional): a new device.
+            names (list of str, optional): dimension names.
+
         """
         if not recurse:
-            return self._select(set_shared=False)
-        # simply exclude the leaves
-        return self._exclude(*self.keys(True, True), set_shared=False)
+            result = self._select(set_shared=False)
+        else:
+            # simply exclude the leaves
+            result = self._exclude(*self.keys(True, True), set_shared=False)
+        if batch_size is not None:
+            result.batch_size = batch_size
+        if device is not NO_DEFAULT:
+            if device is None:
+                result.clear_device_()
+            else:
+                result = result.to(device)
+        if names is not None:
+            result.names = names
+        return result
 
     # Filling
     def zero_(self) -> T:

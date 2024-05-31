@@ -23,6 +23,7 @@ from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
+    _shape,
     DeviceType,
     is_non_tensor,
     is_tensorclass,
@@ -451,15 +452,44 @@ def _stack(
                 isinstance(_tensordict, LazyStackedTensorDict)
                 for _tensordict in list_of_tensordicts
             ):
+                # Let's try to see if all tensors have the same shape
+                # If so, we can assume that we can densly stack the sub-tds
+                leaves = [
+                    torch.utils._pytree.tree_leaves(td) for td in list_of_tensordicts
+                ]
+                for x in zip(*leaves):
+                    # TODO: check what happens with non-tensor data here
+                    if len(x) == 1 or all(_x.shape == x[0].shape for _x in x[1:]):
+                        continue
+                    else:
+                        break
+                else:
+                    # make sure we completed the zip, since strict=True is only available for python >= 3.10
+                    if len(leaves) == 1 or all(
+                        len(_leaves) == len(leaves[0]) for _leaves in leaves[1:]
+                    ):
+                        lazy_stack_dim = list_of_tensordicts[0].stack_dim
+                        if dim <= lazy_stack_dim:
+                            lazy_stack_dim += 1
+                        else:
+                            dim = dim - 1
+                        return LazyStackedTensorDict(
+                            *[
+                                _stack(list(subtds), dim=dim)
+                                for subtds in zip(
+                                    *[td.tensordicts for td in list_of_tensordicts]
+                                )
+                            ],
+                            stack_dim=lazy_stack_dim,
+                        )
                 lazy_stack_dim = list_of_tensordicts[0].stack_dim
                 if dim <= lazy_stack_dim:
                     lazy_stack_dim += 1
                 else:
                     dim = dim - 1
-
                 return LazyStackedTensorDict(
                     *[
-                        torch.stack(list_of_td, dim)
+                        _stack(list_of_td, dim, maybe_dense_stack=maybe_dense_stack)
                         for list_of_td in zip(
                             *[td.tensordicts for td in list_of_tensordicts]
                         )
@@ -482,16 +512,24 @@ def _stack(
                         ) or is_tensorclass(tensor_cls)
                     if is_not_init is None:
                         is_not_init = isinstance(tensor, UninitializedTensorMixin)
-                    if not is_not_init and tensor_shape is None:
-                        tensor_shape = tensor.shape
-                    elif not is_not_init and tensor.shape != tensor_shape:
-                        if maybe_dense_stack:
-                            with set_lazy_legacy(True):
-                                return _stack(list_of_tensordicts, dim=dim)
+                    if not is_not_init:
+                        new_tensor_shape = _shape(tensor)
+                        if tensor_shape is not None:
+                            if len(new_tensor_shape) != len(tensor_shape) or not all(
+                                s1 == s2 and s1 != -1
+                                for s1, s2 in zip(_shape(tensor), tensor_shape)
+                            ):
+                                # Nested tensors will require a lazy stack
+                                if maybe_dense_stack:
+                                    with set_lazy_legacy(True):
+                                        return _stack(list_of_tensordicts, dim=dim)
+                                else:
+                                    raise RuntimeError(
+                                        "The shapes of the tensors to stack is incompatible."
+                                    )
                         else:
-                            raise RuntimeError(
-                                "The shapes of the tensors to stack is incompatible."
-                            )
+                            tensor_shape = new_tensor_shape
+
                     out[key].append(tensor)
                 out[key] = (out[key], is_not_init, is_tensor)
 

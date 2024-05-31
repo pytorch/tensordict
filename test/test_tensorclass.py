@@ -1399,12 +1399,14 @@ class TestTensorClass:
         assert data.z == "test_tensorclass"
         assert data.y.z == "test_tensorclass"
         data_replace = data.replace(replacement)
+
         assert isinstance(data_replace, MyDataNested)
         assert isinstance(data_replace.y, MyDataNested)
         assert data.z == "test_tensorclass"
         assert data.y.z == "test_tensorclass"
         assert data_replace.z == "replacement"
         assert data_replace.y.z == "replacement"
+
         assert (data.X == 1).all()
         assert (data.y.X == 1).all()
         assert (data_replace.X == 0).all()
