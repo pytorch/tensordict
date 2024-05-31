@@ -387,7 +387,7 @@ def _tensorclass(cls: T) -> T:
     cls.__getitem__ = _getitem
     cls.__getitems__ = _getitem
     cls.__setitem__ = _setitem
-    if not hasattr(cls, "__repr__"):
+    if not _is_non_tensor:
         cls.__repr__ = _repr
     cls.__len__ = _len
     cls.__eq__ = _eq
@@ -2155,6 +2155,8 @@ class NonTensorData:
             self._non_tensordict["data"] = data
         assert self._tensordict.is_empty(), self._tensordict
 
+        # TODO: this will probably fail with dynamo at some point, + it's terrible.
+        #  Make sure it's patched properly at init time
         old_eq = self.__class__.__eq__
         if old_eq is _eq:
             global NONTENSOR_HANDLED_FUNCTIONS
