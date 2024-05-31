@@ -836,6 +836,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return type(self)(
             *(tensordict.unsqueeze(dim) for tensordict in self.tensordicts),
             stack_dim=stack_dim,
+            stack_dim_name=self._td_dim_name,
         )
 
     def _legacy_squeeze(self, dim: int | None = None) -> T:
@@ -874,6 +875,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return type(self)(
             *(tensordict.squeeze(dim) for tensordict in self.tensordicts),
             stack_dim=stack_dim,
+            stack_dim_name=self._td_dim_name,
         )
 
     def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
@@ -1342,6 +1344,7 @@ class LazyStackedTensorDict(TensorDictBase):
             stack_dim=self.stack_dim,
             hook_out=self.hook_out,
             hook_in=self.hook_in,
+            stack_dim_name=self._td_dim_name,
         )
         if device is not None and not non_blocking:
             self._sync_all()
@@ -1564,7 +1567,9 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         if inplace:
             return self
-        result = type(self)(*tensordicts, stack_dim=self.stack_dim)
+        result = type(self)(
+            *tensordicts, stack_dim=self.stack_dim, stack_dim_name=self._td_dim_name
+        )
         return result
 
     def _exclude(
@@ -1577,7 +1582,9 @@ class LazyStackedTensorDict(TensorDictBase):
         if inplace:
             self.tensordicts = tensordicts
             return self
-        result = type(self)(*tensordicts, stack_dim=self.stack_dim)
+        result = type(self)(
+            *tensordicts, stack_dim=self.stack_dim, stack_dim_name=self._td_dim_name
+        )
         return result
 
     def __setitem__(self, index: IndexType, value: T) -> T:
@@ -2540,21 +2547,27 @@ class LazyStackedTensorDict(TensorDictBase):
             # example: shape = [5, 4, 3, 2, 1], stack_dim=1, dim0=1, dim1=4
             # resulting shape: [5, 1, 3, 2, 4]
             if dim1 == dim0 + 1:
-                result = type(self)(*self.tensordicts, stack_dim=dim1)
+                result = type(self)(
+                    *self.tensordicts, stack_dim=dim1, stack_dim_name=self._td_dim_name
+                )
             else:
                 result = type(self)(
                     *(td.transpose(dim0, dim1 - 1) for td in self.tensordicts),
                     stack_dim=dim1,
+                    stack_dim_name=self._td_dim_name,
                 )
         elif dim1 == self.stack_dim:
             # example: shape = [5, 4, 3, 2, 1], stack_dim=3, dim0=1, dim1=3
             # resulting shape: [5, 2, 3, 4, 1]
             if dim0 + 1 == dim1:
-                result = type(self)(*self.tensordicts, stack_dim=dim0)
+                result = type(self)(
+                    *self.tensordicts, stack_dim=dim0, stack_dim_name=self._td_dim_name
+                )
             else:
                 result = type(self)(
                     *(td.transpose(dim0 + 1, dim1) for td in self.tensordicts),
                     stack_dim=dim0,
+                    stack_dim_name=self._td_dim_name,
                 )
         else:
             dim0 = dim0 if dim0 < self.stack_dim else dim0 - 1
