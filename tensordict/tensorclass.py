@@ -330,12 +330,9 @@ def _tensorclass(cls: T) -> T:
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Callable:
-        # if not torch.compiler.is_dynamo_compiling() and (func not in _TD_PASS_THROUGH or not all(
-        #     issubclass(t, (Tensor, cls, TensorDictBase)) for t in types
-        # )):
-        if not all(
-            issubclass(t, (Tensor, cls)) for t in types
-        ) or not _TD_PASS_THROUGH.get(func):
+        if func not in _TD_PASS_THROUGH or not all(
+            issubclass(t, (Tensor, cls, TensorDictBase)) for t in types
+        ):
             return NotImplemented
 
         if kwargs is None:
@@ -390,7 +387,8 @@ def _tensorclass(cls: T) -> T:
     cls.__getitem__ = _getitem
     cls.__getitems__ = _getitem
     cls.__setitem__ = _setitem
-    cls.__repr__ = _repr
+    if not hasattr(cls, "__repr__"):
+        cls.__repr__ = _repr
     cls.__len__ = _len
     cls.__eq__ = _eq
     cls.__ne__ = _ne
@@ -510,7 +508,7 @@ def _arg_to_tensordict(arg):
     # if arg is a tensorclass or sequence of tensorclasses, extract the underlying
     # tensordicts and return those instead
 
-    # since arg can be anything (e.g. callable etc) we can't ue pytree
+    # since arg can be anything (e.g. callable etc) we can't use pytree
     # def convert(x):
     #     if _is_tensorclass(type(x)):
     #         return x._tensordict
@@ -608,6 +606,11 @@ def _init_wrapper(__init__: Callable) -> Callable:
         super(type(self), self).__setattr__("_non_tensordict", {})
         super(type(self), self).__setattr__("_is_initialized", True)
 
+        # convert the non tensor data in a regular data
+        kwargs = {
+            key: value.data if is_non_tensor(value) else value
+            for key, value in kwargs.items()
+        }
         __init__(self, **kwargs)
 
     new_params = [
@@ -765,10 +768,16 @@ def _from_tensordict_wrapper(expected_keys):
             # whether a __post_init__ method has been defined and invoke it if so
             if hasattr(tc, "__post_init__"):
                 tc.__post_init__()
+            return tc
         else:
-            tddict = tensordict.to_dict()
-            return cls(**tddict, **non_tensordict)
-        return tc
+            # TODO: things that did NOT work: **tensordict, dict(tensordict)
+            return cls(
+                **dict(tensordict.items()),
+                **non_tensordict,
+                batch_size=tensordict.batch_size,
+                device=tensordict.device,
+                names=tensordict.names,
+            )
 
     return wrapper
 
@@ -956,7 +965,11 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
 
 def _wrap_td_method(funcname, *, copy_non_tensor=False):
     def wrapped_func(self, *args, **kwargs):
-        td = super(type(self), self).__getattribute__("_tensordict")
+        if not torch.compiler.is_dynamo_compiling():
+            td = super(type(self), self).__getattribute__("_tensordict")
+        else:
+            td = self._tensordict
+
         result = getattr(td, funcname)(*args, **kwargs)
 
         def check_out(kwargs, result):
@@ -969,13 +982,19 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False):
         if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
             if result is td:
                 return self
-            nontd = super(type(self), self).__getattribute__("_non_tensordict")
+            if not torch.compiler.is_dynamo_compiling():
+                nontd = super(type(self), self).__getattribute__("_non_tensordict")
+            else:
+                nontd = self._non_tensordict
             if copy_non_tensor:
                 # use tree_map to copy
                 nontd = tree_map(lambda x: x, nontd)
-            return super(type(self), self).__getattribute__("_from_tensordict")(
-                result, nontd
-            )
+            if not torch.compiler.is_dynamo_compiling():
+                return super(type(self), self).__getattribute__("_from_tensordict")(
+                    result, nontd
+                )
+            else:
+                return self._from_tensordict(result, nontd)
         return result
 
     return wrapped_func
@@ -1861,8 +1880,9 @@ def _unbind(self, dim: int):
     Resulting tensorclass instances will share the storage of the initial tensorclass instance.
 
     """
+    # TODO: dynamo doesn't like copy, using dict instead
     return tuple(
-        type(self)._from_tensordict(td, non_tensordict=copy(self._non_tensordict))
+        type(self)._from_tensordict(td, non_tensordict=dict(self._non_tensordict))
         for td in self._tensordict.unbind(dim)
     )
 
@@ -2120,6 +2140,12 @@ class NonTensorData:
 
     _is_non_tensor: bool = True
 
+    def __repr__(self):
+        data_str = str(self.data)
+        if len(data_str) > 200:
+            data_str = data_str[:20] + "  ...  " + data_str[-20:]
+        return f"{type(self).__name__}(data={data_str}, batch_size={self.batch_size}, device={self.device})"
+
     def __post_init__(self):
         if is_non_tensor(self.data):
             data = getattr(self.data, "data", None)
@@ -2128,14 +2154,6 @@ class NonTensorData:
             del self._tensordict["data"]
             self._non_tensordict["data"] = data
         assert self._tensordict.is_empty(), self._tensordict
-
-        def __repr__(self):
-            data_str = str(self.data)
-            if len(data_str) > 200:
-                data_str = data_str[:20] + "  ...  " + data_str[-20:]
-            return f"{type(self).__name__}(data={data_str}, batch_size={self.batch_size}, device={self.device})"
-
-        self.__class__.__repr__ = __repr__
 
         old_eq = self.__class__.__eq__
         if old_eq is _eq:

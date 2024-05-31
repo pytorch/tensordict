@@ -49,10 +49,10 @@ except ImportError:
 from packaging.version import parse
 from tensordict._contextlib import _DecoratorContextManager
 from tensordict._tensordict import (  # noqa: F401
-    # _unravel_key_to_tuple,
-    unravel_key,
-    unravel_key_list,
-    unravel_keys,
+    _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
+    unravel_key as unravel_key_cpp,
+    unravel_key_list as unravel_key_list_cpp,
+    unravel_keys as unravel_keys_cpp,
 )
 
 from torch import Tensor
@@ -2270,11 +2270,37 @@ class KeyDependentDefaultDict(collections.defaultdict):
 
 
 def _unravel_key_to_tuple(key):
+    if not torch.compiler.is_dynamo_compiling():
+        return _unravel_key_to_tuple_cpp(key)
     if isinstance(key, str):
         return (key,)
     if not isinstance(key, tuple):
         return ()
     return tuple(subk for k in key for subk in _unravel_key_to_tuple(k))
+
+
+def unravel_key(key):
+    if not torch.compiler.is_dynamo_compiling():
+        return unravel_key_cpp(key)
+    if isinstance(key, str):
+        return key
+    if isinstance(key, tuple):
+        if len(key) == 1:
+            return unravel_key(key[0])
+        return tuple(unravel_key(_key) for _key in key)
+    raise ValueError("the key must be a str or a tuple of str")
+
+
+def unravel_keys(*keys):
+    if not torch.compiler.is_dynamo_compiling():
+        return unravel_keys_cpp(*keys)
+    return tuple(unravel_key(key) for key in keys)
+
+
+def unravel_key_list(keys):
+    if not torch.compiler.is_dynamo_compiling():
+        return unravel_key_list_cpp(keys)
+    return [unravel_key(key) for key in keys]
 
 
 def _slice_indices(index: slice, len: int):

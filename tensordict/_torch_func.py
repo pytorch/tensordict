@@ -404,11 +404,16 @@ def _stack(
 ) -> T:
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
+    is_tc = False
+    if any(is_tensorclass(td) for td in list_of_tensordicts):
+        is_tc = True
+        if all(is_non_tensor(td) for td in list_of_tensordicts):
+            from tensordict.tensorclass import NonTensorData
 
-    if all(is_non_tensor(td) for td in list_of_tensordicts):
-        from tensordict.tensorclass import NonTensorData
-
-        return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
+            return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
+        else:
+            tc_type = type(list_of_tensordicts[0])
+            list_of_tensordicts = [tc.to_tensordict() for tc in list_of_tensordicts]
 
     batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
@@ -507,9 +512,12 @@ def _stack(
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
                     if is_tensor is None:
                         tensor_cls = type(tensor)
-                        is_tensor = (
-                            not _is_tensor_collection(tensor_cls)
-                        ) or is_tensorclass(tensor_cls)
+                        # is_tensor = (
+                        #     not _is_tensor_collection(tensor_cls)
+                        # ) or is_tensorclass(tensor_cls)
+                        # TODO: make sense of this, dynamo cannot pass through stack (and it's unsafe)
+                        # only tensors should be tensors
+                        is_tensor = not _is_tensor_collection(tensor_cls)
                     if is_not_init is None:
                         is_not_init = isinstance(tensor, UninitializedTensorMixin)
                     if not is_not_init:
@@ -548,7 +556,7 @@ def _stack(
                 for key, (values, is_not_init, is_tensor) in out.items()
             }
 
-            return TensorDict(
+            result = TensorDict(
                 out,
                 batch_size=LazyStackedTensorDict._compute_batch_size(
                     batch_size, dim, len(list_of_tensordicts)
@@ -556,6 +564,13 @@ def _stack(
                 device=device,
                 _run_checks=False,
             )
+            if is_tc:
+                return tc_type(
+                    **dict(result.items()),
+                    batch_size=result.batch_size,
+                    device=result.device,
+                )
+            return result
         else:
             out = LazyStackedTensorDict(
                 *list_of_tensordicts,

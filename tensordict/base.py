@@ -3008,7 +3008,7 @@ class TensorDictBase(MutableMapping):
         self._set_str(
             key,
             NonTensorData(
-                value,
+                data=value,
                 batch_size=self.batch_size,
                 device=self.device,
                 names=self.names if self._has_names() else None,

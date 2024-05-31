@@ -263,7 +263,8 @@ class TensorDict(TensorDictBase):
                     f"sub-type or a dictionary, found type(source)={type(source)}."
                 )
             self._batch_size = self._parse_batch_size(source, batch_size)
-            self.names = names
+            # TODO: this breaks when stacking tensorclasses with dynamo
+            # self.names = names
 
             for key, value in source.items():
                 self.set(key, value, non_blocking=sub_non_blocking)

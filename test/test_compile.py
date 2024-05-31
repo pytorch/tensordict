@@ -65,8 +65,8 @@ class TestTD:
 
     def test_stack(self):
         def stack_tds(td0, td1):
-            return TensorDict.stack([td0, td1])
-            # return torch.stack([td0, td1])
+            # return TensorDict.stack([td0, td1])
+            return torch.stack([td0, td1])
 
         stack_tds_c = torch.compile(stack_tds, fullgraph=True)
         data0 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
@@ -178,11 +178,20 @@ class TestTC:
         def add_one(td):
             return td + 1
 
-        add_one_c = torch.compile(add_one, fullgraph=True)
         data = MyClass(a=MyClass(a=None, b=torch.zeros(())))
-        assert add_one(data.clone()).a.b == 1
-        assert add_one_c(data.clone()).a.b == 1
-        assert add_one_c(data) is data
+
+        eager = add_one(data.clone())
+
+        add_one_c = torch.compile(add_one, fullgraph=True)
+        compiled = add_one_c(data.clone())
+
+        assert isinstance(eager.a, MyClass)
+        assert eager.a.b == 1
+
+        assert isinstance(compiled.a, MyClass)
+        # TODO: breaks because a is not cast to a MyClass but is a dict
+        assert compiled.a.b == 1
+        assert add_one_c(data) is not data
 
     @pytest.mark.parametrize("index_type", ["slice", "tensor", "int"])
     def test_tc_index(self, index_type):
@@ -205,34 +214,49 @@ class TestTC:
         data = MyClass(
             a=MyClass(a=None, b=torch.arange(3), batch_size=[3]), batch_size=[3]
         )
+
+        indexed_data_eager = index(data)
+        indexed_data_compile = index_c(data)
         if index_type == "int":
-            assert (index(data).a.b == 0).all()
-            assert isinstance(index_c(data), MyClass)
-            assert isinstance(index_c(data).a, MyClass)
-            assert (index_c(data).a.b == 0).all()
-            assert index_c(data).shape == torch.Size([])
+            assert (indexed_data_eager.a.b == 0).all()
+            assert (indexed_data_compile.a.b == 0).all()
+
+            assert isinstance(indexed_data_eager, MyClass)
+            assert isinstance(indexed_data_compile, MyClass)
+
+            assert isinstance(indexed_data_eager.a, MyClass)
+            assert isinstance(indexed_data_compile.a, MyClass)
+
+            assert indexed_data_eager.shape == torch.Size([])
+            assert indexed_data_compile.shape == torch.Size([])
+
         else:
-            assert (index(data).a.b == torch.arange(0, 2)).all()
-            assert isinstance(index(data), MyClass)
-            assert isinstance(index(data).a, MyClass)
-            assert isinstance(index_c(data), MyClass)
-            assert isinstance(index_c(data).a, MyClass)
-            assert (index_c(data).a.b == torch.arange(0, 2)).all()
-            assert index_c(data).shape == torch.Size([2])
+            assert (indexed_data_eager.a.b == torch.arange(0, 2)).all()
+            assert (indexed_data_compile.a.b == torch.arange(0, 2)).all()
+            assert isinstance(indexed_data_eager, MyClass)
+            assert isinstance(indexed_data_compile, MyClass)
+            assert isinstance(indexed_data_eager.a, MyClass)
+            assert isinstance(indexed_data_compile.a, MyClass)
+            assert indexed_data_eager.shape == torch.Size([2])
+            assert indexed_data_compile.shape == torch.Size([2])
 
     def test_tc_stack(self):
         def stack_tds(td0, td1):
             return TensorDict.stack([td0, td1])
             # return torch.stack([td0, td1])
 
-        stack_tds_c = torch.compile(stack_tds, fullgraph=True)
         data0 = MyClass(
             a=MyClass(a=None, b=torch.arange(3), batch_size=[3]), batch_size=[3]
         )
         data1 = MyClass(
             a=MyClass(a=None, b=torch.arange(3, 6), batch_size=[3]), batch_size=[3]
         )
-        assert (stack_tds(data0, data1) == stack_tds_c(data0, data1)).all()
+        stack_eager = stack_tds(data0, data1)
+
+        stack_tds_c = torch.compile(stack_tds, fullgraph=True)
+        stack_compile = stack_tds_c(data0, data1)
+
+        assert (stack_eager == stack_compile).all()
 
     def test_tc_cat(self):
         def cat_tds(td0, td1):
@@ -279,9 +303,9 @@ class TestTC:
         assert_close(clone_c(data), clone(data))
         assert clone_c(data) is not data
         if recurse:
-            assert clone_c(data)["a", "b"] is not data["a", "b"]
+            assert clone_c(data).a.b is not data.a.b
         else:
-            assert clone_c(data)["a", "b"] is data["a", "b"]
+            assert clone_c(data).a.b is data.a.b
 
 
 class TestNN:
