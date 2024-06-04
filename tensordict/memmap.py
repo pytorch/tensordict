@@ -289,7 +289,7 @@ class MemoryMappedTensor(torch.Tensor):
         filename=None,
         handler=None,
     ):
-        if storage.filename is not None:
+        if getattr(storage, "filename", None) is not None:
             if filename is None:
                 filename = storage.filename
             elif str(storage.filename) != str(filename):
