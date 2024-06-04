@@ -2280,6 +2280,17 @@ def _unravel_key_to_tuple(key):
 
 
 def unravel_key(key):
+    """Unravel a nested key.
+
+    Examples:
+        >>> unravel_key("a")
+        "a"
+        >>> unravel_key(("a",))
+        "a"
+        >>> unravel_key((("a", ("b",))))
+        ("a", "b")
+
+    """
     if not torch.compiler.is_dynamo_compiling():
         return unravel_key_cpp(key)
     if isinstance(key, str):
@@ -2292,12 +2303,14 @@ def unravel_key(key):
 
 
 def unravel_keys(*keys):
+    """Unravels a sequence of keys."""
     if not torch.compiler.is_dynamo_compiling():
         return unravel_keys_cpp(*keys)
     return tuple(unravel_key(key) for key in keys)
 
 
 def unravel_key_list(keys):
+    """Unravels a list of keys."""
     if not torch.compiler.is_dynamo_compiling():
         return unravel_key_list_cpp(keys)
     return [unravel_key(key) for key in keys]

@@ -6,8 +6,18 @@ import argparse
 
 import pytest
 import torch
-from tensordict import LazyStackedTensorDict, TensorDict
+from tensordict import LazyStackedTensorDict, tensorclass, TensorDict
 from torch.utils._pytree import tree_map
+
+
+@tensorclass
+class MyTensorClass:
+    a: torch.Tensor
+    b: torch.Tensor
+    c: torch.Tensor
+    d: torch.Tensor
+    e: torch.Tensor
+    f: torch.Tensor
 
 
 # Functions
@@ -17,6 +27,14 @@ def add_one(td):
 
 def add_one_pytree(td):
     return tree_map(lambda x: x + 1, td)
+
+
+def add_self(td):
+    return td + td
+
+
+def add_self_pytree(td):
+    return tree_map(lambda x: x + x, td)
 
 
 def copy(td):
@@ -72,6 +90,19 @@ def get_flat_td():
     )
 
 
+def get_flat_tc():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    return MyTensorClass(
+        a=torch.ones((15,), device=device),
+        b=torch.ones((15,), device=device),
+        c=torch.ones((15,), device=device),
+        d=torch.ones((15,), device=device),
+        e=torch.ones((15,), device=device),
+        f=torch.ones((15,), device=device),
+        device=device,
+    )
+
+
 # Tests runtime of a simple arithmetic op over a highly nested tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 @pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
@@ -114,7 +145,7 @@ def test_compile_copy_nested(mode, dict_type, benchmark):
 
 # Tests runtime of a simple arithmetic op over a flat tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
-@pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "dict"])
 def test_compile_add_one_flat(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
@@ -122,11 +153,42 @@ def test_compile_add_one_flat(mode, dict_type, benchmark):
         else:
             func = add_one
         td = get_flat_td()
+    elif dict_type == "tensorclass":
+        if mode == "compile":
+            func = torch.compile(add_one, fullgraph=True)
+        else:
+            func = add_one
+        td = get_flat_tc()
     else:
         if mode == "compile":
             func = torch.compile(add_one_pytree, fullgraph=True)
         else:
             func = add_one_pytree
+        td = get_flat_td().to_dict()
+    func(td)
+    benchmark(func, td)
+
+
+@pytest.mark.parametrize("mode", ["eager", "compile"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "dict"])
+def test_compile_add_self_flat(mode, dict_type, benchmark):
+    if dict_type == "tensordict":
+        if mode == "compile":
+            func = torch.compile(add_self, fullgraph=True)
+        else:
+            func = add_self
+        td = get_flat_td()
+    elif dict_type == "tensorclass":
+        if mode == "compile":
+            func = torch.compile(add_self, fullgraph=True)
+        else:
+            func = add_self
+        td = get_flat_tc()
+    else:
+        if mode == "compile":
+            func = torch.compile(add_self_pytree, fullgraph=True)
+        else:
+            func = add_self_pytree
         td = get_flat_td().to_dict()
     func(td)
     benchmark(func, td)
@@ -142,6 +204,12 @@ def test_compile_copy_flat(mode, dict_type, benchmark):
         else:
             func = copy
         td = get_flat_td()
+    elif dict_type == "tensorclass":
+        if mode == "compile":
+            func = torch.compile(copy, fullgraph=True)
+        else:
+            func = copy
+        td = get_flat_tc()
     else:
         if mode == "compile":
             func = torch.compile(copy_pytree, fullgraph=True)
@@ -193,7 +261,7 @@ def test_compile_assign_and_add_stack(mode, benchmark):
 
 # Tests indexing speed
 @pytest.mark.parametrize("mode", ["compile", "eager"])
-@pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "dict"])
 @pytest.mark.parametrize("index_type", ["tensor", "slice", "int"])
 def test_compile_indexing(mode, dict_type, index_type, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

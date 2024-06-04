@@ -193,6 +193,25 @@ class TestTC:
         assert compiled.a.b == 1
         assert add_one_c(data) is not data
 
+    def test_tc_arithmetic_other_tc(self):
+        def add_self(td):
+            return td + td
+
+        data = MyClass(a=MyClass(a=None, b=torch.ones(())))
+
+        eager = add_self(data.clone())
+
+        add_self_c = torch.compile(add_self, fullgraph=True)
+        compiled = add_self_c(data.clone())
+
+        assert isinstance(eager.a, MyClass)
+        assert eager.a.b == 2
+
+        assert isinstance(compiled.a, MyClass)
+        # TODO: breaks because a is not cast to a MyClass but is a dict
+        assert compiled.a.b == 2
+        assert add_self_c(data) is not data
+
     @pytest.mark.parametrize("index_type", ["slice", "tensor", "int"])
     def test_tc_index(self, index_type):
         if index_type == "slice":
