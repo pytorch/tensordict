@@ -1113,7 +1113,26 @@ _GENERIC_NESTED_ERR = "Only NestedKeys are supported. Got key {}."
 
 
 class _StringKeys(KeysView):
-    """A key view where contains is restricted to strings."""
+    """A key view where contains is restricted to strings.
+
+    Saving the keys as an attribute is 25% faster than just subclassing KeysView.
+
+    """
+
+    def __init__(self, keys):
+        self.keys = keys
+
+    def __getitem__(self, key):
+        return self.keys.__getitem__(key)
+
+    def __iter__(self):
+        yield from self.keys
+
+    def __repr__(self):
+        return f"{type(self)}({self.keys})"
+
+    def __len__(self):
+        return len(self.keys)
 
     def __contains__(self, item):
         if not isinstance(item, str):
@@ -1127,35 +1146,10 @@ class _StringKeys(KeysView):
                 raise TypeError(_NON_STR_KEY_TUPLE_ERR)
             else:
                 item = unravel_item[0]
-        return super().__contains__(item)
+        return self.keys.__contains__(item)
 
 
 _StringOnlyDict = dict
-# class _StringOnlyDict(dict):
-#     """A dict class where contains is restricted to strings."""
-#
-#     # kept here for debugging
-#     # def __setitem__(self, key, value):
-#     #     if not isinstance(key, str):
-#     #         raise RuntimeError
-#     #     return super().__setitem__(key, value)
-#
-#     def __contains__(self, item):
-#         if not isinstance(item, str):
-#             try:
-#                 unravel_item = _unravel_key_to_tuple(item)
-#                 if not unravel_item:  # catch errors during unravel
-#                     raise TypeError
-#             except Exception:
-#                 raise TypeError(_NON_STR_KEY_ERR)
-#             if len(unravel_item) > 1:
-#                 raise TypeError(_NON_STR_KEY_TUPLE_ERR)
-#             else:
-#                 item = unravel_item[0]
-#         return super().__contains__(item)
-#
-#     def keys(self):
-#         return _StringKeys(self)
 
 
 def lock_blocked(func):
@@ -1531,13 +1525,16 @@ def _check_keys(
 
     if not len(list_of_tensordicts):
         return set()
-    keys: set[str] = set(
-        list_of_tensordicts[0].keys(
-            include_nested=include_nested,
-            leaves_only=leaves_only,
-            is_leaf=_is_leaf_nontensor,
-        )
+    keys = list_of_tensordicts[0].keys(
+        include_nested=include_nested,
+        leaves_only=leaves_only,
+        is_leaf=_is_leaf_nontensor,
     )
+    # TODO: compile doesn't like set() over an arbitrary object
+    if torch.compiler.is_dynamo_compiling():
+        keys = {k for k in keys}  # C416
+    else:
+        keys: set[str] = set(keys)
     for td in list_of_tensordicts[1:]:
         k = td.keys(
             include_nested=include_nested,
@@ -1547,7 +1544,11 @@ def _check_keys(
         if not strict:
             keys = keys.intersection(k)
         else:
-            if set(k) != keys:
+            if torch.compiler.is_dynamo_compiling():
+                k = {v for v in k}  # C416
+            else:
+                k = set(k)
+            if k != keys:
                 raise KeyError(
                     f"got keys {keys} and {set(td.keys())} which are incompatible"
                 )

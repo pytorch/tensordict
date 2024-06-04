@@ -65,8 +65,8 @@ class TestTD:
 
     def test_stack(self):
         def stack_tds(td0, td1):
-            # return TensorDict.stack([td0, td1])
-            return torch.stack([td0, td1])
+            return TensorDict.stack([td0, td1])
+            # return torch.stack([td0, td1])
 
         stack_tds_c = torch.compile(stack_tds, fullgraph=True)
         data0 = TensorDict({"a": {"b": torch.arange(3)}}, [3])

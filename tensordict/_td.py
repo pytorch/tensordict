@@ -68,6 +68,7 @@ from tensordict.utils import (
     _set_max_batch_size,
     _shape,
     _STRDTYPE2DTYPE,
+    _StringKeys,
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
@@ -2795,7 +2796,7 @@ class TensorDict(TensorDictBase):
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
         if not include_nested and not leaves_only:
-            return self._tensordict.keys()
+            return _StringKeys(self._tensordict.keys())
         else:
             return self._nested_keys(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf

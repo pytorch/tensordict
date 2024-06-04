@@ -97,9 +97,13 @@ _METHOD_FROM_TD = [
 ]
 # Methods to apply to the nested TD without wrapping the output
 _NOWRAP_OUTPUT_METHOD_FROM_TD = [
+    "_get_at_str",
+    "_get_at_tuple",
+    "_get_str",
+    "_get_tuple",
     "_values_list",
-    "keys",
     "items",
+    "keys",
     "values",
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
@@ -121,8 +125,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "_erase_names",  # TODO: must be specialized
     "_exclude",  # TODO: must be specialized
     "_fast_apply",
-    "_get_str",
-    "_get_tuple",
+    "_get_sub_tensordict",
     "_has_names",
     "_propagate_lock",
     "_propagate_unlock",
@@ -155,6 +158,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "clamp_max_",
     "clamp_min",
     "clamp_min_",
+    "contiguous",
     "copy_",
     "cos",
     "cos_",
@@ -244,6 +248,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "unlock_",
     "unsqueeze",
     "view",
+    "where",
     "zero_",
 ]
 _FALLBACK_METHOD_FROM_TD_COPY = [
@@ -748,7 +753,12 @@ def _from_tensordict_wrapper(expected_keys):
                 )
 
         # Validating non-tensor keys and for key clash
-        tensor_keys = set(tensordict.keys())
+
+        # TODO: compile doesn't like set() over an arbitrary object
+        if torch.compiler.is_dynamo_compiling():
+            tensor_keys = {k for k in tensordict.keys()}  # C416
+        else:
+            tensor_keys = set(tensordict.keys())
         if non_tensordict is not None:
             for key in list(non_tensordict.keys()):
                 if key not in expected_keys:

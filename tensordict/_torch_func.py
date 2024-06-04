@@ -404,16 +404,14 @@ def _stack(
 ) -> T:
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
-    is_tc = False
-    if any(is_tensorclass(td) for td in list_of_tensordicts):
-        is_tc = True
-        if all(is_non_tensor(td) for td in list_of_tensordicts):
-            from tensordict.tensorclass import NonTensorData
+    is_tc = any(is_tensorclass(td) for td in list_of_tensordicts)
+    if all(is_non_tensor(td) for td in list_of_tensordicts):
+        from tensordict.tensorclass import NonTensorData
 
-            return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
-        else:
-            tc_type = type(list_of_tensordicts[0])
-            list_of_tensordicts = [tc.to_tensordict() for tc in list_of_tensordicts]
+        return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
+    elif is_tc:
+        tc_type = type(list_of_tensordicts[0])
+        list_of_tensordicts = [tc.to_tensordict() for tc in list_of_tensordicts]
 
     batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
