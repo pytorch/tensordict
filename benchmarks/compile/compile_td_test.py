@@ -105,7 +105,7 @@ def get_flat_tc():
 
 # Tests runtime of a simple arithmetic op over a highly nested tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
-@pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_add_one_nested(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
@@ -125,7 +125,7 @@ def test_compile_add_one_nested(mode, dict_type, benchmark):
 
 # Tests the speed of copying a nested tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
-@pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_copy_nested(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
@@ -145,7 +145,7 @@ def test_compile_copy_nested(mode, dict_type, benchmark):
 
 # Tests runtime of a simple arithmetic op over a flat tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
-@pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "dict"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 def test_compile_add_one_flat(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
@@ -170,7 +170,7 @@ def test_compile_add_one_flat(mode, dict_type, benchmark):
 
 
 @pytest.mark.parametrize("mode", ["eager", "compile"])
-@pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "dict"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 def test_compile_add_self_flat(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
@@ -196,7 +196,7 @@ def test_compile_add_self_flat(mode, dict_type, benchmark):
 
 # Tests the speed of copying a flat tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
-@pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_copy_flat(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
@@ -222,7 +222,7 @@ def test_compile_copy_flat(mode, dict_type, benchmark):
 
 # Tests the speed of assigning entries to an empty tensordict
 @pytest.mark.parametrize("mode", ["compile", "eager"])
-@pytest.mark.parametrize("dict_type", ["tensordict", "dict"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "pytree"])
 def test_compile_assign_and_add(mode, dict_type, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     td = TensorDict(device=device)
@@ -261,7 +261,7 @@ def test_compile_assign_and_add_stack(mode, benchmark):
 
 # Tests indexing speed
 @pytest.mark.parametrize("mode", ["compile", "eager"])
-@pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "dict"])
+@pytest.mark.parametrize("dict_type", ["tensordict", "tensorclass", "pytree"])
 @pytest.mark.parametrize("index_type", ["tensor", "slice", "int"])
 def test_compile_indexing(mode, dict_type, index_type, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -287,6 +287,7 @@ def test_compile_indexing(mode, dict_type, index_type, benchmark):
         idx = slice(None, None, 2)
     if index_type == "tensor":
         idx = torch.tensor(range(*idx.indices(10)))
+
     func(td, idx)
     benchmark(func, td, idx)
 
