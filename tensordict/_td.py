@@ -2260,9 +2260,15 @@ class TensorDict(TensorDictBase):
             ):
                 # invalid dict means
                 continue
-            if (
-                device is None or device != torch.device("meta")
-            ) and not torch._guards.active_fake_mode():
+            try:
+                # this was absent in earlier versions of pytorch
+                is_fake = torch._guards.active_fake_mode()
+            except AttributeError:
+                # Let's just make sure that the private function is just not gone
+                if torch.__version__ > "2.3.0":
+                    raise
+                is_fake = False
+            if (device is None or device != torch.device("meta")) and not is_fake:
                 if entry_metadata.get("is_nested", False):
                     # The shape is the shape of the shape, get the shape from it
                     shape = MemoryMappedTensor.from_filename(
