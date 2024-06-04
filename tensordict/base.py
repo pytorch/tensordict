@@ -7465,7 +7465,8 @@ class TensorDictBase(MutableMapping):
 
     def _sync_all(self):
         if _has_cuda:
-            if torch.cuda.is_initialized():
+            # TODO: dynamo doesn't like torch.cuda.is_initialized
+            if torch.compiler.is_dynamo_compiling() or torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         elif _has_mps:
             torch.mps.synchronize()
