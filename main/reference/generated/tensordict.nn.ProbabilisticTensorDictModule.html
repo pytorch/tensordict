@@ -423,6 +423,14 @@ instance will be used. Note that
 instances will use <cite>set_interaction_type</cite> to
 <code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.InteractionType.RANDOM</span></code> by default.</p>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>In some cases, the mode, median or mean value may not be
+readily available through the corresponding attribute.
+To paliate this, <a class="reference internal" href="#tensordict.nn.ProbabilisticTensorDictModule" title="tensordict.nn.ProbabilisticTensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProbabilisticTensorDictModule</span></code></a> will first attempt
+to get the value through a call to <code class="docutils literal notranslate"><span class="pre">get_mode()</span></code>, <code class="docutils literal notranslate"><span class="pre">get_median()</span></code> or <code class="docutils literal notranslate"><span class="pre">get_mean()</span></code>
+if the method exists.</p>
+</div>
 </p></li>
 <li><p><strong>distribution_class</strong> (<em>Type</em><em>, </em><em>optional</em>) – keyword-only argument.
 A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> class to
