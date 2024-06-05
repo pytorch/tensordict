@@ -178,6 +178,12 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
               instances will use `set_interaction_type` to
               :class:`tensordict.nn.InteractionType.RANDOM` by default.
 
+            .. note:: In some cases, the mode, median or mean value may not be
+              readily available through the corresponding attribute.
+              To paliate this, :class:`~ProbabilisticTensorDictModule` will first attempt
+              to get the value through a call to ``get_mode()``, ``get_median()`` or ``get_mean()``
+              if the method exists.
+
         distribution_class (Type, optional): keyword-only argument.
             A :class:`torch.distributions.Distribution` class to
             be used for sampling.
@@ -426,6 +432,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             interaction_type = self.default_interaction_type
 
         if interaction_type is InteractionType.MODE:
+            if hasattr(dist, "get_mode"):
+                return dist.get_mode()
             try:
                 return dist.mode
             except AttributeError:
@@ -434,6 +442,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEDIAN:
+            if hasattr(dist, "get_median"):
+                return dist.get_median()
             try:
                 return dist.median
             except AttributeError:
@@ -442,6 +452,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEAN:
+            if hasattr(dist, "get_mean"):
+                return dist.get_mean()
             try:
                 return dist.mean
             except (AttributeError, NotImplementedError):
