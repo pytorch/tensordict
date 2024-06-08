@@ -40,6 +40,14 @@ TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 LAZY_TD_HANDLED_FUNCTIONS: dict[Callable, Callable] = {}
 T = TypeVar("T", bound="TensorDictBase")
 
+try:
+    from torch.utils._pytree import tree_leaves
+except ImportError:
+    from torch.utils._pytree import tree_flatten
+
+    def tree_leaves(pytree):
+        return tree_flatten(pytree)[0]
+
 
 def implements_for_td(torch_function: Callable) -> Callable[[Callable], Callable]:
     """Register a torch function override for TensorDict."""
@@ -447,9 +455,7 @@ def _stack(
             ):
                 # Let's try to see if all tensors have the same shape
                 # If so, we can assume that we can densly stack the sub-tds
-                leaves = [
-                    torch.utils._pytree.tree_leaves(td) for td in list_of_tensordicts
-                ]
+                leaves = [tree_leaves(td) for td in list_of_tensordicts]
                 for x in zip(*leaves):
                     # TODO: check what happens with non-tensor data here
                     if len(x) == 1 or all(_x.shape == x[0].shape for _x in x[1:]):
