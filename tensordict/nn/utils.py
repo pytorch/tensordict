@@ -8,11 +8,11 @@ from __future__ import annotations
 import functools
 import inspect
 import os
-from distutils.util import strtobool
 from typing import Any, Callable
 
 import torch
 from torch import nn
+from tensordict.utils import strtobool
 
 AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
 
