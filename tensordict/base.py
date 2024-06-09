@@ -426,7 +426,7 @@ class TensorDictBase(MutableMapping):
         *,
         dtype: torch.dtype | None = None,
     ) -> bool | TensorDictBase:  # noqa: D417
-        """Returns the mean value of all elements in the input tensordit.
+        """Returns the mean value of all elements in the input tensordict.
 
         Args:
             dim (int, tuple of int, optional): if ``None``, returns a dimensionless
@@ -455,7 +455,7 @@ class TensorDictBase(MutableMapping):
         *,
         dtype: torch.dtype | None = None,
     ) -> bool | TensorDictBase:  # noqa: D417
-        """Returns the mean of all non-NaN elements in the input tensordit.
+        """Returns the mean of all non-NaN elements in the input tensordict.
 
         Args:
             dim (int, tuple of int, optional): if ``None``, returns a dimensionless
@@ -484,7 +484,7 @@ class TensorDictBase(MutableMapping):
         *,
         dtype: torch.dtype | None = None,
     ) -> bool | TensorDictBase:  # noqa: D417
-        """Returns the produce of values of all elements in the input tensordit.
+        """Returns the produce of values of all elements in the input tensordict.
 
         Args:
             dim (int, tuple of int, optional): if ``None``, returns a dimensionless
@@ -519,7 +519,7 @@ class TensorDictBase(MutableMapping):
         *,
         dtype: torch.dtype | None = None,
     ) -> bool | TensorDictBase:  # noqa: D417
-        """Returns the sum value of all elements in the input tensordit.
+        """Returns the sum value of all elements in the input tensordict.
 
         Args:
             dim (int, tuple of int, optional): if ``None``, returns a dimensionless
@@ -548,7 +548,7 @@ class TensorDictBase(MutableMapping):
         *,
         dtype: torch.dtype | None = None,
     ) -> bool | TensorDictBase:  # noqa: D417
-        """Returns the sum of all non-NaN elements in the input tensordit.
+        """Returns the sum of all non-NaN elements in the input tensordict.
 
         Args:
             dim (int, tuple of int, optional): if ``None``, returns a dimensionless
@@ -577,7 +577,7 @@ class TensorDictBase(MutableMapping):
         *,
         correction: int = 1,
     ) -> bool | TensorDictBase:  # noqa: D417
-        """Returns the standard deviation value of all elements in the input tensordit.
+        """Returns the standard deviation value of all elements in the input tensordict.
 
         Args:
             dim (int, tuple of int, optional): if ``None``, returns a dimensionless
@@ -608,7 +608,7 @@ class TensorDictBase(MutableMapping):
         *,
         correction: int = 1,
     ) -> bool | TensorDictBase:  # noqa: D417
-        """Returns the variance value of all elements in the input tensordit.
+        """Returns the variance value of all elements in the input tensordict.
 
         Args:
             dim (int, tuple of int, optional): if ``None``, returns a dimensionless
