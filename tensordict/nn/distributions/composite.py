@@ -109,7 +109,7 @@ class CompositeDistribution(d.Distribution):
         )
 
     def log_prob(self, sample: TensorDictBase) -> TensorDictBase:
-        """Writes a ``<sample>_log_prob entry`` for each sample in the input tensordit, along with a ``"sample_log_prob"`` entry with the summed log-prob."""
+        """Writes a ``<sample>_log_prob entry`` for each sample in the input tensordict, along with a ``"sample_log_prob"`` entry with the summed log-prob."""
         slp = 0.0
         d = {}
         for name, dist in self.dists.items():

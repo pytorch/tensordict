@@ -1385,7 +1385,7 @@ def _get_leaf_tensordict(
     tensordict: T, key: tuple[str, ...], hook: Callable = None
 ) -> tuple[TensorDictBase, str]:
     # utility function for traversing nested tensordicts
-    # hook should return the default value for tensordit.get(key)
+    # hook should return the default value for tensordict.get(key)
     while len(key) > 1:
         if hook is not None:
             tensordict = hook(tensordict, key)
