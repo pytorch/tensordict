@@ -11,8 +11,8 @@ import os
 from typing import Any, Callable
 
 import torch
-from torch import nn
 from tensordict.utils import strtobool
+from torch import nn
 
 AUTO_MAKE_FUNCTIONAL = strtobool(os.environ.get("AUTO_MAKE_FUNCTIONAL", "False"))
 
