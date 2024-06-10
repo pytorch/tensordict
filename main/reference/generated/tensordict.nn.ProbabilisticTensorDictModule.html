@@ -432,10 +432,19 @@ to get the value through a call to <code class="docutils literal notranslate"><s
 if the method exists.</p>
 </div>
 </p></li>
-<li><p><strong>distribution_class</strong> (<em>Type</em><em>, </em><em>optional</em>) – keyword-only argument.
+<li><p><strong>distribution_class</strong> (<em>Type</em><em>, </em><em>optional</em>) – <p>keyword-only argument.
 A <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> class to
 be used for sampling.
-Default is <a class="reference internal" href="tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta" title="tensordict.nn.distributions.Delta"><code class="xref py py-class docutils literal notranslate"><span class="pre">tensordict.nn.distributions.Delta</span></code></a>.</p></li>
+Default is <a class="reference internal" href="tensordict.nn.distributions.Delta.html#tensordict.nn.distributions.Delta" title="tensordict.nn.distributions.Delta"><code class="xref py py-class docutils literal notranslate"><span class="pre">Delta</span></code></a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the distribution class is of type
+<a class="reference internal" href="tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a>, the <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>
+can be inferred directly form the <code class="docutils literal notranslate"><span class="pre">&quot;distribution_map&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;name_map&quot;</span></code>
+keywork arguments provided through this class’ <code class="docutils literal notranslate"><span class="pre">distribution_kwargs</span></code>
+keyword argument, making the <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> optional in such cases.</p>
+</div>
+</p></li>
 <li><p><strong>distribution_kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.12)"><em>dict</em></a><em>, </em><em>optional</em>) – keyword-only argument.
 Keyword-argument pairs to be passed to the distribution.</p></li>
 <li><p><strong>return_log_prob</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><em>bool</em></a><em>, </em><em>optional</em>) – keyword-only argument.
