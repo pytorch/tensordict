@@ -297,12 +297,28 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         n_empirical_estimate: int = 1000,
     ) -> None:
         super().__init__()
+        distribution_kwargs = (
+            distribution_kwargs if distribution_kwargs is not None else {}
+        )
         if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
         if isinstance(out_keys, (str, tuple)):
             out_keys = [out_keys]
         elif out_keys is None:
-            out_keys = ["_"]
+            if distribution_class is CompositeDistribution:
+                distribution_map = distribution_kwargs.get("distribution_map")
+                if distribution_map is None:
+                    raise KeyError(
+                        "'distribution_map' must be provided within "
+                        "distribution_kwargs whenever the distribution is of type CompositeDistribution."
+                    )
+                name_map = distribution_kwargs.get("name_map", None)
+                if name_map is not None:
+                    out_keys = list(name_map.values())
+                else:
+                    out_keys = list(distribution_map.keys())
+            else:
+                out_keys = ["_"]
         if isinstance(in_keys, dict):
             dist_keys, in_keys = zip(*in_keys.items())
             if set(map(type, dist_keys)) != {str}:
@@ -331,9 +347,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if isinstance(distribution_class, str):
             distribution_class = distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
-        self.distribution_kwargs = (
-            distribution_kwargs if distribution_kwargs is not None else {}
-        )
+        self.distribution_kwargs = distribution_kwargs
         self.n_empirical_estimate = n_empirical_estimate
         self._dist = None
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
