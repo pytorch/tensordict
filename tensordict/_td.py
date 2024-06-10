@@ -1201,7 +1201,13 @@ class TensorDict(TensorDictBase):
         is_shared = self._is_shared
         is_memmap = self._is_memmap
 
-        def empty():
+        def empty(
+            batch_size=batch_size,
+            names=names,
+            device=device,
+            is_shared=is_shared,
+            is_memmap=is_memmap,
+        ):
             result = TensorDict(
                 {}, batch_size=batch_size, names=names, _run_checks=False, device=device
             )
