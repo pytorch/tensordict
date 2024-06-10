@@ -782,8 +782,7 @@ class TestReadWrite:
         assert mmap1.filename == mmap.filename
         assert mmap1.filename == data.filename
         assert mmap1.filename == data.untyped_storage().filename
-        with pytest.raises(AssertionError):
-            assert mmap1.untyped_storage().filename == data.untyped_storage().filename
+        assert mmap1.untyped_storage().filename == data.untyped_storage().filename
 
         os.chmod(str(file_path), 0o444)
         data.fill_(0)

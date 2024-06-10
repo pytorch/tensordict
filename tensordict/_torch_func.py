@@ -46,7 +46,7 @@ except ImportError:
     from torch.utils._pytree import tree_flatten
 
     def tree_leaves(pytree):
-        """torch 2.0 compatible version of tree_leaves."""
+        """Torch 2.0 compatible version of tree_leaves."""
         return tree_flatten(pytree)[0]
 
 
