@@ -187,7 +187,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         distribution_class (Type, optional): keyword-only argument.
             A :class:`torch.distributions.Distribution` class to
             be used for sampling.
-            Default is :class:`tensordict.nn.distributions.Delta`.
+            Default is :class:`~tensordict.nn.distributions.Delta`.
+
+            .. note:: If the distribution class is of type
+                :class:`~tensordict.nn.distributions.CompositeDistribution`, the ``out_keys``
+                can be inferred directly form the ``"distribution_map"`` or ``"name_map"``
+                keywork arguments provided through this class' ``distribution_kwargs``
+                keyword argument, making the ``out_keys`` optional in such cases.
+
         distribution_kwargs (dict, optional): keyword-only argument.
             Keyword-argument pairs to be passed to the distribution.
         return_log_prob (bool, optional): keyword-only argument.
