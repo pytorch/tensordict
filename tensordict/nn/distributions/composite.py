@@ -2,11 +2,11 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from __future__ import annotations
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from tensordict._tensordict import unravel_keys
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key, unravel_keys
 from torch import distributions as d
 
 
@@ -27,6 +27,9 @@ class CompositeDistribution(d.Distribution):
             will match the names of the samples in the tensordict.
 
     Keyword Arguments:
+        name_map (Dict[NestedKey, NestedKey]]): a dictionary representing where each
+            sample should be written. If not provided, the key names from ``distribution_map``
+            will be used.
         extra_kwargs (Dict[NestedKey, Dict]): a possibly incomplete dictionary of
             extra keyword arguments for the distributions to be built.
 
@@ -61,18 +64,41 @@ class CompositeDistribution(d.Distribution):
             is_shared=False)
     """
 
-    def __init__(self, params: TensorDictBase, distribution_map, *, extra_kwargs=None):
+    def __init__(
+        self,
+        params: TensorDictBase,
+        distribution_map: dict,
+        *,
+        name_map: dict | None = None,
+        extra_kwargs=None,
+    ):
         self._batch_shape = params.shape
         if extra_kwargs is None:
             extra_kwargs = {}
         dists = {}
+        if name_map is not None:
+            name_map = {
+                unravel_key(key): unravel_key(other_key)
+                for key, other_key in name_map.items()
+            }
         for name, dist_class in distribution_map.items():
+            name_unravel = unravel_key(name)
+            if name_map:
+                try:
+                    write_name = unravel_key(name_map.get(name, name_unravel))
+                except KeyError:
+                    raise KeyError(
+                        f"Failed to retrieve the key {name} from the name_map with keys {name_map.keys()}."
+                    )
+            else:
+                write_name = name_unravel
+            name = name_unravel
             dist_params = params.get(name, None)
             kwargs = extra_kwargs.get(name, {})
             if dist_params is None:
                 raise KeyError
             dist = dist_class(**dist_params, **kwargs)
-            dists[name] = dist
+            dists[write_name] = dist
         self.dists = dists
 
     def sample(self, shape=None) -> TensorDictBase:

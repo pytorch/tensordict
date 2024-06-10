@@ -3123,6 +3123,43 @@ class TestCompositeDist:
         sample = dist.sample((4,))
         assert sample.shape == torch.Size((4,) + params.shape)
 
+    def test_sample_named(self):
+        params = TensorDict(
+            {
+                "cont": {"loc": torch.randn(3, 4), "scale": torch.rand(3, 4)},
+                ("nested", "disc"): {"logits": torch.randn(3, 10)},
+            },
+            [3],
+        )
+        dist = CompositeDistribution(
+            params,
+            distribution_map={
+                "cont": distributions.Normal,
+                ("nested", "disc"): distributions.Categorical,
+            },
+            name_map={
+                "cont": ("sample", "cont"),
+                (("nested",), "disc"): ("sample", "disc"),
+            },
+        )
+        sample = dist.sample()
+        assert sample.shape == params.shape
+        sample = dist.sample((4,))
+        assert sample.shape == torch.Size((4,) + params.shape)
+        assert sample["sample", "cont"].shape == torch.Size(
+            (
+                4,
+                3,
+                4,
+            )
+        )
+        assert sample["sample", "disc"].shape == torch.Size(
+            (
+                4,
+                3,
+            )
+        )
+
     def test_rsample(self):
         params = TensorDict(
             {
@@ -3231,7 +3268,8 @@ class TestCompositeDist:
         "interaction", [InteractionType.MODE, InteractionType.MEAN]
     )
     @pytest.mark.parametrize("return_log_prob", [True, False])
-    def test_prob_module(self, interaction, return_log_prob):
+    @pytest.mark.parametrize("map_names", [True, False])
+    def test_prob_module(self, interaction, return_log_prob, map_names):
         params = TensorDict(
             {
                 "params": {
@@ -3253,31 +3291,46 @@ class TestCompositeDist:
             "cont": distributions.Normal,
             ("nested", "cont"): distributions.Normal,
         }
+        distribution_kwargs = {"distribution_map": distribution_map}
+        if map_names:
+            distribution_kwargs.update(
+                {
+                    "name_map": {
+                        "cont": ("sample", "cont"),
+                        ("nested", "cont"): ("sample", "nested", "cont"),
+                    }
+                }
+            )
         module = ProbabilisticTensorDictModule(
             in_keys=in_keys,
             out_keys=out_keys,
             distribution_class=CompositeDistribution,
-            distribution_kwargs={"distribution_map": distribution_map},
+            distribution_kwargs=distribution_kwargs,
             default_interaction_type=interaction,
             return_log_prob=return_log_prob,
         )
         sample = module(params)
+        key_logprob0 = ("sample", "cont_log_prob") if map_names else "cont_log_prob"
+        key_logprob1 = (
+            ("sample", "nested", "cont_log_prob")
+            if map_names
+            else ("nested", "cont_log_prob")
+        )
         if return_log_prob:
-            assert "cont_log_prob" in sample.keys()
-            assert ("nested", "cont_log_prob") in sample.keys(True)
+            assert key_logprob0 in sample
+            assert key_logprob1 in sample
         sample_clone = sample.clone()
         lp = module.log_prob(sample_clone)
         if return_log_prob:
             torch.testing.assert_close(
                 lp,
-                sample.get("cont_log_prob").sum(-1)
-                + sample.get(("nested", "cont_log_prob")).sum(-1),
+                sample.get(key_logprob0).sum(-1) + sample.get(key_logprob1).sum(-1),
             )
         else:
             torch.testing.assert_close(
                 lp,
-                sample_clone.get("cont_log_prob").sum(-1)
-                + sample_clone.get(("nested", "cont_log_prob")).sum(-1),
+                sample_clone.get(key_logprob0).sum(-1)
+                + sample_clone.get(key_logprob1).sum(-1),
             )
 
     @pytest.mark.parametrize(
