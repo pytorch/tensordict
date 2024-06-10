@@ -3301,14 +3301,21 @@ class TestCompositeDist:
                     }
                 }
             )
+            out_keys = list(distribution_kwargs["name_map"].values())
         module = ProbabilisticTensorDictModule(
             in_keys=in_keys,
-            out_keys=out_keys,
+            out_keys=None,
             distribution_class=CompositeDistribution,
             distribution_kwargs=distribution_kwargs,
             default_interaction_type=interaction,
             return_log_prob=return_log_prob,
         )
+        if not return_log_prob:
+            assert module.out_keys[-2:] == out_keys
+        else:
+            # loosely checks that the log-prob keys have been added
+            assert module.out_keys[-2:] != out_keys
+
         sample = module(params)
         key_logprob0 = ("sample", "cont_log_prob") if map_names else "cont_log_prob"
         key_logprob1 = (
@@ -3319,6 +3326,7 @@ class TestCompositeDist:
         if return_log_prob:
             assert key_logprob0 in sample
             assert key_logprob1 in sample
+        assert all(key in sample for key in module.out_keys)
         sample_clone = sample.clone()
         lp = module.log_prob(sample_clone)
         if return_log_prob:
