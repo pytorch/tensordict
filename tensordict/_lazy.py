@@ -1661,7 +1661,10 @@ class LazyStackedTensorDict(TensorDictBase):
                             assign(item)
                         else:
                             stack_item, idx = item
-                            self.tensordicts[stack_item][idx] = value[i]
+                            if idx == ():
+                                self.tensordicts[stack_item] = value[i]
+                            else:
+                                self.tensordicts[stack_item][idx] = value[i]
 
                 assign(converted_idx)
                 return self
