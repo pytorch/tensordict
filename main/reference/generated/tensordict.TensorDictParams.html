@@ -3732,7 +3732,7 @@ all hooks registered by this method.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.register_load_state_dict_post_hook">
 <span class="sig-name descname"><span class="pre">register_load_state_dict_post_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.register_load_state_dict_post_hook" title="Permalink to this definition">¶</a></dt>
-<dd><p>Register a post hook to be run after module’s <code class="docutils literal notranslate"><span class="pre">load_state_dict</span></code> is called.</p>
+<dd><p>Register a post-hook to be run after module’s <code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code> is called.</p>
 <dl class="simple">
 <dt>It should have the following signature::</dt><dd><p>hook(module, incompatible_keys) -&gt; None</p>
 </dd>
@@ -3755,6 +3755,22 @@ clearing out both missing and unexpected keys will avoid an error.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.hooks.RemovableHandle</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.register_load_state_dict_pre_hook">
+<span class="sig-name descname"><span class="pre">register_load_state_dict_pre_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.register_load_state_dict_pre_hook" title="Permalink to this definition">¶</a></dt>
+<dd><p>Register a pre-hook to be run before module’s <code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code> is called.</p>
+<dl class="simple">
+<dt>It should have the following signature::</dt><dd><p>hook(module, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs) -&gt; None  # noqa: B950</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>hook</strong> (<em>Callable</em>) – Callable hook that will be invoked before
+loading the state dict.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -3785,12 +3801,25 @@ module’s <a class="reference internal" href="#tensordict.TensorDictParams.stat
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.TensorDictParams.register_state_dict_post_hook">
+<span class="sig-name descname"><span class="pre">register_state_dict_post_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.register_state_dict_post_hook" title="Permalink to this definition">¶</a></dt>
+<dd><p>Register a post-hook for the <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.3)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> method.</p>
+<dl class="simple">
+<dt>It should have the following signature::</dt><dd><p>hook(module, state_dict, prefix, local_metadata) -&gt; None</p>
+</dd>
+</dl>
+<p>The registered hooks can modify the <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> inplace.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictParams.register_state_dict_pre_hook">
 <span class="sig-name descname"><span class="pre">register_state_dict_pre_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.TensorDictParams.register_state_dict_pre_hook" title="Permalink to this definition">¶</a></dt>
 <dd><p>Register a pre-hook for the <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.3)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> method.</p>
-<p>These hooks will be called with arguments: <code class="docutils literal notranslate"><span class="pre">self</span></code>, <code class="docutils literal notranslate"><span class="pre">prefix</span></code>,
-and <code class="docutils literal notranslate"><span class="pre">keep_vars</span></code> before calling <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> on <code class="docutils literal notranslate"><span class="pre">self</span></code>. The registered
-hooks can be used to perform pre-processing before the <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>
+<dl class="simple">
+<dt>It should have the following signature::</dt><dd><p>hook(module, prefix, keep_vars) -&gt; None</p>
+</dd>
+</dl>
+<p>The registered hooks can be used to perform pre-processing before the <code class="docutils literal notranslate"><span class="pre">state_dict</span></code>
 call is made.</p>
 </dd></dl>
 
