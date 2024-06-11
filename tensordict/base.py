@@ -290,7 +290,7 @@ class TensorDictBase(MutableMapping):
             "key must be a NestedKey (a str or a possibly tuple of str)."
         )
 
-    def __getitem__(self, index: IndexType) -> T:
+    def __getitem__(self, index: IndexType) -> T | torch.Tensor:
         """Indexes all tensors according to the provided index.
 
         The index can be a (nested) key or any valid shape index given the
