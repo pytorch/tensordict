@@ -72,8 +72,6 @@ ForkingPickler.register(TensorDict, _reduce_td)
 
 copyreg.pickle(TensorDict, _reduce_td)
 
-# TODO: make a reduction method for Lazy stacks
-
 
 def _rebuild_lazytd_files(cls, keys, rebuilds, args, device, shape, names, stack_dim):
     n = shape[stack_dim]
