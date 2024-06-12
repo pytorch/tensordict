@@ -282,6 +282,12 @@ class LazyStackedTensorDict(TensorDictBase):
     def to_dict(self) -> dict[str, Any]:
         ...
 
+    @classmethod
+    def from_dict(
+        cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+    ):
+        raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
+
     @_fails_exclusive_keys
     def state_dict(
         self,
@@ -2754,6 +2760,12 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def entry_class(self, key: NestedKey) -> type:
         return type(self._source.get(key))
+
+    @classmethod
+    def from_dict(
+        cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+    ):
+        raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
 
     @property
     def device(self) -> torch.device | None:

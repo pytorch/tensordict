@@ -10,6 +10,7 @@ import numbers
 import os
 from collections import defaultdict
 from copy import copy
+
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
@@ -18,15 +19,6 @@ from warnings import warn
 
 import numpy as np
 import torch
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -88,6 +80,15 @@ from tensordict.utils import (
 from torch import Tensor
 from torch.jit._shape_functions import infer_size_impl
 from torch.utils._pytree import tree_map
+
+try:
+    from functorch import dim as ftdim
+
+    _has_funcdim = True
+except ImportError:
+    from tensordict.utils import _ftdim_mock as ftdim
+
+    _has_funcdim = False
 
 _register_tensor_class(ftdim.Tensor)
 
@@ -1526,67 +1527,9 @@ class TensorDict(TensorDictBase):
         return result
 
     @classmethod
-    def from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
-        """Returns a TensorDict created from a dictionary or another :class:`~.tensordict.TensorDict`.
-
-        If ``batch_size`` is not specified, returns the maximum batch size possible.
-
-        This function works on nested dictionaries too, or can be used to determine the
-        batch-size of a nested tensordict.
-
-        Args:
-            input_dict (dictionary, optional): a dictionary to use as a data source
-                (nested keys compatible).
-            batch_size (iterable of int, optional): a batch size for the tensordict.
-            device (torch.device or compatible type, optional): a device for the TensorDict.
-            batch_dims (int, optional): the ``batch_dims`` (ie number of leading dimensions
-                to be considered for ``batch_size``). Exclusinve with ``batch_size``.
-                Note that this is the __maximum__ number of batch dims of the tensordict,
-                a smaller number is tolerated.
-
-        Examples:
-            >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
-            >>> print(TensorDict.from_dict(input_dict))
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
-            >>> # nested dict: the nested TensorDict can have a different batch-size
-            >>> # as long as its leading dims match.
-            >>> input_dict = {"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}
-            >>> print(TensorDict.from_dict(input_dict))
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
-            >>> # we can also use this to work out the batch sie of a tensordict
-            >>> input_td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}, [])
-            >>> print(TensorDict.from_dict(input_td))
-            TensorDict(
-                fields={
-                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
-                    b: TensorDict(
-                        fields={
-                            c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-                        batch_size=torch.Size([3, 4]),
-                        device=None,
-                        is_shared=False)},
-                batch_size=torch.Size([3]),
-                device=None,
-                is_shared=False)
-
-        """
+    def from_dict(
+        cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+    ):
         if batch_dims is not None and batch_size is not None:
             raise ValueError(
                 "Cannot pass both batch_size and batch_dims to `from_dict`."
@@ -1606,6 +1549,7 @@ class TensorDict(TensorDictBase):
             input_dict,
             batch_size=batch_size_set,
             device=device,
+            names=names,
         )
         if batch_size is None:
             _set_max_batch_size(out, batch_dims)
@@ -1614,7 +1558,7 @@ class TensorDict(TensorDictBase):
         return out
 
     def from_dict_instance(
-        self, input_dict, batch_size=None, device=None, batch_dims=None
+        self, input_dict, batch_size=None, device=None, batch_dims=None, names=None
     ):
         if batch_dims is not None and batch_size is not None:
             raise ValueError(
@@ -1641,6 +1585,7 @@ class TensorDict(TensorDictBase):
             input_dict,
             batch_size=batch_size_set,
             device=device,
+            names=names,
         )
         if batch_size is None:
             _set_max_batch_size(out, batch_dims)
@@ -3473,6 +3418,12 @@ class _SubTensorDict(TensorDictBase):
             batch_size=shape,
             propagate_lock=True,
         )
+
+    @classmethod
+    def from_dict(
+        cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+    ):
+        raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
 
     def is_shared(self) -> bool:
         return self._source.is_shared()

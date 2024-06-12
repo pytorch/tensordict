@@ -15,7 +15,7 @@ import numbers
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from copy import copy
 from functools import wraps
 from pathlib import Path
@@ -670,9 +670,87 @@ class TensorDictBase(MutableMapping):
         _set_max_batch_size(self, batch_dims)
         return self
 
+    @classmethod
+    @abc.abstractmethod
+    def from_dict(
+        cls,
+        input_dict,
+        batch_size: torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: List[str] | None = None,
+    ):
+        """Returns a TensorDict created from a dictionary or another :class:`~.tensordict.TensorDict`.
+
+        If ``batch_size`` is not specified, returns the maximum batch size possible.
+
+        This function works on nested dictionaries too, or can be used to determine the
+        batch-size of a nested tensordict.
+
+        Args:
+            input_dict (dictionary, optional): a dictionary to use as a data source
+                (nested keys compatible).
+            batch_size (iterable of int, optional): a batch size for the tensordict.
+            device (torch.device or compatible type, optional): a device for the TensorDict.
+            batch_dims (int, optional): the ``batch_dims`` (ie number of leading dimensions
+                to be considered for ``batch_size``). Exclusinve with ``batch_size``.
+                Note that this is the __maximum__ number of batch dims of the tensordict,
+                a smaller number is tolerated.
+            names (list of str, optional): the dimension names of the tensordict.
+
+        Examples:
+            >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
+            >>> print(TensorDict.from_dict(input_dict))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+            >>> # nested dict: the nested TensorDict can have a different batch-size
+            >>> # as long as its leading dims match.
+            >>> input_dict = {"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}
+            >>> print(TensorDict.from_dict(input_dict))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+            >>> # we can also use this to work out the batch sie of a tensordict
+            >>> input_td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}, [])
+            >>> print(TensorDict.from_dict(input_td))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+
+        """
+        ...
+
     @abc.abstractmethod
     def from_dict_instance(
-        self, input_dict, batch_size=None, device=None, batch_dims=None
+        self,
+        input_dict,
+        batch_size=None,
+        device=None,
+        batch_dims=None,
+        names: List[str] | None = None,
     ):
         """Instance method version of :meth:`~tensordict.TensorDict.from_dict`.
 
@@ -2374,6 +2452,72 @@ class TensorDictBase(MutableMapping):
             f"The tensordict has no saved path (memmap={self.is_memmap()}, path={self._memmap_prefix})."
         )
 
+    def consolidate(
+        self,
+        num_threads=0,
+        filename: Path | str | None = None,
+        device: torch.device | None = None,
+    ) -> None:
+        flat_dict = dict(zip(*self._items_list(leaves_only=True, include_nested=True)))
+        flat_size = [v.element_size() * v.numel() for v in flat_dict.values()]
+        if filename is None:
+            storage = torch.empty(
+                sum(flat_size),
+                dtype=torch.bool,
+                device=device if device else self.device,
+            )
+        else:
+            storage = torch.from_file(
+                str(filename), size=sum(flat_size), dtype=torch.bool, shared=True
+            )
+
+        flat_metadata = {}
+
+        offsets = torch.tensor([0] + flat_size).cumsum(0)
+
+        def assign(k, v, start, stop, storage=storage):
+            offset = v.storage_offset()
+            stride = v.stride()
+            if offset or stride != 1:
+                content = v.clone().untyped_storage()
+            else:
+                content = v.untyped_storage()
+
+            storage.untyped_storage()[start:stop].copy_(content)
+
+            storage_slice = storage[start:stop]
+            shape, dtype = v.shape, v.dtype
+            new_v = storage_slice.view(dtype).view(shape)
+            flat_dict[k] = new_v
+            flat_metadata[k] = (dtype, shape, start, stop)
+
+        if num_threads > 0:
+            executor = ThreadPoolExecutor(num_threads)
+            r = []
+            for i, (k, v) in enumerate(flat_dict.items()):
+                r.append(
+                    executor.submit(
+                        assign, k, v, offsets[i].item(), offsets[i + 1].item()
+                    )
+                )
+            wait(r)
+        else:
+            for i, (k, v) in enumerate(flat_dict.items()):
+                assign(k, v, offsets[i].item(), offsets[i + 1].item())
+
+        def assign_val(key, val):
+            return flat_dict[key]
+
+        result = self._fast_apply(
+            assign_val,
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            device=self.device if filename is None else torch.device("cpu"),
+        )
+        result._consolidated = {"storage": storage, "metadata": flat_metadata}
+        return result
+
     def memmap_(
         self,
         prefix: str | None = None,
@@ -3860,7 +4004,7 @@ class TensorDictBase(MutableMapping):
         collapse: bool = False,
     ) -> Tuple[List, List]:
         return tuple(
-            list(key_or_val)
+            tuple(key_or_val)
             for key_or_val in zip(
                 *self.items(
                     include_nested=include_nested,

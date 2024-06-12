@@ -246,6 +246,25 @@ class TestGeneric:
         assert (td_out["key2"] != 0).all()
         assert (td_out["key3", "key4"] != 0).all()
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("use_file", [False, True])
+    def test_consolidate(self, device, use_file, tmpdir):
+        td = TensorDict(
+            {"a": torch.zeros((1,)), "b": {"c": torch.ones((1,))}, "d": "a string!"},
+            device=device,
+            batch_size=[1],
+        )
+        if not use_file:
+            td_c = td.consolidate()
+        else:
+            td_c = td.consolidate(filename=Path(tmpdir) / "file.mmap")
+        assert hasattr(td_c, "_consolidated")
+        assert (td == td_c).all()
+        assert td_c["d"] == "a string!"
+        storage = td_c._consolidated["storage"]
+        storage |= False
+        assert (td != td_c).any()
+
     @pytest.mark.parametrize(
         "ellipsis_index, expectation",
         [
@@ -6832,6 +6851,33 @@ class TestLazyStackedTensorDict:
             assert assert_allclose_td(res[index], td_lazy)
             index = (slice(None),) * cat_dim + (slice(td_lazy.shape[cat_dim], None),)
             assert assert_allclose_td(res[index], td_lazy_2)
+
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
+    @pytest.mark.parametrize("use_file", [False, True])
+    def test_consolidate(self, device, use_file, tmpdir):
+        td = TensorDict(
+            {
+                "a": torch.arange(3).expand(1, 3).clone(),
+                "b": {"c": torch.arange(3, dtype=torch.double).expand(1, 3).clone()},
+                "d": "a string!",
+            },
+            device=device,
+            batch_size=[1, 3],
+        )
+        td = LazyStackedTensorDict(*td.unbind(1), stack_dim=1)
+        if not use_file:
+            td_c = td.consolidate()
+            assert td_c.device == device
+        else:
+            td_c = td.consolidate(filename=Path(tmpdir) / "file.mmap")
+            assert td_c.device == torch.device("cpu")
+        assert hasattr(td_c, "_consolidated")
+        assert type(td_c) == type(td)
+        assert (td == td_c).all()
+        assert td_c["d"] == [["a string!"] * 3]
+        storage = td_c._consolidated["storage"]
+        storage |= False
+        assert (td != td_c).any()
 
     @pytest.mark.parametrize("pos1", range(8))
     @pytest.mark.parametrize("pos2", range(8))
