@@ -93,24 +93,6 @@ class _NoDefault:
 
 NO_DEFAULT = _NoDefault()
 
-
-class _NestedTensorsAsLists:
-    """Class used to iterate over leaves of lazily stacked tensordicts."""
-
-    def __new__(cls):
-        if not hasattr(cls, "instance"):
-            cls.instance = super(_NestedTensorsAsLists, cls).__new__(cls)
-        return cls.instance
-
-    def __bool__(self):
-        return False
-
-    def __call__(self, val):
-        return _default_is_leaf(val)
-
-
-_NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
-
 T = TypeVar("T", bound="TensorDictBase")
 
 
@@ -2490,7 +2472,16 @@ class TensorDictBase(MutableMapping):
 
 
         """
-        flat_dict = dict(zip(*self._items_list(leaves_only=True, include_nested=True)))
+        flat_dict = dict(
+            zip(
+                *self._items_list(
+                    leaves_only=True,
+                    include_nested=True,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS,
+                    collapse=True,
+                )
+            )
+        )
         flat_size = [v.element_size() * v.numel() for v in flat_dict.values()]
         if filename is None:
             storage = torch.empty(
@@ -2507,7 +2498,7 @@ class TensorDictBase(MutableMapping):
                 str(filename), size=sum(flat_size), dtype=torch.bool, shared=True
             )
 
-        flat_metadata = {}
+        flat_metadata = {"<DEL>non_tensors<DEL>": {}}
 
         offsets = torch.tensor([0] + flat_size).cumsum(0)
 
@@ -2542,13 +2533,18 @@ class TensorDictBase(MutableMapping):
                 assign(k, v, offsets[i].item(), offsets[i + 1].item())
 
         def assign_val(key, val):
-            return flat_dict[key]
+            result = flat_dict.get(key, None)
+            if result is None:
+                # write the non tensor data in the metadata
+                result = val
+                flat_metadata["<DEL>non_tensors<DEL>"][key] = val.data
+            return result
 
         result = self._fast_apply(
             assign_val,
             named=True,
             nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
             device=self.device if filename is None else torch.device("cpu"),
         )
         result._consolidated = {"storage": storage, "metadata": flat_metadata}
@@ -4040,6 +4036,7 @@ class TensorDictBase(MutableMapping):
         leaves_only: bool = False,
         *,
         collapse: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> Tuple[List, List]:
         return tuple(
             tuple(key_or_val)
@@ -4047,7 +4044,7 @@ class TensorDictBase(MutableMapping):
                 *self.items(
                     include_nested=include_nested,
                     leaves_only=leaves_only,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
                 )
             )
         )
@@ -7796,3 +7793,38 @@ def _load_metadata(prefix: Path):
     with open(filepath) as json_metadata:
         metadata = json.load(json_metadata)
     return metadata
+
+
+class _NestedTensorsAsLists:
+    """Class used to iterate over leaves of lazily stacked tensordicts."""
+
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(cls, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+    def __call__(self, val):
+        return _default_is_leaf(val)
+
+
+class _NestedTensorsAsListsNonTensor:
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(cls, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+    def __call__(self, val):
+        print("here!")
+        return _is_leaf_nontensor(val)
+
+
+_NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
+
+
+_NESTED_TENSORS_AS_LISTS_NONTENSOR = _NestedTensorsAsListsNonTensor()

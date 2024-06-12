@@ -279,6 +279,14 @@ class TestGeneric:
         storage |= False
         assert (td != td_c).any()
 
+        filename = Path(tmpdir) / "file.pkl"
+        torch.save(td, filename)
+        assert (td == torch.load(filename)).all()
+
+        td_c = td.consolidate()
+        torch.save(td_c, filename)
+        assert (td == torch.load(filename)).all()
+
     @pytest.mark.parametrize(
         "ellipsis_index, expectation",
         [
@@ -6892,6 +6900,14 @@ class TestLazyStackedTensorDict:
         storage = td_c._consolidated["storage"]
         storage |= False
         assert (td != td_c).any()
+
+        filename = Path(tmpdir) / "file.pkl"
+        torch.save(td, filename)
+        assert (td == torch.load(filename)).all()
+
+        td_c = td.consolidate()
+        torch.save(td_c, filename)
+        assert (td == torch.load(filename)).all()
 
     @pytest.mark.parametrize("pos1", range(8))
     @pytest.mark.parametrize("pos2", range(8))

@@ -37,6 +37,7 @@ from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.base import (
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
+    _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -99,7 +100,10 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
 
     def _keys(self) -> list[str]:
         result = self.tensordict._key_list()
-        if self.is_leaf is _NESTED_TENSORS_AS_LISTS:
+        if self.is_leaf in (
+            _NESTED_TENSORS_AS_LISTS,
+            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+        ):
             return [
                 (key, str(i))
                 for key in result
@@ -1389,7 +1393,10 @@ class LazyStackedTensorDict(TensorDictBase):
         return keys
 
     def values(self, include_nested=False, leaves_only=False, is_leaf=None):
-        if is_leaf is not _NESTED_TENSORS_AS_LISTS:
+        if is_leaf not in (
+            _NESTED_TENSORS_AS_LISTS,
+            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+        ):
             yield from super().values(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             )
@@ -1402,7 +1409,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
 
     def items(self, include_nested=False, leaves_only=False, is_leaf=None):
-        if is_leaf is not _NESTED_TENSORS_AS_LISTS:
+        if is_leaf not in (
+            _NESTED_TENSORS_AS_LISTS,
+            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+        ):
             yield from super().items(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             )
@@ -1536,7 +1546,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 named=named,
                 nested_keys=nested_keys,
                 prefix=prefix + (str(i),)
-                if is_leaf is _NESTED_TENSORS_AS_LISTS
+                if is_leaf
+                in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
                 else prefix,
                 inplace=inplace,
                 filter_empty=filter_empty,

@@ -93,6 +93,7 @@ _TD_PASS_THROUGH = {
 _METHOD_FROM_TD = [
     "gather",
     "replace",
+    "_has_names",
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
 _FALLBACK_METHOD_FROM_TD = [
