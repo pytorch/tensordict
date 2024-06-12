@@ -886,6 +886,8 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
             "_tensordict" not in __dict__
             or "_non_tensordict" not in __dict__
             or key in SET_ATTRIBUTES
+            or key in self.__class__.__dict__
+            or key not in self.__dataclass_fields__
         ):
             return setattr_(self, key, value)
 
@@ -1305,6 +1307,8 @@ def _set(
         if key in ("batch_size", "names", "device"):
             # handled by setattr
             return
+        # set must still check this even if setattr has already done the check once
+        #  because _set can be called directly
         expected_keys = cls.__dataclass_fields__
         if key not in expected_keys:
             raise AttributeError(
