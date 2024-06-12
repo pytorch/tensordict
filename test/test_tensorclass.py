@@ -187,12 +187,16 @@ class TestTensorClass:
         class MyData:
             a: torch.Tensor
             b: str
+            _c: Any = None
+
             @property
             def c(self):
                 return getattr(self, "_c", None)
+
             @c.setter
             def c(self, value):
                 self._c = value
+
         data = MyData(a=torch.ones(()), b="a string!")
         assert data.c is None
         data.c = 1
