@@ -2519,7 +2519,7 @@ class TensorDictBase(MutableMapping):
             else:
                 content = v.untyped_storage()
 
-            storage.untyped_storage()[start:stop].copy_(content)
+            storage.untyped_storage()[start:stop].copy_(content, non_blocking=True)
 
             storage_slice = storage[start:stop]
             shape, dtype = v.shape, v.dtype
@@ -2552,6 +2552,8 @@ class TensorDictBase(MutableMapping):
             device=self.device if filename is None else torch.device("cpu"),
         )
         result._consolidated = {"storage": storage, "metadata": flat_metadata}
+        # sync if needed
+        self._sync_all()
         return result
 
     def memmap_(
