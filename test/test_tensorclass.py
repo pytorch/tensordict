@@ -182,6 +182,27 @@ class TestTensorClass:
         assert equality_tensordict.batch_size == torch.Size(batch_size)
         assert data.z == z
 
+    def test_property(self):
+        @tensorclass
+        class MyData:
+            a: torch.Tensor
+            b: str
+            _c: Any = None
+
+            @property
+            def c(self):
+                return getattr(self, "_c", None)
+
+            @c.setter
+            def c(self, value):
+                self._c = value
+
+        data = MyData(a=torch.ones(()), b="a string!")
+        assert data.c is None
+        data.c = 1
+        assert data.c == 1
+        assert isinstance(data.c, int)
+
     def test_banned_types(self):
         @tensorclass
         class MyAnyClass:

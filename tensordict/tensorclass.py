@@ -887,6 +887,9 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
             "_tensordict" not in __dict__
             or "_non_tensordict" not in __dict__
             or key in SET_ATTRIBUTES
+            or key in self.__class__.__dict__
+            # if we ever decide to allow anything to be written in a tc
+            # or key not in self.__dataclass_fields__
         ):
             return setattr_(self, key, value)
 
