@@ -2454,10 +2454,42 @@ class TensorDictBase(MutableMapping):
 
     def consolidate(
         self,
+        *,
         num_threads=0,
         filename: Path | str | None = None,
         device: torch.device | None = None,
     ) -> None:
+        """Consolidates the tensordict content in a single storage for fast serialization.
+
+        Keyword Args:
+            num_threads (integer, optional): the number of threads to use for populating
+                the storage.
+            filename (Path, optional): an optional file path for a memory-mapped tensor
+                to use as a storage for the tensordict.
+            device (torch.device, optional): an optional device where the storage must be
+                instantiated.
+
+        Examples:
+            >>> import pickle
+            >>> import tempfile
+            >>> import torch
+            >>> import tqdm
+            >>> from torch.utils.benchmark import Timer
+            >>> from tensordict import TensorDict
+            >>> data = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
+            >>> data_consolidated = data.consolidate()
+            >>> # check that the data has a single data_ptr()
+            >>> assert torch.tensor([
+            ...     v.untyped_storage().data_ptr() for v in data_c.values(True, True)
+            ... ]).unique().numel() == 1
+            >>> # Serializing the tensordict will be faster with data_consolidated
+            >>> with open("data.pickle", "wb") as f:
+            ...    print("regular", Timer("pickle.dump(data, f)", globals=globals()).adaptive_autorange())
+            >>> with open("data_c.pickle", "wb") as f:
+            ...     print("consolidated", Timer("pickle.dump(data_consolidated, f)", globals=globals()).adaptive_autorange())
+
+
+        """
         flat_dict = dict(zip(*self._items_list(leaves_only=True, include_nested=True)))
         flat_size = [v.element_size() * v.numel() for v in flat_dict.values()]
         if filename is None:
@@ -2467,6 +2499,10 @@ class TensorDictBase(MutableMapping):
                 device=device if device else self.device,
             )
         else:
+            if device not in (torch.device("cpu"), None):
+                raise RuntimeError(
+                    "device and filename are mutually exclusive arguments."
+                )
             storage = torch.from_file(
                 str(filename), size=sum(flat_size), dtype=torch.bool, shared=True
             )

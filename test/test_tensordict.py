@@ -246,18 +246,32 @@ class TestGeneric:
         assert (td_out["key2"] != 0).all()
         assert (td_out["key3", "key4"] != 0).all()
 
-    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
     @pytest.mark.parametrize("use_file", [False, True])
     def test_consolidate(self, device, use_file, tmpdir):
         td = TensorDict(
-            {"a": torch.zeros((1,)), "b": {"c": torch.ones((1,))}, "d": "a string!"},
+            {
+                "a": torch.zeros((1,)),
+                "b": {"c": torch.ones((1,), dtype=torch.float32)},
+                "d": "a string!",
+                ("e", "f", "g"): torch.full(
+                    (
+                        1,
+                        2,
+                    ),
+                    2,
+                    dtype=torch.float64,
+                ),
+            },
             device=device,
             batch_size=[1],
         )
         if not use_file:
             td_c = td.consolidate()
+            assert td_c.device == device
         else:
             td_c = td.consolidate(filename=Path(tmpdir) / "file.mmap")
+            assert td_c.device == torch.device("cpu")
         assert hasattr(td_c, "_consolidated")
         assert (td == td_c).all()
         assert td_c["d"] == "a string!"
