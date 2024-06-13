@@ -18,8 +18,7 @@ CLS_MAP = {
 }
 
 
-def _rebuild_tensordict_files(keys, rebuilds_args, metadata_dict):
-    rebuilds = dict(zip(keys, rebuilds_args))
+def _rebuild_tensordict_files(flat_key_values, metadata_dict):
 
     def from_metadata(metadata=metadata_dict, prefix=None):
         non_tensor = metadata.pop("non_tensors")
@@ -30,8 +29,7 @@ def _rebuild_tensordict_files(keys, rebuilds_args, metadata_dict):
         d = non_tensor
         for key, _ in leaves.items():
             total_key = (key,) if prefix is None else prefix + (key,)
-            rebuild, args = rebuilds[total_key]
-            d[key] = rebuild(*args)
+            d[key] = flat_key_values[total_key]
         for k, v in metadata.items():
             # Each remaining key is a tuple pointing to a sub-tensordict
             d[k] = from_metadata(
@@ -45,10 +43,8 @@ def _rebuild_tensordict_files(keys, rebuilds_args, metadata_dict):
 
 def _rebuild_tensordict_files_consolidated(
     metadata,
-    rebuild,
-    args,
+    storage,
 ):
-    storage = rebuild(*args)
 
     def from_metadata(metadata=metadata, prefix=None):
         non_tensor = metadata.pop("non_tensors")
@@ -75,20 +71,13 @@ def _reduce_td(data: TensorDict):
     if consolidated:
         storage = consolidated["storage"]
         storge_metadata = consolidated["metadata"]
-        rebuild, args = torch.multiprocessing.reductions.reduce_tensor(storage)
         return (
             _rebuild_tensordict_files_consolidated,
-            (storge_metadata, rebuild, args),
+            (storge_metadata, storage),
         )
 
     metadata_dict, flat_key_values, _ = data._reduce_vals_and_metadata()
-    keys, rebuilds_args = zip(
-        *(
-            (key, torch.multiprocessing.reductions.reduce_tensor(value))
-            for key, value in flat_key_values.items()
-        )
-    )
-    return (_rebuild_tensordict_files, (keys, rebuilds_args, metadata_dict))
+    return (_rebuild_tensordict_files, (flat_key_values, metadata_dict))
 
 
 ForkingPickler.register(TensorDict, _reduce_td)
