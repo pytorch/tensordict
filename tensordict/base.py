@@ -17,7 +17,7 @@ from collections.abc import MutableMapping
 
 from concurrent.futures import ThreadPoolExecutor, wait
 from copy import copy
-from functools import wraps
+from functools import partial, wraps
 from pathlib import Path
 from textwrap import indent
 from typing import (
@@ -2434,12 +2434,94 @@ class TensorDictBase(MutableMapping):
             f"The tensordict has no saved path (memmap={self.is_memmap()}, path={self._memmap_prefix})."
         )
 
+    # Generic method to get a class metadata
+    def _reduce_get_metadata(self):
+        return {
+            "device": self.device,
+            "names": self.names,
+            "batch_size": self.batch_size,
+        }
+
+    @cache  # noqa: B019
+    def _reduce_vals_and_metadata(self):
+        """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
+        # metadata is nested
+        metadata_dict = {
+            "cls": type(self).__name__,
+            "non_tensors": {},
+            "leaves": {},
+            "cls_metadata": self._reduce_get_metadata(),
+        }
+
+        # flat_key_values is flat
+        flat_key_values = {}
+
+        flat_size = []
+        start = [0]
+
+        def assign(
+            key,
+            value,
+            track_key=(),
+            metadata_dict=metadata_dict,
+            flat_size=flat_size,
+            start=start,
+        ):
+            total_key = key if isinstance(key, tuple) else (key,)
+            total_key = track_key + total_key
+            cls = type(value)
+            if _is_non_tensor(cls):
+                metadata_dict["non_tensors"][key] = value.data
+                return value
+            if _is_tensor_collection(cls):
+                metadata_dict[key] = {
+                    "cls": cls.__name__,
+                    "non_tensors": {},
+                    "leaves": {},
+                    "cls_metadata": value._reduce_get_metadata(),
+                }
+                local_assign = partial(
+                    assign,
+                    track_key=total_key,
+                    metadata_dict=metadata_dict[key],
+                    flat_size=flat_size,
+                )
+                value = value._fast_apply(
+                    local_assign,
+                    named=True,
+                    nested_keys=True,
+                    call_on_nested=True,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
+                )
+                return value
+            flat_key_values[total_key] = value
+            flat_size.append(value.element_size() * value.numel())
+            stop = start[0] + flat_size[-1]
+            metadata_dict["leaves"][key] = (
+                value.dtype,
+                value.shape,
+                value.device,
+                start[0],
+                stop,
+            )
+            start[0] = stop
+            return value
+
+        self._fast_apply(
+            assign,
+            named=True,
+            call_on_nested=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
+        )
+        return metadata_dict, flat_key_values, flat_size
+
     def consolidate(
         self,
         *,
         num_threads=0,
         filename: Path | str | None = None,
         device: torch.device | None = None,
+        non_blocking: bool = False,
     ) -> None:
         """Consolidates the tensordict content in a single storage for fast serialization.
 
@@ -2450,6 +2532,7 @@ class TensorDictBase(MutableMapping):
                 to use as a storage for the tensordict.
             device (torch.device, optional): an optional device where the storage must be
                 instantiated.
+            non_blocking (bool, optional): ``non_blocking`` argument passed to :meth:`~torch.Tensor.copy_`.
 
         Examples:
             >>> import pickle
@@ -2472,21 +2555,11 @@ class TensorDictBase(MutableMapping):
 
 
         """
-        flat_dict = dict(
-            zip(
-                *self._items_list(
-                    leaves_only=True,
-                    include_nested=True,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS,
-                    collapse=True,
-                )
-            )
-        )
-        flat_size = [v.element_size() * v.numel() for v in flat_dict.values()]
+        metadata_dict, flat_dict, flat_size = self._reduce_vals_and_metadata()
         if filename is None:
             storage = torch.empty(
                 sum(flat_size),
-                dtype=torch.bool,
+                dtype=torch.uint8,
                 device=device if device else self.device,
             )
         else:
@@ -2495,28 +2568,32 @@ class TensorDictBase(MutableMapping):
                     "device and filename are mutually exclusive arguments."
                 )
             storage = torch.from_file(
-                str(filename), size=sum(flat_size), dtype=torch.bool, shared=True
+                str(filename), size=sum(flat_size), dtype=torch.uint8, shared=True
             )
-
-        flat_metadata = {"<DEL>non_tensors<DEL>": {}}
+            assert len(storage.untyped_storage()) == sum(flat_size)
 
         offsets = torch.tensor([0] + flat_size).cumsum(0)
 
-        def assign(k, v, start, stop, storage=storage):
+        def assign(k, v, start, stop, storage=storage, non_blocking=non_blocking):
             offset = v.storage_offset()
             stride = v.stride()
             if offset or stride != 1:
-                content = v.clone().untyped_storage()
+                content = v.clone(
+                    memory_format=torch.contiguous_format
+                ).untyped_storage()
             else:
                 content = v.untyped_storage()
 
-            storage.untyped_storage()[start:stop].copy_(content, non_blocking=True)
+            storage.untyped_storage()[start:stop].copy_(
+                content, non_blocking=non_blocking
+            )
+            # storage[start:stop].copy_(v.flatten().view(torch.uint8),
+            #                           non_blocking=non_blocking)
 
             storage_slice = storage[start:stop]
             shape, dtype = v.shape, v.dtype
             new_v = storage_slice.view(dtype).view(shape)
             flat_dict[k] = new_v
-            flat_metadata[k] = (dtype, shape, start, stop)
 
         if num_threads > 0:
             executor = ThreadPoolExecutor(num_threads)
@@ -2533,12 +2610,7 @@ class TensorDictBase(MutableMapping):
                 assign(k, v, offsets[i].item(), offsets[i + 1].item())
 
         def assign_val(key, val):
-            result = flat_dict.get(key, None)
-            if result is None:
-                # write the non tensor data in the metadata
-                result = val
-                flat_metadata["<DEL>non_tensors<DEL>"][key] = val.data
-            return result
+            return flat_dict.get(key, val)
 
         result = self._fast_apply(
             assign_val,
@@ -2547,9 +2619,10 @@ class TensorDictBase(MutableMapping):
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
             device=self.device if filename is None else torch.device("cpu"),
         )
-        result._consolidated = {"storage": storage, "metadata": flat_metadata}
-        # sync if needed
-        self._sync_all()
+        result._consolidated = {"storage": storage, "metadata": metadata_dict}
+        if non_blocking:
+            # sync if needed
+            self._sync_all()
         return result
 
     def memmap_(

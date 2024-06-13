@@ -273,10 +273,10 @@ class TestGeneric:
             td_c = td.consolidate(filename=Path(tmpdir) / "file.mmap")
             assert td_c.device == torch.device("cpu")
         assert hasattr(td_c, "_consolidated")
-        assert (td == td_c).all()
+        assert (td == td_c).all(), td_c.to_dict()
         assert td_c["d"] == "a string!"
         storage = td_c._consolidated["storage"]
-        storage |= False
+        storage *= 0
         assert (td != td_c).any()
 
         filename = Path(tmpdir) / "file.pkl"
@@ -6898,7 +6898,7 @@ class TestLazyStackedTensorDict:
         assert (td == td_c).all()
         assert td_c["d"] == [["a string!"] * 3]
         storage = td_c._consolidated["storage"]
-        storage |= False
+        storage *= 0
         assert (td != td_c).any()
 
         filename = Path(tmpdir) / "file.pkl"

@@ -320,6 +320,40 @@ class TestTensorClass:
         assert torch.all(torch.eq(clone_tc.y.X, data.y.X))
         assert clone_tc.z == data.z == z
 
+    @pytest.mark.parametrize("file", [True, False])
+    def test_consolidate(self, file, tmpdir):
+        data = MyData2(
+            torch.ones((2,)), torch.ones((2, 3)) * 2, "a string!", batch_size=[2]
+        )
+        if file:
+            filename = Path(tmpdir) / "file.mmap"
+        else:
+            filename = None
+        data_c = data.consolidate(filename=filename)
+        assert data_c.z == "a string!"
+        assert isinstance(data_c, MyData2)
+        assert hasattr(data_c, "_consolidated")
+
+        # test pickle
+        f = Path(tmpdir) / "data.pkl"
+        torch.save(data, f)
+        data_load = torch.load(f)
+        assert isinstance(data_load, MyData2)
+        assert data_load.z == "a string!"
+        assert data_load.batch_size == data.batch_size
+        assert (data_load == data).all()
+
+        # with consolidated data
+        f = Path(tmpdir) / "data.pkl"
+        torch.save(data_c, f)
+        data_load = torch.load(f)
+        assert isinstance(data_load, MyData2)
+        assert data_load.z == "a string!"
+        assert data_load.batch_size == data.batch_size
+        assert (data_load == data).all()
+        # the consolidated attribute disappears when loading
+        assert not hasattr(data_load, "_consolidated")
+
     def test_dataclass(self):
         data = MyData(
             X=torch.ones(3, 4, 5),

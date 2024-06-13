@@ -286,11 +286,27 @@ class LazyStackedTensorDict(TensorDictBase):
     def to_dict(self) -> dict[str, Any]:
         ...
 
+    def _reduce_get_metadata(self):
+        metadata = {}
+        metadata["stack_dim"] = self.stack_dim
+        metadata["stack_dim_name"] = self._td_dim_name
+        return metadata
+
     @classmethod
     def from_dict(
-        cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+        cls,
+        input_dict,
+        batch_size=None,
+        device=None,
+        batch_dims=None,
+        stack_dim_name=None,
+        stack_dim=0,
     ):
-        raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
+        return LazyStackedTensorDict(
+            *(input_dict[str(i)] for i in range(len(input_dict))),
+            stack_dim=stack_dim,
+            stack_dim_name=stack_dim_name,
+        )
 
     @_fails_exclusive_keys
     def state_dict(
@@ -1535,27 +1551,45 @@ class LazyStackedTensorDict(TensorDictBase):
             )
 
         others = (other.unbind(self.stack_dim) for other in others)
-        results = [
-            td._apply_nest(
-                fn,
-                *oth,
-                checked=checked,
-                device=device,
-                call_on_nested=call_on_nested,
-                default=default,
-                named=named,
-                nested_keys=nested_keys,
-                prefix=prefix + (str(i),)
-                if is_leaf
-                in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
-                else prefix,
-                inplace=inplace,
-                filter_empty=filter_empty,
-                is_leaf=is_leaf,
-                out=out[i] if out is not None else None,
-            )
-            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
-        ]
+        if (
+            call_on_nested
+            and named
+            and is_leaf
+            in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
+        ):
+            # When calling on nested with name and the name includes the TD index, we
+            # want to call the function on each td.
+            # If we were not keeping track of the TD's index, names would be the same for all
+            # tds and there's a risk that values would collide.
+            # nested_keys is irrelevant when named + call_on_nested are both true.
+            results = []
+            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others)):
+                key = prefix + (str(i),)
+                if len(key) == 1:
+                    key = key[0]
+                results.append(fn(key, td, *oth))
+        else:
+            results = [
+                td._apply_nest(
+                    fn,
+                    *oth,
+                    checked=checked,
+                    device=device,
+                    call_on_nested=call_on_nested,
+                    default=default,
+                    named=named,
+                    nested_keys=nested_keys,
+                    prefix=prefix + (str(i),)
+                    if is_leaf
+                    in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
+                    else prefix,
+                    inplace=inplace,
+                    filter_empty=filter_empty,
+                    is_leaf=is_leaf,
+                    out=out[i] if out is not None else None,
+                )
+                for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
+            ]
         if filter_empty and all(r is None for r in results):
             return
         if not inplace:
