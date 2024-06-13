@@ -73,15 +73,16 @@ def _rebuild_tensordict_files_consolidated(
 def _reduce_td(data: TensorDict):
     consolidated = getattr(data, "_consolidated", None)
     if consolidated:
-        storage = consolidated["storage"]
-        storge_metadata = consolidated["metadata"]
-        rebuild, args = torch.multiprocessing.reductions.reduce_tensor(storage)
-        return (
-            _rebuild_tensordict_files_consolidated,
-            (storge_metadata, rebuild, args),
-        )
-
-    metadata_dict, flat_key_values, _ = data._reduce_vals_and_metadata()
+        # storage = consolidated["storage"]
+        # storge_metadata = consolidated["metadata"]
+        # rebuild, args = torch.multiprocessing.reductions.reduce_tensor(storage)
+        # return (
+        #     _rebuild_tensordict_files_consolidated,
+        #     (storge_metadata, rebuild, args),
+        # )
+        metadata_dict, flat_key_values = consolidated["metadata_dict"], consolidated["flat_key_values"]
+    else:
+        metadata_dict, flat_key_values, _ = data._reduce_vals_and_metadata()
     keys, rebuilds_args = zip(
         *(
             (key, torch.multiprocessing.reductions.reduce_tensor(value))
@@ -98,72 +99,3 @@ copyreg.pickle(TensorDict, _reduce_td)
 ForkingPickler.register(LazyStackedTensorDict, _reduce_td)
 
 copyreg.pickle(LazyStackedTensorDict, _reduce_td)
-
-#
-# def _rebuild_lazytd_files(cls, keys, rebuilds, args, device, shape, names, stack_dim):
-#     n = shape[stack_dim]
-#     shape = torch.Size((b for i, b in enumerate(shape) if i != stack_dim))
-#     dim_name = names[stack_dim] if names is not None else None
-#     names = (
-#         [name for i, name in enumerate(names) if i != stack_dim]
-#         if names is not None
-#         else names
-#     )
-#     td = _rebuild_tensordict_files(
-#         TensorDict, keys, rebuilds, args, device, shape, names
-#     )
-#     return cls(
-#         *[td._get_str(str(i), default=NO_DEFAULT) for i in range(n)],
-#         stack_dim=stack_dim,
-#         stack_dim_name=dim_name,
-#     )
-#
-#
-# def _rebuild_lazytd_files_consolidated(
-#     cls, metadata, rebuild, args, device, shape, names, stack_dim
-# ):
-#     n = shape[stack_dim]
-#     shape = torch.Size((b for i, b in enumerate(shape) if i != stack_dim))
-#     dim_name = names[stack_dim] if names is not None else None
-#     names = (
-#         [name for i, name in enumerate(names) if i != stack_dim]
-#         if names is not None
-#         else names
-#     )
-#     td = _rebuild_tensordict_files_consolidated(
-#         TensorDict, metadata, rebuild, args, device, shape, names
-#     )
-#     return cls(
-#         *[td._get_str(str(i), default=NO_DEFAULT) for i in range(n)],
-#         stack_dim=stack_dim,
-#         stack_dim_name=dim_name,
-#     )
-#
-#
-# def _reduce_lazytd(data: LazyStackedTensorDict):
-#     metadata = data.device, data.shape, data.names, data.stack_dim
-#     consolidated = getattr(data, "_consolidated", None)
-#     if consolidated:
-#         storage = consolidated["storage"]
-#         storge_metadata = consolidated["metadata"]
-#         rebuild, args = torch.multiprocessing.reductions.reduce_tensor(storage)
-#         return (
-#             _rebuild_lazytd_files_consolidated,
-#             (type(data), storge_metadata, rebuild, args) + metadata,
-#         )
-#
-#     metadata_dict, flat_key_values, _ = data._reduce_vals_and_metadata()
-#     rebuilds, args = zip(
-#         *(
-#             torch.multiprocessing.reductions.reduce_tensor(value)
-#             if isinstance(value, torch.Tensor)
-#             else (value.data, None)
-#             for value in values
-#         )
-#     )
-#     return (_rebuild_lazytd_files, (type(data), keys, rebuilds, args) + metadata)
-#
-#
-# ForkingPickler.register(LazyStackedTensorDict, _reduce_lazytd)
-#
-# copyreg.pickle(LazyStackedTensorDict, _reduce_lazytd)
