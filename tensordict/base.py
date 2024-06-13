@@ -2574,28 +2574,36 @@ class TensorDictBase(MutableMapping):
 
         offsets = torch.tensor([0] + flat_size).cumsum(0)
         untyped_storage = storage.untyped_storage()
-        def assign(k, v, start, stop, untyped_storage=untyped_storage, storage=storage, non_blocking=non_blocking):
-            offset = v.storage_offset()
-            stride = v.stride()
-            if offset or stride != 1:
-                content = v.clone(
-                    memory_format=torch.contiguous_format
-                ).untyped_storage()
-            else:
-                content = v.untyped_storage()
-
-            untyped_storage[start:stop].copy_(
-                content, non_blocking=non_blocking
-            )
-            # storage[start:stop].copy_(v.flatten().view(torch.uint8),
-            #                           non_blocking=non_blocking)
-
-            storage_slice = storage[start:stop]
-            shape, dtype = v.shape, v.dtype
-            new_v = storage_slice.view(dtype).view(shape)
-            flat_dict[k] = new_v
 
         if num_threads > 0:
+
+            def assign(
+                k,
+                v,
+                start,
+                stop,
+                untyped_storage=untyped_storage,
+                storage=storage,
+                non_blocking=non_blocking,
+            ):
+                offset = v.storage_offset()
+                stride = v.stride()
+                if offset or any(st != 1 for st in stride):
+                    content = v.clone(
+                        memory_format=torch.contiguous_format
+                    ).untyped_storage()
+                else:
+                    content = v.untyped_storage()
+
+                untyped_storage[start:stop].copy_(content, non_blocking=non_blocking)
+                # storage[start:stop].copy_(v.flatten().view(torch.uint8),
+                #                           non_blocking=non_blocking)
+
+                storage_slice = storage[start:stop]
+                shape, dtype = v.shape, v.dtype
+                new_v = storage_slice.view(dtype).view(shape)
+                flat_dict[k] = new_v
+
             executor = ThreadPoolExecutor(num_threads)
             r = []
             for i, (k, v) in enumerate(flat_dict.items()):
@@ -2606,8 +2614,16 @@ class TensorDictBase(MutableMapping):
                 )
             wait(r)
         else:
+            items = []
             for i, (k, v) in enumerate(flat_dict.items()):
-                assign(k, v, offsets[i].item(), offsets[i + 1].item())
+                if v.stride()[-1] != 1 or v.storage_offset():
+                    v = v.clone(memory_format=torch.contiguous_format)
+                items.append(v.view(-1).view(torch.uint8))
+            torch.cat(items, out=storage)
+            flat_dict = {
+                k: v.view(oldv.dtype).view(oldv.shape)
+                for v, (k, oldv) in zip(storage.split(flat_size), flat_dict.items())
+            }
 
         def assign_val(key, val):
             if isinstance(key, str):

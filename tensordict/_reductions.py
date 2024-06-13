@@ -19,7 +19,6 @@ CLS_MAP = {
 
 
 def _rebuild_tensordict_files(flat_key_values, metadata_dict):
-
     def from_metadata(metadata=metadata_dict, prefix=None):
         non_tensor = metadata.pop("non_tensors")
         leaves = metadata.pop("leaves")
@@ -45,7 +44,6 @@ def _rebuild_tensordict_files_consolidated(
     metadata,
     storage,
 ):
-
     def from_metadata(metadata=metadata, prefix=None):
         non_tensor = metadata.pop("non_tensors")
         leaves = metadata.pop("leaves")
