@@ -2573,8 +2573,8 @@ class TensorDictBase(MutableMapping):
             assert len(storage.untyped_storage()) == sum(flat_size)
 
         offsets = torch.tensor([0] + flat_size).cumsum(0)
-
-        def assign(k, v, start, stop, storage=storage, non_blocking=non_blocking):
+        untyped_storage = storage.untyped_storage()
+        def assign(k, v, start, stop, untyped_storage=untyped_storage, storage=storage, non_blocking=non_blocking):
             offset = v.storage_offset()
             stride = v.stride()
             if offset or stride != 1:
@@ -2584,7 +2584,7 @@ class TensorDictBase(MutableMapping):
             else:
                 content = v.untyped_storage()
 
-            storage.untyped_storage()[start:stop].copy_(
+            untyped_storage[start:stop].copy_(
                 content, non_blocking=non_blocking
             )
             # storage[start:stop].copy_(v.flatten().view(torch.uint8),
@@ -2610,6 +2610,8 @@ class TensorDictBase(MutableMapping):
                 assign(k, v, offsets[i].item(), offsets[i + 1].item())
 
         def assign_val(key, val):
+            if isinstance(key, str):
+                key = (key,)
             return flat_dict.get(key, val)
 
         result = self._fast_apply(
