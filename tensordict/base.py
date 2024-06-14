@@ -997,7 +997,7 @@ class TensorDictBase(MutableMapping):
 
         Keyword Args:
             inplace (bool, optional): if ``True``, the parameters or tensors
-                in the module are updated in-place. Defaults to ``True``.
+                in the module are updated in-place. Defaults to ``False``.
             return_swap (bool, optional): if ``True``, the old parameter configuration
                 will be returned. Defaults to ``False``.
             swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
