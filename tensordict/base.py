@@ -2616,6 +2616,7 @@ class TensorDictBase(MutableMapping):
             wait(r)
         else:
             items = []
+            assert flat_dict
             for v in flat_dict.values():
                 if v.stride()[-1] != 1 or v.storage_offset():
                     v = v.clone(memory_format=torch.contiguous_format)
