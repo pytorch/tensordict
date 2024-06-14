@@ -2440,6 +2440,7 @@ class TensorDictBase(MutableMapping):
             "device": str(self.device) if self.device is not None else None,
             "names": self.names,
             "batch_size": list(self.batch_size),
+            "is_locked": self._is_locked,
         }
 
     @cache  # noqa: B019
@@ -2486,7 +2487,7 @@ class TensorDictBase(MutableMapping):
                     metadata_dict=metadata_dict[key],
                     flat_size=flat_size,
                 )
-                value = value._fast_apply(
+                value._fast_apply(
                     local_assign,
                     named=True,
                     nested_keys=True,

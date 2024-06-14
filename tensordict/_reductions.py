@@ -50,6 +50,7 @@ def _rebuild_tensordict_files_consolidated(
         leaves = metadata.pop("leaves")
         cls = metadata.pop("cls")
         cls_metadata = metadata.pop("cls_metadata")
+        is_locked = cls_metadata.pop("is_locked", False)
         # size can be there to tell what the size of the file is
         _ = metadata.pop("size", None)
 
@@ -65,6 +66,8 @@ def _rebuild_tensordict_files_consolidated(
                 v, prefix=prefix + (k,) if prefix is not None else (k,)
             )
         result = CLS_MAP[cls].from_dict(d, **cls_metadata)
+        if is_locked:
+            result = result.lock_()
         return result
 
     return from_metadata()

@@ -291,6 +291,7 @@ class LazyStackedTensorDict(TensorDictBase):
         metadata = {}
         metadata["stack_dim"] = self.stack_dim
         metadata["stack_dim_name"] = self._td_dim_name
+        metadata["is_locked"] = self.is_locked
         return metadata
 
     @classmethod
