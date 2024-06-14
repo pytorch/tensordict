@@ -2614,13 +2614,20 @@ class TensorDictBase(MutableMapping):
                     )
                 )
             wait(r)
+            if non_blocking:
+                # sync if needed
+                self._sync_all()
         else:
             items = []
-            assert flat_dict
             for v in flat_dict.values():
+                if v.device != storage.device:
+                    v = v.to(storage.device, non_blocking=non_blocking)
                 if v.stride()[-1] != 1 or v.storage_offset():
                     v = v.clone(memory_format=torch.contiguous_format)
                 items.append(v.view(-1).view(torch.uint8))
+            if non_blocking:
+                # sync if needed
+                self._sync_all()
             torch.cat(items, out=storage)
             flat_dict = {
                 k: v.view(oldv.dtype).view(oldv.shape)
@@ -2640,9 +2647,6 @@ class TensorDictBase(MutableMapping):
             device=self.device if filename is None else torch.device("cpu"),
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
-        if non_blocking:
-            # sync if needed
-            self._sync_all()
         if filename is not None:
             with open(Path(filename).with_suffix(".json"), "w") as f:
                 metadata_dict["size"] = filesize
