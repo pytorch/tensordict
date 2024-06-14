@@ -2642,13 +2642,22 @@ class TensorDictBase(MutableMapping):
                 key = (key,)
             return flat_dict.get(key, val)
 
+        if filename is None:
+            device = self.device
+        elif not inplace:
+            device = torch.device("cpu")
+        elif self.device is not None and self.device != torch.device("cpu"):
+            self.clear_device_()
+            device = None
+        else:
+            device = None
         result = self._fast_apply(
             assign_val,
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
             out=self if inplace else None,
-            device=self.device if filename is None else torch.device("cpu"),
+            device=device,
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
         if filename is not None:
