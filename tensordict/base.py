@@ -2607,16 +2607,20 @@ class TensorDictBase(MutableMapping):
                 shape, dtype = v.shape, v.dtype
                 new_v = storage_slice.view(dtype).view(shape)
                 flat_dict[k] = new_v
-
-            executor = ThreadPoolExecutor(num_threads)
-            r = []
-            for i, (k, v) in enumerate(flat_dict.items()):
-                r.append(
-                    executor.submit(
-                        assign, k, v, offsets[i].item(), offsets[i + 1].item()
+            if num_threads > 1:
+                executor = ThreadPoolExecutor(num_threads)
+                r = []
+                for i, (k, v) in enumerate(flat_dict.items()):
+                    r.append(
+                        executor.submit(
+                            assign, k, v, offsets[i].item(), offsets[i + 1].item()
+                        )
                     )
-                )
-            wait(r)
+                wait(r)
+            else:
+                for i, (k, v) in enumerate(flat_dict.items()):
+                    assign(k, v, offsets[i].item(), offsets[i + 1].item())
+
             if non_blocking:
                 # sync if needed
                 self._sync_all()
