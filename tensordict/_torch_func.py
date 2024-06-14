@@ -120,6 +120,7 @@ def _gather(
             names = input.names
         else:
             names = None
+        device = input.device
         return TensorDict(
             {
                 key: _gather_tensor(value)
@@ -127,14 +128,10 @@ def _gather(
             },
             batch_size=index.shape,
             names=names,
+            device=device,
         )
-    TensorDict(
-        {
-            key: _gather_tensor(value, out, key)
-            for key, value in input.items(is_leaf=_is_leaf_nontensor)
-        },
-        batch_size=index.shape,
-    )
+    for key, value in input.items(is_leaf=_is_leaf_nontensor):
+        _gather_tensor(value, out, key)
     return out
 
 
