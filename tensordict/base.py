@@ -10,7 +10,7 @@ import collections
 import concurrent.futures
 import contextlib
 import importlib
-import json
+import orjson as json
 import numbers
 import weakref
 from collections.abc import MutableMapping
@@ -2648,15 +2648,15 @@ class TensorDictBase(MutableMapping):
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
         if filename is not None:
-            with open(Path(filename).with_suffix(".json"), "w") as f:
+            with open(Path(filename).with_suffix(".json"), "wb") as f:
                 metadata_dict["size"] = filesize
-                json.dump(metadata_dict, f)
+                f.write(json.dumps(metadata_dict))
         return result
 
     @classmethod
     def from_consolidated(cls, filename):
-        with open(Path(filename).with_suffix(".json"), "r") as f:
-            metadata = json.load(f)
+        with open(Path(filename).with_suffix(".json"), "rb") as f:
+            metadata = json.loads(f.read())
         file = torch.from_file(str(filename), dtype=torch.uint8, size=metadata["size"])
         from ._reductions import _rebuild_tensordict_files_consolidated
 
