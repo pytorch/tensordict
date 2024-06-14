@@ -2647,7 +2647,7 @@ class TensorDictBase(MutableMapping):
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
-            inplace=inplace,
+            out=self if inplace else None,
             device=self.device if filename is None else torch.device("cpu"),
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
