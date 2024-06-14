@@ -11,6 +11,7 @@ import concurrent.futures
 import contextlib
 import importlib
 import numbers
+import os.path
 import weakref
 from collections.abc import MutableMapping
 
@@ -2565,16 +2566,30 @@ class TensorDictBase(MutableMapping):
                 dtype=torch.uint8,
                 device=device if device else self.device,
             )
+            tensor_storage = storage
         else:
+            # Convert the dict to json
+            metadata_dict_json = json.dumps(metadata_dict)
+            # Represent as a tensor
+            metadata_dict_json = torch.as_tensor(
+                bytearray(metadata_dict_json), dtype=torch.uint8
+            )
+            len_metadata = torch.tensor(
+                [metadata_dict_json.numel()], dtype=torch.int64
+            ).view(torch.uint8)
+
             if device not in (torch.device("cpu"), None):
                 raise RuntimeError(
                     "device and filename are mutually exclusive arguments."
                 )
             filesize = sum(flat_size)
+            suffix = len_metadata.numel() + metadata_dict_json.numel()
             storage = torch.from_file(
-                str(filename), size=filesize, dtype=torch.uint8, shared=True
+                str(filename), size=filesize + suffix, dtype=torch.uint8, shared=True
             )
-            assert len(storage.untyped_storage()) == sum(flat_size)
+            storage[-8:] = len_metadata
+            storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
+            tensor_storage = storage[:suffix]
 
         offsets = torch.tensor([0] + flat_size).cumsum(0)
         untyped_storage = storage.untyped_storage()
@@ -2607,6 +2622,7 @@ class TensorDictBase(MutableMapping):
                 shape, dtype = v.shape, v.dtype
                 new_v = storage_slice.view(dtype).view(shape)
                 flat_dict[k] = new_v
+
             if num_threads > 1:
                 executor = ThreadPoolExecutor(num_threads)
                 r = []
@@ -2635,10 +2651,12 @@ class TensorDictBase(MutableMapping):
             if non_blocking:
                 # sync if needed
                 self._sync_all()
-            torch.cat(items, out=storage)
+            torch.cat(items, out=tensor_storage)
             flat_dict = {
                 k: v.view(oldv.dtype).view(oldv.shape)
-                for v, (k, oldv) in zip(storage.split(flat_size), flat_dict.items())
+                for v, (k, oldv) in zip(
+                    tensor_storage.split(flat_size), flat_dict.items()
+                )
             }
 
         def assign_val(key, val):
@@ -2663,18 +2681,23 @@ class TensorDictBase(MutableMapping):
             out=self if inplace else None,
             device=device,
         )
-        result._consolidated = {"storage": storage, "metadata": metadata_dict}
-        if filename is not None:
-            with open(Path(filename).with_suffix(".json"), "wb") as f:
-                metadata_dict["size"] = filesize
-                f.write(json.dumps(metadata_dict))
+        result._consolidated = {"storage": tensor_storage, "metadata": metadata_dict}
+        # if filename is not None:
+        #     with open(Path(filename).with_suffix(".json"), "wb") as f:
+        #         metadata_dict["size"] = filesize
+        #         f.write(json.dumps(metadata_dict))
         return result
 
     @classmethod
     def from_consolidated(cls, filename):
-        with open(Path(filename).with_suffix(".json"), "rb") as f:
-            metadata = json.loads(f.read())
-        file = torch.from_file(str(filename), dtype=torch.uint8, size=metadata["size"])
+        # with open(Path(filename).with_suffix(".json"), "rb") as f:
+        #     metadata = json.loads(f.read())
+        file = torch.from_file(
+            str(filename), dtype=torch.uint8, size=os.path.getsize(filename)
+        )
+        metadata_size = file[-8:].clone().view(torch.int64)
+        metadata = file[-metadata_size.item() - 8 : -8]
+        metadata = json.loads(bytes(metadata.tolist()))
         from ._reductions import _rebuild_tensordict_files_consolidated
 
         return _rebuild_tensordict_files_consolidated(metadata, file)

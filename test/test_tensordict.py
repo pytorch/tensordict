@@ -270,8 +270,10 @@ class TestGeneric:
             td_c = td.consolidate()
             assert td_c.device == device
         else:
-            td_c = td.consolidate(filename=Path(tmpdir) / "file.mmap")
+            filename = Path(tmpdir) / "file.mmap"
+            td_c = td.consolidate(filename=filename)
             assert td_c.device == torch.device("cpu")
+            assert (TensorDict.from_consolidated(filename) == td_c).all()
         assert hasattr(td_c, "_consolidated")
         assert (td == td_c).all(), td_c.to_dict()
         assert td_c["d"] == "a string!"
