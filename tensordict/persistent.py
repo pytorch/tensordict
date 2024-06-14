@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import importlib
 
-import json
+import orjson as json
 import os
 
 import tempfile
@@ -670,8 +670,8 @@ class PersistentTensorDict(TensorDictBase):
                     "_type": str(self.__class__),
                 }
             )
-            with open(filepath, "w") as json_metadata:
-                json.dump(metadata, json_metadata)
+            with open(filepath, "wb") as json_metadata:
+                json_metadata.write(json.dumps(metadata))
 
         if prefix is not None:
             prefix = Path(prefix)

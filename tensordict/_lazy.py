@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-import json
+import orjson as json
 import numbers
 import os
 import re
@@ -2125,10 +2125,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 prefix = Path(prefix)
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
-                with open(prefix / "meta.json", "w") as f:
-                    json.dump(
-                        {"_type": str(self.__class__), "stack_dim": self.stack_dim}, f
-                    )
+                with open(prefix / "meta.json", "wb") as f:
+                    f.write(json.dumps(
+                        {"_type": str(self.__class__), "stack_dim": self.stack_dim}
+                    ))
 
             if executor is None:
                 save_metadata()

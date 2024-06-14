@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-import json
+import orjson as json
 import numbers
 import os
 from collections import defaultdict
@@ -3485,14 +3485,13 @@ class _SubTensorDict(TensorDictBase):
                 prefix = Path(prefix)
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
-                with open(prefix / "meta.json", "w") as f:
-                    json.dump(
+                with open(prefix / "meta.json", "wb") as f:
+                    f.write(json.dumps(
                         {
                             "_type": str(self.__class__),
                             "index": _index_to_str(self.idx),
-                        },
-                        f,
-                    )
+                        }
+                    ))
 
             if executor is None:
                 save_metadata()
@@ -3966,8 +3965,8 @@ def _save_metadata(data: TensorDictBase, prefix: Path, metadata=None):
             "_type": str(data.__class__),
         }
     )
-    with open(filepath, "w") as json_metadata:
-        json.dump(metadata, json_metadata)
+    with open(filepath, "wb") as json_metadata:
+        json_metadata.write(json.dumps(metadata))
 
 
 # user did specify location and memmap is in wrong place, so we copy

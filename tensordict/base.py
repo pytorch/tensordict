@@ -7900,8 +7900,8 @@ def _is_leaf_nontensor(cls: Type) -> bool:
 
 def _load_metadata(prefix: Path):
     filepath = prefix / "meta.json"
-    with open(filepath) as json_metadata:
-        metadata = json.load(json_metadata)
+    with open(filepath, "rb") as json_metadata:
+        metadata = json.loads(json_metadata.read())
     return metadata
 
 

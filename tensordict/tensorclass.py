@@ -10,7 +10,7 @@ import ctypes
 import dataclasses
 import functools
 import inspect
-import json
+import orjson as json
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
@@ -762,7 +762,7 @@ def _memmap_(
             os.makedirs(prefix, exist_ok=True)
 
         def save_metadata(cls=cls, _non_tensordict=_non_tensordict, prefix=prefix):
-            with open(prefix / "meta.json", "w") as f:
+            with open(prefix / "meta.json", "wb") as f:
                 metadata = {"_type": str(cls)}
                 to_pickle = {}
                 for key, value in _non_tensordict.items():
@@ -771,7 +771,7 @@ def _memmap_(
                         metadata[key] = value
                     else:
                         to_pickle[key] = value
-                json.dump(metadata, f)
+                f.write(json.dumps(metadata))
                 if to_pickle:
                     with open(prefix / "other.pickle", "wb") as pickle_file:
                         pickle.dump(to_pickle, pickle_file)
@@ -2589,8 +2589,8 @@ class NonTensorStack(LazyStackedTensorDict):
                     jsondict["data"] = "pickle.pkl"
                     with open(prefix / "pickle.pkl", "wb") as f:
                         pickle.dump(data, f)
-                with open(prefix / "meta.json", "w") as f:
-                    json.dump(jsondict, f)
+                with open(prefix / "meta.json", "wb") as f:
+                    f.write(json.dump(jsondict))
 
             if executor is None:
                 save_metadata()
