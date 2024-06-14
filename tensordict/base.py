@@ -2437,9 +2437,9 @@ class TensorDictBase(MutableMapping):
     # Generic method to get a class metadata
     def _reduce_get_metadata(self):
         return {
-            "device": self.device,
+            "device": str(self.device) if self.device is not None else None,
             "names": self.names,
-            "batch_size": self.batch_size,
+            "batch_size": list(self.batch_size),
         }
 
     @cache  # noqa: B019
@@ -2498,9 +2498,9 @@ class TensorDictBase(MutableMapping):
             flat_size.append(value.element_size() * value.numel())
             stop = start[0] + flat_size[-1]
             metadata_dict["leaves"][key] = (
-                value.dtype,
-                value.shape,
-                value.device,
+                str(value.dtype),
+                list(value.shape),
+                str(value.device),
                 start[0],
                 stop,
             )
@@ -2567,8 +2567,9 @@ class TensorDictBase(MutableMapping):
                 raise RuntimeError(
                     "device and filename are mutually exclusive arguments."
                 )
+            filesize = sum(flat_size)
             storage = torch.from_file(
-                str(filename), size=sum(flat_size), dtype=torch.uint8, shared=True
+                str(filename), size=filesize, dtype=torch.uint8, shared=True
             )
             assert len(storage.untyped_storage()) == sum(flat_size)
 
@@ -2615,7 +2616,7 @@ class TensorDictBase(MutableMapping):
             wait(r)
         else:
             items = []
-            for i, (k, v) in enumerate(flat_dict.items()):
+            for v in flat_dict.values():
                 if v.stride()[-1] != 1 or v.storage_offset():
                     v = v.clone(memory_format=torch.contiguous_format)
                 items.append(v.view(-1).view(torch.uint8))
@@ -2641,7 +2642,20 @@ class TensorDictBase(MutableMapping):
         if non_blocking:
             # sync if needed
             self._sync_all()
+        if filename is not None:
+            with open(Path(filename).with_suffix(".json"), "w") as f:
+                metadata_dict["size"] = filesize
+                json.dump(metadata_dict, f)
         return result
+
+    @classmethod
+    def from_consolidated(cls, filename):
+        with open(Path(filename).with_suffix(".json"), "r") as f:
+            metadata = json.load(f)
+        file = torch.from_file(str(filename), dtype=torch.uint8, size=metadata["size"])
+        from ._reductions import _rebuild_tensordict_files_consolidated
+
+        return _rebuild_tensordict_files_consolidated(metadata, file)
 
     def memmap_(
         self,

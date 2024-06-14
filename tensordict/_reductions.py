@@ -11,6 +11,7 @@ import torch
 
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
+from tensordict.utils import _STRDTYPE2DTYPE
 
 CLS_MAP = {
     "TensorDict": TensorDict,
@@ -49,9 +50,14 @@ def _rebuild_tensordict_files_consolidated(
         leaves = metadata.pop("leaves")
         cls = metadata.pop("cls")
         cls_metadata = metadata.pop("cls_metadata")
+        # size can be there to tell what the size of the file is
+        _ = metadata.pop("size", None)
 
         d = non_tensor
         for key, (dtype, local_shape, _, start, stop) in leaves.items():
+            dtype = _STRDTYPE2DTYPE[dtype]
+            # device = torch.device(device)
+            local_shape = torch.Size(local_shape)
             d[key] = storage[start:stop].view(dtype).view(local_shape)
         for k, v in metadata.items():
             # Each remaining key is a tuple pointing to a sub-tensordict

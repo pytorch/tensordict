@@ -233,7 +233,7 @@ class TensorDict(TensorDictBase):
                 non_blocking = False
             else:
                 sub_non_blocking = non_blocking
-            device = torch.device(device)
+            device = torch.device(device) if device is not None else None
             if _has_mps:
                 # With MPS, an explicit sync is required
                 sub_non_blocking = True
