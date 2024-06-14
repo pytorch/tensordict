@@ -2609,6 +2609,7 @@ class TensorDictBase(MutableMapping):
                 shape, dtype = v.shape, v.dtype
                 new_v = storage_slice.view(dtype).view(shape)
                 flat_dict[k] = new_v
+
             if num_threads > 1:
                 executor = ThreadPoolExecutor(num_threads)
                 r = []
@@ -2638,10 +2639,15 @@ class TensorDictBase(MutableMapping):
                 # sync if needed
                 self._sync_all()
             torch.cat(items, out=storage)
-            flat_dict = {
-                k: v.view(oldv.dtype).view(oldv.shape)
-                for v, (k, oldv) in zip(storage.split(flat_size), flat_dict.items())
-            }
+            for i, (v, (k, oldv)) in enumerate(
+                zip(storage.split(flat_size), flat_dict.items())
+            ):
+                try:
+                    flat_dict[k] = v.view(oldv.dtype).view(oldv.shape)
+                except:
+                    flat_dict[k] = torch.tensor(
+                        untyped_storage[offsets[i] : offsets[i + 1]], dtype=oldv.dtype
+                    ).view(oldv.shape)
 
         def assign_val(key, val):
             if isinstance(key, str):

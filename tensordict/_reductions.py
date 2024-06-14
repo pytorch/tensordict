@@ -25,6 +25,7 @@ def _rebuild_tensordict_files(flat_key_values, metadata_dict):
         leaves = metadata.pop("leaves")
         cls = metadata.pop("cls")
         cls_metadata = metadata.pop("cls_metadata")
+        is_locked = cls_metadata.pop("is_locked", False)
 
         d = non_tensor
         for key, _ in leaves.items():
@@ -36,6 +37,8 @@ def _rebuild_tensordict_files(flat_key_values, metadata_dict):
                 v, prefix=prefix + (k,) if prefix is not None else (k,)
             )
         result = CLS_MAP[cls].from_dict(d, **cls_metadata)
+        if is_locked:
+            result.lock_()
         return result
 
     return from_metadata()
