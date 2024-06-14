@@ -7,8 +7,6 @@
 from __future__ import annotations
 
 import importlib
-
-import orjson as json
 import os
 
 import tempfile
@@ -18,6 +16,8 @@ from pathlib import Path
 from typing import Any, Callable, Tuple, Type
 
 import numpy as np
+
+import orjson as json
 import torch
 
 from tensordict._td import (
@@ -714,7 +714,7 @@ class PersistentTensorDict(TensorDictBase):
                 if prefix is not None:
                     metadata[key] = {
                         "dtype": str(value.dtype),
-                        "shape": value.shape,
+                        "shape": list(value.shape),
                         "device": str(value.device),
                     }
 

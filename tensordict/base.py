@@ -10,7 +10,6 @@ import collections
 import concurrent.futures
 import contextlib
 import importlib
-import orjson as json
 import numbers
 import weakref
 from collections.abc import MutableMapping
@@ -37,6 +36,7 @@ from typing import (
 )
 
 import numpy as np
+import orjson as json
 import torch
 
 from tensordict.memmap import MemoryMappedTensor
@@ -2472,7 +2472,7 @@ class TensorDictBase(MutableMapping):
             cls = type(value)
             if _is_non_tensor(cls):
                 metadata_dict["non_tensors"][key] = value.data
-                return value
+                return
             if _is_tensor_collection(cls):
                 metadata_dict[key] = {
                     "cls": cls.__name__,
@@ -2493,7 +2493,7 @@ class TensorDictBase(MutableMapping):
                     call_on_nested=True,
                     is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
                 )
-                return value
+                return
             flat_key_values[total_key] = value
             flat_size.append(value.element_size() * value.numel())
             stop = start[0] + flat_size[-1]
@@ -2505,13 +2505,13 @@ class TensorDictBase(MutableMapping):
                 stop,
             )
             start[0] = stop
-            return value
 
         self._fast_apply(
             assign,
             named=True,
             call_on_nested=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
+            filter_empty=True,
         )
         return metadata_dict, flat_key_values, flat_size
 
@@ -2522,6 +2522,7 @@ class TensorDictBase(MutableMapping):
         filename: Path | str | None = None,
         device: torch.device | None = None,
         non_blocking: bool = False,
+        inplace: bool = False,
     ) -> None:
         """Consolidates the tensordict content in a single storage for fast serialization.
 
@@ -2533,6 +2534,8 @@ class TensorDictBase(MutableMapping):
             device (torch.device, optional): an optional device where the storage must be
                 instantiated.
             non_blocking (bool, optional): ``non_blocking`` argument passed to :meth:`~torch.Tensor.copy_`.
+            inplace (bool, optional): if ``True``, the resulting tensordict is the same
+                as ``self`` with updated values. Defaults to ``False``.
 
         Examples:
             >>> import pickle
@@ -2644,6 +2647,7 @@ class TensorDictBase(MutableMapping):
             named=True,
             nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
+            inplace=inplace,
             device=self.device if filename is None else torch.device("cpu"),
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}

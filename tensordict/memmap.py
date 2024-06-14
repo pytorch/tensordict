@@ -827,7 +827,7 @@ class MemoryMappedTensor(torch.Tensor):
             return {
                 "handler": self._handler,
                 "dtype": self.dtype,
-                "shape": self.parent_shape,
+                "shape": list(self.parent_shape),
                 "index": self.index,
             }
         elif getattr(self, "_filename", None) is not None:

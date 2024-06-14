@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import orjson as json
 import numbers
 import os
 import re
@@ -19,6 +18,8 @@ from textwrap import indent
 from typing import Any, Callable, Iterator, OrderedDict, Sequence, Tuple, Type
 
 import numpy as np
+
+import orjson as json
 import torch
 import torch.distributed as dist
 
@@ -2126,9 +2127,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
                 with open(prefix / "meta.json", "wb") as f:
-                    f.write(json.dumps(
-                        {"_type": str(self.__class__), "stack_dim": self.stack_dim}
-                    ))
+                    f.write(
+                        json.dumps(
+                            {"_type": str(self.__class__), "stack_dim": self.stack_dim}
+                        )
+                    )
 
             if executor is None:
                 save_metadata()
@@ -3124,8 +3127,8 @@ class _CustomOpTensorDict(TensorDictBase):
                     "inv_op_kwargs": data.inv_op_kwargs,
                 }
             )
-            with open(filepath, "w") as json_metadata:
-                json.dump(metadata, json_metadata)
+            with open(filepath, "wb") as json_metadata:
+                json_metadata.write(json.dumps(metadata))
 
         if prefix is not None:
             prefix = Path(prefix)

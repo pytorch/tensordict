@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import orjson as json
 import numbers
 import os
 from collections import defaultdict
@@ -18,6 +17,8 @@ from typing import Any, Callable, Iterable, Iterator, List, Sequence, Tuple, Typ
 from warnings import warn
 
 import numpy as np
+
+import orjson as json
 import torch
 
 from tensordict.base import (
@@ -3486,12 +3487,14 @@ class _SubTensorDict(TensorDictBase):
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
                 with open(prefix / "meta.json", "wb") as f:
-                    f.write(json.dumps(
-                        {
-                            "_type": str(self.__class__),
-                            "index": _index_to_str(self.idx),
-                        }
-                    ))
+                    f.write(
+                        json.dumps(
+                            {
+                                "_type": str(self.__class__),
+                                "index": _index_to_str(self.idx),
+                            }
+                        )
+                    )
 
             if executor is None:
                 save_metadata()
@@ -4066,7 +4069,7 @@ def _update_metadata(*, metadata, key, value, is_collection):
             "device": str(value.device),
             "shape": list(value.shape)
             if not value.is_nested
-            else value._nested_tensor_size().shape,
+            else list(value._nested_tensor_size().shape),
             "dtype": str(value.dtype),
             "is_nested": value.is_nested,
         }
