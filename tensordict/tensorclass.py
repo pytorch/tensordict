@@ -94,6 +94,8 @@ _METHOD_FROM_TD = [
     "_get_str",
     "_get_tuple",
     "gather",
+    "is_memmap",
+    "is_shared",
     "ndimension",
     "numel",
     "replace",
