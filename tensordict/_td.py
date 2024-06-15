@@ -2045,11 +2045,14 @@ class TensorDict(TensorDictBase):
             if all(v is None for v in vals):
                 continue
             dest = self._get_str(key, NO_DEFAULT)
-            torch.stack(
+            new_dest = torch.stack(
                 vals,
                 dim=dim,
                 out=dest,
             )
+            if new_dest is not dest:
+                # This can happen with non-tensor data
+                self._set_str(key, new_dest, inplace=False, validated=True)
         return self
 
     def entry_class(self, key: NestedKey) -> type:
