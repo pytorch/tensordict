@@ -469,6 +469,33 @@ equivalent to chained calls of getattr.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorData.is_memmap">
+<span class="sig-name descname"><span class="pre">is_memmap</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.NonTensorData.is_memmap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks if tensordict is memory-mapped.</p>
+<p>If a TensorDict instance is memory-mapped, it is locked (entries cannot
+be renamed, removed or added). If a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> is created with
+tensors that are all memory-mapped, this does __not__ mean that <code class="docutils literal notranslate"><span class="pre">is_memmap</span></code>
+will return <code class="docutils literal notranslate"><span class="pre">True</span></code> (as a new tensor may or may not be memory-mapped).
+Only if one calls <cite>tensordict.memmap_()</cite> will the tensordict be
+considered as memory-mapped.</p>
+<p>This is always <code class="docutils literal notranslate"><span class="pre">True</span></code> for tensordicts on a CUDA device.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorData.is_shared">
+<span class="sig-name descname"><span class="pre">is_shared</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span></span><a class="headerlink" href="#tensordict.NonTensorData.is_shared" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks if tensordict is in shared memory.</p>
+<p>If a TensorDict instance is in shared memory, it is locked (entries cannot
+be renamed, removed or added). If a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> is created with
+tensors that are all in shared memory, this does __not__ mean that <code class="docutils literal notranslate"><span class="pre">is_shared</span></code>
+will return <code class="docutils literal notranslate"><span class="pre">True</span></code> (as a new tensor may or may not be in shared memory).
+Only if one calls <cite>tensordict.share_memory_()</cite> or places the tensordict
+on a device where the content is shared by default (eg, <code class="docutils literal notranslate"><span class="pre">&quot;cuda&quot;</span></code>)
+will the tensordict be considered in shared memory.</p>
+<p>This is always <code class="docutils literal notranslate"><span class="pre">True</span></code> for tensordicts on a CUDA device.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.NonTensorData.load_memmap">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load_memmap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.3)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><span class="pre">TensorDictBase</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.NonTensorData.load_memmap" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads a memory-mapped tensordict from disk.</p>
@@ -719,6 +746,21 @@ be slow for large content.</p>
 <dd class="field-odd"><p>names (list of str)</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorData.ndimension">
+<span class="sig-name descname"><span class="pre">ndimension</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.NonTensorData.ndimension" title="Permalink to this definition">¶</a></dt>
+<dd><p>See <a class="reference internal" href="tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict.batch_dims" title="tensordict.LazyStackedTensorDict.batch_dims"><code class="xref py py-meth docutils literal notranslate"><span class="pre">batch_dims()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.NonTensorData.numel">
+<span class="sig-name descname"><span class="pre">numel</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></span><a class="headerlink" href="#tensordict.NonTensorData.numel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Total number of elements in the batch.</p>
+<p>Lower-bounded to 1, as a stack of two tensordict with empty shape will
+have two elements, therefore we consider that a tensordict is at least
+1-element big.</p>
 </dd></dl>
 
 <dl class="py method">
