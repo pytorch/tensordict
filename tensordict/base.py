@@ -2574,7 +2574,12 @@ class TensorDictBase(MutableMapping):
                 )
             filesize = sum(flat_size)
             storage = torch.from_file(
-                str(filename), size=filesize, dtype=torch.uint8, shared=True
+                str(filename),
+                size=filesize,
+                dtype=torch.uint8,
+                shared=True,
+                # needed when device ctx differs
+                device=torch.device("cpu"),
             )
             assert len(storage.untyped_storage()) == sum(flat_size)
 
@@ -2682,7 +2687,13 @@ class TensorDictBase(MutableMapping):
     def from_consolidated(cls, filename):
         with open(Path(filename).with_suffix(".json"), "rb") as f:
             metadata = json.loads(f.read())
-        file = torch.from_file(str(filename), dtype=torch.uint8, size=metadata["size"])
+        file = torch.from_file(
+            str(filename),
+            dtype=torch.uint8,
+            size=metadata["size"],
+            # needed when device ctx differs
+            device=torch.device("cpu"),
+        )
         from ._reductions import _rebuild_tensordict_files_consolidated
 
         return _rebuild_tensordict_files_consolidated(metadata, file)
