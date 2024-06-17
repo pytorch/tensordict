@@ -20,15 +20,9 @@ from typing import Any, Callable, overload
 import numpy as np
 import torch
 
-from tensordict.utils import _shape, implement_for
+from tensordict.utils import _shape, implement_for, NESTED_TENSOR_ERR
 
 from torch.multiprocessing.reductions import ForkingPickler
-
-NESTED_TENSOR_ERR = (
-    "The PyTorch version isn't compatible with memmap "
-    "nested tensors. Please upgrade to a more recent "
-    "version."
-)
 
 
 class MemoryMappedTensor(torch.Tensor):

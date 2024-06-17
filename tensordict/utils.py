@@ -2274,3 +2274,33 @@ class KeyDependentDefaultDict(collections.defaultdict):
         value = self.fun(key)
         self[key] = value
         return value
+
+
+def _prefix_last_key(key, prefix):
+    if isinstance(key, str):
+        return prefix + key
+    if len(key) == 1:
+        return (_prefix_last_key(key[0], prefix),)
+    return key[:-1] + (_prefix_last_key(key[-1], prefix),)
+
+
+def _nt_from_tensor_shape(value, shape):
+    func_offset_stride = getattr(
+        torch, "_nested_compute_contiguous_strides_offsets", None
+    )
+    if func_offset_stride is not None:
+        offsets_strides = func_offset_stride(shape)
+    else:
+        raise RuntimeError(NESTED_TENSOR_ERR)
+    return torch._nested_view_from_buffer(
+        value,
+        shape,
+        *offsets_strides,
+    )
+
+
+NESTED_TENSOR_ERR = (
+    "The PyTorch version isn't compatible with "
+    "nested tensors. Please upgrade to a more recent "
+    "version."
+)

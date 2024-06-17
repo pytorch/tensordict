@@ -48,6 +48,8 @@ from tensordict.utils import (
     _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
+    _nt_from_tensor_shape,
+    _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
     _set_max_batch_size,
@@ -2447,6 +2449,8 @@ class TensorDictBase(MutableMapping):
     @cache  # noqa: B019
     def _reduce_vals_and_metadata(self):
         """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
+        need_padding = self.dtype is None
+
         # metadata is nested
         metadata_dict = {
             "cls": type(self).__name__,
@@ -2460,6 +2464,31 @@ class TensorDictBase(MutableMapping):
 
         flat_size = []
         start = [0]
+
+        def add_single_value(
+            value, key, start, metadata_dict, dtype, shape, device, flat_size
+        ):
+            n = value.element_size() * value.numel()
+            if need_padding:
+                pad = n % 8
+                if pad != 0:
+                    pad = 8 - pad
+            else:
+                pad = 0
+            flat_size.append(n + pad)
+            stop = start[0] + flat_size[-1]
+            if need_padding:
+                assert start[0] % 8 == 0, (start, n)
+                assert stop % 8 == 0, (stop, n)
+            metadata_dict["leaves"][key] = (
+                str(dtype),
+                list(shape),
+                str(device),
+                start[0],
+                stop,
+                pad,
+            )
+            start[0] = stop
 
         def assign(
             key,
@@ -2496,17 +2525,78 @@ class TensorDictBase(MutableMapping):
                     is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
                 )
                 return
-            flat_key_values[total_key] = value
-            flat_size.append(value.element_size() * value.numel())
-            stop = start[0] + flat_size[-1]
-            metadata_dict["leaves"][key] = (
-                str(value.dtype),
-                list(value.shape),
-                str(value.device),
-                start[0],
-                stop,
-            )
-            start[0] = stop
+            if hasattr(value, "full_tensor"):
+                raise NotImplementedError("DTensor is not supported yet")
+            if getattr(value, "is_nested", False):
+                if value.layout is torch.jagged:
+                    # Get the values
+                    values = value.values()
+                    shape = [v if isinstance(v, int) else -1 for v in values.shape]
+                    # Get the offsets
+                    offsets = value.offsets()
+                    # Now we're saving the two tensors
+                    flat_key_values[_prefix_last_key(total_key, "<NJT>")] = values
+                    add_single_value(
+                        values,
+                        _prefix_last_key(key, "<NJT>"),
+                        start,
+                        metadata_dict,
+                        values.dtype,
+                        shape,
+                        values.device,
+                        flat_size,
+                    )
+                    flat_key_values[
+                        _prefix_last_key(total_key, "<NJT_OFFSETS>")
+                    ] = offsets
+                    add_single_value(
+                        offsets,
+                        _prefix_last_key(key, "<NJT_OFFSETS>"),
+                        start,
+                        metadata_dict,
+                        offsets.dtype,
+                        offsets.shape,
+                        offsets.device,
+                        flat_size,
+                    )
+                else:
+                    # Get the values
+                    values = value.values()
+                    shapes = value._nested_tensor_size()
+                    flat_key_values[_prefix_last_key(total_key, "<NT>")] = values
+                    add_single_value(
+                        values,
+                        _prefix_last_key(key, "<NT>"),
+                        start,
+                        metadata_dict,
+                        values.dtype,
+                        values.shape,
+                        values.device,
+                        flat_size,
+                    )
+                    flat_key_values[_prefix_last_key(total_key, "<NT_SHAPES>")] = shapes
+                    add_single_value(
+                        shapes,
+                        _prefix_last_key(key, "<NT_SHAPES>"),
+                        start,
+                        metadata_dict,
+                        shapes.dtype,
+                        shapes.shape,
+                        shapes.device,
+                        flat_size,
+                    )
+            else:
+                flat_key_values[total_key] = value
+                add_single_value(
+                    value,
+                    key,
+                    start,
+                    metadata_dict,
+                    value.dtype,
+                    value.shape,
+                    value.device,
+                    flat_size,
+                )
 
         self._fast_apply(
             assign,
@@ -2515,7 +2605,7 @@ class TensorDictBase(MutableMapping):
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
             filter_empty=True,
         )
-        return metadata_dict, flat_key_values, flat_size
+        return metadata_dict, flat_key_values, flat_size, need_padding
 
     def consolidate(
         self,
@@ -2560,7 +2650,12 @@ class TensorDictBase(MutableMapping):
 
 
         """
-        metadata_dict, flat_dict, flat_size = self._reduce_vals_and_metadata()
+        (
+            metadata_dict,
+            flat_dict,
+            flat_size,
+            need_padding,
+        ) = self._reduce_vals_and_metadata()
         if filename is None:
             storage = torch.empty(
                 sum(flat_size),
@@ -2584,7 +2679,12 @@ class TensorDictBase(MutableMapping):
             assert len(storage.untyped_storage()) == sum(flat_size)
 
         offsets = torch.tensor([0] + flat_size).cumsum(0)
-        untyped_storage = storage.untyped_storage()
+
+        def view_old_as_new(v, oldv):
+            v = v.view(oldv.dtype)
+            if v.numel() > oldv.numel():
+                return v[: oldv.numel()].view(oldv.shape)
+            return v.view(oldv.shape)
 
         if num_threads > 0:
 
@@ -2593,66 +2693,148 @@ class TensorDictBase(MutableMapping):
                 v,
                 start,
                 stop,
-                untyped_storage=untyped_storage,
+                njts,
+                njts_offsets,
+                nts,
+                nts_shapes,
                 storage=storage,
                 non_blocking=non_blocking,
             ):
-                offset = v.storage_offset()
-                stride = v.stride()
-                if offset or any(st != 1 for st in stride):
-                    content = v.clone(
-                        memory_format=torch.contiguous_format
-                    ).untyped_storage()
-                else:
-                    content = v.untyped_storage()
-
-                untyped_storage[start:stop].copy_(content, non_blocking=non_blocking)
-                # storage[start:stop].copy_(v.flatten().view(torch.uint8),
-                #                           non_blocking=non_blocking)
+                # v may need padding
+                v_pad = v.view(-1).view(torch.uint8)
+                exp_length = stop - start
+                pad = exp_length - v_pad.numel()
+                if pad:
+                    v_pad = torch.cat([v_pad, v_pad.new_zeros(pad)])
+                storage[start:stop].copy_(v_pad, non_blocking=non_blocking)
 
                 storage_slice = storage[start:stop]
                 shape, dtype = v.shape, v.dtype
-                new_v = storage_slice.view(dtype).view(shape)
+                new_v = storage_slice.view(dtype)
+                if pad:
+                    new_v = new_v[: v.numel()]
+                new_v = new_v.view(shape)
+                if k[-1].startswith("<NJT>"):
+                    njts[k] = new_v
+                elif k[-1].startswith("<NJT_OFFSETS>"):
+                    njts_offsets[k] = new_v
+                elif k[-1].startswith("<NT>"):
+                    nts[k] = new_v
+                elif k[-1].startswith("<NT_SHAPES>"):
+                    nts_shapes[k] = new_v
                 flat_dict[k] = new_v
 
+            njts = {}
+            njts_offsets = {}
+            nts = {}
+            nts_shapes = {}
             if num_threads > 1:
                 executor = ThreadPoolExecutor(num_threads)
                 r = []
                 for i, (k, v) in enumerate(flat_dict.items()):
                     r.append(
                         executor.submit(
-                            assign, k, v, offsets[i].item(), offsets[i + 1].item()
+                            assign,
+                            k,
+                            v,
+                            offsets[i].item(),
+                            offsets[i + 1].item(),
+                            njts,
+                            njts_offsets,
+                            nts,
+                            nts_shapes,
                         )
                     )
                 wait(r)
             else:
                 for i, (k, v) in enumerate(flat_dict.items()):
-                    assign(k, v, offsets[i].item(), offsets[i + 1].item())
+                    assign(
+                        k,
+                        v,
+                        offsets[i].item(),
+                        offsets[i + 1].item(),
+                        njts,
+                        njts_offsets,
+                        nts,
+                        nts_shapes,
+                    )
+            for njt_key, njt_val in njts.items():
+                njt_key_offset = njt_key[:-1] + (
+                    njt_key[-1].replace("<NJT>", "<NJT_OFFSETS>"),
+                )
+                val = torch.nested.nested_tensor_from_jagged(
+                    njt_val, flat_dict[njt_key_offset]
+                )
+                del flat_dict[njt_key]
+                del flat_dict[njt_key_offset]
+                newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
+                flat_dict[newkey] = val
+            for nt_key, nt_val in nts.items():
+                nt_key_shape = nt_key[:-1] + (
+                    nt_key[-1].replace("<NT>", "<NT_SHAPES>"),
+                )
+                val = _nt_from_tensor_shape(nt_val, nt_key_shape)
+                del flat_dict[nt_key]
+                del flat_dict[nt_key_shape]
+                newkey = nt_val[:-1] + (nt_val[-1].replace("<NT>", ""),)
+                flat_dict[newkey] = val
 
             if non_blocking:
                 # sync if needed
                 self._sync_all()
         else:
+
+            def _view_and_pad(tensor):
+                result = tensor.view(-1).view(torch.uint8)
+                # result must always have a multiple of 8 elements
+                pad = 0
+                if need_padding:
+                    pad = result.numel() % 8
+                    if pad != 0:
+                        result = torch.cat([result, result.new_zeros(8 - pad)])
+                return result, pad
+
             items = []
             for v in flat_dict.values():
                 if v.device != storage.device:
                     v = v.to(storage.device, non_blocking=non_blocking)
                 if v.stride()[-1] != 1 or v.storage_offset():
                     v = v.clone(memory_format=torch.contiguous_format)
-                items.append(v.view(-1).view(torch.uint8))
+                v, pad = _view_and_pad(v)
+                items.append(v)
             if non_blocking:
                 # sync if needed
                 self._sync_all()
             torch.cat(items, out=storage)
             for i, (v, (k, oldv)) in enumerate(
-                zip(storage.split(flat_size), flat_dict.items())
+                zip(storage.split(flat_size), list(flat_dict.items()))
             ):
-                try:
-                    flat_dict[k] = v.view(oldv.dtype).view(oldv.shape)
-                except:
-                    flat_dict[k] = torch.tensor(
-                        untyped_storage[offsets[i] : offsets[i + 1]], dtype=oldv.dtype
-                    ).view(oldv.shape)
+                if not k[-1].startswith("<"):
+                    flat_dict[k] = view_old_as_new(v, oldv)
+                elif k[-1].startswith("<NJT>") or k[-1].startswith("<NT>"):
+                    # NJT/NT always comes before offsets/shapes
+                    _nested_values = view_old_as_new(v, oldv)
+                    del flat_dict[k]
+                elif k[-1].startswith("<NJT_OFFSETS>"):
+                    newk = k[:-1] + (k[-1].replace("<NJT_OFFSETS>", ""),)
+                    nt_offsets = view_old_as_new(v, oldv)
+                    del flat_dict[k]
+                    flat_dict[newk] = torch.nested.nested_tensor_from_jagged(
+                        _nested_values, nt_offsets
+                    )
+                    del _nested_values
+                elif k[-1].startswith("<NT_SHAPES>"):
+                    newk = k[:-1] + (k[-1].replace("<NT_SHAPES>", ""),)
+                    nt_shapes = view_old_as_new(v, oldv)
+                    del flat_dict[k]
+                    flat_dict[newk] = _nt_from_tensor_shape(_nested_values, nt_shapes)
+                    assert (
+                        flat_dict[newk].untyped_storage().data_ptr()
+                        == _nested_values.untyped_storage().data_ptr()
+                    )
+                    del _nested_values
+                else:
+                    flat_dict[k] = view_old_as_new(v, oldv)
 
         def assign_val(key, val):
             if isinstance(key, str):
