@@ -11,7 +11,7 @@ import torch
 
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-from tensordict.utils import _nt_from_tensor_shape, _STRDTYPE2DTYPE
+from tensordict.utils import _STRDTYPE2DTYPE
 
 CLS_MAP = {
     "TensorDict": TensorDict,
@@ -30,18 +30,13 @@ def _rebuild_tensordict_files(flat_key_values, metadata_dict):
         d = non_tensor
         for key, _ in leaves.items():
             total_key = (key,) if prefix is None else prefix + (key,)
-            if total_key[-1].startswith("<NJT>") or total_key[-1].startswith("<NT>"):
+            if total_key[-1].startswith("<NJT>"):
                 nested_values = flat_key_values[total_key]
                 continue
             if total_key[-1].startswith("<NJT_OFFSETS"):
                 offsets = flat_key_values[total_key]
                 key = key.replace("<NJT_OFFSETS>", "")
                 value = torch.nested.nested_tensor_from_jagged(nested_values, offsets)
-                del nested_values
-            elif total_key[-1].startswith("<NT_SHAPES"):
-                shapes = flat_key_values[total_key]
-                key = key.replace("<NT_SHAPES>", "")
-                value = _nt_from_tensor_shape(nested_values, shapes)
                 del nested_values
             else:
                 value = flat_key_values[total_key]
@@ -79,20 +74,15 @@ def _rebuild_tensordict_files_consolidated(
             local_shape = torch.Size(local_shape)
             value = storage[start:stop].view(dtype)
             if value.numel() > local_shape.numel():
-                print(pad, value.numel(), local_shape.numel())
                 value = value[: local_shape.numel()]
             value = value.view(local_shape)
-            if key.startswith("<NJT>") or key.startswith("<NT>"):
+            if key.startswith("<NJT>"):
                 nested_values = value
                 continue
             elif key.startswith("<NJT_OFFSETS>"):
                 offsets = value
                 value = torch.nested.nested_tensor_from_jagged(nested_values, offsets)
                 key = key.replace("<NJT_OFFSETS>", "")
-            elif key.startswith("<NT_SHAPES>"):
-                shapes = value
-                value = _nt_from_tensor_shape(nested_values, shapes)
-                key = key.replace("<NT_SHAPES>", "")
             d[key] = value
         for k, v in metadata.items():
             # Each remaining key is a tuple pointing to a sub-tensordict

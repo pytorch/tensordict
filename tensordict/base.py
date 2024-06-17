@@ -48,7 +48,6 @@ from tensordict.utils import (
     _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
-    _nt_from_tensor_shape,
     _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
@@ -2560,30 +2559,8 @@ class TensorDictBase(MutableMapping):
                         flat_size,
                     )
                 else:
-                    # Get the values
-                    values = value.values()
-                    shapes = value._nested_tensor_size()
-                    flat_key_values[_prefix_last_key(total_key, "<NT>")] = values
-                    add_single_value(
-                        values,
-                        _prefix_last_key(key, "<NT>"),
-                        start,
-                        metadata_dict,
-                        values.dtype,
-                        values.shape,
-                        values.device,
-                        flat_size,
-                    )
-                    flat_key_values[_prefix_last_key(total_key, "<NT_SHAPES>")] = shapes
-                    add_single_value(
-                        shapes,
-                        _prefix_last_key(key, "<NT_SHAPES>"),
-                        start,
-                        metadata_dict,
-                        shapes.dtype,
-                        shapes.shape,
-                        shapes.device,
-                        flat_size,
+                    raise NotImplementedError(
+                        "NST is not supported, please use layout=torch.jagged when building the nested tensor."
                     )
             else:
                 flat_key_values[total_key] = value
@@ -2695,8 +2672,6 @@ class TensorDictBase(MutableMapping):
                 stop,
                 njts,
                 njts_offsets,
-                nts,
-                nts_shapes,
                 storage=storage,
                 non_blocking=non_blocking,
             ):
@@ -2718,16 +2693,10 @@ class TensorDictBase(MutableMapping):
                     njts[k] = new_v
                 elif k[-1].startswith("<NJT_OFFSETS>"):
                     njts_offsets[k] = new_v
-                elif k[-1].startswith("<NT>"):
-                    nts[k] = new_v
-                elif k[-1].startswith("<NT_SHAPES>"):
-                    nts_shapes[k] = new_v
                 flat_dict[k] = new_v
 
             njts = {}
             njts_offsets = {}
-            nts = {}
-            nts_shapes = {}
             if num_threads > 1:
                 executor = ThreadPoolExecutor(num_threads)
                 r = []
@@ -2741,8 +2710,6 @@ class TensorDictBase(MutableMapping):
                             offsets[i + 1].item(),
                             njts,
                             njts_offsets,
-                            nts,
-                            nts_shapes,
                         )
                     )
                 wait(r)
@@ -2755,8 +2722,6 @@ class TensorDictBase(MutableMapping):
                         offsets[i + 1].item(),
                         njts,
                         njts_offsets,
-                        nts,
-                        nts_shapes,
                     )
             for njt_key, njt_val in njts.items():
                 njt_key_offset = njt_key[:-1] + (
@@ -2768,15 +2733,6 @@ class TensorDictBase(MutableMapping):
                 del flat_dict[njt_key]
                 del flat_dict[njt_key_offset]
                 newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
-                flat_dict[newkey] = val
-            for nt_key, nt_val in nts.items():
-                nt_key_shape = nt_key[:-1] + (
-                    nt_key[-1].replace("<NT>", "<NT_SHAPES>"),
-                )
-                val = _nt_from_tensor_shape(nt_val, nt_key_shape)
-                del flat_dict[nt_key]
-                del flat_dict[nt_key_shape]
-                newkey = nt_val[:-1] + (nt_val[-1].replace("<NT>", ""),)
                 flat_dict[newkey] = val
 
             if non_blocking:
@@ -2811,7 +2767,7 @@ class TensorDictBase(MutableMapping):
             ):
                 if not k[-1].startswith("<"):
                     flat_dict[k] = view_old_as_new(v, oldv)
-                elif k[-1].startswith("<NJT>") or k[-1].startswith("<NT>"):
+                elif k[-1].startswith("<NJT>"):
                     # NJT/NT always comes before offsets/shapes
                     _nested_values = view_old_as_new(v, oldv)
                     del flat_dict[k]
@@ -2821,16 +2777,6 @@ class TensorDictBase(MutableMapping):
                     del flat_dict[k]
                     flat_dict[newk] = torch.nested.nested_tensor_from_jagged(
                         _nested_values, nt_offsets
-                    )
-                    del _nested_values
-                elif k[-1].startswith("<NT_SHAPES>"):
-                    newk = k[:-1] + (k[-1].replace("<NT_SHAPES>", ""),)
-                    nt_shapes = view_old_as_new(v, oldv)
-                    del flat_dict[k]
-                    flat_dict[newk] = _nt_from_tensor_shape(_nested_values, nt_shapes)
-                    assert (
-                        flat_dict[newk].untyped_storage().data_ptr()
-                        == _nested_values.untyped_storage().data_ptr()
                     )
                     del _nested_values
                 else:
