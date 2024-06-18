@@ -2662,7 +2662,7 @@ class TensorDictBase(MutableMapping):
             )
             assert len(storage.untyped_storage()) == sum(flat_size)
 
-        offsets = torch.tensor([0] + flat_size).cumsum(0)
+        offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
 
         def view_old_as_new(v, oldv):
             v = v.view(oldv.dtype)
@@ -2713,8 +2713,8 @@ class TensorDictBase(MutableMapping):
                             assign,
                             k,
                             v,
-                            offsets[i].item(),
-                            offsets[i + 1].item(),
+                            offsets[i],
+                            offsets[i + 1],
                             njts,
                             njts_offsets,
                         )
@@ -2731,8 +2731,8 @@ class TensorDictBase(MutableMapping):
                     assign(
                         k,
                         v,
-                        offsets[i].item(),
-                        offsets[i + 1].item(),
+                        offsets[i],
+                        offsets[i + 1],
                         njts,
                         njts_offsets,
                     )
