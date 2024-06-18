@@ -2534,6 +2534,9 @@ class TensorDictBase(MutableMapping):
                     # Get the offsets
                     offsets = value.offsets()
                     # Now we're saving the two tensors
+                    # We will rely on the fact that the writing order is preserved in python dict
+                    # (since python 3.7). Later, we will read the NJT then the NJT offset in that order
+                    # to do the allocation.
                     flat_key_values[_prefix_last_key(total_key, "<NJT>")] = values
                     add_single_value(
                         values,
@@ -2592,6 +2595,7 @@ class TensorDictBase(MutableMapping):
         device: torch.device | None = None,
         non_blocking: bool = False,
         inplace: bool = False,
+        return_early: bool = False,
     ) -> None:
         """Consolidates the tensordict content in a single storage for fast serialization.
 
@@ -2605,6 +2609,9 @@ class TensorDictBase(MutableMapping):
             non_blocking (bool, optional): ``non_blocking`` argument passed to :meth:`~torch.Tensor.copy_`.
             inplace (bool, optional): if ``True``, the resulting tensordict is the same
                 as ``self`` with updated values. Defaults to ``False``.
+            return_early (bool, optional): if ``True`` and ``num_threads>0``,
+                the method will return a future of the tensordict. The resulting
+                tensordict can be queried using `future.result()`.
 
         Examples:
             >>> import pickle
@@ -2712,7 +2719,13 @@ class TensorDictBase(MutableMapping):
                             njts_offsets,
                         )
                     )
-                wait(r)
+                if not return_early:
+                    wait(r)
+                else:
+                    # TODO: We'd need to merge the second half of this function to make this a thing
+                    raise NotImplementedError(
+                        "return_early is not implemented yet for `consolidate`."
+                    )
             else:
                 for i, (k, v) in enumerate(flat_dict.items()):
                     assign(
@@ -2762,9 +2775,7 @@ class TensorDictBase(MutableMapping):
                 # sync if needed
                 self._sync_all()
             torch.cat(items, out=storage)
-            for i, (v, (k, oldv)) in enumerate(
-                zip(storage.split(flat_size), list(flat_dict.items()))
-            ):
+            for v, (k, oldv) in zip(storage.split(flat_size), list(flat_dict.items())):
                 if not k[-1].startswith("<"):
                     flat_dict[k] = view_old_as_new(v, oldv)
                 elif k[-1].startswith("<NJT>"):
@@ -2778,6 +2789,9 @@ class TensorDictBase(MutableMapping):
                     flat_dict[newk] = torch.nested.nested_tensor_from_jagged(
                         _nested_values, nt_offsets
                     )
+                    # delete the nested value to make sure that if there was an
+                    # ordering mismatch we wouldn't be looking at the value key of
+                    # another nested tensor.
                     del _nested_values
                 else:
                     flat_dict[k] = view_old_as_new(v, oldv)
@@ -2850,7 +2864,8 @@ class TensorDictBase(MutableMapping):
             num_threads (int, optional): the number of threads used to write the memmap
                 tensors. Defaults to `0`.
             return_early (bool, optional): if ``True`` and ``num_threads>0``,
-                the method will return a future of the tensordict.
+                the method will return a future of the tensordict. The resulting
+                tensordict can be queried using `future.result()`.
             share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
                 shared between the processes and writing operation (such as inplace update
                 or set) on any of the workers within a single node will update the value

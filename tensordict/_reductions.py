@@ -73,7 +73,7 @@ def _rebuild_tensordict_files_consolidated(
             # device = torch.device(device)
             local_shape = torch.Size(local_shape)
             value = storage[start:stop].view(dtype)
-            if value.numel() > local_shape.numel():
+            if pad:
                 value = value[: local_shape.numel()]
             value = value.view(local_shape)
             if key.startswith("<NJT>"):

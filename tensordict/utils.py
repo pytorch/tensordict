@@ -2284,7 +2284,6 @@ def _prefix_last_key(key, prefix):
     return key[:-1] + (_prefix_last_key(key[-1], prefix),)
 
 
-
 NESTED_TENSOR_ERR = (
     "The PyTorch version isn't compatible with "
     "nested tensors. Please upgrade to a more recent "
