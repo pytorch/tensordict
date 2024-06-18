@@ -50,7 +50,6 @@ from tensordict.utils import (
     _get_shape_from_args,
     _getitem_batch_size,
     _is_number,
-    _parse_to,
     _renamed_inplace_method,
     _shape,
     _td_fields,
@@ -1332,7 +1331,7 @@ class LazyStackedTensorDict(TensorDictBase):
         result = self
 
         if device is not None and dtype is None and device == self.device:
-            return result
+            return result, False
 
         if non_blocking in (None, True):
             sub_non_blocking = True
@@ -3008,7 +3007,7 @@ class _CustomOpTensorDict(TensorDictBase):
         result = self
 
         if device is not None and dtype is None and device == self.device:
-            return result
+            return result, False
 
         td, must_sync = self._source._to(
             device=device,

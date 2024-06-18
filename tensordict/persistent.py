@@ -970,7 +970,7 @@ class PersistentTensorDict(TensorDictBase):
     ) -> Tuple[T, bool]:
         result = self
         if device is not None and dtype is None and device == self.device:
-            return result
+            return result, False
         if dtype is not None:
             return self.to_tensordict()._to(
                 device=device,

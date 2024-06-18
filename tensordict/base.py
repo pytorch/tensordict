@@ -49,7 +49,6 @@ from tensordict.utils import (
     _is_tensorclass,
     _KEY_ERROR,
     _parse_to,
-    _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
     _set_max_batch_size,

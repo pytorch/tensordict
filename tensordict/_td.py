@@ -61,7 +61,6 @@ from tensordict.utils import (
     _LOCK_ERROR,
     _NON_STR_KEY_ERR,
     _NON_STR_KEY_TUPLE_ERR,
-    _parse_to,
     _prune_selected_keys,
     _set_item,
     _set_max_batch_size,
@@ -2513,7 +2512,7 @@ class TensorDict(TensorDictBase):
         result = self
 
         if device is not None and dtype is None and device == self.device:
-            return result
+            return result, False
 
         must_sync = False
         # this may seem awkward but non_blocking=None acts as True and this makes only one check
