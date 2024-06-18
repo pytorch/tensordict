@@ -48,6 +48,8 @@ from tensordict.utils import (
     _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
+    _parse_to,
+    _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
     _set_max_batch_size,
@@ -7448,7 +7450,6 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T:
         ...
 
-    @abc.abstractmethod
     def to(self, *args, **kwargs) -> T:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
@@ -7489,6 +7490,23 @@ class TensorDictBase(MutableMapping):
             >>> data_cuda = data.to(torch.randn(3, device="cuda:0"))  # using an example tensor
             >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # using a tensordict example
         """
+        non_blocking = kwargs.pop("non_blocking", None)
+        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
+        result, must_sync = self._to(
+            device=device,
+            dtype=dtype,
+            convert_to_format=convert_to_format,
+            batch_size=batch_size,
+            non_blocking=non_blocking,
+        )
+        if must_sync and non_blocking is None:
+            self._sync_all()
+        return result
+
+    @abc.abstractmethod
+    def _to(
+        self, *, device, dtype, convert_to_format, batch_size, non_blocking
+    ) -> Tuple[T, bool]:
         ...
 
     def _sync_all(self):

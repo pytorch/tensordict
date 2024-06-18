@@ -2507,36 +2507,41 @@ class TensorDict(TensorDictBase):
 
         return memmap_tensor
 
-    def to(self, *args, **kwargs: Any) -> T:
-        non_blocking = kwargs.pop("non_blocking", None)
-        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
+    def _to(
+        self, *, device, dtype, convert_to_format, batch_size, non_blocking
+    ) -> Tuple[T, bool]:
         result = self
 
         if device is not None and dtype is None and device == self.device:
             return result
 
-        if non_blocking is None:
-            sub_non_blocking = True
-            non_blocking = False
-        else:
-            sub_non_blocking = non_blocking
+        must_sync = False
+        # this may seem awkward but non_blocking=None acts as True and this makes only one check
+        #  (checking against (True, None) would take longer)
+        sub_non_blocking = False if non_blocking is False else True
 
         if convert_to_format is not None:
 
             def to(tensor):
-                return tensor.to(
+                nonlocal must_sync
+                result = tensor.to(
                     device,
                     dtype,
                     non_blocking=sub_non_blocking,
                     convert_to_format=convert_to_format,
                 )
+                must_sync |= sub_non_blocking and result is not tensor
+                return result
 
         else:
 
             def to(tensor):
-                return tensor.to(
+                nonlocal must_sync
+                result = tensor.to(
                     device=device, dtype=dtype, non_blocking=sub_non_blocking
                 )
+                must_sync |= sub_non_blocking and result is not tensor
+                return result
 
         apply_kwargs = {}
         if device is not None or dtype is not None:
@@ -2545,9 +2550,10 @@ class TensorDict(TensorDictBase):
             result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         elif batch_size is not None:
             result.batch_size = batch_size
-        if device is not None and sub_non_blocking and not non_blocking:
-            self._sync_all()
-        return result
+        if must_sync and device is not None and device.type == "cuda":
+            # cuda stream is clever enough to do the sync
+            must_sync = False
+        return result, must_sync
 
     def where(self, condition, other, *, out=None, pad=None):
         if _is_tensor_collection(other.__class__):
@@ -3177,15 +3183,8 @@ class _SubTensorDict(TensorDictBase):
         self._source._stack_onto_at_(list_item, dim=dim, idx=self.idx)
         return self
 
-    def to(self, *args, **kwargs: Any) -> T:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
-        result = self
-
-        if device is not None and dtype is None and device == self.device:
-            return result
-        return self.to_tensordict().to(*args, **kwargs)
+    def _to(self, *args, **kwargs: Any) -> Tuple[T, bool]:
+        return self.to_tensordict()._to(*args, **kwargs)
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
         if not hasattr(self, "_orig_batch_size"):

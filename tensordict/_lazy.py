@@ -1324,9 +1324,9 @@ class LazyStackedTensorDict(TensorDictBase):
             td.pin_memory()
         return self
 
-    def to(self, *args, **kwargs) -> T:
-        non_blocking = kwargs.pop("non_blocking", None)
-        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
+    def _to(
+        self, *, device, dtype, convert_to_format, batch_size, non_blocking
+    ) -> Tuple[T, bool]:
         if batch_size is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
         result = self
@@ -1335,22 +1335,30 @@ class LazyStackedTensorDict(TensorDictBase):
             return result
 
         if non_blocking in (None, True):
-            kwargs["non_blocking"] = True
+            sub_non_blocking = True
         else:
-            kwargs["non_blocking"] = False
-        non_blocking = bool(non_blocking)
+            sub_non_blocking = False
+        tds, must_sync = zip(
+            *(
+                td._to(
+                    device=device,
+                    dtype=dtype,
+                    convert_to_format=convert_to_format,
+                    batch_size=batch_size,
+                    non_blocking=sub_non_blocking,
+                )
+                for td in self.tensordicts
+            )
+        )
+        must_sync = any(must_sync)
         result = type(self)(
-            *[td.to(*args, **kwargs) for td in self.tensordicts],
+            *tds,
             stack_dim=self.stack_dim,
             hook_out=self.hook_out,
             hook_in=self.hook_in,
             stack_dim_name=self._td_dim_name,
         )
-        if device is not None and not non_blocking:
-            self._sync_all()
-        if self.is_locked:
-            result.lock_()
-        return result
+        return result, must_sync
 
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         if len(new_size) <= self.stack_dim:
@@ -2992,9 +3000,9 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source = self._source.del_(key)
         return self
 
-    def to(self, *args, **kwargs) -> T:
-        non_blocking = kwargs.pop("non_blocking", None)
-        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
+    def _to(
+        self, *, device, dtype, convert_to_format, batch_size, non_blocking
+    ) -> Tuple[T, bool]:
         if batch_size is not None:
             raise TypeError(f"Cannot pass batch-size to a {type(self)}.")
         result = self
@@ -3002,10 +3010,16 @@ class _CustomOpTensorDict(TensorDictBase):
         if device is not None and dtype is None and device == self.device:
             return result
 
-        td = self._source.to(*args, non_blocking=non_blocking, **kwargs)
+        td, must_sync = self._source._to(
+            device=device,
+            dtype=dtype,
+            convert_to_format=convert_to_format,
+            batch_size=batch_size,
+            non_blocking=non_blocking,
+        )
         self_copy = copy(self)
         self_copy._source = td
-        return self_copy
+        return self_copy, must_sync
 
     def pin_memory(self) -> _CustomOpTensorDict:
         self._source.pin_memory()
