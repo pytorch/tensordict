@@ -1858,6 +1858,7 @@ class TensorDict(TensorDictBase):
             inplace = self._convert_inplace(inplace, key)
         if not validated:
             value = self._validate_value(value, check_shape=True)
+        print('value', value, 'inplace', inplace)
         if not inplace:
             if self._is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)

@@ -19,6 +19,7 @@ import pickle
 import shutil
 
 import sys
+import traceback
 import warnings
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -2203,6 +2204,8 @@ class NonTensorData:
                 raise RuntimeError(_LOCK_ERROR)
             if clone:
                 data = deepcopy(data)
+            print('updating data!')
+            print(traceback.print_stack())
             self.data = data
         elif isinstance(input_dict_or_td, NonTensorStack):
             raise ValueError(

@@ -387,7 +387,7 @@ class TensorDictBase(MutableMapping):
         if kwargs is None:
             kwargs = {}
         if func not in TD_HANDLED_FUNCTIONS or not all(
-            issubclass(t, (Tensor, TensorDictBase)) for t in types
+            issubclass(t, (Tensor, TensorDictBase)) or _is_tensorclass(t) for t in types
         ):
             return NotImplemented
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
