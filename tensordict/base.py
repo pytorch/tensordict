@@ -370,7 +370,7 @@ class TensorDictBase(MutableMapping):
         if kwargs is None:
             kwargs = {}
         if func not in TD_HANDLED_FUNCTIONS or not all(
-            issubclass(t, (Tensor, TensorDictBase)) for t in types
+            issubclass(t, (Tensor, TensorDictBase)) or _is_tensorclass(t) for t in types
         ):
             return NotImplemented
         return TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
@@ -3766,6 +3766,7 @@ class TensorDictBase(MutableMapping):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         """Updates the TensorDict with values from either a dictionary or another TensorDict.
 
@@ -3788,6 +3789,9 @@ class TensorDictBase(MutableMapping):
             non_blocking (bool, optional): if ``True`` and this copy is between
                 different devices, the copy may occur asynchronously with respect
                 to the host.
+            is_leaf (Callable[[Type], bool], optional): a callable that indicates
+                whether an object type is to be considered a leaf and swapped
+                or a tensor collection.
 
         Returns:
             self
@@ -3807,6 +3811,8 @@ class TensorDictBase(MutableMapping):
         if input_dict_or_td is self:
             # no op
             return self
+        if is_leaf is None:
+            is_leaf = _is_leaf_nontensor
         if keys_to_update is not None:
             if len(keys_to_update) == 0:
                 return self
@@ -3826,7 +3832,7 @@ class TensorDictBase(MutableMapping):
                 value = tree_map(torch.clone, value)
             # the key must be a string by now. Let's check if it is present
             if target is not None:
-                if _is_tensor_collection(type(target)):
+                if not is_leaf(type(target)):
                     if subkey:
                         sub_keys_to_update = _prune_selected_keys(
                             keys_to_update, firstkey
