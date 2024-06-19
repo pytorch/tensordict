@@ -3261,7 +3261,7 @@ class _SubTensorDict(TensorDictBase):
             # the key must be a string by now. Let's check if it is present
             if firstkey in keys:
                 target_class = self.entry_class(firstkey)
-                if not is_leaf(target_class):
+                if _is_tensor_collection(target_class):
                     target = self._source.get(firstkey)._get_sub_tensordict(self.idx)
                     if len(subkey):
                         sub_keys_to_update = _prune_selected_keys(
@@ -3272,6 +3272,7 @@ class _SubTensorDict(TensorDictBase):
                             inplace=False,
                             keys_to_update=sub_keys_to_update,
                             non_blocking=non_blocking,
+                            is_leaf=is_leaf,
                         )
                         continue
                     elif isinstance(value, dict) or _is_tensor_collection(

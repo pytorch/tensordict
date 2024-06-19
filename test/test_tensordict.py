@@ -5637,6 +5637,7 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(RuntimeError, match="a leaf Variable"):
                 sub_td.update(td0)
             return
+        print('updating', sub_td, 'with', td0)
         sub_td.update(td0)
         assert (sub_td == 2).all()
         assert (td[index] == 2).all()
@@ -9075,7 +9076,7 @@ class TestNonTensorData:
         # with pytest.raises(RuntimeError)
         val1 = MyClass(string="another string!")
         with pytest.raises(
-            NotImplementedError, match="Updating MyClass within a shared/memmaped"
+            ValueError, match="Failed to update 'val' in tensordict"
         ):
             td.update(
                 TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []),
