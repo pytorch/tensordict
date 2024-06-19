@@ -48,10 +48,10 @@ except ImportError:
 from packaging.version import parse
 from tensordict._contextlib import _DecoratorContextManager
 from tensordict._tensordict import (  # noqa: F401
-    _unravel_key_to_tuple,
-    unravel_key,
-    unravel_key_list,
-    unravel_keys,
+    _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
+    unravel_key as unravel_key_cpp,
+    unravel_key_list as unravel_key_list_cpp,
+    unravel_keys as unravel_keys_cpp,
 )
 
 from torch import Tensor
@@ -1128,7 +1128,26 @@ _GENERIC_NESTED_ERR = "Only NestedKeys are supported. Got key {}."
 
 
 class _StringKeys(KeysView):
-    """A key view where contains is restricted to strings."""
+    """A key view where contains is restricted to strings.
+
+    Saving the keys as an attribute is 25% faster than just subclassing KeysView.
+
+    """
+
+    def __init__(self, keys):
+        self.keys = keys
+
+    def __getitem__(self, key):
+        return self.keys.__getitem__(key)
+
+    def __iter__(self):
+        yield from self.keys
+
+    def __repr__(self):
+        return f"{type(self)}({self.keys})"
+
+    def __len__(self):
+        return len(self.keys)
 
     def __contains__(self, item):
         if not isinstance(item, str):
@@ -1142,34 +1161,10 @@ class _StringKeys(KeysView):
                 raise TypeError(_NON_STR_KEY_TUPLE_ERR)
             else:
                 item = unravel_item[0]
-        return super().__contains__(item)
+        return self.keys.__contains__(item)
 
 
-class _StringOnlyDict(dict):
-    """A dict class where contains is restricted to strings."""
-
-    # kept here for debugging
-    # def __setitem__(self, key, value):
-    #     if not isinstance(key, str):
-    #         raise RuntimeError
-    #     return super().__setitem__(key, value)
-
-    def __contains__(self, item):
-        if not isinstance(item, str):
-            try:
-                unravel_item = _unravel_key_to_tuple(item)
-                if not unravel_item:  # catch errors during unravel
-                    raise TypeError
-            except Exception:
-                raise TypeError(_NON_STR_KEY_ERR)
-            if len(unravel_item) > 1:
-                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
-            else:
-                item = unravel_item[0]
-        return super().__contains__(item)
-
-    def keys(self):
-        return _StringKeys(self)
+_StringOnlyDict = dict
 
 
 def lock_blocked(func):
@@ -1395,7 +1390,7 @@ def _get_leaf_tensordict(
     return tensordict, key[0]
 
 
-def assert_allclose_td(
+def assert_close(
     actual: T,
     expected: T,
     rtol: float | None = None,
@@ -1545,13 +1540,16 @@ def _check_keys(
 
     if not len(list_of_tensordicts):
         return set()
-    keys: set[str] = set(
-        list_of_tensordicts[0].keys(
-            include_nested=include_nested,
-            leaves_only=leaves_only,
-            is_leaf=_is_leaf_nontensor,
-        )
+    keys = list_of_tensordicts[0].keys(
+        include_nested=include_nested,
+        leaves_only=leaves_only,
+        is_leaf=_is_leaf_nontensor,
     )
+    # TODO: compile doesn't like set() over an arbitrary object
+    if torch.compiler.is_dynamo_compiling():
+        keys = {k for k in keys}  # noqa: C416
+    else:
+        keys: set[str] = set(keys)
     for td in list_of_tensordicts[1:]:
         k = td.keys(
             include_nested=include_nested,
@@ -1561,7 +1559,11 @@ def _check_keys(
         if not strict:
             keys = keys.intersection(k)
         else:
-            if set(k) != keys:
+            if torch.compiler.is_dynamo_compiling():
+                k = {v for v in k}  # noqa: C416
+            else:
+                k = set(k)
+            if k != keys:
                 raise KeyError(
                     f"got keys {keys} and {set(td.keys())} which are incompatible"
                 )
@@ -1800,8 +1802,14 @@ def _getitem_batch_size(batch_size, index):
         boolean = False
         if isinstance(idx, (range, list)):
             shape = len(idx)
-        elif isinstance(idx, (torch.Tensor, np.ndarray)):
-            if idx.dtype == torch.bool or idx.dtype == np.dtype("bool"):
+        elif isinstance(idx, torch.Tensor):
+            if idx.dtype == torch.bool:
+                shape = torch.Size([idx.sum()])
+                boolean = True
+            else:
+                shape = idx.shape
+        elif isinstance(idx, np.ndarray):
+            if idx.dtype == np.dtype("bool"):
                 shape = torch.Size([idx.sum()])
                 boolean = True
             else:
@@ -1841,7 +1849,8 @@ def _getitem_batch_size(batch_size, index):
             continue
         elif isinstance(idx, slice):
             batch = batch_size[count]
-            out.append(len(range(*idx.indices(batch))))
+            out.append(len(range(*_slice_indices(idx, batch))))
+            # out.append(len(range(*idx.indices(batch))))
     count += 1
     if batch_size[count:]:
         out.extend(batch_size[count:])
@@ -2274,6 +2283,87 @@ class KeyDependentDefaultDict(collections.defaultdict):
         value = self.fun(key)
         self[key] = value
         return value
+
+
+def _unravel_key_to_tuple(key):
+    if not torch.compiler.is_dynamo_compiling():
+        return _unravel_key_to_tuple_cpp(key)
+    if isinstance(key, str):
+        return (key,)
+    if not isinstance(key, tuple):
+        return ()
+    return tuple(subk for k in key for subk in _unravel_key_to_tuple(k))
+
+
+def unravel_key(key):
+    """Unravel a nested key.
+
+    Examples:
+        >>> unravel_key("a")
+        "a"
+        >>> unravel_key(("a",))
+        "a"
+        >>> unravel_key((("a", ("b",))))
+        ("a", "b")
+
+    """
+    if not torch.compiler.is_dynamo_compiling():
+        return unravel_key_cpp(key)
+    if isinstance(key, str):
+        return key
+    if isinstance(key, tuple):
+        if len(key) == 1:
+            return unravel_key(key[0])
+        return tuple(unravel_key(_key) for _key in key)
+    raise ValueError("the key must be a str or a tuple of str")
+
+
+def unravel_keys(*keys):
+    """Unravels a sequence of keys."""
+    if not torch.compiler.is_dynamo_compiling():
+        return unravel_keys_cpp(*keys)
+    return tuple(unravel_key(key) for key in keys)
+
+
+def unravel_key_list(keys):
+    """Unravels a list of keys."""
+    if not torch.compiler.is_dynamo_compiling():
+        return unravel_key_list_cpp(keys)
+    return [unravel_key(key) for key in keys]
+
+
+def _slice_indices(index: slice, len: int):
+    """A pure python implementation of slice.indices(len) since torch.compile doesn't recognise it."""
+    step = index.step
+    if step is None:
+        step = 1
+    elif step == 0:
+        raise ValueError("Step cannot be zero.")
+
+    start = index.start
+    stop = index.stop
+    if start is None:
+        if step > 0:
+            start = 0
+        else:
+            start = len - 1
+    elif start < 0:
+        start = len + start
+
+    if stop is None:
+        if step > 0:
+            stop = len
+        else:
+            stop = -1
+    elif stop > 0:
+        stop = min(len, stop)
+    elif step < 0 or (step > 0 and start >= 0):
+        stop = len + stop
+
+    return start, stop, step
+
+
+assert_allclose_td = assert_close
 
 
 def _prefix_last_key(key, prefix):

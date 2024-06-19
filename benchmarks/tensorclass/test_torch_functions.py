@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import argparse
 
 import pytest
 import torch
@@ -94,3 +95,8 @@ def test_stack(benchmark, tc):
 
 def test_cat(benchmark, tc):
     benchmark(torch.cat, [tc] * 3, 0)
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

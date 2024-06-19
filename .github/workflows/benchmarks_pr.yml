@@ -41,7 +41,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
-          RUN_BENCHMARK="pytest -vvv --rank 0 --benchmark-json "
+          RUN_BENCHMARK="TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1 pytest -vvv --rank 0 --benchmark-json "
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
@@ -128,7 +128,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
-          RUN_BENCHMARK="pytest -vvv --rank 0 --benchmark-json "
+          RUN_BENCHMARK="TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1 pytest -vvv --rank 0 --benchmark-json "
           git checkout ${{ github.event.pull_request.base.sha }}
           $RUN_BENCHMARK ${{ env.BASELINE_JSON }}
           git checkout ${{ github.event.pull_request.head.sha }}
