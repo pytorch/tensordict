@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import abc
+import asyncio
 import collections
 import concurrent.futures
 import contextlib
@@ -15,7 +16,7 @@ import numbers
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from functools import partial, wraps
 from pathlib import Path
@@ -2705,27 +2706,30 @@ class TensorDictBase(MutableMapping):
             njts = {}
             njts_offsets = {}
             if num_threads > 1:
-                executor = ThreadPoolExecutor(num_threads)
-                r = []
-                for i, (k, v) in enumerate(flat_dict.items()):
-                    r.append(
-                        executor.submit(
-                            assign,
-                            k,
-                            v,
-                            offsets[i],
-                            offsets[i + 1],
-                            njts,
-                            njts_offsets,
-                        )
-                    )
-                if not return_early:
-                    wait(r)
-                else:
+
+                async def assign_async(*args, **kwargs):
+                    return assign(*args, **kwargs)
+
+                if return_early:
                     # TODO: We'd need to merge the second half of this function to make this a thing
                     raise NotImplementedError(
                         "return_early is not implemented yet for `consolidate`."
                     )
+                async def func(executor):
+                    loop = asyncio.get_running_loop()
+                    tasks = [
+                            assign_async(
+                                k, v, offsets[i], offsets[i + 1], njts, njts_offsets
+                            )
+                            for i, (k, v) in enumerate(flat_dict.items())
+                    ]
+                    return await asyncio.gather(*tasks)
+
+                async def asynccall():
+                    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+                        return await func(executor)
+
+                asyncio.run(asynccall())
             else:
                 for i, (k, v) in enumerate(flat_dict.items()):
                     assign(
