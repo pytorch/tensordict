@@ -420,6 +420,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> TensorDictBase:
         # Deprecating this since _set_tuple will do it thx to the decorator
         # if not self.no_convert:
@@ -438,6 +439,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
                 inplace=inplace,
                 keys_to_update=keys_to_update,
                 non_blocking=non_blocking,
+                is_leaf=is_leaf,
             )
             self._reset_params()
         return self

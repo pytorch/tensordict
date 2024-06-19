@@ -24,7 +24,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, get_type_hints, List, Sequence, TypeVar
+from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
 
 import numpy as np
 import tensordict as tensordict_lib
@@ -91,7 +91,10 @@ _TD_PASS_THROUGH = {
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
+    "_get_at_str",
+    "_get_at_tuple",
     "_get_str",
+    "_get_sub_tensordict",
     "_get_tuple",
     "gather",
     "is_memmap",
@@ -124,8 +127,12 @@ _FALLBACK_METHOD_FROM_TD = [
     "_propagate_unlock",
     "_remove_batch_dim",
     "_select",  # TODO: must be specialized
+    # "_set_at_str",
     "_set_at_tuple",
-    "_set_str",
+    "_set_at_tuple",
+    # _set_str needs a special treatment to catch keys that are already in
+    # non tensor data
+    # "_set_str",
     "_set_tuple",
     "abs",
     "abs_",
@@ -151,6 +158,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "clamp_max_",
     "clamp_min",
     "clamp_min_",
+    "contiguous",
     "copy_",
     "cos",
     "cos_",
@@ -411,6 +419,10 @@ def _tensorclass(cls: T) -> T:
         cls.set = _set
     if not hasattr(cls, "set_at_"):
         cls.set_at_ = _set_at_
+    if not hasattr(cls, "_set_str"):
+        cls._set_str = _set_str
+    if not hasattr(cls, "_set_at_str"):
+        cls._set_at_str = _set_at_str
     if not hasattr(cls, "del_"):
         cls.del_ = _del_
     if not hasattr(cls, "get"):
@@ -1400,6 +1412,52 @@ def _set(
     )
 
 
+def _set_str(
+    self,
+    key: NestedKey,
+    value: str,
+    *,
+    inplace: bool,
+    validated: bool,
+    ignore_lock: bool = False,
+    non_blocking: bool = False,
+):
+    if key in self._non_tensordict:
+        if isinstance(value, (NonTensorData, NonTensorStack)):
+            self._non_tensordict[key] = value.data
+            return self
+        del self._non_tensordict[key]
+    self._tensordict._set_str(
+        key,
+        value,
+        inplace=inplace,
+        validated=validated,
+        ignore_lock=ignore_lock,
+        non_blocking=non_blocking,
+    )
+    return self
+
+
+def _set_at_str(
+    self,
+    key: NestedKey,
+    value: str,
+    idx,
+    *,
+    validated: bool,
+    non_blocking: bool = False,
+):
+    if key in self._non_tensordict:
+        if isinstance(value, (NonTensorData, NonTensorStack)):
+            self._non_tensordict[key] = value.data
+            return self
+        del self._non_tensordict[key]
+    self._tensordict._set_at_str(
+        key, value, idx, validated=validated, non_blocking=non_blocking
+    )
+    return self
+
+
 def _del_(self, key):
     key = _unravel_key_to_tuple(key)
     if len(key) > 1:
@@ -2149,12 +2207,14 @@ class NonTensorData:
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         return self._update(
             input_dict_or_td=input_dict_or_td,
             clone=clone,
             inplace=inplace,
             keys_to_update=keys_to_update,
+            is_leaf=is_leaf,
         )
 
     def _update(
@@ -2165,6 +2225,7 @@ class NonTensorData:
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
         break_on_memmap: bool = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         if isinstance(input_dict_or_td, NonTensorData):
             data = input_dict_or_td.data
@@ -2666,12 +2727,14 @@ class NonTensorStack(LazyStackedTensorDict):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         return self._update(
             input_dict_or_td=input_dict_or_td,
             clone=clone,
             inplace=inplace,
             keys_to_update=keys_to_update,
+            is_leaf=is_leaf,
         )
 
     def update_(
@@ -2698,6 +2761,7 @@ class NonTensorStack(LazyStackedTensorDict):
         keys_to_update: Sequence[NestedKey] | None = None,
         break_on_memmap: bool = None,
         non_blocking: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         if inplace and self.is_locked and not (self._is_shared or self._is_memmap):
             raise RuntimeError(_LOCK_ERROR)
@@ -2712,6 +2776,7 @@ class NonTensorStack(LazyStackedTensorDict):
                 clone=clone,
                 inplace=inplace,
                 keys_to_update=keys_to_update,
+                is_leaf=is_leaf,
             )
 
         memmap = False
@@ -2741,6 +2806,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     inplace=inplace,
                     keys_to_update=keys_to_update,
                     break_on_memmap=break_on_memmap,
+                    is_leaf=is_leaf,
                 )
             if memmap:
                 self._memmap_(prefix=self._path_to_memmap, inplace=True)

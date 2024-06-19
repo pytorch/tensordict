@@ -31,6 +31,7 @@ except ImportError:
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
+    _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
     _register_tensor_class,
@@ -3227,11 +3228,14 @@ class _SubTensorDict(TensorDictBase):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         **kwargs,
     ) -> _SubTensorDict:
         if input_dict_or_td is self:
             # no op
             return self
+        if is_leaf is None:
+            is_leaf = _is_leaf_nontensor
 
         if getattr(self._source, "_has_exclusive_keys", False):
             raise RuntimeError(
@@ -3268,6 +3272,7 @@ class _SubTensorDict(TensorDictBase):
                             inplace=False,
                             keys_to_update=sub_keys_to_update,
                             non_blocking=non_blocking,
+                            is_leaf=is_leaf,
                         )
                         continue
                     elif isinstance(value, dict) or _is_tensor_collection(
