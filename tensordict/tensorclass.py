@@ -100,14 +100,20 @@ _NOWRAP_OUTPUT_METHOD_FROM_TD = [
     "_get_at_str",
     "_get_at_tuple",
     "_get_str",
-    "_get_sub_tensordict",
+    # "_get_sub_tensordict",
+    "ndimension",
     "_get_tuple",
     "_values_list",
     "is_memmap",
+    "_propagate_lock",
+    "_propagate_unlock",
     "is_shared",
+    "is_empty",
     "items",
     "keys",
     "ndimension",
+    "_has_names",
+    "_check_unlock",
     "numel",
     "values",
 ]
@@ -127,23 +133,13 @@ _FALLBACK_METHOD_FROM_TD = [
     "__truediv__",
     "_add_batch_dim",
     "_apply_nest",
-    "_check_unlock",
     "_erase_names",  # TODO: must be specialized
     "_exclude",  # TODO: must be specialized
     "_fast_apply",
-    "_fast_apply",
     "_get_sub_tensordict",
-    "_has_names",
-    "_propagate_lock",
-    "_propagate_unlock",
     "_remove_batch_dim",
     "_select",  # TODO: must be specialized
-    # "_set_at_str",
     "_set_at_tuple",
-    "_set_at_tuple",
-    # _set_str needs a special treatment to catch keys that are already in
-    # non tensor data
-    # "_set_at_tuple",
     "_set_str",
     "_set_tuple",
     "abs",
@@ -197,15 +193,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "floor_",
     "frac",
     "frac_",
-    "is_empty",
-    "is_memmap",
-    "is_shared",
-    "is_shared",
-    "is_shared",
-    "lerp",
-    "lerp_",
-    "lgamma",
-    "lgamma_",
     "lerp",
     "lerp_",
     "lgamma",
@@ -228,7 +215,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "mul",
     "mul_",
     "named_apply",
-    "ndimension",
     "neg",
     "neg_",
     "norm",
@@ -266,11 +252,19 @@ _FALLBACK_METHOD_FROM_TD = [
     "unflatten",
     "unlock_",
     "unsqueeze",
-    "values",
     "view",
     "where",
     "zero_",
+    # "_set_at_str",
+    # "_set_at_tuple",
+    # _set_str needs a special treatment to catch keys that are already in
+    # non tensor data
 ]
+assert not any(
+    v in _NOWRAP_OUTPUT_METHOD_FROM_TD for v in _FALLBACK_METHOD_FROM_TD
+), set(_NOWRAP_OUTPUT_METHOD_FROM_TD).intersection(_FALLBACK_METHOD_FROM_TD)
+assert len(set(_FALLBACK_METHOD_FROM_TD)) == len(_FALLBACK_METHOD_FROM_TD)
+
 _FALLBACK_METHOD_FROM_TD_COPY = [
     "_clone",  # TODO: must be specialized
     "clone",  # TODO: must be specialized
@@ -780,7 +774,7 @@ def _from_tensordict_wrapper(expected_keys):
 
         # TODO: compile doesn't like set() over an arbitrary object
         if torch.compiler.is_dynamo_compiling():
-            tensor_keys = {k for k in tensordict.keys()}  # C416
+            tensor_keys = {k for k in tensordict.keys()}  # noqa: C416
         else:
             tensor_keys = set(tensordict.keys())
         if non_tensordict is not None:
@@ -985,16 +979,18 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
                 "_tensordict" not in __dict__
                 or "_non_tensordict" not in __dict__
                 or key in SET_ATTRIBUTES
-            or key in self.__class__.__dict__
-            # if we ever decide to allow anything to be written in a tc
-            # or key not in self.__dataclass_fields__):
+                or key in self.__class__.__dict__
+            ):
+                # if we ever decide to allow anything to be written in a tc
+                # or key not in self.__dataclass_fields__):
                 return setattr_(self, key, value)
         else:
             # Pass?
             if key in SET_ATTRIBUTES:
                 # assert getattr(self, "_is_initialized", False)
                 return setattr_(self, key, value)
-            # if not hasattr(self, "_tensordict") or not hasattr(self, "_non_tensordict") or key in SET_ATTRIBUTES:
+            # TODO: compile doesn't support property checks
+            # if type(self).__dict__.get(key) is not None:
             #     return setattr_(self, key, value)
 
         out = self.set(key, value)
@@ -1026,9 +1022,10 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
                 return True
             return False
 
-        if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
-            if result is td:
-                return self
+        if result is td:
+            return self
+        # TODO: this subclass check is just to make dynamo happy
+        if issubclass(type(result), TensorDictBase) and not check_out(kwargs, result):
             if not torch.compiler.is_dynamo_compiling():
                 nontd = super(type(self), self).__getattribute__("_non_tensordict")
             else:

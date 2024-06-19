@@ -1547,7 +1547,7 @@ def _check_keys(
     )
     # TODO: compile doesn't like set() over an arbitrary object
     if torch.compiler.is_dynamo_compiling():
-        keys = {k for k in keys}  # C416
+        keys = {k for k in keys}  # noqa: C416
     else:
         keys: set[str] = set(keys)
     for td in list_of_tensordicts[1:]:
@@ -1560,7 +1560,7 @@ def _check_keys(
             keys = keys.intersection(k)
         else:
             if torch.compiler.is_dynamo_compiling():
-                k = {v for v in k}  # C416
+                k = {v for v in k}  # noqa: C416
             else:
                 k = set(k)
             if k != keys:

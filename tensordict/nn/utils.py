@@ -263,6 +263,8 @@ class set_skip_existing(_DecoratorContextManager):
         return super().__call__(wrapper)
 
     def __enter__(self) -> None:
+        if self.mode and torch.compiler.is_dynamo_compiling():
+            raise RuntimeError("skip_existing is not compatible with TorchDynamo.")
         global _SKIP_EXISTING
         self.prev = _SKIP_EXISTING
         if self.mode is not None:
@@ -285,7 +287,6 @@ class _set_skip_existing_None(set_skip_existing):
     """
 
     def __call__(self, func: Callable):
-
         self._called = True
 
         # sanity check
@@ -302,6 +303,10 @@ class _set_skip_existing_None(set_skip_existing):
 
         @functools.wraps(func)
         def wrapper(_self, tensordict, *args: Any, **kwargs: Any) -> Any:
+            if skip_existing() and torch.compiler.is_dynamo_compiling():
+                raise RuntimeError(
+                    "skip_existing is not compatible with torch.compile."
+                )
             in_keys = getattr(_self, self.in_key_attr)
             out_keys = getattr(_self, self.out_key_attr)
             # we use skip_existing to allow users to override the mode internally
@@ -311,6 +316,8 @@ class _set_skip_existing_None(set_skip_existing):
                 and not any(key in out_keys for key in in_keys)
             ):
                 return tensordict
+            if torch.compiler.is_dynamo_compiling():
+                return func(_self, tensordict, *args, **kwargs)
             global _SKIP_EXISTING
             self.prev = _SKIP_EXISTING
             try:
