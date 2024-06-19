@@ -1104,7 +1104,11 @@ class TensorDictBase(MutableMapping):
     def _dtype(self):
         dtype = None
         for val in self.values(True, True):
-            val_dtype = getattr(val, "dtype", None)
+            if not torch.compiler.is_dynamo_compiling():
+                val_dtype = getattr(val, "dtype", None)
+            else:
+                val_dtype = val.dtype
+
             if dtype is None and val_dtype is not None:
                 dtype = val_dtype
             elif dtype is not None and val_dtype is not None and dtype != val_dtype:
@@ -2519,9 +2523,14 @@ class TensorDictBase(MutableMapping):
                     is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
                 )
                 return
-            if hasattr(value, "full_tensor"):
+            if not torch.compiler.is_dynamo_compiling() and hasattr(
+                value, "full_tensor"
+            ):
                 raise NotImplementedError("DTensor is not supported yet")
-            if getattr(value, "is_nested", False):
+            if (
+                not torch.compiler.is_dynamo_compiling()
+                and getattr(value, "is_nested", False)
+            ) or value.is_nested:
                 if value.layout is torch.jagged:
                     # Get the values
                     values = value.values()
@@ -2657,7 +2666,10 @@ class TensorDictBase(MutableMapping):
             )
             assert len(storage.untyped_storage()) == sum(flat_size)
 
-        offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
+        if not torch.compiler.is_dynamo_compiling():
+            offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
+        else:
+            offsets = torch.tensor([0] + flat_size).cumsum(0)
 
         def view_old_as_new(v, oldv):
             v = v.view(oldv.dtype)
@@ -2762,7 +2774,10 @@ class TensorDictBase(MutableMapping):
             for v in flat_dict.values():
                 if v.device != storage.device:
                     v = v.to(storage.device, non_blocking=non_blocking)
-                if v.stride()[-1] != 1 or v.storage_offset():
+                # TODO: make this compatible with compile
+                if not torch.compiler.is_dynamo_compiling() and (
+                    v.stride()[-1] != 1 or v.storage_offset()
+                ):
                     v = v.clone(memory_format=torch.contiguous_format)
                 v, pad = _view_and_pad(v)
                 items.append(v)
