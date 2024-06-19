@@ -3280,6 +3280,8 @@ class TestTensorDicts(TestTensorDictsBase):
         index = index.cumsum(dim=other_dim) - 1
         # gather
         td_gather = torch.gather(td, dim=dim, index=index)
+        assert td_gather.device == td.device
+        assert td_gather.names == td.names
         # gather with out
         td_gather.zero_()
         out = td_gather.clone()
@@ -9076,9 +9078,7 @@ class TestNonTensorData:
 
         # with pytest.raises(RuntimeError)
         val1 = MyClass(string="another string!")
-        with pytest.raises(
-            NotImplementedError, match="Updating MyClass within a shared/memmaped"
-        ):
+        with pytest.raises(ValueError, match="Failed to update 'val' in tensordict"):
             td.update(
                 TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []),
                 inplace=True,

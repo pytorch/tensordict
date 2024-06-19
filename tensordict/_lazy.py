@@ -35,6 +35,7 @@ except ImportError:
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._tensordict import unravel_key_list
 from tensordict.base import (
+    _is_leaf_nontensor,
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
     _register_tensor_class,
@@ -1662,7 +1663,10 @@ class LazyStackedTensorDict(TensorDictBase):
                             assign(item)
                         else:
                             stack_item, idx = item
-                            self.tensordicts[stack_item][idx] = value[i]
+                            if idx == ():
+                                self.tensordicts[stack_item] = value[i]
+                            else:
+                                self.tensordicts[stack_item][idx] = value[i]
 
                 assign(converted_idx)
                 return self
@@ -2187,6 +2191,7 @@ class LazyStackedTensorDict(TensorDictBase):
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
         non_blocking: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
         **kwargs: Any,
     ) -> T:
         # This implementation of update is compatible with exclusive keys
@@ -2196,6 +2201,8 @@ class LazyStackedTensorDict(TensorDictBase):
         if input_dict_or_td is self:
             # no op
             return self
+        if is_leaf is None:
+            is_leaf = _is_leaf_nontensor
         if isinstance(input_dict_or_td, dict):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_size=self.batch_size
@@ -2222,6 +2229,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     clone=clone,
                     keys_to_update=keys_to_update,
                     non_blocking=non_blocking,
+                    is_leaf=is_leaf,
                     **kwargs,
                 )
             return self
@@ -2251,7 +2259,11 @@ class LazyStackedTensorDict(TensorDictBase):
             self_upd.tensordicts, input_dict_or_td.unbind(self_upd.stack_dim)
         ):
             td_dest.update(
-                td_source, clone=clone, keys_to_update=keys_to_update, **kwargs
+                td_source,
+                clone=clone,
+                keys_to_update=keys_to_update,
+                is_leaf=is_leaf,
+                **kwargs,
             )
         if self.hook_out is not None:
             self_upd = self.hook_out(self_upd)

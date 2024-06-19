@@ -737,18 +737,12 @@ class MemoryMappedTensor(torch.Tensor):
                     "nested tensors. Please upgrade to a more recent "
                     "version."
                 )
-            if writable:
-                tensor = torch.from_file(
-                    str(filename),
-                    shared=True,
-                    dtype=dtype,
-                    size=shape.prod(-1).sum().int(),
-                )
-            else:
-                with open(str(filename), "rb") as f:
-                    mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-                    tensor = torch.frombuffer(mm, dtype=dtype)
-                    # mm.close()
+            tensor = torch.from_file(
+                str(filename),
+                shared=writable,
+                dtype=dtype,
+                size=shape.prod(-1).sum().int(),
+            )
             tensor = torch._nested_view_from_buffer(
                 tensor,
                 shape,
@@ -757,14 +751,9 @@ class MemoryMappedTensor(torch.Tensor):
         else:
             shape = torch.Size(shape)
             # whether the file already existed
-            if writable:
-                tensor = torch.from_file(
-                    str(filename), shared=True, dtype=dtype, size=shape.numel()
-                )
-            else:
-                with open(str(filename), "rb") as f:
-                    mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-                    tensor = torch.frombuffer(mm, dtype=dtype)
+            tensor = torch.from_file(
+                str(filename), shared=writable, dtype=dtype, size=shape.numel()
+            )
             tensor = tensor.view(shape)
 
         if index is not None:

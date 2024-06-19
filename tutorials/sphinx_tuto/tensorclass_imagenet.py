@@ -31,7 +31,6 @@ Batched data loading with tensorclasses
 #
 import os
 import time
-from distutils.util import strtobool
 from pathlib import Path
 
 import torch
@@ -40,6 +39,7 @@ import tqdm
 
 from tensordict import MemoryMappedTensor
 from tensordict.prototype import tensorclass
+from tensordict.utils import strtobool
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 

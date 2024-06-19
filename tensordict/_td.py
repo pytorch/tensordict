@@ -32,6 +32,7 @@ except ImportError:
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
+    _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
     _register_tensor_class,
@@ -1206,7 +1207,13 @@ class TensorDict(TensorDictBase):
         is_shared = self._is_shared
         is_memmap = self._is_memmap
 
-        def empty():
+        def empty(
+            batch_size=batch_size,
+            names=names,
+            device=device,
+            is_shared=is_shared,
+            is_memmap=is_memmap,
+        ):
             result = TensorDict(
                 {}, batch_size=batch_size, names=names, _run_checks=False, device=device
             )
@@ -2044,11 +2051,14 @@ class TensorDict(TensorDictBase):
             if all(v is None for v in vals):
                 continue
             dest = self._get_str(key, NO_DEFAULT)
-            torch.stack(
+            new_dest = torch.stack(
                 vals,
                 dim=dim,
                 out=dest,
             )
+            if new_dest is not dest:
+                # This can happen with non-tensor data
+                self._set_str(key, new_dest, inplace=False, validated=True)
         return self
 
     def entry_class(self, key: NestedKey) -> type:
@@ -3258,11 +3268,14 @@ class _SubTensorDict(TensorDictBase):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         **kwargs,
     ) -> _SubTensorDict:
         if input_dict_or_td is self:
             # no op
             return self
+        if is_leaf is None:
+            is_leaf = _is_leaf_nontensor
 
         if getattr(self._source, "_has_exclusive_keys", False):
             raise RuntimeError(
@@ -3299,6 +3312,7 @@ class _SubTensorDict(TensorDictBase):
                             inplace=False,
                             keys_to_update=sub_keys_to_update,
                             non_blocking=non_blocking,
+                            is_leaf=is_leaf,
                         )
                         continue
                     elif isinstance(value, dict) or _is_tensor_collection(

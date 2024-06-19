@@ -19,7 +19,6 @@ import warnings
 from collections import defaultdict, OrderedDict
 from collections.abc import KeysView
 from copy import copy
-from distutils.util import strtobool
 from functools import wraps
 from importlib import import_module
 from numbers import Number
@@ -152,6 +151,22 @@ console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s [%(name)s][%(levelname)s] %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
+
+
+def strtobool(val):
+    """Convert a string representation of truth to true (1) or false (0).
+
+    True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
+    are 'n', 'no', 'f', 'false', 'off', and '0'.  Raises ValueError if
+    'val' is anything else.
+    """
+    val = val.lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return 1
+    elif val in ("n", "no", "f", "false", "off", "0"):
+        return 0
+    else:
+        raise ValueError(f"invalid truth value {val!r}")
 
 
 def _sub_index(tensor: Tensor, idx: IndexType) -> Tensor:
@@ -1365,7 +1380,7 @@ def _get_leaf_tensordict(
     tensordict: T, key: tuple[str, ...], hook: Callable = None
 ) -> tuple[TensorDictBase, str]:
     # utility function for traversing nested tensordicts
-    # hook should return the default value for tensordit.get(key)
+    # hook should return the default value for tensordict.get(key)
     while len(key) > 1:
         if hook is not None:
             tensordict = hook(tensordict, key)
