@@ -31,6 +31,7 @@ except ImportError:
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
+    _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
     _register_tensor_class,
@@ -1858,7 +1859,6 @@ class TensorDict(TensorDictBase):
             inplace = self._convert_inplace(inplace, key)
         if not validated:
             value = self._validate_value(value, check_shape=True)
-        print('value', value, 'inplace', inplace)
         if not inplace:
             if self._is_locked and not ignore_lock:
                 raise RuntimeError(_LOCK_ERROR)
@@ -3228,11 +3228,14 @@ class _SubTensorDict(TensorDictBase):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
         **kwargs,
     ) -> _SubTensorDict:
         if input_dict_or_td is self:
             # no op
             return self
+        if is_leaf is None:
+            is_leaf = _is_leaf_nontensor
 
         if getattr(self._source, "_has_exclusive_keys", False):
             raise RuntimeError(
@@ -3258,7 +3261,7 @@ class _SubTensorDict(TensorDictBase):
             # the key must be a string by now. Let's check if it is present
             if firstkey in keys:
                 target_class = self.entry_class(firstkey)
-                if _is_tensor_collection(target_class):
+                if not is_leaf(target_class):
                     target = self._source.get(firstkey)._get_sub_tensordict(self.idx)
                     if len(subkey):
                         sub_keys_to_update = _prune_selected_keys(

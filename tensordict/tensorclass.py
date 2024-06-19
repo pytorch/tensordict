@@ -19,13 +19,12 @@ import pickle
 import shutil
 
 import sys
-import traceback
 import warnings
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, get_type_hints, List, Sequence, TypeVar
+from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
 
 import numpy as np
 import tensordict as tensordict_lib
@@ -2150,12 +2149,14 @@ class NonTensorData:
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         return self._update(
             input_dict_or_td=input_dict_or_td,
             clone=clone,
             inplace=inplace,
             keys_to_update=keys_to_update,
+            is_leaf=is_leaf,
         )
 
     def _update(
@@ -2166,6 +2167,7 @@ class NonTensorData:
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
         break_on_memmap: bool = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         if isinstance(input_dict_or_td, NonTensorData):
             data = input_dict_or_td.data
@@ -2204,8 +2206,6 @@ class NonTensorData:
                 raise RuntimeError(_LOCK_ERROR)
             if clone:
                 data = deepcopy(data)
-            print('updating data!')
-            print(traceback.print_stack())
             self.data = data
         elif isinstance(input_dict_or_td, NonTensorStack):
             raise ValueError(
@@ -2669,12 +2669,14 @@ class NonTensorStack(LazyStackedTensorDict):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         return self._update(
             input_dict_or_td=input_dict_or_td,
             clone=clone,
             inplace=inplace,
             keys_to_update=keys_to_update,
+            is_leaf=is_leaf,
         )
 
     def update_(
@@ -2701,6 +2703,7 @@ class NonTensorStack(LazyStackedTensorDict):
         keys_to_update: Sequence[NestedKey] | None = None,
         break_on_memmap: bool = None,
         non_blocking: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         if inplace and self.is_locked and not (self._is_shared or self._is_memmap):
             raise RuntimeError(_LOCK_ERROR)
@@ -2715,6 +2718,7 @@ class NonTensorStack(LazyStackedTensorDict):
                 clone=clone,
                 inplace=inplace,
                 keys_to_update=keys_to_update,
+                is_leaf=is_leaf,
             )
 
         memmap = False
@@ -2744,6 +2748,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     inplace=inplace,
                     keys_to_update=keys_to_update,
                     break_on_memmap=break_on_memmap,
+                    is_leaf=is_leaf,
                 )
             if memmap:
                 self._memmap_(prefix=self._path_to_memmap, inplace=True)
