@@ -13,7 +13,13 @@ import weakref
 import pytest
 import torch
 
-from tensordict import LazyStackedTensorDict, tensorclass, TensorDict
+from tensordict import (
+    LazyStackedTensorDict,
+    NonTensorData,
+    NonTensorStack,
+    tensorclass,
+    TensorDict,
+)
 from tensordict._tensordict import unravel_key_list
 from tensordict.nn import (
     dispatch,
@@ -364,6 +370,20 @@ class TestTDModule:
             tensordict_module(td)
         assert td.shape == torch.Size([3])
         assert td.get("out").shape == torch.Size([3, 4])
+
+    def test_nontensor(self):
+        tdm = TensorDictModule(
+            lambda: NonTensorStack(NonTensorData(1), NonTensorData(2)),
+            in_keys=[],
+            out_keys=["out"],
+        )
+        assert tdm(TensorDict({}))["out"] == [1, 2]
+        tdm = TensorDictModule(
+            lambda: "a string!",
+            in_keys=[],
+            out_keys=["out"],
+        )
+        assert tdm(TensorDict({}))["out"] == "a string!"
 
     @pytest.mark.parametrize(
         "out_keys",
