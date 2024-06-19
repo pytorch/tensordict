@@ -3931,7 +3931,7 @@ class _TensorDictKeysView:
     def __repr__(self):
         include_nested = f"include_nested={self.include_nested}"
         leaves_only = f"leaves_only={self.leaves_only}"
-        return f"{self.__class__.__name__}({list(self)},\n{indent(include_nested, 4*' ')},\n{indent(leaves_only, 4*' ')})"
+        return f"{self.__class__.__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
 
 
 def _set_tensor_dict(  # noqa: F811

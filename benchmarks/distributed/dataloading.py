@@ -159,7 +159,7 @@ class ImageNetData:
         sd = dict(data.state_dict())
         app_state = {"state": torchsnapshot.StateDict(data=sd)}
         snapshot.restore(app_state=app_state)
-        logging.info(f"done! Took: {time.time()-t0:4.4f}s")
+        logging.info(f"done! Took: {time.time() - t0:4.4f}s")
         return data
 
     def save(self, path):
@@ -350,7 +350,7 @@ class DummyTrainerNode:
             if iteration >= self.world_size:
                 total += batch.shape[0]
         t = time.time() - t0
-        logging.info(f"time spent: {t:4.4f}s, Rate: {total/t} fps")
+        logging.info(f"time spent: {t:4.4f}s, Rate: {total / t} fps")
         return {"time": t, "rate": total / t}
 
     def create_data_nodes(self, data):
