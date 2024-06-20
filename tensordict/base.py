@@ -2818,8 +2818,6 @@ class TensorDictBase(MutableMapping):
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
         if filename is not None:
             with open(filename, "w+b") as f:
-                print(f.fileno())
-                print(storage._handler.fd)
                 # storage._handler.buffer.write_byte(f.read(1))
                 os.sendfile(f.fileno(), storage._handler.fd, 0, filesize)
 
