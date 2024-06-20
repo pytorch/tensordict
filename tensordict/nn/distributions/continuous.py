@@ -264,3 +264,7 @@ class Delta(D.Distribution):
     @property
     def mean(self) -> torch.Tensor:
         return self.param
+
+    @property
+    def deterministic_sample(self) -> torch.Tensor:
+        return self.param
