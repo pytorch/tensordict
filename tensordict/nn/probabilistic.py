@@ -466,7 +466,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if interaction_type is None:
             interaction_type = self.default_interaction_type
 
-        if interaction_type is InteractionType.MODE:
+        if interaction_type is InteractionType.DETERMINISTIC:
             try:
                 return dist.deterministic_sample
             except AttributeError:
@@ -474,7 +474,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                     return dist.mean
                 except AttributeError:
                     raise NotImplementedError(
-                        f"method {type(dist)}.mode is not implemented."
+                        f"method {type(dist)}.deterministic_sample is not implemented."
                     )
                 finally:
                     warnings.warn(
