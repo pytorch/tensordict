@@ -32,6 +32,7 @@ class InteractionType(Enum):
     MEDIAN = auto()
     MEAN = auto()
     RANDOM = auto()
+    DETERMINISTIC = auto()
 
     @classmethod
     def from_str(cls, type_str: str) -> InteractionType:
@@ -453,8 +454,26 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             interaction_type = self.default_interaction_type
 
         if interaction_type is InteractionType.MODE:
-            if hasattr(dist, "get_mode"):
-                return dist.get_mode()
+            try:
+                return dist.deterministic_sample
+            except AttributeError:
+                try:
+                    return dist.mean
+                except AttributeError:
+                    raise NotImplementedError(
+                        f"method {type(dist)}.mode is not implemented."
+                    )
+                finally:
+                    warnings.warn(
+                        "deterministic_sample wasn't found when queried. "
+                        f"{type(self).__name__} is falling back on mean instead. "
+                        f"For better code quality and efficiency, make sure to either "
+                        f"provide a distribution with a deterministic_sample attribute or "
+                        f"to change the InteractionMode to the desired value.",
+                        category=UserWarning,
+                    )
+
+        if interaction_type is InteractionType.MODE:
             try:
                 return dist.mode
             except AttributeError:
@@ -463,8 +482,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEDIAN:
-            if hasattr(dist, "get_median"):
-                return dist.get_median()
             try:
                 return dist.median
             except AttributeError:
@@ -473,8 +490,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEAN:
-            if hasattr(dist, "get_mean"):
-                return dist.get_mean()
             try:
                 return dist.mean
             except (AttributeError, NotImplementedError):

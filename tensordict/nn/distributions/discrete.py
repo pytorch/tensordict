@@ -63,6 +63,8 @@ class OneHotCategorical(D.Categorical):
         else:
             return (self.probs == self.probs.max(-1, True)[0]).to(torch.long)
 
+    determnistic_sample = mode
+
     def sample(
         self,
         sample_shape: torch.Size | Sequence[int] | None = None,
