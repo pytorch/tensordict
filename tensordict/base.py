@@ -12,6 +12,7 @@ import contextlib
 import gc
 import importlib
 import numbers
+import os
 import weakref
 from collections.abc import MutableMapping
 
@@ -2816,8 +2817,13 @@ class TensorDictBase(MutableMapping):
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
         if filename is not None:
-            with open(filename, "wb") as f:
-                f.write(storage._handler.buffer.read(filesize))
+            with open(filename, "w+b") as f:
+                print(f.fileno())
+                print(storage._handler.fd)
+                # storage._handler.buffer.write_byte(f.read(1))
+                os.sendfile(f.fileno(), storage._handler.fd, 0, filesize)
+
+                # f.write(storage._handler.buffer.read(filesize))
             with open(Path(filename).with_suffix(".json"), "wb") as f:
                 metadata_dict["size"] = filesize
                 f.write(json.dumps(metadata_dict))
