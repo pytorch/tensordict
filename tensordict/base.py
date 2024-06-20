@@ -2640,9 +2640,10 @@ class TensorDictBase(MutableMapping):
             flat_size,
             need_padding,
         ) = self._reduce_vals_and_metadata()
+        filesize = sum(flat_size)
         if filename is None:
             storage = torch.empty(
-                sum(flat_size),
+                filesize,
                 dtype=torch.uint8,
                 device=device if device else self.device,
             )
@@ -2651,14 +2652,9 @@ class TensorDictBase(MutableMapping):
                 raise RuntimeError(
                     "device and filename are mutually exclusive arguments."
                 )
-            filesize = sum(flat_size)
-            storage = torch.from_file(
-                str(filename),
-                size=filesize,
+            storage = MemoryMappedTensor.empty(
+                shape=(filesize,),
                 dtype=torch.uint8,
-                shared=True,
-                # needed when device ctx differs
-                device=torch.device("cpu"),
             )
             assert len(storage.untyped_storage()) == sum(flat_size)
 
@@ -2820,6 +2816,8 @@ class TensorDictBase(MutableMapping):
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
         if filename is not None:
+            with open(filename, "wb") as f:
+                f.write(storage._handler.buffer.read(filesize))
             with open(Path(filename).with_suffix(".json"), "wb") as f:
                 metadata_dict["size"] = filesize
                 f.write(json.dumps(metadata_dict))
