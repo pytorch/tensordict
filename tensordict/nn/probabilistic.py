@@ -28,6 +28,19 @@ __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
 
 class InteractionType(Enum):
+    """A list of possible interaction types with a distribution.
+
+    MODE, MEDIAN and MEAN point to the property / attribute with the same name.
+    RANDOM points to ``rsample()`` if that method exists or ``sample()`` if not.
+
+    DETERMINISTIC can be used as a generic fallback if ``MEAN`` or ``MODE`` are not guaranteed to
+    be analytically tractable. In such cases, a rude deterministic estimate can be used
+    in some cases even if it lacks a true algebraic meaning.
+    This value will trigger a query to the ``deterministic_sample`` attribute in the distribution
+    and if it does not exist, the ``mean`` will be used.
+
+    """
+
     MODE = auto()
     MEDIAN = auto()
     MEAN = auto()
