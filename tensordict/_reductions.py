@@ -59,6 +59,7 @@ def _rebuild_tensordict_files_consolidated(
     storage,
 ):
     def from_metadata(metadata=metadata, prefix=None):
+        metadata = dict(metadata)
         non_tensor = metadata.pop("non_tensors")
         leaves = metadata.pop("leaves")
         cls = metadata.pop("cls")
