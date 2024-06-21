@@ -9226,9 +9226,7 @@ class TestNonTensorData:
 
         # with pytest.raises(RuntimeError)
         val1 = MyClass(string="another string!")
-        with pytest.raises(
-            NotImplementedError, match="Updating MyClass within a shared/memmaped"
-        ):
+        with pytest.raises(ValueError, match="Failed to update 'val' in tensordict"):
             td.update(
                 TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []),
                 inplace=True,

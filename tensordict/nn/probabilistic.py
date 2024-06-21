@@ -28,10 +28,24 @@ __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
 
 class InteractionType(Enum):
+    """A list of possible interaction types with a distribution.
+
+    MODE, MEDIAN and MEAN point to the property / attribute with the same name.
+    RANDOM points to ``rsample()`` if that method exists or ``sample()`` if not.
+
+    DETERMINISTIC can be used as a generic fallback if ``MEAN`` or ``MODE`` are not guaranteed to
+    be analytically tractable. In such cases, a rude deterministic estimate can be used
+    in some cases even if it lacks a true algebraic meaning.
+    This value will trigger a query to the ``deterministic_sample`` attribute in the distribution
+    and if it does not exist, the ``mean`` will be used.
+
+    """
+
     MODE = auto()
     MEDIAN = auto()
     MEAN = auto()
     RANDOM = auto()
+    DETERMINISTIC = auto()
 
     @classmethod
     def from_str(cls, type_str: str) -> InteractionType:
@@ -103,7 +117,9 @@ class set_interaction_type(_DecoratorContextManager):
         type (InteractionType): sampling type to use when the policy is being called.
     """
 
-    def __init__(self, type: InteractionType | None = InteractionType.MODE) -> None:
+    def __init__(
+        self, type: InteractionType | None = InteractionType.DETERMINISTIC
+    ) -> None:
         super().__init__()
         self.type = type
 
@@ -295,7 +311,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         out_keys: NestedKey | List[NestedKey] | None = None,
         *,
         default_interaction_mode: str | None = None,
-        default_interaction_type: InteractionType = InteractionType.MODE,
+        default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
@@ -452,9 +468,27 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if interaction_type is None:
             interaction_type = self.default_interaction_type
 
+        if interaction_type is InteractionType.DETERMINISTIC:
+            try:
+                return dist.deterministic_sample
+            except AttributeError:
+                try:
+                    return dist.mean
+                except AttributeError:
+                    raise NotImplementedError(
+                        f"method {type(dist)}.deterministic_sample is not implemented."
+                    )
+                finally:
+                    warnings.warn(
+                        "deterministic_sample wasn't found when queried. "
+                        f"{type(self).__name__} is falling back on mean instead. "
+                        f"For better code quality and efficiency, make sure to either "
+                        f"provide a distribution with a deterministic_sample attribute or "
+                        f"to change the InteractionMode to the desired value.",
+                        category=UserWarning,
+                    )
+
         if interaction_type is InteractionType.MODE:
-            if hasattr(dist, "get_mode"):
-                return dist.get_mode()
             try:
                 return dist.mode
             except AttributeError:
@@ -463,8 +497,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEDIAN:
-            if hasattr(dist, "get_median"):
-                return dist.get_median()
             try:
                 return dist.median
             except AttributeError:
@@ -473,8 +505,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEAN:
-            if hasattr(dist, "get_mean"):
-                return dist.get_mean()
             try:
                 return dist.mean
             except (AttributeError, NotImplementedError):

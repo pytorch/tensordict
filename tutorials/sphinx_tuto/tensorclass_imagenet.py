@@ -338,7 +338,7 @@ if __name__ == "__main__":
         image, target = image.to(device), target.to(device)
     t = time.time() - t0
     print(
-        f"One iteration over dataloader done! Rate: {total/t:4.4f} fps, time: {t: 4.4f}s"
+        f"One iteration over dataloader done! Rate: {total / t:4.4f} fps, time: {t: 4.4f}s"
     )
 
     ##############################################################################
@@ -355,7 +355,7 @@ if __name__ == "__main__":
         image, target = batch.images, batch.targets
     t = time.time() - t0
     print(
-        f"One iteration over tensorclass dataloader done! Rate: {total/t:4.4f} fps, time: {t: 4.4f}s"
+        f"One iteration over tensorclass dataloader done! Rate: {total / t:4.4f} fps, time: {t: 4.4f}s"
     )
 
     ##############################################################################
@@ -373,7 +373,7 @@ if __name__ == "__main__":
         image, target = image.to(device), target.to(device)
     t = time.time() - t0
     print(
-        f"One iteration over val data done! Rate: {total/t:4.4f} fps, time: {t: 4.4f}s"
+        f"One iteration over val data done! Rate: {total / t:4.4f} fps, time: {t: 4.4f}s"
     )
 
     total = 0
@@ -387,7 +387,7 @@ if __name__ == "__main__":
         ), batch.targets.contiguous().to(device)
     t = time.time() - t0
     print(
-        f"One iteration over tensorclass val data done! Rate: {total/t:4.4f} fps, time: {t: 4.4f}s"
+        f"One iteration over tensorclass val data done! Rate: {total / t:4.4f} fps, time: {t: 4.4f}s"
     )
 
     ##############################################################################
