@@ -131,6 +131,10 @@ def _reduce_td(data: TensorDict):
     # storage.
     # Checking the dtype locally doesn't work because this reduction is also being called for sub-tds
     # of bigger consolidated TDs where the dtypes mismatch globally, but not locally.
+    # Note also that we could say that for non-consolidated TDs we'll just use the regular reduce
+    # but if one does `pipe.send(td.consolidate()[0])`, the td being sent over is consolidated but
+    # lacks the _consolidated field, so this will fall back on regular pickle and PT will complain about
+    # the storage pointing to tensors of different dtypes.
     # return (_make_td, (type(data), data.__getstate__(),))
 
     metadata_dict, flat_key_values, _, _ = data._reduce_vals_and_metadata(
