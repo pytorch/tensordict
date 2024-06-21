@@ -2589,21 +2589,24 @@ class TensorDictBase(MutableMapping):
 
     def consolidate(
         self,
+        filename: Path | str | None = None,
         *,
         num_threads=0,
-        filename: Path | str | None = None,
         device: torch.device | None = None,
         non_blocking: bool = False,
         inplace: bool = False,
         return_early: bool = False,
+        use_buffer: bool = False,
     ) -> None:
         """Consolidates the tensordict content in a single storage for fast serialization.
+
+        Args:
+            filename (Path, optional): an optional file path for a memory-mapped tensor
+                to use as a storage for the tensordict.
 
         Keyword Args:
             num_threads (integer, optional): the number of threads to use for populating
                 the storage.
-            filename (Path, optional): an optional file path for a memory-mapped tensor
-                to use as a storage for the tensordict.
             device (torch.device, optional): an optional device where the storage must be
                 instantiated.
             non_blocking (bool, optional): ``non_blocking`` argument passed to :meth:`~torch.Tensor.copy_`.
@@ -2612,6 +2615,10 @@ class TensorDictBase(MutableMapping):
             return_early (bool, optional): if ``True`` and ``num_threads>0``,
                 the method will return a future of the tensordict. The resulting
                 tensordict can be queried using `future.result()`.
+            use_buffer (bool, optional): if ``True`` and a filename is passed, an intermediate
+                local buffer will be created in shared memory, and the data will be copied at
+                the storage location as a last step. This may be faster than writing directly
+                to a distant physical memory (e.g., NFS).
 
         Examples:
             >>> import pickle
@@ -2640,9 +2647,10 @@ class TensorDictBase(MutableMapping):
             flat_size,
             need_padding,
         ) = self._reduce_vals_and_metadata()
+        filesize = sum(flat_size)
         if filename is None:
             storage = torch.empty(
-                sum(flat_size),
+                filesize,
                 dtype=torch.uint8,
                 device=device if device else self.device,
             )
@@ -2651,15 +2659,20 @@ class TensorDictBase(MutableMapping):
                 raise RuntimeError(
                     "device and filename are mutually exclusive arguments."
                 )
-            filesize = sum(flat_size)
-            storage = torch.from_file(
-                str(filename),
-                size=filesize,
-                dtype=torch.uint8,
-                shared=True,
-                # needed when device ctx differs
-                device=torch.device("cpu"),
-            )
+            if not use_buffer:
+                storage = torch.from_file(
+                    str(filename),
+                    size=filesize,
+                    dtype=torch.uint8,
+                    shared=True,
+                    # needed when device ctx differs
+                    device=torch.device("cpu"),
+                )
+            else:
+                storage = MemoryMappedTensor.empty(
+                    shape=(filesize,),
+                    dtype=torch.uint8,
+                )
             assert len(storage.untyped_storage()) == sum(flat_size)
 
         offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
@@ -2820,6 +2833,12 @@ class TensorDictBase(MutableMapping):
         )
         result._consolidated = {"storage": storage, "metadata": metadata_dict}
         if filename is not None:
+            if use_buffer:
+                with open(filename, "w+b") as f:
+                    # storage._handler.buffer.write_byte(f.read(1))
+                    # storage._handler.buffer.flush()
+                    # os.sendfile(f.fileno(), storage._handler.fd, 0, filesize)
+                    f.write(storage._handler.buffer)
             with open(Path(filename).with_suffix(".json"), "wb") as f:
                 metadata_dict["size"] = filesize
                 f.write(json.dumps(metadata_dict))
