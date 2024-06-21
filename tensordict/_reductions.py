@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import copyreg
-import functools
 from multiprocessing.reduction import ForkingPickler
 
 import torch
@@ -111,9 +110,6 @@ def _rebuild_tensordict_files_consolidated(
         return result
 
     return from_metadata()
-
-    return x
-
 
 def _make_td(cls, state):
     td = cls.__new__(cls)

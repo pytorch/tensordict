@@ -6972,7 +6972,7 @@ class TestLazyStackedTensorDict:
             assert td_c.device == torch.device("cpu")
             assert (TensorDict.from_consolidated(filename) == td_c).all()
         assert hasattr(td_c, "_consolidated")
-        assert type(td_c) == type(td)
+        assert type(td_c) == type(td)  # noqa
         assert (td == td_c).all()
         assert td_c["d"] == [["a string!"] * 3]
         storage = td_c._consolidated["storage"]
