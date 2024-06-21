@@ -2835,9 +2835,6 @@ class TensorDictBase(MutableMapping):
         if filename is not None:
             if use_buffer:
                 with open(filename, "w+b") as f:
-                    # storage._handler.buffer.write_byte(f.read(1))
-                    # storage._handler.buffer.flush()
-                    # os.sendfile(f.fileno(), storage._handler.fd, 0, filesize)
                     f.write(storage._handler.buffer)
             with open(Path(filename).with_suffix(".json"), "wb") as f:
                 metadata_dict["size"] = filesize
