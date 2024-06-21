@@ -6,14 +6,10 @@ from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 
 import torch
-from tensordict import (
-    LazyStackedTensorDict,
-    PersistentTensorDict,
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict._td import _SubTensorDict
+from tensordict._lazy import LazyStackedTensorDict
+from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
+from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import _shape, implement_for
 
 try:

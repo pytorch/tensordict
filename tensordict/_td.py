@@ -1559,6 +1559,18 @@ class TensorDict(TensorDictBase):
             out.batch_size = batch_size
         return out
 
+    @classmethod
+    def _from_dict_validated(
+        cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+    ):
+        return cls(
+            input_dict,
+            batch_size=torch.Size(batch_size),
+            device=torch.device(device) if device is not None else device,
+            names=names,
+            _run_checks=False,
+        )
+
     def from_dict_instance(
         self, input_dict, batch_size=None, device=None, batch_dims=None, names=None
     ):
@@ -2768,12 +2780,9 @@ class TensorDict(TensorDictBase):
         )
 
     def __getstate__(self):
-        result = {
-            key: val
-            for key, val in self.__dict__.items()
-            if key
-            not in ("_last_op", "_cache", "__last_op_queue", "__lock_parents_weakrefs")
-        }
+        result = dict(self.__dict__)
+        for key in ("_last_op", "_cache", "__last_op_queue", "__lock_parents_weakrefs"):
+            result.pop(key, None)
         return result
 
     def __setstate__(self, state):

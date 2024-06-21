@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import copyreg
+import functools
 from multiprocessing.reduction import ForkingPickler
 
 import torch
-
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
+
+from tensordict.tensorclass import NonTensorData
 from tensordict.utils import _STRDTYPE2DTYPE
 
 CLS_MAP = {
@@ -19,7 +21,7 @@ CLS_MAP = {
 }
 
 
-def _rebuild_tensordict_files(flat_key_values, metadata_dict):
+def _rebuild_tensordict_files(flat_key_values, metadata_dict, is_shared: bool = False):
     def from_metadata(metadata=metadata_dict, prefix=None):
         non_tensor = metadata.pop("non_tensors")
         leaves = metadata.pop("leaves")
@@ -27,7 +29,10 @@ def _rebuild_tensordict_files(flat_key_values, metadata_dict):
         cls_metadata = metadata.pop("cls_metadata")
         is_locked = cls_metadata.pop("is_locked", False)
 
-        d = non_tensor
+        d = {
+            key: NonTensorData(data, batch_size=batch_size)
+            for (key, (data, batch_size)) in non_tensor.items()
+        }
         for key, _ in leaves.items():
             total_key = (key,) if prefix is None else prefix + (key,)
             if total_key[-1].startswith("<NJT>"):
@@ -46,12 +51,18 @@ def _rebuild_tensordict_files(flat_key_values, metadata_dict):
             d[k] = from_metadata(
                 v, prefix=prefix + (k,) if prefix is not None else (k,)
             )
-        result = CLS_MAP[cls].from_dict(d, **cls_metadata)
+        result = CLS_MAP[cls]._from_dict_validated(d, **cls_metadata)
         if is_locked:
             result.lock_()
+        # if is_shared:
+        #     result._is_shared = is_shared
         return result
 
     return from_metadata()
+
+
+def _rebuild_tensordict_files_shared(flat_key_values, metadata_dict):
+    return _rebuild_tensordict_files(flat_key_values, metadata_dict, is_shared=True)
 
 
 def _rebuild_tensordict_files_consolidated(
@@ -68,7 +79,10 @@ def _rebuild_tensordict_files_consolidated(
         # size can be there to tell what the size of the file is
         _ = metadata.pop("size", None)
 
-        d = non_tensor
+        d = {
+            key: NonTensorData(data, batch_size=batch_size)
+            for (key, (data, batch_size)) in non_tensor.items()
+        }
         for key, (dtype, local_shape, _, start, stop, pad) in leaves.items():
             dtype = _STRDTYPE2DTYPE[dtype]
             # device = torch.device(device)
@@ -90,25 +104,42 @@ def _rebuild_tensordict_files_consolidated(
             d[k] = from_metadata(
                 v, prefix=prefix + (k,) if prefix is not None else (k,)
             )
-        result = CLS_MAP[cls].from_dict(d, **cls_metadata)
+        result = CLS_MAP[cls]._from_dict_validated(d, **cls_metadata)
+        # result._is_shared = storage.is_shared()
         if is_locked:
             result = result.lock_()
         return result
 
     return from_metadata()
 
+    return x
+
+
+def _make_td(cls, state):
+    td = cls.__new__(cls)
+    for key, val in state.items():
+        setattr(td, key, val)
+    return td
+
 
 def _reduce_td(data: TensorDict):
     consolidated = getattr(data, "_consolidated", None)
-    if consolidated:
+    if consolidated and consolidated["metadata"] is not None:
         storage = consolidated["storage"]
         storge_metadata = consolidated["metadata"]
         return (
             _rebuild_tensordict_files_consolidated,
             (storge_metadata, storage),
         )
+    # The reason we can't use this is that pytorch unpickler requires the dtypes to match for a single
+    # storage.
+    # Checking the dtype locally doesn't work because this reduction is also being called for sub-tds
+    # of bigger consolidated TDs where the dtypes mismatch globally, but not locally.
+    # return (_make_td, (type(data), data.__getstate__(),))
 
-    metadata_dict, flat_key_values, _, _ = data._reduce_vals_and_metadata()
+    metadata_dict, flat_key_values, _, _ = data._reduce_vals_and_metadata(
+        requires_metadata=True
+    )
     return (_rebuild_tensordict_files, (flat_key_values, metadata_dict))
 
 

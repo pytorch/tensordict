@@ -12,6 +12,7 @@ import contextlib
 import gc
 import importlib
 import numbers
+import os.path
 import weakref
 from collections.abc import MutableMapping
 
@@ -726,6 +727,14 @@ class TensorDictBase(MutableMapping):
 
         """
         ...
+
+    @classmethod
+    def _from_dict_validated(cls, *args, **kwargs):
+        """A faster version of from_dict when the values have been validated.
+
+        By default, falls back on :meth:`~.from_dict`.
+        """
+        return cls.from_dict(*args, **kwargs)
 
     @abc.abstractmethod
     def from_dict_instance(
@@ -2445,28 +2454,37 @@ class TensorDictBase(MutableMapping):
             "is_locked": self._is_locked,
         }
 
-    @cache  # noqa: B019
-    def _reduce_vals_and_metadata(self):
+    # @cache  # noqa: B019
+    def _reduce_vals_and_metadata(self, *, dtype=NO_DEFAULT, requires_metadata):
         """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
-        need_padding = self.dtype is None
+        if dtype is NO_DEFAULT:
+            dtype = self.dtype
+        need_padding = dtype is None
+        # If the dtype is not unique (self.dtype is None) then we need the metadata
+        # because we need a custom unpickler
+        requires_metadata = requires_metadata | need_padding
 
-        # metadata is nested
-        metadata_dict = {
-            "cls": type(self).__name__,
-            "non_tensors": {},
-            "leaves": {},
-            "cls_metadata": self._reduce_get_metadata(),
-        }
+        if requires_metadata:
+            # metadata is nested
+            metadata_dict = {
+                "cls": type(self).__name__,
+                "non_tensors": {},
+                "leaves": {},
+                "cls_metadata": self._reduce_get_metadata(),
+            }
+        else:
+            metadata_dict = None
 
         # flat_key_values is flat
         flat_key_values = {}
 
         flat_size = []
-        start = [0]
+        start = 0
 
         def add_single_value(
-            value, key, start, metadata_dict, dtype, shape, device, flat_size
+            value, key, metadata_dict, dtype, shape, device, flat_size
         ):
+            nonlocal start
             n = value.element_size() * value.numel()
             if need_padding:
                 pad = n % 8
@@ -2475,19 +2493,17 @@ class TensorDictBase(MutableMapping):
             else:
                 pad = 0
             flat_size.append(n + pad)
-            stop = start[0] + flat_size[-1]
-            if need_padding:
-                assert start[0] % 8 == 0, (start, n)
-                assert stop % 8 == 0, (stop, n)
-            metadata_dict["leaves"][key] = (
-                str(dtype),
-                list(shape),
-                str(device),
-                start[0],
-                stop,
-                pad,
-            )
-            start[0] = stop
+            stop = start + flat_size[-1]
+            if requires_metadata:
+                metadata_dict["leaves"][key] = (
+                    str(dtype),
+                    list(shape),
+                    str(device),
+                    start,
+                    stop,
+                    pad,
+                )
+            start = stop
 
         def assign(
             key,
@@ -2495,25 +2511,30 @@ class TensorDictBase(MutableMapping):
             track_key=(),
             metadata_dict=metadata_dict,
             flat_size=flat_size,
-            start=start,
         ):
             total_key = key if isinstance(key, tuple) else (key,)
             total_key = track_key + total_key
             cls = type(value)
             if _is_non_tensor(cls):
-                metadata_dict["non_tensors"][key] = value.data
+                if requires_metadata:
+                    metadata_dict["non_tensors"][key] = (
+                        value.data,
+                        list(value.batch_size),
+                    )
                 return
             if _is_tensor_collection(cls):
-                metadata_dict[key] = {
-                    "cls": cls.__name__,
-                    "non_tensors": {},
-                    "leaves": {},
-                    "cls_metadata": value._reduce_get_metadata(),
-                }
+                metadata_dict_key = None
+                if requires_metadata:
+                    metadata_dict_key = metadata_dict[key] = {
+                        "cls": cls.__name__,
+                        "non_tensors": {},
+                        "leaves": {},
+                        "cls_metadata": value._reduce_get_metadata(),
+                    }
                 local_assign = partial(
                     assign,
                     track_key=total_key,
-                    metadata_dict=metadata_dict[key],
+                    metadata_dict=metadata_dict_key,
                     flat_size=flat_size,
                 )
                 value._fast_apply(
@@ -2541,7 +2562,6 @@ class TensorDictBase(MutableMapping):
                     add_single_value(
                         values,
                         _prefix_last_key(key, "<NJT>"),
-                        start,
                         metadata_dict,
                         values.dtype,
                         shape,
@@ -2554,7 +2574,6 @@ class TensorDictBase(MutableMapping):
                     add_single_value(
                         offsets,
                         _prefix_last_key(key, "<NJT_OFFSETS>"),
-                        start,
                         metadata_dict,
                         offsets.dtype,
                         offsets.shape,
@@ -2570,7 +2589,6 @@ class TensorDictBase(MutableMapping):
                 add_single_value(
                     value,
                     key,
-                    start,
                     metadata_dict,
                     value.dtype,
                     value.shape,
@@ -2582,6 +2600,7 @@ class TensorDictBase(MutableMapping):
             assign,
             named=True,
             call_on_nested=True,
+            nested_keys=True,
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
             filter_empty=True,
         )
@@ -2597,6 +2616,7 @@ class TensorDictBase(MutableMapping):
         inplace: bool = False,
         return_early: bool = False,
         use_buffer: bool = False,
+        share_memory: bool = False,
     ) -> None:
         """Consolidates the tensordict content in a single storage for fast serialization.
 
@@ -2619,6 +2639,9 @@ class TensorDictBase(MutableMapping):
                 local buffer will be created in shared memory, and the data will be copied at
                 the storage location as a last step. This may be faster than writing directly
                 to a distant physical memory (e.g., NFS).
+                Defaults to ``False``.
+            share_memory (bool, optional): if ``True``, the storage will be placed in shared memory.
+                Defaults to ``False``.
 
         Examples:
             >>> import pickle
@@ -2641,39 +2664,62 @@ class TensorDictBase(MutableMapping):
 
 
         """
+        if hasattr(self, "_consolidated"):
+            return self
+
         (
             metadata_dict,
             flat_dict,
             flat_size,
             need_padding,
-        ) = self._reduce_vals_and_metadata()
+        ) = self._reduce_vals_and_metadata(requires_metadata=filename is not None)
         filesize = sum(flat_size)
+        device = torch.device(device) if device is not None else None
         if filename is None:
             storage = torch.empty(
                 filesize,
                 dtype=torch.uint8,
                 device=device if device else self.device,
             )
+            if share_memory and not (
+                device is not None and device.type == "cuda"
+            ):  # cuda device is always shared
+                storage.share_memory_()
         else:
+            # Convert the dict to json
+            metadata_dict_json = json.dumps(metadata_dict)
+            # Represent as a tensor
+            metadata_dict_json = torch.as_tensor(
+                bytearray(metadata_dict_json), dtype=torch.uint8
+            )
+            len_metadata = torch.tensor(
+                [metadata_dict_json.numel()], dtype=torch.int64
+            ).view(torch.uint8)
+
             if device not in (torch.device("cpu"), None):
                 raise RuntimeError(
                     "device and filename are mutually exclusive arguments."
                 )
+            suffix = len_metadata.numel() + metadata_dict_json.numel()
             if not use_buffer:
-                storage = torch.from_file(
+                total_storage = torch.from_file(
                     str(filename),
-                    size=filesize,
+                    size=filesize + suffix,
                     dtype=torch.uint8,
                     shared=True,
                     # needed when device ctx differs
                     device=torch.device("cpu"),
                 )
             else:
-                storage = MemoryMappedTensor.empty(
-                    shape=(filesize,),
+                total_storage = MemoryMappedTensor.empty(
+                    shape=(filesize + suffix,),
                     dtype=torch.uint8,
                 )
-            assert len(storage.untyped_storage()) == sum(flat_size)
+
+            total_storage[-8:] = len_metadata
+            total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
+            storage = total_storage[:suffix]
+            # assert len(storage.untyped_storage()) == filesize
 
         offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
 
@@ -2835,26 +2881,32 @@ class TensorDictBase(MutableMapping):
         if filename is not None:
             if use_buffer:
                 with open(filename, "w+b") as f:
-                    f.write(storage._handler.buffer)
-            with open(Path(filename).with_suffix(".json"), "wb") as f:
-                metadata_dict["size"] = filesize
-                f.write(json.dumps(metadata_dict))
+                    f.write(total_storage._handler.buffer)
+            # with open(Path(filename).with_suffix(".json"), "wb") as f:
+            #     metadata_dict["size"] = filesize
+            #     f.write(json.dumps(metadata_dict))
         return result
 
     @classmethod
     def from_consolidated(cls, filename):
-        with open(Path(filename).with_suffix(".json"), "rb") as f:
-            metadata = json.loads(f.read())
+        # with open(Path(filename).with_suffix(".json"), "rb") as f:
+        #     metadata = json.loads(f.read())
         file = torch.from_file(
             str(filename),
             dtype=torch.uint8,
-            size=metadata["size"],
+            size=os.path.getsize(filename),
             # needed when device ctx differs
             device=torch.device("cpu"),
         )
+        metadata_size = file[-8:].clone().view(torch.int64)
+        metadata = file[-metadata_size - 8 : -8]
+        metadata = json.loads(bytes(metadata.tolist()))
+
         from ._reductions import _rebuild_tensordict_files_consolidated
 
-        return _rebuild_tensordict_files_consolidated(metadata, file)
+        return _rebuild_tensordict_files_consolidated(
+            metadata, file[: -metadata_size - 8]
+        )
 
     def memmap_(
         self,
