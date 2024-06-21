@@ -73,6 +73,7 @@ class TestInteractionType:
         "str_and_expected_type",
         [
             ("mode", InteractionType.MODE),
+            ("deterministic", InteractionType.DETERMINISTIC),
             ("MEDIAN", InteractionType.MEDIAN),
             ("Mean", InteractionType.MEAN),
             ("RanDom", InteractionType.RANDOM),

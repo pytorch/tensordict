@@ -117,7 +117,9 @@ class set_interaction_type(_DecoratorContextManager):
         type (InteractionType): sampling type to use when the policy is being called.
     """
 
-    def __init__(self, type: InteractionType | None = InteractionType.MODE) -> None:
+    def __init__(
+        self, type: InteractionType | None = InteractionType.DETERMINISTIC
+    ) -> None:
         super().__init__()
         self.type = type
 
@@ -309,7 +311,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         out_keys: NestedKey | List[NestedKey] | None = None,
         *,
         default_interaction_mode: str | None = None,
-        default_interaction_type: InteractionType = InteractionType.MODE,
+        default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
