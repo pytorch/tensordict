@@ -126,6 +126,8 @@ _STRDTYPE2DTYPE = {
         torch.quint4x2,
     )
 }
+_DTYPE2STRDTYPE = {dtype: str_dtype for str_dtype, dtype in _STRDTYPE2DTYPE.items()}
+
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
@@ -2289,3 +2291,5 @@ NESTED_TENSOR_ERR = (
     "nested tensors. Please upgrade to a more recent "
     "version."
 )
+
+_DEVICE2STRDEVICE = KeyDependentDefaultDict(lambda key: str(key))

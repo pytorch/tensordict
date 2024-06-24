@@ -13,6 +13,7 @@ from tensordict._td import TensorDict
 
 from tensordict.tensorclass import NonTensorData
 from tensordict.utils import _STRDTYPE2DTYPE
+
 CLS_MAP = {
     "TensorDict": TensorDict,
     "LazyStackedTensorDict": LazyStackedTensorDict,
@@ -109,6 +110,7 @@ def _rebuild_tensordict_files_consolidated(
 
     return from_metadata()
 
+
 def _make_td(cls, state):
     td = cls.__new__(cls)
     for key, val in state.items():
@@ -127,8 +129,13 @@ def _reduce_td(data: TensorDict):
         )
 
     # This is faster than the solution below.
-    return (_make_td, (type(data), data.__getstate__(),))
-
+    return (
+        _make_td,
+        (
+            type(data),
+            data.__getstate__(),
+        ),
+    )
     # metadata_dict, flat_key_values, _, _ = data._reduce_vals_and_metadata(
     #     requires_metadata=True
     # )

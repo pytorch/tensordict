@@ -44,6 +44,8 @@ import torch
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _CloudpickleWrapper,
+    _DEVICE2STRDEVICE,
+    _DTYPE2STRDTYPE,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
     _is_non_tensor,
@@ -2569,9 +2571,9 @@ class TensorDictBase(MutableMapping):
             stop = start + flat_size[-1]
             if requires_metadata:
                 metadata_dict["leaves"][key] = (
-                    str(dtype),
+                    _DTYPE2STRDTYPE[dtype],
                     list(shape),
-                    str(device),
+                    _DEVICE2STRDEVICE[device],
                     start,
                     stop,
                     pad,
@@ -2588,14 +2590,16 @@ class TensorDictBase(MutableMapping):
             total_key = key if isinstance(key, tuple) else (key,)
             total_key = track_key + total_key
             cls = type(value)
-            if _is_non_tensor(cls):
+            if issubclass(cls, torch.Tensor):
+                pass
+            elif _is_non_tensor(cls):
                 if requires_metadata:
                     metadata_dict["non_tensors"][key] = (
                         value.data,
                         list(value.batch_size),
                     )
                 return
-            if _is_tensor_collection(cls):
+            elif _is_tensor_collection(cls):
                 metadata_dict_key = None
                 if requires_metadata:
                     metadata_dict_key = metadata_dict[key] = {
@@ -2618,6 +2622,7 @@ class TensorDictBase(MutableMapping):
                     is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
                 )
                 return
+            # Tensors: DTensor, nested and then regular
             if hasattr(value, "full_tensor"):
                 raise NotImplementedError("DTensor is not supported yet")
             if getattr(value, "is_nested", False):
@@ -2657,17 +2662,17 @@ class TensorDictBase(MutableMapping):
                     raise NotImplementedError(
                         "NST is not supported, please use layout=torch.jagged when building the nested tensor."
                     )
-            else:
-                flat_key_values[total_key] = value
-                add_single_value(
-                    value,
-                    key,
-                    metadata_dict,
-                    value.dtype,
-                    value.shape,
-                    value.device,
-                    flat_size,
-                )
+                return
+            flat_key_values[total_key] = value
+            add_single_value(
+                value,
+                key,
+                metadata_dict,
+                value.dtype,
+                value.shape,
+                value.device,
+                flat_size,
+            )
 
         self._fast_apply(
             assign,
@@ -2690,6 +2695,7 @@ class TensorDictBase(MutableMapping):
         return_early: bool = False,
         use_buffer: bool = False,
         share_memory: bool = False,
+        metadata: bool = False,
     ) -> None:
         """Consolidates the tensordict content in a single storage for fast serialization.
 
@@ -2715,6 +2721,11 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
             share_memory (bool, optional): if ``True``, the storage will be placed in shared memory.
                 Defaults to ``False``.
+            metadata (bool, optional): if ``True``, the metadata will be stored alongisde the
+                common storage. If a filename is provided, this is without effect.
+                Storing the metadata can be useful when one wants to control how serialization
+                is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
+                differently if the metadata is or isn't available.
 
         Examples:
             >>> import pickle
@@ -2745,7 +2756,9 @@ class TensorDictBase(MutableMapping):
             flat_dict,
             flat_size,
             need_padding,
-        ) = self._reduce_vals_and_metadata(requires_metadata=filename is not None)
+        ) = self._reduce_vals_and_metadata(
+            requires_metadata=filename is not None or metadata, dtype=None
+        )
         filesize = sum(flat_size)
         device = torch.device(device) if device is not None else None
         if filename is None:
@@ -2791,7 +2804,7 @@ class TensorDictBase(MutableMapping):
 
             total_storage[-8:] = len_metadata
             total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
-            storage = total_storage[:suffix]
+            storage = total_storage[:-suffix]
             # assert len(storage.untyped_storage()) == filesize
 
         offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
