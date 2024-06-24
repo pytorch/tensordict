@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
 import abc
 from typing import Callable, Dict, Generic, List, Optional, TypeVar
 
@@ -48,29 +53,29 @@ class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
     def clear(self) -> None:
         self.tensor_dict.clear()
 
-    def __getitem__(self, indexes: torch.Tensor) -> torch.Tensor:
+    def __getitem__(self, indices: torch.Tensor) -> torch.Tensor:
         values: List[torch.Tensor] = []
-        for index in torch.unbind(indexes):
-            value = self.tensor_dict.get(index.item())
+        for index in indices.tolist():
+            value = self.tensor_dict.get(index)
             if value is None:
                 value = self.default_tensor.clone()
             values.append(value)
 
         return torch.stack(values)
 
-    def __setitem__(self, indexes: torch.Tensor, values: torch.Tensor) -> None:
-        for index, value in zip(torch.unbind(indexes), torch.unbind(values)):
-            self.tensor_dict[index.item()] = value
+    def __setitem__(self, indices: torch.Tensor, values: torch.Tensor) -> None:
+        for index, value in zip(indices.tolist(), values.unbind(0)):
+            self.tensor_dict[index] = value
 
     def __len__(self) -> None:
         return len(self.tensor_dict)
 
-    def contain(self, indexes: torch.Tensor) -> torch.Tensor:
+    def contain(self, indices: torch.Tensor) -> torch.Tensor:
         res: List[bool] = []
-        for index in torch.unbind(indexes):
-            res.append(index.item() in self.tensor_dict)
+        for index in indices.tolist():
+            res.append(index in self.tensor_dict)
 
-        return torch.Tensor(res).to(torch.int64)
+        return torch.tensor(res, dtype=torch.int64)
 
 
 class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
