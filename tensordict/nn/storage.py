@@ -77,7 +77,7 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
     """A Fixed Tensor Storage.
 
     This is storage that backed by nn.Embedding and hence can be in any device that
-    nn.Embedding supports. The size of memory is fixed and cannot be extended.
+    nn.Embedding supports. The size of storage is fixed and cannot be extended.
     """
 
     def __init__(
@@ -173,7 +173,7 @@ class SipHash(torch.nn.Module):
             hash_value = hash(x_i.detach().numpy().tobytes())
             hash_values.append(hash_value)
 
-        return torch.Tensor(hash_values).to(torch.int64).unsqueeze(dim=-1)
+        return torch.Tensor(hash_values).to(torch.int64)
 
 
 class QueryModule(TensorDictModuleBase):
@@ -225,7 +225,7 @@ class TensorDictStorage(
 ):
     """A Storage for TensorDict.
 
-    This module resembles a memory. It takes a tensordict as its input and
+    This module resembles a storage. It takes a tensordict as its input and
     returns another tensordict as output similar to TensorDictModuleBase. However,
     it provides additional functionality like python map:
 
@@ -248,7 +248,7 @@ class TensorDictStorage(
         >>> tensor_dict_storage = TensorDictStorage(
         ...     in_keys=["key1", "key2"],
         ...     query_module=query_module,
-        ...     memories={"index": embedding_storage},
+        ...     key_to_storage={"index": embedding_storage},
         ... )
         >>> index = TensorDict(
         ...     {
@@ -271,22 +271,22 @@ class TensorDictStorage(
     def __init__(
         self,
         query_module: QueryModule,
-        memories: Dict[NestedKey, TensorStorage[torch.Tensor, torch.Tensor]],
+        key_to_storage: Dict[NestedKey, TensorStorage[torch.Tensor, torch.Tensor]],
     ):
         self.in_keys = query_module.in_keys
-        self.out_keys = list(memories.keys())
+        self.out_keys = list(key_to_storage.keys())
 
         super().__init__()
 
         for k in self.out_keys:
-            assert k in memories, f"{k} has not been assigned to a memory"
+            assert k in key_to_storage, f"{k} has not been assigned to a memory"
         self.query_module = query_module
         self.index_key = query_module.index_key
-        self.memories = memories
+        self.key_to_storage = key_to_storage
         self.batch_added = False
 
     def clear(self) -> None:
-        for mem in self.memories.values():
+        for mem in self.key_to_storage.values():
             mem.clear()
 
     def to_index(self, item: TensorDictBase) -> torch.Tensor:
@@ -317,7 +317,7 @@ class TensorDictStorage(
 
         res = TensorDict({}, batch_size=item.batch_size)
         for k in self.out_keys:
-            res[k] = self.memories[k][index]
+            res[k] = self.key_to_storage[k][index]
 
         res = self.maybe_remove_batch(res)
         return res
@@ -327,14 +327,15 @@ class TensorDictStorage(
 
         index = self.to_index(item)
         for k in self.out_keys:
-            self.memories[k][index] = value[k]
+            self.key_to_storage[k][index] = value[k]
 
     def __len__(self):
-        return len(next(iter(self.memories.values())))
+        return len(next(iter(self.key_to_storage.values())))
 
     def contain(self, item: TensorDictBase) -> torch.Tensor:
         item, _ = self.maybe_add_batch(item, None)
         index = self.to_index(item)
 
-        index = self.maybe_remove_batch(index)
-        return next(iter(self.memories.values())).contain(index)
+        res = next(iter(self.key_to_storage.values())).contain(index)
+        res = self.maybe_remove_batch(res)
+        return res

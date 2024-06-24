@@ -44,15 +44,10 @@ def test_binary_to_decimal():
 
 
 def test_query():
-    torch.manual_seed(3)
-    mlp = torch.nn.Linear(in_features=1, out_features=64, bias=True)
-    binary_to_decimal = BinaryToDecimal(
-        num_bits=8, device="cpu", dtype=torch.int32, convert_to_binary=True
-    )
     query_module = QueryModule(
         in_keys=["key1", "key2"],
         index_key="index",
-        hash_module=torch.nn.Sequential(mlp, binary_to_decimal),
+        hash_module=SipHash(),
     )
 
     query = TensorDict(
@@ -72,15 +67,10 @@ def test_query():
 
 
 def test_query_module():
-    torch.manual_seed(5)
-    mlp = torch.nn.Linear(in_features=1, out_features=64, bias=True)
-    binary_to_decimal = BinaryToDecimal(
-        num_bits=8, device="cpu", dtype=torch.int32, convert_to_binary=True
-    )
     query_module = QueryModule(
         in_keys=["key1", "key2"],
         index_key="index",
-        hash_module=torch.nn.Sequential(mlp, binary_to_decimal),
+        hash_module=SipHash(),
     )
 
     embedding_storage = FixedStorage(
@@ -89,9 +79,8 @@ def test_query_module():
     )
 
     tensor_dict_storage = TensorDictStorage(
-        in_keys=["key1", "key2"],
         query_module=query_module,
-        memories={"index": embedding_storage},
+        key_to_storage={"index": embedding_storage},
     )
 
     index = TensorDict(
@@ -123,12 +112,11 @@ def test_storage():
         hash_module=SipHash(),
     )
 
-    embedding_storage = DynamicStorage()
+    embedding_storage = DynamicStorage(default_tensor=torch.zeros((1,)))
 
     tensor_dict_storage = TensorDictStorage(
-        in_keys=["key1", "key2"],
         query_module=query_module,
-        memories={"index": embedding_storage},
+        key_to_storage={"index": embedding_storage},
     )
 
     index = TensorDict(
