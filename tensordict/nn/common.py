@@ -1196,7 +1196,9 @@ class TensorDictModule(TensorDictModuleBase):
                     ) from err
                 else:
                     raise err
-            if isinstance(tensors, (dict, TensorDictBase)):
+            if isinstance(tensors, (dict, TensorDictBase)) and all(
+                key in tensors for key in self.out_keys
+            ):
                 if isinstance(tensors, dict):
                     keys = unravel_key_list(list(tensors.keys()))
                     values = tensors.values()

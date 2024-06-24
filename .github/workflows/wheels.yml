@@ -18,7 +18,13 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python_version: [["3.8", "cp38-cp38"], ["3.9", "cp39-cp39"], ["3.10", "cp310-cp310"], ["3.11", "cp311-cp311"]]
+        python_version: [
+          ["3.8", "cp38-cp38"],
+          ["3.9", "cp39-cp39"],
+          ["3.10", "cp310-cp310"],
+          ["3.11", "cp311-cp311"],
+          ["3.12", "cp312-cp312"],
+        ]
         cuda_support: [["", "--extra-index-url https://download.pytorch.org/whl/cpu", "\"['cpu', '11.3', '11.6']\"", "cpu"]]
     container: pytorch/manylinux-${{ matrix.cuda_support[3] }}
     steps:
@@ -56,7 +62,13 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python_version: [["3.8", "3.8"], ["3.9", "3.9"], ["3.10", "3.10.3"], ["3.11", "3.11"]]
+        python_version: [
+          ["3.8", "3.8"],
+          ["3.9", "3.9"],
+          ["3.10", "3.10.3"],
+          ["3.11", "3.11"],
+          ["3.12", "3.12"],
+        ]
     steps:
       - name: Setup Python
         uses: actions/setup-python@v2
@@ -71,7 +83,7 @@ jobs:
       - name: Build wheel
         shell: bash
         run: |
-            python3 -mpip install wheel
+            python3 -mpip install wheel setuptools
             TENSORDICT_BUILD_VERSION=0.4.0 python3 setup.py bdist_wheel
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v2
@@ -90,7 +102,7 @@ jobs:
     strategy:
       matrix:
         os: [["linux", "ubuntu-20.04"]]
-        python_version: ["3.8", "3.9", "3.10", "3.11" ]
+        python_version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     runs-on: ${{ matrix.os[1] }}
     steps:
       - name: Setup Python
@@ -137,7 +149,7 @@ jobs:
     needs: build-wheel-windows
     strategy:
       matrix:
-        python_version: ["3.8", "3.9", "3.10", "3.11" ]
+        python_version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     runs-on: windows-latest
     steps:
       - name: Setup Python

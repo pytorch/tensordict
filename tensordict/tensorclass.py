@@ -24,7 +24,7 @@ from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, get_type_hints, List, Sequence, TypeVar
+from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
 
 import numpy as np
 import tensordict as tensordict_lib
@@ -91,7 +91,16 @@ _TD_PASS_THROUGH = {
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
+    "_get_at_str",
+    "_get_at_tuple",
+    "_get_str",
+    "_get_sub_tensordict",
+    "_get_tuple",
     "gather",
+    "is_memmap",
+    "is_shared",
+    "ndimension",
+    "numel",
     "replace",
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
@@ -108,68 +117,119 @@ _FALLBACK_METHOD_FROM_TD = [
     "__sub__",
     "__truediv__",
     "_add_batch_dim",
-    "apply",
     "_apply_nest",
-    "_fast_apply",
-    "apply_",
-    "named_apply",
     "_check_unlock",
-    "unsqueeze",
-    "squeeze",
     "_erase_names",  # TODO: must be specialized
     "_exclude",  # TODO: must be specialized
-    "_get_str",
-    "_get_tuple",
-    "_set_at_tuple",
+    "_fast_apply",
     "_has_names",
     "_propagate_lock",
     "_propagate_unlock",
     "_remove_batch_dim",
-    "is_memmap",
-    "is_shared",
     "_select",  # TODO: must be specialized
-    "_set_str",
+    # "_set_at_str",
+    "_set_at_tuple",
+    "_set_at_tuple",
+    # _set_str needs a special treatment to catch keys that are already in
+    # non tensor data
+    # "_set_str",
     "_set_tuple",
-    "all",
-    "any",
-    "empty",
-    "exclude",
-    "expand",
-    "expand_as",
-    "is_empty",
-    "is_shared",
-    "items",
-    "keys",
-    "lock_",
-    "masked_fill",
-    "masked_fill_",
-    "permute",
-    "flatten",
-    "unflatten",
-    "ndimension",
-    "rename_",  # TODO: must be specialized
-    "reshape",
-    "select",
-    "to",
-    "transpose",
-    "unlock_",
-    "values",
-    "view",
-    "zero_",
-    "add",
-    "add_",
-    "mul",
-    "mul_",
     "abs",
     "abs_",
     "acos",
     "acos_",
+    "add",
+    "add_",
+    "addcdiv",
+    "addcdiv_",
+    "addcmul",
+    "addcmul_",
+    "all",
+    "any",
+    "apply",
+    "apply_",
+    "asin",
+    "asin_",
+    "atan",
+    "atan_",
+    "ceil",
+    "ceil_",
+    "clamp_max",
+    "clamp_max_",
+    "clamp_min",
+    "clamp_min_",
+    "contiguous",
+    "copy_",
+    "cos",
+    "cos_",
+    "cosh",
+    "cosh_",
+    "cpu",
+    "cuda",
+    "div",
+    "div_",
+    "empty",
+    "erf",
+    "erf_",
+    "erfc",
+    "erfc_",
+    "exclude",
     "exp",
     "exp_",
+    "expand",
+    "expand_as",
+    "expm1",
+    "expm1_",
+    "flatten",
+    "floor",
+    "floor_",
+    "frac",
+    "frac_",
+    "is_empty",
+    "is_memmap",
+    "is_shared",
+    "is_shared",
+    "isfinite",
+    "isnan",
+    "isreal",
+    "items",
+    "keys",
+    "lerp",
+    "lerp_",
+    "lgamma",
+    "lgamma_",
+    "lock_",
+    "log",
+    "log10",
+    "log10_",
+    "log1p",
+    "log1p_",
+    "log2",
+    "log2_",
+    "log_",
+    "masked_fill",
+    "masked_fill_",
+    "maximum",
+    "maximum_",
+    "minimum",
+    "minimum_",
+    "mul",
+    "mul_",
+    "named_apply",
+    "ndimension",
     "neg",
     "neg_",
+    "norm",
+    "permute",
+    "pow",
+    "pow_",
     "reciprocal",
     "reciprocal_",
+    "rename_",  # TODO: must be specialized
+    "reshape",
+    "round",
+    "round_",
+    "select",
     "sigmoid",
     "sigmoid_",
     "sign",
@@ -178,67 +238,25 @@ _FALLBACK_METHOD_FROM_TD = [
     "sin_",
     "sinh",
     "sinh_",
+    "sqrt",
+    "sqrt_",
+    "squeeze",
+    "sub",
+    "sub_",
     "tan",
     "tan_",
     "tanh",
     "tanh_",
+    "to",
+    "transpose",
     "trunc",
     "trunc_",
-    "norm",
-    "lgamma",
-    "lgamma_",
-    "frac",
-    "frac_",
-    "expm1",
-    "expm1_",
-    "log",
-    "log_",
-    "log10",
-    "log10_",
-    "log1p",
-    "log1p_",
-    "log2",
-    "log2_",
-    "ceil",
-    "ceil_",
-    "floor",
-    "floor_",
-    "round",
-    "round_",
-    "erf",
-    "erf_",
-    "erfc",
-    "erfc_",
-    "asin",
-    "asin_",
-    "atan",
-    "atan_",
-    "cos",
-    "cos_",
-    "cosh",
-    "cosh_",
-    "lerp",
-    "lerp_",
-    "addcdiv",
-    "addcdiv_",
-    "addcmul",
-    "addcmul_",
-    "sub",
-    "sub_",
-    "maximum_",
-    "maximum",
-    "minimum_",
-    "minimum",
-    "clamp_max_",
-    "clamp_max",
-    "clamp_min_",
-    "clamp_min",
-    "pow",
-    "pow_",
-    "div",
-    "div_",
-    "sqrt",
-    "sqrt_",
+    "unflatten",
+    "unlock_",
+    "unsqueeze",
+    "values",
+    "view",
+    "zero_",
 ]
 _FALLBACK_METHOD_FROM_TD_COPY = [
     "_clone",  # TODO: must be specialized
@@ -404,6 +422,10 @@ def _tensorclass(cls: T) -> T:
         cls.set = _set
     if not hasattr(cls, "set_at_"):
         cls.set_at_ = _set_at_
+    if not hasattr(cls, "_set_str"):
+        cls._set_str = _set_str
+    if not hasattr(cls, "_set_at_str"):
+        cls._set_at_str = _set_at_str
     if not hasattr(cls, "del_"):
         cls.del_ = _del_
     if not hasattr(cls, "get"):
@@ -886,6 +908,9 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
             "_tensordict" not in __dict__
             or "_non_tensordict" not in __dict__
             or key in SET_ATTRIBUTES
+            or key in self.__class__.__dict__
+            # if we ever decide to allow anything to be written in a tc
+            # or key not in self.__dataclass_fields__
         ):
             return setattr_(self, key, value)
 
@@ -1388,6 +1413,52 @@ def _set(
     raise ValueError(
         f"Supported type for key are str and tuple, got {key} of type {type(key)}"
     )
+
+
+def _set_str(
+    self,
+    key: NestedKey,
+    value: str,
+    *,
+    inplace: bool,
+    validated: bool,
+    ignore_lock: bool = False,
+    non_blocking: bool = False,
+):
+    if key in self._non_tensordict:
+        if isinstance(value, (NonTensorData, NonTensorStack)):
+            self._non_tensordict[key] = value.data
+            return self
+        del self._non_tensordict[key]
+    self._tensordict._set_str(
+        key,
+        value,
+        inplace=inplace,
+        validated=validated,
+        ignore_lock=ignore_lock,
+        non_blocking=non_blocking,
+    )
+    return self
+
+
+def _set_at_str(
+    self,
+    key: NestedKey,
+    value: str,
+    idx,
+    *,
+    validated: bool,
+    non_blocking: bool = False,
+):
+    if key in self._non_tensordict:
+        if isinstance(value, (NonTensorData, NonTensorStack)):
+            self._non_tensordict[key] = value.data
+            return self
+        del self._non_tensordict[key]
+    self._tensordict._set_at_str(
+        key, value, idx, validated=validated, non_blocking=non_blocking
+    )
+    return self
 
 
 def _del_(self, key):
@@ -2139,12 +2210,14 @@ class NonTensorData:
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         return self._update(
             input_dict_or_td=input_dict_or_td,
             clone=clone,
             inplace=inplace,
             keys_to_update=keys_to_update,
+            is_leaf=is_leaf,
         )
 
     def _update(
@@ -2155,6 +2228,7 @@ class NonTensorData:
         *,
         keys_to_update: Sequence[NestedKey] | None = None,
         break_on_memmap: bool = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         if isinstance(input_dict_or_td, NonTensorData):
             data = input_dict_or_td.data
@@ -2656,12 +2730,14 @@ class NonTensorStack(LazyStackedTensorDict):
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         return self._update(
             input_dict_or_td=input_dict_or_td,
             clone=clone,
             inplace=inplace,
             keys_to_update=keys_to_update,
+            is_leaf=is_leaf,
         )
 
     def update_(
@@ -2688,6 +2764,7 @@ class NonTensorStack(LazyStackedTensorDict):
         keys_to_update: Sequence[NestedKey] | None = None,
         break_on_memmap: bool = None,
         non_blocking: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> T:
         if inplace and self.is_locked and not (self._is_shared or self._is_memmap):
             raise RuntimeError(_LOCK_ERROR)
@@ -2702,6 +2779,7 @@ class NonTensorStack(LazyStackedTensorDict):
                 clone=clone,
                 inplace=inplace,
                 keys_to_update=keys_to_update,
+                is_leaf=is_leaf,
             )
 
         memmap = False
@@ -2731,6 +2809,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     inplace=inplace,
                     keys_to_update=keys_to_update,
                     break_on_memmap=break_on_memmap,
+                    is_leaf=is_leaf,
                 )
             if memmap:
                 self._memmap_(prefix=self._path_to_memmap, inplace=True)

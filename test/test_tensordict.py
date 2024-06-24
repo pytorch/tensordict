@@ -3280,6 +3280,8 @@ class TestTensorDicts(TestTensorDictsBase):
         index = index.cumsum(dim=other_dim) - 1
         # gather
         td_gather = torch.gather(td, dim=dim, index=index)
+        assert td_gather.device == td.device
+        assert td_gather.names == td.names
         # gather with out
         td_gather.zero_()
         out = td_gather.clone()
@@ -3425,6 +3427,26 @@ class TestTensorDicts(TestTensorDictsBase):
                 else:
                     assert td.view(*new_shape) is td
                     assert td.view(-1).view(*new_shape) is td
+
+    def test_isfinite(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert td.isfinite().all()
+
+    def test_isnan(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert not td.isnan().any()
+
+    def test_isreal(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert td.isreal().all()
+
+    def test_isposinf(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert not td.isposinf().any()
+
+    def test_isneginf(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert not td.isneginf().any()
 
     def test_items_values_keys(self, td_name, device):
         torch.manual_seed(1)
@@ -9072,9 +9094,7 @@ class TestNonTensorData:
 
         # with pytest.raises(RuntimeError)
         val1 = MyClass(string="another string!")
-        with pytest.raises(
-            NotImplementedError, match="Updating MyClass within a shared/memmaped"
-        ):
+        with pytest.raises(ValueError, match="Failed to update 'val' in tensordict"):
             td.update(
                 TensorDict({"val": NonTensorData(data=val1, batch_size=[])}, []),
                 inplace=True,

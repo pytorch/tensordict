@@ -28,10 +28,24 @@ __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
 
 
 class InteractionType(Enum):
+    """A list of possible interaction types with a distribution.
+
+    MODE, MEDIAN and MEAN point to the property / attribute with the same name.
+    RANDOM points to ``rsample()`` if that method exists or ``sample()`` if not.
+
+    DETERMINISTIC can be used as a generic fallback if ``MEAN`` or ``MODE`` are not guaranteed to
+    be analytically tractable. In such cases, a rude deterministic estimate can be used
+    in some cases even if it lacks a true algebraic meaning.
+    This value will trigger a query to the ``deterministic_sample`` attribute in the distribution
+    and if it does not exist, the ``mean`` will be used.
+
+    """
+
     MODE = auto()
     MEDIAN = auto()
     MEAN = auto()
     RANDOM = auto()
+    DETERMINISTIC = auto()
 
     @classmethod
     def from_str(cls, type_str: str) -> InteractionType:
@@ -103,7 +117,9 @@ class set_interaction_type(_DecoratorContextManager):
         type (InteractionType): sampling type to use when the policy is being called.
     """
 
-    def __init__(self, type: InteractionType | None = InteractionType.MODE) -> None:
+    def __init__(
+        self, type: InteractionType | None = InteractionType.DETERMINISTIC
+    ) -> None:
         super().__init__()
         self.type = type
 
@@ -187,7 +203,14 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         distribution_class (Type, optional): keyword-only argument.
             A :class:`torch.distributions.Distribution` class to
             be used for sampling.
-            Default is :class:`tensordict.nn.distributions.Delta`.
+            Default is :class:`~tensordict.nn.distributions.Delta`.
+
+            .. note:: If the distribution class is of type
+                :class:`~tensordict.nn.distributions.CompositeDistribution`, the ``out_keys``
+                can be inferred directly form the ``"distribution_map"`` or ``"name_map"``
+                keywork arguments provided through this class' ``distribution_kwargs``
+                keyword argument, making the ``out_keys`` optional in such cases.
+
         distribution_kwargs (dict, optional): keyword-only argument.
             Keyword-argument pairs to be passed to the distribution.
         return_log_prob (bool, optional): keyword-only argument.
@@ -288,7 +311,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         out_keys: NestedKey | List[NestedKey] | None = None,
         *,
         default_interaction_mode: str | None = None,
-        default_interaction_type: InteractionType = InteractionType.MODE,
+        default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
         distribution_class: type = Delta,
         distribution_kwargs: dict | None = None,
         return_log_prob: bool = False,
@@ -297,12 +320,28 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         n_empirical_estimate: int = 1000,
     ) -> None:
         super().__init__()
+        distribution_kwargs = (
+            distribution_kwargs if distribution_kwargs is not None else {}
+        )
         if isinstance(in_keys, (str, tuple)):
             in_keys = [in_keys]
         if isinstance(out_keys, (str, tuple)):
             out_keys = [out_keys]
         elif out_keys is None:
-            out_keys = ["_"]
+            if distribution_class is CompositeDistribution:
+                distribution_map = distribution_kwargs.get("distribution_map")
+                if distribution_map is None:
+                    raise KeyError(
+                        "'distribution_map' must be provided within "
+                        "distribution_kwargs whenever the distribution is of type CompositeDistribution."
+                    )
+                name_map = distribution_kwargs.get("name_map", None)
+                if name_map is not None:
+                    out_keys = list(name_map.values())
+                else:
+                    out_keys = list(distribution_map.keys())
+            else:
+                out_keys = ["_"]
         if isinstance(in_keys, dict):
             dist_keys, in_keys = zip(*in_keys.items())
             if set(map(type, dist_keys)) != {str}:
@@ -331,9 +370,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if isinstance(distribution_class, str):
             distribution_class = distributions_maps.get(distribution_class.lower())
         self.distribution_class = distribution_class
-        self.distribution_kwargs = (
-            distribution_kwargs if distribution_kwargs is not None else {}
-        )
+        self.distribution_kwargs = distribution_kwargs
         self.n_empirical_estimate = n_empirical_estimate
         self._dist = None
         self.cache_dist = cache_dist if hasattr(distribution_class, "update") else False
@@ -431,9 +468,42 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if interaction_type is None:
             interaction_type = self.default_interaction_type
 
+        if interaction_type is InteractionType.DETERMINISTIC:
+            try:
+                return dist.deterministic_sample
+            except AttributeError:
+                try:
+                    support = dist.support
+                    fallback = (
+                        "mean" if isinstance(support, D.constraints._Real) else "mode"
+                    )
+                except NotImplementedError:
+                    # Some custom dists don't have a support
+                    # We arbitrarily fall onto 'mean' in these cases
+                    fallback = "mean"
+                try:
+                    if fallback == "mean":
+                        return dist.mean
+                    elif fallback == "mode":
+                        # Categorical dists don't have an average
+                        return dist.mode
+                    else:
+                        raise AttributeError
+                except AttributeError:
+                    raise NotImplementedError(
+                        f"method {type(dist)}.deterministic_sample is not implemented, no replacement found."
+                    )
+                finally:
+                    warnings.warn(
+                        f"deterministic_sample wasn't found when queried on {type(dist)}. "
+                        f"{type(self).__name__} is falling back on {fallback} instead. "
+                        f"For better code quality and efficiency, make sure to either "
+                        f"provide a distribution with a deterministic_sample attribute or "
+                        f"to change the InteractionMode to the desired value.",
+                        category=UserWarning,
+                    )
+
         if interaction_type is InteractionType.MODE:
-            if hasattr(dist, "get_mode"):
-                return dist.get_mode()
             try:
                 return dist.mode
             except AttributeError:
@@ -442,8 +512,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEDIAN:
-            if hasattr(dist, "get_median"):
-                return dist.get_median()
             try:
                 return dist.median
             except AttributeError:
@@ -452,8 +520,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 )
 
         elif interaction_type is InteractionType.MEAN:
-            if hasattr(dist, "get_mean"):
-                return dist.get_mean()
             try:
                 return dist.mean
             except (AttributeError, NotImplementedError):
