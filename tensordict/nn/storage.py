@@ -97,7 +97,7 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
 
     def clear(self):
         self.init_fm(self.embedding.weight)
-        self.flag = torch.zeros(size=(self.embedding.num_embeddings, 1)).to(torch.int64)
+        self.flag = torch.zeros((self.embedding.num_embeddings, 1), dtype=torch.int64)
 
     def to_index(self, item: torch.Tensor) -> torch.Tensor:
         return torch.remainder(item.to(torch.int64), self.num_embedding).to(torch.int64)
