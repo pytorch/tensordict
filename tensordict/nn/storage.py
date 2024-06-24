@@ -237,7 +237,7 @@ class TensorDictStorage(
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> mlp = torch.nn.Linear(in_features=1, out_features=64, bias=True)
+        >>> mlp = torch.nn.LazyLinear(out_features=64, bias=True)
         >>> binary_to_decimal = BinaryToDecimal(
         ...     num_bits=8, device="cpu", dtype=torch.int32, convert_to_binary=True
         ... )
@@ -251,7 +251,6 @@ class TensorDictStorage(
         ...     lambda x: torch.nn.init.constant_(x, 0),
         ... )
         >>> tensor_dict_storage = TensorDictStorage(
-        ...     in_keys=["key1", "key2"],
         ...     query_module=query_module,
         ...     key_to_storage={"index": embedding_storage},
         ... )
@@ -266,6 +265,7 @@ class TensorDictStorage(
         ...     {"index": torch.Tensor([[10], [20], [30], [40]])}, batch_size=(4,)
         ... )
         >>> tensor_dict_storage[index] = value
+        >>> tensor_dict_storage[index]
         >>> assert torch.sum(tensor_dict_storage.contain(index)).item() == 4
         >>> new_index = index.clone(True)
         >>> new_index["key3"] = torch.Tensor([[4], [5], [6], [7]])
