@@ -178,7 +178,7 @@ class SipHash(torch.nn.Module):
             hash_value = hash(x_i.detach().numpy().tobytes())
             hash_values.append(hash_value)
 
-        return torch.Tensor(hash_values).to(torch.int64)
+        return torch.tensor(hash_values, dtype=torch.int64)
 
 
 class QueryModule(TensorDictModuleBase):
