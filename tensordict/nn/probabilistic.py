@@ -472,9 +472,15 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             try:
                 return dist.deterministic_sample
             except AttributeError:
-                fallback = (
-                    "mean" if isinstance(dist.support, D.constraints._Real) else "mode"
-                )
+                try:
+                    support = dist.support
+                    fallback = (
+                        "mean" if isinstance(support, D.constraints._Real) else "mode"
+                    )
+                except NotImplementedError:
+                    # Some custom dists don't have a support
+                    # We arbitrarily fall onto 'mean' in these cases
+                    fallback = "mean"
                 try:
                     if fallback == "mean":
                         return dist.mean
