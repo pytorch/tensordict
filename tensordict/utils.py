@@ -2274,3 +2274,18 @@ class KeyDependentDefaultDict(collections.defaultdict):
         value = self.fun(key)
         self[key] = value
         return value
+
+
+def _prefix_last_key(key, prefix):
+    if isinstance(key, str):
+        return prefix + key
+    if len(key) == 1:
+        return (_prefix_last_key(key[0], prefix),)
+    return key[:-1] + (_prefix_last_key(key[-1], prefix),)
+
+
+NESTED_TENSOR_ERR = (
+    "The PyTorch version isn't compatible with "
+    "nested tensors. Please upgrade to a more recent "
+    "version."
+)

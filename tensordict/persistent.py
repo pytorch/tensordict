@@ -39,7 +39,6 @@ from tensordict.utils import (
     _CloudpickleWrapper,
     _KEY_ERROR,
     _LOCK_ERROR,
-    _parse_to,
     _proc_init,
     _split_tensordict,
     cache,
@@ -966,24 +965,35 @@ class PersistentTensorDict(TensorDictBase):
             "Create a regular tensordict first using the `to_tensordict` method."
         )
 
-    def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+    def _to(
+        self, *, device, dtype, convert_to_format, batch_size, non_blocking
+    ) -> Tuple[T, bool]:
         result = self
         if device is not None and dtype is None and device == self.device:
-            return result
+            return result, False
         if dtype is not None:
-            return self.to_tensordict().to(*args, **kwargs)
+            return self.to_tensordict()._to(
+                device=device,
+                dtype=dtype,
+                convert_to_format=convert_to_format,
+                batch_size=batch_size,
+                non_blocking=non_blocking,
+            )
         result = self
         if device is not None:
             result = result.clone(False)
             result._device = device
             for key, nested in list(result._nested_tensordicts.items()):
-                result._nested_tensordicts[key] = nested.to(device)
+                result._nested_tensordicts[key], _ = nested._to(
+                    device=device,
+                    dtype=dtype,
+                    convert_to_format=convert_to_format,
+                    batch_size=batch_size,
+                    non_blocking=non_blocking,
+                )
         if batch_size is not None:
             result.batch_size = batch_size
-        return result
+        return result, False
 
     def _to_numpy(self, value):
         if hasattr(value, "requires_grad") and value.requires_grad:

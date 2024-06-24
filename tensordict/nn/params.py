@@ -11,7 +11,7 @@ import re
 import weakref
 from copy import copy
 from functools import wraps
-from typing import Any, Callable, Iterator, OrderedDict, Sequence, Type
+from typing import Any, Callable, Iterator, OrderedDict, Sequence, Tuple, Type
 
 import torch
 
@@ -528,11 +528,11 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     __getitems__ = __getitem__
 
-    def to(self, *args, **kwargs) -> TensorDictBase:
-        params = self._param_td.to(*args, **kwargs)
+    def _to(self, *args, **kwargs) -> Tuple[TensorDictBase, bool]:
+        params, must_sync = self._param_td._to(*args, **kwargs)
         if params is self._param_td:
-            return self
-        return TensorDictParams(params)
+            return self, must_sync
+        return TensorDictParams(params), must_sync
 
     def cpu(self):
         params = self._param_td.cpu()
