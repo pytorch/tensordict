@@ -143,7 +143,7 @@ class BinaryToDecimal(torch.nn.Module):
     ):
         super().__init__()
         self.convert_to_binary = convert_to_binary
-        self.bases = 2 ** torch.arange(num_bits - 1, -1, -1).to(device, dtype)
+        self.bases = 2 ** torch.arange(num_bits - 1, -1, -1, device=device, dtype=dtype)
         self.num_bits = num_bits
         self.zero_tensor = torch.zeros((1,))
 
