@@ -1914,6 +1914,38 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.isfinite">
+<span class="sig-name descname"><span class="pre">isfinite</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.isfinite" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a new tensordict with boolean elements representing if each element is finite or not.</p>
+<p>Real values are finite when they are not NaN, negative infinity, or infinity. Complex values are finite when both their real and imaginary parts are finite.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.isnan">
+<span class="sig-name descname"><span class="pre">isnan</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.isnan" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a new tensordict with boolean elements representing if each element of input is NaN or not.</p>
+<p>Complex values are considered NaN when either their real and/or imaginary part is NaN.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.isneginf">
+<span class="sig-name descname"><span class="pre">isneginf</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.isneginf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tests if each element of input is negative infinity or not.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.isposinf">
+<span class="sig-name descname"><span class="pre">isposinf</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.isposinf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tests if each element of input is negative infinity or not.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="tensordict.PersistentTensorDict.isreal">
+<span class="sig-name descname"><span class="pre">isreal</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">T</span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.isreal" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a new tensordict with boolean elements representing if each element of input is real-valued or not.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="tensordict.PersistentTensorDict.items">
 <span class="sig-name descname"><span class="pre">items</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">include_nested</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaves_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.12)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_leaf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.12)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">CompatibleType</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.PersistentTensorDict.items" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a generator of key-value pairs for the tensordict.</p>
