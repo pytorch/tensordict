@@ -182,10 +182,10 @@ class SipHash(torch.nn.Module):
 
 
 class QueryModule(TensorDictModuleBase):
-    """A Module to generate compatible indexes for storage.
+    """A Module to generate compatible indices for storage.
 
     A module that queries a storage and return required index of that storage.
-    Currently, it only outputs integer indexes (torch.int64).
+    Currently, it only outputs integer indices (torch.int64).
     """
 
     def __init__(
@@ -193,7 +193,7 @@ class QueryModule(TensorDictModuleBase):
         in_keys: List[NestedKey],
         index_key: NestedKey,
         hash_module: torch.nn.Module,
-        aggregation_module: Optional[torch.nn.Module] = None,
+        aggregation_module: torch.nn.Module | None = None,
     ):
         self.in_keys = in_keys if isinstance(in_keys, List) else [in_keys]
         self.out_keys = [index_key]
@@ -298,7 +298,7 @@ class TensorDictStorage(
         return self.query_module(item)[self.index_key]
 
     def maybe_add_batch(
-        self, item: TensorDictBase, value: Optional[TensorDictBase]
+        self, item: TensorDictBase, value: TensorDictBase | None
     ) -> TensorDictBase:
         self.batch_added = False
         if len(item.batch_size) == 0:
