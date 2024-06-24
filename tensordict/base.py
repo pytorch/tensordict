@@ -2667,17 +2667,12 @@ class TensorDictBase(MutableMapping):
         if hasattr(self, "_consolidated"):
             return self
 
-        # One might argue that we could only require metadata when the
-        # tensordict has to be saved on file, as picle should be able to
-        # deconstruct and reconstruct the whole structure.
-        # However, PT doesn't like consolidated tensors with tensors that
-        # have different dtypes on top, so we'll need the metadata anyway.
         (
             metadata_dict,
             flat_dict,
             flat_size,
             need_padding,
-        ) = self._reduce_vals_and_metadata(requires_metadata=True)
+        ) = self._reduce_vals_and_metadata(requires_metadata=filename is not None)
         filesize = sum(flat_size)
         device = torch.device(device) if device is not None else None
         if filename is None:

@@ -13,7 +13,6 @@ from tensordict._td import TensorDict
 
 from tensordict.tensorclass import NonTensorData
 from tensordict.utils import _STRDTYPE2DTYPE
-
 CLS_MAP = {
     "TensorDict": TensorDict,
     "LazyStackedTensorDict": LazyStackedTensorDict,
@@ -104,7 +103,6 @@ def _rebuild_tensordict_files_consolidated(
                 v, prefix=prefix + (k,) if prefix is not None else (k,)
             )
         result = CLS_MAP[cls]._from_dict_validated(d, **cls_metadata)
-        # result._is_shared = storage.is_shared()
         if is_locked:
             result = result.lock_()
         return result
@@ -127,20 +125,14 @@ def _reduce_td(data: TensorDict):
             _rebuild_tensordict_files_consolidated,
             (storge_metadata, storage),
         )
-    # The reason we can't use this is that pytorch unpickler requires the dtypes to match for a single
-    # storage.
-    # Checking the dtype locally doesn't work because this reduction is also being called for sub-tds
-    # of bigger consolidated TDs where the dtypes mismatch globally, but not locally.
-    # Note also that we could say that for non-consolidated TDs we'll just use the regular reduce
-    # but if one does `pipe.send(td.consolidate()[0])`, the td being sent over is consolidated but
-    # lacks the _consolidated field, so this will fall back on regular pickle and PT will complain about
-    # the storage pointing to tensors of different dtypes.
-    # return (_make_td, (type(data), data.__getstate__(),))
 
-    metadata_dict, flat_key_values, _, _ = data._reduce_vals_and_metadata(
-        requires_metadata=True
-    )
-    return (_rebuild_tensordict_files, (flat_key_values, metadata_dict))
+    # This is faster than the solution below.
+    return (_make_td, (type(data), data.__getstate__(),))
+
+    # metadata_dict, flat_key_values, _, _ = data._reduce_vals_and_metadata(
+    #     requires_metadata=True
+    # )
+    # return (_rebuild_tensordict_files, (flat_key_values, metadata_dict))
 
 
 ForkingPickler.register(TensorDict, _reduce_td)
