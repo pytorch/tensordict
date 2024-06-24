@@ -472,16 +472,25 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             try:
                 return dist.deterministic_sample
             except AttributeError:
+                fallback = (
+                    "mean" if isinstance(dist.support, D.constraints._Real) else "mode"
+                )
                 try:
-                    return dist.mean
+                    if fallback == "mean":
+                        return dist.mean
+                    elif fallback == "mode":
+                        # Categorical dists don't have an average
+                        return dist.mode
+                    else:
+                        raise AttributeError
                 except AttributeError:
                     raise NotImplementedError(
-                        f"method {type(dist)}.deterministic_sample is not implemented."
+                        f"method {type(dist)}.deterministic_sample is not implemented, no replacement found."
                     )
                 finally:
                     warnings.warn(
-                        "deterministic_sample wasn't found when queried. "
-                        f"{type(self).__name__} is falling back on mean instead. "
+                        f"deterministic_sample wasn't found when queried on {type(dist)}. "
+                        f"{type(self).__name__} is falling back on {fallback} instead. "
                         f"For better code quality and efficiency, make sure to either "
                         f"provide a distribution with a deterministic_sample attribute or "
                         f"to change the InteractionMode to the desired value.",
