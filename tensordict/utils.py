@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import abc
 import collections
 import concurrent.futures
 import inspect
@@ -129,7 +130,30 @@ _STRDTYPE2DTYPE = {
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
-NestedKey = Union[str, Tuple[str, ...]]
+
+
+class _NestedKeyMeta(abc.ABCMeta):
+    def __instancecheck__(self, instance):
+        return isinstance(instance, str) or (
+            isinstance(instance, tuple)
+            and len(instance)
+            and all(isinstance(subkey, NestedKey) for subkey in instance)
+        )
+
+
+class NestedKey(metaclass=_NestedKeyMeta):
+    """An abstract class for nested keys.
+
+    Nested keys are the generic key type accepted by TensorDict.
+
+    A nested key is either a string or a non-empty tuple of NestedKeys instances.
+
+    The NestedKey class supports instance checks.
+
+    """
+
+    pass
+
 
 _KEY_ERROR = 'key "{}" not found in {} with ' "keys {}"
 _LOCK_ERROR = (
@@ -2274,3 +2298,14 @@ class KeyDependentDefaultDict(collections.defaultdict):
         value = self.fun(key)
         self[key] = value
         return value
+
+
+def is_namedtuple(obj):
+    """Check if obj is a namedtuple."""
+    return isinstance(obj, tuple) and hasattr(obj, "_fields")
+
+
+def is_namedtuple_class(cls):
+    """Check if a class is a namedtuple class."""
+    base_attrs = {"_fields", "_replace", "_asdict"}
+    return all(hasattr(cls, attr) for attr in base_attrs)
