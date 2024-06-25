@@ -26,7 +26,7 @@ from textwrap import indent
 from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
 
 import numpy as np
-import orjson as json
+import json
 import tensordict as tensordict_lib
 
 import torch
