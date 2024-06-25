@@ -49,6 +49,7 @@ from tensordict.utils import (
     _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
+    _make_dtype_promotion,
     _proc_init,
     _prune_selected_keys,
     _set_max_batch_size,
@@ -7758,10 +7759,6 @@ class TensorDictBase(MutableMapping):
         r"""Casts all tensors to ``torch.half``."""
         return self._fast_apply(lambda x: x.half(), propagate_lock=True)
 
-    def bfloat16(self):
-        r"""Casts all tensors to ``torch.bfloat16``."""
-        return self._fast_apply(lambda x: x.bfloat16(), propagate_lock=True)
-
     def type(self, dst_type):
         r"""Casts all tensors to :attr:`dst_type`.
 
@@ -7798,6 +7795,82 @@ class TensorDictBase(MutableMapping):
             lambda x: x.detach(),
             propagate_lock=True,
         )
+
+    @_make_dtype_promotion
+    def bfloat16(self):
+        ...
+
+    @_make_dtype_promotion
+    def complex128(self):
+        ...
+
+    @_make_dtype_promotion
+    def complex32(self):
+        ...
+
+    @_make_dtype_promotion
+    def complex64(self):
+        ...
+
+    @_make_dtype_promotion
+    def float16(self):
+        ...
+
+    @_make_dtype_promotion
+    def float32(self):
+        ...
+
+    @_make_dtype_promotion
+    def float64(self):
+        ...
+
+    @_make_dtype_promotion
+    def int16(self):
+        ...
+
+    @_make_dtype_promotion
+    def int32(self):
+        ...
+
+    @_make_dtype_promotion
+    def int64(self):
+        ...
+
+    @_make_dtype_promotion
+    def int8(self):
+        ...
+
+    @_make_dtype_promotion
+    def qint32(self):
+        ...
+
+    @_make_dtype_promotion
+    def qint8(self):
+        ...
+
+    @_make_dtype_promotion
+    def quint4x2(self):
+        ...
+
+    @_make_dtype_promotion
+    def quint8(self):
+        ...
+
+    @_make_dtype_promotion
+    def uint16(self):
+        ...
+
+    @_make_dtype_promotion
+    def uint32(self):
+        ...
+
+    @_make_dtype_promotion
+    def uint64(self):
+        ...
+
+    @_make_dtype_promotion
+    def uint8(self):
+        ...
 
 
 _ACCEPTED_CLASSES = (

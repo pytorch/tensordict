@@ -105,28 +105,29 @@ if not _has_funcdim:
 
 T = TypeVar("T", bound="TensorDictBase")
 
-_STRDTYPE2DTYPE = {
-    str(dtype): dtype
-    for dtype in (
-        torch.float32,
-        torch.float64,
-        torch.float16,
-        torch.bfloat16,
-        torch.complex32,
-        torch.complex64,
-        torch.complex128,
-        torch.uint8,
-        torch.int8,
-        torch.int16,
-        torch.int32,
-        torch.int64,
-        torch.bool,
-        torch.quint8,
-        torch.qint8,
-        torch.qint32,
-        torch.quint4x2,
-    )
-}
+_TORCH_DTYPES = (
+    torch.bfloat16,
+    torch.bool,
+    torch.complex128,
+    torch.complex32,
+    torch.complex64,
+    torch.float16,
+    torch.float32,
+    torch.float64,
+    torch.int16,
+    torch.int32,
+    torch.int64,
+    torch.int8,
+    torch.qint32,
+    torch.qint8,
+    torch.quint4x2,
+    torch.quint8,
+    torch.uint16,
+    torch.uint32,
+    torch.uint64,
+    torch.uint8,
+)
+_STRDTYPE2DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
@@ -414,19 +415,19 @@ def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
     return tensor_expand
 
 
-NUMPY_TO_TORCH_DTYPE_DICT = {
-    np.dtype("bool"): torch.bool,
-    np.dtype("uint8"): torch.uint8,
-    np.dtype("int8"): torch.int8,
-    np.dtype("int16"): torch.int16,
-    np.dtype("int32"): torch.int32,
-    np.dtype("int64"): torch.int64,
-    np.dtype("float16"): torch.float16,
-    np.dtype("float32"): torch.float32,
-    np.dtype("float64"): torch.float64,
-    np.dtype("complex64"): torch.complex64,
-    np.dtype("complex128"): torch.complex128,
-}
+def _populate_np_dtypes():
+    d = {}
+    for dtype in _TORCH_DTYPES:
+        dtype_str = str(dtype).split(".")[-1]
+        try:
+            d[np.dtype(dtype_str)] = dtype
+        except TypeError:
+            continue
+    return d
+
+
+NUMPY_TO_TORCH_DTYPE_DICT = _populate_np_dtypes()
+
 TORCH_TO_NUMPY_DTYPE_DICT = {
     value: key for key, value in NUMPY_TO_TORCH_DTYPE_DICT.items()
 }
@@ -2309,3 +2310,14 @@ def is_namedtuple_class(cls):
     """Check if a class is a namedtuple class."""
     base_attrs = {"_fields", "_replace", "_asdict"}
     return all(hasattr(cls, attr) for attr in base_attrs)
+
+
+def _make_dtype_promotion(func):
+    dtype = getattr(torch, func.__name__)
+
+    @wraps(func)
+    def new_func(self):
+        return self._fast_apply(lambda x: x.to(dtype), propagate_lock=True)
+
+    new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``."""
+    return new_func
