@@ -68,7 +68,14 @@ class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
     def clear(self) -> None:
         self.tensor_dict.clear()
 
+    def _check_indices(self, indices: torch.Tensor) -> None:
+        if len(indices.shape) != 1:
+            raise ValueError(
+                f"Indices have to be a one-d vector but got {indices.shape}"
+            )
+
     def __getitem__(self, indices: torch.Tensor) -> torch.Tensor:
+        self._check_indices(indices)
         values: List[torch.Tensor] = []
         for index in indices.tolist():
             value = self.tensor_dict.get(index)
@@ -79,6 +86,7 @@ class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
         return torch.stack(values)
 
     def __setitem__(self, indices: torch.Tensor, values: torch.Tensor) -> None:
+        self._check_indices(indices)
         for index, value in zip(indices.tolist(), values.unbind(0)):
             self.tensor_dict[index] = value
 
@@ -86,6 +94,7 @@ class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
         return len(self.tensor_dict)
 
     def contain(self, indices: torch.Tensor) -> torch.Tensor:
+        self._check_indices(indices)
         res: List[bool] = []
         for index in indices.tolist():
             res.append(index in self.tensor_dict)
@@ -130,11 +139,11 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
         self.init_fm(self.embedding.weight)
         self.flag = torch.zeros((self.embedding.num_embeddings, 1), dtype=torch.bool)
 
-    def to_index(self, item: torch.Tensor) -> torch.Tensor:
+    def _to_index(self, item: torch.Tensor) -> torch.Tensor:
         return torch.remainder(item.to(torch.int64), self.num_embedding).to(torch.int64)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.embedding(self.to_index(x))
+        return self.embedding(self._to_index(x))
 
     def __getitem__(self, item: torch.Tensor) -> torch.Tensor:
         return self.forward(item)
@@ -145,7 +154,7 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
                 "The shape value does not match with storage cell shape, "
                 f"expected {self.embedding.embedding_dim} but got {value.shape[-1]}!"
             )
-        index = self.to_index(item)
+        index = self._to_index(item)
         with torch.no_grad():
             self.embedding.weight[index, :] = value
             self.flag[index] = True
@@ -154,7 +163,7 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
         return torch.sum(self.flag).item()
 
     def contain(self, item: torch.Tensor) -> torch.Tensor:
-        index = self.to_index(item)
+        index = self._to_index(item)
         return self.flag[index]
 
 
@@ -360,10 +369,10 @@ class TensorDictStorage(
         for mem in self.key_to_storage.values():
             mem.clear()
 
-    def to_index(self, item: TensorDictBase) -> torch.Tensor:
+    def _to_index(self, item: TensorDictBase) -> torch.Tensor:
         return self.query_module(item)[self.index_key]
 
-    def maybe_add_batch(
+    def _maybe_add_batch(
         self, item: TensorDictBase, value: TensorDictBase | None
     ) -> TensorDictBase:
         self.batch_added = False
@@ -376,27 +385,27 @@ class TensorDictStorage(
 
         return item, value
 
-    def maybe_remove_batch(self, item: TensorDictBase) -> TensorDictBase:
+    def _maybe_remove_batch(self, item: TensorDictBase) -> TensorDictBase:
         if self.batch_added:
             item = item.squeeze(dim=0)
         return item
 
     def __getitem__(self, item: TensorDictBase) -> TensorDictBase:
-        item, _ = self.maybe_add_batch(item, None)
+        item, _ = self._maybe_add_batch(item, None)
 
-        index = self.to_index(item)
+        index = self._to_index(item)
 
         res = TensorDict({}, batch_size=item.batch_size)
         for k in self.out_keys:
             res[k] = self.key_to_storage[k][index]
 
-        res = self.maybe_remove_batch(res)
+        res = self._maybe_remove_batch(res)
         return res
 
     def __setitem__(self, item: TensorDictBase, value: TensorDictBase):
-        item, value = self.maybe_add_batch(item, value)
+        item, value = self._maybe_add_batch(item, value)
 
-        index = self.to_index(item)
+        index = self._to_index(item)
         for k in self.out_keys:
             self.key_to_storage[k][index] = value[k]
 
@@ -404,9 +413,9 @@ class TensorDictStorage(
         return len(next(iter(self.key_to_storage.values())))
 
     def contain(self, item: TensorDictBase) -> torch.Tensor:
-        item, _ = self.maybe_add_batch(item, None)
-        index = self.to_index(item)
+        item, _ = self._maybe_add_batch(item, None)
+        index = self._to_index(item)
 
         res = next(iter(self.key_to_storage.values())).contain(index)
-        res = self.maybe_remove_batch(res)
+        res = self._maybe_remove_batch(res)
         return res
