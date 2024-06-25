@@ -1782,6 +1782,10 @@ class TensorDictBase(MutableMapping):
         ...
 
     @overload
+    def view(self, dtype):
+        ...
+
+    @overload
     def view(self, shape: torch.Size):
         ...
 
@@ -1798,12 +1802,22 @@ class TensorDictBase(MutableMapping):
         self,
         *shape: int,
         size: list | tuple | torch.Size | None = None,
+        batch_size: torch.Size | None = None,
     ):
         """Returns a tensordict with views of the tensors according to a new shape, compatible with the tensordict batch_size.
 
+        Alternatively, a dtype can be provided as a first unnamed argument. In that case, all tensors will be viewed
+        with the according dtype. Note that this assume that the new shapes will be compatible with the provided dtype.
+        See :meth:`~torch.view` for more information on dtype views.
+
         Args:
             *shape (int): new shape of the resulting tensordict.
+            dtype (torch.dtype): alternatively, a dtype to use to represent the tensor content.
             size: iterable
+
+        Keyword Args:
+            batch_size (torch.Size, optional): if a dtype is provided, the batch-size can be reset using this
+                keyword argument. If the ``view`` is called with a shape, this is without effect.
 
         Returns:
             a new tensordict with the desired batch_size.
@@ -1819,6 +1833,9 @@ class TensorDictBase(MutableMapping):
             >>> print(td_view.get("b").shape)  # torch.Size([1, 4, 3, 10, 1])
 
         """
+        if len(shape) == 1 and isinstance(shape[0], torch.dtype):
+            dtype = shape[0]
+            return self._view_dtype(dtype=dtype, batch_size=batch_size)
         _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
@@ -1828,6 +1845,10 @@ class TensorDictBase(MutableMapping):
             if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
+
+    def _view_dtype(self, *, dtype, batch_size):
+        # We use apply because we want to check the shapes
+        return self.apply(lambda x: x.view(dtype), batch_size=batch_size)
 
     def _legacy_view(
         self,
