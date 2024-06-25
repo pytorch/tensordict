@@ -891,6 +891,33 @@ class TestGeneric:
                 assert p.grad is None
             assert all(param.grad is not None for param in params.values(True, True))
 
+    def test_from_pytree(self):
+        class WeirdLookingClass:
+            pass
+
+        weird_key = WeirdLookingClass()
+
+        pytree = (
+            [torch.randint(10, (3,)), torch.zeros(2)],
+            {
+                "tensor": torch.randn(
+                    2,
+                ),
+                "td": TensorDict({"one": 1}),
+                weird_key: torch.randint(10, (2,)),
+                "list": [1, 2, 3],
+            },
+            {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+        )
+        td = TensorDict.from_pytree(pytree)
+        pytree_recon = td.to_pytree()
+
+        def check(v1, v2):
+            assert (v1 == v2).all()
+
+        torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+        assert weird_key in pytree_recon[1]
+
     @pytest.mark.parametrize(
         "idx",
         [
@@ -5721,6 +5748,12 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td_view.get("a") == tensor).all()
 
             assert (td_view.get("a") == 1).all()
+
+    @set_lazy_legacy(False)
+    def test_view_dtype(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tview = td.view(torch.uint8, batch_size=[])
+        assert all(p.dtype == torch.uint8 for p in tview.values(True, True))
 
     @set_lazy_legacy(False)
     def test_view_decorator(self, td_name, device):
