@@ -91,6 +91,7 @@ _TD_PASS_THROUGH = {
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
+    "_default_get",
     "_get_at_str",
     "_get_at_tuple",
     "_get_str",
@@ -259,6 +260,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "unsqueeze",
     "values",
     "view",
+    "where",
     "zero_",
 ]
 _FALLBACK_METHOD_FROM_TD_COPY = [

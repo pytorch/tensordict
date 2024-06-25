@@ -39,7 +39,7 @@ from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData, tensorclass
+from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -1008,6 +1008,33 @@ class TestGeneric:
             for p in modules[0].parameters():
                 assert p.grad is None
             assert all(param.grad is not None for param in params.values(True, True))
+
+    def test_from_pytree(self):
+        class WeirdLookingClass:
+            pass
+
+        weird_key = WeirdLookingClass()
+
+        pytree = (
+            [torch.randint(10, (3,)), torch.zeros(2)],
+            {
+                "tensor": torch.randn(
+                    2,
+                ),
+                "td": TensorDict({"one": 1}),
+                weird_key: torch.randint(10, (2,)),
+                "list": [1, 2, 3],
+            },
+            {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+        )
+        td = TensorDict.from_pytree(pytree)
+        pytree_recon = td.to_pytree()
+
+        def check(v1, v2):
+            assert (v1 == v2).all()
+
+        torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+        assert weird_key in pytree_recon[1]
 
     @pytest.mark.parametrize(
         "idx",
@@ -5841,6 +5868,12 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td_view.get("a") == 1).all()
 
     @set_lazy_legacy(False)
+    def test_view_dtype(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tview = td.view(torch.uint8, batch_size=[])
+        assert all(p.dtype == torch.uint8 for p in tview.values(True, True))
+
+    @set_lazy_legacy(False)
     def test_view_decorator(self, td_name, device):
         td = getattr(self, td_name)(device)
         is_lazy = td_name in (
@@ -9319,6 +9352,32 @@ class TestNonTensorData:
 
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
+
+    def test_where(self):
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        other = NonTensorStack(
+            *[NonTensorData(["b"]), NonTensorData(["b"])], batch_size=(2,)
+        )
+        out = NonTensorStack(
+            *[NonTensorData(["none"]), NonTensorData(["none"])], batch_size=(2,)
+        )
+        result = tensor.where(condition=condition, other=other, out=out, pad=0)
+        assert result.tolist() == [["a"], ["b"]]
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        other = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        out = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        result = tensor.where(condition=condition, other=other, out=out, pad=0)
+        assert result.tolist() == [["a"], ["a"]]
 
 
 class TestSubclassing:

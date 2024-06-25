@@ -13,6 +13,7 @@ import gc
 import importlib
 import numbers
 import os.path
+import uuid
 import weakref
 from collections.abc import MutableMapping
 
@@ -51,6 +52,7 @@ from tensordict.utils import (
     _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
+    _make_dtype_promotion,
     _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
@@ -69,6 +71,8 @@ from tensordict.utils import (
     IndexType,
     infer_size_impl,
     int_generator,
+    is_namedtuple,
+    is_namedtuple_class,
     is_non_tensor,
     lazy_legacy,
     lock_blocked,
@@ -866,6 +870,134 @@ class TensorDictBase(MutableMapping):
 
         """
         ...
+
+    @classmethod
+    def from_pytree(
+        cls,
+        pytree,
+        *,
+        batch_size: torch.Size | None = None,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+    ):
+        """Converts a pytree to a TensorDict instance.
+
+        This method is designed to keep the pytree nested structure as much as possible.
+
+        Additional non-tensor keys are added to keep track of each level's identity, providing
+        a built-in pytree-to-tensordict bijective transform API.
+
+        Accepted classes currently include lists, tuples, named tuples and dict.
+
+        .. note:: for dictionaries, non-NestedKey keys are registered separately as :class:`~tensordict.NonTensorData`
+            instances.
+
+        .. note:: Tensor-castable types (such as int, float or np.ndarray) will be converted to torch.Tensor instances.
+            NOte that this transformation is surjective: transforming back the tensordict to a pytree will not
+            recover the original types.
+
+        Examples:
+            >>> # Create a pytree with tensor leaves, and one "weird"-looking dict key
+            >>> class WeirdLookingClass:
+            ...     pass
+            ...
+            >>> weird_key = WeirdLookingClass()
+            >>> # Make a pytree with tuple, lists, dict and namedtuple
+            >>> pytree = (
+            ...     [torch.randint(10, (3,)), torch.zeros(2)],
+            ...     {
+            ...         "tensor": torch.randn(
+            ...             2,
+            ...         ),
+            ...         "td": TensorDict({"one": 1}),
+            ...         weird_key: torch.randint(10, (2,)),
+            ...         "list": [1, 2, 3],
+            ...     },
+            ...     {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+            ... )
+            >>> # Build a TensorDict from that pytree
+            >>> td = TensorDict.from_pytree(pytree)
+            >>> # Recover the pytree
+            >>> pytree_recon = td.to_pytree()
+            >>> # Check that the leaves match
+            >>> def check(v1, v2):
+            >>>     assert (v1 == v2).all()
+            >>>
+            >>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+            >>> assert weird_key in pytree_recon[1]
+
+        """
+        if is_tensor_collection(pytree):
+            return pytree
+        if isinstance(pytree, (torch.Tensor,)):
+            return pytree
+
+        from tensordict._td import TensorDict
+
+        result = None
+        if is_namedtuple(pytree):
+            result = TensorDict.from_namedtuple(named_tuple=pytree)
+            if batch_dims is not None:
+                result.batch_size = batch_size
+            result["_pytree_type"] = type(pytree)
+        elif isinstance(pytree, (list, tuple)):
+            source = {str(i): cls.from_pytree(elt) for i, elt in enumerate(pytree)}
+            source["_pytree_type"] = type(pytree)
+            result = TensorDict(source, batch_size=batch_size)
+        elif isinstance(pytree, dict):
+            source = {}
+            for key, item in pytree.items():
+                if isinstance(key, NestedKey):
+                    source[key] = cls.from_pytree(item)
+                else:
+                    subs_key = "<NON_NESTED>" + str(uuid.uuid1())
+                    source[subs_key] = TensorDict(
+                        {"value": cls.from_pytree(item), "key": key}
+                    )
+            source["_pytree_type"] = type(pytree)
+            result = TensorDict(source, batch_size=batch_size)
+        if result is not None:
+            if auto_batch_size:
+                result.auto_batch_size_(batch_dims)
+            return result
+        if isinstance(pytree, (int, float, np.ndarray)):
+            return torch.as_tensor(pytree)
+        raise NotImplementedError(f"Unknown type {type(pytree)}.")
+
+    def to_pytree(self):
+        """Converts a tensordict to a PyTree.
+
+        If the tensordict was not created from a pytree, this method just returns ``self`` without modification.
+
+        See :meth:`~.from_pytree` for more information and examples.
+
+        """
+        _pytree_type = self._get_str("_pytree_type", default=None)
+        if _pytree_type is None:
+            return self
+        _pytree_type = _pytree_type.data
+        items = {key: val for (key, val) in self.items() if key != "_pytree_type"}
+        items = {
+            key: val if not is_tensor_collection(val) else val.to_pytree()
+            for key, val in items.items()
+        }
+        if _pytree_type in (list, tuple):
+            return _pytree_type((items[str(i)] for i in range(len(items))))
+        if _pytree_type is dict:
+            items = dict(
+                (
+                    (val["key"], val["value"])
+                    if key.startswith("<NON_NESTED>")
+                    else (key, val)
+                    for (key, val) in items.items()
+                )
+            )
+            return items
+        if is_namedtuple_class(_pytree_type):
+            from tensordict._td import TensorDict
+
+            return TensorDict(items).to_namedtuple(dest_cls=_pytree_type)
+        raise NotImplementedError(f"unknown type {_pytree_type}")
 
     @classmethod
     def from_h5(cls, filename, mode="r"):
@@ -1723,6 +1855,10 @@ class TensorDictBase(MutableMapping):
         ...
 
     @overload
+    def view(self, dtype):
+        ...
+
+    @overload
     def view(self, shape: torch.Size):
         ...
 
@@ -1739,12 +1875,22 @@ class TensorDictBase(MutableMapping):
         self,
         *shape: int,
         size: list | tuple | torch.Size | None = None,
+        batch_size: torch.Size | None = None,
     ):
         """Returns a tensordict with views of the tensors according to a new shape, compatible with the tensordict batch_size.
 
+        Alternatively, a dtype can be provided as a first unnamed argument. In that case, all tensors will be viewed
+        with the according dtype. Note that this assume that the new shapes will be compatible with the provided dtype.
+        See :meth:`~torch.view` for more information on dtype views.
+
         Args:
             *shape (int): new shape of the resulting tensordict.
+            dtype (torch.dtype): alternatively, a dtype to use to represent the tensor content.
             size: iterable
+
+        Keyword Args:
+            batch_size (torch.Size, optional): if a dtype is provided, the batch-size can be reset using this
+                keyword argument. If the ``view`` is called with a shape, this is without effect.
 
         Returns:
             a new tensordict with the desired batch_size.
@@ -1760,6 +1906,9 @@ class TensorDictBase(MutableMapping):
             >>> print(td_view.get("b").shape)  # torch.Size([1, 4, 3, 10, 1])
 
         """
+        if len(shape) == 1 and isinstance(shape[0], torch.dtype):
+            dtype = shape[0]
+            return self._view_dtype(dtype=dtype, batch_size=batch_size)
         _lazy_legacy = lazy_legacy()
 
         if _lazy_legacy:
@@ -1769,6 +1918,10 @@ class TensorDictBase(MutableMapping):
             if result._is_shared or result._is_memmap:
                 result.lock_()
             return result
+
+    def _view_dtype(self, *, dtype, batch_size):
+        # We use apply because we want to check the shapes
+        return self.apply(lambda x: x.view(dtype), batch_size=batch_size)
 
     def _legacy_view(
         self,
@@ -7336,8 +7489,11 @@ class TensorDictBase(MutableMapping):
 
         return torch.utils._pytree.tree_map(to_numpy, as_dict)
 
-    def to_namedtuple(self):
+    def to_namedtuple(self, dest_cls: type | None = None):
         """Converts a tensordict to a namedtuple.
+
+        Args:
+            dest_cls (Type, optional): an optional namedtuple class to use.
 
         Examples:
             >>> from tensordict import TensorDict
@@ -7354,9 +7510,12 @@ class TensorDictBase(MutableMapping):
             for key, value in dictionary.items():
                 if isinstance(value, dict):
                     dictionary[key] = dict_to_namedtuple(value)
-            return collections.namedtuple("GenericDict", dictionary.keys())(
-                **dictionary
+            cls = (
+                collections.namedtuple("GenericDict", dictionary.keys())
+                if dest_cls is None
+                else dest_cls
             )
+            return cls(**dictionary)
 
         return dict_to_namedtuple(self.to_dict())
 
@@ -7394,10 +7553,6 @@ class TensorDictBase(MutableMapping):
 
         """
         from tensordict import TensorDict
-
-        def is_namedtuple(obj):
-            """Check if obj is a namedtuple."""
-            return isinstance(obj, tuple) and hasattr(obj, "_fields")
 
         def namedtuple_to_dict(namedtuple_obj):
             if is_namedtuple(namedtuple_obj):
@@ -8152,10 +8307,6 @@ class TensorDictBase(MutableMapping):
         r"""Casts all tensors to ``torch.half``."""
         return self._fast_apply(lambda x: x.half(), propagate_lock=True)
 
-    def bfloat16(self):
-        r"""Casts all tensors to ``torch.bfloat16``."""
-        return self._fast_apply(lambda x: x.bfloat16(), propagate_lock=True)
-
     def type(self, dst_type):
         r"""Casts all tensors to :attr:`dst_type`.
 
@@ -8192,6 +8343,82 @@ class TensorDictBase(MutableMapping):
             lambda x: x.detach(),
             propagate_lock=True,
         )
+
+    @_make_dtype_promotion
+    def bfloat16(self):
+        ...
+
+    @_make_dtype_promotion
+    def complex128(self):
+        ...
+
+    @_make_dtype_promotion
+    def complex32(self):
+        ...
+
+    @_make_dtype_promotion
+    def complex64(self):
+        ...
+
+    @_make_dtype_promotion
+    def float16(self):
+        ...
+
+    @_make_dtype_promotion
+    def float32(self):
+        ...
+
+    @_make_dtype_promotion
+    def float64(self):
+        ...
+
+    @_make_dtype_promotion
+    def int16(self):
+        ...
+
+    @_make_dtype_promotion
+    def int32(self):
+        ...
+
+    @_make_dtype_promotion
+    def int64(self):
+        ...
+
+    @_make_dtype_promotion
+    def int8(self):
+        ...
+
+    @_make_dtype_promotion
+    def qint32(self):
+        ...
+
+    @_make_dtype_promotion
+    def qint8(self):
+        ...
+
+    @_make_dtype_promotion
+    def quint4x2(self):
+        ...
+
+    @_make_dtype_promotion
+    def quint8(self):
+        ...
+
+    @_make_dtype_promotion
+    def uint16(self):
+        ...
+
+    @_make_dtype_promotion
+    def uint32(self):
+        ...
+
+    @_make_dtype_promotion
+    def uint64(self):
+        ...
+
+    @_make_dtype_promotion
+    def uint8(self):
+        ...
 
 
 _ACCEPTED_CLASSES = (
