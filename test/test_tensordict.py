@@ -39,7 +39,7 @@ from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData, tensorclass
+from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -9197,6 +9197,32 @@ class TestNonTensorData:
 
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
+
+    def test_where(self):
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        other = NonTensorStack(
+            *[NonTensorData(["b"]), NonTensorData(["b"])], batch_size=(2,)
+        )
+        out = NonTensorStack(
+            *[NonTensorData(["none"]), NonTensorData(["none"])], batch_size=(2,)
+        )
+        result = tensor.where(condition=condition, other=other, out=out, pad=0)
+        assert result.tolist() == [["a"], ["b"]]
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        other = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        out = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        result = tensor.where(condition=condition, other=other, out=out, pad=0)
+        assert result.tolist() == [["a"], ["a"]]
 
 
 class TestSubclassing:
