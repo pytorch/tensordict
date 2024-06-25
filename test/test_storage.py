@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from typing import cast
 
 import torch
 
@@ -37,6 +38,15 @@ def test_embedding_memory():
     assert not (embedding_storage[index] == torch.ones(size=(2, 2))).all()
 
 
+def test_dynamic_storage():
+    storage = DynamicStorage(default_tensor=torch.zeros((1,)))
+    index = torch.randn((3,))
+    value = torch.rand((3, 1))
+    storage[index] = value
+    assert len(storage) == 3
+    assert (storage[index.clone()] == value).all()
+
+
 def test_binary_to_decimal():
     binary_to_decimal = BinaryToDecimal(
         num_bits=4, device="cpu", dtype=torch.int32, convert_to_binary=True
@@ -46,6 +56,15 @@ def test_binary_to_decimal():
 
     assert decimal.shape == (2,)
     assert (decimal == torch.Tensor([3, 2])).all()
+
+
+def test_sip_hash():
+    a = torch.rand((3, 2))
+    b = a.clone()
+    hash_module = SipHash()
+    hash_a = cast(torch.Tensor, hash_module(a))
+    hash_b = cast(torch.Tensor, hash_module(b))
+    assert (hash_a == hash_b).all()
 
 
 def test_query():
@@ -143,4 +162,4 @@ def test_storage():
     new_index["key3"] = torch.Tensor([[4], [5], [6], [7]])
     retrieve_value = tensor_dict_storage[new_index]
 
-    assert (retrieve_value["index"] == value["index"]).all()
+    assert cast(torch.Tensor, retrieve_value["index"] == value["index"]).all()

@@ -5,7 +5,7 @@
 
 import abc
 from abc import abstractmethod
-from typing import Callable, Dict, Generic, List, Optional, TypeVar
+from typing import Callable, Dict, Generic, List, TypeVar
 
 import torch
 
@@ -50,6 +50,15 @@ class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
 
     This is a storage that save its tensors in cpu memories. It
     expands as necessary.
+
+    Examples:
+        >>> storage = DynamicStorage(default_tensor=torch.zeros((1,)))
+        >>> index = torch.randn((3,))
+        >>> value = torch.rand((2, 1))
+        >>> storage[index] = value
+        >>> assert len(storage) == 3
+        >>> assert (storage[index.clone()] == value).all()
+
     """
 
     def __init__(self, default_tensor: torch.Tensor):
@@ -89,6 +98,22 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
 
     This is storage that backed by nn.Embedding and hence can be in any device that
     nn.Embedding supports. The size of storage is fixed and cannot be extended.
+
+    Examples:
+        >>> embedding_storage = FixedStorage(
+        ...     torch.nn.Embedding(num_embeddings=10, embedding_dim=2),
+        ...     lambda x: torch.nn.init.constant_(x, 0),
+        ... )
+        >>> index = torch.Tensor([1, 2]).long()
+        >>> assert len(embedding_storage) == 0
+        >>> assert not (embedding_storage[index] == torch.ones(size=(2, 2))).all()
+        >>> embedding_storage[index] = torch.ones(size=(2, 2))
+        >>> assert torch.sum(embedding_storage.contain(index)).item() == 2
+        >>> assert (embedding_storage[index] == torch.ones(size=(2, 2))).all()
+        >>> assert len(embedding_storage) == 2
+        >>> embedding_storage.clear()
+        >>> assert len(embedding_storage) == 0
+        >>> assert not (embedding_storage[index] == torch.ones(size=(2, 2))).all()
     """
 
     def __init__(
@@ -138,6 +163,15 @@ class BinaryToDecimal(torch.nn.Module):
 
     This is a utility class that allow to convert a binary encoding tensor (e.g. `1001`) to
     its decimal value (e.g. `9`)
+
+    Examples:
+        >>> binary_to_decimal = BinaryToDecimal(
+        ...    num_bits=4, device="cpu", dtype=torch.int32, convert_to_binary=True
+        ... )
+        >>> binary = torch.Tensor([[0, 0, 1, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 0, 10, 0]])
+        >>> decimal = binary_to_decimal(binary)
+        >>> assert decimal.shape == (2,)
+        >>> assert (decimal == torch.Tensor([3, 2])).all()
     """
 
     def __init__(
@@ -176,6 +210,15 @@ class SipHash(torch.nn.Module):
     """A Module to Compute SipHash values for given tensors.
 
     A hash function module based on SipHash implementation in python.
+
+    Examples:
+        >>> from typing import cast
+        >>> a = torch.rand((3, 2))
+        >>> b = a.clone()
+        >>> hash_module = SipHash()
+        >>> hash_a = cast(torch.Tensor, hash_module(a))
+        >>> hash_b = cast(torch.Tensor, hash_module(b))
+        >>> assert (hash_a == hash_b).all()
     """
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -192,6 +235,27 @@ class QueryModule(TensorDictModuleBase):
 
     A module that queries a storage and return required index of that storage.
     Currently, it only outputs integer indices (torch.int64).
+
+    Examples:
+        >>> query_module = QueryModule(
+        ...     in_keys=["key1", "key2"],
+        ...     index_key="index",
+        ...     hash_module=SipHash(),
+        ... )
+        >>> query = TensorDict(
+        ...     {
+        ...         "key1": torch.Tensor([[1], [1], [1], [2]]),
+        ...         "key2": torch.Tensor([[3], [3], [2], [3]]),
+        ...     },
+        ...     batch_size=(4,),
+        ... )
+        >>> res = query_module(query)
+        >>> assert res["index"][0] == res["index"][1]
+        >>> for i in range(1, 3):
+        >>>     assert res["index"][i].item() != res["index"][i + 1].item(), (
+        ...         f"{i} = ({query[i]['key1']}, {query[i]['key2']}) s index and {i + 1} = ({query[i + 1]['key1']}, "
+        ...         f"{query[i + 1]['key2']})'s index are the same!"
+        ... )
     """
 
     def __init__(
@@ -243,18 +307,14 @@ class TensorDictStorage(
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> mlp = torch.nn.LazyLinear(out_features=64, bias=True)
-        >>> binary_to_decimal = BinaryToDecimal(
-        ...     num_bits=8, device="cpu", dtype=torch.int32, convert_to_binary=True
-        ... )
+        >>> from typing import cast
         >>> query_module = QueryModule(
         ...     in_keys=["key1", "key2"],
         ...     index_key="index",
-        ...     hash_module=torch.nn.Sequential(mlp, binary_to_decimal),
+        ...     hash_module=SipHash(),
         ... )
-        >>> embedding_storage = FixedStorage(
-        ...     torch.nn.Embedding(num_embeddings=23, embedding_dim=1),
-        ...     lambda x: torch.nn.init.constant_(x, 0),
+        >>> embedding_storage = DynamicStorage(
+        ...     default_tensor=torch.zeros((1,)),
         ... )
         >>> tensor_dict_storage = TensorDictStorage(
         ...     query_module=query_module,
@@ -276,7 +336,7 @@ class TensorDictStorage(
         >>> new_index = index.clone(True)
         >>> new_index["key3"] = torch.Tensor([[4], [5], [6], [7]])
         >>> retrieve_value = tensor_dict_storage[new_index]
-        >>> assert (retrieve_value["index"] == value["index"]).all()
+        >>> assert cast(torch.Tensor, retrieve_value["index"] == value["index"]).all()
     """
 
     def __init__(
