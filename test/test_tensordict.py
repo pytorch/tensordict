@@ -5723,6 +5723,12 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td_view.get("a") == 1).all()
 
     @set_lazy_legacy(False)
+    def test_view_dtype(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tview = td.view(torch.uint8, batch_size=[])
+        assert all(p.dtype == torch.uint8 for p in tview.values(True, True))
+
+    @set_lazy_legacy(False)
     def test_view_decorator(self, td_name, device):
         td = getattr(self, td_name)(device)
         is_lazy = td_name in (
