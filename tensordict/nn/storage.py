@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+from abc import abstractmethod
 from typing import Callable, Dict, Generic, List, Optional, TypeVar
 
 import torch
@@ -23,18 +24,23 @@ class TensorStorage(abc.ABC, Generic[K, V]):
     This class is for internal use, please use derived classes instead.
     """
 
+    @abstractmethod
     def clear(self) -> None:
         raise NotImplementedError
 
+    @abstractmethod
     def __getitem__(self, item: K) -> V:
         raise NotImplementedError
 
+    @abstractmethod
     def __setitem__(self, key: K, value: V) -> None:
         raise NotImplementedError
 
+    @abstractmethod
     def __len__(self) -> int:
         raise NotImplementedError
 
+    @abstractmethod
     def contain(self, item: K) -> torch.Tensor:
         raise NotImplementedError
 
@@ -75,7 +81,7 @@ class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
         for index in indices.tolist():
             res.append(index in self.tensor_dict)
 
-        return torch.tensor(res, dtype=torch.int64)
+        return torch.tensor(res, dtype=torch.bool)
 
 
 class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
@@ -97,7 +103,7 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
 
     def clear(self):
         self.init_fm(self.embedding.weight)
-        self.flag = torch.zeros((self.embedding.num_embeddings, 1), dtype=torch.int64)
+        self.flag = torch.zeros((self.embedding.num_embeddings, 1), dtype=torch.bool)
 
     def to_index(self, item: torch.Tensor) -> torch.Tensor:
         return torch.remainder(item.to(torch.int64), self.num_embedding).to(torch.int64)
@@ -117,7 +123,7 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
         index = self.to_index(item)
         with torch.no_grad():
             self.embedding.weight[index, :] = value
-            self.flag[index] = 1
+            self.flag[index] = True
 
     def __len__(self) -> int:
         return torch.sum(self.flag).item()
@@ -145,7 +151,7 @@ class BinaryToDecimal(torch.nn.Module):
         self.convert_to_binary = convert_to_binary
         self.bases = 2 ** torch.arange(num_bits - 1, -1, -1, device=device, dtype=dtype)
         self.num_bits = num_bits
-        self.zero_tensor = torch.zeros((1,))
+        self.zero_tensor = torch.zeros((1,), device=device)
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         num_features = features.shape[-1]
