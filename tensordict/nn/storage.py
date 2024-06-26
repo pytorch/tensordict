@@ -41,19 +41,33 @@ class TensorStorage(abc.ABC, Generic[K, V]):
         raise NotImplementedError
 
     @abstractmethod
-    def contain(self, item: K) -> torch.Tensor:
+    def contains(self, item: K) -> torch.Tensor:
         raise NotImplementedError
+
+    def __contains__(self, item):
+        return self.contains(item)
 
 
 class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
     """A Dynamic Tensor Storage.
 
+    Indices can be of any pytorch dtype.
+
     This is a storage that save its tensors in cpu memories. It
     expands as necessary.
+
+    It is assumed that all values in the storage can be stacked together
+    using :func:`~torch.stack`.
+
+    Args:
+        default_tensor (torch.Tensor): the default value to return when
+            an index cannot be found. This value will not be set in the
+            storage.
 
     Examples:
         >>> storage = DynamicStorage(default_tensor=torch.zeros((1,)))
         >>> index = torch.randn((3,))
+        >>> # set a value with a mismatching shape: it will be expanded to (3, 2, 1) shape
         >>> value = torch.rand((2, 1))
         >>> storage[index] = value
         >>> assert len(storage) == 3
@@ -78,22 +92,27 @@ class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
         self._check_indices(indices)
         values: List[torch.Tensor] = []
         for index in indices.tolist():
-            value = self.tensor_dict.get(index)
-            if value is None:
-                value = self.default_tensor.clone()
+            value = self.tensor_dict.get(index, self.default_tensor)
             values.append(value)
 
         return torch.stack(values)
 
     def __setitem__(self, indices: torch.Tensor, values: torch.Tensor) -> None:
         self._check_indices(indices)
+        if not indices.ndim:
+            self.tensor_dict[indices.item()] = values
+            return
+        if not values.ndim:
+            values = values.expand(indices.shape[0])
+        if values.shape[0] != indices.shape[0]:
+            values = values.expand(indices.shape[0], *values.shape)
         for index, value in zip(indices.tolist(), values.unbind(0)):
             self.tensor_dict[index] = value
 
     def __len__(self) -> None:
         return len(self.tensor_dict)
 
-    def contain(self, indices: torch.Tensor) -> torch.Tensor:
+    def contains(self, indices: torch.Tensor) -> torch.Tensor:
         self._check_indices(indices)
         res: List[bool] = []
         for index in indices.tolist():
@@ -105,19 +124,27 @@ class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
 class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
     """A Fixed Tensor Storage.
 
+    Indices must be of ``torch.long`` dtype.
+
     This is storage that backed by nn.Embedding and hence can be in any device that
     nn.Embedding supports. The size of storage is fixed and cannot be extended.
+
+    Args:
+        embedding (torch.nn.Embedding): the embedding module, or equivalent.
+        init_fn (Callable[[torch.Tensor], torch.Tensor], optional): an init function
+            for the embedding weights. Defaults to
+            :func:`~torch.nn.init.normal_`, like `nn.Embedding`.
 
     Examples:
         >>> embedding_storage = FixedStorage(
         ...     torch.nn.Embedding(num_embeddings=10, embedding_dim=2),
         ...     lambda x: torch.nn.init.constant_(x, 0),
         ... )
-        >>> index = torch.Tensor([1, 2]).long()
+        >>> index = torch.Tensor([1, 2], dtype=torch.long)
         >>> assert len(embedding_storage) == 0
         >>> assert not (embedding_storage[index] == torch.ones(size=(2, 2))).all()
         >>> embedding_storage[index] = torch.ones(size=(2, 2))
-        >>> assert torch.sum(embedding_storage.contain(index)).item() == 2
+        >>> assert torch.sum(embedding_storage.contains(index)).item() == 2
         >>> assert (embedding_storage[index] == torch.ones(size=(2, 2))).all()
         >>> assert len(embedding_storage) == 2
         >>> embedding_storage.clear()
@@ -126,12 +153,14 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
     """
 
     def __init__(
-        self, embedding: nn.Embedding, init_fm: Callable[[torch.Tensor], torch.Tensor]
+        self, embedding: nn.Embedding, init_fm: Callable[[torch.Tensor], torch.Tensor]|None=None
     ):
         super().__init__()
         self.embedding = embedding
         self.num_embedding = embedding.num_embeddings
         self.flag = None
+        if init_fm is None:
+            init_fm = torch.nn.init.normal_
         self.init_fm = init_fm
         self.clear()
 
@@ -162,7 +191,7 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
     def __len__(self) -> int:
         return torch.sum(self.flag).item()
 
-    def contain(self, item: torch.Tensor) -> torch.Tensor:
+    def contains(self, item: torch.Tensor) -> torch.Tensor:
         index = self._to_index(item)
         return self.flag[index]
 
@@ -172,6 +201,18 @@ class BinaryToDecimal(torch.nn.Module):
 
     This is a utility class that allow to convert a binary encoding tensor (e.g. `1001`) to
     its decimal value (e.g. `9`)
+
+    Args:
+        num_bits (int): the number of bits to use for the bases table.
+            The number of bits must be lower or equal to the input length and the input length
+            must be divisible by ``num_bits``. If ``num_bits`` is lower than the number of
+            bits in the input, the end result will be aggregated on the last dimension using
+            :func:`~torch.sum`.
+        device (torch.device): the device where inputs and outputs are to be expected.
+        dtype (torch.dtype): the output dtype.
+        convert_to_binary (bool, optional): if ``True``, the input to the ``forward``
+            method will be cast to a binary input using :func:`~torch.heavyside`.
+            Defaults to ``False``.
 
     Examples:
         >>> binary_to_decimal = BinaryToDecimal(
@@ -188,7 +229,7 @@ class BinaryToDecimal(torch.nn.Module):
         num_bits: int,
         device: torch.device,
         dtype: torch.dtype,
-        convert_to_binary: bool,
+        convert_to_binary: bool=False,
     ):
         super().__init__()
         self.convert_to_binary = convert_to_binary
@@ -209,7 +250,7 @@ class BinaryToDecimal(torch.nn.Module):
             else features
         )
         feature_parts = binary_features.reshape(shape=(-1, self.num_bits))
-        digits = torch.sum(self.bases * feature_parts, -1)
+        digits = torch.vmap(torch.dot, (None, 0))(self.bases, feature_parts.to(self.bases.dtype))
         digits = digits.reshape(shape=(-1, features.shape[-1] // self.num_bits))
         aggregated_digits = torch.sum(digits, dim=-1)
         return aggregated_digits
@@ -220,20 +261,27 @@ class SipHash(torch.nn.Module):
 
     A hash function module based on SipHash implementation in python.
 
+    .. warning:: This module relies on the builtin ``hash`` function.
+        To get reproducible results across runs, the ``PYTHONHASHSEED`` environment
+        variable must be set before the code is run (changing this value during code
+        execution is without effect).
+
     Examples:
-        >>> from typing import cast
-        >>> a = torch.rand((3, 2))
+        >>> # Assuming we set PYTHONHASHSEED=0 prior to running this code
+        >>> a = torch.tensor([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]])
         >>> b = a.clone()
         >>> hash_module = SipHash()
-        >>> hash_a = cast(torch.Tensor, hash_module(a))
-        >>> hash_b = cast(torch.Tensor, hash_module(b))
+        >>> hash_a = hash_module(a)
+        >>> hash_a
+        tensor([-4669941682990263259, -3778166555168484291, -9122128731510687521])
+        >>> hash_b = hash_module(b)
         >>> assert (hash_a == hash_b).all()
     """
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         hash_values = []
-        for x_i in torch.unbind(x):
-            hash_value = hash(x_i.detach().numpy().tobytes())
+        for x_i in x.detach().cpu().view(torch.uint8).numpy():
+            hash_value = hash(x_i.tobytes())
             hash_values.append(hash_value)
 
         return torch.tensor(hash_values, dtype=torch.int64)
@@ -245,6 +293,20 @@ class QueryModule(TensorDictModuleBase):
     A module that queries a storage and return required index of that storage.
     Currently, it only outputs integer indices (torch.int64).
 
+    Args:
+        in_keys (list of NestedKeys): keys of the input tensordict that
+            will be used to generate the hash value.
+        index_key (NestedKey): the output key where the hash value will be written.
+
+    Keyword Args:
+        hash_module (nn.Module or Callable[[torch.Tensor], torch.Tensor]): a hash
+            module similar to :class:`~tensordict.nn.SipHash` (default).
+        aggregation_module (torch.nn.Module or Callable[[torch.Tensor], torch.Tensor]): a
+            method to aggregate the hash values. Defaults to the value of ``hash_module``.
+            If only one ``in_Keys`` is provided, this module will be ignored.
+        clone (bool, optional): if ``True``, a shallow clone of the input TensorDict will be
+            returned. Defaults to ``False``.
+
     Examples:
         >>> query_module = QueryModule(
         ...     in_keys=["key1", "key2"],
@@ -255,29 +317,36 @@ class QueryModule(TensorDictModuleBase):
         ...     {
         ...         "key1": torch.Tensor([[1], [1], [1], [2]]),
         ...         "key2": torch.Tensor([[3], [3], [2], [3]]),
+        ...         "other": torch.randn(4),
         ...     },
         ...     batch_size=(4,),
         ... )
         >>> res = query_module(query)
+        >>> # The first two pairs of key1 and key2 match
         >>> assert res["index"][0] == res["index"][1]
-        >>> for i in range(1, 3):
-        >>>     assert res["index"][i].item() != res["index"][i + 1].item(), (
-        ...         f"{i} = ({query[i]['key1']}, {query[i]['key2']}) s index and {i + 1} = ({query[i + 1]['key1']}, "
-        ...         f"{query[i + 1]['key2']})'s index are the same!"
-        ... )
+        >>> # The last three pairs of key1 and key2 have at least one mismatching value
+        >>> assert res["index"][1] != res["index"][2]
+        >>> assert res["index"][2] != res["index"][3]
     """
 
     def __init__(
         self,
         in_keys: List[NestedKey],
         index_key: NestedKey,
-        hash_module: torch.nn.Module,
+        *,
+        hash_module: torch.nn.Module | None = None,
         aggregation_module: torch.nn.Module | None = None,
+        clone: bool = False,
     ):
         self.in_keys = in_keys if isinstance(in_keys, List) else [in_keys]
+        if len(in_keys) == 0:
+            raise ValueError(f"`in_keys` cannot be empty.")
         self.out_keys = [index_key]
 
         super().__init__()
+
+        if hash_module is None:
+            hash_module = SipHash()
 
         self.aggregation_module = (
             aggregation_module if aggregation_module else hash_module
@@ -285,22 +354,31 @@ class QueryModule(TensorDictModuleBase):
 
         self.hash_module = hash_module
         self.index_key = index_key
+        self.clone = clone
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         hash_values = []
 
-        for k in self.in_keys:
-            hash_values.append(self.hash_module(tensordict[k]))
+        i = -1  # to make linter happy
+        for i, k in enumerate(self.in_keys):
+            hash_values.append(self.hash_module(tensordict.get(k)))
 
-        td_hash_value = self.aggregation_module(
-            torch.stack(
-                hash_values,
-                dim=-1,
-            ),
-        )
+        if i > 0:
+            td_hash_value = self.aggregation_module(
+                torch.stack(
+                    hash_values,
+                    dim=-1,
+                ),
+            )
+        else:
+            td_hash_value = hash_values[0]
 
-        output = tensordict.clone(False)
-        output[self.index_key] = td_hash_value
+        if self.clone:
+            output = tensordict.copy()
+        else:
+            output = tensordict
+
+        output.set(self.index_key, td_hash_value)
         return output
 
 
@@ -312,6 +390,13 @@ class TensorDictStorage(
     This module resembles a storage. It takes a tensordict as its input and
     returns another tensordict as output similar to TensorDictModuleBase. However,
     it provides additional functionality like python map:
+
+    Args:
+        query_module (TensorDictModuleBase): a query module, typically an instance of
+            :class:`~tensordict.nn.QueryModule`, used to map a set of tensordict
+            entries to a hash key.
+        key_to_storage (Dict[NestedKey, TensorStorage[torch.Tensor, torch.Tensor]]):
+            a dictionary representing the map from an index key to a tensor storage.
 
     Examples:
         >>> import torch
@@ -341,7 +426,13 @@ class TensorDictStorage(
         ... )
         >>> tensor_dict_storage[index] = value
         >>> tensor_dict_storage[index]
-        >>> assert torch.sum(tensor_dict_storage.contain(index)).item() == 4
+        TensorDict(
+            fields={
+                index: Tensor(shape=torch.Size([4, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
+            batch_size=torch.Size([4]),
+            device=None,
+            is_shared=False)
+        >>> assert torch.sum(tensor_dict_storage.contains(index)).item() == 4
         >>> new_index = index.clone(True)
         >>> new_index["key3"] = torch.Tensor([[4], [5], [6], [7]])
         >>> retrieve_value = tensor_dict_storage[new_index]
@@ -412,10 +503,10 @@ class TensorDictStorage(
     def __len__(self):
         return len(next(iter(self.key_to_storage.values())))
 
-    def contain(self, item: TensorDictBase) -> torch.Tensor:
+    def contains(self, item: TensorDictBase) -> torch.Tensor:
         item, _ = self._maybe_add_batch(item, None)
         index = self._to_index(item)
 
-        res = next(iter(self.key_to_storage.values())).contain(index)
+        res = next(iter(self.key_to_storage.values())).contains(index)
         res = self._maybe_remove_batch(res)
         return res

@@ -28,7 +28,7 @@ def test_embedding_memory():
     assert not (embedding_storage[index] == torch.ones(size=(2, 2))).all()
 
     embedding_storage[index] = torch.ones(size=(2, 2))
-    assert torch.sum(embedding_storage.contain(index)).item() == 2
+    assert torch.sum(embedding_storage.contains(index)).item() == 2
 
     assert (embedding_storage[index] == torch.ones(size=(2, 2))).all()
 
@@ -120,7 +120,7 @@ def test_query_module():
     )
 
     tensor_dict_storage[index] = value
-    assert torch.sum(tensor_dict_storage.contain(index)).item() == 4
+    assert torch.sum(tensor_dict_storage.contains(index)).item() == 4
 
     new_index = index.clone(True)
     new_index["key3"] = torch.Tensor([[4], [5], [6], [7]])
@@ -156,7 +156,7 @@ def test_storage():
     )
 
     tensor_dict_storage[index] = value
-    assert torch.sum(tensor_dict_storage.contain(index)).item() == 4
+    assert torch.sum(tensor_dict_storage.contains(index)).item() == 4
 
     new_index = index.clone(True)
     new_index["key3"] = torch.Tensor([[4], [5], [6], [7]])
