@@ -1339,6 +1339,35 @@ class TestGeneric:
             td_memmap_pm = td_memmap.apply(lambda x: x.clone()).pin_memory()
             assert (td.pin_memory().to(device) == td_memmap_pm.to(device)).all()
 
+    def test_load_custom_artifact(self):
+        # Build the TD using this
+        # td = TensorDict(
+        #     {
+        #         "nested": {
+        #             "int64": [[1], [2]],
+        #             "string": ["a string!"],
+        #             "bfloat16": torch.ones(2, 1, dtype=torch.bfloat16),
+        #         }
+        #     },
+        #     batch_size=[2, 1],
+        #     names=["batch", "time"],
+        # ).memmap(f"{Path(__file__).parent}/artifacts/mmap_example/")
+
+        td = TensorDict.load(f"{Path(__file__).parent}/artifacts/mmap_example/")
+        assert td.shape == (2, 1)
+        # assert td.names == ("batch", "time")
+        assert (td["nested", "int64"] == torch.tensor([[1], [2]])).all()
+        assert td["nested", "int64"].dtype == torch.int64
+        assert td["nested", "string"] == ["a string!"]
+        assert (
+            td["nested", "bfloat16"] == torch.ones(2, 1, dtype=torch.bfloat16)
+        ).all()
+        assert td["nested", "bfloat16"].dtype == torch.bfloat16
+        td_nested = TensorDict.load(
+            f"{Path(__file__).parent}/artifacts/mmap_example/nested"
+        )
+        assert (td_nested == td["nested"]).all()
+
     @pytest.mark.parametrize("method", ["share_memory", "memmap"])
     def test_memory_lock(self, method):
         torch.manual_seed(1)

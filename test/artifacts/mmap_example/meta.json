@@ -1,0 +1,1 @@
+{"nested": {"type": "TensorDict"}, "shape": [2, 1], "device": "cpu", "_type": "<class 'tensordict._td.TensorDict'>"}
