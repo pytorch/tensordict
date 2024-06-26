@@ -9200,12 +9200,12 @@ class TestNonTensorData:
             if json_serializable:
                 assert (
                     f.read()
-                    == f'{{"_type": "<class \'tensordict.tensorclass.NonTensorStack\'>", "stack_dim": 0, "device": {device_str}, "data": [[0, 1], [0, 1], [0, 1]]}}'
+                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","stack_dim":0,"device":{device_str},"data":[[0,1],[0,1],[0,1]]}}'
                 )
             else:
                 assert (
                     f.read()
-                    == f'{{"_type": "<class \'tensordict.tensorclass.NonTensorStack\'>", "stack_dim": 0, "device": {device_str}, "data": "pickle.pkl"}}'
+                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","stack_dim":0,"device":{device_str},"data":"pickle.pkl"}}'
                 )
         data_recon = TensorDict.load_memmap(tmpdir)
         assert data_recon.batch_size == data.batch_size

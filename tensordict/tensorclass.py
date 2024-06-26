@@ -10,7 +10,6 @@ import ctypes
 import dataclasses
 import functools
 import inspect
-import json
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
@@ -27,6 +26,7 @@ from textwrap import indent
 from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
 
 import numpy as np
+import orjson as json
 import tensordict as tensordict_lib
 
 import torch
@@ -2686,7 +2686,7 @@ class NonTensorStack(LazyStackedTensorDict):
                     with open(prefix / "pickle.pkl", "wb") as f:
                         pickle.dump(data, f)
                 with open(prefix / "meta.json", "wb") as f:
-                    f.write(json.dump(jsondict))
+                    f.write(json.dumps(jsondict))
 
             if executor is None:
                 save_metadata()
