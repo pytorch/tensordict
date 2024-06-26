@@ -804,7 +804,7 @@ def _memmap_(
             futures.append(executor.submit(save_metadata))
 
         prefix = prefix / "_tensordict"
-    if not isinstance(self, (NonTensorData,)):
+    if not isinstance(self, NonTensorData):
         td = self._tensordict._memmap_(
             prefix=prefix,
             executor=executor,
@@ -817,8 +817,11 @@ def _memmap_(
         td._device = torch.device("cpu")
     else:
         # For non-tensor data, we don't create an empty _tensordict dir
-        td = TensorDict(device=torch.device("cpu"))
+        td = self._tensordict.empty()
         td._is_memmap = True
+        td._is_locked = True
+        if inplace:
+            self.__dict__["_tensordict"] = td
     if not inplace:
         result = cls._from_tensordict(td, _non_tensordict)
     else:
