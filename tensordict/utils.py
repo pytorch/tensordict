@@ -122,11 +122,14 @@ _TORCH_DTYPES = (
     torch.qint8,
     torch.quint4x2,
     torch.quint8,
-    torch.uint16,
-    torch.uint32,
-    torch.uint64,
     torch.uint8,
 )
+if hasattr(torch, "uint16"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint16,)
+if hasattr(torch, "uint32"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint32,)
+if hasattr(torch, "uint64"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint64,)
 _STRDTYPE2DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
