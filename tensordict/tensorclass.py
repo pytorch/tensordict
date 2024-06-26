@@ -2162,7 +2162,9 @@ class NonTensorData:
             def __eq__(self, other):
                 if isinstance(other, NonTensorData):
                     return torch.full(
-                        self.batch_size, self.data == other.data, device=self.device
+                        self.batch_size,
+                        bool(self.data == other.data),
+                        device=self.device,
                     )
                 return old_eq(self, other)
 
@@ -2174,7 +2176,7 @@ class NonTensorData:
             def __ne__(self, other):
                 if isinstance(other, NonTensorData):
                     return torch.full(
-                        self.batch_size, self.data != other.data, device=self.device
+                        self.batch_size, bool(self.data != other.data), device=self.device
                     )
                 return _ne(self, other)
 
@@ -2186,7 +2188,7 @@ class NonTensorData:
             def __xor__(self, other):
                 if isinstance(other, NonTensorData):
                     return torch.full(
-                        self.batch_size, self.data ^ other.data, device=self.device
+                        self.batch_size, bool(self.data ^ other.data), device=self.device
                     )
                 return _xor(self, other)
 
@@ -2198,7 +2200,7 @@ class NonTensorData:
             def __or__(self, other):
                 if isinstance(other, NonTensorData):
                     return torch.full(
-                        self.batch_size, self.data | other.data, device=self.device
+                        self.batch_size, bool(self.data | other.data), device=self.device
                     )
                 return _or(self, other)
 

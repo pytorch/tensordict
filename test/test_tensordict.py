@@ -1245,6 +1245,10 @@ class TestGeneric:
             td["nested", "bfloat16"] == torch.ones(2, 1, dtype=torch.bfloat16)
         ).all()
         assert td["nested", "bfloat16"].dtype == torch.bfloat16
+        td_nested = TensorDict.load(
+            f"{Path(__file__).parent}/artifacts/mmap_example/nested"
+        )
+        assert (td_nested == td["nested"]).all()
 
     @pytest.mark.parametrize("method", ["share_memory", "memmap"])
     def test_memory_lock(self, method):
