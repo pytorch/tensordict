@@ -113,8 +113,7 @@ def _rebuild_tensordict_files_consolidated(
 
 def _make_td(cls, state):
     td = cls.__new__(cls)
-    for key, val in state.items():
-        setattr(td, key, val)
+    td.__setstate__(state)
     return td
 
 
