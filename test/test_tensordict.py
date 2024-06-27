@@ -323,18 +323,18 @@ class TestGeneric:
         # assert data_ptr.unique().numel() == 1
         assert hasattr(td_c, "_consolidated")
         if not nested:
-            assert (td == td_c).all(), td_c.to_dict()
+            assert (td.to(td_c.device) == td_c).all(), td_c.to_dict()
         else:
             assert all(
                 (_td == _td_c).all()
-                for (_td, _td_c) in zip(td.unbind(0), td_c.unbind(0))
+                for (_td, _td_c) in zip(td.to(td_c.device).unbind(0), td_c.unbind(0))
             ), td_c.to_dict()
 
         assert td_c["d"] == "a string!"
         storage = td_c._consolidated["storage"]
         storage *= 0
         if not nested:
-            assert (td != td_c).any(), td_c.to_dict()
+            assert (td.to(td_c.device) != td_c).any(), td_c.to_dict()
         elif nested == "NJT":
             assert (td_c["e", "f", "g"].offsets() == 0).all()
             assert (td_c["e", "f", "g"].values() == 0).all()
@@ -7058,11 +7058,11 @@ class TestLazyStackedTensorDict:
             assert (TensorDict.from_consolidated(filename) == td_c).all()
         assert hasattr(td_c, "_consolidated")
         assert type(td_c) == type(td)  # noqa
-        assert (td == td_c).all()
+        assert (td.to(td_c.device) == td_c).all()
         assert td_c["d"] == [["a string!"] * 3]
         storage = td_c._consolidated["storage"]
         storage *= 0
-        assert (td != td_c).any()
+        assert (td.to(td_c.device) != td_c).any()
 
         filename = Path(tmpdir) / "file.pkl"
         torch.save(td, filename)
