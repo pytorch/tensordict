@@ -2316,10 +2316,14 @@ def is_namedtuple_class(cls):
 
 
 def _make_dtype_promotion(func):
-    dtype = getattr(torch, func.__name__)
+    dtype = getattr(torch, func.__name__, None)
 
     @wraps(func)
     def new_func(self):
+        if dtype is None:
+            raise NotImplementedError(
+                f"Your pytorch version {torch.__version__} does not support {dtype}."
+            )
         return self._fast_apply(lambda x: x.to(dtype), propagate_lock=True)
 
     new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``."""
