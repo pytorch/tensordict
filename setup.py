@@ -182,7 +182,7 @@ def _main(argv):
             "build_ext": BuildExtension.with_options(no_python_abi_suffix=True),
             "clean": clean,
         },
-        install_requires=[pytorch_package_dep, "numpy", "cloudpickle"],
+        install_requires=[pytorch_package_dep, "numpy", "cloudpickle", "orjson"],
         extras_require={
             "tests": [
                 "pytest",

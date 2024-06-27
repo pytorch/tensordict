@@ -595,6 +595,11 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         ...
 
+    @classmethod
+    def from_dict(cls, *args, **kwargs):
+        td = TensorDict.from_dict(*args, **kwargs)
+        return TensorDictParams(td)
+
     @_fallback
     def to_tensordict(self):
         ...

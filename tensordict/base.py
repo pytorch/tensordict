@@ -11,15 +11,15 @@ import concurrent.futures
 import contextlib
 import gc
 import importlib
-import json
 import numbers
+import os.path
 import uuid
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from copy import copy
-from functools import wraps
+from functools import partial, wraps
 from pathlib import Path
 from textwrap import indent
 from typing import (
@@ -39,17 +39,21 @@ from typing import (
 )
 
 import numpy as np
+import orjson as json
 import torch
 
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _CloudpickleWrapper,
+    _DEVICE2STRDEVICE,
+    _DTYPE2STRDTYPE,
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
     _is_non_tensor,
     _is_tensorclass,
     _KEY_ERROR,
     _make_dtype_promotion,
+    _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
     _set_max_batch_size,
@@ -97,24 +101,6 @@ class _NoDefault:
 
 
 NO_DEFAULT = _NoDefault()
-
-
-class _NestedTensorsAsLists:
-    """Class used to iterate over leaves of lazily stacked tensordicts."""
-
-    def __new__(cls):
-        if not hasattr(cls, "instance"):
-            cls.instance = super(_NestedTensorsAsLists, cls).__new__(cls)
-        return cls.instance
-
-    def __bool__(self):
-        return False
-
-    def __call__(self, val):
-        return _default_is_leaf(val)
-
-
-_NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
 
 T = TypeVar("T", bound="TensorDictBase")
 
@@ -377,6 +363,27 @@ class TensorDictBase(MutableMapping):
 
     def __delitem__(self, key: NestedKey) -> T:
         return self.del_(key)
+
+    def __getstate__(self):
+        result = dict(self.__dict__)
+        for key in ("_last_op", "_cache", "__last_op_queue", "__lock_parents_weakrefs"):
+            result.pop(key, None)
+        return result
+
+    def __setstate__(self, state):
+        for key, value in state.items():
+            setattr(self, key, value)
+        self._cache = None
+        self.__last_op_queue = None
+        self._last_op = None
+        if self._is_locked:
+            # this can cause avoidable overhead, as we will be locking the leaves
+            # then locking their parent, and the parent of the parent, every
+            # time re-locking tensordicts that have already been locked.
+            # To avoid this, we should lock only at the root, but it isn't easy
+            # to spot what the root is...
+            self._is_locked = False
+            self.lock_()
 
     @classmethod
     def __torch_function__(
@@ -748,9 +755,95 @@ class TensorDictBase(MutableMapping):
         _set_max_batch_size(self, batch_dims)
         return self
 
+    @classmethod
+    @abc.abstractmethod
+    def from_dict(
+        cls,
+        input_dict,
+        batch_size: torch.Size | None = None,
+        device: torch.device | None = None,
+        batch_dims: int | None = None,
+        names: List[str] | None = None,
+    ):
+        """Returns a TensorDict created from a dictionary or another :class:`~.tensordict.TensorDict`.
+
+        If ``batch_size`` is not specified, returns the maximum batch size possible.
+
+        This function works on nested dictionaries too, or can be used to determine the
+        batch-size of a nested tensordict.
+
+        Args:
+            input_dict (dictionary, optional): a dictionary to use as a data source
+                (nested keys compatible).
+            batch_size (iterable of int, optional): a batch size for the tensordict.
+            device (torch.device or compatible type, optional): a device for the TensorDict.
+            batch_dims (int, optional): the ``batch_dims`` (ie number of leading dimensions
+                to be considered for ``batch_size``). Exclusinve with ``batch_size``.
+                Note that this is the __maximum__ number of batch dims of the tensordict,
+                a smaller number is tolerated.
+            names (list of str, optional): the dimension names of the tensordict.
+
+        Examples:
+            >>> input_dict = {"a": torch.randn(3, 4), "b": torch.randn(3)}
+            >>> print(TensorDict.from_dict(input_dict))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+            >>> # nested dict: the nested TensorDict can have a different batch-size
+            >>> # as long as its leading dims match.
+            >>> input_dict = {"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}
+            >>> print(TensorDict.from_dict(input_dict))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+            >>> # we can also use this to work out the batch sie of a tensordict
+            >>> input_td = TensorDict({"a": torch.randn(3), "b": {"c": torch.randn(3, 4)}}, [])
+            >>> print(TensorDict.from_dict(input_td))
+            TensorDict(
+                fields={
+                    a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
+                    b: TensorDict(
+                        fields={
+                            c: Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
+                        batch_size=torch.Size([3, 4]),
+                        device=None,
+                        is_shared=False)},
+                batch_size=torch.Size([3]),
+                device=None,
+                is_shared=False)
+
+        """
+        ...
+
+    @classmethod
+    def _from_dict_validated(cls, *args, **kwargs):
+        """A faster version of from_dict when the values have been validated.
+
+        By default, falls back on :meth:`~.from_dict`.
+        """
+        return cls.from_dict(*args, **kwargs)
+
     @abc.abstractmethod
     def from_dict_instance(
-        self, input_dict, batch_size=None, device=None, batch_dims=None
+        self,
+        input_dict,
+        batch_size=None,
+        device=None,
+        batch_dims=None,
+        names: List[str] | None = None,
     ):
         """Instance method version of :meth:`~tensordict.TensorDict.from_dict`.
 
@@ -1143,7 +1236,7 @@ class TensorDictBase(MutableMapping):
 
         Keyword Args:
             inplace (bool, optional): if ``True``, the parameters or tensors
-                in the module are updated in-place. Defaults to ``True``.
+                in the module are updated in-place. Defaults to ``False``.
             return_swap (bool, optional): if ``True``, the old parameter configuration
                 will be returned. Defaults to ``False``.
             swap_dest (TensorDictBase, optional): if ``return_swap`` is ``True``,
@@ -2601,6 +2694,484 @@ class TensorDictBase(MutableMapping):
             f"The tensordict has no saved path (memmap={self.is_memmap()}, path={self._memmap_prefix})."
         )
 
+    # Generic method to get a class metadata
+    def _reduce_get_metadata(self):
+        return {
+            "device": str(self.device) if self.device is not None else None,
+            "names": self.names,
+            "batch_size": list(self.batch_size),
+            "is_locked": self._is_locked,
+        }
+
+    # @cache  # noqa: B019
+    def _reduce_vals_and_metadata(self, *, dtype=NO_DEFAULT, requires_metadata):
+        """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
+        if dtype is NO_DEFAULT:
+            dtype = self.dtype
+        need_padding = dtype is None
+        # If the dtype is not unique (self.dtype is None) then we need the metadata
+        # because we need a custom unpickler
+        requires_metadata = requires_metadata | need_padding
+
+        if requires_metadata:
+            # metadata is nested
+            metadata_dict = {
+                "cls": type(self).__name__,
+                "non_tensors": {},
+                "leaves": {},
+                "cls_metadata": self._reduce_get_metadata(),
+            }
+        else:
+            metadata_dict = None
+
+        # flat_key_values is flat
+        flat_key_values = {}
+
+        flat_size = []
+        start = 0
+
+        def add_single_value(
+            value, key, metadata_dict, dtype, shape, device, flat_size
+        ):
+            nonlocal start
+            n = value.element_size() * value.numel()
+            if need_padding:
+                pad = n % 8
+                if pad != 0:
+                    pad = 8 - pad
+            else:
+                pad = 0
+            flat_size.append(n + pad)
+            stop = start + flat_size[-1]
+            if requires_metadata:
+                metadata_dict["leaves"][key] = (
+                    _DTYPE2STRDTYPE[dtype],
+                    list(shape),
+                    _DEVICE2STRDEVICE[device],
+                    start,
+                    stop,
+                    pad,
+                )
+            start = stop
+
+        def assign(
+            key,
+            value,
+            track_key=(),
+            metadata_dict=metadata_dict,
+            flat_size=flat_size,
+        ):
+            total_key = key if isinstance(key, tuple) else (key,)
+            total_key = track_key + total_key
+            cls = type(value)
+            if issubclass(cls, torch.Tensor):
+                pass
+            elif _is_non_tensor(cls):
+                if requires_metadata:
+                    metadata_dict["non_tensors"][key] = (
+                        value.data,
+                        list(value.batch_size),
+                    )
+                return
+            elif _is_tensor_collection(cls):
+                metadata_dict_key = None
+                if requires_metadata:
+                    metadata_dict_key = metadata_dict[key] = {
+                        "cls": cls.__name__,
+                        "non_tensors": {},
+                        "leaves": {},
+                        "cls_metadata": value._reduce_get_metadata(),
+                    }
+                local_assign = partial(
+                    assign,
+                    track_key=total_key,
+                    metadata_dict=metadata_dict_key,
+                    flat_size=flat_size,
+                )
+                value._fast_apply(
+                    local_assign,
+                    named=True,
+                    nested_keys=True,
+                    call_on_nested=True,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
+                )
+                return
+            # Tensors: DTensor, nested and then regular
+            if hasattr(value, "full_tensor"):
+                raise NotImplementedError("DTensor is not supported yet")
+            if getattr(value, "is_nested", False):
+                if value.layout is torch.jagged:
+                    # Get the values
+                    values = value.values()
+                    shape = [v if isinstance(v, int) else -1 for v in values.shape]
+                    # Get the offsets
+                    offsets = value.offsets()
+                    # Now we're saving the two tensors
+                    # We will rely on the fact that the writing order is preserved in python dict
+                    # (since python 3.7). Later, we will read the NJT then the NJT offset in that order
+                    # to do the allocation.
+                    flat_key_values[_prefix_last_key(total_key, "<NJT>")] = values
+                    add_single_value(
+                        values,
+                        _prefix_last_key(key, "<NJT>"),
+                        metadata_dict,
+                        values.dtype,
+                        shape,
+                        values.device,
+                        flat_size,
+                    )
+                    flat_key_values[
+                        _prefix_last_key(total_key, "<NJT_OFFSETS>")
+                    ] = offsets
+                    add_single_value(
+                        offsets,
+                        _prefix_last_key(key, "<NJT_OFFSETS>"),
+                        metadata_dict,
+                        offsets.dtype,
+                        offsets.shape,
+                        offsets.device,
+                        flat_size,
+                    )
+                else:
+                    raise NotImplementedError(
+                        "NST is not supported, please use layout=torch.jagged when building the nested tensor."
+                    )
+                return
+            flat_key_values[total_key] = value
+            add_single_value(
+                value,
+                key,
+                metadata_dict,
+                value.dtype,
+                value.shape,
+                value.device,
+                flat_size,
+            )
+
+        self._fast_apply(
+            assign,
+            named=True,
+            call_on_nested=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
+            filter_empty=True,
+        )
+        return metadata_dict, flat_key_values, flat_size, need_padding
+
+    def consolidate(
+        self,
+        filename: Path | str | None = None,
+        *,
+        num_threads=0,
+        device: torch.device | None = None,
+        non_blocking: bool = False,
+        inplace: bool = False,
+        return_early: bool = False,
+        use_buffer: bool = False,
+        share_memory: bool = False,
+        pin_memory: bool = False,
+        metadata: bool = False,
+    ) -> None:
+        """Consolidates the tensordict content in a single storage for fast serialization.
+
+        Args:
+            filename (Path, optional): an optional file path for a memory-mapped tensor
+                to use as a storage for the tensordict.
+
+        Keyword Args:
+            num_threads (integer, optional): the number of threads to use for populating
+                the storage.
+            device (torch.device, optional): an optional device where the storage must be
+                instantiated.
+            non_blocking (bool, optional): ``non_blocking`` argument passed to :meth:`~torch.Tensor.copy_`.
+            inplace (bool, optional): if ``True``, the resulting tensordict is the same
+                as ``self`` with updated values. Defaults to ``False``.
+            return_early (bool, optional): if ``True`` and ``num_threads>0``,
+                the method will return a future of the tensordict. The resulting
+                tensordict can be queried using `future.result()`.
+            use_buffer (bool, optional): if ``True`` and a filename is passed, an intermediate
+                local buffer will be created in shared memory, and the data will be copied at
+                the storage location as a last step. This may be faster than writing directly
+                to a distant physical memory (e.g., NFS).
+                Defaults to ``False``.
+            share_memory (bool, optional): if ``True``, the storage will be placed in shared memory.
+                Defaults to ``False``.
+            pin_memory (bool, optional): whether the consolidated data should be placed in pinned
+                memory. Defaults to ``False``.
+            metadata (bool, optional): if ``True``, the metadata will be stored alongisde the
+                common storage. If a filename is provided, this is without effect.
+                Storing the metadata can be useful when one wants to control how serialization
+                is achieved, as TensorDict handles the pickling/unpickling of consolidated TDs
+                differently if the metadata is or isn't available.
+
+        Examples:
+            >>> import pickle
+            >>> import tempfile
+            >>> import torch
+            >>> import tqdm
+            >>> from torch.utils.benchmark import Timer
+            >>> from tensordict import TensorDict
+            >>> data = TensorDict({"a": torch.zeros(()), "b": {"c": torch.zeros(())}})
+            >>> data_consolidated = data.consolidate()
+            >>> # check that the data has a single data_ptr()
+            >>> assert torch.tensor([
+            ...     v.untyped_storage().data_ptr() for v in data_c.values(True, True)
+            ... ]).unique().numel() == 1
+            >>> # Serializing the tensordict will be faster with data_consolidated
+            >>> with open("data.pickle", "wb") as f:
+            ...    print("regular", Timer("pickle.dump(data, f)", globals=globals()).adaptive_autorange())
+            >>> with open("data_c.pickle", "wb") as f:
+            ...     print("consolidated", Timer("pickle.dump(data_consolidated, f)", globals=globals()).adaptive_autorange())
+
+
+        """
+        if hasattr(self, "_consolidated"):
+            return self
+
+        (
+            metadata_dict,
+            flat_dict,
+            flat_size,
+            need_padding,
+        ) = self._reduce_vals_and_metadata(
+            requires_metadata=filename is not None or metadata, dtype=None
+        )
+        filesize = sum(flat_size)
+        device = torch.device(device) if device is not None else None
+        if filename is None:
+            storage = torch.empty(
+                filesize,
+                dtype=torch.uint8,
+                device=device if device else self.device,
+                pin_memory=pin_memory,
+            )
+            if share_memory and not (
+                device is not None and device.type == "cuda"
+            ):  # cuda device is always shared
+                storage.share_memory_()
+        else:
+            # Convert the dict to json
+            metadata_dict_json = json.dumps(metadata_dict)
+            # Represent as a tensor
+            metadata_dict_json = torch.as_tensor(
+                bytearray(metadata_dict_json), dtype=torch.uint8
+            )
+            len_metadata = torch.tensor(
+                [metadata_dict_json.numel()], dtype=torch.int64
+            ).view(torch.uint8)
+
+            if device not in (torch.device("cpu"), None):
+                raise RuntimeError(
+                    "device and filename are mutually exclusive arguments."
+                )
+            suffix = len_metadata.numel() + metadata_dict_json.numel()
+            if not use_buffer:
+                total_storage = torch.from_file(
+                    str(filename),
+                    size=filesize + suffix,
+                    dtype=torch.uint8,
+                    shared=True,
+                    # needed when device ctx differs
+                    device=torch.device("cpu"),
+                )
+            else:
+                total_storage = MemoryMappedTensor.empty(
+                    shape=(filesize + suffix,),
+                    dtype=torch.uint8,
+                )
+
+            total_storage[-8:] = len_metadata
+            total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
+            storage = total_storage[:-suffix]
+            # assert len(storage.untyped_storage()) == filesize
+
+        offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
+
+        def view_old_as_new(v, oldv):
+            v = v.view(oldv.dtype)
+            if v.numel() > oldv.numel():
+                return v[: oldv.numel()].view(oldv.shape)
+            return v.view(oldv.shape)
+
+        if num_threads > 0:
+
+            def assign(
+                k,
+                v,
+                start,
+                stop,
+                njts,
+                njts_offsets,
+                storage=storage,
+                non_blocking=non_blocking,
+            ):
+                # v may need padding
+                v_pad = v.view(-1).view(torch.uint8)
+                exp_length = stop - start
+                pad = exp_length - v_pad.numel()
+                if pad:
+                    v_pad = torch.cat([v_pad, v_pad.new_zeros(pad)])
+                storage[start:stop].copy_(v_pad, non_blocking=non_blocking)
+
+                storage_slice = storage[start:stop]
+                shape, dtype = v.shape, v.dtype
+                new_v = storage_slice.view(dtype)
+                if pad:
+                    new_v = new_v[: v.numel()]
+                new_v = new_v.view(shape)
+                if k[-1].startswith("<NJT>"):
+                    njts[k] = new_v
+                elif k[-1].startswith("<NJT_OFFSETS>"):
+                    njts_offsets[k] = new_v
+                flat_dict[k] = new_v
+
+            njts = {}
+            njts_offsets = {}
+            if num_threads > 1:
+                executor = ThreadPoolExecutor(num_threads)
+                r = []
+                for i, (k, v) in enumerate(flat_dict.items()):
+                    r.append(
+                        executor.submit(
+                            assign,
+                            k,
+                            v,
+                            offsets[i],
+                            offsets[i + 1],
+                            njts,
+                            njts_offsets,
+                        )
+                    )
+                if not return_early:
+                    wait(r)
+                else:
+                    # TODO: We'd need to merge the second half of this function to make this a thing
+                    raise NotImplementedError(
+                        "return_early is not implemented yet for `consolidate`."
+                    )
+            else:
+                for i, (k, v) in enumerate(flat_dict.items()):
+                    assign(
+                        k,
+                        v,
+                        offsets[i],
+                        offsets[i + 1],
+                        njts,
+                        njts_offsets,
+                    )
+            for njt_key, njt_val in njts.items():
+                njt_key_offset = njt_key[:-1] + (
+                    njt_key[-1].replace("<NJT>", "<NJT_OFFSETS>"),
+                )
+                val = torch.nested.nested_tensor_from_jagged(
+                    njt_val, flat_dict[njt_key_offset]
+                )
+                del flat_dict[njt_key]
+                del flat_dict[njt_key_offset]
+                newkey = njt_key[:-1] + (njt_key[-1].replace("<NJT>", ""),)
+                flat_dict[newkey] = val
+
+            if non_blocking:
+                # sync if needed
+                self._sync_all()
+        else:
+
+            def _view_and_pad(tensor):
+                result = tensor.view(-1).view(torch.uint8)
+                # result must always have a multiple of 8 elements
+                pad = 0
+                if need_padding:
+                    pad = result.numel() % 8
+                    if pad != 0:
+                        result = torch.cat([result, result.new_zeros(8 - pad)])
+                return result, pad
+
+            items = []
+            for v in flat_dict.values():
+                if v.device != storage.device:
+                    v = v.to(storage.device, non_blocking=non_blocking)
+                if v.stride()[-1] != 1 or v.storage_offset():
+                    v = v.clone(memory_format=torch.contiguous_format)
+                v, pad = _view_and_pad(v)
+                items.append(v)
+            if non_blocking:
+                # sync if needed
+                self._sync_all()
+            torch.cat(items, out=storage)
+            for v, (k, oldv) in zip(storage.split(flat_size), list(flat_dict.items())):
+                if not k[-1].startswith("<"):
+                    flat_dict[k] = view_old_as_new(v, oldv)
+                elif k[-1].startswith("<NJT>"):
+                    # NJT/NT always comes before offsets/shapes
+                    _nested_values = view_old_as_new(v, oldv)
+                    del flat_dict[k]
+                elif k[-1].startswith("<NJT_OFFSETS>"):
+                    newk = k[:-1] + (k[-1].replace("<NJT_OFFSETS>", ""),)
+                    nt_offsets = view_old_as_new(v, oldv)
+                    del flat_dict[k]
+                    flat_dict[newk] = torch.nested.nested_tensor_from_jagged(
+                        _nested_values, nt_offsets
+                    )
+                    # delete the nested value to make sure that if there was an
+                    # ordering mismatch we wouldn't be looking at the value key of
+                    # another nested tensor.
+                    del _nested_values
+                else:
+                    flat_dict[k] = view_old_as_new(v, oldv)
+
+        def assign_val(key, val):
+            if isinstance(key, str):
+                key = (key,)
+            return flat_dict.get(key, val)
+
+        if filename is None:
+            device = self.device
+        elif not inplace:
+            device = torch.device("cpu")
+        elif self.device is not None and self.device != torch.device("cpu"):
+            self.clear_device_()
+            device = None
+        else:
+            device = None
+        result = self._fast_apply(
+            assign_val,
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
+            out=self if inplace else None,
+            device=device,
+        )
+        result._consolidated = {"storage": storage, "metadata": metadata_dict}
+        if filename is not None:
+            if use_buffer:
+                with open(filename, "w+b") as f:
+                    f.write(total_storage._handler.buffer)
+            # with open(Path(filename).with_suffix(".json"), "wb") as f:
+            #     metadata_dict["size"] = filesize
+            #     f.write(json.dumps(metadata_dict))
+        return result
+
+    @classmethod
+    def from_consolidated(cls, filename):
+        # with open(Path(filename).with_suffix(".json"), "rb") as f:
+        #     metadata = json.loads(f.read())
+        file = torch.from_file(
+            str(filename),
+            dtype=torch.uint8,
+            size=os.path.getsize(filename),
+            # needed when device ctx differs
+            device=torch.device("cpu"),
+        )
+        metadata_size = file[-8:].clone().view(torch.int64)
+        metadata = file[-metadata_size - 8 : -8]
+        metadata = json.loads(bytes(metadata.tolist()))
+
+        from ._reductions import _rebuild_tensordict_files_consolidated
+
+        return _rebuild_tensordict_files_consolidated(
+            metadata, file[: -metadata_size - 8]
+        )
+
     def memmap_(
         self,
         prefix: str | None = None,
@@ -2625,7 +3196,8 @@ class TensorDictBase(MutableMapping):
             num_threads (int, optional): the number of threads used to write the memmap
                 tensors. Defaults to `0`.
             return_early (bool, optional): if ``True`` and ``num_threads>0``,
-                the method will return a future of the tensordict.
+                the method will return a future of the tensordict. The resulting
+                tensordict can be queried using `future.result()`.
             share_non_tensor (bool, optional): if ``True``, the non-tensor data will be
                 shared between the processes and writing operation (such as inplace update
                 or set) on any of the workers within a single node will update the value
@@ -4091,14 +4663,15 @@ class TensorDictBase(MutableMapping):
         leaves_only: bool = False,
         *,
         collapse: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> Tuple[List, List]:
         return tuple(
-            list(key_or_val)
+            tuple(key_or_val)
             for key_or_val in zip(
                 *self.items(
                     include_nested=include_nested,
                     leaves_only=leaves_only,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
                 )
             )
         )
@@ -7938,6 +8511,40 @@ def _is_leaf_nontensor(cls: Type) -> bool:
 
 def _load_metadata(prefix: Path):
     filepath = prefix / "meta.json"
-    with open(filepath) as json_metadata:
-        metadata = json.load(json_metadata)
+    with open(filepath, "rb") as json_metadata:
+        metadata = json.loads(json_metadata.read())
     return metadata
+
+
+class _NestedTensorsAsLists:
+    """Class used to iterate over leaves of lazily stacked tensordicts."""
+
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(cls, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+    def __call__(self, val):
+        return _default_is_leaf(val)
+
+
+class _NestedTensorsAsListsNonTensor:
+    def __new__(cls):
+        if not hasattr(cls, "instance"):
+            cls.instance = super(cls, cls).__new__(cls)
+        return cls.instance
+
+    def __bool__(self):
+        return False
+
+    def __call__(self, val):
+        return _is_leaf_nontensor(val)
+
+
+_NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
+
+
+_NESTED_TENSORS_AS_LISTS_NONTENSOR = _NestedTensorsAsListsNonTensor()

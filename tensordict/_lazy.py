@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import json
 import numbers
 import os
 import re
@@ -19,6 +18,8 @@ from textwrap import indent
 from typing import Any, Callable, Iterator, OrderedDict, Sequence, Tuple, Type
 
 import numpy as np
+
+import orjson as json
 import torch
 import torch.distributed as dist
 
@@ -38,6 +39,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
+    _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     CompatibleType,
@@ -100,7 +102,10 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
 
     def _keys(self) -> list[str]:
         result = self.tensordict._key_list()
-        if self.is_leaf is _NESTED_TENSORS_AS_LISTS:
+        if self.is_leaf in (
+            _NESTED_TENSORS_AS_LISTS,
+            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+        ):
             return [
                 (key, str(i))
                 for key in result
@@ -282,6 +287,29 @@ class LazyStackedTensorDict(TensorDictBase):
     @_fails_exclusive_keys
     def to_dict(self) -> dict[str, Any]:
         ...
+
+    def _reduce_get_metadata(self):
+        metadata = {}
+        metadata["stack_dim"] = self.stack_dim
+        metadata["stack_dim_name"] = self._td_dim_name
+        metadata["is_locked"] = self.is_locked
+        return metadata
+
+    @classmethod
+    def from_dict(
+        cls,
+        input_dict,
+        batch_size=None,
+        device=None,
+        batch_dims=None,
+        stack_dim_name=None,
+        stack_dim=0,
+    ):
+        return LazyStackedTensorDict(
+            *(input_dict[str(i)] for i in range(len(input_dict))),
+            stack_dim=stack_dim,
+            stack_dim_name=stack_dim_name,
+        )
 
     @_fails_exclusive_keys
     def state_dict(
@@ -1384,7 +1412,10 @@ class LazyStackedTensorDict(TensorDictBase):
         return keys
 
     def values(self, include_nested=False, leaves_only=False, is_leaf=None):
-        if is_leaf is not _NESTED_TENSORS_AS_LISTS:
+        if is_leaf not in (
+            _NESTED_TENSORS_AS_LISTS,
+            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+        ):
             yield from super().values(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             )
@@ -1397,7 +1428,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
 
     def items(self, include_nested=False, leaves_only=False, is_leaf=None):
-        if is_leaf is not _NESTED_TENSORS_AS_LISTS:
+        if is_leaf not in (
+            _NESTED_TENSORS_AS_LISTS,
+            _NESTED_TENSORS_AS_LISTS_NONTENSOR,
+        ):
             yield from super().items(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
             )
@@ -1520,26 +1554,45 @@ class LazyStackedTensorDict(TensorDictBase):
             )
 
         others = (other.unbind(self.stack_dim) for other in others)
-        results = [
-            td._apply_nest(
-                fn,
-                *oth,
-                checked=checked,
-                device=device,
-                call_on_nested=call_on_nested,
-                default=default,
-                named=named,
-                nested_keys=nested_keys,
-                prefix=prefix + (str(i),)
-                if is_leaf is _NESTED_TENSORS_AS_LISTS
-                else prefix,
-                inplace=inplace,
-                filter_empty=filter_empty,
-                is_leaf=is_leaf,
-                out=out[i] if out is not None else None,
-            )
-            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
-        ]
+        if (
+            call_on_nested
+            and named
+            and is_leaf
+            in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
+        ):
+            # When calling on nested with name and the name includes the TD index, we
+            # want to call the function on each td.
+            # If we were not keeping track of the TD's index, names would be the same for all
+            # tds and there's a risk that values would collide.
+            # nested_keys is irrelevant when named + call_on_nested are both true.
+            results = []
+            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others)):
+                key = prefix + (str(i),)
+                if len(key) == 1:
+                    key = key[0]
+                results.append(fn(key, td, *oth))
+        else:
+            results = [
+                td._apply_nest(
+                    fn,
+                    *oth,
+                    checked=checked,
+                    device=device,
+                    call_on_nested=call_on_nested,
+                    default=default,
+                    named=named,
+                    nested_keys=nested_keys,
+                    prefix=prefix + (str(i),)
+                    if is_leaf
+                    in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
+                    else prefix,
+                    inplace=inplace,
+                    filter_empty=filter_empty,
+                    is_leaf=is_leaf,
+                    out=out[i] if out is not None else None,
+                )
+                for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
+            ]
         if filter_empty and all(r is None for r in results):
             return
         if not inplace:
@@ -2075,9 +2128,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 prefix = Path(prefix)
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
-                with open(prefix / "meta.json", "w") as f:
-                    json.dump(
-                        {"_type": str(self.__class__), "stack_dim": self.stack_dim}, f
+                with open(prefix / "meta.json", "wb") as f:
+                    f.write(
+                        json.dumps(
+                            {"_type": str(self.__class__), "stack_dim": self.stack_dim}
+                        )
                     )
 
             if executor is None:
@@ -2764,6 +2819,12 @@ class _CustomOpTensorDict(TensorDictBase):
     def entry_class(self, key: NestedKey) -> type:
         return type(self._source.get(key))
 
+    @classmethod
+    def from_dict(
+        cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
+    ):
+        raise NotImplementedError(f"from_dict not implemented for {cls.__name__}.")
+
     @property
     def device(self) -> torch.device | None:
         return self._source.device
@@ -3076,8 +3137,8 @@ class _CustomOpTensorDict(TensorDictBase):
                     "inv_op_kwargs": data.inv_op_kwargs,
                 }
             )
-            with open(filepath, "w") as json_metadata:
-                json.dump(metadata, json_metadata)
+            with open(filepath, "wb") as json_metadata:
+                json_metadata.write(json.dumps(metadata))
 
         if prefix is not None:
             prefix = Path(prefix)
