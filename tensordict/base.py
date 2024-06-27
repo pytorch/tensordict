@@ -6036,8 +6036,7 @@ class TensorDictBase(MutableMapping):
         return self
 
     def add(self, other: TensorDictBase | float, alpha: float | None = None):
-        keys_vals = self._items_list(True, True)
-        keys, vals = keys_vals
+        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
             other_val = other._values_list(True, True)
         else:

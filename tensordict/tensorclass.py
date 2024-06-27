@@ -92,26 +92,28 @@ _TD_PASS_THROUGH = {
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
+    "_check_unlock",
     "_default_get",
     "_get_at_str",
     "_get_at_tuple",
     "_get_str",
-    # "_get_sub_tensordict",
-    "ndimension",
     "_get_tuple",
-    "_values_list",
-    "is_memmap",
+    "_has_names",
     "_propagate_lock",
     "_propagate_unlock",
-    "is_shared",
+    "_values_list",
+    "gather",
     "is_empty",
+    "is_memmap",
+    "is_shared",
     "items",
     "keys",
     "ndimension",
-    "_has_names",
-    "_check_unlock",
+    "ndimension",
     "numel",
+    "replace",
     "values",
+    # "_get_sub_tensordict",
 ]
 
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
@@ -189,15 +191,9 @@ _FALLBACK_METHOD_FROM_TD = [
     "floor_",
     "frac",
     "frac_",
-    "is_empty",
-    "is_memmap",
-    "is_shared",
-    "is_shared",
     "isfinite",
     "isnan",
     "isreal",
-    "items",
-    "keys",
     "lerp",
     "lerp_",
     "lgamma",
@@ -265,9 +261,9 @@ _FALLBACK_METHOD_FROM_TD = [
     # _set_str needs a special treatment to catch keys that are already in
     # non tensor data
 ]
-assert not any(
-    v in _NOWRAP_OUTPUT_METHOD_FROM_TD for v in _FALLBACK_METHOD_FROM_TD
-), set(_NOWRAP_OUTPUT_METHOD_FROM_TD).intersection(_FALLBACK_METHOD_FROM_TD)
+assert not any(v in _METHOD_FROM_TD for v in _FALLBACK_METHOD_FROM_TD), set(
+    _METHOD_FROM_TD
+).intersection(_FALLBACK_METHOD_FROM_TD)
 assert len(set(_FALLBACK_METHOD_FROM_TD)) == len(_FALLBACK_METHOD_FROM_TD)
 
 _FALLBACK_METHOD_FROM_TD_COPY = [
@@ -468,9 +464,9 @@ def _tensorclass(cls: T) -> T:
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name))
-    for method_name in _NOWRAP_OUTPUT_METHOD_FROM_TD:
-        if not hasattr(cls, method_name):
-            setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True))
+    # for method_name in _NOWRAP_OUTPUT_METHOD_FROM_TD:
+    #     if not hasattr(cls, method_name):
+    #         setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True))
     for method_name in _FALLBACK_METHOD_FROM_TD_COPY:
         if not hasattr(cls, method_name):
             setattr(

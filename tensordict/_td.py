@@ -428,13 +428,16 @@ class TensorDict(TensorDictBase):
             inplace = bool(inplace)
 
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
-        if not is_dynamo and module.__class__.__setattr__ is __base__setattr__:
+        if module.__class__.__setattr__ is __base__setattr__:
             __dict__ = module.__dict__
         else:
             __dict__ = None
 
         for key, value in input.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
+                # For Dynamo, we use regular set/delattr as we're not
+                #  much afraid by overhead (and dynamo doesn't like those
+                #  hacks we're doing).
                 if __dict__ is not None:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                     local_out = _set_tensor_dict(
@@ -460,7 +463,8 @@ class TensorDict(TensorDictBase):
                 if __dict__ is not None:
                     child = __dict__["_modules"][key]
                 else:
-                    child = getattr(module, key)
+                    child = module._modules.get(key)
+
                 if not is_dynamo:
                     local_out = memo.get(weakref.ref(child), NO_DEFAULT)
 
@@ -2662,6 +2666,7 @@ class TensorDict(TensorDictBase):
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
+            # TODO: Dynamo doesn't like `copy`
             names=list(self._td_dim_names) if self._has_names() else None,
             _run_checks=False,
         )
@@ -2926,7 +2931,8 @@ class TensorDict(TensorDictBase):
         if not include_nested and not leaves_only:
             return self._tensordict.values()
         else:
-            return super().values(
+            return TensorDictBase.values(
+                self,
                 include_nested=include_nested,
                 leaves_only=leaves_only,
                 is_leaf=is_leaf,
@@ -3845,33 +3851,18 @@ class _TensorDictKeysView:
             is_leaf = _default_is_leaf
         self.is_leaf = is_leaf
 
-    #     self.items = []
-    #     self._iter()
-    #
-    # def __getitem__(self, i):
-    #     return self.items[i]
-
     def __iter__(self) -> Iterable[str] | Iterable[tuple[str, ...]]:
-        #     yield from self.items
-        #
-        # def _iter(self):
         if not self.include_nested:
             if self.leaves_only:
                 for key in self._keys():
                     target_class = self.tensordict.entry_class(key)
                     if _is_tensor_collection(target_class):
                         continue
-                    # self.items.append(key)
                     yield key
             else:
                 yield from self._keys()
-                # self.items += self._keys()
         else:
             yield from (
-                #     key if len(key) > 1 else key[0]
-                #     for key in self._iter_helper(self.tensordict)
-                # )
-                # self.items += (
                 key if len(key) > 1 else key[0]
                 for key in self._iter_helper(self.tensordict)
             )
@@ -4187,13 +4178,3 @@ def _update_metadata(*, metadata, key, value, is_collection):
         metadata[key] = {
             "type": type(value).__name__,
         }
-
-
-# @torch._dynamo.on_compile_start
-# def _check_inline_inbuilt_module():
-#     try:
-#         assert str2bool(environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"])
-#     except (AssertionError, KeyError):
-#         raise RuntimeError(
-#             "set TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1 to use functional calls with tensordict."
-#         )
