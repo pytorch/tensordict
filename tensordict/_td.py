@@ -2666,8 +2666,7 @@ class TensorDict(TensorDictBase):
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
-            # TODO: Dynamo doesn't like `copy`
-            names=list(self._td_dim_names) if self._has_names() else None,
+            names=copy(self._td_dim_names) if self._has_names() else None,
             _run_checks=False,
         )
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too

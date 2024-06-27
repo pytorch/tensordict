@@ -937,11 +937,8 @@ def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
 
 def _getattr(self, item: str) -> Any:
     # if not item.startswith("__"):
-    if not torch.compiler.is_dynamo_compiling():
-        __dict__ = self.__dict__
-        _non_tensordict = __dict__.get("_non_tensordict")
-    else:
-        _non_tensordict = self._non_tensordict
+    __dict__ = self.__dict__
+    _non_tensordict = __dict__.get("_non_tensordict")
 
     if _non_tensordict is not None:
         out = _non_tensordict.get(item, NO_DEFAULT)
@@ -1039,8 +1036,7 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
 
         if result is td:
             return self
-        # TODO: this subclass check is just to make dynamo happy
-        if issubclass(type(result), TensorDictBase) and not check_out(kwargs, result):
+        if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
             if not torch.compiler.is_dynamo_compiling():
                 nontd = super(type(self), self).__getattribute__("_non_tensordict")
             else:

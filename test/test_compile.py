@@ -376,6 +376,8 @@ class TestNN:
 class TestFunctional:
     @pytest.mark.parametrize("modif_param", [False, True])
     def test_functional(self, modif_param):
+
+        # TODO: UNTESTED
         class MessUpParams(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -383,7 +385,7 @@ class TestFunctional:
 
             def forward(self, x):
                 self.param.data.add_(1)
-                return x
+                return x * 1
 
         module = torch.nn.Sequential(
             torch.nn.Linear(3, 4),
@@ -403,10 +405,6 @@ class TestFunctional:
             # with td.to_module(module):
             #     return module(x)
 
-            # sd = module.state_dict()
-            # module.load_state_dict(td.flatten_keys().to_dict())
-            # result = module(x)
-            # module.load_state_dict(sd)
             params = td.to_module(module, return_swap=True)
             result = module(x)
             params.to_module(module, return_swap=True, swap_dest=td)
@@ -415,26 +413,32 @@ class TestFunctional:
         call_compile = torch.compile(call, fullgraph=True)  # , backend="eager")
         x = torch.randn(2, 3)
         assert (call(x, td_zero) == 0).all()
-        assert (
-            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
+        assert all(
+            p_new is p_orig
+            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
         )
         assert (call(x, td_zero) == 0).all()
-        assert (
-            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
+        assert all(
+            p_new is p_orig
+            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
         )
         if modif_param:
             assert td_zero["3", "param"] == 2
         else:
             assert (td_zero == 0).all()
         # torch.testing.assert_close(call_compile(x, td_zero), module(x))
+
+        td.to_module(module)
         call_compile(x, td_zero)
         assert (call_compile(x, td_zero) == 0).all()
-        assert (
-            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
+        assert all(
+            p_new is p_orig
+            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
         )
         assert (call_compile(x, td_zero) == 0).all()
-        assert (
-            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
+        assert all(
+            p_new is p_orig
+            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
         )
         if modif_param:
             assert td_zero["3", "param"] == 4
