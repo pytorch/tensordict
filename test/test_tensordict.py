@@ -251,7 +251,10 @@ class TestGeneric:
     @pytest.mark.parametrize("num_threads", [0, 1, 2])
     @pytest.mark.parametrize("use_file", [False, True])
     @pytest.mark.parametrize(
-        "nested,hetdtype", [[False, False], [False, True], ["NJT", True]]
+        "nested,hetdtype",
+        [[False, False], [False, True], ["NJT", True]]
+        if torch.__version__ > "2.3"
+        else [[False, False], [False, True]],
     )
     def test_consolidate(self, device, use_file, tmpdir, num_threads, nested, hetdtype):
         if not nested:
