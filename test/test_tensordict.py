@@ -348,7 +348,7 @@ class TestGeneric:
         filename = Path(tmpdir) / "file.pkl"
         if not nested:
             torch.save(td, filename)
-            assert (td == torch.load(filename)).all(), td_c.to_dict()
+            assert (td == torch.load(filename, weights_only=False)).all(), td_c.to_dict()
         else:
             pass
             # wait for https://github.com/pytorch/pytorch/issues/129366 to be resolved
@@ -360,11 +360,11 @@ class TestGeneric:
         td_c = td.consolidate()
         torch.save(td_c, filename)
         if not nested:
-            assert (td == torch.load(filename)).all(), td_c.to_dict()
+            assert (td == torch.load(filename, weights_only=False)).all(), td_c.to_dict()
         else:
             assert all(
                 (_td == _td_c).all()
-                for (_td, _td_c) in zip(td.unbind(0), torch.load(filename).unbind(0))
+                for (_td, _td_c) in zip(td.unbind(0), torch.load(filename, weights_only=False).unbind(0))
             ), td_c.to_dict()
 
     @pytest.mark.parametrize(
@@ -7069,11 +7069,11 @@ class TestLazyStackedTensorDict:
 
         filename = Path(tmpdir) / "file.pkl"
         torch.save(td, filename)
-        assert (td == torch.load(filename)).all()
+        assert (td == torch.load(filename, weights_only=False)).all()
 
         td_c = td.consolidate()
         torch.save(td_c, filename)
-        assert (td == torch.load(filename)).all()
+        assert (td == torch.load(filename, weights_only=False)).all()
 
     @pytest.mark.parametrize("pos1", range(8))
     @pytest.mark.parametrize("pos2", range(8))

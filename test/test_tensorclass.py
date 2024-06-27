@@ -337,7 +337,7 @@ class TestTensorClass:
         # test pickle
         f = Path(tmpdir) / "data.pkl"
         torch.save(data, f)
-        data_load = torch.load(f)
+        data_load = torch.load(f, weights_only=False)
         assert isinstance(data_load, MyData2)
         assert data_load.z == "a string!"
         assert data_load.batch_size == data.batch_size
@@ -346,7 +346,7 @@ class TestTensorClass:
         # with consolidated data
         f = Path(tmpdir) / "data.pkl"
         torch.save(data_c, f)
-        data_load = torch.load(f)
+        data_load = torch.load(f, weights_only=False)
         assert isinstance(data_load, MyData2)
         assert data_load.z == "a string!"
         assert data_load.batch_size == data.batch_size
