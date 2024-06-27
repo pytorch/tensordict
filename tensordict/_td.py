@@ -767,15 +767,26 @@ class TensorDict(TensorDictBase):
                         ) from err
 
             keys = set(self.keys())
-            if any(key not in keys for key in value.keys()):
-                subtd = self._get_sub_tensordict(index)
-            for key, item in value.items():
-                if key in keys:
+            subtd = None
+            for value_key, item in value.items():
+                if value_key in keys:
+                    if is_non_tensor(item):
+                        dest = self._get_str(value_key, NO_DEFAULT)
+                        if (dest[index] != item).any():
+                            dest_stack = dest.maybe_to_stack()
+                            if dest_stack is not dest:
+                                dest_stack[index] = item
+                                self._set_str(
+                                    value_key, dest_stack, validated=True, inplace=False
+                                )
+                                continue
                     self._set_at_str(
-                        key, item, index, validated=False, non_blocking=False
+                        value_key, item, index, validated=False, non_blocking=False
                     )
                 else:
-                    subtd.set(key, item, inplace=True, non_blocking=False)
+                    if subtd is None:
+                        subtd = self._get_sub_tensordict(index)
+                    subtd.set(value_key, item, inplace=True, non_blocking=False)
         else:
             for key in self.keys():
                 self.set_at_(key, value, index)

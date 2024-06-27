@@ -167,6 +167,7 @@ class TestTensorClass:
             {
                 "X": X,
                 "y": y,
+                "z": z,
             },
             batch_size=[3, 4],
         )
@@ -428,6 +429,7 @@ class TestTensorClass:
             ),
             batch_size=[3],
         )
+        assert not a._non_tensordict
         b = MyClass2(
             torch.zeros(3),
             "z0",
@@ -439,7 +441,11 @@ class TestTensorClass:
             ),
             batch_size=[3],
         )
-        c = TensorDict({"x": torch.zeros(3), "y": {"x": torch.ones(3)}}, batch_size=[3])
+        assert not b._non_tensordict
+        c = TensorDict(
+            {"x": torch.zeros(3), "z": "z0", "y": {"x": torch.ones(3), "z": "z1"}},
+            batch_size=[3],
+        )
 
         assert (a == a.clone()).all()
         assert (a != 1.0).any()
@@ -776,9 +782,9 @@ class TestTensorClass:
         data2 = MyDataNested(X=X, y=data_nest2, z=z, batch_size=batch_size)
         assert (data == data2).all()
         assert (data == data2).X.all()
-        assert (data == data2).z is None
+        assert (data == data2).z.all()
         assert (data == data2).y.X.all()
-        assert (data == data2).y.z is None
+        assert (data == data2).y.z.all()
 
     @pytest.mark.parametrize("any_to_td", [True, False])
     def test_nested_heterogeneous(self, any_to_td):
@@ -840,9 +846,9 @@ class TestTensorClass:
         data2 = MyDataNested(X=X + 1, y=data_nest2, z=z, batch_size=batch_size)
         assert (data != data2).any()
         assert (data != data2).X.all()
-        assert (data != data2).z is None
+        assert (data != data2).z.all()
         assert not (data != data2).y.X.any()
-        assert (data != data2).y.z is None
+        assert not (data != data2).y.z.any()
 
     def test_permute(
         self,
@@ -1031,10 +1037,9 @@ class TestTensorClass:
 
         data.set("v", "test")
         assert data.v == "test"
-        assert "v" not in data._tensordict.keys()
-        assert "v" in data._non_tensordict.keys()
+        assert "v" in data._tensordict.keys()
 
-        with pytest.raises(RuntimeError, match="Cannot update an existing"):
+        with pytest.raises(ValueError, match="Failed to update 'v'"):
             data.set("v", vorig, inplace=True)
 
         # ensure optional fields are writable
@@ -1112,8 +1117,8 @@ class TestTensorClass:
 
         data.v = "test"
         assert data.v == "test"
-        assert "v" not in data._tensordict.keys()
-        assert "v" in data._non_tensordict.keys()
+        assert "v" in data._tensordict.keys()
+        assert "v" not in data._non_tensordict.keys()
 
         # ensure optional fields are writable
         data.k = torch.zeros(3, 4, 5)
@@ -1165,11 +1170,9 @@ class TestTensorClass:
         # Negative testcase for non-tensor data
         z = "test_bluff"
         data2 = MyData(X=x, y=y, z=z, batch_size=batch_size)
-        with pytest.warns(
-            UserWarning,
-            match="Meta data at 'z' may or may not be equal, this may result in undefined behaviours",
-        ):
-            data[1] = data2[1]
+        data[1] = data2[1]
+        assert (data[1] == data2[1]).all()
+        assert data[1].z == ["test_bluff"] * data[1].numel()
 
         # Validating nested test cases
         @tensorclass
@@ -1193,11 +1196,8 @@ class TestTensorClass:
 
         # Negative Scenario
         data3 = MyDataNested(X=X2, y=data_nest2, z=["e", "f"], batch_size=batch_size)
-        with pytest.warns(
-            UserWarning,
-            match="Meta data at 'z' may or may not be equal, this may result in undefined behaviours",
-        ):
-            data[:2] = data3[:2]
+        data[:2] = data3[:2]
+        assert data[:2].z == data3[:2]._get_str("z", None).tolist()
 
     @pytest.mark.parametrize(
         "broadcast_type",
@@ -1479,7 +1479,12 @@ class TestTensorClass:
         if lazy_legacy() or lazy:
             assert isinstance(stacked_tc._tensordict, LazyStackedTensorDict)
             assert isinstance(stacked_tc.y._tensordict, LazyStackedTensorDict)
-        assert stacked_tc.z == stacked_tc.y.z == z
+        zlist = z
+        if lazy:
+            for d in range(stacked_tc.ndim - 1, -1, -1):
+                zlist = [zlist] * stacked_tc.batch_size[d]
+        assert stacked_tc.z == stacked_tc.y.z
+        assert stacked_tc.z == zlist
 
         # Testing negative scenarios
         y = torch.zeros(3, 4, 5, dtype=torch.bool)
@@ -2005,7 +2010,7 @@ class TestAutoCasting:
         )
         assert isinstance(obj.tensor, torch.Tensor)
         assert isinstance(obj.integer, int)
-        assert isinstance(obj.string, str)
+        assert isinstance(obj.string, str), type(obj.string)
         assert isinstance(obj.floating, float)
         assert isinstance(obj.numpy_array, np.ndarray)
         assert isinstance(obj.anything, torch.Tensor)
@@ -2222,7 +2227,8 @@ class TestVMAP:
 
         data_bis = torch.vmap(assert_is_data)(data)
         assert isinstance(data_bis, VmappableClass)
-        assert "non_tensor" not in data_bis._tensordict
+        assert "non_tensor" in data_bis._tensordict
+        assert "non_tensor" not in data_bis._non_tensordict
         assert (data_bis == data).all()
         assert data_bis.non_tensor == "a string!"
 
