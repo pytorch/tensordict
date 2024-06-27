@@ -3047,8 +3047,6 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_equal(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        print(td)
-        print(td.to_tensordict())
         assert (td == td.to_tensordict()).all()
         td0 = td.to_tensordict().zero_()
         assert (td != td0).any()
