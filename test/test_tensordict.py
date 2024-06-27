@@ -39,7 +39,7 @@ from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData, tensorclass
+from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -891,6 +891,33 @@ class TestGeneric:
                 assert p.grad is None
             assert all(param.grad is not None for param in params.values(True, True))
 
+    def test_from_pytree(self):
+        class WeirdLookingClass:
+            pass
+
+        weird_key = WeirdLookingClass()
+
+        pytree = (
+            [torch.randint(10, (3,)), torch.zeros(2)],
+            {
+                "tensor": torch.randn(
+                    2,
+                ),
+                "td": TensorDict({"one": 1}),
+                weird_key: torch.randint(10, (2,)),
+                "list": [1, 2, 3],
+            },
+            {"named_tuple": TensorDict({"two": torch.ones(1) * 2}).to_namedtuple()},
+        )
+        td = TensorDict.from_pytree(pytree)
+        pytree_recon = td.to_pytree()
+
+        def check(v1, v2):
+            assert (v1 == v2).all()
+
+        torch.utils._pytree.tree_map(check, pytree, pytree_recon)
+        assert weird_key in pytree_recon[1]
+
     @pytest.mark.parametrize(
         "idx",
         [
@@ -1193,6 +1220,35 @@ class TestGeneric:
             td_memmap = td.clone().memmap_()
             td_memmap_pm = td_memmap.apply(lambda x: x.clone()).pin_memory()
             assert (td.pin_memory().to(device) == td_memmap_pm.to(device)).all()
+
+    def test_load_custom_artifact(self):
+        # Build the TD using this
+        # td = TensorDict(
+        #     {
+        #         "nested": {
+        #             "int64": [[1], [2]],
+        #             "string": ["a string!"],
+        #             "bfloat16": torch.ones(2, 1, dtype=torch.bfloat16),
+        #         }
+        #     },
+        #     batch_size=[2, 1],
+        #     names=["batch", "time"],
+        # ).memmap(f"{Path(__file__).parent}/artifacts/mmap_example/")
+
+        td = TensorDict.load(f"{Path(__file__).parent}/artifacts/mmap_example/")
+        assert td.shape == (2, 1)
+        # assert td.names == ("batch", "time")
+        assert (td["nested", "int64"] == torch.tensor([[1], [2]])).all()
+        assert td["nested", "int64"].dtype == torch.int64
+        assert td["nested", "string"] == ["a string!"]
+        assert (
+            td["nested", "bfloat16"] == torch.ones(2, 1, dtype=torch.bfloat16)
+        ).all()
+        assert td["nested", "bfloat16"].dtype == torch.bfloat16
+        td_nested = TensorDict.load(
+            f"{Path(__file__).parent}/artifacts/mmap_example/nested"
+        )
+        assert (td_nested == td["nested"]).all()
 
     @pytest.mark.parametrize("method", ["share_memory", "memmap"])
     def test_memory_lock(self, method):
@@ -3427,6 +3483,26 @@ class TestTensorDicts(TestTensorDictsBase):
                 else:
                     assert td.view(*new_shape) is td
                     assert td.view(-1).view(*new_shape) is td
+
+    def test_isfinite(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert td.isfinite().all()
+
+    def test_isnan(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert not td.isnan().any()
+
+    def test_isreal(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert td.isreal().all()
+
+    def test_isposinf(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert not td.isposinf().any()
+
+    def test_isneginf(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        assert not td.isneginf().any()
 
     def test_items_values_keys(self, td_name, device):
         torch.manual_seed(1)
@@ -5701,6 +5777,12 @@ class TestTensorDicts(TestTensorDictsBase):
             assert (td_view.get("a") == tensor).all()
 
             assert (td_view.get("a") == 1).all()
+
+    @set_lazy_legacy(False)
+    def test_view_dtype(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tview = td.view(torch.uint8, batch_size=[])
+        assert all(p.dtype == torch.uint8 for p in tview.values(True, True))
 
     @set_lazy_legacy(False)
     def test_view_decorator(self, td_name, device):
@@ -9148,6 +9230,32 @@ class TestNonTensorData:
 
         if strategy == "memmap":
             assert TensorDict.load_memmap(tmpdir).get("val").tolist() == [0, 3] * 5
+
+    def test_where(self):
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        other = NonTensorStack(
+            *[NonTensorData(["b"]), NonTensorData(["b"])], batch_size=(2,)
+        )
+        out = NonTensorStack(
+            *[NonTensorData(["none"]), NonTensorData(["none"])], batch_size=(2,)
+        )
+        result = tensor.where(condition=condition, other=other, out=out, pad=0)
+        assert result.tolist() == [["a"], ["b"]]
+        condition = torch.tensor([True, False])
+        tensor = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        other = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        out = NonTensorStack(
+            *[NonTensorData(["a"]), NonTensorData(["a"])], batch_size=(2,)
+        )
+        result = tensor.where(condition=condition, other=other, out=out, pad=0)
+        assert result.tolist() == [["a"], ["a"]]
 
 
 class TestSubclassing:

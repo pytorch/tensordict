@@ -126,6 +126,14 @@ class CompositeDistribution(d.Distribution):
             self.batch_shape,
         )
 
+    @property
+    def deterministic_sample(self) -> TensorDictBase:
+        samples = {name: dist.deterministic_sample for name, dist in self.dists.items()}
+        return TensorDict(
+            samples,
+            self.batch_shape,
+        )
+
     def rsample(self, shape=None) -> TensorDictBase:
         if shape is None:
             shape = torch.Size([])

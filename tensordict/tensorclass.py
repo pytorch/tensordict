@@ -92,11 +92,7 @@ _TD_PASS_THROUGH = {
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
-    "replace",
-    "gather",
-]
-# Methods to apply to the nested TD without wrapping the output
-_NOWRAP_OUTPUT_METHOD_FROM_TD = [
+    "_default_get",
     "_get_at_str",
     "_get_at_tuple",
     "_get_str",
@@ -193,6 +189,15 @@ _FALLBACK_METHOD_FROM_TD = [
     "floor_",
     "frac",
     "frac_",
+    "is_empty",
+    "is_memmap",
+    "is_shared",
+    "is_shared",
+    "isfinite",
+    "isnan",
+    "isreal",
+    "items",
+    "keys",
     "lerp",
     "lerp_",
     "lgamma",
@@ -859,17 +864,24 @@ def _memmap_(
             futures.append(executor.submit(save_metadata))
 
         prefix = prefix / "_tensordict"
-
-    td = self._tensordict._memmap_(
-        prefix=prefix,
-        executor=executor,
-        futures=futures,
-        inplace=inplace,
-        like=like,
-        copy_existing=copy_existing,
-        share_non_tensor=share_non_tensor,
-    )
-    td._device = torch.device("cpu")
+    if not isinstance(self, NonTensorData):
+        td = self._tensordict._memmap_(
+            prefix=prefix,
+            executor=executor,
+            futures=futures,
+            inplace=inplace,
+            like=like,
+            copy_existing=copy_existing,
+            share_non_tensor=share_non_tensor,
+        )
+        td._device = torch.device("cpu")
+    else:
+        # For non-tensor data, we don't create an empty _tensordict dir
+        td = self._tensordict.empty()
+        td._is_memmap = True
+        td._is_locked = True
+        if inplace:
+            self.__dict__["_tensordict"] = td
     if not inplace:
         result = cls._from_tensordict(td, _non_tensordict)
     else:
@@ -888,7 +900,14 @@ def _load_memmap(cls, prefix: Path, metadata: dict, **kwargs):
     if os.path.exists(prefix / "other.pickle"):
         with open(prefix / "other.pickle", "rb") as pickle_file:
             non_tensordict.update(pickle.load(pickle_file))
-    td = TensorDict.load_memmap(prefix / "_tensordict", **kwargs, non_blocking=False)
+    if os.path.exists(prefix / "_tensordict"):
+        td = TensorDict.load_memmap(
+            prefix / "_tensordict", **kwargs, non_blocking=False
+        )
+    else:
+        if not issubclass(cls, NonTensorData):
+            raise ValueError("The _tensordict directory seems to be missing.")
+        td = TensorDict(device="cpu")
     return cls._from_tensordict(td, non_tensordict)
 
 
@@ -2258,7 +2277,9 @@ class NonTensorData:
             def __eq__(self, other):
                 if isinstance(other, NonTensorData):
                     return torch.full(
-                        self.batch_size, self.data == other.data, device=self.device
+                        self.batch_size,
+                        bool(self.data == other.data),
+                        device=self.device,
                     )
                 return old_eq(self, other)
 
@@ -2270,7 +2291,9 @@ class NonTensorData:
             def __ne__(self, other):
                 if isinstance(other, NonTensorData):
                     return torch.full(
-                        self.batch_size, self.data != other.data, device=self.device
+                        self.batch_size,
+                        bool(self.data != other.data),
+                        device=self.device,
                     )
                 return _ne(self, other)
 
@@ -2282,7 +2305,9 @@ class NonTensorData:
             def __xor__(self, other):
                 if isinstance(other, NonTensorData):
                     return torch.full(
-                        self.batch_size, self.data ^ other.data, device=self.device
+                        self.batch_size,
+                        bool(self.data ^ other.data),
+                        device=self.device,
                     )
                 return _xor(self, other)
 
@@ -2294,7 +2319,9 @@ class NonTensorData:
             def __or__(self, other):
                 if isinstance(other, NonTensorData):
                     return torch.full(
-                        self.batch_size, self.data | other.data, device=self.device
+                        self.batch_size,
+                        bool(self.data | other.data),
+                        device=self.device,
                     )
                 return _or(self, other)
 

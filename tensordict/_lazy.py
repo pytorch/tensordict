@@ -2359,7 +2359,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     return td.where(cond, other, pad=pad)
                 return other if not cond else td
 
-            result = LazyStackedTensorDict.maybe_dense_stack(
+            result = LazyStackedTensorDict.lazy_stack(
                 [
                     where(td, cond, _other, pad=pad)
                     for td, cond, _other in zip(self.tensordicts, condition, other)
@@ -2367,7 +2367,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 self.stack_dim,
             )
         else:
-            result = LazyStackedTensorDict.maybe_dense_stack(
+            result = LazyStackedTensorDict.lazy_stack(
                 [
                     td.where(cond, other, pad=pad)
                     for td, cond in zip(self.tensordicts, condition)
