@@ -1475,7 +1475,8 @@ def assert_allclose_td(
                 continue
             assert_allclose_td(input1, input2, rtol=rtol, atol=atol)
             continue
-
+        elif not isinstance(input1, torch.Tensor):
+            continue
         mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 

@@ -34,7 +34,7 @@ from tensordict import LazyStackedTensorDict, make_tensordict, TensorDict
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
-from tensordict.base import TensorDictBase
+from tensordict.base import _is_leaf_nontensor, TensorDictBase
 from tensordict.functional import dense_stack_tds, pad, pad_sequence
 from tensordict.memmap import MemoryMappedTensor
 
@@ -2613,10 +2613,10 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_apply_filter(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         assert td.apply(lambda x: None, filter_empty=False) is not None
-        if td_name != "td_with_non_tensor":
-            assert td.apply(lambda x: None, filter_empty=True) is None
-        else:
-            assert td.apply(lambda x: None, filter_empty=True) is not None
+        assert (
+            td.apply(lambda x: None, filter_empty=True, is_leaf=_is_leaf_nontensor)
+            is None
+        )
 
     @pytest.mark.parametrize("inplace", [False, True])
     def test_apply_other(self, td_name, device, inplace):
@@ -3047,6 +3047,8 @@ class TestTensorDicts(TestTensorDictsBase):
     def test_equal(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
+        print(td)
+        print(td.to_tensordict())
         assert (td == td.to_tensordict()).all()
         td0 = td.to_tensordict().zero_()
         assert (td != td0).any()
@@ -5905,7 +5907,7 @@ class TestTensorDictRepr:
     def nested_td(self, device, dtype):
         if device is not None:
             device_not_none = device
-        elif torch.has_cuda and torch.cuda.device_count():
+        elif torch.cuda.is_available() and torch.cuda.device_count():
             device_not_none = torch.device("cuda:0")
         else:
             device_not_none = torch.device("cpu")
@@ -5929,7 +5931,7 @@ class TestTensorDictRepr:
 
         if device is not None:
             device_not_none = device
-        elif torch.has_cuda and torch.cuda.device_count():
+        elif torch.cuda.is_available() and torch.cuda.device_count():
             device_not_none = torch.device("cuda:0")
         else:
             device_not_none = torch.device("cpu")
@@ -5959,7 +5961,7 @@ class TestTensorDictRepr:
     def stacked_td(self, device, dtype):
         if device is not None:
             device_not_none = device
-        elif torch.has_cuda and torch.cuda.device_count():
+        elif torch.cuda.is_available() and torch.cuda.device_count():
             device_not_none = torch.device("cuda:0")
         else:
             device_not_none = torch.device("cpu")
@@ -5985,7 +5987,7 @@ class TestTensorDictRepr:
     def td(self, device, dtype):
         if device is not None:
             device_not_none = device
-        elif torch.has_cuda and torch.cuda.device_count():
+        elif torch.cuda.is_available() and torch.cuda.device_count():
             device_not_none = torch.device("cuda:0")
         else:
             device_not_none = torch.device("cpu")

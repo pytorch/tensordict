@@ -1294,6 +1294,8 @@ def _to_tensordict(self) -> TensorDict:
     """
     td = self._tensordict.to_tensordict()
     for key, val in self._non_tensordict.items():
+        # if val is None:
+        #     continue
         td.set_non_tensor(key, val)
     return td
 
@@ -1407,7 +1409,7 @@ def _set(
         elif isinstance(value, tuple(tensordict_lib.base._ACCEPTED_CLASSES)):
             return set_tensor()
 
-        if isinstance(self, NonTensorData) or value is None:
+        if self._is_non_tensor or value is None:
             # Avoiding key clash, honoring the user input to assign non-tensor data to the key
             if key in self._tensordict.keys():
                 if inplace:
@@ -1697,7 +1699,11 @@ def _eq(self, other: object) -> bool:
     if is_tensorclass(other):
         tensor = self._tensordict == other._tensordict
     else:
-        tensor = self._tensordict == other
+        tensor = self._tensordict == (
+            other.exclude(*self._non_tensordict.keys())
+            if _is_tensor_collection(type(other))
+            else other
+        )
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -1754,7 +1760,11 @@ def _ne(self, other: object) -> bool:
     if is_tensorclass(other):
         tensor = self._tensordict != other._tensordict
     else:
-        tensor = self._tensordict != other
+        tensor = self._tensordict != (
+            other.exclude(*self._non_tensordict.keys())
+            if _is_tensor_collection(type(other))
+            else other
+        )
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -1778,7 +1788,11 @@ def _or(self, other: object) -> bool:
     if is_tensorclass(other):
         tensor = self._tensordict | other._tensordict
     else:
-        tensor = self._tensordict | other
+        tensor = self._tensordict | (
+            other.exclude(*self._non_tensordict.keys())
+            if _is_tensor_collection(type(other))
+            else other
+        )
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -1802,7 +1816,11 @@ def _xor(self, other: object) -> bool:
     if is_tensorclass(other):
         tensor = self._tensordict ^ other._tensordict
     else:
-        tensor = self._tensordict ^ other
+        tensor = self._tensordict ^ (
+            other.exclude(*self._non_tensordict.keys())
+            if _is_tensor_collection(type(other))
+            else other
+        )
     return _from_tensordict_with_none(self, tensor)
 
 
@@ -2138,13 +2156,18 @@ class NonTensorData:
     _is_non_tensor: bool = True
 
     def __post_init__(self):
-        if is_non_tensor(self.data):
-            data = getattr(self.data, "data", None)
-            if data is None:
-                data = self.data.tolist()
-            del self._tensordict["data"]
-            self._non_tensordict["data"] = data
-        assert self._tensordict.is_empty(), self._tensordict
+        _tensordict = self.__dict__["_tensordict"]
+        _non_tensordict = self.__dict__["_non_tensordict"]
+        data = _non_tensordict.get("data", NO_DEFAULT)
+        if data is NO_DEFAULT:
+            data = _tensordict._get_str("data", default=NO_DEFAULT)
+            data_inner = getattr(data, "data", None)
+            if data_inner is None:
+                # Support for stacks
+                data_inner = data.tolist()
+            del _tensordict["data"]
+            _non_tensordict["data"] = data_inner
+        assert _tensordict.is_empty(), self._tensordict
 
         def __repr__(self):
             data_str = str(self.data)
