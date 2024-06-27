@@ -2869,6 +2869,7 @@ class TensorDictBase(MutableMapping):
         return_early: bool = False,
         use_buffer: bool = False,
         share_memory: bool = False,
+        pin_memory: bool = False,
         metadata: bool = False,
     ) -> None:
         """Consolidates the tensordict content in a single storage for fast serialization.
@@ -2895,6 +2896,8 @@ class TensorDictBase(MutableMapping):
                 Defaults to ``False``.
             share_memory (bool, optional): if ``True``, the storage will be placed in shared memory.
                 Defaults to ``False``.
+            pin_memory (bool, optional): whether the consolidated data should be placed in pinned
+                memory. Defaults to ``False``.
             metadata (bool, optional): if ``True``, the metadata will be stored alongisde the
                 common storage. If a filename is provided, this is without effect.
                 Storing the metadata can be useful when one wants to control how serialization
@@ -2940,6 +2943,7 @@ class TensorDictBase(MutableMapping):
                 filesize,
                 dtype=torch.uint8,
                 device=device if device else self.device,
+                pin_memory=pin_memory,
             )
             if share_memory and not (
                 device is not None and device.type == "cuda"
