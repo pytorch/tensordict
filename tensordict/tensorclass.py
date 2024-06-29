@@ -92,12 +92,15 @@ _TD_PASS_THROUGH = {
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
 _METHOD_FROM_TD = [
-    "_check_unlock",
+]
+# Methods to be executed from tensordict, any ref to self means 'self._tensordict'
+_FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_default_get",
     "_get_at_str",
     "_get_at_tuple",
     "_get_str",
     "_get_tuple",
+    "_check_unlock",
     "_has_names",
     "_propagate_lock",
     "_propagate_unlock",
@@ -464,9 +467,9 @@ def _tensorclass(cls: T) -> T:
     for method_name in _FALLBACK_METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, _wrap_td_method(method_name))
-    # for method_name in _NOWRAP_OUTPUT_METHOD_FROM_TD:
-    #     if not hasattr(cls, method_name):
-    #         setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True))
+    for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
+        if not hasattr(cls, method_name):
+            setattr(cls, method_name, _wrap_td_method(method_name, no_wrap=True))
     for method_name in _FALLBACK_METHOD_FROM_TD_COPY:
         if not hasattr(cls, method_name):
             setattr(
