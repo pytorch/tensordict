@@ -1294,12 +1294,11 @@ class LazyStackedTensorDict(TensorDictBase):
         source = {key: value.contiguous() for key, value in self.items()}
         batch_size = self.batch_size
         device = self.device
-        out = TensorDict(
+        out = TensorDict._new_unsafe(
             source=source,
             batch_size=batch_size,
             device=device,
             names=self.names,
-            _run_checks=False,
             lock=self.is_locked,
         )
         return out
@@ -1675,8 +1674,8 @@ class LazyStackedTensorDict(TensorDictBase):
         if is_tensor_collection(value) or isinstance(value, dict):
             indexed_bs = _getitem_batch_size(self.batch_size, index)
             if isinstance(value, dict):
-                value = TensorDict(
-                    value, batch_size=indexed_bs, device=self.device, _run_checks=False
+                value = TensorDict._new_unsafe(
+                    value, batch_size=indexed_bs, device=self.device
                 )
             if value.batch_size != indexed_bs:
                 # try to expand

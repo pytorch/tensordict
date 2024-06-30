@@ -595,12 +595,11 @@ def _init_wrapper(init: Callable) -> Callable:
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
 
-        self._tensordict = TensorDict(
+        self._tensordict = TensorDict._new_unsafe(
             {},
             batch_size=torch.Size(batch_size),
             device=device,
             names=names,
-            _run_checks=False,
         )
         self._non_tensordict = {}
 
