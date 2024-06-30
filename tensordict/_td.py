@@ -224,7 +224,6 @@ class TensorDict(TensorDictBase):
         names: Sequence[str] | None = None,
         non_blocking: bool = None,
         lock: bool = False,
-        _run_checks: bool = True,
     ) -> None:
         has_device = False
         sub_non_blocking = False
@@ -241,38 +240,64 @@ class TensorDict(TensorDictBase):
                 sub_non_blocking = True
         self._device = device
 
-        self._tensordict = _tensordict = _StringOnlyDict()
-        if not _run_checks:
-            self._batch_size = batch_size
-            if source:  # faster than calling items
-                for key, value in source.items():
-                    if isinstance(value, dict):
-                        value = TensorDict(
-                            value,
-                            batch_size=self._batch_size,
-                            device=self._device,
-                            _run_checks=_run_checks,
-                            non_blocking=sub_non_blocking,
-                        )
-                    _tensordict[key] = value
-            self._td_dim_names = names
-        else:
-            if source is None:
-                source = {}
-            if not isinstance(source, (TensorDictBase, dict)):
-                raise ValueError(
-                    "A TensorDict source is expected to be a TensorDictBase "
-                    f"sub-type or a dictionary, found type(source)={type(source)}."
-                )
-            self._batch_size = self._parse_batch_size(source, batch_size)
-            self.names = names
+        self._tensordict = _StringOnlyDict()
+        if source is None:
+            source = {}
+        if not isinstance(source, (TensorDictBase, dict)):
+            raise ValueError(
+                "A TensorDict source is expected to be a TensorDictBase "
+                f"sub-type or a dictionary, found type(source)={type(source)}."
+            )
+        self._batch_size = self._parse_batch_size(source, batch_size)
+        self.names = names
 
-            for key, value in source.items():
-                self.set(key, value, non_blocking=sub_non_blocking)
+        for key, value in source.items():
+            self.set(key, value, non_blocking=sub_non_blocking)
         if not non_blocking and sub_non_blocking and has_device:
             self._sync_all()
         if lock:
             self.lock_()
+
+    @classmethod
+    def _new_unsafe(
+        cls,
+        source: T | dict[str, CompatibleType] = None,
+        batch_size: Sequence[int] | torch.Size | int | None = None,
+        device: DeviceType | None = None,
+        names: Sequence[str] | None = None,
+        non_blocking: bool = None,
+        lock: bool = False,
+        nested: bool = True,
+    ) -> TensorDict:
+        self = cls.__new__(cls)
+        sub_non_blocking = False
+        if device is not None:
+            if non_blocking is None:
+                sub_non_blocking = True
+                non_blocking = False
+            else:
+                sub_non_blocking = non_blocking
+            device = torch.device(device) if device is not None else None
+            if _has_mps:
+                # With MPS, an explicit sync is required
+                sub_non_blocking = True
+        self._device = device
+        self._tensordict = _tensordict = _StringOnlyDict()
+        self._batch_size = batch_size
+        if source:  # faster than calling items
+            for key, value in source.items():
+                if nested and isinstance(value, dict):
+                    value = TensorDict._new_unsafe(
+                        source=value,
+                        batch_size=self._batch_size,
+                        device=self._device,
+                        non_blocking=sub_non_blocking,
+                    )
+                _tensordict[key] = value
+        self._td_dim_names = names
+        if lock:
+            self.lock_()
+        return self
 
     @classmethod
     def from_module(
@@ -496,7 +521,7 @@ class TensorDict(TensorDictBase):
                 _quick_set(_swap, swap_dest)
                 return swap_dest
             else:
-                return TensorDict(_swap, batch_size=[], _run_checks=False)
+                return TensorDict._new_unsafe(_swap, batch_size=[])
 
     def __ne__(self, other: object) -> T | bool:
         if _is_tensorclass(other):
@@ -1066,13 +1091,12 @@ class TensorDict(TensorDictBase):
                 return value
             return _add_batch_dim(value, in_dim, vmap_level)
 
-        out = TensorDict(
+        out = TensorDict._new_unsafe(
             {key: _add_batch_dim_wrapper(key, value) for key, value in td.items()},
             batch_size=torch.Size(
                 [b for i, b in enumerate(td.batch_size) if i != in_dim]
             ),
             names=[name for i, name in enumerate(td.names) if i != in_dim],
-            _run_checks=False,
             lock=self.is_locked,
         )
         return out
@@ -1139,12 +1163,11 @@ class TensorDict(TensorDictBase):
                 )
             else:
                 source[key] = _get_item(item, index)
-        result = TensorDict(
+        result = TensorDict._new_unsafe(
             source=source,
             batch_size=batch_size,
             device=self.device,
             names=names,
-            _run_checks=False,
             # lock=self.is_locked,
         )
         if self._is_memmap and _index_preserve_data_ptr(index):
@@ -1211,8 +1234,8 @@ class TensorDict(TensorDictBase):
             is_shared=is_shared,
             is_memmap=is_memmap,
         ):
-            result = TensorDict(
-                {}, batch_size=batch_size, names=names, _run_checks=False, device=device
+            result = TensorDict._new_unsafe(
+                {}, batch_size=batch_size, names=names, device=device
             )
             result._is_shared = is_shared
             result._is_memmap = is_memmap
@@ -1546,7 +1569,7 @@ class TensorDict(TensorDictBase):
                 input_dict[key] = TensorDict.from_dict(
                     value, batch_size=[], device=device, batch_dims=None
                 )
-        # _run_checks=False breaks because a tensor may have the same batch-size as the tensordict
+        # regular __init__ breaks because a tensor may have the same batch-size as the tensordict
         out = cls(
             input_dict,
             batch_size=batch_size_set,
@@ -1563,12 +1586,11 @@ class TensorDict(TensorDictBase):
     def _from_dict_validated(
         cls, input_dict, batch_size=None, device=None, batch_dims=None, names=None
     ):
-        return cls(
+        return cls._new_unsafe(
             input_dict,
             batch_size=torch.Size(batch_size),
             device=torch.device(device) if device is not None else device,
             names=names,
-            _run_checks=False,
         )
 
     def from_dict_instance(
@@ -2611,12 +2633,11 @@ class TensorDict(TensorDictBase):
         return all([value.is_contiguous() for _, value in self.items()])
 
     def _clone(self, recurse: bool = True) -> T:
-        result = TensorDict(
+        result = TensorDict._new_unsafe(
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
             names=copy(self._td_dim_names),
-            _run_checks=False,
         )
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour
@@ -2629,12 +2650,11 @@ class TensorDict(TensorDictBase):
         source = {key: value.contiguous() for key, value in self.items()}
         batch_size = self.batch_size
         device = self.device
-        out = TensorDict(
+        out = TensorDict._new_unsafe(
             source=source,
             batch_size=batch_size,
             device=device,
             names=self.names,
-            _run_checks=False,
         )
         return out
 
@@ -2642,14 +2662,13 @@ class TensorDict(TensorDictBase):
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
     ) -> T:
         if not recurse:
-            return TensorDict(
+            return TensorDict._new_unsafe(
                 device=self._device if device is NO_DEFAULT else device,
                 batch_size=self._batch_size
                 if batch_size is None
                 else torch.Size(batch_size),
                 source={},
                 names=self._td_dim_names if names is None else names,
-                _run_checks=False,
             )
         return super().empty(recurse=recurse)
 
@@ -2688,13 +2707,12 @@ class TensorDict(TensorDictBase):
                         *val, strict=strict, inplace=inplace, set_shared=set_shared
                     )
 
-        result = TensorDict(
+        result = TensorDict._new_unsafe(
             device=self.device,
             batch_size=self.batch_size,
             source=source,
             # names=self.names if self._has_names() else None,
             names=self._td_dim_names,
-            _run_checks=False,
         )
         if inplace:
             self._tensordict = result._tensordict
@@ -2738,12 +2756,11 @@ class TensorDict(TensorDictBase):
                         _tensordict[key] = val
         if inplace:
             return self
-        result = TensorDict(
+        result = TensorDict._new_unsafe(
             _tensordict,
             batch_size=self.batch_size,
             device=self.device,
             names=self.names if self._has_names() else None,
-            _run_checks=False,
         )
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour
@@ -3375,12 +3392,11 @@ class _SubTensorDict(TensorDictBase):
         return all(value.is_contiguous() for value in self.values())
 
     def contiguous(self) -> T:
-        return TensorDict(
+        return TensorDict._new_unsafe(
             batch_size=self.batch_size,
             source={key: value.contiguous() for key, value in self.items()},
             device=self.device,
             names=self.names,
-            _run_checks=False,
         )
 
     def _select(
