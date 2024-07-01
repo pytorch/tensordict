@@ -2951,6 +2951,7 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         if device.type == "cuda" and device_cast.type == "cpu" and pin_memory:
+            print(device, device_cast)
             with pytest.raises(RuntimeError, match="only dense CPU tensors can be pinned"):
                 td_device = td.to(
                     device_cast, pin_memory=pin_memory, num_threads=num_threads
