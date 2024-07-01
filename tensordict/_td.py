@@ -1103,13 +1103,13 @@ class TensorDict(TensorDictBase):
                 futures.append(local_future)
             else:
                 if subs_results is not None:
-                    result = subs_results[local_future]
+                    local_result = subs_results[local_future]
                 else:
                     # TODO: check if add_done_callback can safely be used here
                     #  The issue is that it does not raises an exception encountered during the
                     #  execution, resulting in UBs.
-                    result = local_future.result()
-                local_future = executor.submit(setter, item_trsf=result)
+                    local_result = local_future.result()
+                local_future = executor.submit(setter, item_trsf=local_result)
                 futures.append(local_future)
                 local_futures[i] = local_future
 
