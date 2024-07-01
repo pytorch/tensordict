@@ -2943,10 +2943,16 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
     @pytest.mark.parametrize("device_cast", get_available_devices())
-    def test_cast_device(self, td_name, device, device_cast):
+    @pytest.mark.parametrize("pin_memory", [False] if not torch.cuda.is_available() else [False, True])
+    @pytest.mark.parametrize("num_threads", [0, 1, 4, None])
+    def test_cast_device(self, td_name, device, device_cast, pin_memory, num_threads):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td_device = td.to(device_cast)
+        if device.type == "cuda" and pin_memory:
+            with pytest.raises(RuntimeError, "Only cpu"):
+                td_device = td.to(device_cast, pin_memory=pin_memory, num_threads=num_threads)
+            return
+        td_device = td.to(device_cast, pin_memory=pin_memory, num_threads=num_threads)
 
         for item in td_device.values():
             assert item.device == device_cast
@@ -8276,13 +8282,15 @@ class TestNamedDims(TestTensorDictsBase):
             tdbool.names = "All work and no play makes Jack a dull boy"
 
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_to(self, device):
+    @pytest.mark.parametrize("pin_memory", [False] if not torch.cuda.is_available() else [False, True])
+    @pytest.mark.parametrize("num_threads", [0, 1, 4, None])
+    def test_to(self, device, pin_memory, num_threads):
         td = TensorDict(
             {"": TensorDict({}, [3, 4, 1, 6])},
             batch_size=[3, 4, 1, 6],
             names=["a", "b", "c", "d"],
         )
-        tdt = td.to(device)
+        tdt = td.to(device, pin_memory=pin_memory, num_threads=num_threads)
         assert tdt.names == ["a", "b", "c", "d"]
 
     def test_unbind(self):

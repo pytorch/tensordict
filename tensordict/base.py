@@ -2420,21 +2420,26 @@ class TensorDictBase(MutableMapping):
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors."""
         ...
 
-    def cpu(self) -> T:
-        """Casts a tensordict to CPU."""
-        return self.to("cpu")
+    def cpu(self, **kwargs) -> T:
+        """Casts a tensordict to CPU.
 
-    def cuda(self, device: int = None) -> T:
+        This function also supports all the keyword arguments of :meth:`~.to`.
+        """
+        return self.to("cpu", **kwargs)
+
+    def cuda(self, device: int = None, **kwargs) -> T:
         """Casts a tensordict to a cuda device (if not already on it).
 
         Args:
             device (int, optional): if provided, the cuda device on which the
                 tensor should be cast.
 
+        This function also supports all the keyword arguments of :meth:`~.to`.
+
         """
         if device is None:
             return self.to(torch.device("cuda"))
-        return self.to(f"cuda:{device}")
+        return self.to(f"cuda:{device}", **kwargs)
 
     @property
     def is_cuda(self):
