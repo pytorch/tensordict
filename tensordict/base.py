@@ -8480,6 +8480,8 @@ class TensorDictBase(MutableMapping):
                     lambda x: x.pin_memory(), num_threads=num_threads, call_when_done=to
                 )
             else:
+                if pin_memory:
+                    result = result.pin_memory()
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
                 result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
