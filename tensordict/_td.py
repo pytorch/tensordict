@@ -8,12 +8,12 @@ from __future__ import annotations
 import numbers
 import os
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor, wait, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterable, Iterator, List, Sequence, Tuple, Type
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Sequence, Tuple, Type
 from warnings import warn
 
 import numpy as np
@@ -1052,7 +1052,9 @@ class TensorDict(TensorDictBase):
 
         any_set = set()
 
-        for i, (key, local_future) in enumerate(zip(self.keys(), local_futures, strict=True)):
+        for i, (key, local_future) in enumerate(
+            zip(self.keys(), local_futures, strict=True)
+        ):
 
             def setter(
                 item_trsf,
@@ -2666,6 +2668,9 @@ class TensorDict(TensorDictBase):
 
     def to(self, *args, **kwargs: Any) -> T:
         non_blocking = kwargs.pop("non_blocking", None)
+        pin_memory = kwargs.pop("pin_memory", False)
+        num_threads = kwargs.pop("num_threads", None)
+
         device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
         result = self
 
@@ -2695,12 +2700,16 @@ class TensorDict(TensorDictBase):
                     device=device, dtype=dtype, non_blocking=sub_non_blocking
                 )
 
+
         apply_kwargs = {}
         if device is not None or dtype is not None:
-            apply_kwargs["device"] = device if device is not None else self.device
-            apply_kwargs["batch_size"] = batch_size
-            result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
-        elif batch_size is not None:
+            if pin_memory and num_threads != 0:
+                result = self._multithread_apply_nest(lambda x: x.pin_memory(), num_threads=num_threads, call_when_done=to)
+            else:
+                apply_kwargs["device"] = device if device is not None else self.device
+                apply_kwargs["batch_size"] = batch_size
+                result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
+        if batch_size is not None:
             result.batch_size = batch_size
         if device is not None and sub_non_blocking and not non_blocking:
             self._sync_all()

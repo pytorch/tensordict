@@ -548,6 +548,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
+        subs_results: Dict[Future, Any] | None = None,
         **constructor_kwargs,
     ) -> None:
         ...

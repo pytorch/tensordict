@@ -18,7 +18,7 @@ import warnings
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import Future, ThreadPoolExecutor, wait, as_completed
+from concurrent.futures import as_completed, Future, ThreadPoolExecutor, wait
 from copy import copy
 from functools import partial, wraps
 from pathlib import Path
@@ -5827,6 +5827,7 @@ class TensorDictBase(MutableMapping):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
+        subs_results: Dict[Future, Any] | None = None,
         **constructor_kwargs,
     ) -> None:
         ...

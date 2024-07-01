@@ -1574,6 +1574,7 @@ class LazyStackedTensorDict(TensorDictBase):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
+        subs_results: Dict[Future, Any] | None = None,
         **constructor_kwargs,
     ) -> None:
         if inplace and any(
@@ -1603,6 +1604,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 executor=executor,
                 futures=futures,
                 local_futures=local_future,
+                subs_results=subs_results,
             )
             results.append(local_out)
         if filter_empty and all(r is None for r in results):
