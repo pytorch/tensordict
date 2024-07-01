@@ -18,7 +18,7 @@ import warnings
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait, as_completed
 from copy import copy
 from functools import partial, wraps
 from pathlib import Path
