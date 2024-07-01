@@ -8,7 +8,7 @@ from __future__ import annotations
 import numbers
 import os
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait, as_completed
 from copy import copy
 from numbers import Number
 from pathlib import Path
