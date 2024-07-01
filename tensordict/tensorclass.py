@@ -104,6 +104,7 @@ _METHOD_FROM_TD = [
     "numel",
     "replace",
     "_has_names",
+    "_multithread_rebuild",  # rebuild checks if self is a non tensor
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
 _FALLBACK_METHOD_FROM_TD = [
@@ -120,6 +121,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "__truediv__",
     "_add_batch_dim",
     "_apply_nest",
+    "_multithread_apply_flat",
     "_check_unlock",
     "_erase_names",  # TODO: must be specialized
     "_exclude",  # TODO: must be specialized
@@ -467,9 +469,6 @@ def _tensorclass(cls: T) -> T:
                 method_name,
                 _wrap_td_method(method_name, copy_non_tensor=True),
             )
-
-    if not hasattr(cls, "_apply_nest"):
-        cls._apply_nest = TensorDict._apply_nest
 
     if not hasattr(cls, "filter_non_tensor_data"):
         cls.filter_non_tensor_data = _filter_non_tensor_data

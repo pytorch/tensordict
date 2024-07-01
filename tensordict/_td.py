@@ -944,103 +944,22 @@ class TensorDict(TensorDictBase):
             names=None,
         )
 
-    def _multithread_apply_nest(
-        self,
-        fn: Callable,
-        *others: T,
-        batch_size: Sequence[int] | None = None,
-        device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
-        inplace: bool = False,
-        checked: bool = False,
-        call_on_nested: bool = False,
-        default: Any = NO_DEFAULT,
-        named: bool = False,
-        nested_keys: bool = False,
-        prefix: tuple = (),
-        filter_empty: bool | None = None,
-        is_leaf: Callable = None,
-        out: TensorDictBase | None = None,
-        num_threads: int,
-        **constructor_kwargs,
-    ) -> T | None:
-        if call_on_nested:
-            raise RuntimeError
-        # We create 2 structures that will have the same elements within:
-        #  futures is a flat list of all the futures we need to wait for,
-        #  local_futures is a nested representation of this flat structure.
-        #  In local_futures, the order of the items can be used to link the items to their key.
-        futures = []
-        local_futures = []
-        executor = ThreadPoolExecutor(max_workers=num_threads)
-        self._multithread_apply_flat(
-            fn,
-            *others,
-            batch_size=batch_size,
-            device=device,
-            names=names,
-            inplace=inplace,
-            checked=checked,
-            call_on_nested=call_on_nested,
-            default=default,
-            named=named,
-            nested_keys=nested_keys,
-            prefix=prefix,
-            filter_empty=filter_empty,
-            is_leaf=is_leaf,
-            out=out,
-            executor=executor,
-            futures=futures,
-            local_futures=local_futures,
-            **constructor_kwargs,
-        )
-        return self._multithread_rebuild(
-            fn,
-            *others,
-            batch_size=batch_size,
-            device=device,
-            names=names,
-            inplace=inplace,
-            checked=checked,
-            call_on_nested=call_on_nested,
-            default=default,
-            named=named,
-            nested_keys=nested_keys,
-            prefix=prefix,
-            filter_empty=filter_empty,
-            is_leaf=is_leaf,
-            out=out,
-            executor=executor,
-            futures=futures,
-            local_futures=local_futures,
-            **constructor_kwargs,
-        )
-
     def _multithread_apply_flat(
         self,
         fn: Callable,
         *others: T,
-        batch_size: Sequence[int] | None = None,
-        device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
-        inplace: bool = False,
-        checked: bool = False,
         call_on_nested: bool = False,
         default: Any = NO_DEFAULT,
         named: bool = False,
         nested_keys: bool = False,
         prefix: tuple = (),
-        filter_empty: bool | None = None,
         is_leaf: Callable = None,
-        out: TensorDictBase | None = None,
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
-        **constructor_kwargs,
     ) -> None:
         if is_leaf is None:
             is_leaf = _default_is_leaf
-
         for key, item in self.items():
             if (
                 not call_on_nested
@@ -1061,21 +980,13 @@ class TensorDict(TensorDictBase):
                 item._multithread_apply_flat(
                     fn,
                     *_others,
-                    inplace=inplace,
-                    batch_size=batch_size,
-                    device=device,
-                    checked=checked,
                     named=named,
                     nested_keys=nested_keys,
-                    default=default,
                     prefix=prefix + (key,),
-                    filter_empty=filter_empty,
                     is_leaf=is_leaf,
-                    out=out._get_str(key, default=None) if out is not None else None,
                     executor=executor,
                     futures=futures,
                     local_futures=local_futures[-1],
-                    **constructor_kwargs,
                 )
             else:
                 _others = [_other._get_str(key, default=default) for _other in others]
@@ -1093,26 +1004,23 @@ class TensorDict(TensorDictBase):
 
     def _multithread_rebuild(
         self,
-        fn: Callable,
-        *others: T,
+        *,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = None,
         inplace: bool = False,
         checked: bool = False,
-        call_on_nested: bool = False,
-        default: Any = NO_DEFAULT,
-        named: bool = False,
-        nested_keys: bool = False,
-        prefix: tuple = (),
-        filter_empty: bool | None = None,
-        is_leaf: Callable = None,
         out: TensorDictBase | None = None,
+        filter_empty: bool = False,
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
         **constructor_kwargs,
     ) -> None:
+        if constructor_kwargs:
+            raise RuntimeError(
+                f"constructor_kwargs not supported for class {type(self)}."
+            )
         # Rebuilds a tensordict from the futures of its leaves
         if inplace:
             result = self
@@ -1141,21 +1049,20 @@ class TensorDict(TensorDictBase):
             result = make_result()
             is_locked = False
 
-        any_set = False
+        any_set = set()
 
         for i, (key, local_future) in enumerate(zip(self.keys(), local_futures)):
 
             def setter(
-                future,
+                item_trsf,
                 key=key,
                 inplace=inplace,
                 result=result,
                 checked=checked,
-                item_trsf=NO_DEFAULT,
             ):
-                if item_trsf is NO_DEFAULT:
-                    item_trsf = future.result()
-                if item_trsf is not None:
+                set_item = item_trsf is not None
+                any_set.add(set_item)
+                if set_item:
                     if isinstance(self, _SubTensorDict):
                         result.set(key, item_trsf, inplace=inplace)
                     else:
@@ -1168,51 +1075,42 @@ class TensorDict(TensorDictBase):
                         )
 
             if isinstance(local_future, list):
-                item_trsf = self._multithread_rebuild(
-                    fn,
-                    *others,
+                # We can't make this a future as it could cause deadlocks:
+                #  If we put a future over the root and this triggers another
+                #  call on the leaves, the root will occupy a spot in the execution queue
+                #  and wait for completion, potentially preventing the leaf of
+                #  getting in the execution queue at all.
+                td = self._get_str(key, default=None)
+                item_trsf = td._multithread_rebuild(
                     batch_size=batch_size,
                     device=device,
                     names=names,
                     inplace=inplace,
                     checked=checked,
-                    call_on_nested=call_on_nested,
-                    default=default,
-                    named=named,
-                    nested_keys=nested_keys,
-                    prefix=prefix,
-                    filter_empty=filter_empty,
-                    is_leaf=is_leaf,
                     out=out,
+                    filter_empty=filter_empty,
                     executor=executor,
                     futures=futures,
                     local_futures=local_future,
                     **constructor_kwargs,
                 )
-                local_future = executor.submit(setter, future=None, item_trsf=item_trsf)
+                local_future = executor.submit(setter, item_trsf=item_trsf)
                 local_futures[i] = local_future
                 futures.append(local_future)
             else:
-                item_trsf = local_future.add_done_callback(setter)
+                # TODO: check if add_done_callback can safely be used here
+                #  The issue is that it does not raises an exception encountered during the
+                #  execution, resulting in UBs.
+                local_future = executor.submit(setter, item_trsf=local_future.result())
+                futures.append(local_future)
+                local_futures[i] = local_future
 
         wait(local_futures)
+        any_set = True in any_set or is_non_tensor(self)
 
-        any_set = not result.is_empty()
         if filter_empty and not any_set:
             return
-        elif filter_empty is None and not any_set and not self.is_empty():
-            # we raise the deprecation warning only if the tensordict wasn't already empty.
-            # After we introduce the new behaviour, we will have to consider what happens
-            # to empty tensordicts by default: will they disappear or stay?
-            warn(
-                "Your resulting tensordict has no leaves but you did not specify filter_empty=False. "
-                "Currently, this returns an empty tree (filter_empty=True), but from v0.5 it will return "
-                "a None unless filter_empty=False. "
-                "To silence this warning, set filter_empty to the desired value in your call to `apply`.",
-                category=DeprecationWarning,
-            )
-
-        if not inplace and is_locked:
+        elif not filter_empty and not inplace and is_locked:
             result.lock_()
         return result
 
@@ -3977,8 +3875,8 @@ class _SubTensorDict(TensorDictBase):
     _add_batch_dim = TensorDict._add_batch_dim
 
     _apply_nest = TensorDict._apply_nest
-    # def _apply_nest(self, *args, **kwargs):
-    #     return self.to_tensordict()._apply_nest(*args, **kwargs)
+    _multithread_apply_flat = TensorDict._multithread_apply_flat
+    _multithread_rebuild = TensorDict._multithread_rebuild
     _convert_to_tensordict = TensorDict._convert_to_tensordict
 
     _get_names_idx = TensorDict._get_names_idx

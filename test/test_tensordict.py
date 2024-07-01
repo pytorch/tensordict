@@ -2746,6 +2746,70 @@ class TestTensorDicts(TestTensorDictsBase):
             assert td.apply(lambda x: None, filter_empty=True) is not None
 
     @pytest.mark.parametrize("inplace", [False, True])
+    @pytest.mark.parametrize(
+        "named,nested_keys", [[False, False], [True, False], [True, True]]
+    )
+    def test_apply_multithread(self, td_name, device, inplace, named, nested_keys):
+        td = getattr(self, td_name)(device)
+        if not named:
+            func = lambda x: x + 1
+        else:
+
+            def func(name, x):
+                return x + 1 + isinstance(name, tuple)
+
+        td0 = td._fast_apply(func, named=named, nested_keys=nested_keys, checked=False)
+        if isinstance(td, TensorDictParams):
+            td = td.data
+        td1 = td._fast_apply(
+            func,
+            inplace=inplace,
+            named=named,
+            nested_keys=nested_keys,
+            num_threads=2,
+            checked=False,
+        )
+        if inplace:
+            assert td1 is td
+        assert (td0 == td1).all()
+
+    @pytest.mark.parametrize("checked", [False, True])
+    def test_apply_multithread_exception(self, td_name, device, checked):
+        td = getattr(self, td_name)(device)
+
+        def func(*args):
+            raise RuntimeError("Test")
+
+        with pytest.raises(RuntimeError, match="Test"):
+            td._fast_apply(func, checked=checked)
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_apply_multithread_filter_empty(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+
+        def func(x):
+            return None
+
+        result0 = td._fast_apply(
+            func, filter_empty=True, inplace=inplace, num_threads=0, checked=False
+        )
+        result1 = td._fast_apply(
+            func, filter_empty=True, inplace=inplace, num_threads=2, checked=False
+        )
+        if not td._has_non_tensor:
+            # outplace, no non-tensor
+            assert result0 is None
+            assert result1 is None, (td, result1)
+        elif inplace:
+            # inplace, has non tensor
+            assert result0 is td
+            assert result1 is td, result1
+        else:
+            # not inplace, has non tensor
+            assert result0 is not None
+            assert result1 is not None, result0
+
+    @pytest.mark.parametrize("inplace", [False, True])
     def test_apply_other(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
