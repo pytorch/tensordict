@@ -26,6 +26,7 @@ from textwrap import indent
 from typing import (
     Any,
     Callable,
+    Dict,
     Generator,
     Iterator,
     List,
@@ -54,6 +55,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _KEY_ERROR,
     _make_dtype_promotion,
+    _parse_to,
     _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
@@ -8428,7 +8430,60 @@ class TensorDictBase(MutableMapping):
             >>> data_cuda = data.to(torch.randn(3, device="cuda:0"))  # using an example tensor
             >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # using a tensordict example
         """
-        ...
+        non_blocking = kwargs.pop("non_blocking", None)
+
+        (
+            device,
+            dtype,
+            _,
+            convert_to_format,
+            batch_size,
+            pin_memory,
+            num_threads,
+        ) = _parse_to(*args, **kwargs)
+        result = self
+
+        if device is not None and dtype is None and device == self.device:
+            return result
+
+        if non_blocking is None:
+            sub_non_blocking = True
+            non_blocking = False
+        else:
+            sub_non_blocking = non_blocking
+
+        if convert_to_format is not None:
+
+            def to(tensor):
+                return tensor.to(
+                    device,
+                    dtype,
+                    non_blocking=sub_non_blocking,
+                    convert_to_format=convert_to_format,
+                )
+
+        else:
+
+            def to(tensor):
+                return tensor.to(
+                    device=device, dtype=dtype, non_blocking=sub_non_blocking
+                )
+
+        apply_kwargs = {}
+        if device is not None or dtype is not None:
+            if pin_memory and num_threads != 0:
+                result = self._multithread_apply_nest(
+                    lambda x: x.pin_memory(), num_threads=num_threads, call_when_done=to
+                )
+            else:
+                apply_kwargs["device"] = device if device is not None else self.device
+                apply_kwargs["batch_size"] = batch_size
+                result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
+        if batch_size is not None:
+            result.batch_size = batch_size
+        if device is not None and sub_non_blocking and not non_blocking:
+            self._sync_all()
+        return result
 
     def _sync_all(self):
         if _has_cuda:

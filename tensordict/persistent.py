@@ -967,9 +967,15 @@ class PersistentTensorDict(TensorDictBase):
         )
 
     def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+        (
+            device,
+            dtype,
+            non_blocking,
+            convert_to_format,
+            batch_size,
+            pin_memory,
+            num_threads,
+        ) = _parse_to(*args, **kwargs)
         result = self
         if device is not None and dtype is None and device == self.device:
             return result
