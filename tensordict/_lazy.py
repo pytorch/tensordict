@@ -1348,11 +1348,6 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         return result
 
-    def pin_memory(self) -> T:
-        for td in self.tensordicts:
-            td.pin_memory()
-        return self
-
     def to(self, *args, **kwargs) -> T:
         non_blocking = kwargs.pop("non_blocking", None)
         device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
@@ -3195,8 +3190,19 @@ class _CustomOpTensorDict(TensorDictBase):
         self_copy._source = td
         return self_copy
 
-    def pin_memory(self) -> _CustomOpTensorDict:
-        self._source.pin_memory()
+    def pin_memory(
+        self, *, num_threads: int | str = 0, inplace: bool = False
+    ) -> _CustomOpTensorDict:
+        _source = self._source.pin_memory(num_threads=num_threads, inplace=inplace)
+        if not inplace:
+            return type(self)(
+                source=_source,
+                custom_op=self.custom_op,
+                inv_op=self.inv_op,
+                custom_op_kwargs=self.custom_op_kwargs,
+                inv_op_kwargs=self.inv_op_kwargs,
+                batch_size=self.batch_size,
+            )
         return self
 
     @lock_blocked

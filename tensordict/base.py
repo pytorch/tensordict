@@ -2413,7 +2413,7 @@ class TensorDictBase(MutableMapping):
                 value.clear_device_()
         return self
 
-    def pin_memory(self, num_threads: int | str=0, inplace: bool=False) -> T:
+    def pin_memory(self, num_threads: int | str = 0, inplace: bool = False) -> T:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
 
         Args:
@@ -2430,8 +2430,14 @@ class TensorDictBase(MutableMapping):
             else:
                 raise TypeError("num_threads must be either an integer or `'auto'`.")
 
-        return self._fast_apply(lambda x: x.pin_memory(), num_threads=num_threads, inplace=inplace)
-    def pin_memory_(self, num_threads: int | str=0) -> T:
+        return self._fast_apply(
+            lambda x: x.pin_memory(),
+            num_threads=num_threads,
+            inplace=inplace,
+            propagate_lock=True,
+        )
+
+    def pin_memory_(self, num_threads: int | str = 0) -> T:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors and returns the TensorDict modifies in-place.
 
         Args:

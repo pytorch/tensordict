@@ -754,20 +754,10 @@ class PersistentTensorDict(TensorDictBase):
 
     _load_memmap = TensorDict._load_memmap
 
-    def pin_memory(self):
-        """Returns a new PersistentTensorDict where any given Tensor key returns a tensor with pin_memory=True.
-
-        This will fail with PersistentTensorDict with a ``cuda`` device attribute.
-
-        """
-        if self.device.type == "cuda":
-            raise RuntimeError("cannot pin memory on a tensordict stored on cuda.")
-        out = self.clone(False)
-        out._pin_mem = True
-        out._nested_tensordicts = {
-            key: val.pin_memory() for key, val in out._nested_tensordicts.items()
-        }
-        return out
+    def pin_memory(self, *args, **kwargs):
+        raise RuntimeError(
+            f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
+        )
 
     @lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
