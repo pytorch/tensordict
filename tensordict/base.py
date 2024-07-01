@@ -8420,6 +8420,20 @@ class TensorDictBase(MutableMapping):
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
                     casting is undertook.
+            pin_memory (bool, optional): if ``True``, the tensors are pinned before
+                being sent to device. This will be done asynchronously but can be
+                controlled via the ``num_threads`` argument.
+
+                .. note:: Calling ``tensordict.pin_memory().to("cuda")`` will usually
+                    be much slower than ``tensordict.to("cuda", pin_memory=True)`` as
+                    the pin_memory is called asynchronously in the second case.
+
+            num_threads (int or None, optional): if ``pin_memory=True``, the number
+                of threads to be used for ``pin_memory``. By default, multithreading
+                will be used with ``num_threads=None`` in
+                :meth:`~concurrent.futures.ThreadPoolExecutor(max_workers=None)`, which will
+                result in a high number of threads. ``num_threads=0`` will cancel any
+                multithreading for the `pin_memory()` calls.
 
         Returns:
             a new tensordict instance if the device differs from the tensordict
