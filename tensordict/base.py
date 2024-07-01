@@ -2413,10 +2413,34 @@ class TensorDictBase(MutableMapping):
                 value.clear_device_()
         return self
 
-    @abc.abstractmethod
-    def pin_memory(self) -> T:
-        """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors."""
-        ...
+    def pin_memory(self, num_threads: int | str=0, inplace: bool=False) -> T:
+        """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
+
+        Args:
+            num_threads (int or str): if provided, the number of threads to use
+                to call ``pin_memory`` on the leaves. If ``"auto"`` is passed, the
+                number of threads is automatically determined.
+            inplace (bool, optional): if ``True``, the tensordict is modified in-place.
+                Defaults to ``False``.
+
+        """
+        if not isinstance(num_threads, int):
+            if num_threads == "auto":
+                num_threads = torch.get_num_threads()
+            else:
+                raise TypeError("num_threads must be either an integer or `'auto'`.")
+
+        return self._fast_apply(lambda x: x.pin_memory(), num_threads=num_threads, inplace=inplace)
+    def pin_memory_(self, num_threads: int | str=0) -> T:
+        """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors and returns the TensorDict modifies in-place.
+
+        Args:
+            num_threads (int or str): if provided, the number of threads to use
+                to call ``pin_memory`` on the leaves. If ``"auto"`` is passed, the
+                number of threads is automatically determined.
+
+        """
+        return self.pin_memory(num_threads=num_threads, inplace=True)
 
     def cpu(self) -> T:
         """Casts a tensordict to CPU."""
