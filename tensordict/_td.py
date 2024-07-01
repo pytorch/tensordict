@@ -8,8 +8,8 @@ from __future__ import annotations
 import numbers
 import os
 from collections import defaultdict
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
-
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
@@ -943,6 +943,278 @@ class TensorDict(TensorDictBase):
             device=self.device,
             names=None,
         )
+
+    def _multithread_apply_nest(
+        self,
+        fn: Callable,
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = NO_DEFAULT,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
+        filter_empty: bool | None = None,
+        is_leaf: Callable = None,
+        out: TensorDictBase | None = None,
+        num_threads: int,
+        **constructor_kwargs,
+    ) -> T | None:
+        if call_on_nested:
+            raise RuntimeError
+        # We create 2 structures that will have the same elements within:
+        #  futures is a flat list of all the futures we need to wait for,
+        #  local_futures is a nested representation of this flat structure.
+        #  In local_futures, the order of the items can be used to link the items to their key.
+        futures = []
+        local_futures = []
+        executor = ThreadPoolExecutor(max_workers=num_threads)
+        self._multithread_apply_flat(
+            fn,
+            *others,
+            batch_size=batch_size,
+            device=device,
+            names=names,
+            inplace=inplace,
+            checked=checked,
+            call_on_nested=call_on_nested,
+            default=default,
+            named=named,
+            nested_keys=nested_keys,
+            prefix=prefix,
+            filter_empty=filter_empty,
+            is_leaf=is_leaf,
+            out=out,
+            executor=executor,
+            futures=futures,
+            local_futures=local_futures,
+            **constructor_kwargs,
+        )
+        return self._multithread_rebuild(
+            fn,
+            *others,
+            batch_size=batch_size,
+            device=device,
+            names=names,
+            inplace=inplace,
+            checked=checked,
+            call_on_nested=call_on_nested,
+            default=default,
+            named=named,
+            nested_keys=nested_keys,
+            prefix=prefix,
+            filter_empty=filter_empty,
+            is_leaf=is_leaf,
+            out=out,
+            executor=executor,
+            futures=futures,
+            local_futures=local_futures,
+            **constructor_kwargs,
+        )
+
+    def _multithread_apply_flat(
+        self,
+        fn: Callable,
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = NO_DEFAULT,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
+        filter_empty: bool | None = None,
+        is_leaf: Callable = None,
+        out: TensorDictBase | None = None,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+        **constructor_kwargs,
+    ) -> None:
+        if is_leaf is None:
+            is_leaf = _default_is_leaf
+
+        for key, item in self.items():
+            if (
+                not call_on_nested
+                and not is_leaf(item.__class__)
+                # and not is_non_tensor(item)
+            ):
+                if default is not NO_DEFAULT:
+                    _others = [_other._get_str(key, default=None) for _other in others]
+                    _others = [
+                        self.empty(recurse=True) if _other is None else _other
+                        for _other in _others
+                    ]
+                else:
+                    _others = [
+                        _other._get_str(key, default=NO_DEFAULT) for _other in others
+                    ]
+                local_futures.append([])
+                item._multithread_apply_flat(
+                    fn,
+                    *_others,
+                    inplace=inplace,
+                    batch_size=batch_size,
+                    device=device,
+                    checked=checked,
+                    named=named,
+                    nested_keys=nested_keys,
+                    default=default,
+                    prefix=prefix + (key,),
+                    filter_empty=filter_empty,
+                    is_leaf=is_leaf,
+                    out=out._get_str(key, default=None) if out is not None else None,
+                    executor=executor,
+                    futures=futures,
+                    local_futures=local_futures[-1],
+                    **constructor_kwargs,
+                )
+            else:
+                _others = [_other._get_str(key, default=default) for _other in others]
+                if named:
+                    if nested_keys:
+                        future = executor.submit(
+                            fn, prefix + (key,) if prefix != () else key, item, *_others
+                        )
+                    else:
+                        future = executor.submit(fn, key, item, *_others)
+                else:
+                    future = executor.submit(fn, item, *_others)
+                futures.append(future)
+                local_futures.append(future)
+
+    def _multithread_rebuild(
+        self,
+        fn: Callable,
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = NO_DEFAULT,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
+        filter_empty: bool | None = None,
+        is_leaf: Callable = None,
+        out: TensorDictBase | None = None,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+        **constructor_kwargs,
+    ) -> None:
+        # Rebuilds a tensordict from the futures of its leaves
+        if inplace:
+            result = self
+            is_locked = result.is_locked
+        elif out is not None:
+            result = out
+            if out.is_locked:
+                raise RuntimeError(_LOCK_ERROR)
+            is_locked = False
+            if batch_size is not None and batch_size != out.batch_size:
+                raise RuntimeError(
+                    "batch_size and out.batch_size must be equal when both are provided."
+                )
+            if device is not NO_DEFAULT and device != out.device:
+                raise RuntimeError(
+                    "device and out.device must be equal when both are provided."
+                )
+        else:
+
+            def make_result(names=names, batch_size=batch_size):
+                if batch_size is not None and names is None:
+                    # erase names
+                    names = [None] * len(batch_size)
+                return self.empty(batch_size=batch_size, device=device, names=names)
+
+            result = make_result()
+            is_locked = False
+
+        any_set = False
+
+        for i, (key, local_future) in enumerate(zip(self.keys(), local_futures)):
+
+            def setter(
+                future,
+                key=key,
+                inplace=inplace,
+                result=result,
+                checked=checked,
+                item_trsf=NO_DEFAULT,
+            ):
+                if item_trsf is NO_DEFAULT:
+                    item_trsf = future.result()
+                if item_trsf is not None:
+                    if isinstance(self, _SubTensorDict):
+                        result.set(key, item_trsf, inplace=inplace)
+                    else:
+                        result._set_str(
+                            key,
+                            item_trsf,
+                            inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                            validated=checked,
+                            non_blocking=False,
+                        )
+
+            if isinstance(local_future, list):
+                item_trsf = self._multithread_rebuild(
+                    fn,
+                    *others,
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    inplace=inplace,
+                    checked=checked,
+                    call_on_nested=call_on_nested,
+                    default=default,
+                    named=named,
+                    nested_keys=nested_keys,
+                    prefix=prefix,
+                    filter_empty=filter_empty,
+                    is_leaf=is_leaf,
+                    out=out,
+                    executor=executor,
+                    futures=futures,
+                    local_futures=local_future,
+                    **constructor_kwargs,
+                )
+                local_future = executor.submit(setter, future=None, item_trsf=item_trsf)
+                local_futures[i] = local_future
+                futures.append(local_future)
+            else:
+                item_trsf = local_future.add_done_callback(setter)
+
+        wait(local_futures)
+
+        any_set = not result.is_empty()
+        if filter_empty and not any_set:
+            return
+        elif filter_empty is None and not any_set and not self.is_empty():
+            # we raise the deprecation warning only if the tensordict wasn't already empty.
+            # After we introduce the new behaviour, we will have to consider what happens
+            # to empty tensordicts by default: will they disappear or stay?
+            warn(
+                "Your resulting tensordict has no leaves but you did not specify filter_empty=False. "
+                "Currently, this returns an empty tree (filter_empty=True), but from v0.5 it will return "
+                "a None unless filter_empty=False. "
+                "To silence this warning, set filter_empty to the desired value in your call to `apply`.",
+                category=DeprecationWarning,
+            )
+
+        if not inplace and is_locked:
+            result.lock_()
+        return result
 
     def _apply_nest(
         self,
