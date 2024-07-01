@@ -8477,7 +8477,11 @@ class TensorDictBase(MutableMapping):
         if device is not None or dtype is not None:
             if pin_memory and num_threads != 0:
                 result = self._multithread_apply_nest(
-                    lambda x: x.pin_memory(), num_threads=num_threads, call_when_done=to, device=device, checked=True,
+                    lambda x: x.pin_memory(),
+                    num_threads=num_threads,
+                    call_when_done=to,
+                    device=device,
+                    checked=True,
                 )
             else:
                 if pin_memory:
