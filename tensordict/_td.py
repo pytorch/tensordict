@@ -958,7 +958,6 @@ class TensorDict(TensorDictBase):
         futures: List[Future],
         local_futures: List,
     ) -> None:
-        init_idx = len(futures)
         if is_leaf is None:
             is_leaf = _default_is_leaf
         for key, item in self.items():
@@ -1002,7 +1001,6 @@ class TensorDict(TensorDictBase):
                     future = executor.submit(fn, item, *_others)
                 futures.append(future)
                 local_futures.append(future)
-            return (init_idx, len(futures))
 
     def _multithread_rebuild(
         self,
@@ -1054,7 +1052,7 @@ class TensorDict(TensorDictBase):
 
         any_set = set()
 
-        for i, (key, local_future) in enumerate(zip(self.keys(), local_futures)):
+        for i, (key, local_future) in enumerate(zip(self.keys(), local_futures, strict=True)):
 
             def setter(
                 item_trsf,
