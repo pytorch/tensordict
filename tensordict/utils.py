@@ -15,10 +15,10 @@ import os
 
 import sys
 import time
-
 import warnings
 from collections import defaultdict, OrderedDict
 from collections.abc import KeysView
+from concurrent.futures import Future
 from copy import copy
 from functools import wraps
 from importlib import import_module

@@ -5849,11 +5849,16 @@ class TensorDictBase(MutableMapping):
         is_leaf: Callable = None,
         out: TensorDictBase | None = None,
         num_threads: int,
+        call_when_done: Callable | None = None,
         **constructor_kwargs,
     ) -> T | None:
         """A deadlock-safe multithread wrapper around TD.apply.
 
         First launches fn for all the leaves, then rebuilds the tensordicts out of them.
+
+        An optional ``call_when_done`` function can be passed to execute a method on the main thread
+        after a future is completed.
+
         """
         if call_on_nested:
             warnings.warn(
@@ -5881,6 +5886,12 @@ class TensorDictBase(MutableMapping):
             futures=futures,
             local_futures=local_futures,
         )
+        if call_when_done is not None:
+            subs_results = {}
+            for fut in as_completed(futures):
+                subs_results[fut] = call_when_done(fut.result())
+        else:
+            subs_results = None
         return self._multithread_rebuild(
             batch_size=batch_size,
             device=device,
@@ -5892,6 +5903,7 @@ class TensorDictBase(MutableMapping):
             executor=executor,
             futures=futures,
             local_futures=local_futures,
+            subs_results=subs_results,
             **constructor_kwargs,
         )
 

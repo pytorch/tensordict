@@ -958,6 +958,7 @@ class TensorDict(TensorDictBase):
         futures: List[Future],
         local_futures: List,
     ) -> None:
+        init_idx = len(futures)
         if is_leaf is None:
             is_leaf = _default_is_leaf
         for key, item in self.items():
@@ -1001,6 +1002,7 @@ class TensorDict(TensorDictBase):
                     future = executor.submit(fn, item, *_others)
                 futures.append(future)
                 local_futures.append(future)
+            return (init_idx, len(futures))
 
     def _multithread_rebuild(
         self,
@@ -1015,6 +1017,7 @@ class TensorDict(TensorDictBase):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
+        subs_results: Dict[Future, Any] | None = None,
         **constructor_kwargs,
     ) -> None:
         if constructor_kwargs:
@@ -1092,16 +1095,21 @@ class TensorDict(TensorDictBase):
                     executor=executor,
                     futures=futures,
                     local_futures=local_future,
+                    subs_results=subs_results,
                     **constructor_kwargs,
                 )
                 local_future = executor.submit(setter, item_trsf=item_trsf)
                 local_futures[i] = local_future
                 futures.append(local_future)
             else:
-                # TODO: check if add_done_callback can safely be used here
-                #  The issue is that it does not raises an exception encountered during the
-                #  execution, resulting in UBs.
-                local_future = executor.submit(setter, item_trsf=local_future.result())
+                if subs_results is not None:
+                    result = subs_results[local_future]
+                else:
+                    # TODO: check if add_done_callback can safely be used here
+                    #  The issue is that it does not raises an exception encountered during the
+                    #  execution, resulting in UBs.
+                    result = local_future.result()
+                local_future = executor.submit(setter, item_trsf=result)
                 futures.append(local_future)
                 local_futures[i] = local_future
 
