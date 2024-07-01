@@ -8394,7 +8394,6 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T:
         ...
 
-    @abc.abstractmethod
     def to(self, *args, **kwargs) -> T:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
