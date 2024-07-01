@@ -8,8 +8,8 @@ from __future__ import annotations
 import numbers
 import os
 from collections import defaultdict
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
-
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
@@ -943,6 +943,176 @@ class TensorDict(TensorDictBase):
             device=self.device,
             names=None,
         )
+
+    def _multithread_apply_flat(
+        self,
+        fn: Callable,
+        *others: T,
+        call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
+        is_leaf: Callable = None,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+    ) -> None:
+        if is_leaf is None:
+            is_leaf = _default_is_leaf
+        for key, item in self.items():
+            if (
+                not call_on_nested
+                and not is_leaf(item.__class__)
+                # and not is_non_tensor(item)
+            ):
+                if default is not NO_DEFAULT:
+                    _others = [_other._get_str(key, default=None) for _other in others]
+                    _others = [
+                        self.empty(recurse=True) if _other is None else _other
+                        for _other in _others
+                    ]
+                else:
+                    _others = [
+                        _other._get_str(key, default=NO_DEFAULT) for _other in others
+                    ]
+                local_futures.append([])
+                item._multithread_apply_flat(
+                    fn,
+                    *_others,
+                    named=named,
+                    nested_keys=nested_keys,
+                    prefix=prefix + (key,),
+                    is_leaf=is_leaf,
+                    executor=executor,
+                    futures=futures,
+                    local_futures=local_futures[-1],
+                )
+            else:
+                _others = [_other._get_str(key, default=default) for _other in others]
+                if named:
+                    if nested_keys:
+                        future = executor.submit(
+                            fn, prefix + (key,) if prefix != () else key, item, *_others
+                        )
+                    else:
+                        future = executor.submit(fn, key, item, *_others)
+                else:
+                    future = executor.submit(fn, item, *_others)
+                futures.append(future)
+                local_futures.append(future)
+
+    def _multithread_rebuild(
+        self,
+        *,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = NO_DEFAULT,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        out: TensorDictBase | None = None,
+        filter_empty: bool = False,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+        **constructor_kwargs,
+    ) -> None:
+        if constructor_kwargs:
+            raise RuntimeError(
+                f"constructor_kwargs not supported for class {type(self)}."
+            )
+        # Rebuilds a tensordict from the futures of its leaves
+        if inplace:
+            result = self
+            is_locked = result.is_locked
+        elif out is not None:
+            result = out
+            if out.is_locked:
+                raise RuntimeError(_LOCK_ERROR)
+            is_locked = False
+            if batch_size is not None and batch_size != out.batch_size:
+                raise RuntimeError(
+                    "batch_size and out.batch_size must be equal when both are provided."
+                )
+            if device is not NO_DEFAULT and device != out.device:
+                raise RuntimeError(
+                    "device and out.device must be equal when both are provided."
+                )
+        else:
+
+            def make_result(names=names, batch_size=batch_size):
+                if batch_size is not None and names is None:
+                    # erase names
+                    names = [None] * len(batch_size)
+                return self.empty(batch_size=batch_size, device=device, names=names)
+
+            result = make_result()
+            is_locked = False
+
+        any_set = set()
+
+        for i, (key, local_future) in enumerate(zip(self.keys(), local_futures)):
+
+            def setter(
+                item_trsf,
+                key=key,
+                inplace=inplace,
+                result=result,
+                checked=checked,
+            ):
+                set_item = item_trsf is not None
+                any_set.add(set_item)
+                if set_item:
+                    if isinstance(self, _SubTensorDict):
+                        result.set(key, item_trsf, inplace=inplace)
+                    else:
+                        result._set_str(
+                            key,
+                            item_trsf,
+                            inplace=BEST_ATTEMPT_INPLACE if inplace else False,
+                            validated=checked,
+                            non_blocking=False,
+                        )
+
+            if isinstance(local_future, list):
+                # We can't make this a future as it could cause deadlocks:
+                #  If we put a future over the root and this triggers another
+                #  call on the leaves, the root will occupy a spot in the execution queue
+                #  and wait for completion, potentially preventing the leaf of
+                #  getting in the execution queue at all.
+                td = self._get_str(key, default=None)
+                item_trsf = td._multithread_rebuild(
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    inplace=inplace,
+                    checked=checked,
+                    out=out,
+                    filter_empty=filter_empty,
+                    executor=executor,
+                    futures=futures,
+                    local_futures=local_future,
+                    **constructor_kwargs,
+                )
+                local_future = executor.submit(setter, item_trsf=item_trsf)
+                local_futures[i] = local_future
+                futures.append(local_future)
+            else:
+                # TODO: check if add_done_callback can safely be used here
+                #  The issue is that it does not raises an exception encountered during the
+                #  execution, resulting in UBs.
+                local_future = executor.submit(setter, item_trsf=local_future.result())
+                futures.append(local_future)
+                local_futures[i] = local_future
+
+        wait(local_futures)
+        any_set = True in any_set or is_non_tensor(self)
+
+        if filter_empty and not any_set:
+            return
+        elif not filter_empty and not inplace and is_locked:
+            result.lock_()
+        return result
 
     def _apply_nest(
         self,
@@ -3705,8 +3875,8 @@ class _SubTensorDict(TensorDictBase):
     _add_batch_dim = TensorDict._add_batch_dim
 
     _apply_nest = TensorDict._apply_nest
-    # def _apply_nest(self, *args, **kwargs):
-    #     return self.to_tensordict()._apply_nest(*args, **kwargs)
+    _multithread_apply_flat = TensorDict._multithread_apply_flat
+    _multithread_rebuild = TensorDict._multithread_rebuild
     _convert_to_tensordict = TensorDict._convert_to_tensordict
 
     _get_names_idx = TensorDict._get_names_idx

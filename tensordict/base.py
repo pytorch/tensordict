@@ -14,10 +14,11 @@ import importlib
 import numbers
 import os.path
 import uuid
+import warnings
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
 from functools import partial, wraps
 from pathlib import Path
@@ -2312,6 +2313,14 @@ class TensorDictBase(MutableMapping):
     @abc.abstractmethod
     def _has_names(self):
         ...
+
+    @property
+    def _has_non_tensor(self):
+        """Checks if the tensordict has non-tensor data."""
+        for value in self.values(True, True, is_leaf=_is_leaf_nontensor):
+            if _is_non_tensor(type(value)):
+                return True
+        return False
 
     # Device functionality: device is optional. If provided, it will enforce
     # all data is on the same device
@@ -5788,6 +5797,105 @@ class TensorDictBase(MutableMapping):
         return result
 
     @abc.abstractmethod
+    def _multithread_apply_flat(
+        self,
+        fn: Callable,
+        *others: T,
+        call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
+        is_leaf: Callable = None,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+    ) -> None:
+        ...
+
+    @abc.abstractmethod
+    def _multithread_rebuild(
+        self,
+        *,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = NO_DEFAULT,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        out: TensorDictBase | None = None,
+        filter_empty: bool = False,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+        **constructor_kwargs,
+    ) -> None:
+        ...
+
+    def _multithread_apply_nest(
+        self,
+        fn: Callable,
+        *others: T,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = NO_DEFAULT,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
+        filter_empty: bool | None = None,
+        is_leaf: Callable = None,
+        out: TensorDictBase | None = None,
+        num_threads: int,
+        **constructor_kwargs,
+    ) -> T | None:
+        """A deadlock-safe multithread wrapper around TD.apply.
+
+        First launches fn for all the leaves, then rebuilds the tensordicts out of them.
+        """
+        if call_on_nested:
+            warnings.warn(
+                "Multithreaded apply with call_on_nested=True should not be used for deep TensorDicts. "
+                "In the best cases, it will be inefficient, in the worst an arbitrary large number of "
+                "threads will be spawn."
+            )
+        # We create 2 structures that will have the same elements within:
+        #  futures is a flat list of all the futures we need to wait for,
+        #  local_futures is a nested representation of this flat structure.
+        #  In local_futures, the order of the items can be used to link the items to their key.
+        futures = []
+        local_futures = []
+        executor = ThreadPoolExecutor(max_workers=num_threads)
+        self._multithread_apply_flat(
+            fn,
+            *others,
+            call_on_nested=call_on_nested,
+            default=default,
+            named=named,
+            nested_keys=nested_keys,
+            prefix=prefix,
+            is_leaf=is_leaf,
+            executor=executor,
+            futures=futures,
+            local_futures=local_futures,
+        )
+        return self._multithread_rebuild(
+            batch_size=batch_size,
+            device=device,
+            names=names,
+            inplace=inplace,
+            checked=checked,
+            out=out,
+            filter_empty=filter_empty,
+            executor=executor,
+            futures=futures,
+            local_futures=local_futures,
+            **constructor_kwargs,
+        )
+
+    @abc.abstractmethod
     def _apply_nest(
         self,
         fn: Callable,
@@ -5827,6 +5935,8 @@ class TensorDictBase(MutableMapping):
         is_leaf: Callable = None,
         propagate_lock: bool = False,
         out: TensorDictBase | None = None,
+        num_threads: int = 0,
+        checked: bool = True,
         **constructor_kwargs,
     ) -> T | None:
         """A faster apply method.
@@ -5836,14 +5946,23 @@ class TensorDictBase(MutableMapping):
         (device, shape etc.) match the :meth:`~.apply` ones.
 
         """
-        result = self._apply_nest(
+        if num_threads:
+
+            def func(*args, **kwargs):
+                return self._multithread_apply_nest(
+                    *args, **kwargs, num_threads=num_threads
+                )
+
+        else:
+            func = self._apply_nest
+        result = func(
             fn,
             *others,
             batch_size=batch_size,
             device=device,
             names=names,
             inplace=inplace,
-            checked=True,
+            checked=checked,
             call_on_nested=call_on_nested,
             named=named,
             default=default,

@@ -11,11 +11,12 @@ import re
 import textwrap
 import weakref
 from collections import defaultdict
+from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy, deepcopy
 from functools import wraps
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterator, OrderedDict, Sequence, Tuple, Type
+from typing import Any, Callable, Iterator, List, OrderedDict, Sequence, Tuple, Type
 
 import numpy as np
 
@@ -1499,6 +1500,124 @@ class LazyStackedTensorDict(TensorDictBase):
         for td, *_others in zip(self.tensordicts, *others):
             td._fast_apply(fn, *_others, inplace=True, propagate_lock=True, **kwargs)
         return self
+
+    def _multithread_apply_nest(self, *args, **kwargs):
+        if kwargs.get("batch_size") is not None:
+            raise RuntimeError(
+                f"batch_size cannot be specified for {type(self).__name__}._multithread_apply_nest."
+            )
+        return super()._multithread_apply_nest(*args, **kwargs)
+
+    def _multithread_apply_flat(
+        self,
+        fn: Callable,
+        *others: T,
+        call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
+        is_leaf: Callable = None,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+    ) -> None:
+        others = (other.unbind(self.stack_dim) for other in others)
+        if (
+            call_on_nested
+            and named
+            and is_leaf
+            in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
+        ):
+            # When calling on nested with name and the name includes the TD index, we
+            # want to call the function on each td.
+            # If we were not keeping track of the TD's index, names would be the same for all
+            # tds and there's a risk that values would collide.
+            # nested_keys is irrelevant when named + call_on_nested are both true.
+            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others)):
+                key = prefix + (str(i),)
+                if len(key) == 1:
+                    key = key[0]
+                futures.append(executor.submit(fn, key, td, *oth))
+                local_futures.append(futures[-1])
+        else:
+            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others)):
+                local_futures.append([])
+                td._multithread_apply_flat(
+                    fn,
+                    *oth,
+                    call_on_nested=call_on_nested,
+                    default=default,
+                    named=named,
+                    nested_keys=nested_keys,
+                    prefix=prefix + (str(i),)
+                    if is_leaf
+                    in (_NESTED_TENSORS_AS_LISTS, _NESTED_TENSORS_AS_LISTS_NONTENSOR)
+                    else prefix,
+                    is_leaf=is_leaf,
+                    executor=executor,
+                    futures=futures,
+                    local_futures=local_futures[-1],
+                )
+
+    def _multithread_rebuild(
+        self,
+        *,
+        # We know batch_size is None, this has been checked earlier
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = NO_DEFAULT,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        out: TensorDictBase | None = None,
+        filter_empty: bool = False,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+        **constructor_kwargs,
+    ) -> None:
+        if inplace and any(
+            arg for arg in (batch_size, device, names, constructor_kwargs)
+        ):
+            raise ValueError(
+                "Cannot pass other arguments to LazyStackedTensorDict.apply when inplace=True."
+            )
+        if out is not None:
+            if not isinstance(out, LazyStackedTensorDict):
+                raise ValueError(
+                    "out must be a LazyStackedTensorDict instance in lazy_stack.apply(..., out=out)."
+                )
+            out = out.tensordicts
+        results = []
+        for i, (td, local_future) in enumerate(zip(self.tensordicts, local_futures)):
+            local_out = out[i] if out is not None else None
+            # Each local_future points to a list of futures for a single tensordict
+            local_out = td._multithread_rebuild(
+                batch_size=batch_size,
+                device=device,
+                names=names,
+                inplace=inplace,
+                checked=checked,
+                out=local_out,
+                filter_empty=filter_empty,
+                executor=executor,
+                futures=futures,
+                local_futures=local_future,
+            )
+            results.append(local_out)
+        if filter_empty and all(r is None for r in results):
+            return
+        if not inplace:
+            out = type(self)(
+                *results,
+                stack_dim=self.stack_dim,
+                stack_dim_name=self._td_dim_name,
+            )
+        else:
+            out = self
+        if names is not None:
+            out.names = names
+        return out
 
     def _apply_nest(
         self,
@@ -3356,7 +3475,11 @@ class _CustomOpTensorDict(TensorDictBase):
     reshape = TensorDict.reshape
     split = TensorDict.split
     _to_module = TensorDict._to_module
+
     _apply_nest = TensorDict._apply_nest
+    _multithread_apply_flat = TensorDict._multithread_apply_flat
+    _multithread_rebuild = TensorDict._multithread_rebuild
+
     _remove_batch_dim = TensorDict._remove_batch_dim
     all = TensorDict.all
     any = TensorDict.any

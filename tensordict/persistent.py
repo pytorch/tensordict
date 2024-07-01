@@ -1318,6 +1318,9 @@ class PersistentTensorDict(TensorDictBase):
 
     _cast_reduction = TensorDict._cast_reduction
     _apply_nest = TensorDict._apply_nest
+    _multithread_apply_flat = TensorDict._multithread_apply_flat
+    _multithread_rebuild = TensorDict._multithread_rebuild
+
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
     _convert_to_tensordict = TensorDict._convert_to_tensordict

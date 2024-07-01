@@ -9,9 +9,10 @@ import inspect
 import numbers
 import re
 import weakref
+from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy
 from functools import wraps
-from typing import Any, Callable, Iterator, OrderedDict, Sequence, Type
+from typing import Any, Callable, Iterator, List, OrderedDict, Sequence, Type
 
 import torch
 
@@ -514,6 +515,41 @@ class TensorDictParams(TensorDictBase, nn.Module):
 
     @_unlock_and_set(inplace=True)
     def _apply_nest(*args, **kwargs):
+        ...
+
+    @_fallback
+    def _multithread_apply_flat(
+        self,
+        fn: Callable,
+        *others: T,
+        call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
+        is_leaf: Callable = None,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+    ) -> None:
+        ...
+
+    @_fallback
+    def _multithread_rebuild(
+        self,
+        *,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = NO_DEFAULT,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        out: TensorDictBase | None = None,
+        filter_empty: bool = False,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+        **constructor_kwargs,
+    ) -> None:
         ...
 
     @_get_post_hook
