@@ -1052,9 +1052,7 @@ class TensorDict(TensorDictBase):
 
         any_set = set()
 
-        for i, (key, local_future) in enumerate(
-            zip(self.keys(), local_futures, strict=True)
-        ):
+        for i, (key, local_future) in enumerate(zip(self.keys(), local_futures)):
 
             def setter(
                 item_trsf,
