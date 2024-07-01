@@ -2413,23 +2413,19 @@ class TensorDictBase(MutableMapping):
                 value.clear_device_()
         return self
 
-    def pin_memory(self, num_threads: int | str = 0, inplace: bool = False) -> T:
+    def pin_memory(self, num_threads: int | None = None, inplace: bool = False) -> T:
         """Calls :meth:`~torch.Tensor.pin_memory` on the stored tensors.
 
         Args:
             num_threads (int or str): if provided, the number of threads to use
-                to call ``pin_memory`` on the leaves. If ``"auto"`` is passed, the
-                number of threads is automatically determined.
+                to call ``pin_memory`` on the leaves. Defaults to ``None``, which sets a high
+                number of threads in :class:`~concurrent.futures.ThreadPoolExecutor(max_workers=None)`.
+                To execute all the calls to :meth:`~torch.Tensor.pin_memory` on the main thread, pass
+                ``num_threads=0``.
             inplace (bool, optional): if ``True``, the tensordict is modified in-place.
                 Defaults to ``False``.
 
         """
-        if not isinstance(num_threads, int):
-            if num_threads == "auto":
-                num_threads = torch.get_num_threads()
-            else:
-                raise TypeError("num_threads must be either an integer or `'auto'`.")
-
         return self._fast_apply(
             lambda x: x.pin_memory(),
             num_threads=num_threads,
