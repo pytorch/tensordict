@@ -7,8 +7,6 @@
 from __future__ import annotations
 
 import importlib
-
-import json
 import os
 
 import tempfile
@@ -18,6 +16,8 @@ from pathlib import Path
 from typing import Any, Callable, Tuple, Type
 
 import numpy as np
+
+import orjson as json
 import torch
 
 from tensordict._td import (
@@ -670,8 +670,8 @@ class PersistentTensorDict(TensorDictBase):
                     "_type": str(self.__class__),
                 }
             )
-            with open(filepath, "w") as json_metadata:
-                json.dump(metadata, json_metadata)
+            with open(filepath, "wb") as json_metadata:
+                json_metadata.write(json.dumps(metadata))
 
         if prefix is not None:
             prefix = Path(prefix)
@@ -714,7 +714,7 @@ class PersistentTensorDict(TensorDictBase):
                 if prefix is not None:
                     metadata[key] = {
                         "dtype": str(value.dtype),
-                        "shape": value.shape,
+                        "shape": list(value.shape),
                         "device": str(value.device),
                     }
 
@@ -754,20 +754,10 @@ class PersistentTensorDict(TensorDictBase):
 
     _load_memmap = TensorDict._load_memmap
 
-    def pin_memory(self):
-        """Returns a new PersistentTensorDict where any given Tensor key returns a tensor with pin_memory=True.
-
-        This will fail with PersistentTensorDict with a ``cuda`` device attribute.
-
-        """
-        if self.device.type == "cuda":
-            raise RuntimeError("cannot pin memory on a tensordict stored on cuda.")
-        out = self.clone(False)
-        out._pin_mem = True
-        out._nested_tensordicts = {
-            key: val.pin_memory() for key, val in out._nested_tensordicts.items()
-        }
-        return out
+    def pin_memory(self, *args, **kwargs):
+        raise RuntimeError(
+            f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
+        )
 
     @lock_blocked
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
@@ -967,9 +957,20 @@ class PersistentTensorDict(TensorDictBase):
         )
 
     def to(self, *args, **kwargs: Any) -> PersistentTensorDict:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+        (
+            device,
+            dtype,
+            non_blocking,
+            convert_to_format,
+            batch_size,
+            pin_memory,
+            num_threads,
+        ) = _parse_to(*args, **kwargs)
+        if pin_memory:
+            raise RuntimeError(
+                f"Cannot call pin_memory {type(self).__name__}.to(). Call "
+                f"`to_tensordict()` before executing this code."
+            )
         result = self
         if device is not None and dtype is None and device == self.device:
             return result
@@ -1318,6 +1319,9 @@ class PersistentTensorDict(TensorDictBase):
 
     _cast_reduction = TensorDict._cast_reduction
     _apply_nest = TensorDict._apply_nest
+    _multithread_apply_flat = TensorDict._multithread_apply_flat
+    _multithread_rebuild = TensorDict._multithread_rebuild
+
     _check_device = TensorDict._check_device
     _check_is_shared = TensorDict._check_is_shared
     _convert_to_tensordict = TensorDict._convert_to_tensordict

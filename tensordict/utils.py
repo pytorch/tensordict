@@ -15,7 +15,6 @@ import os
 
 import sys
 import time
-
 import warnings
 from collections import defaultdict, OrderedDict
 from collections.abc import KeysView
@@ -131,6 +130,7 @@ if hasattr(torch, "uint32"):
 if hasattr(torch, "uint64"):
     _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint64,)
 _STRDTYPE2DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
+_DTYPE2STRDTYPE = {dtype: str_dtype for str_dtype, dtype in _STRDTYPE2DTYPE.items()}
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
@@ -1315,6 +1315,8 @@ def _split_tensordict(
 
 def _parse_to(*args, **kwargs):
     batch_size = kwargs.pop("batch_size", None)
+    pin_memory = kwargs.pop("pin_memory", False)
+    num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
     device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
         *args, **kwargs
@@ -1328,7 +1330,15 @@ def _parse_to(*args, **kwargs):
             dtype = None
         elif len(dtypes) == 1:
             dtype = list(dtypes)[0]
-    return device, dtype, non_blocking, convert_to_format, batch_size
+    return (
+        device,
+        dtype,
+        non_blocking,
+        convert_to_format,
+        batch_size,
+        pin_memory,
+        num_threads,
+    )
 
 
 class _ErrorInteceptor:
@@ -2418,3 +2428,20 @@ def _slice_indices(index: slice, len: int):
 
 
 assert_allclose_td = assert_close
+
+
+def _prefix_last_key(key, prefix):
+    if isinstance(key, str):
+        return prefix + key
+    if len(key) == 1:
+        return (_prefix_last_key(key[0], prefix),)
+    return key[:-1] + (_prefix_last_key(key[-1], prefix),)
+
+
+NESTED_TENSOR_ERR = (
+    "The PyTorch version isn't compatible with "
+    "nested tensors. Please upgrade to a more recent "
+    "version."
+)
+
+_DEVICE2STRDEVICE = KeyDependentDefaultDict(lambda key: str(key))

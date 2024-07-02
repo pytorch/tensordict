@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import tensordict._reductions
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import is_tensor_collection, TensorDict
 from tensordict.base import TensorDictBase

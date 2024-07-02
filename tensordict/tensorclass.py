@@ -10,7 +10,6 @@ import ctypes
 import dataclasses
 import functools
 import inspect
-import json
 import multiprocessing.managers
 import multiprocessing.sharedctypes
 import numbers
@@ -27,10 +26,11 @@ from textwrap import indent
 from typing import Any, Callable, get_type_hints, List, Sequence, Type, TypeVar
 
 import numpy as np
+import orjson as json
 import tensordict as tensordict_lib
 
 import torch
-from tensordict import LazyStackedTensorDict
+from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
 from tensordict._tensordict import _unravel_key_to_tuple
@@ -95,13 +95,15 @@ _METHOD_FROM_TD = [
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
+    "_check_unlock",
     "_default_get",
     "_get_at_str",
     "_get_at_tuple",
     "_get_str",
     "_get_tuple",
-    "_check_unlock",
     "_has_names",
+    "_multithread_apply_flat",
+    "_multithread_rebuild",  # rebuild checks if self is a non tensor
     "_propagate_lock",
     "_propagate_unlock",
     "_values_list",
@@ -141,7 +143,9 @@ _FALLBACK_METHOD_FROM_TD = [
     "_remove_batch_dim",
     "_select",  # TODO: must be specialized
     "_set_at_tuple",
-    "_set_str",
+    # _set_str needs a special treatment to catch keys that are already in
+    # non tensor data
+    # "_set_str",
     "_set_tuple",
     "abs",
     "abs_",
@@ -167,6 +171,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "clamp_max_",
     "clamp_min",
     "clamp_min_",
+    "consolidate",
     "contiguous",
     "copy_",
     "cos",
@@ -478,9 +483,6 @@ def _tensorclass(cls: T) -> T:
                 _wrap_td_method(method_name, copy_non_tensor=True),
             )
 
-    if not hasattr(cls, "_apply_nest"):
-        cls._apply_nest = TensorDict._apply_nest
-
     if not hasattr(cls, "filter_non_tensor_data"):
         cls.filter_non_tensor_data = _filter_non_tensor_data
     cls.__enter__ = __enter__
@@ -630,14 +632,12 @@ def _init_wrapper(__init__: Callable) -> Callable:
 
         super(type(self), self).__setattr__(
             "_tensordict",
-            TensorDict(
-                {},
-                batch_size=torch.Size(batch_size),
-                device=device,
-                names=names,
-                _run_checks=False,
-            ),
-        )
+            TensorDict._new_unsafe(
+            {},
+            batch_size=torch.Size(batch_size),
+            device=device,
+            names=names,
+        ))
         super(type(self), self).__setattr__("_non_tensordict", {})
         super(type(self), self).__setattr__("_is_initialized", True)
 
@@ -843,7 +843,7 @@ def _memmap_(
             os.makedirs(prefix, exist_ok=True)
 
         def save_metadata(cls=cls, _non_tensordict=_non_tensordict, prefix=prefix):
-            with open(prefix / "meta.json", "w") as f:
+            with open(prefix / "meta.json", "wb") as f:
                 metadata = {"_type": str(cls)}
                 to_pickle = {}
                 for key, value in _non_tensordict.items():
@@ -852,7 +852,7 @@ def _memmap_(
                         metadata[key] = value
                     else:
                         to_pickle[key] = value
-                json.dump(metadata, f)
+                f.write(json.dumps(metadata))
                 if to_pickle:
                     with open(prefix / "other.pickle", "wb") as pickle_file:
                         pickle.dump(to_pickle, pickle_file)
@@ -2778,8 +2778,8 @@ class NonTensorStack(LazyStackedTensorDict):
                     jsondict["data"] = "pickle.pkl"
                     with open(prefix / "pickle.pkl", "wb") as f:
                         pickle.dump(data, f)
-                with open(prefix / "meta.json", "w") as f:
-                    json.dump(jsondict, f)
+                with open(prefix / "meta.json", "wb") as f:
+                    f.write(json.dumps(jsondict))
 
             if executor is None:
                 save_metadata()

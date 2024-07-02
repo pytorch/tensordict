@@ -299,8 +299,8 @@ def _cat(
         names = None
         if list_of_tensordicts[0]._has_names():
             names = list_of_tensordicts[0].names
-        return TensorDict(
-            out, device=device, batch_size=batch_size, _run_checks=False, names=names
+        return TensorDict._new_unsafe(
+            out, device=device, batch_size=batch_size, names=names
         )
     else:
         if out.batch_size != batch_size:
@@ -558,13 +558,12 @@ def _stack(
                 for key, (values, is_not_init, is_tensor) in out.items()
             }
 
-            result = TensorDict(
+            result = TensorDict._new_unsafe(
                 out,
                 batch_size=LazyStackedTensorDict._compute_batch_size(
                     batch_size, dim, len(list_of_tensordicts)
                 ),
                 device=device,
-                _run_checks=False,
             )
             if is_tc:
                 return tc_type(
