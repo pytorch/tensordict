@@ -4526,6 +4526,10 @@ class TestTensorDicts(TestTensorDictsBase):
             with pytest.raises(RuntimeError, match="cannot pin"):
                 td.pin_memory()
             return
+        if isinstance(td, TensorDictParams) and inplace:
+            with pytest.raises(RuntimeError, match="Cannot pin_memory in-place with TensorDictParams."):
+                td_pin = td.pin_memory(inplace=inplace)
+            return
         td_pin = td.pin_memory(inplace=inplace)
         assert all(leaf.is_pinned for leaf in td_pin.values(True, True))
         if inplace:
