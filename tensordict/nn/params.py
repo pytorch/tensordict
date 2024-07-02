@@ -860,9 +860,10 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def names(self):
         ...
 
-    @_fallback
     def pin_memory(self, *args, **kwargs):
-        ...
+        if kwargs.get("inplace", False):
+            raise RuntimeError(f"Cannot pin_memory in-place with {type(self).__name__}.")
+        return _fallback(self.pin_memory)(self, *args, **kwargs)
 
     @_unlock_and_set
     def _select(self, *args, **kwargs):
