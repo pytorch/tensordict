@@ -91,8 +91,7 @@ _TD_PASS_THROUGH = {
     torch.gather: True,
 }
 # Methods to be executed from tensordict, any ref to self means 'tensorclass'
-_METHOD_FROM_TD = [
-]
+_METHOD_FROM_TD = []
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_check_unlock",
@@ -633,11 +632,12 @@ def _init_wrapper(__init__: Callable) -> Callable:
         super(type(self), self).__setattr__(
             "_tensordict",
             TensorDict._new_unsafe(
-            {},
-            batch_size=torch.Size(batch_size),
-            device=device,
-            names=names,
-        ))
+                {},
+                batch_size=torch.Size(batch_size),
+                device=device,
+                names=names,
+            ),
+        )
         super(type(self), self).__setattr__("_non_tensordict", {})
         super(type(self), self).__setattr__("_is_initialized", True)
 

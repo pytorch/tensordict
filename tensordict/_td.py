@@ -252,8 +252,8 @@ class TensorDict(TensorDictBase):
             )
         self._batch_size = self._parse_batch_size(source, batch_size)
         # TODO: this breaks when stacking tensorclasses with dynamo
-            if not torch.compiler.is_dynamo_compiling():
-                self.names = names
+        if not torch.compiler.is_dynamo_compiling():
+            self.names = names
 
         for key, value in source.items():
             self.set(key, value, non_blocking=sub_non_blocking)
@@ -273,6 +273,8 @@ class TensorDict(TensorDictBase):
         lock: bool = False,
         nested: bool = True,
     ) -> TensorDict:
+        if torch.compiler.is_dynamo_compiling():
+            return TensorDict(source, batch_size=batch_size, device=device, names=names, non_blocking=non_blocking, lock=lock)
         self = cls.__new__(cls)
         sub_non_blocking = False
         if device is not None:
