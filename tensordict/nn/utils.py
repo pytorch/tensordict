@@ -263,19 +263,79 @@ class set_skip_existing(_DecoratorContextManager):
         return super().__call__(wrapper)
 
     def __enter__(self) -> None:
+        if self.mode and torch.compiler.is_dynamo_compiling():
+            raise RuntimeError("skip_existing is not compatible with TorchDynamo.")
         global _SKIP_EXISTING
         self.prev = _SKIP_EXISTING
         if self.mode is not None:
             _SKIP_EXISTING = self.mode
         elif not self._called:
             raise RuntimeError(
-                f"It seems you are using {self.__class__.__name__} as a decorator with ``None`` input. "
+                f"It seems you are using {self.__class__.__name__} as a context manager with ``None`` input. "
                 f"This behaviour is not allowed."
             )
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         global _SKIP_EXISTING
         _SKIP_EXISTING = self.prev
+
+
+class _set_skip_existing_None(set_skip_existing):
+    """A version of skip_existing that is constant wrt init inputs (for torch.compile compatibility).
+
+    This class should only be used as a decorator, not a context manager.
+    """
+
+    def __call__(self, func: Callable):
+        self._called = True
+
+        # sanity check
+        for i, key in enumerate(inspect.signature(func).parameters):
+            if i == 0:
+                # skip self
+                continue
+            if key != "tensordict":
+                raise RuntimeError(
+                    "the first argument of the wrapped function must be "
+                    "named 'tensordict'."
+                )
+            break
+
+        @functools.wraps(func)
+        def wrapper(_self, tensordict, *args: Any, **kwargs: Any) -> Any:
+            if skip_existing() and torch.compiler.is_dynamo_compiling():
+                raise RuntimeError(
+                    "skip_existing is not compatible with torch.compile."
+                )
+            in_keys = getattr(_self, self.in_key_attr)
+            out_keys = getattr(_self, self.out_key_attr)
+            # we use skip_existing to allow users to override the mode internally
+            if (
+                skip_existing()
+                and all(key in tensordict.keys(True) for key in out_keys)
+                and not any(key in out_keys for key in in_keys)
+            ):
+                return tensordict
+            if torch.compiler.is_dynamo_compiling():
+                return func(_self, tensordict, *args, **kwargs)
+            global _SKIP_EXISTING
+            self.prev = _SKIP_EXISTING
+            try:
+                result = func(_self, tensordict, *args, **kwargs)
+            finally:
+                _SKIP_EXISTING = self.prev
+            return result
+
+        return wrapper
+
+    in_key_attr = "in_keys"
+    out_key_attr = "out_keys"
+    __init__ = object.__init__
+
+    def clone(self) -> _set_skip_existing_None:
+        # override this method if your children class takes __init__ parameters
+        out = self.__class__()
+        return out
 
 
 def skip_existing():
