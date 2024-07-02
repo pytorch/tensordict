@@ -30,7 +30,12 @@ from _utils_internal import (
     TestTensorDictsBase,
 )
 
-from tensordict import LazyStackedTensorDict, make_tensordict, TensorDict
+from tensordict import (
+    LazyStackedTensorDict,
+    make_tensordict,
+    PersistentTensorDict,
+    TensorDict,
+)
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
@@ -4508,27 +4513,33 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
     @pytest.mark.parametrize("device_cast", [0, "cuda:0", torch.device("cuda:0")])
-    def test_pin_memory(self, td_name, device_cast, device):
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_pin_memory(self, td_name, device_cast, device, inplace):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         td.unlock_()
+        if isinstance(td, (_SubTensorDict, PersistentTensorDict)):
+            with pytest.raises(RuntimeError, match="Cannot pin memory"):
+                td.pin_memory()
+            return
         if device.type == "cuda":
             with pytest.raises(RuntimeError, match="cannot pin"):
                 td.pin_memory()
             return
-        td.pin_memory()
-        td_device = td.to(device_cast)
+        if isinstance(td, TensorDictParams) and inplace:
+            with pytest.raises(
+                RuntimeError, match="Cannot pin_memory in-place with TensorDictParams."
+            ):
+                td_pin = td.pin_memory(inplace=inplace)
+            return
+        td_pin = td.pin_memory(inplace=inplace)
+        assert all(leaf.is_pinned for leaf in td_pin.values(True, True))
+        if inplace:
+            assert td_pin is td
+
+        td_device = td_pin.to(device_cast)
         _device_cast = torch.device(device_cast)
         assert td_device.device == _device_cast
-        assert td_device.clone().device == _device_cast
-        if device != _device_cast:
-            assert td_device is not td
-        for item in td_device.values():
-            assert item.device == _device_cast
-        for item in td_device.clone().values():
-            assert item.device == _device_cast
-        # assert type(td_device) is type(td)
-        assert_allclose_td(td, td_device.to(device))
 
     def test_pop(self, td_name, device):
         td = getattr(self, td_name)(device)

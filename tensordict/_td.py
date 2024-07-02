@@ -1988,12 +1988,6 @@ class TensorDict(TensorDictBase):
     def popitem(self) -> Tuple[NestedKey, CompatibleType]:
         return self._tensordict.popitem()
 
-    def pin_memory(self) -> T:
-        def pin_mem(tensor):
-            return tensor.pin_memory()
-
-        return self._fast_apply(pin_mem, propagate_lock=True)
-
     def _set_str(
         self,
         key: NestedKey,
@@ -3620,9 +3614,10 @@ class _SubTensorDict(TensorDictBase):
         self._source.rename_key_(old_key, new_key, safe=safe)
         return self
 
-    def pin_memory(self) -> T:
-        self._source.pin_memory()
-        return self
+    def pin_memory(self, *args, **kwargs) -> T:
+        raise RuntimeError(
+            f"Cannot pin memory of a {type(self).__name__}. Call to_tensordict() before making this call."
+        )
 
     def detach_(self) -> T:
         raise RuntimeError("Detaching a sub-tensordict in-place cannot be done.")
