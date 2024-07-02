@@ -4527,7 +4527,9 @@ class TestTensorDicts(TestTensorDictsBase):
                 td.pin_memory()
             return
         if isinstance(td, TensorDictParams) and inplace:
-            with pytest.raises(RuntimeError, match="Cannot pin_memory in-place with TensorDictParams."):
+            with pytest.raises(
+                RuntimeError, match="Cannot pin_memory in-place with TensorDictParams."
+            ):
                 td_pin = td.pin_memory(inplace=inplace)
             return
         td_pin = td.pin_memory(inplace=inplace)
