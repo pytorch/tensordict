@@ -977,8 +977,10 @@ class PersistentTensorDict(TensorDictBase):
             num_threads,
         ) = _parse_to(*args, **kwargs)
         if pin_memory:
-            raise RuntimeError(f"Cannot call pin_memory {type(self).__name__}.to(). Call "
-                               f"`to_tensordict()` before executing this code.")
+            raise RuntimeError(
+                f"Cannot call pin_memory {type(self).__name__}.to(). Call "
+                f"`to_tensordict()` before executing this code."
+            )
         result = self
         if device is not None and dtype is None and device == self.device:
             return result

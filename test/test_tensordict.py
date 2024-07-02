@@ -2951,7 +2951,9 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         if pin_memory and td_name == "td_h5":
-            with pytest.raises(RuntimeError, match="Cannot call pin_memory PersistentTensorDict.to()"):
+            with pytest.raises(
+                RuntimeError, match="Cannot call pin_memory PersistentTensorDict.to()"
+            ):
                 td_device = td.to(
                     device_cast, pin_memory=pin_memory, num_threads=num_threads
                 )
