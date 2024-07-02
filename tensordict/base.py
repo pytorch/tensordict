@@ -6150,6 +6150,182 @@ class TensorDictBase(MutableMapping):
             at little cost.
 
         """
+        return self._map(
+            fn,
+            dim=dim,
+            num_workers=num_workers,
+            chunksize=chunksize,
+            num_chunks=num_chunks,
+            pool=pool,
+            generator=generator,
+            max_tasks_per_child=max_tasks_per_child,
+            worker_threads=worker_threads,
+            index_with_generator=index_with_generator,
+            pbar=pbar,
+            mp_start_method=mp_start_method,
+            out=out,
+            iterable=False,
+        )
+
+    def map_iter(
+        self,
+        fn: Callable[[TensorDictBase], TensorDictBase | None],
+        dim: int = 0,
+        num_workers: int | None = None,
+        *,
+        chunksize: int | None = None,
+        num_chunks: int | None = None,
+        pool: mp.Pool | None = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
+        index_with_generator: bool = False,
+        pbar: bool = False,
+        mp_start_method: str | None = None,
+    ):
+        """Maps a function to splits of the tensordict across one dimension iteratively.
+
+        This is the iterable version of :meth:`~TensorDictBase.map`.
+
+        This method will apply a function to a tensordict instance by chunking
+        it in tensordicts of equal size and dispatching the operations over the
+        desired number of workers. It will yield the results one at a time.
+
+        The function signature should be ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``.
+        The function must be serializable.
+
+        Args:
+            fn (callable): function to apply to the tensordict.
+                Signatures similar to ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``
+                are supported.
+            dim (int, optional): the dim along which the tensordict will be chunked.
+            num_workers (int, optional): the number of workers. Exclusive with ``pool``.
+                If none is provided, the number of workers will be set to the
+                number of cpus available.
+
+        Keyword Args:
+            chunksize (int, optional): The size of each chunk of data.
+                A ``chunksize`` of 0 will unbind the tensordict along the
+                desired dimension and restack it after the function is applied,
+                whereas ``chunksize>0`` will split the tensordict and call
+                :func:`torch.cat` on the resulting list of tensordicts.
+                If none is provided, the number of chunks will equate the number
+                of workers. For very large tensordicts, such large chunks
+                may not fit in memory for the operation to be done and
+                more chunks may be needed to make the operation practically
+                doable. This argument is exclusive with ``num_chunks``.
+            num_chunks (int, optional): the number of chunks to split the tensordict
+                into. If none is provided, the number of chunks will equate the number
+                of workers. For very large tensordicts, such large chunks
+                may not fit in memory for the operation to be done and
+                more chunks may be needed to make the operation practically
+                doable. This argument is exclusive with ``chunksize``.
+            pool (mp.Pool, optional): a multiprocess Pool instance to use
+                to execute the job. If none is provided, a pool will be created
+                within the ``map`` method.
+            generator (torch.Generator, optional): a generator to use for seeding.
+                A base seed will be generated from it, and each worker
+                of the pool will be seeded with the provided seed incremented
+                by a unique integer from ``0`` to ``num_workers``. If no generator
+                is provided, a random integer will be used as seed.
+                To work with unseeded workers, a pool should be created separately
+                and passed to :meth:`map` directly.
+                .. note::
+                  Caution should be taken when providing a low-valued seed as
+                  this can cause autocorrelation between experiments, example:
+                  if 8 workers are asked and the seed is 4, the workers seed will
+                  range from 4 to 11. If the seed is 5, the workers seed will range
+                  from 5 to 12. These two experiments will have an overlap of 7
+                  seeds, which can have unexpected effects on the results.
+
+                .. note::
+                  The goal of seeding the workers is to have independent seed on
+                  each worker, and NOT to have reproducible results across calls
+                  of the `map` method. In other words, two experiments may and
+                  probably will return different results as it is impossible to
+                  know which worker will pick which job. However, we can make sure
+                  that each worker has a different seed and that the pseudo-random
+                  operations on each will be uncorrelated.
+            max_tasks_per_child (int, optional): the maximum number of jobs picked
+                by every child process. Defaults to ``None``, i.e., no restriction
+                on the number of jobs.
+            worker_threads (int, optional): the number of threads for the workers.
+                Defaults to ``1``.
+            index_with_generator (bool, optional): if ``True``, the splitting / chunking
+                of the tensordict will be done during the query, sparing init time.
+                Note that :meth:`~.chunk` and :meth:`~.split` are much more
+                efficient than indexing (which is used within the generator)
+                so a gain of processing time at init time may have a negative
+                impact on the total runtime. Defaults to ``False``.
+            pbar (bool, optional): if ``True``, a progress bar will be displayed.
+                Requires tqdm to be available. Defaults to ``False``.
+            mp_start_method (str, optional): the start method for multiprocessing.
+                If not provided, the default start method will be used.
+                Accepted strings are ``"fork"`` and ``"spawn"``. Keep in mind that
+                ``"cuda"`` tensors cannot be shared between processes with the
+                ``"fork"`` start method. This is without effect if the ``pool``
+                is passed to the ``map`` method.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>>
+            >>> def process_data(data):
+            ...     data.set("y", data.get("x") + 1)
+            ...     return data
+            >>> if __name__ == "__main__":
+            ...     data = TensorDict({"x": torch.zeros(1, 1_000_000)}, [1, 1_000_000]).memmap_()
+            ...     for sample in data.map_iter(process_data, dim=1):
+            ...         print(sample["y"])
+            ...         break
+            ...
+            tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
+
+        .. note:: This method is particularily useful when working with large
+            datasets stored on disk (e.g. memory-mapped tensordicts) where
+            chunks will be zero-copied slices of the original data which can
+            be passed to the processes with virtually zero-cost. This allows
+            to tread very large datasets (eg. over a Tb big) to be processed
+            at little cost.
+
+        .. note:: This function be used to represent a dataset and load from it,
+            in a dataloader-like fashion.
+
+        """
+        yield from self._map(
+            fn,
+            dim=dim,
+            num_workers=num_workers,
+            chunksize=chunksize,
+            num_chunks=num_chunks,
+            pool=pool,
+            generator=generator,
+            max_tasks_per_child=max_tasks_per_child,
+            worker_threads=worker_threads,
+            index_with_generator=index_with_generator,
+            pbar=pbar,
+            mp_start_method=mp_start_method,
+            iterable=True,
+        )
+
+    def _map(
+        self,
+        fn: Callable[[TensorDictBase], TensorDictBase | None],
+        dim: int = 0,
+        num_workers: int | None = None,
+        *,
+        out: TensorDictBase | None = None,
+        chunksize: int | None = None,
+        num_chunks: int | None = None,
+        pool: mp.Pool | None = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
+        index_with_generator: bool = False,
+        pbar: bool = False,
+        mp_start_method: str | None = None,
+        iterable: bool,
+    ):
         from torch import multiprocessing as mp
 
         if pool is None:
@@ -6168,13 +6344,14 @@ class TensorDictBase(MutableMapping):
             queue = ctx.Queue(maxsize=num_workers)
             for i in range(num_workers):
                 queue.put(i)
-            with ctx.Pool(
+            pool = ctx.Pool(
                 processes=num_workers,
                 initializer=_proc_init,
                 initargs=(seed, queue, worker_threads),
                 maxtasksperchild=max_tasks_per_child,
-            ) as pool:
-                return self.map(
+            )
+            try:
+                result = self._map(
                     fn,
                     dim=dim,
                     chunksize=chunksize,
@@ -6182,7 +6359,19 @@ class TensorDictBase(MutableMapping):
                     pool=pool,
                     pbar=pbar,
                     out=out,
+                    iterable=iterable,
                 )
+                if iterable:
+                    yield from result
+                    return  # noqa: B901
+                else:
+                    return result
+            finally:
+                try:
+                    pool.terminate()
+                finally:
+                    pool.join()
+
         num_workers = pool._processes
         dim_orig = dim
         if dim < 0:
@@ -6237,31 +6426,34 @@ class TensorDictBase(MutableMapping):
         imaplist = []
         start = 0
         base_index = (slice(None),) * dim
-        for item in imap:
-            if item is not None:
-                if out is not None:
-                    if chunksize == 0:
-                        out[base_index + (start,)].update_(item)
-                        start += 1
+        if iterable:
+            yield from imap
+        else:
+            for item in imap:
+                if item is not None:
+                    if out is not None:
+                        if chunksize == 0:
+                            out[base_index + (start,)].update_(item)
+                            start += 1
+                        else:
+                            end = start + item.shape[dim]
+                            chunk = base_index + (slice(start, end),)
+                            out[chunk].update_(item)
+                            start = end
                     else:
-                        end = start + item.shape[dim]
-                        chunk = base_index + (slice(start, end),)
-                        out[chunk].update_(item)
-                        start = end
+                        imaplist.append(item)
+            del imap
+
+            # support inplace modif
+            if imaplist:
+                if chunksize == 0:
+                    from tensordict._lazy import LazyStackedTensorDict
+
+                    # We want to be able to return whichever data structure
+                    out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
                 else:
-                    imaplist.append(item)
-        del imap
-
-        # support inplace modif
-        if imaplist:
-            if chunksize == 0:
-                from tensordict._lazy import LazyStackedTensorDict
-
-                # We want to be able to return whichever data structure
-                out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
-            else:
-                out = torch.cat(imaplist, dim)
-        return out
+                    out = torch.cat(imaplist, dim)
+            return out
 
     # point-wise arithmetic ops
     def __add__(self, other: TensorDictBase | float) -> T:
