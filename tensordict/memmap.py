@@ -20,15 +20,9 @@ from typing import Any, Callable, overload
 import numpy as np
 import torch
 
-from tensordict.utils import _shape, implement_for
+from tensordict.utils import _shape, implement_for, NESTED_TENSOR_ERR
 
 from torch.multiprocessing.reductions import ForkingPickler
-
-NESTED_TENSOR_ERR = (
-    "The PyTorch version isn't compatible with memmap "
-    "nested tensors. Please upgrade to a more recent "
-    "version."
-)
 
 
 class MemoryMappedTensor(torch.Tensor):
@@ -245,7 +239,12 @@ class MemoryMappedTensor(torch.Tensor):
             if not existsok and os.path.exists(str(filename)):
                 raise RuntimeError(f"The file {filename} already exists.")
             result = torch.from_file(
-                str(filename), shared=True, dtype=input.dtype, size=shape_numel
+                str(filename),
+                shared=True,
+                dtype=input.dtype,
+                size=shape_numel,
+                # needed when device ctx differs
+                device=torch.device("cpu"),
             )
             if isinstance(shape, torch.Tensor):
                 func_offset_stride = getattr(
@@ -592,7 +591,12 @@ class MemoryMappedTensor(torch.Tensor):
                 return result
             else:
                 result = torch.from_file(
-                    str(filename), shared=True, dtype=dtype, size=shape_numel
+                    str(filename),
+                    shared=True,
+                    dtype=dtype,
+                    size=shape_numel,
+                    # needed when device ctx differs
+                    device=torch.device("cpu"),
                 )
                 func_offset_stride = getattr(
                     torch, "_nested_compute_contiguous_strides_offsets", None
@@ -742,6 +746,8 @@ class MemoryMappedTensor(torch.Tensor):
                 shared=writable,
                 dtype=dtype,
                 size=shape.prod(-1).sum().int(),
+                # needed when device ctx differs
+                device=torch.device("cpu"),
             )
             tensor = torch._nested_view_from_buffer(
                 tensor,
@@ -752,7 +758,12 @@ class MemoryMappedTensor(torch.Tensor):
             shape = torch.Size(shape)
             # whether the file already existed
             tensor = torch.from_file(
-                str(filename), shared=writable, dtype=dtype, size=shape.numel()
+                str(filename),
+                shared=writable,
+                dtype=dtype,
+                size=shape.numel(),
+                # needed when device ctx differs
+                device=torch.device("cpu"),
             )
             tensor = tensor.view(shape)
 
@@ -827,7 +838,7 @@ class MemoryMappedTensor(torch.Tensor):
             return {
                 "handler": self._handler,
                 "dtype": self.dtype,
-                "shape": self.parent_shape,
+                "shape": list(self.parent_shape),
                 "index": self.index,
             }
         elif getattr(self, "_filename", None) is not None:

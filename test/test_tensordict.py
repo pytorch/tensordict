@@ -30,7 +30,12 @@ from _utils_internal import (
     TestTensorDictsBase,
 )
 
-from tensordict import LazyStackedTensorDict, make_tensordict, TensorDict
+from tensordict import (
+    LazyStackedTensorDict,
+    make_tensordict,
+    PersistentTensorDict,
+    TensorDict,
+)
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, is_tensor_collection
 from tensordict._torch_func import _stack as stack_td
@@ -245,6 +250,133 @@ class TestGeneric:
         assert (td_out["key1"] != 0).all()
         assert (td_out["key2"] != 0).all()
         assert (td_out["key3", "key4"] != 0).all()
+
+    @pytest.mark.filterwarnings("error")
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
+    @pytest.mark.parametrize("num_threads", [0, 1, 2])
+    @pytest.mark.parametrize("use_file", [False, True])
+    @pytest.mark.parametrize(
+        "nested,hetdtype",
+        [[False, False], [False, True]]
+        if torch.__version__ < "2.4"
+        else [[False, False], [False, True], ["NJT", True]],
+    )
+    def test_consolidate(self, device, use_file, tmpdir, num_threads, nested, hetdtype):
+        if not nested:
+            a = torch.zeros((2,))
+            c = torch.ones((2,), dtype=torch.float16 if hetdtype else torch.float32)
+            g = torch.full(
+                (2, 3), 2, dtype=torch.float64 if hetdtype else torch.float32
+            )
+        else:
+            layout = torch.jagged
+            a = torch.nested.nested_tensor(
+                [torch.zeros((1,), device=device), torch.zeros((2,), device=device)],
+                layout=layout,
+            )
+            c = torch.nested.nested_tensor(
+                [
+                    torch.ones(
+                        (1,),
+                        device=device,
+                        dtype=torch.float16 if hetdtype else torch.float32,
+                    ),
+                    torch.ones(
+                        (2,),
+                        device=device,
+                        dtype=torch.float16 if hetdtype else torch.float32,
+                    ),
+                ],
+                layout=layout,
+            )
+            g0 = torch.full(
+                (1, 3), 2, dtype=torch.float64 if hetdtype else torch.float32
+            )
+            g1 = torch.full(
+                (2, 3), 2, dtype=torch.float64 if hetdtype else torch.float32
+            )
+            g = torch.nested.nested_tensor([g0, g1], layout=layout)
+
+        td = TensorDict(
+            {
+                "a": a,
+                "b": {"c": c},
+                "d": "a string!",
+                ("e", "f", "g"): g,
+            },
+            device=device,
+            batch_size=[2],
+        )
+        if not use_file:
+            td_c = td.consolidate(num_threads=num_threads, metadata=bool(nested))
+            assert td_c.device == device
+        else:
+            filename = Path(tmpdir) / "file.mmap"
+            td_c = td.consolidate(filename=filename, num_threads=num_threads)
+            assert td_c.device == torch.device("cpu")
+            if not nested:
+                assert (TensorDict.from_consolidated(filename) == td_c).all()
+            else:
+                assert all(
+                    (_td0 == _td1).all()
+                    for (_td0, _td1) in zip(
+                        TensorDict.from_consolidated(filename).unbind(0), td_c.unbind(0)
+                    )
+                )
+
+        # TODO: This does NOT work because of the float16 which screws up the offsets.
+        #  to replicate this issue, comment out the try/except within consolidate
+        # values = td_c.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        # data_ptr = torch.tensor([t.untyped_storage().data_ptr() for t in values])
+        # assert data_ptr.unique().numel() == 1
+        assert hasattr(td_c, "_consolidated")
+        if not nested:
+            assert (td.to(td_c.device) == td_c).all(), td_c.to_dict()
+        else:
+            assert all(
+                (_td == _td_c).all()
+                for (_td, _td_c) in zip(td.to(td_c.device).unbind(0), td_c.unbind(0))
+            ), td_c.to_dict()
+
+        assert td_c["d"] == "a string!"
+        storage = td_c._consolidated["storage"]
+        storage *= 0
+        if not nested:
+            assert (td.to(td_c.device) != td_c).any(), td_c.to_dict()
+        elif nested == "NJT":
+            assert (td_c["e", "f", "g"].offsets() == 0).all()
+            assert (td_c["e", "f", "g"].values() == 0).all()
+        else:
+            assert (td_c["a"].values() == 0).all()
+            assert (td_c["e", "f", "g"].values() == 0).all()
+
+        filename = Path(tmpdir) / "file.pkl"
+        if not nested:
+            torch.save(td, filename)
+            assert (
+                td == torch.load(filename, weights_only=False)
+            ).all(), td_c.to_dict()
+        else:
+            pass
+            # wait for https://github.com/pytorch/pytorch/issues/129366 to be resolved
+            # assert all(
+            #     (_td == _td_c).all()
+            #     for (_td, _td_c) in zip(td.unbind(0), torch.load(filename).unbind(0))
+            # ), td_c.to_dict()
+
+        td_c = td.consolidate()
+        torch.save(td_c, filename)
+        if not nested:
+            assert (
+                td == torch.load(filename, weights_only=False)
+            ).all(), td_c.to_dict()
+        else:
+            assert all(
+                (_td == _td_c).all()
+                for (_td, _td_c) in zip(
+                    td.unbind(0), torch.load(filename, weights_only=False).unbind(0)
+                )
+            ), td_c.to_dict()
 
     @pytest.mark.parametrize(
         "ellipsis_index, expectation",
@@ -2619,6 +2751,70 @@ class TestTensorDicts(TestTensorDictsBase):
         )
 
     @pytest.mark.parametrize("inplace", [False, True])
+    @pytest.mark.parametrize(
+        "named,nested_keys", [[False, False], [True, False], [True, True]]
+    )
+    def test_apply_multithread(self, td_name, device, inplace, named, nested_keys):
+        td = getattr(self, td_name)(device)
+        if not named:
+            func = lambda x: x + 1
+        else:
+
+            def func(name, x):
+                return x + 1 + isinstance(name, tuple)
+
+        td0 = td._fast_apply(func, named=named, nested_keys=nested_keys, checked=False)
+        if isinstance(td, TensorDictParams):
+            td = td.data
+        td1 = td._fast_apply(
+            func,
+            inplace=inplace,
+            named=named,
+            nested_keys=nested_keys,
+            num_threads=2,
+            checked=False,
+        )
+        if inplace:
+            assert td1 is td
+        assert (td0 == td1).all()
+
+    @pytest.mark.parametrize("checked", [False, True])
+    def test_apply_multithread_exception(self, td_name, device, checked):
+        td = getattr(self, td_name)(device)
+
+        def func(*args):
+            raise RuntimeError("Test")
+
+        with pytest.raises(RuntimeError, match="Test"):
+            td._fast_apply(func, checked=checked)
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_apply_multithread_filter_empty(self, td_name, device, inplace):
+        td = getattr(self, td_name)(device)
+
+        def func(x):
+            return None
+
+        result0 = td._fast_apply(
+            func, filter_empty=True, inplace=inplace, num_threads=0, checked=False
+        )
+        result1 = td._fast_apply(
+            func, filter_empty=True, inplace=inplace, num_threads=2, checked=False
+        )
+        if not td._has_non_tensor:
+            # outplace, no non-tensor
+            assert result0 is None
+            assert result1 is None, (td, result1)
+        elif inplace:
+            # inplace, has non tensor
+            assert result0 is td
+            assert result1 is td, result1
+        else:
+            # not inplace, has non tensor
+            assert result0 is not None
+            assert result1 is not None, result0
+
+    @pytest.mark.parametrize("inplace", [False, True])
     def test_apply_other(self, td_name, device, inplace):
         td = getattr(self, td_name)(device)
         td_c = td.to_tensordict()
@@ -2752,10 +2948,31 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
     @pytest.mark.parametrize("device_cast", get_available_devices())
-    def test_cast_device(self, td_name, device, device_cast):
+    @pytest.mark.parametrize(
+        "pin_memory", [False] if not torch.cuda.is_available() else [False, True]
+    )
+    @pytest.mark.parametrize("num_threads", [0, 1, 4, None])
+    def test_cast_device(self, td_name, device, device_cast, pin_memory, num_threads):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
-        td_device = td.to(device_cast)
+        if pin_memory and td_name == "td_h5":
+            with pytest.raises(
+                RuntimeError, match="Cannot call pin_memory PersistentTensorDict.to()"
+            ):
+                td_device = td.to(
+                    device_cast, pin_memory=pin_memory, num_threads=num_threads
+                )
+            return
+
+        if device.type == "cuda" and device_cast.type == "cpu" and pin_memory:
+            with pytest.raises(
+                RuntimeError, match="only dense CPU tensors can be pinned"
+            ):
+                td_device = td.to(
+                    device_cast, pin_memory=pin_memory, num_threads=num_threads
+                )
+            return
+        td_device = td.to(device_cast, pin_memory=pin_memory, num_threads=num_threads)
 
         for item in td_device.values():
             assert item.device == device_cast
@@ -4317,27 +4534,33 @@ class TestTensorDicts(TestTensorDictsBase):
         torch.cuda.device_count() == 0, reason="No cuda device detected"
     )
     @pytest.mark.parametrize("device_cast", [0, "cuda:0", torch.device("cuda:0")])
-    def test_pin_memory(self, td_name, device_cast, device):
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_pin_memory(self, td_name, device_cast, device, inplace):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
         td.unlock_()
+        if isinstance(td, (_SubTensorDict, PersistentTensorDict)):
+            with pytest.raises(RuntimeError, match="Cannot pin memory"):
+                td.pin_memory()
+            return
         if device.type == "cuda":
             with pytest.raises(RuntimeError, match="cannot pin"):
                 td.pin_memory()
             return
-        td.pin_memory()
-        td_device = td.to(device_cast)
+        if isinstance(td, TensorDictParams) and inplace:
+            with pytest.raises(
+                RuntimeError, match="Cannot pin_memory in-place with TensorDictParams."
+            ):
+                td_pin = td.pin_memory(inplace=inplace)
+            return
+        td_pin = td.pin_memory(inplace=inplace)
+        assert all(leaf.is_pinned for leaf in td_pin.values(True, True))
+        if inplace:
+            assert td_pin is td
+
+        td_device = td_pin.to(device_cast)
         _device_cast = torch.device(device_cast)
         assert td_device.device == _device_cast
-        assert td_device.clone().device == _device_cast
-        if device != _device_cast:
-            assert td_device is not td
-        for item in td_device.values():
-            assert item.device == _device_cast
-        for item in td_device.clone().values():
-            assert item.device == _device_cast
-        # assert type(td_device) is type(td)
-        assert_allclose_td(td, td_device.to(device))
 
     def test_pop(self, td_name, device):
         td = getattr(self, td_name)(device)
@@ -6917,6 +7140,43 @@ class TestLazyStackedTensorDict:
             index = (slice(None),) * cat_dim + (slice(td_lazy.shape[cat_dim], None),)
             assert assert_allclose_td(res[index], td_lazy_2)
 
+    @pytest.mark.parametrize("device", [None, *get_available_devices()])
+    @pytest.mark.parametrize("use_file", [False, True])
+    def test_consolidate(self, device, use_file, tmpdir):
+        td = TensorDict(
+            {
+                "a": torch.arange(3).expand(1, 3).clone(),
+                "b": {"c": torch.arange(3, dtype=torch.double).expand(1, 3).clone()},
+                "d": "a string!",
+            },
+            device=device,
+            batch_size=[1, 3],
+        )
+        td = LazyStackedTensorDict(*td.unbind(1), stack_dim=1)
+        if not use_file:
+            td_c = td.consolidate()
+            assert td_c.device == device
+        else:
+            filename = Path(tmpdir) / "file.mmap"
+            td_c = td.consolidate(filename=filename)
+            assert td_c.device == torch.device("cpu")
+            assert (TensorDict.from_consolidated(filename) == td_c).all()
+        assert hasattr(td_c, "_consolidated")
+        assert type(td_c) == type(td)  # noqa
+        assert (td.to(td_c.device) == td_c).all()
+        assert td_c["d"] == [["a string!"] * 3]
+        storage = td_c._consolidated["storage"]
+        storage *= 0
+        assert (td.to(td_c.device) != td_c).any()
+
+        filename = Path(tmpdir) / "file.pkl"
+        torch.save(td, filename)
+        assert (td == torch.load(filename, weights_only=False)).all()
+
+        td_c = td.consolidate()
+        torch.save(td_c, filename)
+        assert (td == torch.load(filename, weights_only=False)).all()
+
     @pytest.mark.parametrize("pos1", range(8))
     @pytest.mark.parametrize("pos2", range(8))
     @pytest.mark.parametrize("pos3", range(8))
@@ -8048,13 +8308,17 @@ class TestNamedDims(TestTensorDictsBase):
             tdbool.names = "All work and no play makes Jack a dull boy"
 
     @pytest.mark.parametrize("device", get_available_devices())
-    def test_to(self, device):
+    @pytest.mark.parametrize(
+        "pin_memory", [False] if not torch.cuda.is_available() else [False, True]
+    )
+    @pytest.mark.parametrize("num_threads", [0, 1, 4, None])
+    def test_to(self, device, pin_memory, num_threads):
         td = TensorDict(
             {"": TensorDict({}, [3, 4, 1, 6])},
             batch_size=[3, 4, 1, 6],
             names=["a", "b", "c", "d"],
         )
-        tdt = td.to(device)
+        tdt = td.to(device, pin_memory=pin_memory, num_threads=num_threads)
         assert tdt.names == ["a", "b", "c", "d"]
 
     def test_unbind(self):
@@ -9045,12 +9309,12 @@ class TestNonTensorData:
             if json_serializable:
                 assert (
                     f.read()
-                    == f'{{"_type": "<class \'tensordict.tensorclass.NonTensorStack\'>", "stack_dim": 0, "device": {device_str}, "data": [[0, 1], [0, 1], [0, 1]]}}'
+                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","stack_dim":0,"device":{device_str},"data":[[0,1],[0,1],[0,1]]}}'
                 )
             else:
                 assert (
                     f.read()
-                    == f'{{"_type": "<class \'tensordict.tensorclass.NonTensorStack\'>", "stack_dim": 0, "device": {device_str}, "data": "pickle.pkl"}}'
+                    == f'{{"_type":"<class \'tensordict.tensorclass.NonTensorStack\'>","stack_dim":0,"device":{device_str},"data":"pickle.pkl"}}'
                 )
         data_recon = TensorDict.load_memmap(tmpdir)
         assert data_recon.batch_size == data.batch_size

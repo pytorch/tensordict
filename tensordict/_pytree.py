@@ -6,14 +6,10 @@ from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 
 import torch
-from tensordict import (
-    LazyStackedTensorDict,
-    PersistentTensorDict,
-    TensorDict,
-    TensorDictBase,
-)
-from tensordict._td import _SubTensorDict
+from tensordict._lazy import LazyStackedTensorDict
+from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
 from tensordict.base import _NESTED_TENSORS_AS_LISTS
+from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import _shape, implement_for
 
 try:
@@ -238,12 +234,11 @@ def _tensorclass_constructor(
 def _tensordict_constructor(
     *, cls, keys, values, batch_size, names, device, non_tensor_items
 ):
-    result = cls(
+    result = cls._new_unsafe(
         dict(zip(keys, values)),
         batch_size=batch_size,
         names=names,
         device=device,
-        _run_checks=False,
     )
     for key, item in non_tensor_items:
         result.set_non_tensor(key, item)
@@ -254,12 +249,11 @@ def _lazy_tensordict_constructor(
     *, cls, keys, values, batch_size, names, device, non_tensor_items
 ):
 
-    result = cls(
+    result = cls._new_unsafe(
         dict(zip(keys, values)),
         batch_size=batch_size,
         names=names,
         device=device,
-        _run_checks=False,
     )
     for key, item in non_tensor_items:
         result.set_non_tensor(key, item)
