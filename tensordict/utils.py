@@ -15,7 +15,6 @@ import os
 
 import sys
 import time
-
 import warnings
 from collections import defaultdict, OrderedDict
 from collections.abc import KeysView
@@ -1321,6 +1320,8 @@ def _split_tensordict(
 
 def _parse_to(*args, **kwargs):
     batch_size = kwargs.pop("batch_size", None)
+    pin_memory = kwargs.pop("pin_memory", False)
+    num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
     device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
         *args, **kwargs
@@ -1334,7 +1335,15 @@ def _parse_to(*args, **kwargs):
             dtype = None
         elif len(dtypes) == 1:
             dtype = list(dtypes)[0]
-    return device, dtype, non_blocking, convert_to_format, batch_size
+    return (
+        device,
+        dtype,
+        non_blocking,
+        convert_to_format,
+        batch_size,
+        pin_memory,
+        num_threads,
+    )
 
 
 class _ErrorInteceptor:

@@ -13,7 +13,7 @@ from copy import copy
 from numbers import Number
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterable, Iterator, List, Sequence, Tuple, Type
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Sequence, Tuple, Type
 from warnings import warn
 
 import numpy as np
@@ -1015,6 +1015,7 @@ class TensorDict(TensorDictBase):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
+        subs_results: Dict[Future, Any] | None = None,
         **constructor_kwargs,
     ) -> None:
         if constructor_kwargs:
@@ -1092,16 +1093,21 @@ class TensorDict(TensorDictBase):
                     executor=executor,
                     futures=futures,
                     local_futures=local_future,
+                    subs_results=subs_results,
                     **constructor_kwargs,
                 )
                 local_future = executor.submit(setter, item_trsf=item_trsf)
                 local_futures[i] = local_future
                 futures.append(local_future)
             else:
-                # TODO: check if add_done_callback can safely be used here
-                #  The issue is that it does not raises an exception encountered during the
-                #  execution, resulting in UBs.
-                local_future = executor.submit(setter, item_trsf=local_future.result())
+                if subs_results is not None:
+                    local_result = subs_results[local_future]
+                else:
+                    # TODO: check if add_done_callback can safely be used here
+                    #  The issue is that it does not raises an exception encountered during the
+                    #  execution, resulting in UBs.
+                    local_result = local_future.result()
+                local_future = executor.submit(setter, item_trsf=local_result)
                 futures.append(local_future)
                 local_futures[i] = local_future
 
@@ -2652,48 +2658,6 @@ class TensorDict(TensorDictBase):
 
         return memmap_tensor
 
-    def to(self, *args, **kwargs: Any) -> T:
-        non_blocking = kwargs.pop("non_blocking", None)
-        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
-        result = self
-
-        if device is not None and dtype is None and device == self.device:
-            return result
-
-        if non_blocking is None:
-            sub_non_blocking = True
-            non_blocking = False
-        else:
-            sub_non_blocking = non_blocking
-
-        if convert_to_format is not None:
-
-            def to(tensor):
-                return tensor.to(
-                    device,
-                    dtype,
-                    non_blocking=sub_non_blocking,
-                    convert_to_format=convert_to_format,
-                )
-
-        else:
-
-            def to(tensor):
-                return tensor.to(
-                    device=device, dtype=dtype, non_blocking=sub_non_blocking
-                )
-
-        apply_kwargs = {}
-        if device is not None or dtype is not None:
-            apply_kwargs["device"] = device if device is not None else self.device
-            apply_kwargs["batch_size"] = batch_size
-            result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
-        elif batch_size is not None:
-            result.batch_size = batch_size
-        if device is not None and sub_non_blocking and not non_blocking:
-            self._sync_all()
-        return result
-
     def where(self, condition, other, *, out=None, pad=None):
         if _is_tensor_collection(other.__class__):
 
@@ -3294,9 +3258,15 @@ class _SubTensorDict(TensorDictBase):
         return self
 
     def to(self, *args, **kwargs: Any) -> T:
-        device, dtype, non_blocking, convert_to_format, batch_size = _parse_to(
-            *args, **kwargs
-        )
+        (
+            device,
+            dtype,
+            non_blocking,
+            convert_to_format,
+            batch_size,
+            pin_memory,
+            num_threads,
+        ) = _parse_to(*args, **kwargs)
         result = self
 
         if device is not None and dtype is None and device == self.device:

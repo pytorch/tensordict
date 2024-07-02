@@ -16,7 +16,17 @@ from copy import copy, deepcopy
 from functools import wraps
 from pathlib import Path
 from textwrap import indent
-from typing import Any, Callable, Iterator, List, OrderedDict, Sequence, Tuple, Type
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    OrderedDict,
+    Sequence,
+    Tuple,
+    Type,
+)
 
 import numpy as np
 
@@ -1349,32 +1359,9 @@ class LazyStackedTensorDict(TensorDictBase):
         return result
 
     def to(self, *args, **kwargs) -> T:
-        non_blocking = kwargs.pop("non_blocking", None)
-        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
-        if batch_size is not None:
+        if kwargs.get("batch_size") is not None:
             raise TypeError("Cannot pass batch-size to a LazyStackedTensorDict.")
-        result = self
-
-        if device is not None and dtype is None and device == self.device:
-            return result
-
-        if non_blocking in (None, True):
-            kwargs["non_blocking"] = True
-        else:
-            kwargs["non_blocking"] = False
-        non_blocking = bool(non_blocking)
-        result = type(self)(
-            *[td.to(*args, **kwargs) for td in self.tensordicts],
-            stack_dim=self.stack_dim,
-            hook_out=self.hook_out,
-            hook_in=self.hook_in,
-            stack_dim_name=self._td_dim_name,
-        )
-        if device is not None and not non_blocking:
-            self._sync_all()
-        if self.is_locked:
-            result.lock_()
-        return result
+        return super().to(*args, **kwargs)
 
     def _check_new_batch_size(self, new_size: torch.Size) -> None:
         if len(new_size) <= self.stack_dim:
@@ -1569,6 +1556,7 @@ class LazyStackedTensorDict(TensorDictBase):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
+        subs_results: Dict[Future, Any] | None = None,
         **constructor_kwargs,
     ) -> None:
         if inplace and any(
@@ -1598,6 +1586,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 executor=executor,
                 futures=futures,
                 local_futures=local_future,
+                subs_results=subs_results,
             )
             results.append(local_out)
         if filter_empty and all(r is None for r in results):
@@ -3177,7 +3166,15 @@ class _CustomOpTensorDict(TensorDictBase):
 
     def to(self, *args, **kwargs) -> T:
         non_blocking = kwargs.pop("non_blocking", None)
-        device, dtype, _, convert_to_format, batch_size = _parse_to(*args, **kwargs)
+        (
+            device,
+            dtype,
+            _,
+            convert_to_format,
+            batch_size,
+            pin_memory,
+            num_threads,
+        ) = _parse_to(*args, **kwargs)
         if batch_size is not None:
             raise TypeError(f"Cannot pass batch-size to a {type(self)}.")
         result = self

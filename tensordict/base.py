@@ -18,7 +18,7 @@ import warnings
 import weakref
 from collections.abc import MutableMapping
 
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import as_completed, Future, ThreadPoolExecutor, wait
 from copy import copy
 from functools import partial, wraps
 from pathlib import Path
@@ -26,6 +26,7 @@ from textwrap import indent
 from typing import (
     Any,
     Callable,
+    Dict,
     Generator,
     Iterator,
     List,
@@ -54,6 +55,7 @@ from tensordict.utils import (
     _is_tensorclass,
     _KEY_ERROR,
     _make_dtype_promotion,
+    _parse_to,
     _prefix_last_key,
     _proc_init,
     _prune_selected_keys,
@@ -2444,21 +2446,26 @@ class TensorDictBase(MutableMapping):
         """
         return self.pin_memory(num_threads=num_threads, inplace=True)
 
-    def cpu(self) -> T:
-        """Casts a tensordict to CPU."""
-        return self.to("cpu")
+    def cpu(self, **kwargs) -> T:
+        """Casts a tensordict to CPU.
 
-    def cuda(self, device: int = None) -> T:
+        This function also supports all the keyword arguments of :meth:`~.to`.
+        """
+        return self.to("cpu", **kwargs)
+
+    def cuda(self, device: int = None, **kwargs) -> T:
         """Casts a tensordict to a cuda device (if not already on it).
 
         Args:
             device (int, optional): if provided, the cuda device on which the
                 tensor should be cast.
 
+        This function also supports all the keyword arguments of :meth:`~.to`.
+
         """
         if device is None:
             return self.to(torch.device("cuda"))
-        return self.to(f"cuda:{device}")
+        return self.to(f"cuda:{device}", **kwargs)
 
     @property
     def is_cuda(self):
@@ -5853,6 +5860,7 @@ class TensorDictBase(MutableMapping):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
+        subs_results: Dict[Future, Any] | None = None,
         **constructor_kwargs,
     ) -> None:
         ...
@@ -5875,11 +5883,16 @@ class TensorDictBase(MutableMapping):
         is_leaf: Callable = None,
         out: TensorDictBase | None = None,
         num_threads: int,
+        call_when_done: Callable | None = None,
         **constructor_kwargs,
     ) -> T | None:
         """A deadlock-safe multithread wrapper around TD.apply.
 
         First launches fn for all the leaves, then rebuilds the tensordicts out of them.
+
+        An optional ``call_when_done`` function can be passed to execute a method on the main thread
+        after a future is completed.
+
         """
         if call_on_nested:
             warnings.warn(
@@ -5907,6 +5920,12 @@ class TensorDictBase(MutableMapping):
             futures=futures,
             local_futures=local_futures,
         )
+        if call_when_done is not None:
+            subs_results = {}
+            for fut in as_completed(futures):
+                subs_results[fut] = call_when_done(fut.result())
+        else:
+            subs_results = None
         return self._multithread_rebuild(
             batch_size=batch_size,
             device=device,
@@ -5918,6 +5937,7 @@ class TensorDictBase(MutableMapping):
             executor=executor,
             futures=futures,
             local_futures=local_futures,
+            subs_results=subs_results,
             **constructor_kwargs,
         )
 
@@ -8400,7 +8420,6 @@ class TensorDictBase(MutableMapping):
     def to(self: T, *, batch_size: torch.Size) -> T:
         ...
 
-    @abc.abstractmethod
     def to(self, *args, **kwargs) -> T:
         """Maps a TensorDictBase subclass either on another device, dtype or to another TensorDictBase subclass (if permitted).
 
@@ -8427,6 +8446,20 @@ class TensorDictBase(MutableMapping):
                     a dtype, the dtype is gathered from the example leaves.
                     If there are more than one dtype, then no dtype
                     casting is undertook.
+            pin_memory (bool, optional): if ``True``, the tensors are pinned before
+                being sent to device. This will be done asynchronously but can be
+                controlled via the ``num_threads`` argument.
+
+                .. note:: Calling ``tensordict.pin_memory().to("cuda")`` will usually
+                    be much slower than ``tensordict.to("cuda", pin_memory=True)`` as
+                    the pin_memory is called asynchronously in the second case.
+
+            num_threads (int or None, optional): if ``pin_memory=True``, the number
+                of threads to be used for ``pin_memory``. By default, multithreading
+                will be used with ``num_threads=None`` in
+                :meth:`~concurrent.futures.ThreadPoolExecutor(max_workers=None)`, which will
+                result in a high number of threads. ``num_threads=0`` will cancel any
+                multithreading for the `pin_memory()` calls.
 
         Returns:
             a new tensordict instance if the device differs from the tensordict
@@ -8441,7 +8474,66 @@ class TensorDictBase(MutableMapping):
             >>> data_cuda = data.to(torch.randn(3, device="cuda:0"))  # using an example tensor
             >>> data_cuda = data.to(other=TensorDict({}, [], device="cuda:0"))  # using a tensordict example
         """
-        ...
+        non_blocking = kwargs.pop("non_blocking", None)
+
+        (
+            device,
+            dtype,
+            _,
+            convert_to_format,
+            batch_size,
+            pin_memory,
+            num_threads,
+        ) = _parse_to(*args, **kwargs)
+        result = self
+
+        if device is not None and dtype is None and device == self.device:
+            return result
+
+        if non_blocking is None:
+            sub_non_blocking = True
+            non_blocking = False
+        else:
+            sub_non_blocking = non_blocking
+
+        if convert_to_format is not None:
+
+            def to(tensor):
+                return tensor.to(
+                    device,
+                    dtype,
+                    non_blocking=sub_non_blocking,
+                    convert_to_format=convert_to_format,
+                )
+
+        else:
+
+            def to(tensor):
+                return tensor.to(
+                    device=device, dtype=dtype, non_blocking=sub_non_blocking
+                )
+
+        apply_kwargs = {}
+        if device is not None or dtype is not None:
+            if pin_memory and num_threads != 0:
+                result = self._multithread_apply_nest(
+                    lambda x: x.pin_memory(),
+                    num_threads=num_threads,
+                    call_when_done=to,
+                    device=device,
+                    checked=True,
+                )
+            else:
+                if pin_memory:
+                    result = result.pin_memory()
+                apply_kwargs["device"] = device if device is not None else self.device
+                apply_kwargs["batch_size"] = batch_size
+                result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
+        if batch_size is not None:
+            result.batch_size = batch_size
+        if device is not None and sub_non_blocking and not non_blocking:
+            self._sync_all()
+        return result
 
     def _sync_all(self):
         if _has_cuda:

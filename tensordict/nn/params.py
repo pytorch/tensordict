@@ -12,7 +12,7 @@ import weakref
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy
 from functools import wraps
-from typing import Any, Callable, Iterator, List, OrderedDict, Sequence, Type
+from typing import Any, Callable, Dict, Iterator, List, OrderedDict, Sequence, Type
 
 import torch
 
@@ -548,6 +548,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
+        subs_results: Dict[Future, Any] | None = None,
         **constructor_kwargs,
     ) -> None:
         ...
