@@ -1253,6 +1253,29 @@ class as_decorator:
         return new_func
 
 
+def _find_smallest_uint(N):
+    if not hasattr(torch, "uint32"):
+        # Fallback
+        return torch.int64
+    if N < 0:
+        raise ValueError("N must be a non-negative integer")
+
+    int8_max = 127
+    int16_max = 32767
+    int32_max = 2147483647
+    int64_max = 9223372036854775807
+    if N <= int8_max:
+        return torch.int8
+    elif N <= int16_max:
+        return torch.int16
+    elif N <= int32_max:
+        return torch.int32
+    elif N <= int64_max:
+        return torch.int64
+    else:
+        return "uint is too large to be represented by uint64"
+
+
 def _split_tensordict(
     td,
     chunksize,
@@ -1261,7 +1284,12 @@ def _split_tensordict(
     dim,
     use_generator=False,
     to_tensordict=False,
+    shuffle=False,
 ):
+    if shuffle and not use_generator:
+        raise RuntimeError(
+            "Shuffling is not permitted unless use_generator is set to ``True`` for efficiency purposes."
+        )
     if chunksize is None and num_chunks is None:
         num_chunks = num_workers
     if chunksize is not None and num_chunks is not None:
@@ -1272,50 +1300,63 @@ def _split_tensordict(
         num_chunks = min(td.shape[dim], num_chunks)
         if use_generator:
 
-            def _chunk_generator():
-                chunksize = -(td.shape[dim] // -num_chunks)
+            def next_index(td=td, dim=dim, num_chunks=num_chunks):
                 idx_start = 0
-                base = (slice(None),) * dim
-                for _ in range(num_chunks):
-                    idx_end = idx_start + chunksize
-                    out = td[base + (slice(idx_start, idx_end),)]
-                    if to_tensordict:
-                        out = out.to_tensordict()
-                    yield out
+                n = td.shape[dim]
+                chunksize = -(n // -num_chunks)
+                idx_end = chunksize
+                while idx_start < n:
+                    yield slice(idx_start, idx_end)
                     idx_start = idx_end
+                    idx_end += chunksize
 
-            return _chunk_generator()
-        return td.chunk(num_chunks, dim=dim)
+        else:
+            return td.chunk(num_chunks, dim=dim)
     else:
         if chunksize == 0:
             if use_generator:
 
-                def _unbind_generator():
-                    base = (slice(None),) * dim
-                    for i in range(td.shape[dim]):
-                        out = td[base + (i,)]
-                        if to_tensordict:
-                            out = out.to_tensordict()
-                        yield out
+                def next_index(td=td, dim=dim):
+                    yield from range(td.shape[dim])
 
-                return _unbind_generator()
-            return td.unbind(dim=dim)
-        if use_generator:
+            else:
+                return td.unbind(dim=dim)
+        else:
+            if use_generator:
 
-            def _split_generator():
-                idx_start = 0
-                base = (slice(None),) * dim
-                for _ in range(num_chunks):
-                    idx_end = idx_start + chunksize
-                    out = td[base + (slice(idx_start, idx_end),)]
-                    if to_tensordict:
-                        out = out.to_tensordict()
-                    yield out
-                    idx_start = idx_end
+                def next_index(td=td, dim=dim, chunksize=chunksize):
+                    idx_start = 0
+                    idx_end = chunksize
+                    n = td.shape[dim]
+                    while idx_start < n:
+                        yield slice(idx_start, idx_end)
+                        idx_start = idx_end
+                        idx_end += chunksize
 
-            return _split_generator()
-        chunksize = min(td.shape[dim], chunksize)
-        return td.split(chunksize, dim=dim)
+            else:
+                chunksize = min(td.shape[dim], chunksize)
+                return td.split(chunksize, dim=dim)
+    # end up here only when use_generator = True
+    if shuffle:
+
+        def next_index_shuffle(next_index=next_index):
+            n = td.shape[dim]
+            device = td.device
+            rp = torch.randperm(n, dtype=_find_smallest_uint(n), device=device)
+            for idx in next_index():
+                yield rp[idx].long()
+
+        next_index = next_index_shuffle
+
+    def _split_generator():
+        base = (slice(None),) * dim
+        for idx in next_index():
+            out = td[base + (idx,)]
+            if to_tensordict:
+                out = out.to_tensordict()
+            yield out
+
+    return _split_generator()
 
 
 def _parse_to(*args, **kwargs):

@@ -6173,13 +6173,14 @@ class TensorDictBase(MutableMapping):
         dim: int = 0,
         num_workers: int | None = None,
         *,
+        shuffle: bool = False,
         chunksize: int | None = None,
         num_chunks: int | None = None,
         pool: mp.Pool | None = None,
         generator: torch.Generator | None = None,
         max_tasks_per_child: int | None = None,
         worker_threads: int = 1,
-        index_with_generator: bool = False,
+        index_with_generator: bool = True,
         pbar: bool = False,
         mp_start_method: str | None = None,
     ):
@@ -6204,6 +6205,10 @@ class TensorDictBase(MutableMapping):
                 number of cpus available.
 
         Keyword Args:
+            shuffle (bool, optional): whether the indices should be globally shuffled.
+                If ``True``, each batch will contain non-contiguous samples.
+                If ``index_with_generator=False`` and `shuffle=True``, an error will be raised.
+                Defaults to ``False``.
             chunksize (int, optional): The size of each chunk of data.
                 A ``chunksize`` of 0 will unbind the tensordict along the
                 desired dimension and restack it after the function is applied,
@@ -6256,7 +6261,12 @@ class TensorDictBase(MutableMapping):
                 Note that :meth:`~.chunk` and :meth:`~.split` are much more
                 efficient than indexing (which is used within the generator)
                 so a gain of processing time at init time may have a negative
-                impact on the total runtime. Defaults to ``False``.
+                impact on the total runtime. Defaults to ``True``.
+
+                .. note:: The default value of ``index_with_generator`` differs for ``map_iter``
+                    and ``map`` and the former assumes that it is prohibitively expensive to
+                    store a split version of the TensorDict in memory.
+
             pbar (bool, optional): if ``True``, a progress bar will be displayed.
                 Requires tqdm to be available. Defaults to ``False``.
             mp_start_method (str, optional): the start method for multiprocessing.
@@ -6271,15 +6281,16 @@ class TensorDictBase(MutableMapping):
             >>> from tensordict import TensorDict
             >>>
             >>> def process_data(data):
+            ...     data.unlock_()
             ...     data.set("y", data.get("x") + 1)
             ...     return data
             >>> if __name__ == "__main__":
             ...     data = TensorDict({"x": torch.zeros(1, 1_000_000)}, [1, 1_000_000]).memmap_()
-            ...     for sample in data.map_iter(process_data, dim=1):
+            ...     for sample in data.map_iter(process_data, dim=1, chunksize=5):
             ...         print(sample["y"])
             ...         break
             ...
-            tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]])
+            tensor([[1., 1., 1., 1., 1.]])
 
         .. note:: This method is particularily useful when working with large
             datasets stored on disk (e.g. memory-mapped tensordicts) where
@@ -6296,6 +6307,7 @@ class TensorDictBase(MutableMapping):
             fn,
             dim=dim,
             num_workers=num_workers,
+            shuffle=shuffle,
             chunksize=chunksize,
             num_chunks=num_chunks,
             pool=pool,
@@ -6314,6 +6326,7 @@ class TensorDictBase(MutableMapping):
         dim: int = 0,
         num_workers: int | None = None,
         *,
+        shuffle: bool = False,
         out: TensorDictBase | None = None,
         chunksize: int | None = None,
         num_chunks: int | None = None,
@@ -6359,13 +6372,15 @@ class TensorDictBase(MutableMapping):
                     pool=pool,
                     pbar=pbar,
                     out=out,
+                    index_with_generator=index_with_generator,
                     iterable=iterable,
+                    shuffle=shuffle,
                 )
                 if iterable:
                     yield from result
                     return  # noqa: B901
                 else:
-                    return result
+                    return result  # noqa: B901
             finally:
                 try:
                     pool.terminate()
@@ -6385,6 +6400,7 @@ class TensorDictBase(MutableMapping):
             num_chunks,
             num_workers,
             dim,
+            shuffle=shuffle,
             use_generator=index_with_generator,
         )
         if not index_with_generator:
@@ -6409,6 +6425,7 @@ class TensorDictBase(MutableMapping):
                     num_chunks,
                     num_workers,
                     dim,
+                    shuffle=shuffle,
                     use_generator=index_with_generator,
                 )
                 return _CloudpickleWrapper(newfn), zip(self_split, out_split)
@@ -6416,7 +6433,8 @@ class TensorDictBase(MutableMapping):
             fn, self_split = wrap_fn_with_out(fn, out)
             out = None
 
-        imap = pool.imap(fn, self_split, call_chunksize)
+        imap_fn = pool.imap if not shuffle else pool.imap_unordered
+        imap = imap_fn(fn, self_split, call_chunksize)
 
         if pbar and importlib.util.find_spec("tqdm", None) is not None:
             import tqdm
