@@ -8798,7 +8798,7 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
-@pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
+# @pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
@@ -9007,6 +9007,83 @@ class TestMap:
         )
         td = td.map(self.nontensor_check, chunksize=0)
         assert td["check"].all()
+
+    @staticmethod
+    def _return_identical(td):
+        return td.clone()
+
+    @pytest.mark.parametrize("shuffle", [False, True])
+    @pytest.mark.parametrize(
+        "chunksize,num_chunks", [[0, None], [11, None], [None, 11]]
+    )
+    def test_map_iter(self, chunksize, num_chunks, shuffle):
+        torch.manual_seed(0)
+        td = TensorDict(
+            {
+                "a": torch.arange(100),
+                "b": {
+                    "c": torch.arange(100, 200),
+                    "d": NonTensorStack(*[NonTensorData(str(i)) for i in range(100)]),
+                },
+            },
+            batch_size=[100],
+        )
+        strings = set()
+        a_elts = set()
+        c_elts = set()
+        data_prev = None
+        for data in td.map_iter(
+            self._return_identical,
+            shuffle=shuffle,
+            num_chunks=num_chunks,
+            chunksize=chunksize,
+        ):
+            if data_prev is not None and data.shape == data_prev.shape:
+                if shuffle:
+                    assert (data != data_prev + data.numel()).any()
+                else:
+                    assert (
+                        data.filter_non_tensor_data()
+                        == data_prev.filter_non_tensor_data() + data.numel()
+                    ).all()
+            d = data["b", "d"]
+            if not isinstance(d, str):
+                strings.update(d)
+                a_elts.update(data["a"].tolist())
+                c_elts.update(data["b", "c"].tolist())
+            else:
+                strings.add(d)
+                a_elts.add(data["a"].item())
+                c_elts.add(data["b", "c"].item())
+            data_prev = data
+
+        assert a_elts == set(range(100))
+        assert c_elts == set(range(100, 200))
+        assert strings == {str(i) for i in range(100)}
+
+    @pytest.mark.parametrize("shuffle", [False, True])
+    @pytest.mark.parametrize(
+        "chunksize,num_chunks", [[0, None], [11, None], [None, 11]]
+    )
+    def test_map_iter_interrupt_early(self, chunksize, num_chunks, shuffle):
+        torch.manual_seed(0)
+        td = TensorDict(
+            {
+                "a": torch.arange(100),
+                "b": {
+                    "c": torch.arange(100, 200),
+                    "d": NonTensorStack(*[NonTensorData(str(i)) for i in range(100)]),
+                },
+            },
+            batch_size=[100],
+        )
+        for _ in td.map_iter(
+            self._return_identical,
+            shuffle=shuffle,
+            num_chunks=num_chunks,
+            chunksize=chunksize,
+        ):
+            return
 
 
 # class TestNonTensorData:
