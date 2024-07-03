@@ -97,14 +97,20 @@ _METHOD_FROM_TD = [
     "_get_str",
     "_get_sub_tensordict",
     "_get_tuple",
+    "_has_names",
+    "_multithread_rebuild",  # rebuild checks if self is a non tensor
     "gather",
     "is_memmap",
     "is_shared",
+    "load_",
+    "memmap",
+    "memmap_",
+    "memmap_like",
+    "memmap_refresh_",
     "ndimension",
     "numel",
     "replace",
-    "_has_names",
-    "_multithread_rebuild",  # rebuild checks if self is a non tensor
+    "save",
 ]
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
 _FALLBACK_METHOD_FROM_TD = [
@@ -192,10 +198,9 @@ _FALLBACK_METHOD_FROM_TD = [
     "floor_",
     "frac",
     "frac_",
-    "is_empty",
-    "is_memmap",
-    "is_shared",
-    "is_shared",
+    "is_empty",  # no wrap output
+    "is_memmap",  # no wrap output
+    "is_shared",  # no wrap output
     "isfinite",
     "isnan",
     "isreal",
@@ -223,7 +228,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "mul",
     "mul_",
     "named_apply",
-    "ndimension",
+    "ndimension",  # no wrap output
     "neg",
     "neg_",
     "norm",
@@ -261,8 +266,9 @@ _FALLBACK_METHOD_FROM_TD = [
     "unflatten",
     "unlock_",
     "unsqueeze",
-    "values",
+    "values",  # no wrap output
     "view",
+    "_get_names_idx",  # no wrap output
     "where",
     "zero_",
 ]
@@ -475,14 +481,10 @@ def _tensorclass(cls: T) -> T:
     cls.__exit__ = __exit__
 
     # Memmap
-    if not hasattr(cls, "memmap_like"):
-        cls.memmap_like = TensorDictBase.memmap_like
-    if not hasattr(cls, "memmap_"):
-        cls.memmap_ = TensorDictBase.memmap_
-    if not hasattr(cls, "memmap"):
-        cls.memmap = TensorDictBase.memmap
     if not hasattr(cls, "load_memmap"):
         cls.load_memmap = TensorDictBase.load_memmap
+    if not hasattr(cls, "load"):
+        cls.load = TensorDictBase.load
     if not hasattr(cls, "_load_memmap"):
         cls._load_memmap = classmethod(_load_memmap)
     if not hasattr(cls, "from_dict"):
@@ -903,7 +905,7 @@ def _getattr(self, item: str) -> Any:
                     return out.data if hasattr(out, "data") else out.tolist()
                 return out
             return _wrap_method(self, item, out)
-    raise AttributeError
+    raise AttributeError(item)
 
 
 SET_ATTRIBUTES = ("batch_size", "device", "_locked_tensordicts", "names")
@@ -2534,7 +2536,11 @@ class NonTensorData:
         memmaped: bool = False,
         share_non_tensor: bool = False,
     ):
-        if self._tensordict._is_memmap:
+        # For efficiency, we can avoid doing this saving
+        #  if the data is already there.
+        if self._tensordict._is_memmap and str(
+            getattr(self._tensordict, "_memmap_prefix", None)
+        ) == str(prefix):
             return self
 
         _metadata = {}

@@ -19,6 +19,7 @@ from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import pytest
+import tensordict.utils
 import torch
 
 try:
@@ -2265,6 +2266,21 @@ class TestVMAP:
         assert "non_tensor" not in data_bis._non_tensordict
         assert (data_bis == data).all()
         assert data_bis.non_tensor == "a string!"
+
+
+class TestSerialization:
+    def test_save_load(self, tmpdir):
+        myc = MyData(
+            X=torch.rand(2, 3, 4),
+            y=torch.rand(2, 3, 4, 5),
+            z="test_tensorclass",
+            batch_size=[2, 3],
+        )
+        myc.save(tmpdir)
+        tensordict.utils.print_directory_tree(tmpdir)
+        myc_load = TensorDict.load(tmpdir)
+        assert myc_load.z == "test_tensorclass"
+        assert (myc == myc_load).all()
 
 
 class TestPointWise:

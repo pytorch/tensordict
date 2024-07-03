@@ -2319,16 +2319,7 @@ class TensorDict(TensorDictBase):
             raise RuntimeError(
                 "memmap and shared memory are mutually exclusive features."
             )
-        dest = (
-            self
-            if inplace
-            else TensorDict(
-                {},
-                batch_size=self.batch_size,
-                names=self.names if self._has_names() else None,
-                device=torch.device("cpu"),
-            )
-        )
+        dest = self if inplace else self.empty(device=torch.device("cpu"))
 
         # We must set these attributes before memmapping because we need the metadata
         # to match the tensordict content.
