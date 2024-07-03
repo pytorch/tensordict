@@ -9340,6 +9340,11 @@ class TensorDictBase(MutableMapping):
         else:
             sub_non_blocking = non_blocking
 
+        if getattr(self, "_consolidated", False) and dtype is None:
+            return self._to_consolidated(
+                device=device, pin_memory=pin_memory, num_threads=num_threads
+            )
+
         if convert_to_format is not None:
 
             def to(tensor):
@@ -9357,11 +9362,6 @@ class TensorDictBase(MutableMapping):
                     device=device, dtype=dtype, non_blocking=sub_non_blocking
                 )
 
-        if getattr(self, "_consolidated", False) and dtype is None:
-            return self._to_consolidated(
-                device=device, pin_memory=pin_memory, num_threads=num_threads
-            )
-
         apply_kwargs = {}
         if device is not None or dtype is not None:
             if non_blocking_pin and num_threads != 0:
@@ -9377,11 +9377,12 @@ class TensorDictBase(MutableMapping):
                 apply_kwargs["batch_size"] = batch_size
                 if non_blocking_pin:
 
-                    def new_to(tensor, to=to):
-                        return to(tensor.pin_memory())
+                    def to_pinmem(tensor, _to=to):
+                        return _to(tensor.pin_memory())
 
-                    to = new_to
-                result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
+                    result = result._fast_apply(to_pinmem, propagate_lock=True, **apply_kwargs)
+                else:
+                    result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         if batch_size is not None:
             result.batch_size = batch_size
         if device is not None and sub_non_blocking and not non_blocking:
