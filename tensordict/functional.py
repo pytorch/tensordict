@@ -141,7 +141,8 @@ def pad_sequence(
         )
     if batch_first is not None:
         warnings.warn(
-            "The batch_first argument is deprecated and will be removed in a future release. The output will always be batch_first.",
+            "The batch_first argument is deprecated and will be removed in v0.6. "
+            "The output will always be batch_first.",
             category=DeprecationWarning,
         )
 
