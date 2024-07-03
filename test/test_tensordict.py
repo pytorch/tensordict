@@ -9061,10 +9061,6 @@ class TestMap:
         assert c_elts == set(range(100, 200))
         assert strings == {str(i) for i in range(100)}
 
-    @staticmethod
-    def _return_identical(td):
-        return td.clone()
-
     @pytest.mark.parametrize("shuffle", [False, True])
     @pytest.mark.parametrize(
         "chunksize,num_chunks", [[0, None], [11, None], [None, 11]]
@@ -9081,7 +9077,7 @@ class TestMap:
             },
             batch_size=[100],
         )
-        for data in td.map_iter(
+        for _ in td.map_iter(
             self._return_identical,
             shuffle=shuffle,
             num_chunks=num_chunks,
