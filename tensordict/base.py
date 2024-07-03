@@ -6376,11 +6376,11 @@ class TensorDictBase(MutableMapping):
                     iterable=iterable,
                     shuffle=shuffle,
                 )
-                if iterable:
-                    yield from result
-                    return  # noqa: B901
-                else:
-                    return result  # noqa: B901
+                # if iterable:
+                #     yield from result
+                #     return  # noqa: B901
+                # else:
+                return result  # noqa: B901
             finally:
                 try:
                     pool.terminate()
@@ -6445,7 +6445,7 @@ class TensorDictBase(MutableMapping):
         start = 0
         base_index = (slice(None),) * dim
         if iterable:
-            yield from imap
+            return imap
         else:
             for item in imap:
                 if item is not None:
