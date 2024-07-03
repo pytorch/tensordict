@@ -28,8 +28,7 @@ import tenacity
 import torch
 import tqdm
 
-from tensordict import MemoryMappedTensor
-from tensordict.prototype import tensorclass
+from tensordict import MemoryMappedTensor, tensorclass
 from torch import multiprocessing as mp, nn
 from torch.distributed import rpc
 from torch.utils.data import DataLoader

@@ -715,7 +715,7 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
                 if index.dtype is torch.bool:
                     warnings.warn(
                         "Indexing a tensor with a nested list of boolean values is "
-                        "going to be deprecated as this functionality is not supported "
+                        "going to be deprecated in v0.6 as this functionality is not supported "
                         f"by PyTorch. (follows error: {err})",
                         category=DeprecationWarning,
                     )

@@ -9,7 +9,7 @@ import argparse
 import pytest
 import torch
 
-from tensordict.prototype import tensorclass
+from tensordict import tensorclass
 
 
 @tensorclass
