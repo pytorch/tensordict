@@ -1168,7 +1168,8 @@ class TensorDictModule(TensorDictModuleBase):
                 # special rule for TensorDictModule that states that the second arg is
                 # likely to be the module params.
                 warnings.warn(
-                    "tensordict_out will be deprecated soon.",
+                    "tensordict_out will be deprecated in v0.6. "
+                    "Make sure you have removed any such arg by then.",
                     category=DeprecationWarning,
                 )
             if len(args):
