@@ -9,9 +9,10 @@ import inspect
 import numbers
 import re
 import weakref
+from concurrent.futures import Future, ThreadPoolExecutor
 from copy import copy
 from functools import wraps
-from typing import Any, Callable, Iterator, OrderedDict, Sequence, Type
+from typing import Any, Callable, Dict, Iterator, List, OrderedDict, Sequence, Type
 
 import torch
 
@@ -516,6 +517,42 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _apply_nest(*args, **kwargs):
         ...
 
+    @_fallback
+    def _multithread_apply_flat(
+        self,
+        fn: Callable,
+        *others: T,
+        call_on_nested: bool = False,
+        default: Any = NO_DEFAULT,
+        named: bool = False,
+        nested_keys: bool = False,
+        prefix: tuple = (),
+        is_leaf: Callable = None,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+    ) -> None:
+        ...
+
+    @_fallback
+    def _multithread_rebuild(
+        self,
+        *,
+        batch_size: Sequence[int] | None = None,
+        device: torch.device | None = NO_DEFAULT,
+        names: Sequence[str] | None = None,
+        inplace: bool = False,
+        checked: bool = False,
+        out: TensorDictBase | None = None,
+        filter_empty: bool = False,
+        executor: ThreadPoolExecutor,
+        futures: List[Future],
+        local_futures: List,
+        subs_results: Dict[Future, Any] | None = None,
+        **constructor_kwargs,
+    ) -> None:
+        ...
+
     @_get_post_hook
     @_fallback
     def get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
@@ -594,6 +631,11 @@ class TensorDictParams(TensorDictBase, nn.Module):
     @_fallback
     def _unbind(self, dim: int) -> tuple[TensorDictBase, ...]:
         ...
+
+    @classmethod
+    def from_dict(cls, *args, **kwargs):
+        td = TensorDict.from_dict(*args, **kwargs)
+        return TensorDictParams(td)
 
     @_fallback
     def to_tensordict(self):
@@ -819,9 +861,12 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def names(self):
         ...
 
-    @_fallback
     def pin_memory(self, *args, **kwargs):
-        ...
+        if kwargs.get("inplace", False):
+            raise RuntimeError(
+                f"Cannot pin_memory in-place with {type(self).__name__}."
+            )
+        return _fallback(self.pin_memory)(self, *args, **kwargs)
 
     @_unlock_and_set
     def _select(self, *args, **kwargs):

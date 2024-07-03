@@ -64,7 +64,7 @@ def _insert_interaction_mode_deprecation_warning(
 ) -> Callable[[str, Warning, int], None]:
     return warn(
         (
-            f"{prefix}interaction_mode is deprecated for naming clarity. "
+            f"{prefix}interaction_mode is deprecated for naming clarity and will be removed in v0.6. "
             f"Please use {prefix}interaction_type with InteractionType enum instead."
         ),
         DeprecationWarning,
@@ -413,7 +413,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
     @property
     def SAMPLE_LOG_PROB_KEY(self):
         warnings.warn(
-            "SAMPLE_LOG_PROB_KEY will be deprecated soon."
+            "SAMPLE_LOG_PROB_KEY will be deprecated in v0.6."
             "Use 'obj.log_prob_key' instead",
             category=DeprecationWarning,
         )

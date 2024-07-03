@@ -71,8 +71,10 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
     for i in range(0, len(reverse_pad), 2):
         reverse_pad[i], reverse_pad[i + 1] = reverse_pad[i + 1], reverse_pad[i]
 
-    out = TensorDict(
-        {}, torch.Size(new_batch_size), device=tensordict.device, _run_checks=False
+    out = TensorDict._new_unsafe(
+        {},
+        torch.Size(new_batch_size),
+        device=tensordict.device,
     )
     for key, tensor in tensordict.items():
         cur_pad = reverse_pad
@@ -139,7 +141,8 @@ def pad_sequence(
         )
     if batch_first is not None:
         warnings.warn(
-            "The batch_first argument is deprecated and will be removed in a future release. The output will always be batch_first.",
+            "The batch_first argument is deprecated and will be removed in v0.6. "
+            "The output will always be batch_first.",
             category=DeprecationWarning,
         )
 
@@ -238,7 +241,7 @@ def merge_tensordicts(*tensordicts: T) -> T:
         d.update(td.to_dict())
         if td.batch_dims < len(batch_size):
             batch_size = td.batch_size
-    return TensorDict(d, batch_size, device=td.device, _run_checks=False)
+    return TensorDict._new_unsafe(d, batch_size, device=td.device)
 
 
 def dense_stack_tds(

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import abc
 import collections
 import concurrent.futures
 import inspect
@@ -14,7 +15,6 @@ import os
 
 import sys
 import time
-
 import warnings
 from collections import defaultdict, OrderedDict
 from collections.abc import KeysView
@@ -104,32 +104,60 @@ if not _has_funcdim:
 
 T = TypeVar("T", bound="TensorDictBase")
 
-_STRDTYPE2DTYPE = {
-    str(dtype): dtype
-    for dtype in (
-        torch.float32,
-        torch.float64,
-        torch.float16,
-        torch.bfloat16,
-        torch.complex32,
-        torch.complex64,
-        torch.complex128,
-        torch.uint8,
-        torch.int8,
-        torch.int16,
-        torch.int32,
-        torch.int64,
-        torch.bool,
-        torch.quint8,
-        torch.qint8,
-        torch.qint32,
-        torch.quint4x2,
-    )
-}
+_TORCH_DTYPES = (
+    torch.bfloat16,
+    torch.bool,
+    torch.complex128,
+    torch.complex32,
+    torch.complex64,
+    torch.float16,
+    torch.float32,
+    torch.float64,
+    torch.int16,
+    torch.int32,
+    torch.int64,
+    torch.int8,
+    torch.qint32,
+    torch.qint8,
+    torch.quint4x2,
+    torch.quint8,
+    torch.uint8,
+)
+if hasattr(torch, "uint16"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint16,)
+if hasattr(torch, "uint32"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint32,)
+if hasattr(torch, "uint64"):
+    _TORCH_DTYPES = _TORCH_DTYPES + (torch.uint64,)
+_STRDTYPE2DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
+_DTYPE2STRDTYPE = {dtype: str_dtype for str_dtype, dtype in _STRDTYPE2DTYPE.items()}
 
 IndexType = Union[None, int, slice, str, Tensor, List[Any], Tuple[Any, ...]]
 DeviceType = Union[torch.device, str, int]
-NestedKey = Union[str, Tuple[str, ...]]
+
+
+class _NestedKeyMeta(abc.ABCMeta):
+    def __instancecheck__(self, instance):
+        return isinstance(instance, str) or (
+            isinstance(instance, tuple)
+            and len(instance)
+            and all(isinstance(subkey, NestedKey) for subkey in instance)
+        )
+
+
+class NestedKey(metaclass=_NestedKeyMeta):
+    """An abstract class for nested keys.
+
+    Nested keys are the generic key type accepted by TensorDict.
+
+    A nested key is either a string or a non-empty tuple of NestedKeys instances.
+
+    The NestedKey class supports instance checks.
+
+    """
+
+    pass
+
 
 _KEY_ERROR = 'key "{}" not found in {} with ' "keys {}"
 _LOCK_ERROR = (
@@ -390,19 +418,19 @@ def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
     return tensor_expand
 
 
-NUMPY_TO_TORCH_DTYPE_DICT = {
-    np.dtype("bool"): torch.bool,
-    np.dtype("uint8"): torch.uint8,
-    np.dtype("int8"): torch.int8,
-    np.dtype("int16"): torch.int16,
-    np.dtype("int32"): torch.int32,
-    np.dtype("int64"): torch.int64,
-    np.dtype("float16"): torch.float16,
-    np.dtype("float32"): torch.float32,
-    np.dtype("float64"): torch.float64,
-    np.dtype("complex64"): torch.complex64,
-    np.dtype("complex128"): torch.complex128,
-}
+def _populate_np_dtypes():
+    d = {}
+    for dtype in _TORCH_DTYPES:
+        dtype_str = str(dtype).split(".")[-1]
+        try:
+            d[np.dtype(dtype_str)] = dtype
+        except TypeError:
+            continue
+    return d
+
+
+NUMPY_TO_TORCH_DTYPE_DICT = _populate_np_dtypes()
+
 TORCH_TO_NUMPY_DTYPE_DICT = {
     value: key for key, value in NUMPY_TO_TORCH_DTYPE_DICT.items()
 }
@@ -687,7 +715,7 @@ def _get_item(tensor: Tensor, index: IndexType) -> Tensor:
                 if index.dtype is torch.bool:
                     warnings.warn(
                         "Indexing a tensor with a nested list of boolean values is "
-                        "going to be deprecated as this functionality is not supported "
+                        "going to be deprecated in v0.6 as this functionality is not supported "
                         f"by PyTorch. (follows error: {err})",
                         category=DeprecationWarning,
                     )
@@ -1225,6 +1253,29 @@ class as_decorator:
         return new_func
 
 
+def _find_smallest_uint(N):
+    if not hasattr(torch, "uint32"):
+        # Fallback
+        return torch.int64
+    if N < 0:
+        raise ValueError("N must be a non-negative integer")
+
+    int8_max = 127
+    int16_max = 32767
+    int32_max = 2147483647
+    int64_max = 9223372036854775807
+    if N <= int8_max:
+        return torch.int8
+    elif N <= int16_max:
+        return torch.int16
+    elif N <= int32_max:
+        return torch.int32
+    elif N <= int64_max:
+        return torch.int64
+    else:
+        return "uint is too large to be represented by uint64"
+
+
 def _split_tensordict(
     td,
     chunksize,
@@ -1233,7 +1284,12 @@ def _split_tensordict(
     dim,
     use_generator=False,
     to_tensordict=False,
+    shuffle=False,
 ):
+    if shuffle and not use_generator:
+        raise RuntimeError(
+            "Shuffling is not permitted unless use_generator is set to ``True`` for efficiency purposes."
+        )
     if chunksize is None and num_chunks is None:
         num_chunks = num_workers
     if chunksize is not None and num_chunks is not None:
@@ -1244,54 +1300,69 @@ def _split_tensordict(
         num_chunks = min(td.shape[dim], num_chunks)
         if use_generator:
 
-            def _chunk_generator():
-                chunksize = -(td.shape[dim] // -num_chunks)
+            def next_index(td=td, dim=dim, num_chunks=num_chunks):
                 idx_start = 0
-                base = (slice(None),) * dim
-                for _ in range(num_chunks):
-                    idx_end = idx_start + chunksize
-                    out = td[base + (slice(idx_start, idx_end),)]
-                    if to_tensordict:
-                        out = out.to_tensordict()
-                    yield out
+                n = td.shape[dim]
+                chunksize = -(n // -num_chunks)
+                idx_end = chunksize
+                while idx_start < n:
+                    yield slice(idx_start, idx_end)
                     idx_start = idx_end
+                    idx_end += chunksize
 
-            return _chunk_generator()
-        return td.chunk(num_chunks, dim=dim)
+        else:
+            return td.chunk(num_chunks, dim=dim)
     else:
         if chunksize == 0:
             if use_generator:
 
-                def _unbind_generator():
-                    base = (slice(None),) * dim
-                    for i in range(td.shape[dim]):
-                        out = td[base + (i,)]
-                        if to_tensordict:
-                            out = out.to_tensordict()
-                        yield out
+                def next_index(td=td, dim=dim):
+                    yield from range(td.shape[dim])
 
-                return _unbind_generator()
-            return td.unbind(dim=dim)
-        if use_generator:
+            else:
+                return td.unbind(dim=dim)
+        else:
+            if use_generator:
 
-            def _split_generator():
-                idx_start = 0
-                base = (slice(None),) * dim
-                for _ in range(num_chunks):
-                    idx_end = idx_start + chunksize
-                    out = td[base + (slice(idx_start, idx_end),)]
-                    if to_tensordict:
-                        out = out.to_tensordict()
-                    yield out
-                    idx_start = idx_end
+                def next_index(td=td, dim=dim, chunksize=chunksize):
+                    idx_start = 0
+                    idx_end = chunksize
+                    n = td.shape[dim]
+                    while idx_start < n:
+                        yield slice(idx_start, idx_end)
+                        idx_start = idx_end
+                        idx_end += chunksize
 
-            return _split_generator()
-        chunksize = min(td.shape[dim], chunksize)
-        return td.split(chunksize, dim=dim)
+            else:
+                chunksize = min(td.shape[dim], chunksize)
+                return td.split(chunksize, dim=dim)
+    # end up here only when use_generator = True
+    if shuffle:
+
+        def next_index_shuffle(next_index=next_index):
+            n = td.shape[dim]
+            device = td.device
+            rp = torch.randperm(n, dtype=_find_smallest_uint(n), device=device)
+            for idx in next_index():
+                yield rp[idx].long()
+
+        next_index = next_index_shuffle
+
+    def _split_generator():
+        base = (slice(None),) * dim
+        for idx in next_index():
+            out = td[base + (idx,)]
+            if to_tensordict:
+                out = out.to_tensordict()
+            yield out
+
+    return _split_generator()
 
 
 def _parse_to(*args, **kwargs):
     batch_size = kwargs.pop("batch_size", None)
+    pin_memory = kwargs.pop("pin_memory", False)
+    num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
     device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
         *args, **kwargs
@@ -1305,7 +1376,15 @@ def _parse_to(*args, **kwargs):
             dtype = None
         elif len(dtypes) == 1:
             dtype = list(dtypes)[0]
-    return device, dtype, non_blocking, convert_to_format, batch_size
+    return (
+        device,
+        dtype,
+        non_blocking,
+        convert_to_format,
+        batch_size,
+        pin_memory,
+        num_threads,
+    )
 
 
 class _ErrorInteceptor:
@@ -1447,7 +1526,8 @@ def assert_allclose_td(
                 continue
             assert_allclose_td(input1, input2, rtol=rtol, atol=atol)
             continue
-
+        elif not isinstance(input1, torch.Tensor):
+            continue
         mse = (input1.to(torch.float) - input2.to(torch.float)).pow(2).sum()
         mse = mse.div(input1.numel()).sqrt().item()
 
@@ -2274,3 +2354,46 @@ class KeyDependentDefaultDict(collections.defaultdict):
         value = self.fun(key)
         self[key] = value
         return value
+
+
+def is_namedtuple(obj):
+    """Check if obj is a namedtuple."""
+    return isinstance(obj, tuple) and hasattr(obj, "_fields")
+
+
+def is_namedtuple_class(cls):
+    """Check if a class is a namedtuple class."""
+    base_attrs = {"_fields", "_replace", "_asdict"}
+    return all(hasattr(cls, attr) for attr in base_attrs)
+
+
+def _make_dtype_promotion(func):
+    dtype = getattr(torch, func.__name__, None)
+
+    @wraps(func)
+    def new_func(self):
+        if dtype is None:
+            raise NotImplementedError(
+                f"Your pytorch version {torch.__version__} does not support {dtype}."
+            )
+        return self._fast_apply(lambda x: x.to(dtype), propagate_lock=True)
+
+    new_func.__doc__ = rf"""Casts all tensors to ``{str(dtype)}``."""
+    return new_func
+
+
+def _prefix_last_key(key, prefix):
+    if isinstance(key, str):
+        return prefix + key
+    if len(key) == 1:
+        return (_prefix_last_key(key[0], prefix),)
+    return key[:-1] + (_prefix_last_key(key[-1], prefix),)
+
+
+NESTED_TENSOR_ERR = (
+    "The PyTorch version isn't compatible with "
+    "nested tensors. Please upgrade to a more recent "
+    "version."
+)
+
+_DEVICE2STRDEVICE = KeyDependentDefaultDict(lambda key: str(key))
