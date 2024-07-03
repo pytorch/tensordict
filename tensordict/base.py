@@ -6364,7 +6364,7 @@ class TensorDictBase(MutableMapping):
                 maxtasksperchild=max_tasks_per_child,
             )
             try:
-                result = self._map(
+                yield from self._map(
                     fn,
                     dim=dim,
                     chunksize=chunksize,
@@ -6376,11 +6376,7 @@ class TensorDictBase(MutableMapping):
                     iterable=iterable,
                     shuffle=shuffle,
                 )
-                # if iterable:
-                #     yield from result
-                #     return  # noqa: B901
-                # else:
-                return result  # noqa: B901
+                return
             finally:
                 try:
                     pool.terminate()
@@ -6445,7 +6441,8 @@ class TensorDictBase(MutableMapping):
         start = 0
         base_index = (slice(None),) * dim
         if iterable:
-            return imap
+            yield from imap
+            return
         else:
             for item in imap:
                 if item is not None:
