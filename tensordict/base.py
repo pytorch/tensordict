@@ -9377,7 +9377,7 @@ class TensorDictBase(MutableMapping):
                 apply_kwargs["batch_size"] = batch_size
                 if non_blocking_pin:
 
-                    def new_to(tensor):
+                    def new_to(tensor, to=to):
                         return to(tensor.pin_memory())
 
                     to = new_to
