@@ -818,6 +818,7 @@ def _memmap_(
         td = self._tensordict.empty()
         td._is_memmap = True
         td._is_locked = True
+        td._memmap_prefix = prefix
         if inplace:
             self.__dict__["_tensordict"] = td
     if not inplace:
@@ -2712,6 +2713,7 @@ class NonTensorStack(LazyStackedTensorDict):
         # The only thing remaining to do is share the data between processes
         results = []
         for i, td in enumerate(self.tensordicts):
+            td: NonTensorData
             results.append(
                 td._memmap_(
                     prefix=(prefix / str(i)) if prefix is not None else None,
