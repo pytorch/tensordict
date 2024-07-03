@@ -16,8 +16,7 @@ Using tensorclasses for datasets
 import torch
 import torch.nn as nn
 
-from tensordict import MemoryMappedTensor
-from tensordict.prototype import tensorclass
+from tensordict import MemoryMappedTensor, tensorclass
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchvision.transforms import ToTensor
