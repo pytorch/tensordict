@@ -9357,6 +9357,11 @@ class TensorDictBase(MutableMapping):
                     device=device, dtype=dtype, non_blocking=sub_non_blocking
                 )
 
+        if getattr(self, "_consolidated", False) and dtype is None:
+            return self._to_consolidated(
+                device=device, pin_memory=pin_memory, num_threads=num_threads
+            )
+
         apply_kwargs = {}
         if device is not None or dtype is not None:
             if non_blocking_pin and num_threads != 0:
@@ -9370,12 +9375,42 @@ class TensorDictBase(MutableMapping):
                     result = result.pin_memory()
                 apply_kwargs["device"] = device if device is not None else self.device
                 apply_kwargs["batch_size"] = batch_size
+                if non_blocking_pin:
+
+                    def new_to(tensor):
+                        return to(tensor.pin_memory())
+
+                    to = new_to
                 result = result._fast_apply(to, propagate_lock=True, **apply_kwargs)
         if batch_size is not None:
             result.batch_size = batch_size
         if device is not None and sub_non_blocking and not non_blocking:
             self._sync_all()
         return result
+
+    def _to_consolidated(self, *, device, pin_memory, num_threads):
+        if num_threads is None:
+            # unspecified num_threads should mean 0
+            num_threads = 0
+        storage = self._consolidated["storage"]
+        if pin_memory:
+            storage = storage.pin_memory()
+        storage_cast = storage.to(device, non_blocking=True)
+        untyped_storage = storage_cast.untyped_storage()
+
+        def set_(x):
+            storage_offset = x.storage_offset()
+            stride = x.stride()
+            return torch.empty_like(x, device=device).set_(
+                untyped_storage,
+                size=x.shape,
+                stride=stride,
+                storage_offset=storage_offset,
+            )
+
+        return self._fast_apply(
+            set_, device=torch.device(device), num_threads=num_threads
+        )
 
     def _sync_all(self):
         if _has_cuda:
