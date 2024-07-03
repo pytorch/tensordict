@@ -42,7 +42,7 @@ jobs:
           ["3.12", "cp312-cp312"],
         ]
         cuda_support: [["", "cpu", "cpu"]]
-    container: pytorch/manylinux-cuda116
+    container: pytorch/manylinux-cuda121
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v2
@@ -51,6 +51,7 @@ jobs:
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
+          python3 -c """import sys;print(sys.version)"""
           python3 -mpip install --pre torch --extra-index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda_support[1] }}
       - name: Build tensordict Nightly
         run: |

@@ -27,6 +27,7 @@ from typing import (
     Tuple,
     Type,
 )
+from warnings import warn
 
 import numpy as np
 
@@ -1695,8 +1696,18 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
                 for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
             ]
-        if filter_empty and all(r is None for r in results):
-            return
+        if all(r is None for r in results):
+            if filter_empty is None:
+                warn(
+                    "Your resulting tensordict has no leaves but you did not specify filter_empty=True. "
+                    "This now returns None (filter_empty=True). "
+                    "To silence this warning, set filter_empty to the desired value in your call to `apply`. "
+                    "This warning will be removed in v0.6.",
+                    category=DeprecationWarning,
+                )
+                return
+            elif filter_empty:
+                return
         if not inplace:
             out = type(self)(
                 *results,
