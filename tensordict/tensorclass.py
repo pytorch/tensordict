@@ -127,22 +127,18 @@ _FALLBACK_METHOD_FROM_TD = [
     "__truediv__",
     "_add_batch_dim",
     "_apply_nest",
-    "_multithread_apply_flat",
     "_check_unlock",
     "_erase_names",  # TODO: must be specialized
     "_exclude",  # TODO: must be specialized
     "_fast_apply",
+    "_get_names_idx",  # no wrap output
     "_has_names",
+    "_multithread_apply_flat",
     "_propagate_lock",
     "_propagate_unlock",
     "_remove_batch_dim",
     "_select",  # TODO: must be specialized
-    # "_set_at_str",
     "_set_at_tuple",
-    "_set_at_tuple",
-    # _set_str needs a special treatment to catch keys that are already in
-    # non tensor data
-    # "_set_at_tuple",
     "_set_str",
     "_set_tuple",
     "abs",
@@ -219,6 +215,8 @@ _FALLBACK_METHOD_FROM_TD = [
     "log2",
     "log2_",
     "log_",
+    "map",
+    "map_iter",
     "masked_fill",
     "masked_fill_",
     "maximum",
@@ -268,7 +266,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "unsqueeze",
     "values",  # no wrap output
     "view",
-    "_get_names_idx",  # no wrap output
     "where",
     "zero_",
 ]
