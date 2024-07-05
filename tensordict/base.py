@@ -4689,14 +4689,28 @@ class TensorDictBase(MutableMapping):
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
+        *,
+        collapse: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
+        sorting_keys: List[NestedKey] | None = None,
     ) -> List:
-        return list(
-            self.values(
+        if sorting_keys is None:
+            return list(
+                self.values(
+                    include_nested=include_nested,
+                    leaves_only=leaves_only,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
+                )
+            )
+        else:
+            keys, vals = self._items_list(
                 include_nested=include_nested,
                 leaves_only=leaves_only,
-                is_leaf=_NESTED_TENSORS_AS_LISTS,
+                is_leaf=is_leaf,
+                collapse=collapse,
             )
-        )
+            source = dict(zip(keys, vals))
+            return [source[key] for key in sorting_keys]
 
     @cache  # noqa: B019
     def _items_list(
@@ -7026,7 +7040,7 @@ class TensorDictBase(MutableMapping):
     def add(self, other: TensorDictBase | float, alpha: float | None = None):
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         if alpha is not None:
@@ -7044,13 +7058,15 @@ class TensorDictBase(MutableMapping):
 
     def add_(self, other: TensorDictBase | float, alpha: float | None = None):
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            torch._foreach_add_(self._values_list(True, True), other_val, alpha=alpha)
+            torch._foreach_add_(val, other_val, alpha=alpha)
         else:
-            torch._foreach_add_(self._values_list(True, True), other_val)
+            torch._foreach_add_(val, other_val)
         return self
 
     def lerp(self, end: TensorDictBase | float, weight: TensorDictBase | float):
@@ -7154,10 +7170,11 @@ class TensorDictBase(MutableMapping):
         return self
 
     def sub(self, other: TensorDictBase | float, alpha: float | None = None):
-        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
         if alpha is not None:
             vals = torch._foreach_sub(vals, other_val, alpha=alpha)
@@ -7174,28 +7191,33 @@ class TensorDictBase(MutableMapping):
 
     def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            torch._foreach_sub_(self._values_list(True, True), other_val, alpha=alpha)
+            torch._foreach_sub_(val, other_val, alpha=alpha)
         else:
-            torch._foreach_sub_(self._values_list(True, True), other_val)
+            torch._foreach_sub_(val, other_val)
         return self
 
     def mul_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_mul_(self._values_list(True, True), other_val)
+        torch._foreach_mul_(val, other_val)
         return self
 
     def mul(self, other: TensorDictBase | float) -> T:
-        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
         vals = torch._foreach_mul(vals, other_val)
         items = dict(zip(keys, vals))
@@ -7209,16 +7231,18 @@ class TensorDictBase(MutableMapping):
 
     def maximum_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_maximum_(self._values_list(True, True), other_val)
+        torch._foreach_maximum_(val, other_val)
         return self
 
     def maximum(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_maximum(vals, other_val)
@@ -7233,16 +7257,18 @@ class TensorDictBase(MutableMapping):
 
     def minimum_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_minimum_(self._values_list(True, True), other_val)
+        torch._foreach_minimum_(val, other_val)
         return self
 
     def minimum(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_minimum(vals, other_val)
@@ -7257,16 +7283,18 @@ class TensorDictBase(MutableMapping):
 
     def clamp_max_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_max_(self._values_list(True, True), other_val)
+        torch._foreach_clamp_max_(val, other_val)
         return self
 
     def clamp_max(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_clamp_max(vals, other_val)
@@ -7281,16 +7309,18 @@ class TensorDictBase(MutableMapping):
 
     def clamp_min_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_min_(self._values_list(True, True), other_val)
+        torch._foreach_clamp_min_(val, other_val)
         return self
 
     def clamp_min(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_clamp_min(vals, other_val)
@@ -7305,16 +7335,18 @@ class TensorDictBase(MutableMapping):
 
     def pow_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_pow_(self._values_list(True, True), other_val)
+        torch._foreach_pow_(val, other_val)
         return self
 
     def pow(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_pow(vals, other_val)
@@ -7329,16 +7361,18 @@ class TensorDictBase(MutableMapping):
 
     def div_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_div_(self._values_list(True, True), other_val)
+        torch._foreach_div_(val, other_val)
         return self
 
     def div(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_div(vals, other_val)
