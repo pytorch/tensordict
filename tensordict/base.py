@@ -7179,7 +7179,7 @@ class TensorDictBase(MutableMapping):
         if alpha is not None:
             vals = torch._foreach_sub(val, other_val, alpha=alpha)
         else:
-            vals = torch._foreach_sub(vals, other_val)
+            vals = torch._foreach_sub(val, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
             lambda name, val: items.get(name, val),
