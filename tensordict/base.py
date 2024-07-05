@@ -7177,7 +7177,7 @@ class TensorDictBase(MutableMapping):
             val = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            vals = torch._foreach_sub(vals, other_val, alpha=alpha)
+            vals = torch._foreach_sub(val, other_val, alpha=alpha)
         else:
             vals = torch._foreach_sub(vals, other_val)
         items = dict(zip(keys, vals))
@@ -7213,13 +7213,12 @@ class TensorDictBase(MutableMapping):
         return self
 
     def mul(self, other: TensorDictBase | float) -> T:
+        keys, val = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            keys, val = self._items_list(True, True)
             other_val = other._values_list(True, True, sorting_keys=keys)
         else:
-            val = self._values_list(True, True)
             other_val = other
-        vals = torch._foreach_mul(vals, other_val)
+        vals = torch._foreach_mul(val, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
             lambda name, val: items.get(name, val),
