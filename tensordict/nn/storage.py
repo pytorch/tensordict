@@ -121,6 +121,33 @@ class DynamicStorage(TensorStorage[torch.Tensor, torch.Tensor]):
         return torch.tensor(res, dtype=torch.bool)
 
 
+class LazyDynamicStorage(DynamicStorage):
+    """A lazy version of DynamicStorage where the default tensor is assumed to be zeros_like(init_tensor).
+
+    See :class:`~tensordict.nn.storage.DynamicStorage` for more info.
+
+    """
+
+    def __init__(self, default_tensor: torch.Tensor | None = None) -> None:
+        if default_tensor is None:
+            self._init = False
+            default_tensor = torch.nn.UninitializedBuffer()
+        else:
+            self._init = False
+        super().__init__(default_tensor)
+
+    def __setitem__(self, indices: torch.Tensor, values: torch.Tensor) -> None:
+        if not self._init:
+            if len(indices):
+                val = values[0]
+            else:
+                val = values
+            self.default_tensor.materialize(
+                shape=val.shape, device=val.device, dtype=val.dtype
+            )
+        return super().__setitem__(indices, values)
+
+
 class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
     """A Fixed Tensor Storage.
 
@@ -296,32 +323,65 @@ class RandomProjectionHash(SipHash):
 
     This module requires sklearn to be installed.
 
+    Keyword Args:
+        n_components (int, optional): the low-dimensional number of components of the projections.
+            Defaults to 16.
+        projection_type (str, optional): the projection type to use.
+            Must be one of ``"gaussian"`` or ``"sparse_random"``. Defaults to "gaussian".
+        dtype_cast (torch.dtype, optional): the dtype to cast the projection to.
+            Defaults to ``torch.float16``.
+        lazy (bool, optional): if ``True``, the random projection is fit on the first batch of data
+            received. Defaults to ``False``.
+
     """
+
+    _N_COMPONENTS_DEFAULT = 16
 
     def __init__(
         self,
-        n_components=16,
-        projection_type: str = "gaussian",
+        *,
+        n_components: int | None = None,
+        projection_type: str = "sparse_random",
         dtype_cast=torch.float16,
+        lazy: bool = False,
         **kwargs,
     ):
+        if n_components is None:
+            n_components = self._N_COMPONENTS_DEFAULT
+
         super().__init__()
         from sklearn.random_projection import (
             GaussianRandomProjection,
             SparseRandomProjection,
         )
 
+        self.lazy = lazy
+        self._init = not lazy
+
         self.dtype_cast = dtype_cast
-        if projection_type == "gaussian":
+        if projection_type.lower() == "gaussian":
             self.transform = GaussianRandomProjection(
                 n_components=n_components, **kwargs
             )
-        elif projection_type == "sparse_random":
+        elif projection_type.lower() in ("sparse_random", "sparse-random"):
             self.transform = SparseRandomProjection(n_components=n_components, **kwargs)
         else:
-            raise ValueError
+            raise ValueError(
+                f"Only 'gaussian' and 'sparse_random' projections are supported. Got projection_type={projection_type}."
+            )
+
+    def fit(self, x):
+        """Fits the random projection to the input data."""
+        self.transform.fit(x)
+        self._init = True
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.lazy and not self._init:
+            self.fit(x)
+        elif not self._init:
+            raise RuntimeError(
+                f"The {type(self).__name__} has not been initialized. Call fit before calling this method."
+            )
         x = self.transform.transform(x)
         x = torch.as_tensor(x, dtype=self.dtype_cast)
         return super().forward(x)
@@ -337,6 +397,7 @@ class QueryModule(TensorDictModuleBase):
         in_keys (list of NestedKeys): keys of the input tensordict that
             will be used to generate the hash value.
         index_key (NestedKey): the output key where the hash value will be written.
+            Defaults to ``"_index"``.
 
     Keyword Args:
         hash_module (nn.Module or Callable[[torch.Tensor], torch.Tensor]): a hash
@@ -372,7 +433,7 @@ class QueryModule(TensorDictModuleBase):
     def __init__(
         self,
         in_keys: List[NestedKey],
-        index_key: NestedKey,
+        index_key: NestedKey = "_index",
         *,
         hash_module: torch.nn.Module | None = None,
         aggregation_module: torch.nn.Module | None = None,
@@ -481,6 +542,7 @@ class TensorDictStorage(
 
     def __init__(
         self,
+        *,
         query_module: QueryModule,
         key_to_storage: Dict[NestedKey, TensorStorage[torch.Tensor, torch.Tensor]],
     ):
@@ -493,6 +555,77 @@ class TensorDictStorage(
         self.index_key = query_module.index_key
         self.key_to_storage = key_to_storage
         self.batch_added = False
+
+    @classmethod
+    def from_tensordict_pair(
+        cls,
+        source,
+        dest,
+        in_keys: List[NestedKey],
+        out_keys: List[NestedKey] | None = None,
+        storage_type: type = LazyDynamicStorage,
+        hash_module: Callable | None = None,
+    ):
+        """Creates a new TensorDictStorage from a pair of tensordicts (source and dest) using pre-defined rules of thumb.
+
+        Args:
+            source (TensorDict): An example of source tensordict, used as index in the storage.
+            dest (TensorDict): An example of dest tensordict, used as data in the storage.
+            in_keys (List[NestedKey]): a list of keys to use in the map.
+            out_keys (List[NestedKey]): a list of keys to return in the output tensordict.
+                All keys absent from out_keys, even if present in ``dest``, will not be stored
+                in the storage. Defaults to ``None`` (all keys are registered).
+            storage_type (type, optional): a type of tensor storage.
+                Defaults to :class:`~tensordict.nn.storage.LazyDynamicStorage`.
+                Other options include :class:`~tensordict.nn.storage.FixedStorage`.
+            hash_module (Callable, optional): a hash function to use in the :class:`~tensordict.nn.storage.QueryModule`.
+                Defaults to :class:`SipHash` for low-dimensional inputs, and :class:`~tensordict.nn.storage.RandomProjectionHash`
+                for larger inputs.
+
+        Examples:
+            >>> # The following example requires torchrl and gymnasium to be installed
+            >>> from tensordict.nn.storage import TensorDictStorage, RandomProjectionHash
+            >>> from torchrl.envs import GymEnv
+            >>> env = GymEnv("CartPole-v1")
+            >>> rollout = env.rollout(100)
+            >>> source, dest = r.exclude("next"), r.get("next")
+            >>> storage = TensorDictStorage.from_tensordict_pair(
+            ...     source, dest,
+            ...     in_keys=["observation", "action"],
+            ... )
+            >>> # maps the (obs, action) tuple to a corresponding next state
+            >>> storage[source] = dest
+            >>> storage[source]
+            TensorDict(
+                fields={
+                    done: Tensor(shape=torch.Size([35, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    observation: Tensor(shape=torch.Size([35, 4]), device=cpu, dtype=torch.float32, is_shared=False),
+                    reward: Tensor(shape=torch.Size([35, 1]), device=cpu, dtype=torch.float32, is_shared=False),
+                    terminated: Tensor(shape=torch.Size([35, 1]), device=cpu, dtype=torch.bool, is_shared=False),
+                    truncated: Tensor(shape=torch.Size([35, 1]), device=cpu, dtype=torch.bool, is_shared=False)},
+                batch_size=torch.Size([35]),
+                device=None,
+                is_shared=False)
+
+        """
+        # Build query module
+        if hash_module is None:
+            # Count the features, if they're greater than RandomProjectionHash._N_COMPONENTS_DEFAULT
+            #  use that module to project them to that dimensionality.
+            n_feat = 0
+            for in_key in in_keys:
+                n_feat += source[in_key].shape[-1]
+            if n_feat > RandomProjectionHash._N_COMPONENTS_DEFAULT:
+                hash_module = RandomProjectionHash()
+        query_module = QueryModule(in_keys, hash_module=hash_module)
+
+        # Build key_to_storage
+        if out_keys is None:
+            out_keys = list(dest.keys(True, True))
+        key_to_storage = {}
+        for key in out_keys:
+            key_to_storage[key] = storage_type()
+        return cls(query_module=query_module, key_to_storage=key_to_storage)
 
     def clear(self) -> None:
         for mem in self.key_to_storage.values():
