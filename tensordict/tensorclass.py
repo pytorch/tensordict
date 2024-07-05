@@ -1379,9 +1379,9 @@ def _set(
 
             if isinstance(value, dict):
                 if _is_tensor_collection(target_cls):
-                    value = target_cls.from_dict(value)
+                    cast_val = target_cls.from_dict(value)
                     self._tensordict.set(
-                        key, value, inplace=inplace, non_blocking=non_blocking
+                        key, cast_val, inplace=inplace, non_blocking=non_blocking
                     )
                     return self
                 elif type_hints is None:
@@ -1425,7 +1425,11 @@ def _set(
                     raise RuntimeError(
                         f"Cannot update an existing entry of type {type(self._tensordict.get(key))} with a value of type {type(value)}."
                     )
-            set_tensor(value=value, non_tensor=True)
+            non_tensor = not (
+                isinstance(value, _ACCEPTED_CLASSES)
+                or _is_tensor_collection(type(value))
+            )
+            set_tensor(value=value, non_tensor=non_tensor)
         return self
 
     if isinstance(key, tuple) and len(key):
