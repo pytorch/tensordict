@@ -12,6 +12,7 @@ import os
 import pickle
 import re
 import sys
+import weakref
 from multiprocessing import Pool
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -201,9 +202,9 @@ class TestTensorClass:
 
         data = MyData(a=torch.ones(()), b="a string!")
         assert data.c is None
-        data.c = 1
-        assert data.c == 1
-        assert isinstance(data.c, int)
+        data.c = "1"
+        assert data.c == "1"
+        assert isinstance(data.c, str)
 
     def test_banned_types(self):
         @tensorclass
@@ -692,7 +693,9 @@ class TestTensorClass:
         assert data[1][1].batch_size == torch.Size([])
 
         # Non-tensor data won't get indexed
-        assert data[1].z == data[2].z == data[:2].z == z
+        assert data[1].z == data[2].z, (data[1].z, data[2].z)
+        assert data[1].z == data[:2].z
+        assert data[1].z == z
 
         with pytest.raises(
             RuntimeError,
@@ -1793,6 +1796,33 @@ class TestTensorClass:
         if lazy_legacy():
             assert isinstance(viewed_td._tensordict, _ViewedTensorDict)
         assert viewed_td.z == viewed_td.y.z == z
+
+    def test_weakref_attr(self):
+        @tensorclass
+        class Y:
+            _z: weakref.ref
+
+            @property
+            def z(self) -> torch.Tensor:
+                return self._z()
+
+        obj = torch.ones(())
+        y0 = Y(
+            weakref.ref(obj),
+            batch_size=[
+                1,
+            ],
+        )
+        y1 = Y(
+            weakref.ref(obj),
+            batch_size=[
+                1,
+            ],
+        )
+        y = torch.cat([y0, y1])
+        assert y.z.shape == torch.Size(())
+        y = torch.stack([y0, y1])
+        assert y.z.shape == torch.Size(())
 
 
 class TestMemmap:
