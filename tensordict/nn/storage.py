@@ -153,7 +153,9 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
     """
 
     def __init__(
-        self, embedding: nn.Embedding, init_fm: Callable[[torch.Tensor], torch.Tensor]|None=None
+        self,
+        embedding: nn.Embedding,
+        init_fm: Callable[[torch.Tensor], torch.Tensor] | None = None,
     ):
         super().__init__()
         self.embedding = embedding
@@ -229,7 +231,7 @@ class BinaryToDecimal(torch.nn.Module):
         num_bits: int,
         device: torch.device,
         dtype: torch.dtype,
-        convert_to_binary: bool=False,
+        convert_to_binary: bool = False,
     ):
         super().__init__()
         self.convert_to_binary = convert_to_binary
@@ -250,7 +252,9 @@ class BinaryToDecimal(torch.nn.Module):
             else features
         )
         feature_parts = binary_features.reshape(shape=(-1, self.num_bits))
-        digits = torch.vmap(torch.dot, (None, 0))(self.bases, feature_parts.to(self.bases.dtype))
+        digits = torch.vmap(torch.dot, (None, 0))(
+            self.bases, feature_parts.to(self.bases.dtype)
+        )
         digits = digits.reshape(shape=(-1, features.shape[-1] // self.num_bits))
         aggregated_digits = torch.sum(digits, dim=-1)
         return aggregated_digits
@@ -280,11 +284,47 @@ class SipHash(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         hash_values = []
-        for x_i in x.detach().cpu().view(torch.uint8).numpy():
+        for x_i in x.detach().cpu().numpy():
             hash_value = hash(x_i.tobytes())
             hash_values.append(hash_value)
 
         return torch.tensor(hash_values, dtype=torch.int64)
+
+
+class RandomProjectionHash(SipHash):
+    """A module that combines random projections with SipHash to get a low-dimensional tensor, easier to embed through SipHash.
+
+    This module requires sklearn to be installed.
+
+    """
+
+    def __init__(
+        self,
+        n_components=16,
+        projection_type: str = "gaussian",
+        dtype_cast=torch.float16,
+        **kwargs,
+    ):
+        super().__init__()
+        from sklearn.random_projection import (
+            GaussianRandomProjection,
+            SparseRandomProjection,
+        )
+
+        self.dtype_cast = dtype_cast
+        if projection_type == "gaussian":
+            self.transform = GaussianRandomProjection(
+                n_components=n_components, **kwargs
+            )
+        elif projection_type == "sparse_random":
+            self.transform = SparseRandomProjection(n_components=n_components, **kwargs)
+        else:
+            raise ValueError
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.transform.transform(x)
+        x = torch.as_tensor(x, dtype=self.dtype_cast)
+        return super().forward(x)
 
 
 class QueryModule(TensorDictModuleBase):
@@ -340,7 +380,7 @@ class QueryModule(TensorDictModuleBase):
     ):
         self.in_keys = in_keys if isinstance(in_keys, List) else [in_keys]
         if len(in_keys) == 0:
-            raise ValueError(f"`in_keys` cannot be empty.")
+            raise ValueError("`in_keys` cannot be empty.")
         self.out_keys = [index_key]
 
         super().__init__()
@@ -360,7 +400,7 @@ class QueryModule(TensorDictModuleBase):
         hash_values = []
 
         i = -1  # to make linter happy
-        for i, k in enumerate(self.in_keys):
+        for k in self.in_keys:
             hash_values.append(self.hash_module(tensordict.get(k)))
 
         if i > 0:
@@ -449,8 +489,6 @@ class TensorDictStorage(
 
         super().__init__()
 
-        for k in self.out_keys:
-            assert k in key_to_storage, f"{k} has not been assigned to a memory"
         self.query_module = query_module
         self.index_key = query_module.index_key
         self.key_to_storage = key_to_storage
@@ -488,7 +526,8 @@ class TensorDictStorage(
 
         res = TensorDict({}, batch_size=item.batch_size)
         for k in self.out_keys:
-            res[k] = self.key_to_storage[k][index]
+            storage: FixedStorage = self.key_to_storage[k]
+            res[k] = storage[index]
 
         res = self._maybe_remove_batch(res)
         return res
