@@ -1,4 +1,4 @@
-name: Build M1 Wheels
+name: Build Linux Wheels
 
 on:
   pull_request:
@@ -22,7 +22,7 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
     with:
       package-type: wheel
-      os: macos-arm64
+      os: linux
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
   build:
@@ -35,7 +35,7 @@ jobs:
             smoke-test-script: test/smoke_test.py
             package-name: tensordict
     name: pytorch/tensordict
-    uses: pytorch/test-infra/.github/workflows/build_wheels_macos.yml@main
+    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     with:
       repository: ${{ matrix.repository }}
       ref: ""
@@ -43,6 +43,5 @@ jobs:
       test-infra-ref: main
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}
-      runner-type: macos-m1-stable
       smoke-test-script: ${{ matrix.smoke-test-script }}
       trigger-event: ${{ github.event_name }}
