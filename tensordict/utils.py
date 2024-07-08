@@ -46,13 +46,13 @@ try:
 except ImportError:
     _has_funcdim = False
 from packaging.version import parse
-from tensordict._contextlib import _DecoratorContextManager
-from tensordict._tensordict import (  # noqa: F401
+from tensordict._C import (  # noqa: F401
     _unravel_key_to_tuple,
     unravel_key,
     unravel_key_list,
     unravel_keys,
 )
+from tensordict._contextlib import _DecoratorContextManager
 
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl

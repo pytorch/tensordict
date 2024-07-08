@@ -30,10 +30,10 @@ import orjson as json
 import tensordict as tensordict_lib
 
 import torch
+from tensordict._C import _unravel_key_to_tuple
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
-from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _ACCEPTED_CLASSES,

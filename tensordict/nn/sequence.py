@@ -26,7 +26,7 @@ except ImportError:
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
 
-from tensordict._tensordict import unravel_key_list
+from tensordict._C import unravel_key_list
 from tensordict.nn.common import dispatch, TensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import NestedKey
