@@ -179,6 +179,8 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
         >>> assert not (embedding_storage[index] == torch.ones(size=(2, 2))).all()
     """
 
+    _initialized: bool
+
     def __init__(
         self,
         embedding: nn.Embedding,
@@ -186,7 +188,11 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
     ):
         super().__init__()
         self.embedding = embedding
-        self.num_embedding = embedding.num_embeddings
+        if not hasattr(self, "num_embeddings"):
+            self.num_embeddings = embedding.num_embeddings
+            self._initialized = True
+        else:
+            self._initialized = False
         self.flag = None
         if init_fm is None:
             init_fm = torch.nn.init.normal_
@@ -194,19 +200,36 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
         self.clear()
 
     def clear(self):
-        self.init_fm(self.embedding.weight)
-        self.flag = torch.zeros((self.embedding.num_embeddings, 1), dtype=torch.bool)
+        if self._initialized:
+            self.init_fm(self.embedding.weight)
+            self.flag = torch.zeros(
+                (self.embedding.num_embeddings, 1), dtype=torch.bool
+            )
+            self._index_to_index = {}
 
     def _to_index(self, item: torch.Tensor) -> torch.Tensor:
-        return torch.remainder(item.to(torch.int64), self.num_embedding).to(torch.int64)
+        result = []
+        for _item in item.tolist():
+            result.append(
+                self._index_to_index.setdefault(_item, len(self._index_to_index))
+            )
+        return torch.tensor(result)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.embedding(self._to_index(x))
 
+    def _init(self, value):
+        ...
+
     def __getitem__(self, item: torch.Tensor) -> torch.Tensor:
+        if not self._initialized:
+            raise RuntimeError(f"The module is not initialized yet.")
         return self.forward(item)
 
     def __setitem__(self, item: torch.Tensor, value: torch.Tensor) -> None:
+        if not self._initialized:
+            self._init(value)
+
         if value.shape[-1] != self.embedding.embedding_dim:
             raise ValueError(
                 "The shape value does not match with storage cell shape, "
@@ -220,9 +243,34 @@ class FixedStorage(nn.Module, TensorStorage[torch.Tensor, torch.Tensor]):
     def __len__(self) -> int:
         return torch.sum(self.flag).item()
 
-    def contains(self, item: torch.Tensor) -> torch.Tensor:
-        index = self._to_index(item)
+    def contains(self, value: torch.Tensor) -> torch.Tensor:
+        index = self._to_index(value)
         return self.flag[index]
+
+
+class LazyFixedStorage(FixedStorage):
+    """A lazy version of FixedStorage."""
+    # We don't really care about using UnintializedParams as these are not learnable params
+    embedding_constructor: type | Callable = torch.nn.Embedding
+
+    def __init__(
+        self,
+        num_embeddings: int,
+        init_fm: Callable[[torch.Tensor], torch.Tensor] | None = None,
+    ) -> None:
+        self.num_embeddings = num_embeddings
+        self.flag = None
+        if init_fm is None:
+            init_fm = torch.nn.init.normal_
+        super().__init__(embedding=None, init_fm=init_fm)
+
+    def _init(self, val):
+        embedding_dim = val.shape[-1]
+        self.embedding = self.embedding_constructor(
+            embedding_dim=embedding_dim, num_embeddings=self.num_embeddings
+        ).to(val.dtype)
+        self._initialized = True
+        self.clear()
 
 
 class BinaryToDecimal(torch.nn.Module):
