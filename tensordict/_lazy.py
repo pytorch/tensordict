@@ -45,7 +45,7 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
-from tensordict._C import _unravel_key_to_tuple, unravel_key_list
+from tensordict._C import _unravel_key_to_tuple, unravel_key_list  # ignore
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict.base import (
     _is_leaf_nontensor,

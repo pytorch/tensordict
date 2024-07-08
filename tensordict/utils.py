@@ -46,7 +46,7 @@ try:
 except ImportError:
     _has_funcdim = False
 from packaging.version import parse
-from tensordict._C import (  # noqa: F401
+from tensordict._C import (  # noqa: F401  # ignore
     _unravel_key_to_tuple,
     unravel_key,
     unravel_key_list,
