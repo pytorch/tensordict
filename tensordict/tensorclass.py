@@ -2417,11 +2417,11 @@ class NonTensorData:
         first = list_of_non_tensor[0]
 
         def _check_equal(a, b):
-            if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
-                return (a == b).all()
-            if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
-                return (a == b).all()
             try:
+                if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
+                    return (a == b).all()
+                if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+                    return (a == b).all()
                 iseq = a == b
             except Exception:
                 iseq = False
