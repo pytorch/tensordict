@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import numbers
 import os
+import weakref
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
@@ -61,6 +62,7 @@ from tensordict.utils import (
     _set_max_batch_size,
     _shape,
     _STRDTYPE2DTYPE,
+    _StringKeys,
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
@@ -269,6 +271,15 @@ class TensorDict(TensorDictBase):
         lock: bool = False,
         nested: bool = True,
     ) -> TensorDict:
+        if torch.compiler.is_dynamo_compiling():
+            return TensorDict(
+                source,
+                batch_size=batch_size,
+                device=device,
+                names=names,
+                non_blocking=non_blocking,
+                lock=lock,
+            )
         self = cls.__new__(cls)
         sub_non_blocking = False
         if device is not None:
@@ -395,6 +406,7 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         non_blocking: bool = False,
     ):
+        is_dynamo = torch.compiler.is_dynamo_compiling()
 
         if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:
@@ -405,13 +417,11 @@ class TensorDict(TensorDictBase):
                 module.update(self)
                 return
 
-        # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
-        __dict__ = module.__dict__
-
         hooks = memo["hooks"]
         if return_swap:
             _swap = {}
-            memo[id(module)] = _swap
+            if not is_dynamo:
+                memo[weakref.ref(module)] = _swap
 
         if use_state_dict:
             if inplace is not None:
@@ -451,9 +461,18 @@ class TensorDict(TensorDictBase):
             input = self
             inplace = bool(inplace)
 
+        # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
+        if module.__class__.__setattr__ is __base__setattr__:
+            __dict__ = module.__dict__
+        else:
+            __dict__ = None
+
         for key, value in input.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
-                if module.__class__.__setattr__ is __base__setattr__:
+                # For Dynamo, we use regular set/delattr as we're not
+                #  much afraid by overhead (and dynamo doesn't like those
+                #  hacks we're doing).
+                if __dict__ is not None:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                     local_out = _set_tensor_dict(
                         __dict__, hooks, module, key, value, inplace
@@ -475,19 +494,15 @@ class TensorDict(TensorDictBase):
                     # if there is at least one key, we must populate the module.
                     # Otherwise, we just go to the next key
                     continue
-                child = __dict__["_modules"][key]
-                local_out = memo.get(id(child), NO_DEFAULT)
+                if __dict__ is not None:
+                    child = __dict__["_modules"][key]
+                else:
+                    child = module._modules.get(key)
 
-                if local_out is NO_DEFAULT:
-                    # if isinstance(child, TensorDictBase):
-                    #     # then child is a TensorDictParams
-                    #     from tensordict.nn import TensorDictParams
-                    #
-                    #     local_out = child
-                    #     if not isinstance(value, TensorDictParams):
-                    #         value = TensorDictParams(value, no_convert=True)
-                    #     __dict__["_modules"][key] = value
-                    # else:
+                if not is_dynamo:
+                    local_out = memo.get(weakref.ref(child), NO_DEFAULT)
+
+                if is_dynamo or local_out is NO_DEFAULT:
                     local_out = value._to_module(
                         child,
                         inplace=inplace,
@@ -500,6 +515,7 @@ class TensorDict(TensorDictBase):
 
             if return_swap:
                 _swap[key] = local_out
+
         if return_swap:
             if isinstance(swap_dest, dict):
                 return _swap
@@ -2776,7 +2792,7 @@ class TensorDict(TensorDictBase):
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
-            names=copy(self._td_dim_names),
+            names=copy(self._td_dim_names) if self._has_names() else None,
         )
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour
@@ -2915,7 +2931,7 @@ class TensorDict(TensorDictBase):
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
         if not include_nested and not leaves_only:
-            return self._tensordict.keys()
+            return _StringKeys(self._tensordict.keys())
         else:
             return self._nested_keys(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
@@ -2946,20 +2962,55 @@ class TensorDict(TensorDictBase):
             return self._tensordict.items()
         elif include_nested and leaves_only:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
+            result = []
+            if torch.compiler.is_dynamo_compiling():
 
-            def fast_iter():
-                for k, val in self._tensordict.items():
-                    if not is_leaf(val.__class__):
-                        yield from (
-                            ((k, *((_key,) if isinstance(_key, str) else _key)), _val)
+                def fast_iter():
+                    for key, val in self._tensordict.items():
+                        if not is_leaf(val.__class__):
                             for _key, _val in val.items(
                                 include_nested=include_nested,
                                 leaves_only=leaves_only,
                                 is_leaf=is_leaf,
+                            ):
+                                result.append(
+                                    (
+                                        (
+                                            key,
+                                            *(
+                                                (_key,)
+                                                if isinstance(_key, str)
+                                                else _key
+                                            ),
+                                        ),
+                                        _val,
+                                    )
+                                )
+                        else:
+                            result.append((key, val))
+                    return result
+
+            else:
+                # dynamo doesn't like generators
+                def fast_iter():
+                    for key, val in self._tensordict.items():
+                        if not is_leaf(val.__class__):
+                            yield from (
+                                (
+                                    (
+                                        key,
+                                        *((_key,) if isinstance(_key, str) else _key),
+                                    ),
+                                    _val,
+                                )
+                                for _key, _val in val.items(
+                                    include_nested=include_nested,
+                                    leaves_only=leaves_only,
+                                    is_leaf=is_leaf,
+                                )
                             )
-                        )
-                    else:
-                        yield k, val
+                        else:
+                            yield (key, val)
 
             return fast_iter()
         else:
@@ -2976,7 +3027,8 @@ class TensorDict(TensorDictBase):
         if not include_nested and not leaves_only:
             return self._tensordict.values()
         else:
-            return super().values(
+            return TensorDictBase.values(
+                self,
                 include_nested=include_nested,
                 leaves_only=leaves_only,
                 is_leaf=is_leaf,
@@ -4038,7 +4090,7 @@ class _TensorDictKeysView:
 
 
 def _set_tensor_dict(  # noqa: F811
-    module_dict,
+    __dict__,
     hooks,
     module: torch.nn.Module,
     name: str,
@@ -4047,12 +4099,12 @@ def _set_tensor_dict(  # noqa: F811
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     was_buffer = False
-    out = module_dict["_parameters"].pop(name, None)  # type: ignore[assignment]
+    out = __dict__["_parameters"].pop(name, None)  # type: ignore[assignment]
     if out is None:
-        out = module_dict["_buffers"].pop(name, None)
+        out = __dict__["_buffers"].pop(name, None)
         was_buffer = out is not None
     if out is None:
-        out = module_dict.pop(name)
+        out = __dict__.pop(name)
     if inplace:
         # swap tensor and out after updating out
         out_tmp = out.clone()
@@ -4065,7 +4117,7 @@ def _set_tensor_dict(  # noqa: F811
             output = hook(module, name, tensor)
             if output is not None:
                 tensor = output
-        module_dict["_parameters"][name] = tensor
+        __dict__["_parameters"][name] = tensor
 
         if isinstance(
             tensor, (_BatchedUninitializedParameter, _BatchedUninitializedBuffer)
@@ -4075,9 +4127,9 @@ def _set_tensor_dict(  # noqa: F811
             )
 
     elif was_buffer and isinstance(tensor, torch.Tensor):
-        module_dict["_buffers"][name] = tensor
+        __dict__["_buffers"][name] = tensor
     else:
-        module_dict[name] = tensor
+        __dict__[name] = tensor
     return out
 
 
