@@ -45,10 +45,6 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
-from tensordict._C import (  # @manual=//tensordict:_C
-    _unravel_key_to_tuple,
-    unravel_key_list,
-)
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict.base import (
     _is_leaf_nontensor,
@@ -72,6 +68,7 @@ from tensordict.utils import (
     _renamed_inplace_method,
     _shape,
     _td_fields,
+    _unravel_key_to_tuple,
     as_decorator,
     cache,
     convert_ellipsis_to_idx,
@@ -85,6 +82,7 @@ from tensordict.utils import (
     KeyedJaggedTensor,
     lock_blocked,
     NestedKey,
+    unravel_key_list,
 )
 from torch import Tensor
 
