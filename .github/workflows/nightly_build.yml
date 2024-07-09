@@ -45,7 +45,7 @@ jobs:
     container: pytorch/manylinux-cuda121
     steps:
       - name: Checkout tensordict
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         env:
          AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
       - name: Install PyTorch nightly
@@ -69,7 +69,7 @@ jobs:
           python3 -mpip install auditwheel
           auditwheel show dist/*
       - name: Upload wheel for the test-wheel job
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: dist/*.whl
@@ -92,9 +92,9 @@ jobs:
     container: pytorch/manylinux-${{ matrix.cuda_support[2] }}
     steps:
       - name: Checkout tensordict
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Download built wheels
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
@@ -128,14 +128,14 @@ jobs:
         cuda_support: [["", "cpu", "cpu"]]
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python_version[0] }}
           architecture: x64
         env:
           AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
       - name: Checkout tensordict
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Install PyTorch Nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
@@ -149,7 +149,7 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python3 -mpip install numpy pytest pillow>=4.1.1 scipy networkx expecttest pyyaml
       - name: Download built wheels
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: tensordict-linux-${{ matrix.python_version[0] }}_${{ matrix.cuda_support[2] }}.whl
           path: /tmp/wheels
@@ -196,7 +196,7 @@ jobs:
         with:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout tensordict
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Install PyTorch nightly
         shell: bash
         run: |
@@ -235,7 +235,7 @@ jobs:
         with:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout tensordict
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Install PyTorch Nightly
         shell: bash
         run: |
@@ -249,7 +249,7 @@ jobs:
         run: |
           python3 -mpip install numpy pytest --no-cache-dir
       - name: Download built wheels
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: wheels
@@ -291,9 +291,9 @@ jobs:
         ]
     steps:
       - name: Checkout tensordict
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Download built wheels
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: tensordict-win-${{ matrix.python_version[0] }}.whl
           path: wheels
