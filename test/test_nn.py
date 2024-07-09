@@ -20,7 +20,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
 )
-from tensordict._tensordict import unravel_key_list
+from tensordict._C import unravel_key_list
 from tensordict.nn import (
     dispatch,
     probabilistic as nn_probabilistic,

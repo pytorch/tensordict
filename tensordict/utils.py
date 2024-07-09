@@ -46,13 +46,13 @@ try:
 except ImportError:
     _has_funcdim = False
 from packaging.version import parse
-from tensordict._contextlib import _DecoratorContextManager
-from tensordict._tensordict import (  # noqa: F401
+from tensordict._C import (  # noqa: F401  # @manual=//tensordict:_C
     _unravel_key_to_tuple,
     unravel_key,
     unravel_key_list,
     unravel_keys,
 )
+from tensordict._contextlib import _DecoratorContextManager
 
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
@@ -69,9 +69,15 @@ if TYPE_CHECKING:
 
 try:
     try:
-        from functorch._C import get_unwrapped, is_batchedtensor
+        from torch._C._functorch import (  # @manual=fbcode//caffe2:torch
+            get_unwrapped,
+            is_batchedtensor,
+        )
     except ImportError:
-        from torch._C._functorch import get_unwrapped, is_batchedtensor
+        from functorch._C import (  # @manual=fbcode//functorch:_C  # noqa
+            get_unwrapped,
+            is_batchedtensor,
+        )
 except ImportError:
     pass
 
@@ -2315,7 +2321,7 @@ class _add_batch_dim_pre_hook:
     def __call__(self, mod: torch.nn.Module, args, kwargs):
         for name, param in list(mod.named_parameters(recurse=False)):
             if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
-                from torch._C._functorch import _add_batch_dim
+                from torch._C._functorch import _add_batch_dim  # @manual=//caffe2:_C
 
                 param = _add_batch_dim(param, param.in_dim, param.vmap_level)
                 delattr(mod, name)

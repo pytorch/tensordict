@@ -26,11 +26,11 @@ from tensordict.utils import (
     set_lazy_legacy,
 )
 from tensordict._pytree import *
-from tensordict._tensordict import unravel_key, unravel_key_list
+from tensordict._C import unravel_key, unravel_key_list  # @manual=//tensordict:_C
 from tensordict.nn import TensorDictParams
 
 try:
-    from tensordict.version import __version__
+    from tensordict.version import __version__  # @manual=//tensordict:version
 except ImportError:
     __version__ = None
 

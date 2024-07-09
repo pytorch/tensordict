@@ -45,8 +45,11 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
+from tensordict._C import (  # @manual=//tensordict:_C
+    _unravel_key_to_tuple,
+    unravel_key_list,
+)
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
@@ -89,13 +92,13 @@ from torch import Tensor
 _has_functorch = False
 try:
     try:
-        from torch._C._functorch import (
+        from torch._C._functorch import (  # @manual=fbcode//caffe2:torch
             _add_batch_dim,
             _remove_batch_dim,
             is_batchedtensor,
         )
     except ImportError:
-        from functorch._C import is_batchedtensor
+        from functorch._C import is_batchedtensor  # @manual=fbcode//caffe2/functorch:_C
 
     _has_functorch = True
 except ImportError:

@@ -135,7 +135,7 @@ def get_extensions():
 
     ext_modules = [
         extension(
-            "tensordict._tensordict",
+            "tensordict._C",
             sources,
             include_dirs=[this_dir],
             extra_compile_args=extra_compile_args,
