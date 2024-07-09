@@ -30,7 +30,7 @@ from tensordict.nn.functional_modules import (
 from tensordict.nn.utils import (
     _auto_make_functional,
     _dispatch_td_nn_modules,
-    set_skip_existing,
+    _set_skip_existing_None,
 )
 from tensordict.utils import implement_for, NestedKey
 from torch import nn, Tensor
@@ -503,6 +503,11 @@ class TensorDictModuleBase(nn.Module):
             cls.out_keys = TensorDictModuleBase.out_keys
         out = super().__new__(cls)
         return out
+
+    @staticmethod
+    def is_tdmodule_compatible(module):
+        """Checks if a module is compatible with TensorDictModule API."""
+        return hasattr(module, "in_keys") and hasattr(module, "out_keys")
 
     @property
     def in_keys(self):
@@ -1145,7 +1150,7 @@ class TensorDictModule(TensorDictModuleBase):
         return out
 
     @dispatch(auto_batch_size=False)
-    @set_skip_existing(None)
+    @_set_skip_existing_None()
     def forward(
         self,
         tensordict: TensorDictBase,
@@ -1249,16 +1254,50 @@ class TensorDictModule(TensorDictModuleBase):
         return f"{self.__class__.__name__}(\n{fields})"
 
     def __getattr__(self, name: str) -> Any:
-        try:
-            return super().__getattr__(name)
-        except AttributeError as err1:
-            if not name.startswith("_"):
-                # no fallback for private attributes
-                try:
-                    return getattr(super().__getattr__("module"), name)
-                except Exception as err2:
-                    raise err2 from err1
-            raise
+        if not torch.compiler.is_dynamo_compiling():
+            __dict__ = self.__dict__
+            _parameters = __dict__.get("_parameters")
+            if _parameters:
+                # A param can be None so we use False instead to check if the key
+                # is in the _parameters dict once and only once.
+                # We use False but any non-None, non-Parameter value would do.
+                # The alternative `if name in _parameters: return _parameters[name]`
+                # accesses the value of `name` twice when only one is required
+                result = _parameters.get(name, False)
+                if result is not False:
+                    return result
+            _buffers = __dict__.get("_buffers")
+            if _buffers:
+                result = _buffers.get(name, False)
+                if result is not False:
+                    return result
+            _modules = __dict__.get("_modules")
+            if _modules:
+                result = _modules.get(name, False)
+                if result is not False:
+                    return result
+        # TODO: find a way to make this check work with dynamo
+        # elif hasattr(self, "_parameters"):
+        else:
+            _parameters = self._parameters
+            result = _parameters.get(name, False)
+            if result is not False:
+                return result
+            _buffers = self._buffers
+            result = _buffers.get(name, False)
+            if result is not False:
+                return result
+            _modules = self._modules
+            result = _modules.get(name, False)
+            if result is not False:
+                return result
+
+        if not name.startswith("_"):
+            # no fallback for private attributes
+            return getattr(super().__getattr__("module"), name)
+        raise AttributeError(
+            f"module {self.__class__.__name__} has no attribute named {name}."
+        )
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -1292,15 +1331,60 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
                 self.register_forward_hook(self.td_module._forward_hooks[pre_hook])
 
     def __getattr__(self, name: str) -> Any:
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            if name not in self.__dict__ and not name.startswith("__"):
-                return getattr(self._modules["td_module"], name)
-            else:
-                raise AttributeError(
-                    f"attribute {name} not recognised in {type(self).__name__}"
-                )
+        if not torch.compiler.is_dynamo_compiling():
+            __dict__ = self.__dict__
+            _parameters = __dict__.get("_parameters")
+            if _parameters:
+                # A param can be None so we use False instead to check if the key
+                # is in the _parameters dict once and only once.
+                # We use False but any non-None, non-Parameter value would do.
+                # The alternative `if name in _parameters: return _parameters[name]`
+                # accesses the value of `name` twice when only one is required
+                result = _parameters.get(name, False)
+                if result is not False:
+                    return result
+            _buffers = __dict__.get("_buffers")
+            if _buffers:
+                result = _buffers.get(name, False)
+                if result is not False:
+                    return result
+            _modules = __dict__.get("_modules")
+            if _modules:
+                result = _modules.get(name, False)
+                if result is not False:
+                    return result
+        # TODO: find a way to make this check work with dynamo
+        # elif hasattr(self, "_parameters"):
+        else:
+            _parameters = self._parameters
+            result = _parameters.get(name, False)
+            if result is not False:
+                return result
+            _buffers = self._buffers
+            result = _buffers.get(name, False)
+            if result is not False:
+                return result
+            _modules = self._modules
+            result = _modules.get(name, False)
+            if result is not False:
+                return result
+        if name not in self.__dict__ and not name.startswith("__"):
+            return getattr(self._modules["td_module"], name)
+        raise AttributeError(
+            f"attribute {name} not recognised in {type(self).__name__}"
+        )
 
     def forward(self, *args: Any, **kwargs: Any) -> TensorDictBase:
         return self.td_module.forward(*args, **kwargs)
+
+
+class WrapModule(TensorDictModuleBase):
+    in_keys = []
+    out_keys = []
+
+    def __init__(self, func):
+        self.func = func
+        super().__init__()
+
+    def forward(self, data):
+        return self.func(data)
