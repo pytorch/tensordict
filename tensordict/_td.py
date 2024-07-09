@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import numbers
 import os
+import weakref
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
@@ -61,6 +62,7 @@ from tensordict.utils import (
     _set_max_batch_size,
     _shape,
     _STRDTYPE2DTYPE,
+    _StringKeys,
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
@@ -269,6 +271,15 @@ class TensorDict(TensorDictBase):
         lock: bool = False,
         nested: bool = True,
     ) -> TensorDict:
+        if torch.compiler.is_dynamo_compiling():
+            return TensorDict(
+                source,
+                batch_size=batch_size,
+                device=device,
+                names=names,
+                non_blocking=non_blocking,
+                lock=lock,
+            )
         self = cls.__new__(cls)
         sub_non_blocking = False
         if device is not None:
@@ -2776,7 +2787,7 @@ class TensorDict(TensorDictBase):
             source={key: _clone_value(value, recurse) for key, value in self.items()},
             batch_size=self.batch_size,
             device=self.device,
-            names=copy(self._td_dim_names),
+            names=copy(self._td_dim_names) if self._has_names() else None,
         )
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour
@@ -2915,7 +2926,7 @@ class TensorDict(TensorDictBase):
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> _TensorDictKeysView:
         if not include_nested and not leaves_only:
-            return self._tensordict.keys()
+            return _StringKeys(self._tensordict.keys())
         else:
             return self._nested_keys(
                 include_nested=include_nested, leaves_only=leaves_only, is_leaf=is_leaf
@@ -2946,20 +2957,55 @@ class TensorDict(TensorDictBase):
             return self._tensordict.items()
         elif include_nested and leaves_only:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
+            result = []
+            if torch.compiler.is_dynamo_compiling():
 
-            def fast_iter():
-                for k, val in self._tensordict.items():
-                    if not is_leaf(val.__class__):
-                        yield from (
-                            ((k, *((_key,) if isinstance(_key, str) else _key)), _val)
+                def fast_iter():
+                    for key, val in self._tensordict.items():
+                        if not is_leaf(val.__class__):
                             for _key, _val in val.items(
                                 include_nested=include_nested,
                                 leaves_only=leaves_only,
                                 is_leaf=is_leaf,
+                            ):
+                                result.append(
+                                    (
+                                        (
+                                            key,
+                                            *(
+                                                (_key,)
+                                                if isinstance(_key, str)
+                                                else _key
+                                            ),
+                                        ),
+                                        _val,
+                                    )
+                                )
+                        else:
+                            result.append((key, val))
+                    return result
+
+            else:
+                # dynamo doesn't like generators
+                def fast_iter():
+                    for key, val in self._tensordict.items():
+                        if not is_leaf(val.__class__):
+                            yield from (
+                                (
+                                    (
+                                        key,
+                                        *((_key,) if isinstance(_key, str) else _key),
+                                    ),
+                                    _val,
+                                )
+                                for _key, _val in val.items(
+                                    include_nested=include_nested,
+                                    leaves_only=leaves_only,
+                                    is_leaf=is_leaf,
+                                )
                             )
-                        )
-                    else:
-                        yield k, val
+                        else:
+                            yield (key, val)
 
             return fast_iter()
         else:
@@ -2976,7 +3022,8 @@ class TensorDict(TensorDictBase):
         if not include_nested and not leaves_only:
             return self._tensordict.values()
         else:
-            return super().values(
+            return TensorDictBase.values(
+                self,
                 include_nested=include_nested,
                 leaves_only=leaves_only,
                 is_leaf=is_leaf,

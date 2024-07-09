@@ -9,6 +9,7 @@ import abc
 import collections
 import concurrent.futures
 import contextlib
+import enum
 import gc
 import importlib
 import numbers
@@ -93,17 +94,11 @@ from torch.utils._pytree import tree_map
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key, default=None)` is a valid usage.
-class _NoDefault:
-    def __new__(cls):
-        if not hasattr(cls, "instance"):
-            cls.instance = super(_NoDefault, cls).__new__(cls)
-        return cls.instance
-
-    def __bool__(self):
-        return False
+class _NoDefault(enum.IntEnum):
+    ZERO = 0
 
 
-NO_DEFAULT = _NoDefault()
+NO_DEFAULT = _NoDefault.ZERO
 
 T = TypeVar("T", bound="TensorDictBase")
 
@@ -3854,7 +3849,7 @@ class TensorDictBase(MutableMapping):
         self._set_str(
             key,
             NonTensorData(
-                value,
+                data=value,
                 batch_size=self.batch_size,
                 device=self.device,
                 names=self.names if self._has_names() else None,
@@ -4721,16 +4716,23 @@ class TensorDictBase(MutableMapping):
         collapse: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> Tuple[List, List]:
-        return tuple(
-            tuple(key_or_val)
-            for key_or_val in zip(
-                *self.items(
-                    include_nested=include_nested,
-                    leaves_only=leaves_only,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
-                )
-            )
+        # return tuple(
+        #     tuple(key_or_val)
+        #     for key_or_val in zip(
+        #         *self.items(
+        #             include_nested=include_nested,
+        #             leaves_only=leaves_only,
+        #             is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
+        #         )
+        #     )
+        # )
+        items = self.items(
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
         )
+        keys, vals = zip(*items)
+        return list(keys), list(vals)
 
     @cache  # noqa: B019
     def _grad(self):
@@ -4798,7 +4800,7 @@ class TensorDictBase(MutableMapping):
             self.del_(key)
         except KeyError as err:
             # if default provided, 'out' value will return, else raise error
-            if default == NO_DEFAULT:
+            if default is NO_DEFAULT:
                 raise KeyError(
                     f"You are trying to pop key `{key}` which is not in dict "
                     f"without providing default value."
@@ -8799,7 +8801,8 @@ class TensorDictBase(MutableMapping):
 
     def _sync_all(self):
         if _has_cuda:
-            if torch.cuda.is_initialized():
+            # TODO: dynamo doesn't like torch.cuda.is_initialized
+            if torch.compiler.is_dynamo_compiling() or torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         elif _has_mps:
             torch.mps.synchronize()
@@ -8959,9 +8962,8 @@ def _register_tensor_class(cls):
 
 
 def _is_tensor_collection(datatype):
-    try:
-        out = _TENSOR_COLLECTION_MEMO[datatype]
-    except KeyError:
+    out = _TENSOR_COLLECTION_MEMO.get(datatype)
+    if out is None:
         if issubclass(datatype, TensorDictBase):
             out = True
         elif _is_tensorclass(datatype):
