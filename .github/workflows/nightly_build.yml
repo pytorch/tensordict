@@ -47,6 +47,8 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v3
         env:
+          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
           ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Install PyTorch nightly
         run: |
@@ -94,6 +96,8 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v3
         env:
+          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
           ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Download built wheels
         uses: actions/download-artifact@v4
@@ -139,6 +143,8 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v3
         env:
+          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
           ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Install PyTorch Nightly
         run: |
@@ -202,6 +208,8 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v3
         env:
+          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
           ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Install PyTorch nightly
         shell: bash
@@ -243,6 +251,8 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v3
         env:
+          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
           ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Install PyTorch Nightly
         shell: bash
@@ -301,6 +311,8 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v3
         env:
+          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
           ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Download built wheels
         uses: actions/download-artifact@v4
