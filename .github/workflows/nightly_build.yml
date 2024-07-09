@@ -27,6 +27,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
+env:
+  ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
+  ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
+
 jobs:
   build-wheel-linux:
     # Don't run on forked repos.
@@ -46,10 +51,6 @@ jobs:
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v3
-        env:
-          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Install PyTorch nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
