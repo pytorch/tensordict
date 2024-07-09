@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
+        env:
+          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - uses: actions/setup-python@v4
         with:
           python-version: 3.8
