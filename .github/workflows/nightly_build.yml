@@ -96,10 +96,6 @@ jobs:
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v3
-        env:
-          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:
@@ -143,10 +139,6 @@ jobs:
           AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
       - name: Checkout tensordict
         uses: actions/checkout@v3
-        env:
-          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Install PyTorch Nightly
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
@@ -208,10 +200,6 @@ jobs:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout tensordict
         uses: actions/checkout@v3
-        env:
-          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Install PyTorch nightly
         shell: bash
         run: |
@@ -251,10 +239,6 @@ jobs:
           python-version: ${{ matrix.python_version[1] }}
       - name: Checkout tensordict
         uses: actions/checkout@v3
-        env:
-          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Install PyTorch Nightly
         shell: bash
         run: |
@@ -311,10 +295,6 @@ jobs:
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v3
-        env:
-          ACTIONS_RUNNER_FORCED_INTERNAL_NODE_VERSION: node16
-          ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: node16
-          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Download built wheels
         uses: actions/download-artifact@v4
         with:
