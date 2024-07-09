@@ -47,7 +47,6 @@ jobs:
       - name: Checkout tensordict
         uses: actions/checkout@v3
         env:
-         AGENT_TOOLSDIRECTORY: "/opt/hostedtoolcache"
          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true  # https://github.com/actions/checkout/issues/1809
       - name: Install PyTorch nightly
         run: |
