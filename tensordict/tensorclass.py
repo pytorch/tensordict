@@ -2419,9 +2419,9 @@ class NonTensorData:
         def _check_equal(a, b):
             try:
                 if isinstance(a, _ACCEPTED_CLASSES) or isinstance(b, _ACCEPTED_CLASSES):
-                    return (a == b).all()
+                    return (a == b).all() and a.shape == b.shape
                 if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
-                    return (a == b).all()
+                    return (a == b).all() and a.shape == b.shape
                 iseq = a == b
             except Exception:
                 iseq = False

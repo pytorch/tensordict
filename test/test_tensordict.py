@@ -9132,7 +9132,9 @@ class TestNonTensorData:
         t2 = torch.tensor([1, 2, 3, 4], dtype=torch.float)
         stack = NonTensorStack(NonTensorData(t1), NonTensorData(t2))  # this works fine
         assert all(isinstance(t, torch.Tensor) for t in stack.tolist())
-        stack = torch.stack([NonTensorData(t1), NonTensorData(t2)])  # this triggers an exception
+        stack = torch.stack(
+            [NonTensorData(t1), NonTensorData(t2)]
+        )  # this triggers an exception
         assert all(isinstance(t, torch.Tensor) for t in stack.tolist())
 
     def test_set(self, non_tensor_data):
