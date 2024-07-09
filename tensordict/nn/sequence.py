@@ -23,6 +23,11 @@ from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torch import nn
 
+from tensordict.nn.common import dispatch, TensorDictModule
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
+from tensordict.utils import NestedKey, unravel_key_list
+from torch import nn
+
 _has_functorch = False
 try:
     import functorch

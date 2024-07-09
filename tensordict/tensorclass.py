@@ -30,10 +30,10 @@ import orjson as json
 import tensordict as tensordict_lib
 
 import torch
+from tensordict._C import _unravel_key_to_tuple  # @manual=//tensordict:_C
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._pytree import _register_td_node
 from tensordict._td import is_tensor_collection, NO_DEFAULT, TensorDict, TensorDictBase
-from tensordict._tensordict import _unravel_key_to_tuple
 from tensordict._torch_func import TD_HANDLED_FUNCTIONS
 from tensordict.base import (
     _ACCEPTED_CLASSES,
@@ -122,7 +122,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "numel",
     "replace",
     "values",
-    # "_get_sub_tensordict",
+    "_get_names_idx",  # no wrap output
 ]
 
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
@@ -139,15 +139,16 @@ _FALLBACK_METHOD_FROM_TD = [
     "__sub__",
     "__truediv__",
     "_add_batch_dim",
+    "_get_sub_tensordict",
     "_apply_nest",
+    "_multithread_apply_flat",
     "_erase_names",  # TODO: must be specialized
     "_exclude",  # TODO: must be specialized
     "_fast_apply",
-    "_get_names_idx",  # no wrap output
-    "_get_sub_tensordict",
     "_remove_batch_dim",
     "_select",  # TODO: must be specialized
     "_set_at_tuple",
+    # _set_str needs a special treatment to catch keys that are already in non tensor data
     "_set_tuple",
     "abs",
     "abs_",
@@ -218,6 +219,8 @@ _FALLBACK_METHOD_FROM_TD = [
     "log2",
     "log2_",
     "log_",
+    "map",
+    "map_iter",
     "masked_fill",
     "masked_fill_",
     "maximum",
@@ -1469,9 +1472,9 @@ def _set(
 
             if isinstance(value, dict):
                 if _is_tensor_collection(target_cls):
-                    value = target_cls.from_dict(value)
+                    cast_val = target_cls.from_dict(value)
                     self._tensordict.set(
-                        key, value, inplace=inplace, non_blocking=non_blocking
+                        key, cast_val, inplace=inplace, non_blocking=non_blocking
                     )
                     return self
                 elif type_hints is None:
@@ -1515,7 +1518,11 @@ def _set(
                     raise RuntimeError(
                         f"Cannot update an existing entry of type {type(self._tensordict.get(key))} with a value of type {type(value)}."
                     )
-            set_tensor(value=value, non_tensor=True)
+            non_tensor = not (
+                isinstance(value, _ACCEPTED_CLASSES)
+                or _is_tensor_collection(type(value))
+            )
+            set_tensor(value=value, non_tensor=non_tensor)
         return self
 
     if isinstance(key, tuple) and len(key):

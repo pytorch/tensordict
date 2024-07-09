@@ -4684,14 +4684,28 @@ class TensorDictBase(MutableMapping):
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
+        *,
+        collapse: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
+        sorting_keys: List[NestedKey] | None = None,
     ) -> List:
-        return list(
-            self.values(
+        if sorting_keys is None:
+            return list(
+                self.values(
+                    include_nested=include_nested,
+                    leaves_only=leaves_only,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
+                )
+            )
+        else:
+            keys, vals = self._items_list(
                 include_nested=include_nested,
                 leaves_only=leaves_only,
-                is_leaf=_NESTED_TENSORS_AS_LISTS,
+                is_leaf=is_leaf,
+                collapse=collapse,
             )
-        )
+            source = dict(zip(keys, vals))
+            return [source[key] for key in sorting_keys]
 
     @cache  # noqa: B019
     def _items_list(
@@ -6166,15 +6180,238 @@ class TensorDictBase(MutableMapping):
                 initargs=(seed, queue, worker_threads),
                 maxtasksperchild=max_tasks_per_child,
             ) as pool:
-                return self.map(
-                    fn,
+                return self._map(
+                    fn=fn,
                     dim=dim,
                     chunksize=chunksize,
                     num_chunks=num_chunks,
                     pool=pool,
                     pbar=pbar,
                     out=out,
+                    index_with_generator=index_with_generator,
+                    iterable=False,
+                    shuffle=False,
                 )
+        else:
+            return self._map(
+                fn=fn,
+                dim=dim,
+                chunksize=chunksize,
+                num_chunks=num_chunks,
+                pool=pool,
+                pbar=pbar,
+                out=out,
+                index_with_generator=index_with_generator,
+                iterable=False,
+                shuffle=False,
+            )
+
+    def map_iter(
+        self,
+        fn: Callable[[TensorDictBase], TensorDictBase | None],
+        dim: int = 0,
+        num_workers: int | None = None,
+        *,
+        shuffle: bool = False,
+        chunksize: int | None = None,
+        num_chunks: int | None = None,
+        pool: mp.Pool | None = None,
+        generator: torch.Generator | None = None,
+        max_tasks_per_child: int | None = None,
+        worker_threads: int = 1,
+        index_with_generator: bool = True,
+        pbar: bool = False,
+        mp_start_method: str | None = None,
+    ):
+        """Maps a function to splits of the tensordict across one dimension iteratively.
+
+        This is the iterable version of :meth:`~TensorDictBase.map`.
+
+        This method will apply a function to a tensordict instance by chunking
+        it in tensordicts of equal size and dispatching the operations over the
+        desired number of workers. It will yield the results one at a time.
+
+        The function signature should be ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``.
+        The function must be serializable.
+
+        Args:
+            fn (callable): function to apply to the tensordict.
+                Signatures similar to ``Callabe[[TensorDict], Union[TensorDict, Tensor]]``
+                are supported.
+            dim (int, optional): the dim along which the tensordict will be chunked.
+            num_workers (int, optional): the number of workers. Exclusive with ``pool``.
+                If none is provided, the number of workers will be set to the
+                number of cpus available.
+
+        Keyword Args:
+            shuffle (bool, optional): whether the indices should be globally shuffled.
+                If ``True``, each batch will contain non-contiguous samples.
+                If ``index_with_generator=False`` and `shuffle=True``, an error will be raised.
+                Defaults to ``False``.
+            chunksize (int, optional): The size of each chunk of data.
+                A ``chunksize`` of 0 will unbind the tensordict along the
+                desired dimension and restack it after the function is applied,
+                whereas ``chunksize>0`` will split the tensordict and call
+                :func:`torch.cat` on the resulting list of tensordicts.
+                If none is provided, the number of chunks will equate the number
+                of workers. For very large tensordicts, such large chunks
+                may not fit in memory for the operation to be done and
+                more chunks may be needed to make the operation practically
+                doable. This argument is exclusive with ``num_chunks``.
+            num_chunks (int, optional): the number of chunks to split the tensordict
+                into. If none is provided, the number of chunks will equate the number
+                of workers. For very large tensordicts, such large chunks
+                may not fit in memory for the operation to be done and
+                more chunks may be needed to make the operation practically
+                doable. This argument is exclusive with ``chunksize``.
+            pool (mp.Pool, optional): a multiprocess Pool instance to use
+                to execute the job. If none is provided, a pool will be created
+                within the ``map`` method.
+            generator (torch.Generator, optional): a generator to use for seeding.
+                A base seed will be generated from it, and each worker
+                of the pool will be seeded with the provided seed incremented
+                by a unique integer from ``0`` to ``num_workers``. If no generator
+                is provided, a random integer will be used as seed.
+                To work with unseeded workers, a pool should be created separately
+                and passed to :meth:`map` directly.
+                .. note::
+                  Caution should be taken when providing a low-valued seed as
+                  this can cause autocorrelation between experiments, example:
+                  if 8 workers are asked and the seed is 4, the workers seed will
+                  range from 4 to 11. If the seed is 5, the workers seed will range
+                  from 5 to 12. These two experiments will have an overlap of 7
+                  seeds, which can have unexpected effects on the results.
+
+                .. note::
+                  The goal of seeding the workers is to have independent seed on
+                  each worker, and NOT to have reproducible results across calls
+                  of the `map` method. In other words, two experiments may and
+                  probably will return different results as it is impossible to
+                  know which worker will pick which job. However, we can make sure
+                  that each worker has a different seed and that the pseudo-random
+                  operations on each will be uncorrelated.
+            max_tasks_per_child (int, optional): the maximum number of jobs picked
+                by every child process. Defaults to ``None``, i.e., no restriction
+                on the number of jobs.
+            worker_threads (int, optional): the number of threads for the workers.
+                Defaults to ``1``.
+            index_with_generator (bool, optional): if ``True``, the splitting / chunking
+                of the tensordict will be done during the query, sparing init time.
+                Note that :meth:`~.chunk` and :meth:`~.split` are much more
+                efficient than indexing (which is used within the generator)
+                so a gain of processing time at init time may have a negative
+                impact on the total runtime. Defaults to ``True``.
+
+                .. note:: The default value of ``index_with_generator`` differs for ``map_iter``
+                    and ``map`` and the former assumes that it is prohibitively expensive to
+                    store a split version of the TensorDict in memory.
+
+            pbar (bool, optional): if ``True``, a progress bar will be displayed.
+                Requires tqdm to be available. Defaults to ``False``.
+            mp_start_method (str, optional): the start method for multiprocessing.
+                If not provided, the default start method will be used.
+                Accepted strings are ``"fork"`` and ``"spawn"``. Keep in mind that
+                ``"cuda"`` tensors cannot be shared between processes with the
+                ``"fork"`` start method. This is without effect if the ``pool``
+                is passed to the ``map`` method.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>>
+            >>> def process_data(data):
+            ...     data.unlock_()
+            ...     data.set("y", data.get("x") + 1)
+            ...     return data
+            >>> if __name__ == "__main__":
+            ...     data = TensorDict({"x": torch.zeros(1, 1_000_000)}, [1, 1_000_000]).memmap_()
+            ...     for sample in data.map_iter(process_data, dim=1, chunksize=5):
+            ...         print(sample["y"])
+            ...         break
+            ...
+            tensor([[1., 1., 1., 1., 1.]])
+
+        .. note:: This method is particularily useful when working with large
+            datasets stored on disk (e.g. memory-mapped tensordicts) where
+            chunks will be zero-copied slices of the original data which can
+            be passed to the processes with virtually zero-cost. This allows
+            to tread very large datasets (eg. over a Tb big) to be processed
+            at little cost.
+
+        .. note:: This function be used to represent a dataset and load from it,
+            in a dataloader-like fashion.
+
+        """
+        from torch import multiprocessing as mp
+
+        if pool is None:
+            if num_workers is None:
+                num_workers = mp.cpu_count()  # Get the number of CPU cores
+            if generator is None:
+                generator = torch.Generator()
+            seed = (
+                torch.empty((), dtype=torch.int64).random_(generator=generator).item()
+            )
+            if mp_start_method is not None:
+                ctx = mp.get_context(mp_start_method)
+            else:
+                ctx = mp.get_context()
+
+            queue = ctx.Queue(maxsize=num_workers)
+            for i in range(num_workers):
+                queue.put(i)
+            pool = ctx.Pool(
+                processes=num_workers,
+                initializer=_proc_init,
+                initargs=(seed, queue, worker_threads),
+                maxtasksperchild=max_tasks_per_child,
+            )
+            try:
+                yield from self._map(
+                    fn=fn,
+                    dim=dim,
+                    chunksize=chunksize,
+                    num_chunks=num_chunks,
+                    pool=pool,
+                    pbar=pbar,
+                    out=None,
+                    index_with_generator=index_with_generator,
+                    iterable=True,
+                    shuffle=shuffle,
+                )
+            finally:
+                try:
+                    pool.terminate()
+                finally:
+                    pool.join()
+        else:
+            yield from self._map(
+                fn=fn,
+                dim=dim,
+                chunksize=chunksize,
+                num_chunks=num_chunks,
+                pool=pool,
+                pbar=pbar,
+                out=None,
+                index_with_generator=index_with_generator,
+                iterable=True,
+                shuffle=shuffle,
+            )
+
+    def _map(
+        self,
+        fn: Callable[[TensorDictBase], TensorDictBase | None],
+        dim: int = 0,
+        *,
+        shuffle: bool = False,
+        out: TensorDictBase | None = None,
+        chunksize: int | None = None,
+        num_chunks: int | None = None,
+        pool: mp.Pool | None = None,
+        index_with_generator: bool = False,
+        pbar: bool = False,
+        iterable: bool,
+    ):
         num_workers = pool._processes
         dim_orig = dim
         if dim < 0:
@@ -6188,6 +6425,7 @@ class TensorDictBase(MutableMapping):
             num_chunks,
             num_workers,
             dim,
+            shuffle=shuffle,
             use_generator=index_with_generator,
         )
         if not index_with_generator:
@@ -6212,6 +6450,7 @@ class TensorDictBase(MutableMapping):
                     num_chunks,
                     num_workers,
                     dim,
+                    shuffle=shuffle,
                     use_generator=index_with_generator,
                 )
                 return _CloudpickleWrapper(newfn), zip(self_split, out_split)
@@ -6219,41 +6458,45 @@ class TensorDictBase(MutableMapping):
             fn, self_split = wrap_fn_with_out(fn, out)
             out = None
 
-        imap = pool.imap(fn, self_split, call_chunksize)
+        imap_fn = pool.imap if not shuffle else pool.imap_unordered
+        imap = imap_fn(fn, self_split, call_chunksize)
 
         if pbar and importlib.util.find_spec("tqdm", None) is not None:
             import tqdm
 
             imap = tqdm.tqdm(imap, total=length)
 
-        imaplist = []
-        start = 0
-        base_index = (slice(None),) * dim
-        for item in imap:
-            if item is not None:
-                if out is not None:
-                    if chunksize == 0:
-                        out[base_index + (start,)].update_(item)
-                        start += 1
+        if iterable:
+            return imap
+        else:
+            imaplist = []
+            start = 0
+            base_index = (slice(None),) * dim
+            for item in imap:
+                if item is not None:
+                    if out is not None:
+                        if chunksize == 0:
+                            out[base_index + (start,)].update_(item)
+                            start += 1
+                        else:
+                            end = start + item.shape[dim]
+                            chunk = base_index + (slice(start, end),)
+                            out[chunk].update_(item)
+                            start = end
                     else:
-                        end = start + item.shape[dim]
-                        chunk = base_index + (slice(start, end),)
-                        out[chunk].update_(item)
-                        start = end
+                        imaplist.append(item)
+            del imap
+
+            # support inplace modif
+            if imaplist:
+                if chunksize == 0:
+                    from tensordict._lazy import LazyStackedTensorDict
+
+                    # We want to be able to return whichever data structure
+                    out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
                 else:
-                    imaplist.append(item)
-        del imap
-
-        # support inplace modif
-        if imaplist:
-            if chunksize == 0:
-                from tensordict._lazy import LazyStackedTensorDict
-
-                # We want to be able to return whichever data structure
-                out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
-            else:
-                out = torch.cat(imaplist, dim)
-        return out
+                    out = torch.cat(imaplist, dim)
+            return out
 
     # point-wise arithmetic ops
     def __add__(self, other: TensorDictBase | float) -> T:
@@ -6776,7 +7019,7 @@ class TensorDictBase(MutableMapping):
     def add(self, other: TensorDictBase | float, alpha: float | None = None):
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         if alpha is not None:
@@ -6794,13 +7037,15 @@ class TensorDictBase(MutableMapping):
 
     def add_(self, other: TensorDictBase | float, alpha: float | None = None):
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            torch._foreach_add_(self._values_list(True, True), other_val, alpha=alpha)
+            torch._foreach_add_(val, other_val, alpha=alpha)
         else:
-            torch._foreach_add_(self._values_list(True, True), other_val)
+            torch._foreach_add_(val, other_val)
         return self
 
     def lerp(self, end: TensorDictBase | float, weight: TensorDictBase | float):
@@ -6904,15 +7149,16 @@ class TensorDictBase(MutableMapping):
         return self
 
     def sub(self, other: TensorDictBase | float, alpha: float | None = None):
-        keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            vals = torch._foreach_sub(vals, other_val, alpha=alpha)
+            vals = torch._foreach_sub(val, other_val, alpha=alpha)
         else:
-            vals = torch._foreach_sub(vals, other_val)
+            vals = torch._foreach_sub(val, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
             lambda name, val: items.get(name, val),
@@ -6924,30 +7170,34 @@ class TensorDictBase(MutableMapping):
 
     def sub_(self, other: TensorDictBase | float, alpha: float | None = None):
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
         if alpha is not None:
-            torch._foreach_sub_(self._values_list(True, True), other_val, alpha=alpha)
+            torch._foreach_sub_(val, other_val, alpha=alpha)
         else:
-            torch._foreach_sub_(self._values_list(True, True), other_val)
+            torch._foreach_sub_(val, other_val)
         return self
 
     def mul_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_mul_(self._values_list(True, True), other_val)
+        torch._foreach_mul_(val, other_val)
         return self
 
     def mul(self, other: TensorDictBase | float) -> T:
-        keys, vals = self._items_list(True, True)
+        keys, val = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
-        vals = torch._foreach_mul(vals, other_val)
+        vals = torch._foreach_mul(val, other_val)
         items = dict(zip(keys, vals))
         return self._fast_apply(
             lambda name, val: items.get(name, val),
@@ -6959,16 +7209,18 @@ class TensorDictBase(MutableMapping):
 
     def maximum_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_maximum_(self._values_list(True, True), other_val)
+        torch._foreach_maximum_(val, other_val)
         return self
 
     def maximum(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_maximum(vals, other_val)
@@ -6983,16 +7235,18 @@ class TensorDictBase(MutableMapping):
 
     def minimum_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_minimum_(self._values_list(True, True), other_val)
+        torch._foreach_minimum_(val, other_val)
         return self
 
     def minimum(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_minimum(vals, other_val)
@@ -7007,16 +7261,18 @@ class TensorDictBase(MutableMapping):
 
     def clamp_max_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_max_(self._values_list(True, True), other_val)
+        torch._foreach_clamp_max_(val, other_val)
         return self
 
     def clamp_max(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_clamp_max(vals, other_val)
@@ -7031,16 +7287,18 @@ class TensorDictBase(MutableMapping):
 
     def clamp_min_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_clamp_min_(self._values_list(True, True), other_val)
+        torch._foreach_clamp_min_(val, other_val)
         return self
 
     def clamp_min(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_clamp_min(vals, other_val)
@@ -7055,16 +7313,18 @@ class TensorDictBase(MutableMapping):
 
     def pow_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_pow_(self._values_list(True, True), other_val)
+        torch._foreach_pow_(val, other_val)
         return self
 
     def pow(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_pow(vals, other_val)
@@ -7079,16 +7339,18 @@ class TensorDictBase(MutableMapping):
 
     def div_(self, other: TensorDictBase | float) -> T:
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            keys, val = self._items_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
+            val = self._values_list(True, True)
             other_val = other
-        torch._foreach_div_(self._values_list(True, True), other_val)
+        torch._foreach_div_(val, other_val)
         return self
 
     def div(self, other: TensorDictBase | float) -> T:
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            other_val = other._values_list(True, True)
+            other_val = other._values_list(True, True, sorting_keys=keys)
         else:
             other_val = other
         vals = torch._foreach_div(vals, other_val)

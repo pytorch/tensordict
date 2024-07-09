@@ -13,9 +13,12 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 
 import torch
 from cloudpickle import dumps as cloudpickle_dumps, loads as cloudpickle_loads
+from tensordict._C import (  # @manual=//tensordict:_C
+    _unravel_key_to_tuple,
+    unravel_key_list,
+)
 
 from tensordict._td import is_tensor_collection, TensorDictBase
-from tensordict._tensordict import _unravel_key_to_tuple, unravel_key_list
 from tensordict.functional import make_tensordict
 from tensordict.nn.functional_modules import (
     _swap_state,
