@@ -69,9 +69,15 @@ if TYPE_CHECKING:
 
 try:
     try:
-        from functorch._C import get_unwrapped, is_batchedtensor
+        from torch._C._functorch import (  # @manual=fbcode//caffe2:_C
+            get_unwrapped,
+            is_batchedtensor,
+        )
     except ImportError:
-        from torch._C._functorch import get_unwrapped, is_batchedtensor
+        from functorch._C import (
+            get_unwrapped,
+            is_batchedtensor,
+        )  # @manual=fbcode//functorch:_C
 except ImportError:
     pass
 

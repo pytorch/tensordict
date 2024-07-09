@@ -92,13 +92,13 @@ from torch import Tensor
 _has_functorch = False
 try:
     try:
-        from torch._C._functorch import (
+        from torch._C._functorch import (  # @manual=fbcode//caffe2:_C
             _add_batch_dim,
             _remove_batch_dim,
             is_batchedtensor,
         )
     except ImportError:
-        from functorch._C import is_batchedtensor
+        from functorch._C import is_batchedtensor  # @manual=fbcode//caffe2/functorch:_C
 
     _has_functorch = True
 except ImportError:
