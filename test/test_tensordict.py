@@ -6791,7 +6791,7 @@ class TestMPInplace:
         elif td_type == "memmap":
             tensordict = tensordict.memmap_()
         elif td_type == "memmap_stack":
-            tensordict = stack_td(
+            tensordict = TensorDict.lazy_stack(
                 [
                     tensordict[0].clone().memmap_(),
                     tensordict[1].clone().memmap_(),
