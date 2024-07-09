@@ -109,8 +109,8 @@ def set_tensor_dict(  # noqa: F811
 
 _RESET_OLD_TENSORDICT = True
 try:
-    import torch._functorch.vmap as vmap_src
-    from torch._functorch.vmap import (
+    import torch._functorch.vmap as vmap_src  # @manual=fbcode//caffe2:torch
+    from torch._functorch.vmap import (  # @manual=fbcode//caffe2:torch
         _add_batch_dim,
         _broadcast_to_and_flatten,
         _get_name,
@@ -124,7 +124,7 @@ try:
     _has_functorch = True
 except ImportError:
     try:
-        from functorch._src.vmap import (
+        from functorch._src.vmap import (  # @manual=fbcode//caffe2/functorch:functorch_src
             _add_batch_dim,
             _broadcast_to_and_flatten,
             _get_name,
@@ -136,7 +136,7 @@ except ImportError:
         )
 
         _has_functorch = True
-        import functorch._src.vmap as vmap_src
+        import functorch._src.vmap as vmap_src  # @manual=fbcode//caffe2/functorch:functorch_src
     except ImportError:
         _has_functorch = False
 

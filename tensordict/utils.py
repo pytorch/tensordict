@@ -69,7 +69,7 @@ if TYPE_CHECKING:
 
 try:
     try:
-        from torch._C._functorch import (  # @manual=fbcode//caffe2:_C
+        from torch._C._functorch import (  # @manual=fbcode//caffe2:torch
             get_unwrapped,
             is_batchedtensor,
         )
@@ -2321,7 +2321,7 @@ class _add_batch_dim_pre_hook:
     def __call__(self, mod: torch.nn.Module, args, kwargs):
         for name, param in list(mod.named_parameters(recurse=False)):
             if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
-                from torch._C._functorch import _add_batch_dim
+                from torch._C._functorch import _add_batch_dim  # @manual=//caffe2:_C
 
                 param = _add_batch_dim(param, param.in_dim, param.vmap_level)
                 delattr(mod, name)

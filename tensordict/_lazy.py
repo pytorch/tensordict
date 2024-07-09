@@ -92,7 +92,7 @@ from torch import Tensor
 _has_functorch = False
 try:
     try:
-        from torch._C._functorch import (  # @manual=fbcode//caffe2:_C
+        from torch._C._functorch import (  # @manual=fbcode//caffe2:torch
             _add_batch_dim,
             _remove_batch_dim,
             is_batchedtensor,
