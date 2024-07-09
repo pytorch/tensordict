@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import numbers
 import os
-import weakref
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
