@@ -10,7 +10,10 @@ import torch
 
 from tensordict import assert_close, TensorDict
 
+TORCH_VERSION = torch.__version__
 
+
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 class TestTD:
     def test_tensor_output(self):
         def add_one(td):
