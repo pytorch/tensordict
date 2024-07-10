@@ -1585,7 +1585,10 @@ class TensorDict(TensorDictBase):
             return tensor.reshape((*shape, *tensor.shape[batch_dims:]))
 
         return self._fast_apply(
-            _reshape, batch_size=shape, call_on_nested=True, propagate_lock=True
+            _reshape,
+            batch_size=shape,
+            call_on_nested=True,
+            propagate_lock=True,
         )
 
     def _transpose(self, dim0, dim1):
@@ -1926,7 +1929,11 @@ class TensorDict(TensorDictBase):
             self._erase_names()
             return
         value = list(value)
-        num_none = sum(v is None for v in value)
+        # Faster but incompatible with dynamo
+        # num_none = sum(v is None for v in value)
+        num_none = 0
+        for v in value:
+            num_none += v is None
         if num_none:
             num_none -= 1
         if len(set(value)) != len(value) - num_none:
@@ -1978,10 +1985,6 @@ class TensorDict(TensorDictBase):
         self._batch_size_setter(new_size)
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
-        if not hasattr(self, "_orig_batch_size"):
-            self._orig_batch_size = self.batch_size
-        elif self._orig_batch_size == new_size:
-            del self._orig_batch_size
         self._batch_size = new_size
 
     # Checks
@@ -3336,10 +3339,6 @@ class _SubTensorDict(TensorDictBase):
         return self.to_tensordict().to(*args, **kwargs)
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
-        if not hasattr(self, "_orig_batch_size"):
-            self._orig_batch_size = self.batch_size
-        elif self._orig_batch_size == new_size:
-            del self._orig_batch_size
         self._batch_size = new_size
 
     def get(
