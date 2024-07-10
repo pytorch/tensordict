@@ -417,7 +417,7 @@ def _stack(
         return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
     elif is_tc:
         tc_type = type(list_of_tensordicts[0])
-        list_of_tensordicts = [tc.to_tensordict() for tc in list_of_tensordicts]
+        list_of_tensordicts = [tc._tensordict for tc in list_of_tensordicts]
 
     batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
@@ -566,11 +566,7 @@ def _stack(
                 device=device,
             )
             if is_tc:
-                return tc_type(
-                    **dict(result.items()),
-                    batch_size=result.batch_size,
-                    device=result.device,
-                )
+                return tc_type.from_tensordict(result)
             return result
         else:
             out = LazyStackedTensorDict(
