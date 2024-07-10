@@ -1430,6 +1430,12 @@ class TensorDict(TensorDictBase):
         if self._has_names():
             names = copy(self.names)
             names = [name for i, name in enumerate(names) if i != dim]
+            # We could use any() but dynamo doesn't like generators
+            for name in names:
+                if name is not None:
+                    break
+            else:
+                names = None
         device = self.device
 
         is_shared = self._is_shared
