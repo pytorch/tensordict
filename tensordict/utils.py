@@ -1935,8 +1935,10 @@ def _getitem_batch_size(batch_size, index):
             continue
         elif isinstance(idx, slice):
             batch = batch_size[count]
-            out.append(len(range(*_slice_indices(idx, batch))))
-            # out.append(len(range(*idx.indices(batch))))
+            if torch.compiler.is_dynamo_compiling():
+                out.append(len(range(*_slice_indices(idx, batch))))
+            else:
+                out.append(len(range(*idx.indices(batch))))
     count += 1
     if batch_size[count:]:
         out.extend(batch_size[count:])
