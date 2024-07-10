@@ -87,8 +87,11 @@ class TestTD:
             return td.reshape(2, 2)
 
         reshape_c = torch.compile(reshape, fullgraph=True)
-        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
-        assert (reshape(data) == reshape_c(data)).all()
+        data = TensorDict({"a": {"b": torch.arange(4)}}, [4], names=["z"])
+        assert data["a"].names == data.names == ["z"]
+        data_reshape = reshape(data)
+        data_reshape_c = reshape_c(data)
+        assert (data_reshape == data_reshape_c).all()
 
     def test_unbind(self):
         def unbind(td):
