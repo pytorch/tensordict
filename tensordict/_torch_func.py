@@ -276,18 +276,14 @@ def _cat(
     if out is None:
         out = {}
         for key in keys:
-            if not torch._dynamo.is_compiling():
+            items = [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts]
+            if not torch.compiler.is_dynamo_compiling():
                 with _ErrorInteceptor(
                     key, "Attempted to concatenate tensors on different devices at key"
                 ):
-                    out[key] = torch.cat(
-                        [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts],
-                        dim,
-                    )
+                    out[key] = torch.cat(items, dim)
             else:
-                out[key] = TensorDict.cat(
-                    [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts], dim
-                )
+                out[key] = torch.cat(items, dim)
         if device is None:
             device = list_of_tensordicts[0].device
             for td in list_of_tensordicts[1:]:
@@ -313,7 +309,7 @@ def _cat(
         for key in keys:
             with _ErrorInteceptor(
                 key, "Attempted to concatenate tensors on different devices at key"
-            ) if not torch._dynamo.is_compiling() else contextlib.nullcontext():
+            ) if not torch.compiler.is_dynamo_compiling() else contextlib.nullcontext():
                 if isinstance(out, TensorDict):
                     torch.cat(
                         [td.get(key) for td in list_of_tensordicts],
