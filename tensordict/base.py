@@ -53,6 +53,7 @@ from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
     _is_non_tensor,
+    _is_number,
     _is_tensorclass,
     _KEY_ERROR,
     _make_dtype_promotion,
@@ -1377,12 +1378,18 @@ class TensorDictBase(MutableMapping):
                         key, value, inplace=True, validated=True, non_blocking=False
                     )
         self._check_new_batch_size(new_batch_size)
-        self._change_batch_size(new_batch_size)
-        if self._has_names():
+        has_names = self._has_names()
+        if has_names:
             # if the tensordict has dim names and the new batch-size has more dims,
             # we can simply add empty names after the current ones.
             # Otherwise, we discard the extra existing names.
             names = self.names
+            self._erase_names()
+        self._change_batch_size(new_batch_size)
+        if has_names:
+            # if the tensordict has dim names and the new batch-size has more dims,
+            # we can simply add empty names after the current ones.
+            # Otherwise, we discard the extra existing names.
             if len(names) < len(new_batch_size):
                 self.names = names + [None] * (len(new_batch_size) - len(names))
             else:
@@ -2153,6 +2160,60 @@ class TensorDictBase(MutableMapping):
         construction.
         """
         ...
+
+    def _get_names_idx(self, idx):
+        if not self._has_names():
+            return None
+
+        def is_boolean(idx):
+            try:
+                from functorch import dim as ftdim
+
+            except ImportError:
+                from tensordict.utils import _ftdim_mock as ftdim
+
+            if isinstance(idx, ftdim.Dim):
+                return None
+            if isinstance(idx, tuple) and len(idx) == 1:
+                return is_boolean(idx[0])
+            if hasattr(idx, "dtype") and idx.dtype is torch.bool:
+                return idx.ndim
+            return None
+
+        num_boolean_dim = is_boolean(idx)
+        names = self.names
+        if num_boolean_dim:
+            names = [None] + names[num_boolean_dim:]
+        else:
+            if not isinstance(idx, tuple):
+                idx = (idx,)
+            if len([_idx for _idx in idx if _idx is not None]) < self.ndim:
+                idx = (*idx, Ellipsis)
+            idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
+            # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
+            count = 0
+            idx_to_take = []
+            no_more_tensors = False
+            for _idx in idx_names:
+                if _idx is None:
+                    idx_to_take.append(None)
+                elif _is_number(_idx):
+                    count += 1
+                elif isinstance(_idx, (torch.Tensor, np.ndarray)):
+                    if not no_more_tensors:
+                        idx_to_take.extend([count] * _idx.ndim)
+                        count += 1
+                        no_more_tensors = True
+                    else:
+                        # skip this one
+                        count += 1
+                else:
+                    idx_to_take.append(count)
+                    count += 1
+            names = [names[i] if i is not None else None for i in idx_to_take]
+        if all(name is None for name in names):
+            return None
+        return names
 
     @abc.abstractmethod
     def _erase_names(self):
@@ -4878,7 +4939,6 @@ class TensorDictBase(MutableMapping):
         else:
             batch_size = [nelt] + list(self.batch_size[end_dim + 1 :])
         # TODO: check that this works with nested tds of different batch size
-        out = self._fast_apply(flatten, batch_size=batch_size, propagate_lock=True)
         if self._has_names():
             names = [
                 name
@@ -4886,7 +4946,11 @@ class TensorDictBase(MutableMapping):
                 if (i < start_dim or i > end_dim)
             ]
             names.insert(start_dim, None)
-            out.names = names
+        else:
+            names = None
+        out = self._fast_apply(
+            flatten, batch_size=batch_size, propagate_lock=True, names=names
+        )
         return out
 
     @as_decorator()
@@ -5517,7 +5581,7 @@ class TensorDictBase(MutableMapping):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
@@ -5671,7 +5735,7 @@ class TensorDictBase(MutableMapping):
         nested_keys: bool = False,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
@@ -5868,7 +5932,7 @@ class TensorDictBase(MutableMapping):
         *,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         out: TensorDictBase | None = None,
@@ -5887,7 +5951,7 @@ class TensorDictBase(MutableMapping):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
@@ -5964,7 +6028,7 @@ class TensorDictBase(MutableMapping):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
@@ -5985,7 +6049,7 @@ class TensorDictBase(MutableMapping):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         call_on_nested: bool = False,
         default: Any = NO_DEFAULT,
@@ -8490,7 +8554,12 @@ class TensorDictBase(MutableMapping):
                 result.lock_()
             return result
         else:
-            for key in list(self.keys()):
+            if not torch.compiler.is_dynamo_compiling():
+                key_list = list(self.keys())
+            else:
+                key_list = [k for k in self.keys()]  # noqa
+
+            for key in key_list:
                 if separator in key:
                     new_key = tuple(key.split(separator))
                     try:

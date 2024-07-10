@@ -2601,13 +2601,13 @@ class NonTensorData:
                 data=deepcopy(self.data),
                 batch_size=self.batch_size,
                 device=self.device,
-                names=self.names,
+                names=self.names if self._has_names() else None,
             )
         return type(self)(
             data=self.data,
             batch_size=self.batch_size,
             device=self.device,
-            names=self.names,
+            names=self.names if self._has_names() else None,
         )
 
     def share_memory_(self):
