@@ -1375,10 +1375,6 @@ class LazyStackedTensorDict(TensorDictBase):
         super()._check_new_batch_size(new_size)
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
-        if not hasattr(self, "_orig_batch_size"):
-            self._orig_batch_size = self.batch_size
-        elif self._orig_batch_size == new_size:
-            del self._orig_batch_size
         self._batch_size = new_size
 
     def keys(
@@ -2978,10 +2974,6 @@ class _CustomOpTensorDict(TensorDictBase):
                 )
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
-        if not hasattr(self, "_orig_batch_size"):
-            self._orig_batch_size = self.batch_size
-        elif self._orig_batch_size == new_size:
-            del self._orig_batch_size
         self._batch_size = new_size
 
     def _get_str(self, key, default):
