@@ -9127,6 +9127,16 @@ class TestNonTensorData:
             TensorDict.from_dict(non_tensor_data.to_dict()) == non_tensor_data
         ).all()
 
+    def test_nontensor_tensor(self):
+        t1 = torch.tensor([1, 2, 3], dtype=torch.float)
+        t2 = torch.tensor([1, 2, 3, 4], dtype=torch.float)
+        stack = NonTensorStack(NonTensorData(t1), NonTensorData(t2))  # this works fine
+        assert all(isinstance(t, torch.Tensor) for t in stack.tolist())
+        stack = torch.stack(
+            [NonTensorData(t1), NonTensorData(t2)]
+        )  # this triggers an exception
+        assert all(isinstance(t, torch.Tensor) for t in stack.tolist())
+
     def test_set(self, non_tensor_data):
         non_tensor_data.set(("nested", "another_string"), "another string!")
         assert (
