@@ -62,6 +62,7 @@ from tensordict.utils import (
     _set_max_batch_size,
     _shape,
     _split_tensordict,
+    _split_tensordict_generator,
     _td_fields,
     _unravel_key_to_tuple,
     as_decorator,
@@ -6198,14 +6199,23 @@ class TensorDictBase(MutableMapping):
                     out=out,
                     index_with_generator=index_with_generator,
                 )
-        else:
-            num_workers = pool._processes
-            dim_orig = dim
-            if dim < 0:
-                dim = self.ndim + dim
-            if dim < 0 or dim >= self.ndim:
-                raise ValueError(f"Got incompatible dimension {dim_orig}")
+        num_workers = pool._processes
+        dim_orig = dim
+        if dim < 0:
+            dim = self.ndim + dim
+        if dim < 0 or dim >= self.ndim:
+            raise ValueError(f"Got incompatible dimension {dim_orig}")
 
+        if index_with_generator:
+            self_split = _split_tensordict_generator(
+                self,
+                chunksize,
+                num_chunks,
+                num_workers,
+                dim,
+                shuffle=False,
+            )
+        else:
             self_split = _split_tensordict(
                 self,
                 chunksize,
@@ -6213,24 +6223,34 @@ class TensorDictBase(MutableMapping):
                 num_workers,
                 dim,
                 shuffle=False,
-                use_generator=index_with_generator,
             )
-            if not index_with_generator:
-                length = len(self_split)
-            else:
-                length = None
-            call_chunksize = 1
 
-            if out is not None and (out.is_shared() or out.is_memmap()):
+        if not index_with_generator:
+            length = len(self_split)
+        else:
+            length = None
+        call_chunksize = 1
 
-                def wrap_fn_with_out(fn, out):
-                    @wraps(fn)
-                    def newfn(item_and_out):
-                        item, out = item_and_out
-                        result = fn(item)
-                        out.update_(result)
-                        return
+        if out is not None and (out.is_shared() or out.is_memmap()):
 
+            def wrap_fn_with_out(fn, out):
+                @wraps(fn)
+                def newfn(item_and_out):
+                    item, out = item_and_out
+                    result = fn(item)
+                    out.update_(result)
+                    return
+
+                if index_with_generator:
+                    out_split = _split_tensordict_generator(
+                        out,
+                        chunksize,
+                        num_chunks,
+                        num_workers,
+                        dim,
+                        shuffle=False,
+                    )
+                else:
                     out_split = _split_tensordict(
                         out,
                         chunksize,
@@ -6238,49 +6258,47 @@ class TensorDictBase(MutableMapping):
                         num_workers,
                         dim,
                         shuffle=False,
-                        use_generator=index_with_generator,
                     )
-                    return _CloudpickleWrapper(newfn), zip(self_split, out_split)
+                return _CloudpickleWrapper(newfn), zip(self_split, out_split)
 
-                fn, self_split = wrap_fn_with_out(fn, out)
-                out = None
+            fn, self_split = wrap_fn_with_out(fn, out)
+            out = None
 
-            imap_fn = pool.imap
-            imap = imap_fn(fn, self_split, call_chunksize)
+        imap = pool.imap(fn, self_split, call_chunksize)
 
-            if pbar and importlib.util.find_spec("tqdm", None) is not None:
-                import tqdm
+        if pbar and importlib.util.find_spec("tqdm", None) is not None:
+            import tqdm
 
-                imap = tqdm.tqdm(imap, total=length)
+            imap = tqdm.tqdm(imap, total=length)
 
-            imaplist = []
-            start = 0
-            base_index = (slice(None),) * dim
-            for item in imap:
-                if item is not None:
-                    if out is not None:
-                        if chunksize == 0:
-                            out[base_index + (start,)].update_(item)
-                            start += 1
-                        else:
-                            end = start + item.shape[dim]
-                            chunk = base_index + (slice(start, end),)
-                            out[chunk].update_(item)
-                            start = end
+        imaplist = []
+        start = 0
+        base_index = (slice(None),) * dim
+        for item in imap:
+            if item is not None:
+                if out is not None:
+                    if chunksize == 0:
+                        out[base_index + (start,)].update_(item)
+                        start += 1
                     else:
-                        imaplist.append(item)
-            del imap
-
-            # support inplace modif
-            if imaplist:
-                if chunksize == 0:
-                    from tensordict._lazy import LazyStackedTensorDict
-
-                    # We want to be able to return whichever data structure
-                    out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
+                        end = start + item.shape[dim]
+                        chunk = base_index + (slice(start, end),)
+                        out[chunk].update_(item)
+                        start = end
                 else:
-                    out = torch.cat(imaplist, dim)
-            return out
+                    imaplist.append(item)
+        del imap
+
+        # support inplace modif
+        if imaplist:
+            if chunksize == 0:
+                from tensordict._lazy import LazyStackedTensorDict
+
+                # We want to be able to return whichever data structure
+                out = LazyStackedTensorDict.maybe_dense_stack(imaplist, dim)
+            else:
+                out = torch.cat(imaplist, dim)
+        return out
 
     def map_iter(
         self,
@@ -6495,15 +6513,25 @@ class TensorDictBase(MutableMapping):
         if dim < 0 or dim >= self.ndim:
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
-        self_split = _split_tensordict(
-            self,
-            chunksize,
-            num_chunks,
-            num_workers,
-            dim,
-            shuffle=shuffle,
-            use_generator=index_with_generator,
-        )
+        if index_with_generator:
+            self_split = _split_tensordict_generator(
+                self,
+                chunksize,
+                num_chunks,
+                num_workers,
+                dim,
+                shuffle=shuffle,
+            )
+        else:
+            self_split = _split_tensordict(
+                self,
+                chunksize,
+                num_chunks,
+                num_workers,
+                dim,
+                shuffle=shuffle,
+            )
+
         if not index_with_generator:
             length = len(self_split)
         else:
@@ -6520,15 +6548,25 @@ class TensorDictBase(MutableMapping):
                     out.update_(result)
                     return
 
-                out_split = _split_tensordict(
-                    out,
-                    chunksize,
-                    num_chunks,
-                    num_workers,
-                    dim,
-                    shuffle=shuffle,
-                    use_generator=index_with_generator,
-                )
+                if index_with_generator:
+                    out_split = _split_tensordict_generator(
+                        out,
+                        chunksize,
+                        num_chunks,
+                        num_workers,
+                        dim,
+                        shuffle=shuffle,
+                    )
+                else:
+                    out_split = _split_tensordict(
+                        out,
+                        chunksize,
+                        num_chunks,
+                        num_workers,
+                        dim,
+                        shuffle=shuffle,
+                    )
+
                 return _CloudpickleWrapper(newfn), zip(self_split, out_split)
 
             fn, self_split = wrap_fn_with_out(fn, out)
