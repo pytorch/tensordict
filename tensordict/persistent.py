@@ -42,6 +42,7 @@ from tensordict.utils import (
     _parse_to,
     _proc_init,
     _split_tensordict,
+    _split_tensordict_generator,
     cache,
     expand_right,
     IndexType,
@@ -812,15 +813,24 @@ class PersistentTensorDict(TensorDictBase):
         if dim < 0 or dim >= self.ndim:
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
-        self_split = _split_tensordict(
-            self,
-            chunksize,
-            num_chunks,
-            num_workers,
-            dim,
-            use_generator=index_with_generator,
-            to_tensordict=True,
-        )
+        if index_with_generator:
+            self_split = _split_tensordict_generator(
+                self,
+                chunksize,
+                num_chunks,
+                num_workers,
+                dim,
+                to_tensordict=True,
+            )
+        else:
+            self_split = _split_tensordict(
+                self,
+                chunksize,
+                num_chunks,
+                num_workers,
+                dim,
+                to_tensordict=True,
+            )
         if not index_with_generator:
             length = len(self_split)
             self_split = tuple(split.to_tensordict() for split in self_split)
@@ -837,14 +847,23 @@ class PersistentTensorDict(TensorDictBase):
                     out.update_(result)
                     return
 
-                out_split = _split_tensordict(
-                    out,
-                    chunksize,
-                    num_chunks,
-                    num_workers,
-                    dim,
-                    use_generator=index_with_generator,
-                )
+                if index_with_generator:
+                    out_split = _split_tensordict_generator(
+                        out,
+                        chunksize,
+                        num_chunks,
+                        num_workers,
+                        dim,
+                    )
+                else:
+                    out_split = _split_tensordict(
+                        out,
+                        chunksize,
+                        num_chunks,
+                        num_workers,
+                        dim,
+                    )
+
                 return _CloudpickleWrapper(newfn), zip(self_split, out_split)
 
             fn, self_split = wrap_fn_with_out(fn, out)

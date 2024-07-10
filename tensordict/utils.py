@@ -1357,7 +1357,6 @@ def _split_tensordict_generator(
                     idx_start = idx_end
                     idx_end += chunksize
 
-    # end up here only when use_generator = True
     if shuffle:
 
         def next_index_shuffle(next_index=next_index):
