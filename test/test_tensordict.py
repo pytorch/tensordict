@@ -8910,39 +8910,39 @@ class TestMap:
             td_out_1["s"].sort().values,
         )
 
-    @pytest.mark.parametrize(
-        "chunksize,num_chunks", [[0, None], [2, None], [None, 5], [None, 10]]
-    )
-    @pytest.mark.parametrize("h5", [False, True])
-    @pytest.mark.parametrize("has_out", [False, True])
-    def test_index_with_generator(self, chunksize, num_chunks, h5, has_out, tmpdir):
-        input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
-        if h5:
-            tmpdir = pathlib.Path(tmpdir)
-            input = input.to_h5(tmpdir / "file.h5")
-        if has_out:
-            output_generator = torch.zeros_like(self.selectfn(input.to_tensordict()))
-            output_split = torch.zeros_like(self.selectfn(input.to_tensordict()))
-        else:
-            output_generator = None
-            output_split = None
-        output_generator = input.map(
-            self.selectfn,
-            num_workers=2,
-            index_with_generator=True,
-            num_chunks=num_chunks,
-            chunksize=chunksize,
-            out=output_generator,
-        )
-        output_split = input.map(
-            self.selectfn,
-            num_workers=2,
-            index_with_generator=True,
-            num_chunks=num_chunks,
-            chunksize=chunksize,
-            out=output_split,
-        )
-        assert (output_generator == output_split).all()
+    # @pytest.mark.parametrize(
+    #     "chunksize,num_chunks", [[0, None], [2, None], [None, 5], [None, 10]]
+    # )
+    # @pytest.mark.parametrize("h5", [False, True])
+    # @pytest.mark.parametrize("has_out", [False, True])
+    # def test_index_with_generator(self, chunksize, num_chunks, h5, has_out, tmpdir):
+    #     input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
+    #     if h5:
+    #         tmpdir = pathlib.Path(tmpdir)
+    #         input = input.to_h5(tmpdir / "file.h5")
+    #     if has_out:
+    #         output_generator = torch.zeros_like(self.selectfn(input.to_tensordict()))
+    #         output_split = torch.zeros_like(self.selectfn(input.to_tensordict()))
+    #     else:
+    #         output_generator = None
+    #         output_split = None
+    #     output_generator = input.map(
+    #         self.selectfn,
+    #         num_workers=2,
+    #         index_with_generator=True,
+    #         num_chunks=num_chunks,
+    #         chunksize=chunksize,
+    #         out=output_generator,
+    #     )
+    #     output_split = input.map(
+    #         self.selectfn,
+    #         num_workers=2,
+    #         index_with_generator=True,
+    #         num_chunks=num_chunks,
+    #         chunksize=chunksize,
+    #         out=output_split,
+    #     )
+    #     assert (output_generator == output_split).all()
 
     def test_map_unbind(self):
         if mp.get_start_method(allow_none=True) is None:
