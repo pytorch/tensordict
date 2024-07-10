@@ -2460,7 +2460,7 @@ def _slice_indices(index: slice, len: int):
         else:
             start = len - 1
     elif start < 0:
-        start = len + start
+        start = max(0, len + start)
 
     if stop is None:
         if step > 0:
@@ -2471,7 +2471,6 @@ def _slice_indices(index: slice, len: int):
         stop = min(len, stop)
     elif step < 0 or (step > 0 and start >= 0):
         stop = len + stop
-
     return start, stop, step
 
 
