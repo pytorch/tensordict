@@ -1166,7 +1166,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 td._fast_apply(
                     lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
                     batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
-                    names=[name for i, name in enumerate(td.names) if i != in_dim],
+                    names=[name for i, name in enumerate(td.names) if i != in_dim]
+                    if self._has_names()
+                    else None,
                 )
                 for td in td.tensordicts
             ]
@@ -1311,7 +1313,7 @@ class LazyStackedTensorDict(TensorDictBase):
             source=source,
             batch_size=batch_size,
             device=device,
-            names=self.names,
+            names=self.names if self._has_names() else None,
             lock=self.is_locked,
         )
         return out
@@ -1546,7 +1548,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # We know batch_size is None, this has been checked earlier
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         out: TensorDictBase | None = None,
@@ -1597,7 +1599,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         else:
             out = self
-        if names is not None:
+        if names is not NO_DEFAULT:
             out.names = names
         return out
 
@@ -1607,7 +1609,7 @@ class LazyStackedTensorDict(TensorDictBase):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
@@ -1713,7 +1715,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         else:
             out = self
-        if names is not None:
+        if names is not NO_DEFAULT:
             out.names = names
         return out
 

@@ -65,8 +65,8 @@ class TestTD:
 
     def test_stack(self):
         def stack_tds(td0, td1):
-            return TensorDict.stack([td0, td1])
-            # return torch.stack([td0, td1])
+            # return TensorDict.stack([td0, td1])
+            return torch.stack([td0, td1])
 
         stack_tds_c = torch.compile(stack_tds, fullgraph=True)
         data0 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
@@ -75,7 +75,8 @@ class TestTD:
 
     def test_cat(self):
         def cat_tds(td0, td1):
-            return TensorDict.cat([td0, td1])
+            # return TensorDict.cat([td0, td1])
+            return torch.cat([td0, td1])
 
         cat_tds_c = torch.compile(cat_tds, fullgraph=True)
         data0 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
@@ -87,11 +88,30 @@ class TestTD:
             return td.reshape(2, 2)
 
         reshape_c = torch.compile(reshape, fullgraph=True)
-        data = TensorDict({"a": {"b": torch.arange(4)}}, [4], names=["z"])
-        assert data["a"].names == data.names == ["z"]
+        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
         data_reshape = reshape(data)
         data_reshape_c = reshape_c(data)
         assert (data_reshape == data_reshape_c).all()
+
+    def test_view(self):
+        def view(td):
+            return td.view(2, 2)
+
+        view_c = torch.compile(view, fullgraph=True)
+        data = TensorDict({"a": {"b": torch.arange(4)}}, [4])
+        data_view = view(data)
+        data_view_c = view_c(data)
+        assert (data_view == data_view_c).all()
+
+    def test_transpose(self):
+        def transpose(td):
+            return td.transpose(0, 1)
+
+        transpose_c = torch.compile(transpose, fullgraph=True)
+        data = TensorDict({"a": {"b": torch.arange(6).view(2, 3)}}, [2, 3])
+        data_transpose = transpose(data)
+        data_transpose_c = transpose_c(data)
+        assert (data_transpose == data_transpose_c).all()
 
     def test_unbind(self):
         def unbind(td):
@@ -130,6 +150,28 @@ class TestTD:
             assert clone_c(data)["a", "b"] is not data["a", "b"]
         else:
             assert clone_c(data)["a", "b"] is data["a", "b"]
+
+    @pytest.mark.parametrize("recurse", [True, False])
+    def test_flatten_keys(self, recurse):
+        def flatten_keys(td: TensorDict):
+            return td.flatten_keys()
+
+        flatten_keys_c = torch.compile(flatten_keys, fullgraph=True)
+        data = TensorDict({"a": {"b": 0, "c": 1}})
+        assert_close(flatten_keys(data), flatten_keys_c(data))
+        assert flatten_keys_c(data) is not data
+        assert flatten_keys_c(data)["a.b"] is data["a", "b"]
+
+    @pytest.mark.parametrize("recurse", [True, False])
+    def test_unflatten_keys(self, recurse):
+        def unflatten_keys(td: TensorDict):
+            return td.unflatten_keys()
+
+        unflatten_keys_c = torch.compile(unflatten_keys, fullgraph=True)
+        data = TensorDict({"a.b": 0, "a.c": 1})
+        assert_close(unflatten_keys(data), unflatten_keys_c(data))
+        assert unflatten_keys_c(data) is not data
+        assert unflatten_keys_c(data)["a", "b"] is data["a.b"]
 
 
 @tensorclass

@@ -48,7 +48,6 @@ from tensordict.utils import (
     _get_shape_from_args,
     _getitem_batch_size,
     _index_preserve_data_ptr,
-    _is_number,
     _is_shared,
     _is_tensorclass,
     _KEY_ERROR,
@@ -306,6 +305,8 @@ class TensorDict(TensorDictBase):
                         non_blocking=sub_non_blocking,
                     )
                 _tensordict[key] = value
+        assert names is None or len(names) == self.batch_dims, (names, batch_size)
+        assert (names is None) or (not all(name is None for name in names))
         self._td_dim_names = names
         if lock:
             self.lock_()
@@ -1025,7 +1026,7 @@ class TensorDict(TensorDictBase):
         *,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         out: TensorDictBase | None = None,
@@ -1060,9 +1061,12 @@ class TensorDict(TensorDictBase):
         else:
 
             def make_result(names=names, batch_size=batch_size):
-                if batch_size is not None and names is None:
-                    # erase names
-                    names = [None] * len(batch_size)
+                if names is NO_DEFAULT:
+                    if batch_size is not None:
+                        # erase names
+                        names = None
+                    elif batch_size is None:
+                        names = self.names if self._has_names() else None
                 return self.empty(batch_size=batch_size, device=device, names=names)
 
             result = make_result()
@@ -1144,7 +1148,7 @@ class TensorDict(TensorDictBase):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
@@ -1176,9 +1180,12 @@ class TensorDict(TensorDictBase):
         else:
 
             def make_result(names=names, batch_size=batch_size):
-                if batch_size is not None and names is None:
-                    # erase names
-                    names = [None] * len(batch_size)
+                if names is NO_DEFAULT:
+                    if batch_size is not None:
+                        # erase names
+                        names = None
+                    else:
+                        names = self.names if self._has_names() else None
                 return self.empty(batch_size=batch_size, device=device, names=names)
 
             result = None
@@ -1291,7 +1298,9 @@ class TensorDict(TensorDictBase):
             batch_size=torch.Size(
                 [b for i, b in enumerate(td.batch_size) if i != in_dim]
             ),
-            names=[name for i, name in enumerate(td.names) if i != in_dim],
+            names=[name for i, name in enumerate(td.names) if i != in_dim]
+            if self._has_names()
+            else None,
             lock=self.is_locked,
         )
         return out
@@ -1392,6 +1401,11 @@ class TensorDict(TensorDictBase):
                     f"as the original length. target_shape = {shape}, existing_shape = {self.batch_size}"
                 )
 
+        if self._has_names():
+            names = [None] * (len(shape) - tensordict_dims) + self.names
+        else:
+            names = None
+
         def _expand(tensor):
             tensor_shape = tensor.shape
             tensor_dims = len(tensor_shape)
@@ -1402,7 +1416,6 @@ class TensorDict(TensorDictBase):
                 new_shape = shape
             return tensor.expand(new_shape)
 
-        names = [None] * (len(shape) - tensordict_dims) + self.names
         return self._fast_apply(
             _expand,
             batch_size=shape,
@@ -1527,7 +1540,7 @@ class TensorDict(TensorDictBase):
         else:
             raise TypeError(WRONG_TYPE)
         index = (slice(None),) * dim
-        names = self.names
+        names = self.names if self._has_names() else None
         return tuple(
             self._index_tensordict(index + (ss,), new_batch_size=bs, names=names)
             for ss, bs in zip(split_sizes, batch_sizes)
@@ -1663,10 +1676,17 @@ class TensorDict(TensorDictBase):
     def _squeeze(self, dim=None):
         batch_size = self.batch_size
         if dim is None:
-            names = list(self.names)
-            batch_size, names = zip(
-                *[(size, name) for size, name in zip(batch_size, names) if size != 1]
-            )
+            names = copy(self.names) if self._has_names() else None
+            if names is not None:
+                batch_size, names = zip(
+                    *[
+                        (size, name)
+                        for size, name in zip(batch_size, names)
+                        if size != 1
+                    ]
+                )
+            else:
+                batch_size = [size for size in batch_size if size != 1]
             batch_size = torch.Size(batch_size)
             if batch_size == self.batch_size:
                 return self
@@ -1701,8 +1721,9 @@ class TensorDict(TensorDictBase):
         batch_size = list(batch_size)
         batch_size.pop(dim)
         batch_size = list(batch_size)
-        names = list(self.names)
-        names.pop(dim)
+        names = copy(self.names) if self._has_names() else None
+        if names:
+            names.pop(dim)
 
         result = self._fast_apply(
             lambda x: x.squeeze(newdim),
@@ -1732,8 +1753,9 @@ class TensorDict(TensorDictBase):
         batch_size.insert(newdim, 1)
         batch_size = torch.Size(batch_size)
 
-        names = copy(self.names)
-        names.insert(newdim, None)
+        names = copy(self.names) if self._has_names() else None
+        if names:
+            names.insert(newdim, None)
 
         def _unsqueeze(tensor):
             return tensor.unsqueeze(newdim)
@@ -1788,7 +1810,7 @@ class TensorDict(TensorDictBase):
             input_dict,
             batch_size=torch.Size(batch_size),
             device=torch.device(device) if device is not None else device,
-            names=names,
+            names=names if any(name is not None for name in names) else None,
         )
 
     def from_dict_instance(
@@ -1868,59 +1890,7 @@ class TensorDict(TensorDictBase):
         names = self._td_dim_names
         if names is None:
             return [None for _ in range(self.batch_dims)]
-        return names
-
-    def _get_names_idx(self, idx):
-        if not self._has_names():
-            names = None
-        else:
-
-            def is_boolean(idx):
-                try:
-                    from functorch import dim as ftdim
-
-                except ImportError:
-                    from tensordict.utils import _ftdim_mock as ftdim
-
-                if isinstance(idx, ftdim.Dim):
-                    return None
-                if isinstance(idx, tuple) and len(idx) == 1:
-                    return is_boolean(idx[0])
-                if hasattr(idx, "dtype") and idx.dtype is torch.bool:
-                    return idx.ndim
-                return None
-
-            num_boolean_dim = is_boolean(idx)
-            names = self.names
-            if num_boolean_dim:
-                names = [None] + names[num_boolean_dim:]
-            else:
-                if not isinstance(idx, tuple):
-                    idx = (idx,)
-                if len([_idx for _idx in idx if _idx is not None]) < self.ndim:
-                    idx = (*idx, Ellipsis)
-                idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
-                # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
-                count = 0
-                idx_to_take = []
-                no_more_tensors = False
-                for _idx in idx_names:
-                    if _idx is None:
-                        idx_to_take.append(None)
-                    elif _is_number(_idx):
-                        count += 1
-                    elif isinstance(_idx, (torch.Tensor, np.ndarray)):
-                        if not no_more_tensors:
-                            idx_to_take.extend([count] * _idx.ndim)
-                            count += 1
-                            no_more_tensors = True
-                        else:
-                            # skip this one
-                            count += 1
-                    else:
-                        idx_to_take.append(count)
-                        count += 1
-                names = [names[i] if i is not None else None for i in idx_to_take]
+        assert len(names) == self.batch_dims, (names, self.batch_dims)
         return names
 
     @names.setter
@@ -1936,6 +1906,9 @@ class TensorDict(TensorDictBase):
         num_none = 0
         for v in value:
             num_none += v is None
+        if num_none == self.batch_dims:
+            self.names = None
+            return
         if num_none:
             num_none -= 1
         if len(set(value)) != len(value) - num_none:
@@ -2813,12 +2786,12 @@ class TensorDict(TensorDictBase):
             source=source,
             batch_size=batch_size,
             device=device,
-            names=self.names,
+            names=self.names if self._has_names() else None,
         )
         return out
 
     def empty(
-        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
+        self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=NO_DEFAULT
     ) -> T:
         if not recurse:
             return TensorDict._new_unsafe(
@@ -2827,7 +2800,9 @@ class TensorDict(TensorDictBase):
                 if batch_size is None
                 else torch.Size(batch_size),
                 source={},
-                names=self._td_dim_names if names is None else names,
+                names=(self.names if self._has_names() else None)
+                if names is NO_DEFAULT
+                else names,
             )
         return super().empty(recurse=recurse)
 
@@ -3593,7 +3568,7 @@ class _SubTensorDict(TensorDictBase):
             batch_size=self.batch_size,
             source={key: value.contiguous() for key, value in self.items()},
             device=self.device,
-            names=self.names,
+            names=self.names if self._has_names() else None,
         )
 
     def _select(
