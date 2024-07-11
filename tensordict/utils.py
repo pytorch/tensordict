@@ -1288,12 +1288,13 @@ def _split_tensordict(
     num_chunks,
     num_workers,
     dim,
+    use_generator=False,
     to_tensordict=False,
     shuffle=False,
 ):
-    if shuffle:
+    if shuffle and not use_generator:
         raise RuntimeError(
-            "Shuffling is not permitted. Use _split_tensordict_generator instead."
+            "Shuffling is not permitted unless use_generator is set to ``True`` for efficiency purposes."
         )
     if chunksize is None and num_chunks is None:
         num_chunks = num_workers
@@ -1303,60 +1304,45 @@ def _split_tensordict(
         )
     if num_chunks is not None:
         num_chunks = min(td.shape[dim], num_chunks)
-        return td.chunk(num_chunks, dim=dim)
-    else:
-        if chunksize == 0:
-            return td.unbind(dim=dim)
-        else:
-            chunksize = min(td.shape[dim], chunksize)
-            return td.split(chunksize, dim=dim)
+        if use_generator:
 
-
-def _split_tensordict_generator(
-    td,
-    chunksize,
-    num_chunks,
-    num_workers,
-    dim,
-    to_tensordict=False,
-    shuffle=False,
-):
-    if chunksize is None and num_chunks is None:
-        num_chunks = num_workers
-    if chunksize is not None and num_chunks is not None:
-        raise ValueError(
-            "Either chunksize or num_chunks must be provided, but not both."
-        )
-    if num_chunks is not None:
-        num_chunks = min(td.shape[dim], num_chunks)
-
-        def next_index(td=td, dim=dim, num_chunks=num_chunks):
-            idx_start = 0
-            n = td.shape[dim]
-            chunksize = -(n // -num_chunks)
-            idx_end = chunksize
-            while idx_start < n:
-                yield slice(idx_start, idx_end)
-                idx_start = idx_end
-                idx_end += chunksize
-
-    else:
-        if chunksize == 0:
-
-            def next_index(td=td, dim=dim):
-                yield from range(td.shape[dim])
-
-        else:
-
-            def next_index(td=td, dim=dim, chunksize=chunksize):
+            def next_index(td=td, dim=dim, num_chunks=num_chunks):
                 idx_start = 0
-                idx_end = chunksize
                 n = td.shape[dim]
+                chunksize = -(n // -num_chunks)
+                idx_end = chunksize
                 while idx_start < n:
                     yield slice(idx_start, idx_end)
                     idx_start = idx_end
                     idx_end += chunksize
 
+        else:
+            return td.chunk(num_chunks, dim=dim)
+    else:
+        if chunksize == 0:
+            if use_generator:
+
+                def next_index(td=td, dim=dim):
+                    yield from range(td.shape[dim])
+
+            else:
+                return td.unbind(dim=dim)
+        else:
+            if use_generator:
+
+                def next_index(td=td, dim=dim, chunksize=chunksize):
+                    idx_start = 0
+                    idx_end = chunksize
+                    n = td.shape[dim]
+                    while idx_start < n:
+                        yield slice(idx_start, idx_end)
+                        idx_start = idx_end
+                        idx_end += chunksize
+
+            else:
+                chunksize = min(td.shape[dim], chunksize)
+                return td.split(chunksize, dim=dim)
+    # end up here only when use_generator = True
     if shuffle:
 
         def next_index_shuffle(next_index=next_index):
@@ -1376,7 +1362,7 @@ def _split_tensordict_generator(
                 out = out.to_tensordict()
             yield out
 
-    yield from _split_generator()
+    return _split_generator()
 
 
 def _parse_to(*args, **kwargs):

@@ -8827,6 +8827,7 @@ class TestMap:
         pytest.skip(
             reason="Using max_tasks_per_child is unstable and can cause multiple processes to start over even though all jobs are completed",
         )
+        gc.collect()
 
         if mp.get_start_method(allow_none=True) is None:
             mp.set_start_method("spawn")
@@ -8870,6 +8871,7 @@ class TestMap:
         )
 
     def test_map_seed_single(self):
+        gc.collect()
         # A cheap version of the previous test
         if mp.get_start_method(allow_none=True) is None:
             mp.set_start_method("spawn")
@@ -8910,41 +8912,48 @@ class TestMap:
             td_out_1["s"].sort().values,
         )
 
-    # @pytest.mark.parametrize(
-    #     "chunksize,num_chunks", [[0, None], [2, None], [None, 5], [None, 10]]
-    # )
-    # @pytest.mark.parametrize("h5", [False, True])
-    # @pytest.mark.parametrize("has_out", [False, True])
-    # def test_index_with_generator(self, chunksize, num_chunks, h5, has_out, tmpdir):
-    #     input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
-    #     if h5:
-    #         tmpdir = pathlib.Path(tmpdir)
-    #         input = input.to_h5(tmpdir / "file.h5")
-    #     if has_out:
-    #         output_generator = torch.zeros_like(self.selectfn(input.to_tensordict()))
-    #         output_split = torch.zeros_like(self.selectfn(input.to_tensordict()))
-    #     else:
-    #         output_generator = None
-    #         output_split = None
-    #     output_generator = input.map(
-    #         self.selectfn,
-    #         num_workers=2,
-    #         index_with_generator=True,
-    #         num_chunks=num_chunks,
-    #         chunksize=chunksize,
-    #         out=output_generator,
-    #     )
-    #     output_split = input.map(
-    #         self.selectfn,
-    #         num_workers=2,
-    #         index_with_generator=True,
-    #         num_chunks=num_chunks,
-    #         chunksize=chunksize,
-    #         out=output_split,
-    #     )
-    #     assert (output_generator == output_split).all()
+    @pytest.mark.parametrize(
+        "chunksize,num_chunks", [[0, None], [2, None], [None, 5], [None, 10]]
+    )
+    @pytest.mark.parametrize("h5", [False, True])
+    @pytest.mark.parametrize("has_out", [False, True])
+    def test_index_with_generator(self, chunksize, num_chunks, h5, has_out, tmpdir):
+        gc.collect()
+        input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
+        if h5:
+            tmpdir = pathlib.Path(tmpdir)
+            input_h5 = input.to_h5(tmpdir / "file.h5")
+            assert input.shape == input_h5.shape
+            input = input_h5
+        if has_out:
+            output_generator = torch.zeros_like(self.selectfn(input.to_tensordict()))
+            output_split = torch.zeros_like(self.selectfn(input.to_tensordict()))
+        else:
+            output_generator = None
+            output_split = None
+        with mp.get_context("fork").Pool(2) as pool:
+            output_generator = input.map(
+                self.selectfn,
+                num_workers=2,
+                index_with_generator=True,
+                num_chunks=num_chunks,
+                chunksize=chunksize,
+                out=output_generator,
+                pool=pool,
+            )
+            output_split = input.map(
+                self.selectfn,
+                num_workers=2,
+                index_with_generator=True,
+                num_chunks=num_chunks,
+                chunksize=chunksize,
+                out=output_split,
+                pool=pool,
+            )
+        assert (output_generator == output_split).all()
 
     def test_map_unbind(self):
+        gc.collect()
         if mp.get_start_method(allow_none=True) is None:
             mp.set_start_method("spawn")
         td0 = TensorDict({"0": 0}, [])
@@ -8961,6 +8970,7 @@ class TestMap:
 
     @pytest.mark.parametrize("chunksize", [0, 5])
     def test_map_inplace(self, chunksize):
+        gc.collect()
         if mp.get_start_method(allow_none=True) is None:
             mp.set_start_method("spawn")
         # Tests that we can return None values
@@ -8978,6 +8988,7 @@ class TestMap:
         "start_method", [None, "spawn" if torch.cuda.is_available() else "fork"]
     )
     def test_map_with_out(self, mmap, chunksize, tmpdir, start_method):
+        gc.collect()
         tmpdir = Path(tmpdir)
         input = TensorDict({"a": torch.arange(10), "b": torch.arange(10)}, [10])
         if mmap:
@@ -9001,7 +9012,8 @@ class TestMap:
         )
         return td
 
-    def test_non_tensor(self):
+    def test_map_non_tensor(self):
+        gc.collect()
         # with NonTensorStack
         td = TensorDict(
             {"tensor": torch.arange(10), "non_tensor": "a string!"}, batch_size=[10]
@@ -9026,6 +9038,7 @@ class TestMap:
         "chunksize,num_chunks", [[0, None], [11, None], [None, 11]]
     )
     def test_map_iter(self, chunksize, num_chunks, shuffle):
+        gc.collect()
         torch.manual_seed(0)
         td = TensorDict(
             {
@@ -9075,6 +9088,7 @@ class TestMap:
         "chunksize,num_chunks", [[0, None], [11, None], [None, 11]]
     )
     def test_map_iter_interrupt_early(self, chunksize, num_chunks, shuffle):
+        gc.collect()
         torch.manual_seed(0)
         td = TensorDict(
             {

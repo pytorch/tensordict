@@ -42,7 +42,6 @@ from tensordict.utils import (
     _parse_to,
     _proc_init,
     _split_tensordict,
-    _split_tensordict_generator,
     cache,
     expand_right,
     IndexType,
@@ -805,7 +804,13 @@ class PersistentTensorDict(TensorDictBase):
                 initargs=(seed, queue, worker_threads),
                 maxtasksperchild=max_tasks_per_child,
             ) as pool:
-                return self.map(fn, dim=dim, chunksize=chunksize, pool=pool)
+                return self.map(
+                    fn,
+                    dim=dim,
+                    chunksize=chunksize,
+                    pool=pool,
+                    index_with_generator=index_with_generator,
+                )
         num_workers = pool._processes
         dim_orig = dim
         if dim < 0:
@@ -813,24 +818,15 @@ class PersistentTensorDict(TensorDictBase):
         if dim < 0 or dim >= self.ndim:
             raise ValueError(f"Got incompatible dimension {dim_orig}")
 
-        if index_with_generator:
-            self_split = _split_tensordict_generator(
-                self,
-                chunksize,
-                num_chunks,
-                num_workers,
-                dim,
-                to_tensordict=True,
-            )
-        else:
-            self_split = _split_tensordict(
-                self,
-                chunksize,
-                num_chunks,
-                num_workers,
-                dim,
-                to_tensordict=True,
-            )
+        self_split = _split_tensordict(
+            self,
+            chunksize,
+            num_chunks,
+            num_workers,
+            dim,
+            use_generator=index_with_generator,
+            to_tensordict=True,
+        )
         if not index_with_generator:
             length = len(self_split)
             self_split = tuple(split.to_tensordict() for split in self_split)
@@ -847,23 +843,14 @@ class PersistentTensorDict(TensorDictBase):
                     out.update_(result)
                     return
 
-                if index_with_generator:
-                    out_split = _split_tensordict_generator(
-                        out,
-                        chunksize,
-                        num_chunks,
-                        num_workers,
-                        dim,
-                    )
-                else:
-                    out_split = _split_tensordict(
-                        out,
-                        chunksize,
-                        num_chunks,
-                        num_workers,
-                        dim,
-                    )
-
+                out_split = _split_tensordict(
+                    out,
+                    chunksize,
+                    num_chunks,
+                    num_workers,
+                    dim,
+                    use_generator=index_with_generator,
+                )
                 return _CloudpickleWrapper(newfn), zip(self_split, out_split)
 
             fn, self_split = wrap_fn_with_out(fn, out)
@@ -882,7 +869,7 @@ class PersistentTensorDict(TensorDictBase):
         for item in imap:
             if item is not None:
                 if out is not None:
-                    if chunksize:
+                    if chunksize != 0:
                         end = start + item.shape[dim]
                         chunk = slice(start, end)
                         out[chunk].update_(item)
