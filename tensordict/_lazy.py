@@ -45,10 +45,6 @@ except ImportError:
     from tensordict.utils import _ftdim_mock as ftdim
 
     _has_funcdim = False
-from tensordict._C import (  # @manual=//tensordict:_C
-    _unravel_key_to_tuple,
-    unravel_key_list,
-)
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict.base import (
     _is_leaf_nontensor,
@@ -72,6 +68,7 @@ from tensordict.utils import (
     _renamed_inplace_method,
     _shape,
     _td_fields,
+    _unravel_key_to_tuple,
     as_decorator,
     cache,
     convert_ellipsis_to_idx,
@@ -85,6 +82,7 @@ from tensordict.utils import (
     KeyedJaggedTensor,
     lock_blocked,
     NestedKey,
+    unravel_key_list,
 )
 from torch import Tensor
 
@@ -1168,7 +1166,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 td._fast_apply(
                     lambda _arg: _add_batch_dim(_arg, in_dim, vmap_level),
                     batch_size=[b for i, b in enumerate(td.batch_size) if i != in_dim],
-                    names=[name for i, name in enumerate(td.names) if i != in_dim],
+                    names=[name for i, name in enumerate(td.names) if i != in_dim]
+                    if self._has_names()
+                    else None,
                 )
                 for td in td.tensordicts
             ]
@@ -1313,7 +1313,7 @@ class LazyStackedTensorDict(TensorDictBase):
             source=source,
             batch_size=batch_size,
             device=device,
-            names=self.names,
+            names=self.names if self._has_names() else None,
             lock=self.is_locked,
         )
         return out
@@ -1377,10 +1377,6 @@ class LazyStackedTensorDict(TensorDictBase):
         super()._check_new_batch_size(new_size)
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
-        if not hasattr(self, "_orig_batch_size"):
-            self._orig_batch_size = self.batch_size
-        elif self._orig_batch_size == new_size:
-            del self._orig_batch_size
         self._batch_size = new_size
 
     def keys(
@@ -1552,7 +1548,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # We know batch_size is None, this has been checked earlier
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         out: TensorDictBase | None = None,
@@ -1603,7 +1599,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         else:
             out = self
-        if names is not None:
+        if names is not NO_DEFAULT:
             out.names = names
         return out
 
@@ -1613,7 +1609,7 @@ class LazyStackedTensorDict(TensorDictBase):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
@@ -1719,7 +1715,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         else:
             out = self
-        if names is not None:
+        if names is not NO_DEFAULT:
             out.names = names
         return out
 
@@ -2980,10 +2976,6 @@ class _CustomOpTensorDict(TensorDictBase):
                 )
 
     def _change_batch_size(self, new_size: torch.Size) -> None:
-        if not hasattr(self, "_orig_batch_size"):
-            self._orig_batch_size = self.batch_size
-        elif self._orig_batch_size == new_size:
-            del self._orig_batch_size
         self._batch_size = new_size
 
     def _get_str(self, key, default):

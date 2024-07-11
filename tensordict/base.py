@@ -9,6 +9,7 @@ import abc
 import collections
 import concurrent.futures
 import contextlib
+import enum
 import gc
 import importlib
 import numbers
@@ -52,8 +53,10 @@ from tensordict.utils import (
     _GENERIC_NESTED_ERR,
     _get_shape_from_args,
     _is_non_tensor,
+    _is_number,
     _is_tensorclass,
     _KEY_ERROR,
+    _lock_warn,
     _make_dtype_promotion,
     _parse_to,
     _prefix_last_key,
@@ -93,17 +96,11 @@ from torch.utils._pytree import tree_map
 
 # NO_DEFAULT is used as a placeholder whenever the default is not provided.
 # Using None is not an option since `td.get(key, default=None)` is a valid usage.
-class _NoDefault:
-    def __new__(cls):
-        if not hasattr(cls, "instance"):
-            cls.instance = super(_NoDefault, cls).__new__(cls)
-        return cls.instance
-
-    def __bool__(self):
-        return False
+class _NoDefault(enum.IntEnum):
+    ZERO = 0
 
 
-NO_DEFAULT = _NoDefault()
+NO_DEFAULT = _NoDefault.ZERO
 
 T = TypeVar("T", bound="TensorDictBase")
 
@@ -1382,12 +1379,18 @@ class TensorDictBase(MutableMapping):
                         key, value, inplace=True, validated=True, non_blocking=False
                     )
         self._check_new_batch_size(new_batch_size)
-        self._change_batch_size(new_batch_size)
-        if self._has_names():
+        has_names = self._has_names()
+        if has_names:
             # if the tensordict has dim names and the new batch-size has more dims,
             # we can simply add empty names after the current ones.
             # Otherwise, we discard the extra existing names.
             names = self.names
+            self._erase_names()
+        self._change_batch_size(new_batch_size)
+        if has_names:
+            # if the tensordict has dim names and the new batch-size has more dims,
+            # we can simply add empty names after the current ones.
+            # Otherwise, we discard the extra existing names.
             if len(names) < len(new_batch_size):
                 self.names = names + [None] * (len(new_batch_size) - len(names))
             else:
@@ -2158,6 +2161,60 @@ class TensorDictBase(MutableMapping):
         construction.
         """
         ...
+
+    def _get_names_idx(self, idx):
+        if not self._has_names():
+            return None
+
+        def is_boolean(idx):
+            try:
+                from functorch import dim as ftdim
+
+            except ImportError:
+                from tensordict.utils import _ftdim_mock as ftdim
+
+            if isinstance(idx, ftdim.Dim):
+                return None
+            if isinstance(idx, tuple) and len(idx) == 1:
+                return is_boolean(idx[0])
+            if hasattr(idx, "dtype") and idx.dtype is torch.bool:
+                return idx.ndim
+            return None
+
+        num_boolean_dim = is_boolean(idx)
+        names = self.names
+        if num_boolean_dim:
+            names = [None] + names[num_boolean_dim:]
+        else:
+            if not isinstance(idx, tuple):
+                idx = (idx,)
+            if len([_idx for _idx in idx if _idx is not None]) < self.ndim:
+                idx = (*idx, Ellipsis)
+            idx_names = convert_ellipsis_to_idx(idx, self.batch_size)
+            # this will convert a [None, :, :, 0, None, 0] in [None, 0, 1, None, 3]
+            count = 0
+            idx_to_take = []
+            no_more_tensors = False
+            for _idx in idx_names:
+                if _idx is None:
+                    idx_to_take.append(None)
+                elif _is_number(_idx):
+                    count += 1
+                elif isinstance(_idx, (torch.Tensor, np.ndarray)):
+                    if not no_more_tensors:
+                        idx_to_take.extend([count] * _idx.ndim)
+                        count += 1
+                        no_more_tensors = True
+                    else:
+                        # skip this one
+                        count += 1
+                else:
+                    idx_to_take.append(count)
+                    count += 1
+            names = [names[i] if i is not None else None for i in idx_to_take]
+        if all(name is None for name in names):
+            return None
+        return names
 
     @abc.abstractmethod
     def _erase_names(self):
@@ -3854,7 +3911,7 @@ class TensorDictBase(MutableMapping):
         self._set_str(
             key,
             NonTensorData(
-                value,
+                data=value,
                 batch_size=self.batch_size,
                 device=self.device,
                 names=self.names if self._has_names() else None,
@@ -4709,8 +4766,12 @@ class TensorDictBase(MutableMapping):
                 is_leaf=is_leaf,
                 collapse=collapse,
             )
-            source = dict(zip(keys, vals))
-            return [source[key] for key in sorting_keys]
+            if torch.compiler.is_dynamo_compiling():
+                key_to_index = {key: i for i, key in enumerate(keys)}
+                return [vals[key_to_index[key]] for key in sorting_keys]
+            else:
+                source = dict(zip(keys, vals))
+                return [source[key] for key in sorting_keys]
 
     @cache  # noqa: B019
     def _items_list(
@@ -4721,16 +4782,23 @@ class TensorDictBase(MutableMapping):
         collapse: bool = False,
         is_leaf: Callable[[Type], bool] | None = None,
     ) -> Tuple[List, List]:
-        return tuple(
-            tuple(key_or_val)
-            for key_or_val in zip(
-                *self.items(
-                    include_nested=include_nested,
-                    leaves_only=leaves_only,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
-                )
-            )
+        # return tuple(
+        #     tuple(key_or_val)
+        #     for key_or_val in zip(
+        #         *self.items(
+        #             include_nested=include_nested,
+        #             leaves_only=leaves_only,
+        #             is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
+        #         )
+        #     )
+        # )
+        items = self.items(
+            include_nested=include_nested,
+            leaves_only=leaves_only,
+            is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else None,
         )
+        keys, vals = zip(*items)
+        return list(keys), list(vals)
 
     @cache  # noqa: B019
     def _grad(self):
@@ -4798,7 +4866,7 @@ class TensorDictBase(MutableMapping):
             self.del_(key)
         except KeyError as err:
             # if default provided, 'out' value will return, else raise error
-            if default == NO_DEFAULT:
+            if default is NO_DEFAULT:
                 raise KeyError(
                     f"You are trying to pop key `{key}` which is not in dict "
                     f"without providing default value."
@@ -4876,7 +4944,6 @@ class TensorDictBase(MutableMapping):
         else:
             batch_size = [nelt] + list(self.batch_size[end_dim + 1 :])
         # TODO: check that this works with nested tds of different batch size
-        out = self._fast_apply(flatten, batch_size=batch_size, propagate_lock=True)
         if self._has_names():
             names = [
                 name
@@ -4884,7 +4951,11 @@ class TensorDictBase(MutableMapping):
                 if (i < start_dim or i > end_dim)
             ]
             names.insert(start_dim, None)
-            out.names = names
+        else:
+            names = None
+        out = self._fast_apply(
+            flatten, batch_size=batch_size, propagate_lock=True, names=names
+        )
         return out
 
     @as_decorator()
@@ -5515,7 +5586,7 @@ class TensorDictBase(MutableMapping):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
@@ -5669,7 +5740,7 @@ class TensorDictBase(MutableMapping):
         nested_keys: bool = False,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
@@ -5866,7 +5937,7 @@ class TensorDictBase(MutableMapping):
         *,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         out: TensorDictBase | None = None,
@@ -5885,7 +5956,7 @@ class TensorDictBase(MutableMapping):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
@@ -5962,7 +6033,7 @@ class TensorDictBase(MutableMapping):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         checked: bool = False,
         call_on_nested: bool = False,
@@ -5983,7 +6054,7 @@ class TensorDictBase(MutableMapping):
         *others: T,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
-        names: Sequence[str] | None = None,
+        names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         call_on_nested: bool = False,
         default: Any = NO_DEFAULT,
@@ -8488,7 +8559,12 @@ class TensorDictBase(MutableMapping):
                 result.lock_()
             return result
         else:
-            for key in list(self.keys()):
+            if not torch.compiler.is_dynamo_compiling():
+                key_list = list(self.keys())
+            else:
+                key_list = [k for k in self.keys()]  # noqa
+
+            for key in key_list:
                 if separator in key:
                     new_key = tuple(key.split(separator))
                     try:
@@ -8522,22 +8598,27 @@ class TensorDictBase(MutableMapping):
 
     def _propagate_lock(self, lock_parents_weakrefs=None):
         """Registers the parent tensordict that handles the lock."""
+        self._is_locked = True
         if self._is_locked and lock_parents_weakrefs is not None:
             lock_parents_weakrefs = [
                 ref
                 for ref in lock_parents_weakrefs
                 if not any(refref is ref for refref in self._lock_parents_weakrefs)
             ]
-        self._is_locked = True
-        is_root = lock_parents_weakrefs is None
-        if is_root:
-            lock_parents_weakrefs = []
+        is_compiling = torch.compiler.is_dynamo_compiling()
+        if not is_compiling:
+            is_root = lock_parents_weakrefs is None
+            if is_root:
+                lock_parents_weakrefs = []
+            else:
+                self._lock_parents_weakrefs = (
+                    self._lock_parents_weakrefs + lock_parents_weakrefs
+                )
+            lock_parents_weakrefs = list(lock_parents_weakrefs)
+            lock_parents_weakrefs.append(weakref.ref(self))
         else:
-            self._lock_parents_weakrefs = (
-                self._lock_parents_weakrefs + lock_parents_weakrefs
-            )
-        lock_parents_weakrefs = copy(lock_parents_weakrefs)
-        lock_parents_weakrefs.append(weakref.ref(self))
+            _lock_warn()
+
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value._propagate_lock(lock_parents_weakrefs)
@@ -8799,7 +8880,8 @@ class TensorDictBase(MutableMapping):
 
     def _sync_all(self):
         if _has_cuda:
-            if torch.cuda.is_initialized():
+            # TODO: dynamo doesn't like torch.cuda.is_initialized
+            if not torch.compiler.is_dynamo_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         elif _has_mps:
             torch.mps.synchronize()
@@ -8959,9 +9041,8 @@ def _register_tensor_class(cls):
 
 
 def _is_tensor_collection(datatype):
-    try:
-        out = _TENSOR_COLLECTION_MEMO[datatype]
-    except KeyError:
+    out = _TENSOR_COLLECTION_MEMO.get(datatype)
+    if out is None:
         if issubclass(datatype, TensorDictBase):
             out = True
         elif _is_tensorclass(datatype):

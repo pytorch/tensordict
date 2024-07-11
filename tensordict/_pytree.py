@@ -29,8 +29,10 @@ PYTREE_REGISTERED_LAZY_TDS = (LazyStackedTensorDict,)
 
 
 def _str_to_dict(str_spec: str) -> Tuple[List[str], str]:
-    assert str_spec[1] == "("
-    assert str_spec[-1] == ")"
+    if str_spec[1] != "(" or str_spec[-1] != ")":
+        raise ValueError(
+            f"string must have '(' as a second character and ')' in last position. Got {str_spec}."
+        )
     context_and_child_strings = str_spec[2:-1]
 
     child_strings = []
@@ -92,7 +94,7 @@ def _tensordict_flatten(d: TensorDict) -> Tuple[List[Any], Context]:
     return values, {
         "keys": keys,
         "batch_size": d.batch_size,
-        "names": d.names,
+        "names": d.names if d._has_names() else None,
         "device": d.device,
         "constructor": _constructor(type(d)),
         "non_tensor_data": d.non_tensor_items(),
@@ -159,7 +161,7 @@ def _td_flatten_with_keys(
     return [(MappingKey(k), v) for k, v in zip(keys, values)], {
         "keys": keys,
         "batch_size": d.batch_size,
-        "names": d.names,
+        "names": d.names if d._has_names() else None,
         "device": d.device,
         "constructor": _constructor(type(d)),
         "non_tensor_data": d.non_tensor_items(),
