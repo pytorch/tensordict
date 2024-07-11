@@ -47,6 +47,7 @@ import torch
 
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
+    _as_context_manager,
     _CloudpickleWrapper,
     _DEVICE2STRDEVICE,
     _DTYPE2STRDTYPE,
@@ -67,7 +68,6 @@ from tensordict.utils import (
     _split_tensordict,
     _td_fields,
     _unravel_key_to_tuple,
-    as_decorator,
     Buffer,
     cache,
     convert_ellipsis_to_idx,
@@ -1217,7 +1217,7 @@ class TensorDictBase(MutableMapping):
             params.lock_()
         return params
 
-    @as_decorator()
+    @_as_context_manager()
     def to_module(
         self,
         module: nn.Module,
@@ -1578,7 +1578,7 @@ class TensorDictBase(MutableMapping):
     def unsqueeze(self, dim: int) -> T:
         ...
 
-    @as_decorator()
+    @_as_context_manager()
     def unsqueeze(self, *args, **kwargs):
         """Unsqueezes all tensors for a dimension comprised in between `-td.batch_dims` and `td.batch_dims` and returns them in a new tensordict.
 
@@ -1646,7 +1646,7 @@ class TensorDictBase(MutableMapping):
     def squeeze(self, dim: int | None = None) -> T:
         ...
 
-    @as_decorator()
+    @_as_context_manager()
     def squeeze(self, *args, **kwargs):
         """Squeezes all tensors for a dimension in between `-self.batch_dims+1` and `self.batch_dims-1` and returns them in a new tensordict.
 
@@ -1897,7 +1897,7 @@ class TensorDictBase(MutableMapping):
     ) -> T:
         ...
 
-    @as_decorator()
+    @_as_context_manager()
     def view(
         self,
         *shape: int,
@@ -1974,7 +1974,7 @@ class TensorDictBase(MutableMapping):
             inv_op_kwargs={"size": self.batch_size},
         )
 
-    @as_decorator()
+    @_as_context_manager()
     def transpose(self, dim0, dim1):
         """Returns a tensordict that is a transposed version of input. The given dimensions ``dim0`` and ``dim1`` are swapped.
 
@@ -2046,7 +2046,7 @@ class TensorDictBase(MutableMapping):
     def permute(self, dims: list | tuple):
         ...
 
-    @as_decorator()
+    @_as_context_manager()
     def permute(self, *args, **kwargs):
         """Returns a view of a tensordict with the batch dimensions permuted according to dims.
 
@@ -4886,7 +4886,7 @@ class TensorDictBase(MutableMapping):
         """
         return sorted(self.keys())
 
-    @as_decorator()
+    @_as_context_manager()
     def flatten(self, start_dim=0, end_dim=-1):
         """Flattens all the tensors of a tensordict.
 
@@ -4958,7 +4958,7 @@ class TensorDictBase(MutableMapping):
         )
         return out
 
-    @as_decorator()
+    @_as_context_manager()
     def unflatten(self, dim, unflattened_size):
         """Unflattens a tensordict dim expanding it to a desired shape.
 
@@ -8635,7 +8635,7 @@ class TensorDictBase(MutableMapping):
     def _lock_parents_weakrefs(self, value: list):
         self.__dict__["__lock_parents_weakrefs"] = value
 
-    @as_decorator("is_locked")
+    @_as_context_manager("is_locked")
     def lock_(self) -> T:
         """Locks a tensordict for non in-place operations.
 
@@ -8718,7 +8718,7 @@ class TensorDictBase(MutableMapping):
             f"self: {self}, obj: {obj}"
         )
 
-    @as_decorator("is_locked")
+    @_as_context_manager("is_locked")
     def unlock_(self) -> T:
         """Unlocks a tensordict for non in-place operations.
 
