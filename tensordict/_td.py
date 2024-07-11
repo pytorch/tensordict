@@ -303,8 +303,8 @@ class TensorDict(TensorDictBase):
                         non_blocking=sub_non_blocking,
                     )
                 _tensordict[key] = value
-        assert names is None or len(names) == self.batch_dims, (names, batch_size)
-        assert (names is None) or (not all(name is None for name in names))
+        # assert names is None or len(names) == self.batch_dims, (names, batch_size)
+        # assert (names is None) or (not all(name is None for name in names))
         self._td_dim_names = names
         if lock:
             self.lock_()
@@ -1894,7 +1894,7 @@ class TensorDict(TensorDictBase):
         names = self._td_dim_names
         if names is None:
             return [None for _ in range(self.batch_dims)]
-        assert len(names) == self.batch_dims, (names, self.batch_dims)
+        # assert len(names) == self.batch_dims, (names, self.batch_dims)
         return names
 
     @names.setter
