@@ -21,9 +21,6 @@ __all__ = [
     "Delta",
 ]
 
-# speeds up distribution construction
-D.Distribution.set_default_validate_args(False)
-
 
 class NormalParamWrapper(nn.Module):
     """A wrapper for normal distribution parameters.
