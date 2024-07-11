@@ -535,6 +535,7 @@ class TestNN:
         module = Seq(lambda td: td.copy(), module0, module1, remove_hidden)
         module_compile = torch.compile(module, fullgraph=True, mode=mode)
         td = TensorDict({"a": torch.randn(32, 4)}, [32])
+        module_compile(td)
         assert_close(module(td), module_compile(td))
         assert module_compile(td) is not td
 
