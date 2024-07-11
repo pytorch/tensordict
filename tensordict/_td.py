@@ -82,7 +82,7 @@ from tensordict.utils import (
 from torch import Tensor
 
 from torch._dynamo import graph_break
-from torch.compiler import is_dynamo_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.jit._shape_functions import infer_size_impl
 from torch.utils._pytree import tree_map
 
@@ -1899,7 +1899,7 @@ class TensorDict(TensorDictBase):
 
     @names.setter
     def names(self, value):
-        if is_dynamo_compiling():
+        if is_dynamo_compiling() or is_compiling():
             if value is not None:
                 graph_break()
             else:
