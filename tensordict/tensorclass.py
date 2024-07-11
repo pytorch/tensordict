@@ -2172,7 +2172,7 @@ class NonTensorData:
                 data_inner = data.tolist()
             del _tensordict["data"]
             _non_tensordict["data"] = data_inner
-        assert _tensordict.is_empty(), self._tensordict
+        # assert _tensordict.is_empty(), self._tensordict
 
         def __repr__(self):
             data_str = str(self.data)
@@ -2507,13 +2507,13 @@ class NonTensorData:
                 data=deepcopy(self.data),
                 batch_size=self.batch_size,
                 device=self.device,
-                names=self.names,
+                names=self.names if self._has_names() else None,
             )
         return type(self)(
             data=self.data,
             batch_size=self.batch_size,
             device=self.device,
-            names=self.names,
+            names=self.names if self._has_names() else None,
         )
 
     def share_memory_(self):

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 
 from typing import Any, Callable, Sequence, TypeVar
@@ -275,12 +276,14 @@ def _cat(
     if out is None:
         out = {}
         for key in keys:
-            with _ErrorInteceptor(
-                key, "Attempted to concatenate tensors on different devices at key"
-            ):
-                out[key] = torch.cat(
-                    [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts], dim
-                )
+            items = [td._get_str(key, NO_DEFAULT) for td in list_of_tensordicts]
+            if not torch.compiler.is_dynamo_compiling():
+                with _ErrorInteceptor(
+                    key, "Attempted to concatenate tensors on different devices at key"
+                ):
+                    out[key] = torch.cat(items, dim)
+            else:
+                out[key] = torch.cat(items, dim)
         if device is None:
             device = list_of_tensordicts[0].device
             for td in list_of_tensordicts[1:]:
@@ -306,7 +309,7 @@ def _cat(
         for key in keys:
             with _ErrorInteceptor(
                 key, "Attempted to concatenate tensors on different devices at key"
-            ):
+            ) if not torch.compiler.is_dynamo_compiling() else contextlib.nullcontext():
                 if isinstance(out, TensorDict):
                     torch.cat(
                         [td.get(key) for td in list_of_tensordicts],
@@ -403,11 +406,14 @@ def _stack(
 ) -> T:
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
-
+    is_tc = any(is_tensorclass(td) for td in list_of_tensordicts)
     if all(is_non_tensor(td) for td in list_of_tensordicts):
         from tensordict.tensorclass import NonTensorData
 
         return NonTensorData._stack_non_tensor(list_of_tensordicts, dim=dim)
+    elif is_tc:
+        tc_type = type(list_of_tensordicts[0])
+        list_of_tensordicts = [tc._tensordict for tc in list_of_tensordicts]
 
     batch_size = list_of_tensordicts[0].batch_size
     if dim < 0:
@@ -504,9 +510,12 @@ def _stack(
                     tensor = _tensordict._get_str(key, default=NO_DEFAULT)
                     if is_tensor is None:
                         tensor_cls = type(tensor)
-                        is_tensor = (
-                            not _is_tensor_collection(tensor_cls)
-                        ) or is_tensorclass(tensor_cls)
+                        # is_tensor = (
+                        #     not _is_tensor_collection(tensor_cls)
+                        # ) or is_tensorclass(tensor_cls)
+                        # TODO: make sense of this, dynamo cannot pass through stack (and it's unsafe)
+                        # only tensors should be tensors
+                        is_tensor = not _is_tensor_collection(tensor_cls)
                     if is_not_init is None:
                         is_not_init = isinstance(tensor, UninitializedTensorMixin)
                     if not is_not_init:
@@ -537,7 +546,7 @@ def _stack(
                     return torch.stack(values, dim)
                 with _ErrorInteceptor(
                     key, "Attempted to stack tensors on different devices at key"
-                ):
+                ) if not torch.compiler.torch.compiler.is_dynamo_compiling() else contextlib.nullcontext():
                     return _stack(values, dim, maybe_dense_stack=maybe_dense_stack)
 
             out = {
@@ -545,13 +554,16 @@ def _stack(
                 for key, (values, is_not_init, is_tensor) in out.items()
             }
 
-            return TensorDict._new_unsafe(
+            result = TensorDict._new_unsafe(
                 out,
                 batch_size=LazyStackedTensorDict._compute_batch_size(
                     batch_size, dim, len(list_of_tensordicts)
                 ),
                 device=device,
             )
+            if is_tc:
+                return tc_type.from_tensordict(result)
+            return result
         else:
             out = LazyStackedTensorDict(
                 *list_of_tensordicts,
