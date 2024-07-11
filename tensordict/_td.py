@@ -80,6 +80,9 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import Tensor
+
+from torch._dynamo import graph_break
+from torch.compiler import is_dynamo_compiling
 from torch.jit._shape_functions import infer_size_impl
 from torch.utils._pytree import tree_map
 
@@ -225,6 +228,8 @@ class TensorDict(TensorDictBase):
         non_blocking: bool = None,
         lock: bool = False,
     ) -> None:
+        if names and is_dynamo_compiling():
+            graph_break()
         has_device = False
         sub_non_blocking = False
         if device is not None:
@@ -269,7 +274,7 @@ class TensorDict(TensorDictBase):
         lock: bool = False,
         nested: bool = True,
     ) -> TensorDict:
-        if torch.compiler.is_dynamo_compiling():
+        if is_dynamo_compiling():
             return TensorDict(
                 source,
                 batch_size=batch_size,
@@ -1894,6 +1899,13 @@ class TensorDict(TensorDictBase):
 
     @names.setter
     def names(self, value):
+        if is_dynamo_compiling():
+            if value is not None:
+                graph_break()
+            else:
+                # We have already made sure that the tensordict was not named
+                return
+
         # we don't run checks on types for efficiency purposes
         if value is None:
             self._rename_subtds(value)
@@ -2941,7 +2953,7 @@ class TensorDict(TensorDictBase):
         elif include_nested and leaves_only:
             is_leaf = _default_is_leaf if is_leaf is None else is_leaf
             result = []
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
 
                 def fast_iter():
                     for key, val in self._tensordict.items():
