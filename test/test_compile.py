@@ -9,7 +9,8 @@ import pytest
 
 import torch
 
-from tensordict import assert_close, TensorDict
+from tensordict import assert_close, TensorDict, TensorDictParams
+from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
 TORCH_VERSION = torch.__version__
 
@@ -290,6 +291,129 @@ class TestTD:
     #     _ = locked_op_c(td)
     #     td_op_c = locked_op_c(td)
     #     assert (td_op == td_op_c).all()
+
+
+@pytest.mark.parametrize("mode", [None, "reduce-overhead"])
+class TestNN:
+    def test_func(self, mode):
+        td = TensorDict({"a": 0})
+        module = Mod(
+            lambda x: x + 1, in_keys=[(((("a",),),),)], out_keys=[(((("a",),),),)]
+        )
+        module_compile = torch.compile(module, fullgraph=True, mode=mode)
+        module_compile(td)
+        assert_close(module(td), module_compile(td))
+
+    def test_linear(self, mode):
+        net = torch.nn.Linear(4, 5)
+        module = Mod(net, in_keys=[(((("a",),),),)], out_keys=[("c", "d")])
+        module_compile = torch.compile(module, fullgraph=True, mode=mode)
+        td = TensorDict({"a": torch.randn(32, 4)}, [32])
+        assert_close(module(td), module_compile(td))
+
+    def test_seq(self, mode):
+        net0 = torch.nn.Linear(4, 5)
+        module0 = Mod(net0, in_keys=["a"], out_keys=["hidden"])
+        net1 = torch.nn.Linear(5, 6)
+        module1 = Mod(net1, in_keys=["hidden"], out_keys=[("c", "d")])
+        module = Seq(module0, module1)
+        module_compile = torch.compile(module, fullgraph=True, mode=mode)
+        td = TensorDict({"a": torch.randn(32, 4)}, [32])
+        assert_close(module(td), module_compile(td))
+
+        assert module_compile(td) is td
+
+    def test_seq_lmbda(self, mode):
+        net0 = torch.nn.Linear(4, 5)
+        module0 = Mod(net0, in_keys=["a"], out_keys=["hidden"])
+        net1 = torch.nn.Linear(5, 6)
+        module1 = Mod(net1, in_keys=["hidden"], out_keys=[("c", "d")])
+
+        def remove_hidden(td):
+            del td["hidden"]
+            return td
+
+        module = Seq(lambda td: td.copy(), module0, module1, remove_hidden)
+        module_compile = torch.compile(module, fullgraph=True, mode=mode)
+        td = TensorDict({"a": torch.randn(32, 4)}, [32])
+        module_compile(td)
+        assert_close(module(td), module_compile(td))
+        assert module_compile(td) is not td
+
+
+@pytest.mark.parametrize("mode", [None, "reduce-overhead"])
+class TestFunctional:
+    # in-place modif raises an error even if fullgraph=False
+    @pytest.mark.parametrize("modif_param", [False])
+    def test_functional(self, modif_param, mode):
+
+        # TODO: UNTESTED
+        class MessUpParams(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.param = torch.nn.Parameter(torch.zeros(()))
+
+            def forward(self, x):
+                self.param.data.add_(1)
+                return x * 1
+
+        module = torch.nn.Sequential(
+            torch.nn.Linear(3, 4),
+            torch.nn.ReLU(),
+            torch.nn.Linear(4, 5),
+        )
+        if modif_param:
+            module.append(MessUpParams())
+
+        orig_params = list(module.parameters())
+        td = TensorDict.from_module(module)
+        td_zero = TensorDictParams(td.data.clone())
+        td_zero.zero_()
+
+        def call(x, td):
+            # TOFIX: `with` needs registering
+            # with td.to_module(module):
+            #     return module(x)
+
+            params = td.to_module(module, return_swap=True)
+            result = module(x)
+            params.to_module(module, return_swap=True, swap_dest=td)
+            return result
+
+        call_compile = torch.compile(call, fullgraph=True, mode=mode)
+        x = torch.randn(2, 3)
+        assert (call(x, td_zero) == 0).all()
+        assert all(
+            p_new is p_orig
+            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
+        )
+        assert (call(x, td_zero) == 0).all()
+        assert all(
+            p_new is p_orig
+            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
+        )
+        if modif_param:
+            assert td_zero["3", "param"] == 2
+        else:
+            assert (td_zero == 0).all()
+        # torch.testing.assert_close(call_compile(x, td_zero), module(x))
+
+        td.to_module(module)
+        call_compile(x, td_zero)
+        assert (call_compile(x, td_zero) == 0).all()
+        assert all(
+            p_new is p_orig
+            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
+        )
+        assert (call_compile(x, td_zero) == 0).all()
+        assert all(
+            p_new is p_orig
+            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
+        )
+        if modif_param:
+            assert td_zero["3", "param"] == 4
+        else:
+            assert (td_zero == 0).all()
 
 
 if __name__ == "__main__":
