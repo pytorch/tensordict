@@ -89,6 +89,7 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import distributed as dist, multiprocessing as mp, nn, Tensor
+from torch.compiler import is_dynamo_compiling
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
@@ -8554,7 +8555,7 @@ class TensorDictBase(MutableMapping):
                 result.lock_()
             return result
         else:
-            if not torch.compiler.is_dynamo_compiling():
+            if not is_dynamo_compiling():
                 key_list = list(self.keys())
             else:
                 key_list = [k for k in self.keys()]  # noqa
@@ -8871,7 +8872,7 @@ class TensorDictBase(MutableMapping):
     def _sync_all(self):
         if _has_cuda:
             # TODO: dynamo doesn't like torch.cuda.is_initialized
-            if torch.compiler.is_dynamo_compiling() or torch.cuda.is_initialized():
+            if not is_dynamo_compiling() and torch.cuda.is_initialized():
                 torch.cuda.synchronize()
         elif _has_mps:
             torch.mps.synchronize()
