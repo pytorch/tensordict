@@ -492,36 +492,37 @@ class TestTC:
             assert clone_c(data).a.b is data.a.b
 
 
+@pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
-    def test_func(self):
+    def test_func(self, mode):
         td = TensorDict({"a": 0})
         module = Mod(
             lambda x: x + 1, in_keys=[(((("a",),),),)], out_keys=[(((("a",),),),)]
         )
-        module_compile = torch.compile(module, fullgraph=True)
-
+        module_compile = torch.compile(module, fullgraph=True, mode=mode)
+        module_compile(td)
         assert_close(module(td), module_compile(td))
 
-    def test_linear(self):
+    def test_linear(self, mode):
         net = torch.nn.Linear(4, 5)
         module = Mod(net, in_keys=[(((("a",),),),)], out_keys=[("c", "d")])
-        module_compile = torch.compile(module, fullgraph=True)
+        module_compile = torch.compile(module, fullgraph=True, mode=mode)
         td = TensorDict({"a": torch.randn(32, 4)}, [32])
         assert_close(module(td), module_compile(td))
 
-    def test_seq(self):
+    def test_seq(self, mode):
         net0 = torch.nn.Linear(4, 5)
         module0 = Mod(net0, in_keys=["a"], out_keys=["hidden"])
         net1 = torch.nn.Linear(5, 6)
         module1 = Mod(net1, in_keys=["hidden"], out_keys=[("c", "d")])
         module = Seq(module0, module1)
-        module_compile = torch.compile(module, fullgraph=True)
+        module_compile = torch.compile(module, fullgraph=True, mode=mode)
         td = TensorDict({"a": torch.randn(32, 4)}, [32])
         assert_close(module(td), module_compile(td))
 
         assert module_compile(td) is td
 
-    def test_seq_lmbda(self):
+    def test_seq_lmbda(self, mode):
         net0 = torch.nn.Linear(4, 5)
         module0 = Mod(net0, in_keys=["a"], out_keys=["hidden"])
         net1 = torch.nn.Linear(5, 6)
@@ -532,7 +533,7 @@ class TestNN:
             return td
 
         module = Seq(lambda td: td.copy(), module0, module1, remove_hidden)
-        module_compile = torch.compile(module, fullgraph=True)
+        module_compile = torch.compile(module, fullgraph=True, mode=mode)
         td = TensorDict({"a": torch.randn(32, 4)}, [32])
         assert_close(module(td), module_compile(td))
         assert module_compile(td) is not td
