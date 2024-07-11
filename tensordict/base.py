@@ -56,6 +56,7 @@ from tensordict.utils import (
     _is_number,
     _is_tensorclass,
     _KEY_ERROR,
+    _lock_warn,
     _make_dtype_promotion,
     _parse_to,
     _prefix_last_key,
@@ -4765,8 +4766,12 @@ class TensorDictBase(MutableMapping):
                 is_leaf=is_leaf,
                 collapse=collapse,
             )
-            source = dict(zip(keys, vals))
-            return [source[key] for key in sorting_keys]
+            if torch.compiler.is_dynamo_compiling():
+                key_to_index = {key: i for i, key in enumerate(keys)}
+                return [vals[key_to_index[key]] for key in sorting_keys]
+            else:
+                source = dict(zip(keys, vals))
+                return [source[key] for key in sorting_keys]
 
     @cache  # noqa: B019
     def _items_list(
@@ -8593,22 +8598,27 @@ class TensorDictBase(MutableMapping):
 
     def _propagate_lock(self, lock_parents_weakrefs=None):
         """Registers the parent tensordict that handles the lock."""
+        self._is_locked = True
         if self._is_locked and lock_parents_weakrefs is not None:
             lock_parents_weakrefs = [
                 ref
                 for ref in lock_parents_weakrefs
                 if not any(refref is ref for refref in self._lock_parents_weakrefs)
             ]
-        self._is_locked = True
-        is_root = lock_parents_weakrefs is None
-        if is_root:
-            lock_parents_weakrefs = []
+        is_compiling = torch.compiler.is_dynamo_compiling()
+        if not is_compiling:
+            is_root = lock_parents_weakrefs is None
+            if is_root:
+                lock_parents_weakrefs = []
+            else:
+                self._lock_parents_weakrefs = (
+                    self._lock_parents_weakrefs + lock_parents_weakrefs
+                )
+            lock_parents_weakrefs = list(lock_parents_weakrefs)
+            lock_parents_weakrefs.append(weakref.ref(self))
         else:
-            self._lock_parents_weakrefs = (
-                self._lock_parents_weakrefs + lock_parents_weakrefs
-            )
-        lock_parents_weakrefs = copy(lock_parents_weakrefs)
-        lock_parents_weakrefs.append(weakref.ref(self))
+            _lock_warn()
+
         for value in self.values():
             if _is_tensor_collection(type(value)):
                 value._propagate_lock(lock_parents_weakrefs)
