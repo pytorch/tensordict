@@ -47,10 +47,10 @@ except ImportError:
     _has_funcdim = False
 from packaging.version import parse
 from tensordict._C import (  # noqa: F401  # @manual=//tensordict:_C
-    _unravel_key_to_tuple,
-    unravel_key,
-    unravel_key_list,
-    unravel_keys,
+    _unravel_key_to_tuple as _unravel_key_to_tuple_cpp,
+    unravel_key as unravel_key_cpp,
+    unravel_key_list as unravel_key_list_cpp,
+    unravel_keys as unravel_keys_cpp,
 )
 from tensordict._contextlib import _DecoratorContextManager
 
@@ -1125,7 +1125,7 @@ def cache(fun):
 
     @wraps(fun)
     def newfun(_self: "TensorDictBase", *args, **kwargs):
-        if not _self.is_locked:
+        if not _self.is_locked or torch.compiler.is_compiling():
             return fun(_self, *args, **kwargs)
         cache = _self._cache
         if cache is None:
@@ -1162,7 +1162,26 @@ _GENERIC_NESTED_ERR = "Only NestedKeys are supported. Got key {}."
 
 
 class _StringKeys(KeysView):
-    """A key view where contains is restricted to strings."""
+    """A key view where contains is restricted to strings.
+
+    Saving the keys as an attribute is 25% faster than just subclassing KeysView.
+
+    """
+
+    def __init__(self, keys):
+        self.keys = keys
+
+    def __getitem__(self, key):
+        return self.keys.__getitem__(key)
+
+    def __iter__(self):
+        yield from self.keys
+
+    def __repr__(self):
+        return f"{type(self)}({self.keys})"
+
+    def __len__(self):
+        return len(self.keys)
 
     def __contains__(self, item):
         if not isinstance(item, str):
@@ -1176,34 +1195,10 @@ class _StringKeys(KeysView):
                 raise TypeError(_NON_STR_KEY_TUPLE_ERR)
             else:
                 item = unravel_item[0]
-        return super().__contains__(item)
+        return self.keys.__contains__(item)
 
 
-class _StringOnlyDict(dict):
-    """A dict class where contains is restricted to strings."""
-
-    # kept here for debugging
-    # def __setitem__(self, key, value):
-    #     if not isinstance(key, str):
-    #         raise RuntimeError
-    #     return super().__setitem__(key, value)
-
-    def __contains__(self, item):
-        if not isinstance(item, str):
-            try:
-                unravel_item = _unravel_key_to_tuple(item)
-                if not unravel_item:  # catch errors during unravel
-                    raise TypeError
-            except Exception:
-                raise TypeError(_NON_STR_KEY_ERR)
-            if len(unravel_item) > 1:
-                raise TypeError(_NON_STR_KEY_TUPLE_ERR)
-            else:
-                item = unravel_item[0]
-        return super().__contains__(item)
-
-    def keys(self):
-        return _StringKeys(self)
+_StringOnlyDict = dict
 
 
 def lock_blocked(func):
@@ -1218,7 +1213,46 @@ def lock_blocked(func):
     return new_func
 
 
-class as_decorator:
+# class as_decorator:
+#     """Converts a method to a decorator.
+#
+#     Examples:
+#         >>> from tensordict import TensorDict
+#         >>> data = TensorDict({}, [])
+#         >>> with data.lock_(): # lock_ is decorated
+#         ...     assert data.is_locked
+#         >>> assert not data.is_locked
+#     """
+#
+#     def __init__(self, attr=None):
+#         self.attr = attr
+#
+#     def __call__(self, func):
+#         if self.attr is not None:
+#
+#             @wraps(func)
+#             def new_func(_self, *args, **kwargs):
+#                 _attr_pre = getattr(_self, self.attr)
+#                 out = func(_self, *args, **kwargs)
+#                 _attr_post = getattr(_self, self.attr)
+#                 if out is not None:
+#                     if _attr_post is not _attr_pre:
+#                         out._last_op = (new_func.__name__, (args, kwargs, _self))
+#                     else:
+#                         out._last_op = None
+#                 return out
+#
+#         else:
+#
+#             @wraps(func)
+#             def new_func(_self, *args, **kwargs):
+#                 out = func(_self, *args, **kwargs)
+#                 if out is not None:
+#                     out._last_op = (new_func.__name__, (args, kwargs, _self))
+#                 return out
+#
+#         return new_func
+def as_decorator(attr=None):
     """Converts a method to a decorator.
 
     Examples:
@@ -1229,17 +1263,14 @@ class as_decorator:
         >>> assert not data.is_locked
     """
 
-    def __init__(self, attr=None):
-        self.attr = attr
-
-    def __call__(self, func):
-        if self.attr is not None:
+    def __call__(func):
+        if attr is not None:
 
             @wraps(func)
             def new_func(_self, *args, **kwargs):
-                _attr_pre = getattr(_self, self.attr)
+                _attr_pre = getattr(_self, attr)
                 out = func(_self, *args, **kwargs)
-                _attr_post = getattr(_self, self.attr)
+                _attr_post = getattr(_self, attr)
                 if out is not None:
                     if _attr_post is not _attr_pre:
                         out._last_op = (new_func.__name__, (args, kwargs, _self))
@@ -1257,6 +1288,8 @@ class as_decorator:
                 return out
 
         return new_func
+
+    return __call__
 
 
 def _find_smallest_uint(N):
@@ -1370,9 +1403,27 @@ def _parse_to(*args, **kwargs):
     pin_memory = kwargs.pop("pin_memory", False)
     num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
-    device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
-        *args, **kwargs
-    )
+    if not torch.compiler.is_dynamo_compiling():
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+            *args, **kwargs
+        )
+    else:
+        device = None
+        dtype = None
+        non_blocking = kwargs.get("non_blocking", False)
+        convert_to_format = kwargs.get("convert_to_format", None)
+        if len(args) > 0:
+            device = torch.device(args[0])
+            if len(args) > 1:
+                dtype = args[1]
+            else:
+                dtype = kwargs.get("dtype", None)
+        else:
+            device = kwargs.get("device", None)
+            dtype = kwargs.get("dtype", None)
+        if device is not None:
+            device = torch.device(device)
+
     if other is not None:
         if device is not None and device != other.device:
             raise ValueError("other and device cannot be both passed")
@@ -1480,7 +1531,7 @@ def _get_leaf_tensordict(
     return tensordict, key[0]
 
 
-def assert_allclose_td(
+def assert_close(
     actual: T,
     expected: T,
     rtol: float | None = None,
@@ -1631,13 +1682,16 @@ def _check_keys(
 
     if not len(list_of_tensordicts):
         return set()
-    keys: set[str] = set(
-        list_of_tensordicts[0].keys(
-            include_nested=include_nested,
-            leaves_only=leaves_only,
-            is_leaf=_is_leaf_nontensor,
-        )
+    keys = list_of_tensordicts[0].keys(
+        include_nested=include_nested,
+        leaves_only=leaves_only,
+        is_leaf=_is_leaf_nontensor,
     )
+    # TODO: compile doesn't like set() over an arbitrary object
+    if torch.compiler.is_dynamo_compiling():
+        keys = {k for k in keys}  # noqa: C416
+    else:
+        keys: set[str] = set(keys)
     for td in list_of_tensordicts[1:]:
         k = td.keys(
             include_nested=include_nested,
@@ -1647,7 +1701,11 @@ def _check_keys(
         if not strict:
             keys = keys.intersection(k)
         else:
-            if set(k) != keys:
+            if torch.compiler.is_dynamo_compiling():
+                k = {v for v in k}  # noqa: C416
+            else:
+                k = set(k)
+            if k != keys:
                 raise KeyError(
                     f"got keys {keys} and {set(td.keys())} which are incompatible"
                 )
@@ -1886,8 +1944,14 @@ def _getitem_batch_size(batch_size, index):
         boolean = False
         if isinstance(idx, (range, list)):
             shape = len(idx)
-        elif isinstance(idx, (torch.Tensor, np.ndarray)):
-            if idx.dtype == torch.bool or idx.dtype == np.dtype("bool"):
+        elif isinstance(idx, torch.Tensor):
+            if idx.dtype == torch.bool:
+                shape = torch.Size([idx.sum()])
+                boolean = True
+            else:
+                shape = idx.shape
+        elif isinstance(idx, np.ndarray):
+            if idx.dtype == np.dtype("bool"):
                 shape = torch.Size([idx.sum()])
                 boolean = True
             else:
@@ -1927,7 +1991,10 @@ def _getitem_batch_size(batch_size, index):
             continue
         elif isinstance(idx, slice):
             batch = batch_size[count]
-            out.append(len(range(*idx.indices(batch))))
+            if torch.compiler.is_dynamo_compiling():
+                out.append(len(range(*_slice_indices(idx, batch))))
+            else:
+                out.append(len(range(*idx.indices(batch))))
     count += 1
     if batch_size[count:]:
         out.extend(batch_size[count:])
@@ -2388,6 +2455,86 @@ def _make_dtype_promotion(func):
     return new_func
 
 
+def _unravel_key_to_tuple(key):
+    if not torch.compiler.is_dynamo_compiling():
+        return _unravel_key_to_tuple_cpp(key)
+    if isinstance(key, str):
+        return (key,)
+    if not isinstance(key, tuple):
+        return ()
+    return tuple(subk for k in key for subk in _unravel_key_to_tuple(k))
+
+
+def unravel_key(key):
+    """Unravel a nested key.
+
+    Examples:
+        >>> unravel_key("a")
+        "a"
+        >>> unravel_key(("a",))
+        "a"
+        >>> unravel_key((("a", ("b",))))
+        ("a", "b")
+
+    """
+    if not torch.compiler.is_dynamo_compiling():
+        return unravel_key_cpp(key)
+    if isinstance(key, str):
+        return key
+    if isinstance(key, tuple):
+        if len(key) == 1:
+            return unravel_key(key[0])
+        return tuple(unravel_key(_key) for _key in key)
+    raise ValueError("the key must be a str or a tuple of str")
+
+
+def unravel_keys(*keys):
+    """Unravels a sequence of keys."""
+    if not torch.compiler.is_dynamo_compiling():
+        return unravel_keys_cpp(*keys)
+    return tuple(unravel_key(key) for key in keys)
+
+
+def unravel_key_list(keys):
+    """Unravels a list of keys."""
+    if not torch.compiler.is_dynamo_compiling():
+        return unravel_key_list_cpp(keys)
+    return [unravel_key(key) for key in keys]
+
+
+def _slice_indices(index: slice, len: int):
+    """A pure python implementation of slice.indices(len) since torch.compile doesn't recognise it."""
+    step = index.step
+    if step is None:
+        step = 1
+    elif step == 0:
+        raise ValueError("Step cannot be zero.")
+
+    start = index.start
+    stop = index.stop
+    if start is None:
+        if step > 0:
+            start = 0
+        else:
+            start = len - 1
+    elif start < 0:
+        start = max(0, len + start)
+
+    if stop is None:
+        if step > 0:
+            stop = len
+        else:
+            stop = -1
+    elif stop > 0:
+        stop = min(len, stop)
+    elif step < 0 or (step > 0 and start >= 0):
+        stop = len + stop
+    return start, stop, step
+
+
+assert_allclose_td = assert_close
+
+
 def _prefix_last_key(key, prefix):
     if isinstance(key, str):
         return prefix + key
@@ -2403,3 +2550,16 @@ NESTED_TENSOR_ERR = (
 )
 
 _DEVICE2STRDEVICE = KeyDependentDefaultDict(lambda key: str(key))
+
+
+def _lock_warn():
+    warnings.warn(
+        "Using lock_() in a compiled graph should "
+        "only be done if users make sure that the code runs in eager mode. "
+        "torch.compile doesn't support weakrefs which are used to reference root tensordicts "
+        "to sub-tensordict and prevent unlocking a node when the graph is locked. "
+        "Such operation will fail in eager mode but won't be captured by torch.compile."
+    )
+
+
+_lock_warn = torch.compiler.assume_constant_result(_lock_warn)
