@@ -2563,3 +2563,13 @@ def _lock_warn():
 
 
 _lock_warn = torch.compiler.assume_constant_result(_lock_warn)
+
+
+def _check_inbuild():
+    if not strtobool(os.environ.get("TORCHDYNAMO_INLINE_INBUILT_NN_MODULES", "0")):
+        raise RuntimeError(
+            "to_module requires TORCHDYNAMO_INLINE_INBUILT_NN_MODULES to be set."
+        )
+
+
+_lock_warn = torch.compiler.assume_constant_result(_check_inbuild)
