@@ -40,6 +40,7 @@ from tensordict.utils import (
     _as_context_manager,
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
+    _check_inbuild,
     _clone_value,
     _expand_to_match_shape,
     _get_item,
@@ -408,6 +409,8 @@ class TensorDict(TensorDictBase):
         non_blocking: bool = False,
     ):
         is_dynamo = torch.compiler.is_dynamo_compiling()
+        if is_dynamo:
+            _check_inbuild()
 
         if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:
