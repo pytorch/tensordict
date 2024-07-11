@@ -334,8 +334,7 @@ def dense_stack_tds(
     shape = list(td_list[0].shape)
     shape.insert(dim, len(td_list))
 
-    out = td_list[0].unsqueeze(dim).expand(shape).clone()
-    return torch.stack(td_list, dim=dim, out=out)
+    return TensorDict.maybe_dense_stack(td_list, dim=dim)
 
 
 def make_tensordict(

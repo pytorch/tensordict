@@ -9435,7 +9435,11 @@ class TestNonTensorData:
 
     def test_memmap_stack_updates(self, tmpdir):
         data = torch.stack([NonTensorData(data=0), NonTensorData(data=1)], 0)
-        data = torch.stack([data] * 3).clone()
+        assert is_non_tensor(data)
+        data = torch.stack([data] * 3)
+        assert is_non_tensor(data)
+        data = data.clone()
+        assert is_non_tensor(data)
         data.memmap_(tmpdir)
         data_recon = TensorDict.load_memmap(tmpdir)
         assert data.tolist() == data_recon.tolist()
