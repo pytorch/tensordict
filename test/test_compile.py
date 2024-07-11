@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import contextlib
+import os
 
 import pytest
 
@@ -345,6 +346,51 @@ class TestNN:
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
+    def test_functional_error(self, mode):
+        TORCHDYNAMO_INLINE_INBUILT_NN_MODULES = os.environ.get(
+            "TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"
+        )
+        os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "1"
+        module = torch.nn.Sequential(
+            torch.nn.Linear(3, 4),
+            torch.nn.ReLU(),
+            torch.nn.Linear(4, 5),
+        )
+        td = TensorDict.from_module(module)
+        td_zero = TensorDictParams(td.data.clone())
+        td_zero.zero_()
+
+        def call(x, td):
+            with td.to_module(module):
+                return module(x)
+
+        call_compile = torch.compile(call, fullgraph=True, mode=mode)
+        x = torch.randn(2, 3)
+        with pytest.raises(
+            torch._dynamo.exc.Unsupported, match="BEFORE_WITH UserDefinedObjectVariable"
+        ):
+            call_compile(x, td_zero)
+        os.environ["TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"] = "0"
+        try:
+
+            def call(x, td):
+                params = td.to_module(module, return_swap=True)
+                result = module(x)
+                params.to_module(module, return_swap=True, swap_dest=td)
+                return result
+
+            call_compile = torch.compile(call, fullgraph=True, mode=mode)
+            x = torch.randn(2, 3)
+            with pytest.raises(
+                RuntimeError, match="TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"
+            ):
+                call_compile(x, td_zero)
+        finally:
+            if TORCHDYNAMO_INLINE_INBUILT_NN_MODULES is not None:
+                os.environ[
+                    "TORCHDYNAMO_INLINE_INBUILT_NN_MODULES"
+                ] = TORCHDYNAMO_INLINE_INBUILT_NN_MODULES
+
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("modif_param", [False])
     def test_functional(self, modif_param, mode):
@@ -386,13 +432,11 @@ class TestFunctional:
         x = torch.randn(2, 3)
         assert (call(x, td_zero) == 0).all()
         assert all(
-            p_new is p_orig
-            for p_new, p_orig in zip(module.parameters(), orig_params)
+            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
         )
         assert (call(x, td_zero) == 0).all()
         assert all(
-            p_new is p_orig
-            for p_new, p_orig in zip(module.parameters(), orig_params)
+            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
         )
         if modif_param:
             assert td_zero["3", "param"] == 2
@@ -404,13 +448,11 @@ class TestFunctional:
         call_compile(x, td_zero)
         assert (call_compile(x, td_zero) == 0).all()
         assert all(
-            p_new is p_orig
-            for p_new, p_orig in zip(module.parameters(), orig_params)
+            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
         )
         assert (call_compile(x, td_zero) == 0).all()
         assert all(
-            p_new is p_orig
-            for p_new, p_orig in zip(module.parameters(), orig_params)
+            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
         )
         if modif_param:
             assert td_zero["3", "param"] == 4
