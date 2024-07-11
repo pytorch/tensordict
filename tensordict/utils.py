@@ -1125,7 +1125,7 @@ def cache(fun):
 
     @wraps(fun)
     def newfun(_self: "TensorDictBase", *args, **kwargs):
-        if not _self.is_locked:
+        if not _self.is_locked or torch.compiler.is_compiling():
             return fun(_self, *args, **kwargs)
         cache = _self._cache
         if cache is None:
@@ -1213,7 +1213,46 @@ def lock_blocked(func):
     return new_func
 
 
-class as_decorator:
+# class as_decorator:
+#     """Converts a method to a decorator.
+#
+#     Examples:
+#         >>> from tensordict import TensorDict
+#         >>> data = TensorDict({}, [])
+#         >>> with data.lock_(): # lock_ is decorated
+#         ...     assert data.is_locked
+#         >>> assert not data.is_locked
+#     """
+#
+#     def __init__(self, attr=None):
+#         self.attr = attr
+#
+#     def __call__(self, func):
+#         if self.attr is not None:
+#
+#             @wraps(func)
+#             def new_func(_self, *args, **kwargs):
+#                 _attr_pre = getattr(_self, self.attr)
+#                 out = func(_self, *args, **kwargs)
+#                 _attr_post = getattr(_self, self.attr)
+#                 if out is not None:
+#                     if _attr_post is not _attr_pre:
+#                         out._last_op = (new_func.__name__, (args, kwargs, _self))
+#                     else:
+#                         out._last_op = None
+#                 return out
+#
+#         else:
+#
+#             @wraps(func)
+#             def new_func(_self, *args, **kwargs):
+#                 out = func(_self, *args, **kwargs)
+#                 if out is not None:
+#                     out._last_op = (new_func.__name__, (args, kwargs, _self))
+#                 return out
+#
+#         return new_func
+def as_decorator(attr=None):
     """Converts a method to a decorator.
 
     Examples:
@@ -1224,17 +1263,14 @@ class as_decorator:
         >>> assert not data.is_locked
     """
 
-    def __init__(self, attr=None):
-        self.attr = attr
-
-    def __call__(self, func):
-        if self.attr is not None:
+    def __call__(func):
+        if attr is not None:
 
             @wraps(func)
             def new_func(_self, *args, **kwargs):
-                _attr_pre = getattr(_self, self.attr)
+                _attr_pre = getattr(_self, attr)
                 out = func(_self, *args, **kwargs)
-                _attr_post = getattr(_self, self.attr)
+                _attr_post = getattr(_self, attr)
                 if out is not None:
                     if _attr_post is not _attr_pre:
                         out._last_op = (new_func.__name__, (args, kwargs, _self))
@@ -1252,6 +1288,8 @@ class as_decorator:
                 return out
 
         return new_func
+
+    return __call__
 
 
 def _find_smallest_uint(N):
@@ -2512,3 +2550,16 @@ NESTED_TENSOR_ERR = (
 )
 
 _DEVICE2STRDEVICE = KeyDependentDefaultDict(lambda key: str(key))
+
+
+def _lock_warn():
+    warnings.warn(
+        "Using lock_() in a compiled graph should "
+        "only be done if users make sure that the code runs in eager mode. "
+        "torch.compile doesn't support weakrefs which are used to reference root tensordicts "
+        "to sub-tensordict and prevent unlocking a node when the graph is locked. "
+        "Such operation will fail in eager mode but won't be captured by torch.compile."
+    )
+
+
+_lock_warn = torch.compiler.assume_constant_result(_lock_warn)
