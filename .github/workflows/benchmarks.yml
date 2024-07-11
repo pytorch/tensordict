@@ -34,7 +34,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
-          python -m pytest -vvv --rank 0 --benchmark-json output.json
+          TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1 python -m pytest -vvv --rank 0 --benchmark-json output.json
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
@@ -114,7 +114,7 @@ jobs:
       - name: Run benchmarks
         run: |
           cd benchmarks/
-          python -m pytest -vvv --rank 0 --benchmark-json output.json
+          TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1 python -m pytest -vvv --rank 0 --benchmark-json output.json
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
