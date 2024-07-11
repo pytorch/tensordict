@@ -6,11 +6,9 @@
 from __future__ import annotations
 
 import logging
-
 from copy import deepcopy
 from typing import Any, Iterable
 
-from tensordict._tensordict import unravel_key_list
 from tensordict.nn.common import (
     dispatch,
     TensorDictModule,
@@ -18,12 +16,6 @@ from tensordict.nn.common import (
     WrapModule,
 )
 from tensordict.nn.utils import _set_skip_existing_None
-
-from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from tensordict.utils import NestedKey
-from torch import nn
-
-from tensordict.nn.common import dispatch, TensorDictModule
 from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
 from tensordict.utils import NestedKey, unravel_key_list
 from torch import nn

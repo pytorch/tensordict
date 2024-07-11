@@ -20,6 +20,7 @@ import numpy as np
 
 import orjson as json
 import torch
+import weakref
 
 from tensordict.base import (
     _ACCEPTED_CLASSES,
