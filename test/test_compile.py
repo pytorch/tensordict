@@ -293,6 +293,7 @@ class TestTD:
     #     assert (td_op == td_op_c).all()
 
 
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestNN:
     def test_func(self, mode):
@@ -341,6 +342,7 @@ class TestNN:
         assert module_compile(td) is not td
 
 
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
     # in-place modif raises an error even if fullgraph=False
