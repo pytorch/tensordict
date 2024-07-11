@@ -29,8 +29,10 @@ PYTREE_REGISTERED_LAZY_TDS = (LazyStackedTensorDict,)
 
 
 def _str_to_dict(str_spec: str) -> Tuple[List[str], str]:
-    assert str_spec[1] == "("
-    assert str_spec[-1] == ")"
+    if str_spec[1] != "(" or str_spec[-1] != ")":
+        raise ValueError(
+            f"string must have '(' as a second character and ')' in last position. Got {str_spec}."
+        )
     context_and_child_strings = str_spec[2:-1]
 
     child_strings = []
