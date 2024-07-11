@@ -804,7 +804,13 @@ class PersistentTensorDict(TensorDictBase):
                 initargs=(seed, queue, worker_threads),
                 maxtasksperchild=max_tasks_per_child,
             ) as pool:
-                return self.map(fn, dim=dim, chunksize=chunksize, pool=pool)
+                return self.map(
+                    fn,
+                    dim=dim,
+                    chunksize=chunksize,
+                    pool=pool,
+                    index_with_generator=index_with_generator,
+                )
         num_workers = pool._processes
         dim_orig = dim
         if dim < 0:
@@ -863,7 +869,7 @@ class PersistentTensorDict(TensorDictBase):
         for item in imap:
             if item is not None:
                 if out is not None:
-                    if chunksize:
+                    if chunksize != 0:
                         end = start + item.shape[dim]
                         chunk = slice(start, end)
                         out[chunk].update_(item)
