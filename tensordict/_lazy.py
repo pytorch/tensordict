@@ -60,6 +60,7 @@ from tensordict.base import (
     TensorDictBase,
 )
 from tensordict.utils import (
+    _as_context_manager,
     _broadcast_tensors,
     _get_shape_from_args,
     _getitem_batch_size,
@@ -69,7 +70,6 @@ from tensordict.utils import (
     _shape,
     _td_fields,
     _unravel_key_to_tuple,
-    as_decorator,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -3380,13 +3380,13 @@ class _CustomOpTensorDict(TensorDictBase):
         else:
             self.unlock_()
 
-    @as_decorator("is_locked")
+    @_as_context_manager("is_locked")
     def lock_(self) -> T:
         self._source.lock_()
         return self
 
     @erase_cache
-    @as_decorator("is_locked")
+    @_as_context_manager("is_locked")
     def unlock_(self) -> T:
         self._source.unlock_()
         return self
