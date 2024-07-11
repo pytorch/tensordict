@@ -56,6 +56,7 @@ from tensordict._contextlib import _DecoratorContextManager
 
 from torch import Tensor
 from torch._C import _disabled_torch_function_impl
+from torch.compiler import is_dynamo_compiling
 from torch.nn.parameter import (
     _ParameterMeta,
     UninitializedBuffer,
@@ -1365,9 +1366,27 @@ def _parse_to(*args, **kwargs):
     pin_memory = kwargs.pop("pin_memory", False)
     num_threads = kwargs.pop("num_threads", None)
     other = kwargs.pop("other", None)
-    device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
-        *args, **kwargs
-    )
+    if not is_dynamo_compiling():
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(
+            *args, **kwargs
+        )
+    else:
+        device = None
+        dtype = None
+        non_blocking = kwargs.get("non_blocking", False)
+        convert_to_format = kwargs.get("convert_to_format", None)
+        if len(args) > 0:
+            device = torch.device(args[0])
+            if len(args) > 1:
+                dtype = args[1]
+            else:
+                dtype = kwargs.get("dtype", None)
+        else:
+            device = kwargs.get("device", None)
+            dtype = kwargs.get("dtype", None)
+        if device is not None:
+            device = torch.device(device)
+
     if other is not None:
         if device is not None and device != other.device:
             raise ValueError("other and device cannot be both passed")
@@ -1632,7 +1651,7 @@ def _check_keys(
         is_leaf=_is_leaf_nontensor,
     )
     # TODO: compile doesn't like set() over an arbitrary object
-    if torch.compiler.is_dynamo_compiling():
+    if is_dynamo_compiling():
         keys = {k for k in keys}  # noqa: C416
     else:
         keys: set[str] = set(keys)
@@ -1645,7 +1664,7 @@ def _check_keys(
         if not strict:
             keys = keys.intersection(k)
         else:
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 k = {v for v in k}  # noqa: C416
             else:
                 k = set(k)
@@ -1935,7 +1954,7 @@ def _getitem_batch_size(batch_size, index):
             continue
         elif isinstance(idx, slice):
             batch = batch_size[count]
-            if torch.compiler.is_dynamo_compiling():
+            if is_dynamo_compiling():
                 out.append(len(range(*_slice_indices(idx, batch))))
             else:
                 out.append(len(range(*idx.indices(batch))))
@@ -2400,7 +2419,7 @@ def _make_dtype_promotion(func):
 
 
 def _unravel_key_to_tuple(key):
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return _unravel_key_to_tuple_cpp(key)
     if isinstance(key, str):
         return (key,)
@@ -2421,7 +2440,7 @@ def unravel_key(key):
         ("a", "b")
 
     """
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return unravel_key_cpp(key)
     if isinstance(key, str):
         return key
@@ -2434,14 +2453,14 @@ def unravel_key(key):
 
 def unravel_keys(*keys):
     """Unravels a sequence of keys."""
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return unravel_keys_cpp(*keys)
     return tuple(unravel_key(key) for key in keys)
 
 
 def unravel_key_list(keys):
     """Unravels a list of keys."""
-    if not torch.compiler.is_dynamo_compiling():
+    if not is_dynamo_compiling():
         return unravel_key_list_cpp(keys)
     return [unravel_key(key) for key in keys]
 
