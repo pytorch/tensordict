@@ -1252,7 +1252,7 @@ def lock_blocked(func):
 #                 return out
 #
 #         return new_func
-def as_decorator(attr=None):
+def _as_context_manager(attr=None):
     """Converts a method to a decorator.
 
     Examples:

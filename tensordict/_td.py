@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import numbers
 import os
+import weakref
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
@@ -17,10 +18,8 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Sequence, Tupl
 from warnings import warn
 
 import numpy as np
-
 import orjson as json
 import torch
-
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
@@ -35,10 +34,10 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _add_batch_dim_pre_hook,
+    _as_context_manager,
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
     _clone_value,
@@ -64,7 +63,6 @@ from tensordict.utils import (
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
-    as_decorator,
     Buffer,
     cache,
     convert_ellipsis_to_idx,
@@ -80,7 +78,6 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import Tensor
-
 from torch._dynamo import graph_break
 from torch.jit._shape_functions import infer_size_impl
 from torch.utils._pytree import tree_map
@@ -3775,7 +3772,7 @@ class _SubTensorDict(TensorDictBase):
         else:
             self.unlock_()
 
-    @as_decorator("is_locked")
+    @_as_context_manager("is_locked")
     def lock_(self) -> T:
         # we can't lock sub-tensordicts because that would mean that the
         # parent tensordict cannot be modified either.
@@ -3785,7 +3782,7 @@ class _SubTensorDict(TensorDictBase):
             )
         return self
 
-    @as_decorator("is_locked")
+    @_as_context_manager("is_locked")
     def unlock_(self) -> T:
         if self.is_locked:
             raise RuntimeError(
