@@ -385,12 +385,12 @@ class TestFunctional:
         assert (call(x, td_zero) == 0).all()
         assert all(
             p_new is p_orig
-            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
+            for p_new, p_orig in zip(module.parameters(), orig_params)
         )
         assert (call(x, td_zero) == 0).all()
         assert all(
             p_new is p_orig
-            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
+            for p_new, p_orig in zip(module.parameters(), orig_params)
         )
         if modif_param:
             assert td_zero["3", "param"] == 2
@@ -403,12 +403,12 @@ class TestFunctional:
         assert (call_compile(x, td_zero) == 0).all()
         assert all(
             p_new is p_orig
-            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
+            for p_new, p_orig in zip(module.parameters(), orig_params)
         )
         assert (call_compile(x, td_zero) == 0).all()
         assert all(
             p_new is p_orig
-            for p_new, p_orig in zip(module.parameters(), orig_params, strict=True)
+            for p_new, p_orig in zip(module.parameters(), orig_params)
         )
         if modif_param:
             assert td_zero["3", "param"] == 4
