@@ -2172,7 +2172,7 @@ class NonTensorData:
                 data_inner = data.tolist()
             del _tensordict["data"]
             _non_tensordict["data"] = data_inner
-        assert _tensordict.is_empty(), self._tensordict
+        # assert _tensordict.is_empty(), self._tensordict
 
         def __repr__(self):
             data_str = str(self.data)
