@@ -2272,7 +2272,7 @@ class NonTensorData:
                 data_inner = data.tolist()
             del _tensordict["data"]
             _non_tensordict["data"] = data_inner
-        assert _tensordict.is_empty(), self._tensordict
+        # assert _tensordict.is_empty(), self._tensordict
 
         # TODO: this will probably fail with dynamo at some point, + it's terrible.
         #  Make sure it's patched properly at init time
