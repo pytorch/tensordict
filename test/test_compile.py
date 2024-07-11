@@ -176,6 +176,42 @@ class TestTD:
         assert unflatten_keys_c(data) is not data
         assert unflatten_keys_c(data)["a", "b"] is data["a.b"]
 
+    def test_names(self):
+        import torch._dynamo.exc
+
+        def make_td_with_names(data):
+            return TensorDict(data, batch_size=[1, 2], names=["d0", "d1"])
+
+        data_dict = {
+            "a": torch.randn(1, 2, 3),
+            "b": torch.zeros(1, 2, 3, dtype=torch.bool),
+        }
+        make_td_with_names_c = torch.compile(make_td_with_names, fullgraph=True)
+        make_td_with_names(data_dict)
+        with pytest.raises(torch._dynamo.exc.Unsupported):
+            make_td_with_names_c(data_dict)
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(), reason="cuda required to test device casting"
+    )
+    @pytest.mark.parametrize("has_device", [True, False])
+    def test_to(self, has_device):
+        device = "cuda:0"
+
+        def test_to_device(td):
+            return td.to(device)
+
+        td = TensorDict(
+            {"a": torch.randn(1, 2, 3), "b": torch.zeros(1, 2, 3, dtype=torch.bool)},
+            batch_size=[1, 2],
+            device="cpu" if has_device else None,
+        )
+        test_to_device_c = torch.compile(test_to_device, fullgraph=True)
+        # td_device = test_to_device(td)
+        td_device_c = test_to_device_c(td)
+        assert td_device_c.batch_size == td.batch_size
+        assert td_device_c.device == torch.device(device)
+
 
 @tensorclass
 class MyClass:
