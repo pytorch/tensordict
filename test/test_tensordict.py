@@ -1501,6 +1501,18 @@ class TestGeneric:
         assert (d["a"] == torch.tensor([[1, 1], [2, 0]])).all()
         assert d["b"] == ["asd", "efg"]
 
+    def test_pad_sequence_tensorclass_nontensor(self):
+        @tensorclass
+        class Sample:
+            a: torch.Tensor
+            b: str
+
+        d1 = Sample(**{"a": torch.tensor([1, 1]), "b": "asd"}, batch_size=[])
+        d2 = Sample(**{"a": torch.tensor([2]), "b": "efg"}, batch_size=[])
+        d = pad_sequence([d1, d2])
+        assert (d.a == torch.tensor([[1, 1], [2, 0]])).all()
+        assert d.b == ["asd", "efg"]
+
     @pytest.mark.parametrize("make_mask", [True, ("bibbidi", "bobbidi", "boo"), False])
     def test_pad_sequence_pad_dim0(self, make_mask):
         pad_dim = 0
