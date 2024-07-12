@@ -905,16 +905,19 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def shape(self) -> torch.Size:
         ...
 
-    def _propagate_lock(self, _lock_parents_weakrefs=None):
+    def _propagate_lock(self, _lock_parents_weakrefs=None, *, is_compiling):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        if _lock_parents_weakrefs is None:
-            _lock_parents_weakrefs = []
-        self._lock_parents_weakrefs += _lock_parents_weakrefs
-        _lock_parents_weakrefs.append(weakref.ref(self))
+        if not not is_compiling:
+            if _lock_parents_weakrefs is None:
+                _lock_parents_weakrefs = []
+            self._lock_parents_weakrefs += _lock_parents_weakrefs
+            _lock_parents_weakrefs.append(weakref.ref(self))
         # we don't want to double-lock the _param_td attrbute which is locked by default
         if not self._param_td.is_locked:
-            self._param_td._propagate_lock(_lock_parents_weakrefs)
+            self._param_td._propagate_lock(
+                _lock_parents_weakrefs, is_compiling=is_compiling
+            )
 
     @erase_cache
     def _propagate_unlock(self):

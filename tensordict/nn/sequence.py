@@ -6,11 +6,19 @@
 from __future__ import annotations
 
 import logging
-
 from copy import deepcopy
 from typing import Any, Iterable
 
-from tensordict.nn.utils import set_skip_existing
+from tensordict.nn.common import (
+    dispatch,
+    TensorDictModule,
+    TensorDictModuleBase,
+    WrapModule,
+)
+from tensordict.nn.utils import _set_skip_existing_None
+from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
+from tensordict.utils import NestedKey, unravel_key_list
+from torch import nn
 
 _has_functorch = False
 try:
@@ -25,12 +33,6 @@ except ImportError:
     )
     FUNCTORCH_ERROR = "functorch not installed. Consider installing functorch to use this functionality."
 
-
-from tensordict._C import unravel_key_list  # @manual=//tensordict:_C
-from tensordict.nn.common import dispatch, TensorDictModule
-from tensordict.tensordict import LazyStackedTensorDict, TensorDictBase
-from tensordict.utils import NestedKey
-from torch import nn
 
 __all__ = ["TensorDictSequential"]
 
@@ -158,6 +160,7 @@ class TensorDictSequential(TensorDictModule):
         *modules: TensorDictModule,
         partial_tolerant: bool = False,
     ) -> None:
+        modules = self._convert_modules(modules)
         in_keys, out_keys = self._compute_in_and_out_keys(modules)
 
         super().__init__(
@@ -165,6 +168,15 @@ class TensorDictSequential(TensorDictModule):
         )
 
         self.partial_tolerant = partial_tolerant
+
+    @staticmethod
+    def _convert_modules(modules):
+        return [
+            WrapModule(module)
+            if not TensorDictModuleBase.is_tdmodule_compatible(module)
+            else module
+            for module in modules
+        ]
 
     def _compute_in_and_out_keys(
         self, modules: list[TensorDictModule]
@@ -416,7 +428,7 @@ class TensorDictSequential(TensorDictModule):
         return tensordict
 
     @dispatch(auto_batch_size=False)
-    @set_skip_existing(None)
+    @_set_skip_existing_None()
     def forward(
         self,
         tensordict: TensorDictBase,
