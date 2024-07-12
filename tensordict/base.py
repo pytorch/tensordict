@@ -8596,16 +8596,15 @@ class TensorDictBase(MutableMapping):
         else:
             self.unlock_()
 
-    def _propagate_lock(self, lock_parents_weakrefs=None):
+    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        if self._is_locked and lock_parents_weakrefs is not None:
+        if lock_parents_weakrefs is not None:
             lock_parents_weakrefs = [
                 ref
                 for ref in lock_parents_weakrefs
                 if not any(refref is ref for refref in self._lock_parents_weakrefs)
             ]
-        is_compiling = torch.compiler.is_dynamo_compiling()
         if not is_compiling:
             is_root = lock_parents_weakrefs is None
             if is_root:
@@ -8616,12 +8615,10 @@ class TensorDictBase(MutableMapping):
                 )
             lock_parents_weakrefs = list(lock_parents_weakrefs)
             lock_parents_weakrefs.append(weakref.ref(self))
-        else:
-            _lock_warn()
 
         for value in self.values():
             if _is_tensor_collection(type(value)):
-                value._propagate_lock(lock_parents_weakrefs)
+                value._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
 
     @property
     def _lock_parents_weakrefs(self):
@@ -8670,7 +8667,10 @@ class TensorDictBase(MutableMapping):
         """
         if self.is_locked:
             return self
-        self._propagate_lock()
+        is_compiling = torch.compiler.is_dynamo_compiling()
+        if is_compiling:
+            _lock_warn()
+        self._propagate_lock(is_compiling=is_compiling)
         return self
 
     @erase_cache
