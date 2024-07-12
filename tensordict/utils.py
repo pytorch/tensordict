@@ -2572,4 +2572,4 @@ def _check_inbuild():
         )
 
 
-_lock_warn = torch.compiler.assume_constant_result(_check_inbuild)
+_check_inbuild = torch.compiler.assume_constant_result(_check_inbuild)

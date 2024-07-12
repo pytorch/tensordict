@@ -3798,7 +3798,7 @@ class _SubTensorDict(TensorDictBase):
             "Cannot unlock a _SubTensorDict. Unlock the parent tensordict instead."
         )
 
-    def _propagate_lock(self, lock_ids=None):
+    def _propagate_lock(self, lock_ids=None, *, is_compiling):
         raise RuntimeError(
             "Cannot lock a _SubTensorDict. Lock the parent tensordict instead."
         )

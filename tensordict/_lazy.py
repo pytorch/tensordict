@@ -2651,16 +2651,17 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         return _lock_parents_weakrefs
 
-    def _propagate_lock(self, lock_parents_weakrefs=None):
+    def _propagate_lock(self, lock_parents_weakrefs=None, *, is_compiling):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        is_root = lock_parents_weakrefs is None
-        if is_root:
-            lock_parents_weakrefs = []
+        if not is_compiling:
+            is_root = lock_parents_weakrefs is None
+            if is_root:
+                lock_parents_weakrefs = []
 
-        lock_parents_weakrefs = copy(lock_parents_weakrefs) + [weakref.ref(self)]
+            lock_parents_weakrefs = copy(lock_parents_weakrefs) + [weakref.ref(self)]
         for dest in self.tensordicts:
-            dest._propagate_lock(lock_parents_weakrefs)
+            dest._propagate_lock(lock_parents_weakrefs, is_compiling=is_compiling)
 
     @erase_cache
     def _propagate_unlock(self):
@@ -3395,8 +3396,8 @@ class _CustomOpTensorDict(TensorDictBase):
         return self._source._remove_lock(lock_id)
 
     @erase_cache
-    def _propagate_lock(self, lock_ids):
-        return self._source._propagate_lock(lock_ids)
+    def _propagate_lock(self, lock_ids, *, is_compiling):
+        return self._source._propagate_lock(lock_ids, is_compiling=is_compiling)
 
     @erase_cache
     def _propagate_unlock(self):
