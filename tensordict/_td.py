@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import numbers
 import os
+import weakref
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from copy import copy
@@ -17,10 +18,8 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Sequence, Tupl
 from warnings import warn
 
 import numpy as np
-
 import orjson as json
 import torch
-
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
@@ -35,12 +34,13 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _add_batch_dim_pre_hook,
+    _as_context_manager,
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
+    _check_inbuild,
     _clone_value,
     _expand_to_match_shape,
     _get_item,
@@ -64,7 +64,6 @@ from tensordict.utils import (
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
-    as_decorator,
     Buffer,
     cache,
     convert_ellipsis_to_idx,
@@ -80,7 +79,6 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import Tensor
-
 from torch._dynamo import graph_break
 from torch.jit._shape_functions import infer_size_impl
 from torch.utils._pytree import tree_map
@@ -410,6 +408,9 @@ class TensorDict(TensorDictBase):
         use_state_dict: bool = False,
         non_blocking: bool = False,
     ):
+        is_dynamo = torch.compiler.is_dynamo_compiling()
+        if is_dynamo:
+            _check_inbuild()
 
         if not use_state_dict and isinstance(module, TensorDictBase):
             if return_swap:
@@ -420,13 +421,11 @@ class TensorDict(TensorDictBase):
                 module.update(self)
                 return
 
-        # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
-        __dict__ = module.__dict__
-
         hooks = memo["hooks"]
         if return_swap:
             _swap = {}
-            memo[id(module)] = _swap
+            if not is_dynamo:
+                memo[weakref.ref(module)] = _swap
 
         if use_state_dict:
             if inplace is not None:
@@ -466,9 +465,18 @@ class TensorDict(TensorDictBase):
             input = self
             inplace = bool(inplace)
 
+        # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
+        if module.__class__.__setattr__ is __base__setattr__:
+            __dict__ = module.__dict__
+        else:
+            __dict__ = None
+
         for key, value in input.items():
             if isinstance(value, (Tensor, ftdim.Tensor)):
-                if module.__class__.__setattr__ is __base__setattr__:
+                # For Dynamo, we use regular set/delattr as we're not
+                #  much afraid by overhead (and dynamo doesn't like those
+                #  hacks we're doing).
+                if __dict__ is not None:
                     # if setattr is the native nn.Module.setattr, we can rely on _set_tensor_dict
                     local_out = _set_tensor_dict(
                         __dict__, hooks, module, key, value, inplace
@@ -490,19 +498,15 @@ class TensorDict(TensorDictBase):
                     # if there is at least one key, we must populate the module.
                     # Otherwise, we just go to the next key
                     continue
-                child = __dict__["_modules"][key]
-                local_out = memo.get(id(child), NO_DEFAULT)
+                if __dict__ is not None:
+                    child = __dict__["_modules"][key]
+                else:
+                    child = module._modules.get(key)
 
-                if local_out is NO_DEFAULT:
-                    # if isinstance(child, TensorDictBase):
-                    #     # then child is a TensorDictParams
-                    #     from tensordict.nn import TensorDictParams
-                    #
-                    #     local_out = child
-                    #     if not isinstance(value, TensorDictParams):
-                    #         value = TensorDictParams(value, no_convert=True)
-                    #     __dict__["_modules"][key] = value
-                    # else:
+                if not is_dynamo:
+                    local_out = memo.get(weakref.ref(child), NO_DEFAULT)
+
+                if is_dynamo or local_out is NO_DEFAULT:
                     local_out = value._to_module(
                         child,
                         inplace=inplace,
@@ -515,6 +519,7 @@ class TensorDict(TensorDictBase):
 
             if return_swap:
                 _swap[key] = local_out
+
         if return_swap:
             if isinstance(swap_dest, dict):
                 return _swap
@@ -3770,7 +3775,7 @@ class _SubTensorDict(TensorDictBase):
         else:
             self.unlock_()
 
-    @as_decorator("is_locked")
+    @_as_context_manager("is_locked")
     def lock_(self) -> T:
         # we can't lock sub-tensordicts because that would mean that the
         # parent tensordict cannot be modified either.
@@ -3780,7 +3785,7 @@ class _SubTensorDict(TensorDictBase):
             )
         return self
 
-    @as_decorator("is_locked")
+    @_as_context_manager("is_locked")
     def unlock_(self) -> T:
         if self.is_locked:
             raise RuntimeError(
@@ -3793,7 +3798,7 @@ class _SubTensorDict(TensorDictBase):
             "Cannot unlock a _SubTensorDict. Unlock the parent tensordict instead."
         )
 
-    def _propagate_lock(self, lock_ids=None):
+    def _propagate_lock(self, lock_ids=None, *, is_compiling):
         raise RuntimeError(
             "Cannot lock a _SubTensorDict. Lock the parent tensordict instead."
         )
@@ -4075,7 +4080,7 @@ class _TensorDictKeysView:
 
 
 def _set_tensor_dict(  # noqa: F811
-    module_dict,
+    __dict__,
     hooks,
     module: torch.nn.Module,
     name: str,
@@ -4084,12 +4089,12 @@ def _set_tensor_dict(  # noqa: F811
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
     was_buffer = False
-    out = module_dict["_parameters"].pop(name, None)  # type: ignore[assignment]
+    out = __dict__["_parameters"].pop(name, None)  # type: ignore[assignment]
     if out is None:
-        out = module_dict["_buffers"].pop(name, None)
+        out = __dict__["_buffers"].pop(name, None)
         was_buffer = out is not None
     if out is None:
-        out = module_dict.pop(name)
+        out = __dict__.pop(name)
     if inplace:
         # swap tensor and out after updating out
         out_tmp = out.clone()
@@ -4102,7 +4107,7 @@ def _set_tensor_dict(  # noqa: F811
             output = hook(module, name, tensor)
             if output is not None:
                 tensor = output
-        module_dict["_parameters"][name] = tensor
+        __dict__["_parameters"][name] = tensor
 
         if isinstance(
             tensor, (_BatchedUninitializedParameter, _BatchedUninitializedBuffer)
@@ -4112,9 +4117,9 @@ def _set_tensor_dict(  # noqa: F811
             )
 
     elif was_buffer and isinstance(tensor, torch.Tensor):
-        module_dict["_buffers"][name] = tensor
+        __dict__["_buffers"][name] = tensor
     else:
-        module_dict[name] = tensor
+        __dict__[name] = tensor
     return out
 
 
