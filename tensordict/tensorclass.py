@@ -1358,7 +1358,10 @@ def _set(
             non_tensor=False,
         ):
             if self_is_non_tensor:
-                raise RuntimeError("set in NontensorData should not end up here.")
+                while is_non_tensor(value):
+                    value = value.data
+                self._non_tensordict[key] = value
+                return self
             if non_tensor:
                 value = NonTensorData(value)
             if key in self._non_tensordict:
@@ -1419,7 +1422,7 @@ def _set(
 
         if self_is_non_tensor or value is None:
             # Avoiding key clash, honoring the user input to assign non-tensor data to the key
-            if key in self._tensordict.keys():
+            if not self_is_non_tensor and key in self._tensordict.keys():
                 if inplace:
                     raise RuntimeError(
                         f"Cannot update an existing entry of type {type(self._tensordict.get(key))} with a value of type {value_type}."
@@ -2195,9 +2198,14 @@ class NonTensorData:
             @functools.wraps(_eq)
             def __eq__(self, other):
                 if isinstance(other, NonTensorData):
+                    eqval = self.data == other.data
+                    if isinstance(eqval, torch.Tensor):
+                        return eqval
+                    if isinstance(eqval, np.ndarray):
+                        return torch.as_tensor(eqval, device=self.device)
                     return torch.full(
                         self.batch_size,
-                        bool(self.data == other.data),
+                        bool(eqval),
                         device=self.device,
                     )
                 return old_eq(self, other)
@@ -2209,9 +2217,14 @@ class NonTensorData:
             @functools.wraps(_ne)
             def __ne__(self, other):
                 if isinstance(other, NonTensorData):
+                    neqval = self.data != other.data
+                    if isinstance(neqval, torch.Tensor):
+                        return neqval
+                    if isinstance(neqval, np.ndarray):
+                        return torch.as_tensor(neqval, device=self.device)
                     return torch.full(
                         self.batch_size,
-                        bool(self.data != other.data),
+                        bool(neqval),
                         device=self.device,
                     )
                 return _ne(self, other)
@@ -2223,9 +2236,14 @@ class NonTensorData:
             @functools.wraps(_xor)
             def __xor__(self, other):
                 if isinstance(other, NonTensorData):
+                    xorval = self.data ^ other.data
+                    if isinstance(xorval, torch.Tensor):
+                        return xorval
+                    if isinstance(xorval, np.ndarray):
+                        return torch.as_tensor(xorval, device=self.device)
                     return torch.full(
                         self.batch_size,
-                        bool(self.data ^ other.data),
+                        bool(xorval),
                         device=self.device,
                     )
                 return _xor(self, other)
@@ -2237,9 +2255,14 @@ class NonTensorData:
             @functools.wraps(_or)
             def __or__(self, other):
                 if isinstance(other, NonTensorData):
+                    orval = self.data | other.data  # yuppie!
+                    if isinstance(orval, torch.Tensor):
+                        return orval
+                    if isinstance(orval, np.ndarray):
+                        return torch.as_tensor(orval, device=self.device)
                     return torch.full(
                         self.batch_size,
-                        bool(self.data | other.data),
+                        bool(orval),
                         device=self.device,
                     )
                 return _or(self, other)
