@@ -460,6 +460,8 @@ def _tensorclass(cls: T) -> T:
         cls.update_ = _update_
     if not hasattr(cls, "update_at_"):
         cls.update_at_ = _update_at_
+    if not hasattr(cls, "_check_dim_name"):
+        cls._check_dim_name = _check_dim_name
     for method_name in _METHOD_FROM_TD:
         if not hasattr(cls, method_name):
             setattr(cls, method_name, getattr(TensorDict, method_name))
@@ -1093,6 +1095,10 @@ def _update_at_(
     )
     self._non_tensordict.update(non_tensordict)
     return self
+
+
+def _check_dim_name(self, name):
+    return self._tensordict._check_dim_name(name)
 
 
 def _wrap_classmethod(td_cls, cls, func):

@@ -8171,6 +8171,25 @@ class TestNamedDims(TestTensorDictsBase):
         tdr = td.refine_names("a", ..., "d")
         assert tdr.names == ["a", None, "c", "d"]
 
+    @pytest.mark.filterwarnings("error")
+    def test_refine_names_nontensor(self):
+        td = NonTensorStack(
+            NonTensorData("test0", batch_size=[1, 2, 3]),
+            NonTensorData("test1", batch_size=[1, 2, 3]),
+        )
+        tdr = td.refine_names(None, None, None, "d")
+        assert tdr.names == [None, None, None, "d"]
+        tdr = tdr.refine_names(None, None, "c", "d")
+        assert tdr.names == [None, None, "c", "d"]
+        with pytest.raises(
+            RuntimeError, match="refine_names: cannot coerce TensorDict"
+        ):
+            tdr.refine_names(None, None, "d", "d")
+        tdr = td.refine_names(..., "d")
+        assert tdr.names == [None, None, "c", "d"]
+        tdr = td.refine_names("a", ..., "d")
+        assert tdr.names == ["a", None, "c", "d"]
+
     def test_rename(self):
         td = TensorDict({}, batch_size=[3, 4, 5, 6], names=None)
         td.names = ["a", None, None, "d"]
