@@ -81,7 +81,7 @@ def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
         if len(pad_size) < len(_shape(tensor)) * 2:
             cur_pad = [0] * (len(_shape(tensor)) * 2 - len(pad_size)) + reverse_pad
 
-        if _is_tensor_collection(tensor.__class__):
+        if _is_tensor_collection(type(tensor)):
             padded = pad(tensor, pad_size, value)
         else:
             padded = torch.nn.functional.pad(tensor, cur_pad, value=value)

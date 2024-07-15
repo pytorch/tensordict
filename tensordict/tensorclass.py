@@ -385,7 +385,7 @@ def _tensorclass(cls: T) -> T:
 
         result = TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
         if isinstance(result, (list, tuple)):
-            return result.__class__(
+            return type(result)(
                 _from_tensordict_with_copy(tensorclass_instance, tensordict_result)
                 for tensordict_result in result
             )
@@ -409,7 +409,7 @@ def _tensorclass(cls: T) -> T:
 
     _get_type_hints(cls)
     cls.__init__ = _init_wrapper(cls.__init__)
-    cls._from_tensordict = classmethod(_from_tensordict_wrapper(expected_keys))
+    cls._from_tensordict = classmethod(_from_tensordict)
     cls.from_tensordict = cls._from_tensordict
     if not hasattr(cls, "__torch_function__"):
         cls.__torch_function__ = classmethod(__torch_function__)
@@ -543,14 +543,16 @@ def _arg_to_tensordict(arg):
     #         return x._tensordict
     #     return x
     # return torch.utils._pytree.tree_map(convert, arg)
-    if callable(arg):
+
+    # TODO: dynamo doesn't like callable
+    if not torch.compiler.is_dynamo_compiling() and callable(arg):
         return arg
     if _is_tensorclass(type(arg)):
         return arg._tensordict
     elif isinstance(arg, (tuple, list)) and all(
         _is_tensorclass(type(item)) for item in arg
     ):
-        return arg.__class__(item._tensordict for item in arg)
+        return type(arg)(item._tensordict for item in arg)
     return arg
 
 
@@ -617,7 +619,7 @@ def _init_wrapper(__init__: Callable) -> Callable:
         if missing_params:
             n_missing = len(missing_params)
             raise TypeError(
-                f"{self.__class__.__name__}.__init__() missing {n_missing} "
+                f"{type(self).__name__}.__init__() missing {n_missing} "
                 f"required positional argument{'' if n_missing == 1 else 's'}: "
                 f"""{", ".join(f"'{name}'" for name in missing_params)}"""
             )
@@ -746,73 +748,80 @@ def _get_type_hints(cls, with_locals=False):
         cls._type_hints = None
 
 
-def _from_tensordict_wrapper(expected_keys):
-    def wrapper(cls, tensordict, non_tensordict=None):  # noqa: D417
-        """Tensor class wrapper to instantiate a new tensor class object.
+def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
+    """Tensor class wrapper to instantiate a new tensor class object.
 
-        Args:
-            tensordict (TensorDict): Dictionary of tensor types
-            non_tensordict (dict): Dictionary with non-tensor and nested tensor class objects
+    Args:
+        tensordict (TensorDict): Dictionary of tensor types
+        non_tensordict (dict): Dictionary with non-tensor and nested tensor class objects
 
-        """
-        if not isinstance(tensordict, TensorDictBase):
-            raise RuntimeError(
-                f"Expected a TensorDictBase instance but got {type(tensordict)}"
-            )
-        # Validating keys of tensordict
-        for key in tensordict.keys():
-            if key not in expected_keys:
-                raise ValueError(
-                    f"Keys from the tensordict ({set(tensordict.keys())}) must "
-                    f"correspond to the class attributes ({expected_keys})."
-                )
-
-        # Validating non-tensor keys and for key clash
-
-        # TODO: compile doesn't like set() over an arbitrary object
-        if torch.compiler.is_dynamo_compiling():
-            tensor_keys = {k for k in tensordict.keys()}  # noqa: C416
-        else:
-            tensor_keys = set(tensordict.keys())
+    """
+    if not isinstance(tensordict, TensorDictBase):
+        raise RuntimeError(
+            f"Expected a TensorDictBase instance but got {type(tensordict)}"
+        )
+    # Validating keys of tensordict
+    td_keys = tensordict.keys()
+    # TODO: compile doesn't like set() over an arbitrary object
+    if torch.compiler.is_dynamo_compiling():
+        tensor_keys = {k for k in td_keys}  # noqa: C416
+        exp_keys = {k for k in cls.__expected_keys__}  # noqa: C416
         if non_tensordict is not None:
-            for key in list(non_tensordict.keys()):
-                if key not in expected_keys:
-                    raise ValueError(
-                        f"Keys from the non-tensor data ({set(non_tensordict.keys())}) must "
-                        f"correspond to the class attributes ({expected_keys})."
-                    )
-                if key in tensor_keys:
-                    if non_tensordict[key] is None:
-                        del non_tensordict[key]
-                        continue
-                    raise KeyError(
-                        f"{key} is present in both tensor and non-tensor dicts."
-                    )
-        if not torch.compiler.is_dynamo_compiling():
-            # bypass initialisation. this means we don't incur any overhead creating an
-            # empty tensordict and writing values to it. we can skip this because we already
-            # have a tensordict to use as the underlying tensordict
-            tc = cls.__new__(cls)
-            tc.__dict__["_tensordict"] = tensordict
-            tc.__dict__["_non_tensordict"] = (
-                non_tensordict if non_tensordict is not None else {}
-            )
-            # since we aren't calling the dataclass init method, we need to manually check
-            # whether a __post_init__ method has been defined and invoke it if so
-            if hasattr(tc, "__post_init__"):
-                tc.__post_init__()
-            return tc
+            nontensor_keys = {k for k in non_tensordict.keys()}  # noqa: C416
         else:
-            # TODO: things that did NOT work: **tensordict, dict(tensordict)
-            return cls(
-                **dict(tensordict.items()),
-                **non_tensordict,
-                batch_size=tensordict.batch_size,
-                device=tensordict.device,
-                names=tensordict.names,
-            )
+            nontensor_keys = set()
+            non_tensordict = {}
+        # TODO: Makes compile unhappy
+        # total_keys = tensor_keys.union(nontensor_keys)
+        total_keys = set(tensor_keys)
+        total_keys.update(nontensor_keys)
+    else:
+        tensor_keys = set(td_keys)
+        exp_keys = set(cls.__expected_keys__)
+        if non_tensordict is not None:
+            nontensor_keys = set(non_tensordict.keys())
+        else:
+            nontensor_keys = set()
+            non_tensordict = {}
+        total_keys = tensor_keys.union(nontensor_keys)
+    for key in nontensor_keys:
+        if key not in tensor_keys:
+            continue
+        if non_tensordict[key] is None:
+            del non_tensordict[key]
+            continue
+        raise KeyError(f"{key} is present in both tensor and non-tensor dicts.")
+    if total_keys - exp_keys:
+        raise ValueError(
+            f"Keys from the tensordict ({set(tensordict.keys())}) must "
+            f"correspond to the class attributes ({cls.__expected_keys__}). Got the set of "
+            f"keys {{{total_keys - exp_keys}}} which do not belong to the class."
+        )
+    else:
+        to_add = exp_keys - tensor_keys
+        for key in to_add:
+            non_tensordict[key] = None
 
-    return wrapper
+    if not torch.compiler.is_dynamo_compiling():
+        # bypass initialisation. this means we don't incur any overhead creating an
+        # empty tensordict and writing values to it. we can skip this because we already
+        # have a tensordict to use as the underlying tensordict
+        tc = cls.__new__(cls)
+        tc.__dict__["_tensordict"] = tensordict
+        tc.__dict__["_non_tensordict"] = non_tensordict
+        # since we aren't calling the dataclass init method, we need to manually check
+        # whether a __post_init__ method has been defined and invoke it if so
+        if hasattr(tc, "__post_init__"):
+            tc.__post_init__()
+        return tc
+    else:
+        # TODO: things that did NOT work: **tensordict, dict(tensordict)
+        kwargs = dict(tensordict.items())
+        kwargs.update(non_tensordict)
+        kwargs["batch_size"] = tensordict.batch_size
+        kwargs["device"] = tensordict.device
+        kwargs["names"] = tensordict._maybe_names()
+        return cls(**kwargs)
 
 
 def _memmap_(
@@ -828,7 +837,7 @@ def _memmap_(
     share_non_tensor: bool = False,
 ):
     _non_tensordict = copy(self._non_tensordict)
-    cls = self.__class__
+    cls = type(self)
 
     if not memmaped and prefix is not None:
         prefix = Path(prefix)
@@ -992,7 +1001,7 @@ def _setattr_wrapper(setattr_: Callable, expected_keys: set[str]) -> Callable:
                 "_tensordict" not in __dict__
                 or "_non_tensordict" not in __dict__
                 or key in SET_ATTRIBUTES
-                or key in self.__class__.__dict__
+                or key in type(self).__dict__
             ):
                 # if we ever decide to allow anything to be written in a tc
                 # or key not in self.__dataclass_fields__):
@@ -1241,7 +1250,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
         )
 
     if is_tensorclass(value):
-        if not isinstance(value, self.__class__):
+        if not isinstance(value, type(self)):
             self_keys = set().union(self._non_tensordict, self._tensordict.keys())
             value_keys = set().union(value._non_tensordict, value._tensordict.keys())
             if self_keys != value_keys:
@@ -1297,7 +1306,7 @@ def _repr(self) -> str:
         )
     else:
         string = ",\n".join(field_str + [batch_size_str, device_str, is_shared_str])
-    return f"{self.__class__.__name__}(\n{string})"
+    return f"{type(self).__name__}(\n{string})"
 
 
 def _len(self) -> int:
@@ -1721,7 +1730,7 @@ def _load_state_dict(
                     )
                 else:
                     # check that sub_key is part of the tensorclass
-                    if sub_key not in self.__class__.__dataclass_fields__:
+                    if sub_key not in type(self).__dataclass_fields__:
                         raise KeyError(
                             f"Key '{sub_key}' wasn't expected in the state-dict."
                         )
@@ -1730,9 +1739,9 @@ def _load_state_dict(
                     ] = sub_item
         elif key == "_tensordict":
             for sub_key in item.keys():
-                if (
-                    sub_key not in self.__class__.__dataclass_fields__
-                    and sub_key not in ("__batch_size", "__device")
+                if sub_key not in type(self).__dataclass_fields__ and sub_key not in (
+                    "__batch_size",
+                    "__device",
                 ):
                     raise KeyError(
                         f"Key '{sub_key}' wasn't expected in the state-dict."
@@ -2282,7 +2291,7 @@ class NonTensorData:
 
         # TODO: this will probably fail with dynamo at some point, + it's terrible.
         #  Make sure it's patched properly at init time
-        old_eq = self.__class__.__eq__
+        old_eq = type(self).__eq__
         if old_eq is _eq:
             global NONTENSOR_HANDLED_FUNCTIONS
             NONTENSOR_HANDLED_FUNCTIONS.extend(TD_HANDLED_FUNCTIONS)
@@ -2304,9 +2313,9 @@ class NonTensorData:
                     )
                 return old_eq(self, other)
 
-            self.__class__.__eq__ = __eq__
+            type(self).__eq__ = __eq__
 
-            _ne = self.__class__.__ne__
+            _ne = type(self).__ne__
 
             @functools.wraps(_ne)
             def __ne__(self, other):
@@ -2323,9 +2332,9 @@ class NonTensorData:
                     )
                 return _ne(self, other)
 
-            self.__class__.__ne__ = __ne__
+            type(self).__ne__ = __ne__
 
-            _xor = self.__class__.__xor__
+            _xor = type(self).__xor__
 
             @functools.wraps(_xor)
             def __xor__(self, other):
@@ -2342,9 +2351,9 @@ class NonTensorData:
                     )
                 return _xor(self, other)
 
-            self.__class__.__xor__ = __xor__
+            type(self).__xor__ = __xor__
 
-            _or = self.__class__.__or__
+            _or = type(self).__or__
 
             @functools.wraps(_or)
             def __or__(self, other):
@@ -2361,7 +2370,7 @@ class NonTensorData:
                     )
                 return _or(self, other)
 
-            self.__class__.__or__ = __or__
+            type(self).__or__ = __or__
 
     def update(
         self,
@@ -2503,10 +2512,8 @@ class NonTensorData:
     def empty(self, recurse=False, *, device=NO_DEFAULT, batch_size=None, names=None):
         if batch_size is not None and names is None:
             names = None
-        elif names is None and self._has_names():
-            names = self.names
         else:
-            names = None
+            names = self._maybe_names()
         return NonTensorData(
             data=self.data,
             batch_size=self.batch_size if batch_size is None else batch_size,
@@ -2555,7 +2562,7 @@ class NonTensorData:
             return NonTensorData(
                 data=first.data,
                 batch_size=batch_size,
-                names=first.names if first._has_names() else None,
+                names=first._maybe_names(),
                 device=first.device,
             )
 
@@ -2594,7 +2601,7 @@ class NonTensorData:
 
         result = TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
         if isinstance(result, (list, tuple)):
-            return result.__class__(
+            return type(result)(
                 _from_tensordict_with_copy(tensorclass_instance, tensordict_result)
                 for tensordict_result in result
             )
@@ -2813,7 +2820,7 @@ class NonTensorStack(LazyStackedTensorDict):
                 if not prefix.exists():
                     os.makedirs(prefix, exist_ok=True)
                 jsondict = {
-                    "_type": str(self.__class__),
+                    "_type": str(type(self)),
                     "stack_dim": self.stack_dim,
                     "device": device,
                 }
