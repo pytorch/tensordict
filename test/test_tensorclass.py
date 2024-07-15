@@ -284,15 +284,15 @@ class TestTensorClass:
         data1 = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
         data2 = MyDataNested(X=X, y=data_nest, z=z, batch_size=batch_size)
 
-        catted_tc = torch.cat([data1, data2], 0)
-        assert type(catted_tc) is type(data1)
-        assert isinstance(catted_tc.y, type(data1.y))
-        assert catted_tc.X.shape == torch.Size([6, 4, 5])
-        assert catted_tc.y.X.shape == torch.Size([6, 4, 5])
-        assert (catted_tc.X == 1).all()
-        assert (catted_tc.y.X == 1).all()
-        assert isinstance(catted_tc._tensordict, TensorDict)
-        assert catted_tc.z == catted_tc.y.z == z
+        tc_cat = torch.cat([data1, data2], 0)
+        assert type(tc_cat) is type(data1)
+        assert isinstance(tc_cat.y, type(data1.y))
+        assert tc_cat.X.shape == torch.Size([6, 4, 5])
+        assert tc_cat.y.X.shape == torch.Size([6, 4, 5])
+        assert (tc_cat.X == 1).all()
+        assert (tc_cat.y.X == 1).all()
+        assert isinstance(tc_cat._tensordict, TensorDict)
+        assert tc_cat.z == tc_cat.y.z == z
 
         # Testing negative scenarios
         y = torch.zeros(3, 4, 5, dtype=torch.bool)
@@ -568,6 +568,7 @@ class TestTensorClass:
             c_gather = torch.gather(c, index=index, dim=dim)
         else:
             c_gather = c.gather(index=index, dim=dim)
+        assert isinstance(c_gather, type(c))
         assert c_gather.x.shape == torch.Size([3, 3])
         assert c_gather.y.shape == torch.Size([3, 3, 5])
         assert c_gather.y.x.shape == torch.Size([3, 3, 5])

@@ -104,7 +104,7 @@ def _gather(
 
     def _gather_tensor(tensor, dest_container=None, dest_key=None):
         if dest_container is not None:
-            dest = dest_container.get(dest_key)
+            dest = dest_container._get_str(dest_key, default=NO_DEFAULT)
         else:
             dest = None
         index_expand = index
