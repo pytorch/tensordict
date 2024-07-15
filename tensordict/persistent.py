@@ -429,7 +429,10 @@ class PersistentTensorDict(TensorDictBase):
         sub_td = self._get_sub_tensordict(index)
         err_set_batch_size = None
         if not isinstance(value, TensorDictBase):
-            value = TensorDict.from_dict(value, batch_size=[])
+            if isinstance(value, (int, torch.Tensor, float, np.ndarray)):
+                value = TensorDict({key: value for key in self.keys(True, True)})
+            else:
+                value = TensorDict.from_dict(value, batch_size=[])
             # try to assign the current shape. If that does not work, we can
             # try to expand
             try:

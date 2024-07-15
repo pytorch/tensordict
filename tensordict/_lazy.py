@@ -807,7 +807,10 @@ class LazyStackedTensorDict(TensorDictBase):
             mask_unbind = split_index["individual_masks"]
             split_dim = split_index["split_dim"]
             splits = [_mask_unbind.sum().item() for _mask_unbind in mask_unbind]
-            value_unbind = value.split(splits, split_dim)
+            if (value.ndim < split_dim + 1) or (value[split_dim] == 1):
+                value_unbind = (value,) * len(splits)
+            else:
+                value_unbind = value.split(splits, split_dim)
             if mask_unbind[0].ndim == 0:
                 # we can return a stack
                 for (i, _idx), mask, _value in zip(
@@ -1905,11 +1908,20 @@ class LazyStackedTensorDict(TensorDictBase):
                         else:
                             result.append(self.tensordicts[i][_idx])
                             result[-1] = result[-1].squeeze(cat_dim)
+                # TODO: return a proper empty TD
+                if not result:
+                    return None
                 return LazyStackedTensorDict.lazy_stack(result, cat_dim)
             else:
                 for i, _idx in converted_idx.items():
                     self_idx = (slice(None),) * split_index["mask_loc"] + (i,)
-                    result.append(self[self_idx][_idx])
+                    item = self[self_idx][_idx]
+                    if item is None:
+                        continue
+                    result.append(item)
+                # TODO: return a proper empty TD
+                if not result:
+                    return None
                 return torch.cat(result, cat_dim)
         elif is_nd_tensor:
             new_stack_dim = self.stack_dim - num_single + num_none
@@ -2556,6 +2568,15 @@ class LazyStackedTensorDict(TensorDictBase):
     def masked_fill(self, mask: Tensor, value: float | bool) -> T:
         td_copy = self.clone()
         return td_copy.masked_fill_(mask, value)
+
+    def masked_scatter(self, mask: torch.Tensor, source: CompatibleType):
+        """Out-of-place version of :meth:`~tensordict.TensorDictBase.masked_scatter_`."""
+        # We create an empty version of self because just copying it will prevent
+        #  writing values that mismatch in shape when using LazyStackedTensorDict.
+        result = self.empty()
+        result[~mask] = self[~mask]
+        result[mask] = source
+        return result
 
     @lock_blocked
     def insert(self, index: int, tensordict: T) -> None:

@@ -8258,6 +8258,37 @@ class TensorDictBase(MutableMapping):
         """
         ...
 
+    def masked_scatter(self, mask: torch.Tensor, source: CompatibleType):
+        """Out-of-place version of :meth:`~tensordict.TensorDictBase.masked_scatter_`."""
+        result = self.clone()
+        result[mask] = source
+        return result
+
+    def masked_scatter_(self, mask, source):
+        """Copies elements from ``source`` into ``self`` at positions where the mask is ``True``.
+
+        Elements from ``source`` are copied into ``self`` starting at position 0 of ``source`` and
+        continuing in order one-by-one for each occurrence of mask being ``True``.
+        The shape of ``mask`` must be broadcastable with the shape of the underlying tensordict.
+
+        The ``source`` should have at least as many elements as the number of ones in mask.
+
+        Examples:
+            >>> data = TensorDict({"a": torch.zeros(10)}, batch_size=[10])
+            >>> mask = torch.tensor([True, False] * 5)
+            >>> data.masked_scatter_(mask, 1)
+            >>> data["a"]
+            tensor([1., 0., 1., 0., 1., 0., 1., 0., 1., 0.])
+            >>> data = TensorDict({"a": torch.zeros(10)}, batch_size=[10])
+            >>> mask = torch.tensor([True, False] * 5)
+            >>> data.masked_scatter_(mask, data+1)
+            >>> data["a"]
+            tensor([1., 0., 1., 0., 1., 0., 1., 0., 1., 0.])
+
+        """
+        self[mask] = source
+        return self
+
     def where(self, condition, other, *, out=None, pad=None):  # noqa: D417
         """Return a ``TensorDict`` of elements selected from either self or other, depending on condition.
 

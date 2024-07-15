@@ -3925,6 +3925,36 @@ class TestTensorDicts(TestTensorDictsBase):
         for item in td.values():
             assert (item[mask] == -10).all(), item[mask]
 
+    def test_masked_scatter(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
+        if td_name in ("td_params",):
+            td = td.data
+        with pytest.raises(
+            TypeError, match="Broadcasting is not supported for point-wise selections"
+        ) if td_name in ("td_h5",) else contextlib.nullcontext():
+            new_td = td.masked_scatter(mask, -10.0)
+            assert new_td is not td
+            for item in new_td.values():
+                assert (item[mask] == -10).all()
+
+    def test_masked_scatter_(self, td_name, device):
+        torch.manual_seed(1)
+        td = getattr(self, td_name)(device)
+        mask = torch.zeros(td.shape, dtype=torch.bool, device=device).bernoulli_()
+        if td_name == "td_params":
+            td_set = td.data
+        else:
+            td_set = td
+        with pytest.raises(
+            TypeError, match="Broadcasting is not supported for point-wise selections"
+        ) if td_name in ("td_h5",) else contextlib.nullcontext():
+            new_td = td_set.masked_scatter_(mask, -10.0)
+            assert new_td is td_set
+            for item in td.values():
+                assert (item[mask] == -10).all(), item[mask]
+
     def test_masking(self, td_name, device):
         torch.manual_seed(1)
         td = getattr(self, td_name)(device)
