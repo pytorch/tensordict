@@ -4147,13 +4147,14 @@ class TestTensorDicts(TestTensorDictsBase):
             num_threads=num_threads,
             copy_existing=True,
         )
+        assert_allclose_td(td.cpu().detach(), tdmmap)
+
         tdfuture = td.memmap(
             prefix=tmpdir if use_dir else None,
             num_threads=num_threads,
             copy_existing=True,
             return_early=True,
         )
-        assert_allclose_td(td.cpu().detach(), tdmmap)
         assert_allclose_td(td.cpu().detach(), tdfuture.result())
 
     @pytest.mark.parametrize("inplace", [False, True])
@@ -9430,6 +9431,7 @@ class TestNonTensorData:
         assert data_recon.batch_size == data.batch_size
         assert data_recon.device == data.device
         assert data_recon.tolist() == data.tolist()
+        assert data_memmap[0].is_memmap()
         assert data_memmap.is_memmap()
         assert data_memmap._is_memmap
 

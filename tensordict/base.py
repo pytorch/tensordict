@@ -68,6 +68,7 @@ from tensordict.utils import (
     _split_tensordict,
     _td_fields,
     _unravel_key_to_tuple,
+    _zip_strict,
     Buffer,
     cache,
     convert_ellipsis_to_idx,
@@ -3202,7 +3203,9 @@ class TensorDictBase(MutableMapping):
                 # sync if needed
                 self._sync_all()
             torch.cat(items, out=storage)
-            for v, (k, oldv) in zip(storage.split(flat_size), list(flat_dict.items())):
+            for v, (k, oldv) in _zip_strict(
+                storage.split(flat_size), list(flat_dict.items())
+            ):
                 if not k[-1].startswith("<"):
                     flat_dict[k] = view_old_as_new(v, oldv)
                 elif k[-1].startswith("<NJT>"):
@@ -6537,7 +6540,7 @@ class TensorDictBase(MutableMapping):
                     shuffle=shuffle,
                     use_generator=index_with_generator,
                 )
-                return _CloudpickleWrapper(newfn), zip(self_split, out_split)
+                return _CloudpickleWrapper(newfn), _zip_strict(self_split, out_split)
 
             fn, self_split = wrap_fn_with_out(fn, out)
             out = None

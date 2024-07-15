@@ -70,6 +70,7 @@ from tensordict.utils import (
     _shape,
     _td_fields,
     _unravel_key_to_tuple,
+    _zip_strict,
     cache,
     convert_ellipsis_to_idx,
     DeviceType,
@@ -445,7 +446,8 @@ class LazyStackedTensorDict(TensorDictBase):
                             shape = [-1]
                             return torch.Size(shape)
                         shape = [
-                            s1 if s1 == s2 else -1 for (s1, s2) in zip(shape, _shape)
+                            s1 if s1 == s2 else -1
+                            for (s1, s2) in _zip_strict(shape, _shape)
                         ]
                 shape.insert(self.stack_dim, len(self.tensordicts))
                 return torch.Size(shape)
@@ -473,7 +475,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"memmap tensordicts and "
                 f"{len(are_memmap) - sum(are_memmap)} non memmap tensordict "
             )
-        return all(are_memmap)
+        return are_memmap[0]
 
     @staticmethod
     def _compute_batch_size(
@@ -507,7 +509,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if self._is_vmapped:
             value = self.hook_in(value)
         values = value.unbind(self.stack_dim)
-        for tensordict, item in zip(self.tensordicts, values):
+        for tensordict, item in _zip_strict(self.tensordicts, values):
             tensordict._set_str(
                 key,
                 item,
@@ -556,7 +558,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if self._is_vmapped:
             value = self.hook_in(value)
         values = value.unbind(self.stack_dim)
-        for tensordict, item in zip(self.tensordicts, values):
+        for tensordict, item in _zip_strict(self.tensordicts, values):
             tensordict._set_tuple(
                 key,
                 item,
@@ -795,7 +797,7 @@ class LazyStackedTensorDict(TensorDictBase):
         elif not has_bool:
             unbind_dim = self.stack_dim - num_single + num_none - num_squash
             value_unbind = value.unbind(unbind_dim)
-            for (i, _idx), _value in zip(
+            for (i, _idx), _value in _zip_strict(
                 converted_idx.items(),
                 value_unbind,
             ):
@@ -810,7 +812,7 @@ class LazyStackedTensorDict(TensorDictBase):
             value_unbind = value.split(splits, split_dim)
             if mask_unbind[0].ndim == 0:
                 # we can return a stack
-                for (i, _idx), mask, _value in zip(
+                for (i, _idx), mask, _value in _zip_strict(
                     converted_idx.items(),
                     mask_unbind,
                     value_unbind,
@@ -824,7 +826,9 @@ class LazyStackedTensorDict(TensorDictBase):
                             non_blocking=non_blocking,
                         )
             else:
-                for (i, _idx), _value in zip(converted_idx.items(), value_unbind):
+                for (i, _idx), _value in _zip_strict(
+                    converted_idx.items(), value_unbind
+                ):
                     self_idx = (slice(None),) * split_index["mask_loc"] + (i,)
                     self[self_idx]._set_at_str(
                         key,
@@ -932,7 +936,9 @@ class LazyStackedTensorDict(TensorDictBase):
             )
             for td in self.tensordicts:
                 out.append(td._unbind(new_dim))
-            return tuple(self.lazy_stack(vals, new_stack_dim) for vals in zip(*out))
+            return tuple(
+                self.lazy_stack(vals, new_stack_dim) for vals in _zip_strict(*out)
+            )
 
     def _stack_onto_(
         self,
@@ -940,7 +946,7 @@ class LazyStackedTensorDict(TensorDictBase):
         dim: int,
     ) -> T:
         if dim == self.stack_dim:
-            for source, tensordict_dest in zip(list_item, self.tensordicts):
+            for source, tensordict_dest in _zip_strict(list_item, self.tensordicts):
                 tensordict_dest.update_(source)
         else:
             for i, td in enumerate(list_item):
@@ -1479,7 +1485,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def apply_(self, fn: Callable, *others, **kwargs):
         others = (other.unbind(self.stack_dim) for other in others)
-        for td, *_others in zip(self.tensordicts, *others):
+        for td, *_others in _zip_strict(self.tensordicts, *others):
             td._fast_apply(fn, *_others, inplace=True, propagate_lock=True, **kwargs)
         return self
 
@@ -1516,14 +1522,14 @@ class LazyStackedTensorDict(TensorDictBase):
             # If we were not keeping track of the TD's index, names would be the same for all
             # tds and there's a risk that values would collide.
             # nested_keys is irrelevant when named + call_on_nested are both true.
-            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others)):
+            for i, (td, *oth) in enumerate(_zip_strict(self.tensordicts, *others)):
                 key = prefix + (str(i),)
                 if len(key) == 1:
                     key = key[0]
                 futures.append(executor.submit(fn, key, td, *oth))
                 local_futures.append(futures[-1])
         else:
-            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others)):
+            for i, (td, *oth) in enumerate(_zip_strict(self.tensordicts, *others)):
                 local_futures.append([])
                 td._multithread_apply_flat(
                     fn,
@@ -1572,7 +1578,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             out = out.tensordicts
         results = []
-        for i, (td, local_future) in enumerate(zip(self.tensordicts, local_futures)):
+        for i, (td, local_future) in enumerate(
+            _zip_strict(self.tensordicts, local_futures)
+        ):
             local_out = out[i] if out is not None else None
             # Each local_future points to a list of futures for a single tensordict
             local_out = td._multithread_rebuild(
@@ -1668,7 +1676,7 @@ class LazyStackedTensorDict(TensorDictBase):
             # tds and there's a risk that values would collide.
             # nested_keys is irrelevant when named + call_on_nested are both true.
             results = []
-            for i, (td, *oth) in enumerate(zip(self.tensordicts, *others)):
+            for i, (td, *oth) in enumerate(_zip_strict(self.tensordicts, *others)):
                 key = prefix + (str(i),)
                 if len(key) == 1:
                     key = key[0]
@@ -1693,7 +1701,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     is_leaf=is_leaf,
                     out=out[i] if out is not None else None,
                 )
-                for i, (td, *oth) in enumerate(zip(self.tensordicts, *others))
+                for i, (td, *oth) in enumerate(_zip_strict(self.tensordicts, *others))
             ]
         if all(r is None for r in results):
             if filter_empty is None:
@@ -1837,7 +1845,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if not has_bool:
                 unbind_dim = self.stack_dim - num_single + num_none - num_squash
                 value_unbind = value.unbind(unbind_dim)
-                for (i, _idx), _value in zip(
+                for (i, _idx), _value in _zip_strict(
                     converted_idx.items(),
                     value_unbind,
                 ):
@@ -1853,7 +1861,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 value_unbind = value.split(splits, split_dim)
                 if mask_unbind[0].ndim == 0:
                     # we can return a stack
-                    for (i, _idx), mask, _value in zip(
+                    for (i, _idx), mask, _value in _zip_strict(
                         converted_idx.items(),
                         mask_unbind,
                         value_unbind,
@@ -1861,7 +1869,9 @@ class LazyStackedTensorDict(TensorDictBase):
                         if mask.any():
                             self.tensordicts[i][_idx] = _value
                 else:
-                    for (i, _idx), _value in zip(converted_idx.items(), value_unbind):
+                    for (i, _idx), _value in _zip_strict(
+                        converted_idx.items(), value_unbind
+                    ):
                         self_idx = (slice(None),) * split_index["mask_loc"] + (i,)
                         self[self_idx][_idx] = _value
         else:
@@ -1898,7 +1908,7 @@ class LazyStackedTensorDict(TensorDictBase):
             result = []
             if mask_unbind[0].ndim == 0:
                 # we can return a stack
-                for (i, _idx), mask in zip(converted_idx.items(), mask_unbind):
+                for (i, _idx), mask in _zip_strict(converted_idx.items(), mask_unbind):
                     if mask.any():
                         if mask.all() and self.tensordicts[i].ndim == 0:
                             result.append(self.tensordicts[i])
@@ -2008,7 +2018,7 @@ class LazyStackedTensorDict(TensorDictBase):
             else:
                 self_expand = self
             out = []
-            for td0, td1 in zip(
+            for td0, td1 in _zip_strict(
                 self_expand.tensordicts, other.unbind(self_expand.stack_dim)
             ):
                 out.append(getattr(td0, comparison_str)(td1))
@@ -2387,7 +2397,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise ValueError(
                     "cannot update stacked tensordicts with different shapes."
                 )
-            for td_dest, td_source in zip(
+            for td_dest, td_source in _zip_strict(
                 self.tensordicts, input_dict_or_td.tensordicts
             ):
                 td_dest.update(
@@ -2421,7 +2431,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise ValueError(
                     "cannot update stacked tensordicts with different shapes."
                 ) from err
-        for td_dest, td_source in zip(
+        for td_dest, td_source in _zip_strict(
             self_upd.tensordicts, input_dict_or_td.unbind(self_upd.stack_dim)
         ):
             td_dest.update(
@@ -2458,7 +2468,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
         if input_dict_or_td.batch_size[self.stack_dim] != len(self.tensordicts):
             raise ValueError("cannot update stacked tensordicts with different shapes.")
-        for td_dest, td_source in zip(
+        for td_dest, td_source in _zip_strict(
             self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
         ):
             td_dest.update_(td_source, clone=clone, non_blocking=non_blocking, **kwargs)
@@ -2490,7 +2500,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             return self
         unbind_dim = self.stack_dim - num_single
-        for (i, _idx), _value in zip(
+        for (i, _idx), _value in _zip_strict(
             converted_idx.items(),
             input_dict_or_td.unbind(unbind_dim),
         ):
@@ -2528,7 +2538,9 @@ class LazyStackedTensorDict(TensorDictBase):
             result = LazyStackedTensorDict.lazy_stack(
                 [
                     where(td, cond, _other, pad=pad)
-                    for td, cond, _other in zip(self.tensordicts, condition, other)
+                    for td, cond, _other in _zip_strict(
+                        self.tensordicts, condition, other
+                    )
                 ],
                 self.stack_dim,
             )
@@ -2536,7 +2548,7 @@ class LazyStackedTensorDict(TensorDictBase):
             result = LazyStackedTensorDict.lazy_stack(
                 [
                     td.where(cond, other, pad=pad)
-                    for td, cond in zip(self.tensordicts, condition)
+                    for td, cond in _zip_strict(self.tensordicts, condition)
                 ],
                 self.stack_dim,
             )
@@ -2549,7 +2561,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     def masked_fill_(self, mask: Tensor, value: float | bool) -> T:
         mask_unbind = mask.unbind(dim=self.stack_dim)
-        for _mask, td in zip(mask_unbind, self.tensordicts):
+        for _mask, td in _zip_strict(mask_unbind, self.tensordicts):
             td.masked_fill_(_mask, value)
         return self
 
