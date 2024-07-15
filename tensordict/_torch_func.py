@@ -24,6 +24,7 @@ from tensordict.utils import (
     _check_keys,
     _ErrorInteceptor,
     _shape,
+    _zip_strict,
     DeviceType,
     is_non_tensor,
     is_tensorclass,
@@ -460,14 +461,14 @@ def _stack(
                 # Let's try to see if all tensors have the same shape
                 # If so, we can assume that we can densly stack the sub-tds
                 leaves = [tree_leaves(td) for td in list_of_tensordicts]
-                for x in zip(*leaves):
+                for x in _zip_strict(*leaves):
                     # TODO: check what happens with non-tensor data here
                     if len(x) == 1 or all(_x.shape == x[0].shape for _x in x[1:]):
                         continue
                     else:
                         break
                 else:
-                    # make sure we completed the zip, since strict=True is only available for python >= 3.10
+                    # make sure we completed the zip_strict, since strict=True is only available for python >= 3.10
                     if len(leaves) == 1 or all(
                         len(_leaves) == len(leaves[0]) for _leaves in leaves[1:]
                     ):
@@ -479,7 +480,7 @@ def _stack(
                         return LazyStackedTensorDict(
                             *[
                                 _stack(list(subtds), dim=dim)
-                                for subtds in zip(
+                                for subtds in _zip_strict(
                                     *[td.tensordicts for td in list_of_tensordicts]
                                 )
                             ],
@@ -493,7 +494,7 @@ def _stack(
                 return LazyStackedTensorDict(
                     *[
                         _stack(list_of_td, dim, maybe_dense_stack=maybe_dense_stack)
-                        for list_of_td in zip(
+                        for list_of_td in _zip_strict(
                             *[td.tensordicts for td in list_of_tensordicts]
                         )
                     ],
@@ -523,7 +524,7 @@ def _stack(
                         if tensor_shape is not None:
                             if len(new_tensor_shape) != len(tensor_shape) or not all(
                                 s1 == s2 and s1 != -1
-                                for s1, s2 in zip(_shape(tensor), tensor_shape)
+                                for s1, s2 in _zip_strict(_shape(tensor), tensor_shape)
                             ):
                                 # Nested tensors will require a lazy stack
                                 if maybe_dense_stack:

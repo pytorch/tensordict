@@ -32,7 +32,7 @@ from tensordict.nn.utils import (
     _dispatch_td_nn_modules,
     _set_skip_existing_None,
 )
-from tensordict.utils import implement_for, NestedKey
+from tensordict.utils import _zip_strict, implement_for, NestedKey
 from torch import nn, Tensor
 
 try:
@@ -1183,7 +1183,7 @@ class TensorDictModule(TensorDictModuleBase):
                 kwargs.update(
                     {
                         kwarg: tensordict.get(in_key, None)
-                        for kwarg, in_key in zip(self._kwargs, self.in_keys)
+                        for kwarg, in_key in _zip_strict(self._kwargs, self.in_keys)
                     }
                 )
                 tensors = ()
@@ -1195,7 +1195,7 @@ class TensorDictModule(TensorDictModuleBase):
                 if any(tensor is None for tensor in tensors) and "None" in str(err):
                     none_set = {
                         key
-                        for key, tensor in zip(self.in_keys, tensors)
+                        for key, tensor in _zip_strict(self.in_keys, tensors)
                         if tensor is None
                     }
                     raise KeyError(
@@ -1211,7 +1211,7 @@ class TensorDictModule(TensorDictModuleBase):
                 if isinstance(tensors, dict):
                     keys = unravel_key_list(list(tensors.keys()))
                     values = tensors.values()
-                    tensors = dict(zip(keys, values))
+                    tensors = dict(_zip_strict(keys, values))
                 tensors = tuple(tensors.get(key, None) for key in self.out_keys)
             if not isinstance(tensors, tuple):
                 tensors = (tensors,)

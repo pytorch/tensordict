@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import concurrent
 import ctypes
 
 import dataclasses
@@ -46,6 +47,7 @@ from tensordict.utils import (
     _is_json_serializable,
     _is_tensorclass,
     _LOCK_ERROR,
+    _zip_strict,
     DeviceType,
     IndexType,
     is_non_tensor,
@@ -117,6 +119,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "is_shared",
     "items",
     "keys",
+    "_maybe_names",
     "ndimension",
     "numel",
     "values",
@@ -276,6 +279,7 @@ assert not any(v in _METHOD_FROM_TD for v in _FALLBACK_METHOD_FROM_TD), set(
 ).intersection(_FALLBACK_METHOD_FROM_TD)
 assert len(set(_FALLBACK_METHOD_FROM_TD)) == len(_FALLBACK_METHOD_FROM_TD)
 
+# These methods require a copy of the non tensor data
 _FALLBACK_METHOD_FROM_TD_COPY = [
     "_clone",  # TODO: must be specialized
     "clone",  # TODO: must be specialized
@@ -430,13 +434,8 @@ def _tensorclass(cls: T) -> T:
     cls.__or__ = _or
     cls.__xor__ = _xor
     cls.__bool__ = _bool
-    cls.non_tensor_items = _non_tensor_items
-    # if not hasattr(cls, "keys"):
-    #     cls.keys = _keys
-    # if not hasattr(cls, "values"):
-    #     cls.values = _values
-    # if not hasattr(cls, "items"):
-    #     cls.items = _items
+    if not hasattr(cls, "non_tensor_items"):
+        cls.non_tensor_items = _non_tensor_items
     if not hasattr(cls, "set"):
         cls.set = _set
     if not hasattr(cls, "set_at_"):
@@ -761,10 +760,11 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
             f"Expected a TensorDictBase instance but got {type(tensordict)}"
         )
     # Validating keys of tensordict
-    td_keys = tensordict.keys()
+    # tensordict = tensordict.copy()
+    tensor_keys = tensordict.keys()
     # TODO: compile doesn't like set() over an arbitrary object
     if torch.compiler.is_dynamo_compiling():
-        tensor_keys = {k for k in td_keys}  # noqa: C416
+        tensor_keys = {k for k in tensor_keys}  # noqa: C416
         exp_keys = {k for k in cls.__expected_keys__}  # noqa: C416
         if non_tensordict is not None:
             nontensor_keys = {k for k in non_tensordict.keys()}  # noqa: C416
@@ -776,7 +776,7 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
         total_keys = set(tensor_keys)
         total_keys.update(nontensor_keys)
     else:
-        tensor_keys = set(td_keys)
+        tensor_keys = set(tensor_keys)
         exp_keys = set(cls.__expected_keys__)
         if non_tensordict is not None:
             nontensor_keys = set(non_tensordict.keys())
@@ -836,7 +836,7 @@ def _memmap_(
     memmaped: bool = False,
     share_non_tensor: bool = False,
 ):
-    _non_tensordict = copy(self._non_tensordict)
+    _non_tensordict = dict(self._non_tensordict)
     cls = type(self)
 
     if not memmaped and prefix is not None:
@@ -865,16 +865,23 @@ def _memmap_(
             futures.append(executor.submit(save_metadata))
 
         prefix = prefix / "_tensordict"
+    new_futures = []
     if not isinstance(self, NonTensorData):
+        # TODO: We can't execute this using multiple threads because from_tensordict expects
+        #  the tensordict and non_tensordict to be complete
         td = self._tensordict._memmap_(
             prefix=prefix,
+            # executor=None,
+            # futures=[],
             executor=executor,
-            futures=futures,
+            futures=new_futures,
             inplace=inplace,
             like=like,
             copy_existing=copy_existing,
             share_non_tensor=share_non_tensor,
         )
+        if new_futures:
+            futures += new_futures
         td._device = torch.device("cpu")
     else:
         # For non-tensor data, we don't create an empty _tensordict dir
@@ -885,6 +892,8 @@ def _memmap_(
         if inplace:
             self.__dict__["_tensordict"] = td
     if not inplace:
+        if new_futures:
+            concurrent.futures.wait(new_futures)
         result = cls._from_tensordict(td, _non_tensordict)
     else:
         result = self
@@ -1048,18 +1057,20 @@ def _wrap_td_method(funcname, *, copy_non_tensor=False, no_wrap=False):
             return self
         if isinstance(result, TensorDictBase) and not check_out(kwargs, result):
             if not torch.compiler.is_dynamo_compiling():
-                nontd = super(type(self), self).__getattribute__("_non_tensordict")
-            else:
-                nontd = self._non_tensordict
-            if copy_non_tensor:
-                # use tree_map to copy
-                nontd = tree_map(lambda x: x, nontd)
-            if not torch.compiler.is_dynamo_compiling():
-                return super(type(self), self).__getattribute__("_from_tensordict")(
-                    result, nontd
+                non_tensordict = super(type(self), self).__getattribute__(
+                    "_non_tensordict"
                 )
             else:
-                return self._from_tensordict(result, nontd)
+                non_tensordict = self._non_tensordict
+            if copy_non_tensor:
+                # use tree_map to copy
+                non_tensordict = tree_map(lambda x: x, non_tensordict)
+            if not torch.compiler.is_dynamo_compiling():
+                return super(type(self), self).__getattribute__("_from_tensordict")(
+                    result, non_tensordict
+                )
+            else:
+                return self._from_tensordict(result, non_tensordict)
         return result
 
     return wrapped_func
@@ -1110,23 +1121,22 @@ def _update(
         input_dict_or_td = self.from_dict(input_dict_or_td)
 
     if is_tensorclass(input_dict_or_td):
+        non_tensordict = {
+            k: v
+            for k, v in input_dict_or_td.__dict__["_non_tensordict"].items()
+            if v is not None
+        }
         self._tensordict.update(input_dict_or_td.__dict__["_tensordict"])
-        self._non_tensordict.update(input_dict_or_td.__dict__["_non_tensordict"])
+        self._non_tensordict.update(non_tensordict)
         return self
 
-    non_tensordict = {}
-    for key, value in input_dict_or_td.items():
-        if is_non_tensor(value):
-            non_tensordict[key] = value.data
-
     self._tensordict.update(
-        input_dict_or_td.exclude(*non_tensordict.keys()),
+        input_dict_or_td,
         clone=clone,
         inplace=inplace,
         keys_to_update=keys_to_update,
         non_blocking=non_blocking,
     )
-    self._non_tensordict.update(non_tensordict)
     return self
 
 
@@ -1143,23 +1153,20 @@ def _update_(
         input_dict_or_td = self.from_dict(input_dict_or_td, batch_size=self.batch_size)
 
     if is_tensorclass(input_dict_or_td):
+        non_tensordict = {
+            k: v for k, v in input_dict_or_td._non_tensordict.items() if v is not None
+        }
         self._tensordict.update_(input_dict_or_td._tensordict)
-        self._non_tensordict.update(input_dict_or_td._non_tensordict)
+        self._non_tensordict.update(non_tensordict)
         return self
 
-    non_tensordict = {}
-    for key, value in input_dict_or_td.items():
-        if is_non_tensor(value):
-            non_tensordict[key] = value.data
-
     self._tensordict.update_(
-        input_dict_or_td.exclude(*non_tensordict.keys()),
+        input_dict_or_td,
         clone=clone,
         inplace=inplace,
         keys_to_update=keys_to_update,
         non_blocking=non_blocking,
     )
-    self._non_tensordict.update(non_tensordict)
     return self
 
 
@@ -1176,23 +1183,20 @@ def _update_at_(
         input_dict_or_td = self.from_dict(input_dict_or_td, batch_size=self.batch_size)
 
     if is_tensorclass(input_dict_or_td):
+        non_tensordict = {
+            k: v for k, v in input_dict_or_td._non_tensordict.items() if v is not None
+        }
         self._tensordict.update(input_dict_or_td._tensordict)
-        self._non_tensordict.update(input_dict_or_td._non_tensordict)
+        self._non_tensordict.update(non_tensordict)
         return self
 
-    non_tensordict = {}
-    for key, value in input_dict_or_td.items():
-        if is_non_tensor(value):
-            non_tensordict[key] = value.data
-
     self._tensordict.update_at_(
-        input_dict_or_td.exclude(*non_tensordict.keys()),
+        input_dict_or_td,
         index=index,
         clone=clone,
         keys_to_update=keys_to_update,
         non_blocking=non_blocking,
     )
-    self._non_tensordict.update(non_tensordict)
     return self
 
 
@@ -1325,21 +1329,21 @@ def _from_dict(cls, input_dict, batch_size=None, device=None, batch_dims=None):
     # we pass through a tensordict because keys could be passed as NestedKeys
     # We can't assume all keys are strings, otherwise calling cls(**kwargs)
     # would work ok
-
-    td = TensorDict.from_dict(
-        input_dict, batch_size=batch_size, device=device, batch_dims=batch_dims
-    )
-    non_tensor = {}
-
     if issubclass(cls, NonTensorData):
         # Note: this won't deal with sub-tensordicts which may or may not be tensorclasses.
         # We don't want to enforce them to be tensorclasses so we can't do much about it...
-        for key, value in list(td.items()):
-            if is_non_tensor(value):
-                non_tensor[key] = value.data
-                del td[key]
+        return cls.from_tensordict(
+            tensordict=TensorDict(
+                batch_size=batch_size, device=device, batch_dims=batch_dims
+            ),
+            non_tensordict=input_dict,
+        )
+    td = TensorDict.from_dict(
+        input_dict, batch_size=batch_size, device=device, batch_dims=batch_dims
+    )
+    non_tensordict = {}
 
-    return cls.from_tensordict(tensordict=td, non_tensordict=non_tensor)
+    return cls.from_tensordict(tensordict=td, non_tensordict=non_tensordict)
 
 
 def _from_dict_instance(
@@ -1561,11 +1565,16 @@ def _set_str(
     ignore_lock: bool = False,
     non_blocking: bool = False,
 ):
-    if key in self._non_tensordict:
-        if isinstance(value, (NonTensorData, NonTensorStack)):
-            self._non_tensordict[key] = value.data
-            return self
-        del self._non_tensordict[key]
+    if is_non_tensor(self):
+        if key != "data":
+            raise KeyError(f"only 'data' keys are supported for {type(self)}.")
+        while isinstance(value, (NonTensorData, NonTensorStack)):
+            value = value.data
+        self._non_tensordict[key] = value
+        return self
+    else:
+        if key in self._non_tensordict:
+            del self._non_tensordict[key]
     self._tensordict._set_str(
         key,
         value,
@@ -1586,11 +1595,16 @@ def _set_at_str(
     validated: bool,
     non_blocking: bool = False,
 ):
-    if key in self._non_tensordict:
-        if isinstance(value, (NonTensorData, NonTensorStack)):
-            self._non_tensordict[key] = value.data
-            return self
-        del self._non_tensordict[key]
+    if is_non_tensor(self):
+        if key != "data":
+            raise KeyError(f"only 'data' keys are supported for {type(self)}.")
+        while isinstance(value, (NonTensorData, NonTensorStack)):
+            value = value.data
+        self._non_tensordict[key] = value
+        return self
+    else:
+        if key in self._non_tensordict:
+            del self._non_tensordict[key]
     self._tensordict._set_at_str(
         key, value, idx, validated=validated, non_blocking=non_blocking
     )
@@ -1942,8 +1956,10 @@ def _non_tensor_items(self, include_nested=False):
         return self.non_tensor_items() + self._tensordict.non_tensor_items(
             include_nested=True
         )
-    else:
+    elif is_tensorclass(self):
         return list(self._non_tensordict.items())
+    else:
+        return self._tensordict.non_tensor_items()
 
 
 def _bool(self):
@@ -2615,6 +2631,12 @@ class NonTensorData:
             *args, **kwargs
         )
 
+    def _multithread_rebuild(self, *args, **kwargs):
+        kwargs["filter_empty"] = False
+        return _wrap_method(
+            self, "_multithread_rebuild", self._tensordict._multithread_rebuild
+        )(*args, **kwargs)
+
     def tolist(self):
         """Converts the data in a list if the batch-size is non-empty.
 
@@ -2979,7 +3001,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
         # update content
         if isinstance(input_dict_or_td, NonTensorStack):
-            for leaf_dest, leaf_src in zip(
+            for leaf_dest, leaf_src in _zip_strict(
                 self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
             ):
                 leaf_dest._update(
