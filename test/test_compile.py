@@ -302,6 +302,7 @@ class MyClass:
     c: Any = None
 
 
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
     def test_tc_tensor_output(self, mode):
