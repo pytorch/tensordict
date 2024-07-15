@@ -112,7 +112,6 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_propagate_lock",
     "_propagate_unlock",
     "_values_list",
-    "gather",
     "is_empty",
     "is_memmap",
     "is_shared",
@@ -120,7 +119,6 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "keys",
     "ndimension",
     "numel",
-    "replace",
     "values",
     "_get_names_idx",  # no wrap output
 ]
@@ -140,6 +138,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "__truediv__",
     "_add_batch_dim",
     "_get_sub_tensordict",
+    "replace",
     "_apply_nest",
     "_multithread_apply_flat",
     "_erase_names",  # TODO: must be specialized
@@ -152,6 +151,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "_set_tuple",
     "abs",
     "abs_",
+    "gather",
     "acos",
     "acos_",
     "add",
@@ -798,7 +798,7 @@ def _from_tensordict(cls, tensordict, non_tensordict=None):  # noqa: D417
             f"keys {{{total_keys - exp_keys}}} which do not belong to the class."
         )
     else:
-        to_add = exp_keys - tensor_keys
+        to_add = exp_keys - total_keys
         for key in to_add:
             non_tensordict[key] = None
 
