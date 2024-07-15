@@ -12,6 +12,10 @@ from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
 TORCH_VERSION = torch.__version__
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+torch.set_default_device(DEVICE)
+
 
 def mlp(device, depth=2, num_cells=32, feature_dim=3):
     return torch.nn.Sequential(

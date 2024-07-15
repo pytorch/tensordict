@@ -112,16 +112,17 @@ def get_flat_tc():
 def test_compile_add_one_nested(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
-            func = torch.compile(add_one, fullgraph=True)
+            func = torch.compile(add_one, fullgraph=True, mode="reduce-overhead")
         else:
             func = add_one
         td = get_nested_td()
     else:
         if mode == "compile":
-            func = torch.compile(add_one_pytree, fullgraph=True)
+            func = torch.compile(add_one_pytree, fullgraph=True, mode="reduce-overhead")
         else:
             func = add_one_pytree
         td = get_nested_td().to_dict()
+    func(td)
     func(td)
     benchmark(func, td)
 
@@ -133,16 +134,17 @@ def test_compile_add_one_nested(mode, dict_type, benchmark):
 def test_compile_copy_nested(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
-            func = torch.compile(copy, fullgraph=True)
+            func = torch.compile(copy, fullgraph=True, mode="reduce-overhead")
         else:
             func = copy
         td = get_nested_td()
     else:
         if mode == "compile":
-            func = torch.compile(copy_pytree, fullgraph=True)
+            func = torch.compile(copy_pytree, fullgraph=True, mode="reduce-overhead")
         else:
             func = copy_pytree
         td = get_nested_td().to_dict()
+    func(td)
     func(td)
     benchmark(func, td)
 
@@ -154,22 +156,23 @@ def test_compile_copy_nested(mode, dict_type, benchmark):
 def test_compile_add_one_flat(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
-            func = torch.compile(add_one, fullgraph=True)
+            func = torch.compile(add_one, fullgraph=True, mode="reduce-overhead")
         else:
             func = add_one
         td = get_flat_td()
     elif dict_type == "tensorclass":
         if mode == "compile":
-            func = torch.compile(add_one, fullgraph=True)
+            func = torch.compile(add_one, fullgraph=True, mode="reduce-overhead")
         else:
             func = add_one
         td = get_flat_tc()
     else:
         if mode == "compile":
-            func = torch.compile(add_one_pytree, fullgraph=True)
+            func = torch.compile(add_one_pytree, fullgraph=True, mode="reduce-overhead")
         else:
             func = add_one_pytree
         td = get_flat_td().to_dict()
+    func(td)
     func(td)
     benchmark(func, td)
 
@@ -180,22 +183,25 @@ def test_compile_add_one_flat(mode, dict_type, benchmark):
 def test_compile_add_self_flat(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
-            func = torch.compile(add_self, fullgraph=True)
+            func = torch.compile(add_self, fullgraph=True, mode="reduce-overhead")
         else:
             func = add_self
         td = get_flat_td()
     elif dict_type == "tensorclass":
         if mode == "compile":
-            func = torch.compile(add_self, fullgraph=True)
+            func = torch.compile(add_self, fullgraph=True, mode="reduce-overhead")
         else:
             func = add_self
         td = get_flat_tc()
     else:
         if mode == "compile":
-            func = torch.compile(add_self_pytree, fullgraph=True)
+            func = torch.compile(
+                add_self_pytree, fullgraph=True, mode="reduce-overhead"
+            )
         else:
             func = add_self_pytree
         td = get_flat_td().to_dict()
+    func(td)
     func(td)
     benchmark(func, td)
 
@@ -207,22 +213,23 @@ def test_compile_add_self_flat(mode, dict_type, benchmark):
 def test_compile_copy_flat(mode, dict_type, benchmark):
     if dict_type == "tensordict":
         if mode == "compile":
-            func = torch.compile(copy, fullgraph=True)
+            func = torch.compile(copy, fullgraph=True, mode="reduce-overhead")
         else:
             func = copy
         td = get_flat_td()
     elif dict_type == "tensorclass":
         if mode == "compile":
-            func = torch.compile(copy, fullgraph=True)
+            func = torch.compile(copy, fullgraph=True, mode="reduce-overhead")
         else:
             func = copy
         td = get_flat_tc()
     else:
         if mode == "compile":
-            func = torch.compile(copy_pytree, fullgraph=True)
+            func = torch.compile(copy_pytree, fullgraph=True, mode="reduce-overhead")
         else:
             func = copy_pytree
         td = get_flat_td().to_dict()
+    func(td)
     func(td)
     benchmark(func, td)
 
@@ -236,17 +243,20 @@ def test_compile_assign_and_add(mode, dict_type, benchmark):
     td = TensorDict(device=device)
     if dict_type == "tensordict":
         if mode == "compile":
-            func = torch.compile(assign_and_add, fullgraph=True)
+            func = torch.compile(assign_and_add, fullgraph=True, mode="reduce-overhead")
         else:
             func = assign_and_add
         kwargs = {}
     else:
         if mode == "compile":
-            func = torch.compile(assign_and_add_pytree, fullgraph=True)
+            func = torch.compile(
+                assign_and_add_pytree, fullgraph=True, mode="reduce-overhead"
+            )
         else:
             func = assign_and_add_pytree
         td = td.to_dict()
         kwargs = {"device": device}
+    func(td, 5, **kwargs)
     func(td, 5, **kwargs)
     benchmark(func, td, 5, **kwargs)
 
@@ -260,10 +270,13 @@ def test_compile_assign_and_add_stack(mode, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     td = LazyStackedTensorDict(TensorDict(device=device), TensorDict(device=device))
     if mode == "compile":
-        func = torch.compile(assign_and_add_stack, fullgraph=True)
+        func = torch.compile(
+            assign_and_add_stack, fullgraph=True, mode="reduce-overhead"
+        )
     else:
         func = assign_and_add_stack
     kwargs = {}
+    func(td, 5, **kwargs)
     func(td, 5, **kwargs)
     benchmark(func, td, 5, **kwargs)
 
@@ -282,12 +295,12 @@ def test_compile_indexing(mode, dict_type, index_type, benchmark):
     )
     if dict_type == "tensordict":
         if mode == "compile":
-            func = torch.compile(index, fullgraph=True)
+            func = torch.compile(index, fullgraph=True, mode="reduce-overhead")
         else:
             func = index
     else:
         if mode == "compile":
-            func = torch.compile(index_pytree, fullgraph=True)
+            func = torch.compile(index_pytree, fullgraph=True, mode="reduce-overhead")
         else:
             func = index_pytree
         td = td.to_dict()
@@ -298,6 +311,7 @@ def test_compile_indexing(mode, dict_type, index_type, benchmark):
     if index_type == "tensor":
         idx = torch.tensor(range(*idx.indices(10)))
 
+    func(td, idx)
     func(td, idx)
     benchmark(func, td, idx)
 
