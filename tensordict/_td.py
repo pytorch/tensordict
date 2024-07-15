@@ -64,6 +64,7 @@ from tensordict.utils import (
     _StringOnlyDict,
     _sub_index,
     _unravel_key_to_tuple,
+    _zip_strict,
     Buffer,
     cache,
     convert_ellipsis_to_idx,
@@ -1076,7 +1077,9 @@ class TensorDict(TensorDictBase):
 
         any_set = set()
 
-        for i, (key, local_future) in enumerate(zip(self.keys(), local_futures)):
+        for i, (key, local_future) in enumerate(
+            _zip_strict(self.keys(), local_futures)
+        ):
 
             def setter(
                 item_trsf,
@@ -1466,7 +1469,7 @@ class TensorDict(TensorDictBase):
                 # tensorclass is also unbound using plain unbind
                 else val._unbind(dim)
             )
-            for td, _val in zip(tds, unbound):
+            for td, _val in _zip_strict(tds, unbound):
                 td._set_str(
                     key, _val, validated=True, inplace=False, non_blocking=False
                 )
@@ -1551,7 +1554,7 @@ class TensorDict(TensorDictBase):
         names = self.names if self._has_names() else None
         return tuple(
             self._index_tensordict(index + (ss,), new_batch_size=bs, names=names)
-            for ss, bs in zip(split_sizes, batch_sizes)
+            for ss, bs in _zip_strict(split_sizes, batch_sizes)
         )
 
     def masked_select(self, mask: Tensor) -> T:
@@ -1686,10 +1689,10 @@ class TensorDict(TensorDictBase):
         if dim is None:
             names = copy(self.names) if self._has_names() else None
             if names is not None:
-                batch_size, names = zip(
+                batch_size, names = _zip_strict(
                     *[
                         (size, name)
-                        for size, name in zip(batch_size, names)
+                        for size, name in _zip_strict(batch_size, names)
                         if size != 1
                     ]
                 )

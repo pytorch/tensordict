@@ -45,6 +45,7 @@ from tensordict.utils import (
     _get_repr,
     _is_json_serializable,
     _LOCK_ERROR,
+    _zip_strict,
     DeviceType,
     IndexType,
     is_non_tensor,
@@ -2878,7 +2879,7 @@ class NonTensorStack(LazyStackedTensorDict):
 
         # update content
         if isinstance(input_dict_or_td, NonTensorStack):
-            for leaf_dest, leaf_src in zip(
+            for leaf_dest, leaf_src in _zip_strict(
                 self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
             ):
                 leaf_dest._update(
