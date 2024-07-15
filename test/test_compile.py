@@ -302,23 +302,24 @@ class MyClass:
     c: Any = None
 
 
+@pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTC:
-    def test_tc_tensor_output(self):
+    def test_tc_tensor_output(self, mode):
         def add_one(td):
             return td.a.b + 1
 
-        add_one_c = torch.compile(add_one, fullgraph=True)
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
         data = MyClass(MyClass(a=None, b=torch.zeros(())))
         assert add_one(data) == 1
         assert add_one_c(data) == 1
         assert add_one_c(data + 1) == 2
 
-    def test_tc_items(self):
+    def test_tc_items(self, mode):
         def items(td):
             keys, vals = zip(*td.items(True, True))
             return keys, vals
 
-        items_c = torch.compile(items, fullgraph=True)
+        items_c = torch.compile(items, fullgraph=True, mode=mode)
         data = MyClass(MyClass(a=None, b=torch.zeros(())))
         keys, vals = items(data)
         keys_c, vals_c = items_c(data)
@@ -329,18 +330,18 @@ class TestTC:
         assert keys == keys_c
         torch.utils._pytree.tree_map(assert_eq, vals, vals_c)
 
-    def test_tc_output(self):
+    def test_tc_output(self, mode):
         def add_one(td):
             td.a.c = td.a.b + 1
             return td
 
-        add_one_c = torch.compile(add_one, fullgraph=True)
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
         data = MyClass(a=MyClass(a=None, b=torch.zeros(())))
         assert add_one(data.clone()).a.c == 1
         assert add_one_c(data.clone()).a.c == 1
         assert add_one_c(data) is data
 
-    def test_tc_arithmetic(self):
+    def test_tc_arithmetic(self, mode):
         def add_one(td):
             return td + 1
 
@@ -348,7 +349,7 @@ class TestTC:
 
         eager = add_one(data.clone())
 
-        add_one_c = torch.compile(add_one, fullgraph=True)
+        add_one_c = torch.compile(add_one, fullgraph=True, mode=mode)
         compiled = add_one_c(data.clone())
 
         assert isinstance(eager.a, MyClass)
@@ -359,7 +360,7 @@ class TestTC:
         assert compiled.a.b == 1
         assert add_one_c(data) is not data
 
-    def test_tc_arithmetic_other_tc(self):
+    def test_tc_arithmetic_other_tc(self, mode):
         def add_self(td):
             return td + td
 
@@ -367,7 +368,7 @@ class TestTC:
 
         eager = add_self(data.clone())
 
-        add_self_c = torch.compile(add_self, fullgraph=True)
+        add_self_c = torch.compile(add_self, fullgraph=True, mode=mode)
         compiled = add_self_c(data.clone())
 
         assert isinstance(eager.a, MyClass)
@@ -379,7 +380,7 @@ class TestTC:
         assert add_self_c(data) is not data
 
     @pytest.mark.parametrize("index_type", ["slice", "tensor", "int"])
-    def test_tc_index(self, index_type):
+    def test_tc_index(self, index_type, mode):
         if index_type == "slice":
 
             def index(td):
@@ -395,7 +396,7 @@ class TestTC:
             def index(td):
                 return td[0]
 
-        index_c = torch.compile(index, fullgraph=True)
+        index_c = torch.compile(index, fullgraph=True, mode=mode)
         data = MyClass(
             a=MyClass(a=None, b=torch.arange(3), batch_size=[3]), batch_size=[3]
         )
@@ -425,10 +426,10 @@ class TestTC:
             assert indexed_data_eager.shape == torch.Size([2])
             assert indexed_data_compile.shape == torch.Size([2])
 
-    def test_tc_stack(self):
+    def test_tc_stack(self, mode):
         def stack_tds(td0, td1):
-            return TensorDict.stack([td0, td1])
-            # return torch.stack([td0, td1])
+            # return TensorDict.stack([td0, td1])
+            return torch.stack([td0, td1])
 
         data0 = MyClass(
             a=MyClass(a=None, b=torch.arange(3), batch_size=[3]), batch_size=[3]
@@ -438,16 +439,16 @@ class TestTC:
         )
         stack_eager = stack_tds(data0, data1)
 
-        stack_tds_c = torch.compile(stack_tds, fullgraph=True)
+        stack_tds_c = torch.compile(stack_tds, fullgraph=True, mode=mode)
         stack_compile = stack_tds_c(data0, data1)
 
         assert (stack_eager == stack_compile).all()
 
-    def test_tc_cat(self):
+    def test_tc_cat(self, mode):
         def cat_tds(td0, td1):
-            return TensorDict.cat([td0, td1])
+            return torch.cat([td0, td1])
 
-        cat_tds_c = torch.compile(cat_tds, fullgraph=True)
+        cat_tds_c = torch.compile(cat_tds, fullgraph=True, mode=mode)
         data0 = MyClass(
             a=MyClass(a=None, b=torch.arange(3), batch_size=[3]), batch_size=[3]
         )
@@ -456,32 +457,32 @@ class TestTC:
         )
         assert (cat_tds(data0, data1) == cat_tds_c(data0, data1)).all()
 
-    def test_tc_reshape(self):
+    def test_tc_reshape(self, mode):
         def reshape(td):
             return td.reshape(2, 2)
 
-        reshape_c = torch.compile(reshape, fullgraph=True)
+        reshape_c = torch.compile(reshape, fullgraph=True, mode=mode)
         data = MyClass(
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (reshape(data) == reshape_c(data)).all()
 
-    def test_tc_unbind(self):
+    def test_tc_unbind(self, mode):
         def unbind(td):
             return td.unbind(0)
 
-        unbind_c = torch.compile(unbind, fullgraph=True)
+        unbind_c = torch.compile(unbind, fullgraph=True, mode=mode)
         data = MyClass(
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
         assert (unbind(data)[-1] == unbind_c(data)[-1]).all()
 
     @pytest.mark.parametrize("recurse", [True, False])
-    def test_tc_clone(self, recurse):
+    def test_tc_clone(self, recurse, mode):
         def clone(td: TensorDict):
             return td.clone(recurse=recurse)
 
-        clone_c = torch.compile(clone, fullgraph=True)
+        clone_c = torch.compile(clone, fullgraph=True, mode=mode)
         data = MyClass(
             a=MyClass(a=None, b=torch.arange(4), batch_size=[4]), batch_size=[4]
         )
@@ -491,6 +492,50 @@ class TestTC:
             assert clone_c(data).a.b is not data.a.b
         else:
             assert clone_c(data).a.b is data.a.b
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(), reason="cuda required to test device casting"
+    )
+    @pytest.mark.parametrize("has_device", [True, False])
+    def test_tc_to(self, has_device, mode):
+        device = "cuda:0"
+
+        def test_to_device(tc):
+            return tc.to(device)
+
+        data = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]),
+            batch_size=[4],
+            device="cpu" if has_device else None,
+        )
+        test_to_device_c = torch.compile(test_to_device, fullgraph=True, mode=mode)
+        # tc_device = test_to_device(tc)
+        _ = test_to_device_c(data)
+        tc_device_c = test_to_device_c(data)
+        assert tc_device_c.batch_size == data.batch_size
+        assert tc_device_c.device == torch.device(device)
+
+    def test_tc_lock(self, mode):
+        def locked_op(tc):
+            # Adding stuff uses cache, check that this doesn't break
+            tc2 = tc + 1
+            tc3 = tc + tc2
+            return tc3
+
+        data = MyClass(
+            a=MyClass(a=None, b=torch.arange(4), batch_size=[4]),
+            batch_size=[4],
+            device="cpu",
+        ).lock_()
+        locked_op_c = torch.compile(locked_op, fullgraph=True, mode=mode)
+        tc_op = locked_op(data)
+        # no warning the second time this is run
+        with pytest.warns(
+            UserWarning, match="Using lock_"
+        ) if mode is None else contextlib.nullcontext():
+            _ = locked_op_c(data)
+        tc_op_c = locked_op_c(data)
+        assert (tc_op == tc_op_c).all()
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")

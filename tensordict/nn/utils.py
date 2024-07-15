@@ -227,7 +227,7 @@ class set_skip_existing(_DecoratorContextManager):
 
     def clone(self) -> set_skip_existing:
         # override this method if your children class takes __init__ parameters
-        out = self.__class__(self.mode)
+        out = type(self)(self.mode)
         out._called = self._called
         return out
 
@@ -271,7 +271,7 @@ class set_skip_existing(_DecoratorContextManager):
             _SKIP_EXISTING = self.mode
         elif not self._called:
             raise RuntimeError(
-                f"It seems you are using {self.__class__.__name__} as a context manager with ``None`` input. "
+                f"It seems you are using {type(self).__name__} as a context manager with ``None`` input. "
                 f"This behaviour is not allowed."
             )
 
@@ -334,7 +334,7 @@ class _set_skip_existing_None(set_skip_existing):
 
     def clone(self) -> _set_skip_existing_None:
         # override this method if your children class takes __init__ parameters
-        out = self.__class__()
+        out = type(self)()
         return out
 
 
@@ -370,7 +370,7 @@ class _set_auto_make_functional(_DecoratorContextManager):
         self.mode = mode
 
     def clone(self):
-        return self.__class__(self.mode)
+        return type(self)(self.mode)
 
     def __enter__(self):
         global AUTO_MAKE_FUNCTIONAL
@@ -395,7 +395,7 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
         self.mode = mode
 
     def clone(self):
-        return self.__class__(self.mode)
+        return type(self)(self.mode)
 
     def __enter__(self):
         global DISPATCH_TDNN_MODULES

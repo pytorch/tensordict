@@ -1251,7 +1251,7 @@ class TensorDictModule(TensorDictModuleBase):
             4 * " ",
         )
 
-        return f"{self.__class__.__name__}(\n{fields})"
+        return f"{type(self).__name__}(\n{fields})"
 
     def __getattr__(self, name: str) -> Any:
         if not torch.compiler.is_dynamo_compiling():
@@ -1296,7 +1296,7 @@ class TensorDictModule(TensorDictModuleBase):
             # no fallback for private attributes
             return getattr(super().__getattr__("module"), name)
         raise AttributeError(
-            f"module {self.__class__.__name__} has no attribute named {name}."
+            f"module {type(self).__name__} has no attribute named {name}."
         )
 
     def __getstate__(self):
