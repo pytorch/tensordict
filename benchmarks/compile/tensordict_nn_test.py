@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import argparse
+import functools
 
 import pytest
 import torch
@@ -15,6 +16,11 @@ TORCH_VERSION = torch.__version__
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 torch.set_default_device(DEVICE)
+
+compile = functools.partial(torch.compile, fullgraph=True)
+compile_overhead = functools.partial(
+    torch.compile, fullgraph=True, mode="reduce-overhead"
+)
 
 
 def mlp(device, depth=2, num_cells=32, feature_dim=3):
@@ -32,34 +38,38 @@ def mlp(device, depth=2, num_cells=32, feature_dim=3):
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
-@pytest.mark.parametrize("mode", ["eager", "compile"])
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_add(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     td = TensorDict({"a": 0}, device=device)
     module = Mod(lambda x: x + 1, in_keys=["a"], out_keys=[("c", "d")])
     if mode == "compile":
-        module = torch.compile(module, fullgraph=True, mode="reduce-overhead")
+        module = compile(module)
+    elif mode == "compile-overhead":
+        module = compile_overhead(module)
     module(td)
     module(td)
     benchmark(module, td)
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
-@pytest.mark.parametrize("mode", ["eager", "compile"])
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
     module = Mod(net, in_keys=["a"], out_keys=[("c", "d")])
     if mode == "compile":
-        module = torch.compile(module, fullgraph=True, mode="reduce-overhead")
+        module = compile(module)
+    elif mode == "compile-overhead":
+        module = compile_overhead(module)
     module(td)
     module(td)
     benchmark(module, td)
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
-@pytest.mark.parametrize("mode", ["eager", "compile"])
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_add(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     td = TensorDict({"a": 0}, device=device)
@@ -75,14 +85,16 @@ def test_seq_add(mode, benchmark):
         delhidden,
     )
     if mode == "compile":
-        module = torch.compile(module, fullgraph=True, mode="reduce-overhead")
+        module = compile(module)
+    elif mode == "compile-overhead":
+        module = compile_overhead(module)
     module(td)
     module(td)
     benchmark(module, td)
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
-@pytest.mark.parametrize("mode", ["eager", "compile"])
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device)
@@ -105,14 +117,16 @@ def test_seq_wrap(mode, benchmark):
         delhidden,
     )
     if mode == "compile":
-        module = torch.compile(module, fullgraph=True, mode="reduce-overhead")
+        module = compile(module)
+    elif mode == "compile-overhead":
+        module = compile_overhead(module)
     module(td)
     module(td)
     benchmark(module, td)
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
-@pytest.mark.parametrize("mode", ["eager", "compile"])
+@pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_runtime(mode, functional, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -133,7 +147,9 @@ def test_func_call_runtime(mode, functional, benchmark):
         call = module
 
     if mode == "compile":
-        call = torch.compile(call, fullgraph=True, mode="reduce-overhead")
+        call = compile(call)
+    elif mode == "compile-overhead":
+        call = compile_overhead(call)
 
     x = torch.randn(2, 2, 16)
     if functional:
