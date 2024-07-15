@@ -13,7 +13,7 @@ from tensordict._td import _unravel_key_to_tuple
 
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import NestedKey
+from tensordict.utils import _zip_strict, NestedKey
 from torch import fx, nn
 
 __all__ = ["symbolic_trace"]
@@ -42,7 +42,7 @@ class TDGraphModule(nn.Module):
         if tensordict_out is None:
             tensordict_out = tensordict
 
-        for out_key, output in zip(self.out_keys, outputs):
+        for out_key, output in _zip_strict(self.out_keys, outputs):
             if out_key != "_":
                 tensordict_out._set_tuple(
                     out_key, output, inplace=False, validated=True, non_blocking=False
@@ -79,7 +79,7 @@ def _partition(
 def _parse_input_nodes(
     in_keys: list[NestedKey], nodes, td: TensorDictBase, inputs: tuple[Any, ...], env
 ):
-    for in_key, node in zip(in_keys, nodes):
+    for in_key, node in _zip_strict(in_keys, nodes):
         if in_key in inputs:
             new_node = inputs[in_key]
         else:
@@ -175,7 +175,7 @@ def _trace_tensordictsequential(td_sequential: TensorDictSequential) -> TDGraphM
                 # ((out1, out2,),), so we need to do some extra unpacking
                 args = args[0] if isinstance(args[0], tuple) else args
 
-                for out_key, arg in zip(td_module.out_keys, args):
+                for out_key, arg in _zip_strict(td_module.out_keys, args):
                     # any outputs of submodules will need to be returned at the end
                     outputs[out_key] = env[arg.name]
                     # we also need to make outputs of submodules available as inputs

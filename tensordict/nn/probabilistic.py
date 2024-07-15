@@ -21,7 +21,7 @@ from tensordict.nn.sequence import TensorDictSequential
 
 from tensordict.nn.utils import set_skip_existing
 from tensordict.tensordict import TensorDictBase
-from tensordict.utils import NestedKey
+from tensordict.utils import _zip_strict, NestedKey
 from torch import distributions as D, Tensor
 
 __all__ = ["ProbabilisticTensorDictModule", "ProbabilisticTensorDictSequential"]
@@ -382,7 +382,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         """Creates a :class:`torch.distribution.Distribution` instance with the parameters provided in the input tensordict."""
         try:
             dist_kwargs = {}
-            for dist_key, td_key in zip(self.dist_keys, self.in_keys):
+            for dist_key, td_key in _zip_strict(self.dist_keys, self.in_keys):
                 if isinstance(dist_key, tuple):
                     dist_key = dist_key[-1]
                 dist_kwargs[dist_key] = tensordict.get(td_key)
@@ -441,7 +441,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 if isinstance(out_tensors, Tensor):
                     out_tensors = (out_tensors,)
                 tensordict_out.update(
-                    {key: value for key, value in zip(self.out_keys, out_tensors)}
+                    {
+                        key: value
+                        for key, value in _zip_strict(self.out_keys, out_tensors)
+                    }
                 )
                 if self.return_log_prob:
                     log_prob = dist.log_prob(*out_tensors)

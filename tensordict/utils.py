@@ -7,6 +7,7 @@ from __future__ import annotations
 import abc
 import collections
 import concurrent.futures
+import functools
 import inspect
 import logging
 
@@ -1552,7 +1553,9 @@ def assert_close(
     if isinstance(actual, LazyStackedTensorDict) and isinstance(
         expected, LazyStackedTensorDict
     ):
-        for sub_actual, sub_expected in zip(actual.tensordicts, expected.tensordicts):
+        for sub_actual, sub_expected in _zip_strict(
+            actual.tensordicts, expected.tensordicts
+        ):
             assert_allclose_td(sub_actual, sub_expected, rtol=rtol, atol=atol)
         return True
 
@@ -1765,7 +1768,7 @@ def _set_max_batch_size(source: T, batch_dims=None):
         else:
             source.batch_size = batch_size
             return
-        for leaf, shape in zip(tensor_data[1:], tensor_shapes[1:]):
+        for leaf, shape in _zip_strict(tensor_data[1:], tensor_shapes[1:]):
             # if we have a nested empty tensordict we can modify its batch size at will
             if _is_tensor_collection(type(leaf)) and leaf.is_empty():
                 continue
@@ -2573,3 +2576,14 @@ def _check_inbuild():
 
 
 _check_inbuild = torch.compiler.assume_constant_result(_check_inbuild)
+
+if sys.version_info >= (3, 10):
+    zip_strict = functools.partial(zip, strict=True)
+else:
+
+    def _zip_strict(*iterables):
+        lengths = {len(it) for it in iterables}
+        if len(lengths) > 1:
+            raise ValueError("lengths of iterables differ.")
+
+        return zip(*iterables)

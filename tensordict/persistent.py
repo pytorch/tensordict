@@ -42,6 +42,7 @@ from tensordict.utils import (
     _parse_to,
     _proc_init,
     _split_tensordict,
+    _zip_strict,
     cache,
     expand_right,
     IndexType,
@@ -851,7 +852,7 @@ class PersistentTensorDict(TensorDictBase):
                     dim,
                     use_generator=index_with_generator,
                 )
-                return _CloudpickleWrapper(newfn), zip(self_split, out_split)
+                return _CloudpickleWrapper(newfn), _zip_strict(self_split, out_split)
 
             fn, self_split = wrap_fn_with_out(fn, out)
             out = None
