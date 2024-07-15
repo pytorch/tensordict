@@ -10,6 +10,8 @@ from tensordict import TensorDict, TensorDictParams
 
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 
+TORCH_VERSION = torch.__version__
+
 
 def mlp(device, depth=2, num_cells=32, feature_dim=3):
     return torch.nn.Sequential(
@@ -25,6 +27,7 @@ def mlp(device, depth=2, num_cells=32, feature_dim=3):
     )
 
 
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 def test_mod_add(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -36,6 +39,7 @@ def test_mod_add(mode, benchmark):
     benchmark(module, td)
 
 
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 def test_mod_wrap(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -48,6 +52,7 @@ def test_mod_wrap(mode, benchmark):
     benchmark(module, td)
 
 
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 def test_seq_add(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,6 +74,7 @@ def test_seq_add(mode, benchmark):
     benchmark(module, td)
 
 
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 def test_seq_wrap(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -97,6 +103,7 @@ def test_seq_wrap(mode, benchmark):
     benchmark(module, td)
 
 
+@pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_runtime(mode, functional, benchmark):
