@@ -161,7 +161,7 @@ def _td_flatten_with_keys(
     return [(MappingKey(k), v) for k, v in zip(keys, values)], {
         "keys": keys,
         "batch_size": d.batch_size,
-        "names": d.names if d._has_names() else None,
+        "names": d._maybe_names(),
         "device": d.device,
         "constructor": _constructor(type(d)),
         "non_tensor_data": d.non_tensor_items(),

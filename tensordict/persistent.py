@@ -667,7 +667,7 @@ class PersistentTensorDict(TensorDictBase):
                 {
                     "shape": list(data.shape),
                     "device": str(data.device),
-                    "_type": str(self.__class__),
+                    "_type": str(type(self)),
                 }
             )
             with open(filepath, "wb") as json_metadata:
@@ -1049,7 +1049,7 @@ class PersistentTensorDict(TensorDictBase):
                 target_td.batch_size = value.batch_size
             elif not is_tensor_collection(target_td):
                 raise RuntimeError(
-                    f"cannot set a tensor collection in place of a non-tensor collection in {self.__class__.__name__}. "
+                    f"cannot set a tensor collection in place of a non-tensor collection in {type(self).__name__}. "
                     f"Got self.get({key})={target_td} and value={value}."
                 )
             if idx is None:
@@ -1116,7 +1116,7 @@ class PersistentTensorDict(TensorDictBase):
             has_key = key in self.file
             if inplace is True and not has_key:  # inplace could be None
                 raise KeyError(
-                    _KEY_ERROR.format(key, self.__class__.__name__, sorted(self.keys()))
+                    _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
                 )
             inplace = has_key
         return inplace
