@@ -384,7 +384,7 @@ def _swap_state(
     else:
         old_tensordict_dict = {}
     for key, value in tensordict.items():
-        cls = value.__class__
+        cls = type(value)
         if _is_tensor_collection(cls) or issubclass(cls, dict):
             _old_value = old_tensordict.get(key, None)
             _old_value = _swap_state(
@@ -408,7 +408,7 @@ def _swap_state(
                     # _old_value = torch.zeros(*value.shape, 0)
                 old_tensordict_dict[key] = _old_value
                 # old_tensordict_dict[key] = _old_value
-            if model.__class__.__setattr__ is __base__setattr__:
+            if type(model).__setattr__ is __base__setattr__:
                 set_tensor_dict(__dict__, model, key, value)
             else:
                 setattr(model, key, value)
@@ -553,12 +553,12 @@ def _make_decorator(module: nn.Module, fun_name: str) -> Callable:
             if (
                 params is None
                 and len(args) == 2
-                and all(_is_tensor_collection(item.__class__) for item in args)
+                and all(_is_tensor_collection(type(item)) for item in args)
             ):
                 params = args[1]
                 args = args[:1]
         elif (
-            len(args) and _is_tensor_collection(args[0].__class__)
+            len(args) and _is_tensor_collection(type(args[0]))
         ) or "tensordict" in kwargs:
             warnings.warn(
                 "You are passing a tensordict/tensorclass instance to a module that "

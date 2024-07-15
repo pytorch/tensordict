@@ -20,6 +20,7 @@ from warnings import warn
 import numpy as np
 import orjson as json
 import torch
+
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
@@ -252,7 +253,9 @@ class TensorDict(TensorDictBase):
                 f"sub-type or a dictionary, found type(source)={type(source)}."
             )
         self._batch_size = self._parse_batch_size(source, batch_size)
-        self.names = names
+        # TODO: this breaks when stacking tensorclasses with dynamo
+        if not torch.compiler.is_dynamo_compiling():
+            self.names = names
 
         for key, value in source.items():
             self.set(key, value, non_blocking=sub_non_blocking)
@@ -467,7 +470,7 @@ class TensorDict(TensorDictBase):
             inplace = bool(inplace)
 
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
-        if module.__class__.__setattr__ is __base__setattr__:
+        if type(module).__setattr__ is __base__setattr__:
             __dict__ = module.__dict__
         else:
             __dict__ = None
@@ -549,7 +552,7 @@ class TensorDict(TensorDictBase):
             return other != self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -573,7 +576,7 @@ class TensorDict(TensorDictBase):
             return other ^ self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -597,7 +600,7 @@ class TensorDict(TensorDictBase):
             return other | self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -621,7 +624,7 @@ class TensorDict(TensorDictBase):
             return other == self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -651,7 +654,7 @@ class TensorDict(TensorDictBase):
             return other <= self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -681,7 +684,7 @@ class TensorDict(TensorDictBase):
             return other < self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -711,7 +714,7 @@ class TensorDict(TensorDictBase):
             return other >= self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -741,7 +744,7 @@ class TensorDict(TensorDictBase):
             return other > self
         if isinstance(other, (dict,)):
             other = self.from_dict_instance(other)
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
             keys1 = set(self.keys())
             keys2 = set(other.keys())
             if len(keys1.difference(keys2)) or len(keys1) != len(keys2):
@@ -985,7 +988,7 @@ class TensorDict(TensorDictBase):
         for key, item in self.items():
             if (
                 not call_on_nested
-                and not is_leaf(item.__class__)
+                and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
@@ -1203,7 +1206,7 @@ class TensorDict(TensorDictBase):
         for key, item in self.items():
             if (
                 not call_on_nested
-                and not is_leaf(item.__class__)
+                and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
                 if default is not NO_DEFAULT:
@@ -1886,8 +1889,7 @@ class TensorDict(TensorDictBase):
     @batch_dims.setter
     def batch_dims(self, value: int) -> None:
         raise RuntimeError(
-            f"Setting batch dims on {self.__class__.__name__} instances is "
-            f"not allowed."
+            f"Setting batch dims on {type(self).__name__} instances is " f"not allowed."
         )
 
     def _has_names(self):
@@ -1946,7 +1948,7 @@ class TensorDict(TensorDictBase):
                     item._erase_names()
             return
         for item in self._tensordict.values():
-            if _is_tensor_collection(item.__class__):
+            if _is_tensor_collection(type(item)):
                 item_names = item.names
                 td_names = list(names) + item_names[len(names) :]
                 item.rename_(*td_names)
@@ -2029,7 +2031,7 @@ class TensorDict(TensorDictBase):
         else:
             try:
                 dest = self._get_str(key, default=NO_DEFAULT)
-                if best_attempt and _is_tensor_collection(dest.__class__):
+                if best_attempt and _is_tensor_collection(type(dest)):
                     dest.update(value, inplace=True, non_blocking=non_blocking)
                 else:
                     if dest is not value:
@@ -2082,7 +2084,7 @@ class TensorDict(TensorDictBase):
         if td is None:
             td = self._create_nested_str(key[0])
             inplace = False
-        elif not _is_tensor_collection(td.__class__):
+        elif not _is_tensor_collection(type(td)):
             raise KeyError(
                 f"The entry {key[0]} is already present in tensordict {self}."
             )
@@ -2298,7 +2300,7 @@ class TensorDict(TensorDictBase):
             if (
                 isinstance(value, Tensor)
                 and value.device.type == "cpu"
-                or _is_tensor_collection(value.__class__)
+                or _is_tensor_collection(type(value))
             ):
                 value.share_memory_()
         self._is_shared = True
@@ -2681,7 +2683,7 @@ class TensorDict(TensorDictBase):
         return memmap_tensor
 
     def where(self, condition, other, *, out=None, pad=None):
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
 
             def func(tensor, _other, key):
                 if tensor is None:
@@ -2964,7 +2966,7 @@ class TensorDict(TensorDictBase):
 
                 def fast_iter():
                     for key, val in self._tensordict.items():
-                        if not is_leaf(val.__class__):
+                        if not is_leaf(type(val)):
                             for _key, _val in val.items(
                                 include_nested=include_nested,
                                 leaves_only=leaves_only,
@@ -2991,7 +2993,7 @@ class TensorDict(TensorDictBase):
                 # dynamo doesn't like generators
                 def fast_iter():
                     for key, val in self._tensordict.items():
-                        if not is_leaf(val.__class__):
+                        if not is_leaf(type(val)):
                             yield from (
                                 (
                                     (
@@ -3045,7 +3047,7 @@ class _SubTensorDict(TensorDictBase):
         idx: IndexType,
         batch_size: Sequence[int] | None = None,
     ) -> None:
-        if not _is_tensor_collection(source.__class__):
+        if not _is_tensor_collection(type(source)):
             raise TypeError(
                 f"Expected source to be a subclass of TensorDictBase, "
                 f"got {type(source)}"
@@ -3148,7 +3150,7 @@ class _SubTensorDict(TensorDictBase):
         if inplace is not False:
             if inplace is True and not has_key:  # inplace could be None
                 raise KeyError(
-                    _KEY_ERROR.format(key, self.__class__.__name__, sorted(self.keys()))
+                    _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
                 )
             inplace = has_key
         if not inplace and has_key:
@@ -3182,7 +3184,7 @@ class _SubTensorDict(TensorDictBase):
             value = self._validate_value(value, check_shape=True)
             validated = True
         if not inplace:
-            if _is_tensor_collection(value.__class__):
+            if _is_tensor_collection(type(value)):
                 value_expand = _expand_to_match_shape(
                     parent.batch_size, value, self.batch_dims, self.device
                 )
@@ -3310,7 +3312,7 @@ class _SubTensorDict(TensorDictBase):
     def entry_class(self, key: NestedKey) -> type:
         source_type = type(self._source.get(key))
         if _is_tensor_collection(source_type):
-            return self.__class__
+            return type(self)
         return source_type
 
     def _stack_onto_(self, list_item: list[CompatibleType], dim: int) -> _SubTensorDict:
@@ -3416,9 +3418,7 @@ class _SubTensorDict(TensorDictBase):
                             is_leaf=is_leaf,
                         )
                         continue
-                    elif isinstance(value, dict) or _is_tensor_collection(
-                        value.__class__
-                    ):
+                    elif isinstance(value, dict) or _is_tensor_collection(type(value)):
                         sub_keys_to_update = _prune_selected_keys(
                             keys_to_update, firstkey
                         )
@@ -3513,7 +3513,7 @@ class _SubTensorDict(TensorDictBase):
         if not isinstance(self._source, TensorDictBase):
             raise TypeError(
                 f"_SubTensorDict was initialized with a source of type"
-                f" {self._source.__class__.__name__}, "
+                f" {type(self._source).__name__}, "
                 "parent tensordict not accessible"
             )
         return self._source
@@ -3693,7 +3693,7 @@ class _SubTensorDict(TensorDictBase):
                     f.write(
                         json.dumps(
                             {
-                                "_type": str(self.__class__),
+                                "_type": str(type(self)),
                                 "index": _index_to_str(self.idx),
                             }
                         )
@@ -3974,11 +3974,11 @@ class _TensorDictKeysView:
     ) -> Iterable[str] | Iterable[tuple[str, ...]]:
         for key, value in self._items(tensordict):
             full_key = self._combine_keys(prefix, key)
-            cls = value.__class__
+            cls = type(value)
             while cls is list:
                 # For lazy stacks
                 value = value[0]
-                cls = value.__class__
+                cls = type(value)
             is_leaf = self.is_leaf(cls)
             if self.include_nested and not is_leaf:
                 yield from self._iter_helper(value, prefix=full_key)
@@ -4064,7 +4064,7 @@ class _TensorDictKeysView:
                         if len(key) >= 3:
                             leaf_td = item_root._get_tuple(key[1:-1], None)
                             if leaf_td is None or (
-                                not _is_tensor_collection(leaf_td.__class__)
+                                not _is_tensor_collection(type(leaf_td))
                                 and not isinstance(leaf_td, KeyedJaggedTensor)
                             ):
                                 return False
@@ -4079,7 +4079,7 @@ class _TensorDictKeysView:
     def __repr__(self):
         include_nested = f"include_nested={self.include_nested}"
         leaves_only = f"leaves_only={self.leaves_only}"
-        return f"{self.__class__.__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
+        return f"{type(self).__name__}({list(self)},\n{indent(include_nested, 4 * ' ')},\n{indent(leaves_only, 4 * ' ')})"
 
 
 def _set_tensor_dict(  # noqa: F811
@@ -4168,7 +4168,7 @@ def _save_metadata(data: TensorDictBase, prefix: Path, metadata=None):
         {
             "shape": list(data.shape),
             "device": str(data.device),
-            "_type": str(data.__class__),
+            "_type": str(type(data)),
         }
     )
     with open(filepath, "wb") as json_metadata:

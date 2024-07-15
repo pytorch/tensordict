@@ -2374,6 +2374,11 @@ class TensorDictBase(MutableMapping):
     def _has_names(self):
         ...
 
+    def _maybe_names(self):
+        if self._has_names():
+            return self.names
+        return None
+
     @property
     def _has_non_tensor(self):
         """Checks if the tensordict has non-tensor data."""
@@ -2469,7 +2474,7 @@ class TensorDictBase(MutableMapping):
         """
         self._device = None
         for value in self.values():
-            if _is_tensor_collection(value.__class__):
+            if _is_tensor_collection(type(value)):
                 value.clear_device_()
         return self
 
@@ -2577,7 +2582,7 @@ class TensorDictBase(MutableMapping):
         if flatten:
             source = source.flatten_keys(".")
         for key, item in source.items():
-            if not _is_tensor_collection(item.__class__):
+            if not _is_tensor_collection(type(item)):
                 if not keep_vars:
                     out[prefix + key] = item.detach().clone()
                 else:
@@ -3917,7 +3922,7 @@ class TensorDictBase(MutableMapping):
                 data=value,
                 batch_size=self.batch_size,
                 device=self.device,
-                names=self.names if self._has_names() else None,
+                names=self._maybe_names(),
             ),
             validated=True,
             inplace=False,
@@ -3995,7 +4000,7 @@ class TensorDictBase(MutableMapping):
             has_key = key in self.keys()
             if inplace is True and not has_key:  # inplace could be None
                 raise KeyError(
-                    _KEY_ERROR.format(key, self.__class__.__name__, sorted(self.keys()))
+                    _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
                 )
             inplace = has_key
         return inplace
@@ -4107,7 +4112,7 @@ class TensorDictBase(MutableMapping):
     ) -> T:
         """Similar to _stack_onto_ but on a specific index. Only works with regular TensorDicts."""
         raise RuntimeError(
-            f"Cannot call _stack_onto_at_ with {self.__class__.__name__}. "
+            f"Cannot call _stack_onto_at_ with {type(self).__name__}. "
             "Make sure your sub-classed tensordicts are turned into regular tensordicts by calling to_tensordict() "
             "before calling __getindex__ and stack."
         )
@@ -4118,7 +4123,7 @@ class TensorDictBase(MutableMapping):
         else:
             # raise KeyError
             raise KeyError(
-                _KEY_ERROR.format(key, self.__class__.__name__, sorted(self.keys()))
+                _KEY_ERROR.format(key, type(self).__name__, sorted(self.keys()))
             )
 
     def get(self, key: NestedKey, default: Any = NO_DEFAULT) -> CompatibleType:
@@ -4280,7 +4285,7 @@ class TensorDictBase(MutableMapping):
                         )
                         continue
                     elif isinstance(value, (dict,)) or _is_tensor_collection(
-                        value.__class__
+                        type(value)
                     ):
                         from tensordict._lazy import LazyStackedTensorDict
 
@@ -4651,7 +4656,7 @@ class TensorDictBase(MutableMapping):
         if include_nested and leaves_only:
             for k in self.keys():
                 val = self._get_str(k, NO_DEFAULT)
-                if not is_leaf(val.__class__):
+                if not is_leaf(type(val)):
                     yield from (
                         (_unravel_key_to_tuple((k, _key)), _val)
                         for _key, _val in val.items(
@@ -4666,7 +4671,7 @@ class TensorDictBase(MutableMapping):
             for k in self.keys():
                 val = self._get_str(k, NO_DEFAULT)
                 yield k, val
-                if not is_leaf(val.__class__):
+                if not is_leaf(type(val)):
                     yield from (
                         (_unravel_key_to_tuple((k, _key)), _val)
                         for _key, _val in val.items(
@@ -4678,7 +4683,7 @@ class TensorDictBase(MutableMapping):
         elif leaves_only:
             for k in self.keys():
                 val = self._get_str(k, NO_DEFAULT)
-                if is_leaf(val.__class__):
+                if is_leaf(type(val)):
                     yield k, val
         else:
             for k in self.keys():
@@ -4717,7 +4722,7 @@ class TensorDictBase(MutableMapping):
         if include_nested and leaves_only:
             for k in self.keys():
                 val = self._get_str(k, NO_DEFAULT)
-                if not is_leaf(val.__class__):
+                if not is_leaf(type(val)):
                     yield from val.values(
                         include_nested=include_nested,
                         leaves_only=leaves_only,
@@ -4729,7 +4734,7 @@ class TensorDictBase(MutableMapping):
             for k in self.keys():
                 val = self._get_str(k, NO_DEFAULT)
                 yield val
-                if not is_leaf(val.__class__):
+                if not is_leaf(type(val)):
                     yield from val.values(
                         include_nested=include_nested,
                         leaves_only=leaves_only,
@@ -4738,7 +4743,7 @@ class TensorDictBase(MutableMapping):
         elif leaves_only:
             for k in self.keys():
                 val = self._get_str(k, NO_DEFAULT)
-                if is_leaf(val.__class__):
+                if is_leaf(type(val)):
                     yield val
         else:
             for k in self.keys():
@@ -5216,7 +5221,7 @@ class TensorDictBase(MutableMapping):
             value = self._get_str(key, NO_DEFAULT)
             if isinstance(value, Tensor):
                 pass
-            elif _is_tensor_collection(value.__class__):
+            elif _is_tensor_collection(type(value)):
                 _tag = value._send(dst, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
                 continue
             else:
@@ -5272,7 +5277,7 @@ class TensorDictBase(MutableMapping):
             value = self._get_str(key, NO_DEFAULT)
             if isinstance(value, Tensor):
                 pass
-            elif _is_tensor_collection(value.__class__):
+            elif _is_tensor_collection(type(value)):
                 _tag = value._recv(src, _tag=_tag, pseudo_rand=pseudo_rand, group=group)
                 continue
             else:
@@ -5395,7 +5400,7 @@ class TensorDictBase(MutableMapping):
             _futures = []
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
-            if _is_tensor_collection(value.__class__):
+            if _is_tensor_collection(type(value)):
                 _tag = value._isend(
                     dst,
                     _tag=_tag,
@@ -5480,7 +5485,7 @@ class TensorDictBase(MutableMapping):
 
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
-            if _is_tensor_collection(value.__class__):
+            if _is_tensor_collection(type(value)):
                 _tag, _future_list = value._irecv(
                     src,
                     _tag=_tag,
@@ -5541,7 +5546,7 @@ class TensorDictBase(MutableMapping):
             root = True
         for key in self.sorted_keys:
             value = self._get_str(key, NO_DEFAULT)
-            if _is_tensor_collection(value.__class__):
+            if _is_tensor_collection(type(value)):
                 _future_list = value._reduce(
                     dst=dst,
                     op=op,
@@ -7492,7 +7497,7 @@ class TensorDictBase(MutableMapping):
                 array,
                 batch_size=self.batch_size,
                 device=self.device,
-                names=self.names if self._has_names() else None,
+                names=self._maybe_names(),
             )
 
     @abc.abstractmethod
@@ -7614,17 +7619,17 @@ class TensorDictBase(MutableMapping):
             last_op, (args, kwargs, out) = _last_op
             # TODO: transpose, flatten etc. as decorator should lock the content to make sure that no key is
             #  added or deleted
-            if last_op == self.__class__.lock_.__name__:
+            if last_op == type(self).lock_.__name__:
                 return self.unlock_()
-            elif last_op == self.__class__.unlock_.__name__:
+            elif last_op == type(self).unlock_.__name__:
                 return self.lock_()
-            elif last_op == self.__class__.transpose.__name__:
+            elif last_op == type(self).transpose.__name__:
                 dim0, dim1 = args
                 if not out.is_locked:
                     return out.update(self.transpose(dim0, dim1), inplace=False)
                 else:
                     return out.update_(self.transpose(dim0, dim1))
-            elif last_op == self.__class__.flatten.__name__:
+            elif last_op == type(self).flatten.__name__:
                 if len(args) == 2:
                     dim0, dim1 = args
                 elif len(args) == 1:
@@ -7645,7 +7650,7 @@ class TensorDictBase(MutableMapping):
                 else:
                     return out.update_(self.unflatten(dim0, out.shape[dim0 : dim1 + 1]))
 
-            elif last_op == self.__class__.unflatten.__name__:
+            elif last_op == type(self).unflatten.__name__:
                 if args:
                     dim0 = args[0]
                     if len(args) > 1:
@@ -7663,7 +7668,7 @@ class TensorDictBase(MutableMapping):
                 else:
                     return out.update_(self.flatten(dim0, dim1))
 
-            elif last_op == self.__class__.permute.__name__:
+            elif last_op == type(self).permute.__name__:
                 dims_list = _get_shape_from_args(*args, kwarg_name="dims", **kwargs)
                 dims_list = [dim if dim >= 0 else self.ndim + dim for dim in dims_list]
                 # inverse map
@@ -7672,12 +7677,12 @@ class TensorDictBase(MutableMapping):
                     return out.update(self.permute(inv_dims_list), inplace=False)
                 else:
                     return out.update_(self.permute(inv_dims_list))
-            elif last_op == self.__class__.view.__name__:
+            elif last_op == type(self).view.__name__:
                 if not out.is_locked:
                     return out.update(self.view(out.shape), inplace=False)
                 else:
                     return out.update_(self.view(out.shape))
-            elif last_op == self.__class__.unsqueeze.__name__:
+            elif last_op == type(self).unsqueeze.__name__:
                 if args:
                     (dim,) = args
                 elif kwargs:
@@ -7690,7 +7695,7 @@ class TensorDictBase(MutableMapping):
                     return out.update(self.squeeze(dim), inplace=False)
                 else:
                     return out.update_(self.squeeze(dim))
-            elif last_op == self.__class__.squeeze.__name__:
+            elif last_op == type(self).squeeze.__name__:
                 if args:
                     (dim,) = args
                 elif kwargs:
@@ -7703,7 +7708,7 @@ class TensorDictBase(MutableMapping):
                     return out.update(self.unsqueeze(dim), inplace=False)
                 else:
                     return out.update_(self.unsqueeze(dim))
-            elif last_op == self.__class__.to_module.__name__:
+            elif last_op == type(self).to_module.__name__:
                 if is_tensor_collection(out):
                     with out.unlock_():
                         return self.to_module(*args, **kwargs, swap_dest=out)
@@ -7864,7 +7869,7 @@ class TensorDictBase(MutableMapping):
         return TensorDict(
             {
                 key: value.clone()
-                if not _is_tensor_collection(value.__class__)
+                if not _is_tensor_collection(type(value))
                 else value
                 if is_non_tensor(value)
                 else value.to_tensordict()
@@ -7872,7 +7877,7 @@ class TensorDictBase(MutableMapping):
             },
             device=self.device,
             batch_size=self.batch_size,
-            names=self.names if self._has_names() else None,
+            names=self._maybe_names(),
         )
 
     def clone(self, recurse: bool = True, **kwargs) -> T:

@@ -960,7 +960,7 @@ class implement_for:
         if cls is None:
             # class not yet defined
             return
-        if cls.__class__.__name__ == "function":
+        if type(cls).__name__ == "function":
             cls = inspect.getmodule(fn)
         return cls
 
@@ -972,7 +972,7 @@ class implement_for:
         type(self)._implementations[self.get_func_name(self.fn)] = self
         cls = self.get_class_that_defined_method(self.fn)
         if cls is not None:
-            if cls.__class__.__name__ == "function":
+            if type(cls).__name__ == "function":
                 cls = inspect.getmodule(self.fn)
         else:
             # class not yet defined
@@ -1069,7 +1069,7 @@ class implement_for:
 
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}("
+            f"{type(self).__name__}("
             f"module_name={self.module_name}({self.from_version, self.to_version}), "
             f"fn_name={self.fn.__name__}, cls={self._get_cls(self.fn)}, is_set={self.do_set})"
         )
@@ -1543,8 +1543,8 @@ def assert_close(
     """Compares two tensordicts and raise an exception if their content does not match exactly."""
     from tensordict.base import _is_tensor_collection
 
-    if not _is_tensor_collection(actual.__class__) or not _is_tensor_collection(
-        expected.__class__
+    if not _is_tensor_collection(type(actual)) or not _is_tensor_collection(
+        type(expected)
     ):
         raise TypeError("assert_allclose inputs must be of TensorDict type")
 
@@ -1580,7 +1580,7 @@ def assert_close(
     for key in keys:
         input1 = actual.get(key)
         input2 = expected.get(key)
-        if _is_tensor_collection(input1.__class__):
+        if _is_tensor_collection(type(input1)):
             if is_non_tensor(input1):
                 # We skip non-tensor data
                 continue
@@ -1608,7 +1608,7 @@ def _get_repr(tensor: Tensor) -> str:
             f"is_shared={_is_shared(tensor)}",
         ]
     )
-    return f"{tensor.__class__.__name__}({s})"
+    return f"{type(tensor).__name__}({s})"
 
 
 def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
@@ -1661,7 +1661,7 @@ def _td_fields(td: T, keys=None) -> str:
                     else None
                 )
                 substr = _get_repr_custom(
-                    tensor.__class__,
+                    type(tensor),
                     shape=shape,
                     device=tensor.device,
                     dtype=tensor.dtype,
@@ -1748,7 +1748,7 @@ def _set_max_batch_size(source: T, batch_dims=None):
     tensor_data = [val for val in source.values() if not is_non_tensor(val)]
 
     for val in tensor_data:
-        if _is_tensor_collection(val.__class__):
+        if _is_tensor_collection(type(val)):
             _set_max_batch_size(val, batch_dims=batch_dims)
 
     batch_size = []
@@ -1786,7 +1786,7 @@ def _clone_value(value, recurse: bool):
     if recurse:
         # this is not a problem for locked tds as we will not lock it
         return value.clone()
-    elif _is_tensor_collection(value.__class__):
+    elif _is_tensor_collection(type(value)):
         return value._clone(recurse=False)
     else:
         return value
@@ -2028,7 +2028,7 @@ class set_lazy_legacy(_DecoratorContextManager):
 
     def clone(self) -> set_lazy_legacy:
         # override this method if your children class takes __init__ parameters
-        return self.__class__(self.mode)
+        return type(self)(self.mode)
 
     def __enter__(self) -> None:
         self.set()

@@ -154,4 +154,4 @@ class _DecoratorContextManager:
 
     def clone(self):
         # override this method if your children class takes __init__ parameters
-        return self.__class__()
+        return type(self)()

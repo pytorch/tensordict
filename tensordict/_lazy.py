@@ -475,7 +475,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"memmap tensordicts and "
                 f"{len(are_memmap) - sum(are_memmap)} non memmap tensordict "
             )
-        return all(are_memmap)
+        return are_memmap[0]
 
     @staticmethod
     def _compute_batch_size(
@@ -548,7 +548,7 @@ class LazyStackedTensorDict(TensorDictBase):
         #     if inplace is True and not has_key:  # inplace could be None
         #         raise KeyError(
         #             TensorDictBase.KEY_ERROR.format(
-        #                 key, self.__class__.__name__, sorted(self.keys())
+        #                 key, type(self).__name__, sorted(self.keys())
         #             )
         #         )
         #     inplace = has_key
@@ -989,7 +989,7 @@ class LazyStackedTensorDict(TensorDictBase):
             out = self.lazy_stack(
                 tensors, self.stack_dim, stack_dim_name=self._td_dim_name
             )
-            if _is_tensor_collection(out.__class__):
+            if _is_tensor_collection(type(out)):
                 if isinstance(out, LazyStackedTensorDict):
                     # then it's a LazyStackedTD
                     out.hook_out = self.hook_out
@@ -2004,7 +2004,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if isinstance(other, (dict,)):
             # we may want to broadcast it instead
             other = TensorDict.from_dict(other, batch_size=self.batch_size)
-        if _is_tensor_collection(other.__class__):
+        if _is_tensor_collection(type(other)):
             if other.batch_size != self.batch_size:
                 if self.ndim < other.ndim:
                     self_expand = self.expand(other.batch_size)
@@ -2253,7 +2253,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 with open(prefix / "meta.json", "wb") as f:
                     f.write(
                         json.dumps(
-                            {"_type": str(self.__class__), "stack_dim": self.stack_dim}
+                            {"_type": str(type(self)), "stack_dim": self.stack_dim}
                         )
                     )
 
@@ -2524,7 +2524,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if condition.ndim < self.ndim:
             condition = expand_right(condition, self.batch_size)
         condition = condition.unbind(self.stack_dim)
-        if _is_tensor_collection(other.__class__) or (
+        if _is_tensor_collection(type(other)) or (
             isinstance(other, Tensor)
             and other.shape[: self.stack_dim] == self.shape[: self.stack_dim]
         ):
@@ -3107,7 +3107,7 @@ class _CustomOpTensorDict(TensorDictBase):
         )
         indented_source = textwrap.indent(f"source={self._source}", "\t")
         return (
-            f"{self.__class__.__name__}(\n{indented_source}, "
+            f"{type(self).__name__}(\n{indented_source}, "
             f"\n\top={self.custom_op}({custom_op_kwargs_str}))"
         )
 
@@ -3270,7 +3270,7 @@ class _CustomOpTensorDict(TensorDictBase):
                 {
                     "shape": list(data.shape),
                     "device": str(data.device),
-                    "_type": str(data.__class__),
+                    "_type": str(type(data)),
                     "custom_op": data.custom_op,
                     "inv_op": data.inv_op,
                     "custom_op_kwargs": data.custom_op_kwargs,

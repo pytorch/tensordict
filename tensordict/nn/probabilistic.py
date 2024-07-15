@@ -98,7 +98,7 @@ class set_interaction_mode(_DecoratorContextManager):
 
     def clone(self) -> set_interaction_mode:
         # override this method if your children class takes __init__ parameters
-        return self.__class__(self.mode)
+        return type(self)(self.mode)
 
     def __enter__(self) -> None:
         global _INTERACTION_TYPE
@@ -125,7 +125,7 @@ class set_interaction_type(_DecoratorContextManager):
 
     def clone(self) -> set_interaction_type:
         # override this method if your children class takes __init__ parameters
-        return self.__class__(self.type)
+        return type(self)(self.type)
 
     def __enter__(self) -> None:
         global _INTERACTION_TYPE
@@ -347,7 +347,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             if set(map(type, dist_keys)) != {str}:
                 raise ValueError(
                     f"If in_keys is dict, its keys must be strings matching to the distribution kwargs."
-                    f"{self.__class__.__name__} got {dist_keys}"
+                    f"{type(self).__name__} got {dist_keys}"
                 )
         else:
             dist_keys = in_keys

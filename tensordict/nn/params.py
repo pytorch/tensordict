@@ -908,7 +908,7 @@ class TensorDictParams(TensorDictBase, nn.Module):
     def _propagate_lock(self, _lock_parents_weakrefs=None, *, is_compiling):
         """Registers the parent tensordict that handles the lock."""
         self._is_locked = True
-        if not not is_compiling:
+        if not is_compiling:
             if _lock_parents_weakrefs is None:
                 _lock_parents_weakrefs = []
             self._lock_parents_weakrefs += _lock_parents_weakrefs

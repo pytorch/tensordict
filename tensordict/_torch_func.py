@@ -105,7 +105,7 @@ def _gather(
 
     def _gather_tensor(tensor, dest_container=None, dest_key=None):
         if dest_container is not None:
-            dest = dest_container.get(dest_key)
+            dest = dest_container._get_str(dest_key, default=NO_DEFAULT)
         else:
             dest = None
         index_expand = index
@@ -547,7 +547,7 @@ def _stack(
                     return torch.stack(values, dim)
                 with _ErrorInteceptor(
                     key, "Attempted to stack tensors on different devices at key"
-                ) if not torch.compiler.torch.compiler.is_dynamo_compiling() else contextlib.nullcontext():
+                ) if not torch.compiler.is_dynamo_compiling() else contextlib.nullcontext():
                     return _stack(values, dim, maybe_dense_stack=maybe_dense_stack)
 
             out = {
@@ -563,7 +563,7 @@ def _stack(
                 device=device,
             )
             if is_tc:
-                return tc_type.from_tensordict(result)
+                return tc_type._from_tensordict(result)
             return result
         else:
             out = LazyStackedTensorDict(
