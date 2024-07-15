@@ -1138,7 +1138,7 @@ class TensorDictModule(TensorDictModuleBase):
             out_keys = self.out_keys_source
         if tensordict_out is None:
             tensordict_out = tensordict
-        for _out_key, _tensor in _zip_strict(out_keys, tensors):
+        for _out_key, _tensor in zip(out_keys, tensors):
             if _out_key != "_":
                 tensordict_out.set(_out_key, _tensor)
         return tensordict_out

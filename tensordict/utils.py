@@ -2578,7 +2578,7 @@ def _check_inbuild():
 _check_inbuild = torch.compiler.assume_constant_result(_check_inbuild)
 
 if sys.version_info >= (3, 10):
-    zip_strict = functools.partial(zip, strict=True)
+    _zip_strict = functools.partial(zip, strict=True)
 else:
 
     def _zip_strict(*iterables):
