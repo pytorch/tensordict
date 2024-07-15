@@ -38,7 +38,8 @@ def test_mod_add(mode, benchmark):
     td = TensorDict({"a": 0}, device=device)
     module = Mod(lambda x: x + 1, in_keys=["a"], out_keys=[("c", "d")])
     if mode == "compile":
-        module = torch.compile(module, fullgraph=True)
+        module = torch.compile(module, fullgraph=True, mode="reduce-overhead")
+    module(td)
     module(td)
     benchmark(module, td)
 
@@ -51,7 +52,8 @@ def test_mod_wrap(mode, benchmark):
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
     module = Mod(net, in_keys=["a"], out_keys=[("c", "d")])
     if mode == "compile":
-        module = torch.compile(module, fullgraph=True)
+        module = torch.compile(module, fullgraph=True, mode="reduce-overhead")
+    module(td)
     module(td)
     benchmark(module, td)
 
@@ -73,7 +75,8 @@ def test_seq_add(mode, benchmark):
         delhidden,
     )
     if mode == "compile":
-        module = torch.compile(module, fullgraph=True)
+        module = torch.compile(module, fullgraph=True, mode="reduce-overhead")
+    module(td)
     module(td)
     benchmark(module, td)
 
@@ -102,7 +105,8 @@ def test_seq_wrap(mode, benchmark):
         delhidden,
     )
     if mode == "compile":
-        module = torch.compile(module, fullgraph=True)
+        module = torch.compile(module, fullgraph=True, mode="reduce-overhead")
+    module(td)
     module(td)
     benchmark(module, td)
 
@@ -129,13 +133,15 @@ def test_func_call_runtime(mode, functional, benchmark):
         call = module
 
     if mode == "compile":
-        call = torch.compile(call, fullgraph=True)
+        call = torch.compile(call, fullgraph=True, mode="reduce-overhead")
 
     x = torch.randn(2, 2, 16)
     if functional:
         call(x, td)
+        call(x, td)
         benchmark(call, x, td)
     else:
+        call(x)
         call(x)
         benchmark(call, x)
 
