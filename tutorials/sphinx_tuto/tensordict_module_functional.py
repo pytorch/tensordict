@@ -4,6 +4,7 @@ Functionalizing TensorDictModule
 In this tutorial you will learn how to use :class:`~.TensorDictModule` in conjunction
 with functorch to create functionlized modules.
 """
+
 ##############################################################################
 # Before we take a look at the functional utilities in :mod:`tensordict.nn`, let us
 # reintroduce one of the example modules from the :class:`~.TensorDictModule` tutorial.

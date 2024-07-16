@@ -172,9 +172,11 @@ class TensorDictSequential(TensorDictModule):
     @staticmethod
     def _convert_modules(modules):
         return [
-            WrapModule(module)
-            if not TensorDictModuleBase.is_tdmodule_compatible(module)
-            else module
+            (
+                WrapModule(module)
+                if not TensorDictModuleBase.is_tdmodule_compatible(module)
+                else module
+            )
             for module in modules
         ]
 

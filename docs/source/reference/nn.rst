@@ -274,7 +274,7 @@ distinguish on a high level parameters and buffers (they are all packed together
 
 Ensembles
 ---------
-The functional approach enables a straightforward ensemble implementation. 
+The functional approach enables a straightforward ensemble implementation.
 We can duplicate and reinitialize model copies using the :class:`tensordict.nn.EnsembleModule`
 
 .. code-block::

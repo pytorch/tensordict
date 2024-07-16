@@ -782,9 +782,11 @@ class TensorDict(TensorDictBase):
                 self._set_tuple(
                     index_unravel,
                     value,
-                    inplace=BEST_ATTEMPT_INPLACE
-                    if isinstance(self, _SubTensorDict)
-                    else False,
+                    inplace=(
+                        BEST_ATTEMPT_INPLACE
+                        if isinstance(self, _SubTensorDict)
+                        else False
+                    ),
                     validated=False,
                     non_blocking=False,
                 )
@@ -1306,9 +1308,11 @@ class TensorDict(TensorDictBase):
             batch_size=torch.Size(
                 [b for i, b in enumerate(td.batch_size) if i != in_dim]
             ),
-            names=[name for i, name in enumerate(td.names) if i != in_dim]
-            if self._has_names()
-            else None,
+            names=(
+                [name for i, name in enumerate(td.names) if i != in_dim]
+                if self._has_names()
+                else None
+            ),
             lock=self.is_locked,
         )
         return out
@@ -1321,11 +1325,13 @@ class TensorDict(TensorDictBase):
         new_names.insert(out_dim, None)
         out = TensorDict(
             {
-                key: value._remove_batch_dim(
-                    vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
+                key: (
+                    value._remove_batch_dim(
+                        vmap_level=vmap_level, batch_size=batch_size, out_dim=out_dim
+                    )
+                    if is_tensor_collection(value)
+                    else _remove_batch_dim(value, vmap_level, batch_size, out_dim)
                 )
-                if is_tensor_collection(value)
-                else _remove_batch_dim(value, vmap_level, batch_size, out_dim)
                 for key, value in self.items()
             },
             batch_size=new_batch_size,
@@ -2816,13 +2822,15 @@ class TensorDict(TensorDictBase):
         if not recurse:
             return TensorDict._new_unsafe(
                 device=self._device if device is NO_DEFAULT else device,
-                batch_size=self._batch_size
-                if batch_size is None
-                else torch.Size(batch_size),
+                batch_size=(
+                    self._batch_size if batch_size is None else torch.Size(batch_size)
+                ),
                 source={},
-                names=(self.names if self._has_names() else None)
-                if names is NO_DEFAULT
-                else names,
+                names=(
+                    (self.names if self._has_names() else None)
+                    if names is NO_DEFAULT
+                    else names
+                ),
             )
         return super().empty(recurse=recurse)
 
@@ -4270,9 +4278,11 @@ def _update_metadata(*, metadata, key, value, is_collection):
     if not is_collection:
         metadata[key] = {
             "device": str(value.device),
-            "shape": list(value.shape)
-            if not value.is_nested
-            else list(value._nested_tensor_size().shape),
+            "shape": (
+                list(value.shape)
+                if not value.is_nested
+                else list(value._nested_tensor_size().shape)
+            ),
             "dtype": str(value.dtype),
             "is_nested": value.is_nested,
         }

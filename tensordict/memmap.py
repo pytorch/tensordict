@@ -125,8 +125,7 @@ class MemoryMappedTensor(torch.Tensor):
         shape=None,
         device=None,
         filename=None,
-    ):
-        ...
+    ): ...
 
     __torch_function__ = torch._C._disabled_torch_function_impl
 
@@ -424,13 +423,11 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def ones(cls, *size, dtype=None, device=None, filename=None):
-        ...
+    def ones(cls, *size, dtype=None, device=None, filename=None): ...
 
     @classmethod
     @overload
-    def ones(cls, shape, *, dtype=None, device=None, filename=None):
-        ...
+    def ones(cls, shape, *, dtype=None, device=None, filename=None): ...
 
     @classmethod
     def ones(cls, *args, **kwargs):
@@ -473,13 +470,11 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def zeros(cls, *size, dtype=None, device=None, filename=None):
-        ...
+    def zeros(cls, *size, dtype=None, device=None, filename=None): ...
 
     @classmethod
     @overload
-    def zeros(cls, shape, *, dtype=None, device=None, filename=None):
-        ...
+    def zeros(cls, shape, *, dtype=None, device=None, filename=None): ...
 
     @classmethod
     def zeros(cls, *args, **kwargs):
@@ -523,13 +518,11 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def empty(cls, *size, dtype=None, device=None, filename=None):
-        ...
+    def empty(cls, *size, dtype=None, device=None, filename=None): ...
 
     @classmethod
     @overload
-    def empty(cls, shape, *, dtype=None, device=None, filename=None):
-        ...
+    def empty(cls, shape, *, dtype=None, device=None, filename=None): ...
 
     @classmethod
     def empty(cls, *args, **kwargs):
@@ -670,13 +663,11 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     @overload
-    def full(cls, *size, fill_value, dtype=None, device=None, filename=None):
-        ...
+    def full(cls, *size, fill_value, dtype=None, device=None, filename=None): ...
 
     @classmethod
     @overload
-    def full(cls, shape, *, fill_value, dtype=None, device=None, filename=None):
-        ...
+    def full(cls, shape, *, fill_value, dtype=None, device=None, filename=None): ...
 
     @classmethod
     def full(cls, *args, **kwargs):

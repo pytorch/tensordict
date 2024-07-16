@@ -3,7 +3,6 @@ Using TensorDict for datasets
 =============================
 """
 
-
 ##############################################################################
 # In this tutorial we demonstrate how ``TensorDict`` can be used to
 # efficiently and transparently load and manage data inside a training

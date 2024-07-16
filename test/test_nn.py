@@ -59,7 +59,7 @@ try:
     try:
         from torch import vmap
     except ImportError:
-        from functorch import vmap
+        from functorch import vmap  # noqa: TOR103
 
     _has_functorch = True
     FUNCTORCH_ERR = ""

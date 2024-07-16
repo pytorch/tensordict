@@ -5,6 +5,7 @@ In this tutorial you will learn how to use :class:`~.TensorDictModule` and
 :class:`~.TensorDictSequential` to create generic and reusable modules that can accept
 :class:`~.TensorDict` as input.
 """
+
 ##############################################################################
 # For a convenient usage of the :class:`~.TensorDict` class with ``nn.Module``,
 # :mod:`tensordict` provides an interface between the two named ``TensorDictModule``.
