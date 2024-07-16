@@ -1407,7 +1407,7 @@ class TensorDict(TensorDictBase):
                 f"dimensions in the TensorDict ({tensordict_dims})"
             )
 
-        # new shape compatability check
+        # new shape compatibility check
         for old_dim, new_dim in zip(self.batch_size, shape[-tensordict_dims:]):
             if old_dim != 1 and new_dim != old_dim:
                 raise RuntimeError(
