@@ -1793,24 +1793,26 @@ class TensorDictBase(MutableMapping):
         return _cat(input, dim, out=out)
 
     @classmethod
-    def lazy_stack(cls, input, dim=0, *, out=None):
+    def lazy_stack(cls, input, dim=0, *, out=None, **kwargs):
         """Creates a lazy stack of tensordicts.
 
         See :meth:`~tensordict.LazyStackTensorDict.lazy_stack` for details.
         """
         from tensordict._lazy import LazyStackedTensorDict
 
-        return LazyStackedTensorDict.lazy_stack(input, dim=dim, out=out)
+        return LazyStackedTensorDict.lazy_stack(input, dim=dim, out=out, **kwargs)
 
     @classmethod
-    def maybe_dense_stack(cls, input, dim=0, *, out=None):
+    def maybe_dense_stack(cls, input, dim=0, *, out=None, **kwargs):
         """Attempts to make a dense stack of tensordicts, and falls back on lazy stack when required..
 
         See :meth:`~tensordict.LazyStackTensorDict.maybe_dense_stack` for details.
         """
         from tensordict._lazy import LazyStackedTensorDict
 
-        return LazyStackedTensorDict.maybe_dense_stack(input, dim=dim, out=out)
+        return LazyStackedTensorDict.maybe_dense_stack(
+            input, dim=dim, out=out, **kwargs
+        )
 
     @abc.abstractmethod
     def split(self, split_size: int | list[int], dim: int = 0) -> list[TensorDictBase]:

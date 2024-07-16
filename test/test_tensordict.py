@@ -7836,6 +7836,21 @@ class TestLazyStackedTensorDict:
         td["a", "c"] = td["a", "c"] + 1
         assert (td["a", "c"] == torch.tensor([[3], [4]], device=td.device)).all()
 
+    def test_strict_shape(self):
+        td0 = TensorDict(batch_size=[3, 4])
+        td1 = TensorDict(batch_size=[3, 5])
+        with pytest.raises(RuntimeError, match="stacking tensordicts requires"):
+            TensorDict.lazy_stack([td0, td1], strict_shape=True)
+        with pytest.raises(RuntimeError, match="batch sizes in tensordicts differs"):
+            LazyStackedTensorDict(*[td0, td1], strict_shape=True)
+        td = LazyStackedTensorDict(td0, td1, stack_dim=1)
+        assert td.shape == torch.Size([3, 2, -1])
+        assert td[0].shape == torch.Size([2, -1])
+        assert td[:, :, 0].shape == torch.Size([3, 2])
+        assert td[:, :, :2].shape == torch.Size([3, 2, 2])
+        assert td[:, :, -2:].shape == torch.Size([3, 2, 2])
+        assert td[:, 0, :].shape == torch.Size([3, 4])
+
     def test_unbind_lazystack(self):
         td0 = TensorDict(
             {

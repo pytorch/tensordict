@@ -177,6 +177,8 @@ class LazyStackedTensorDict(TensorDictBase):
          hook_in (callable, optional): a callable to execute before :meth:`~.set`.
          stack_dim_name (str, optional): the name of the stack dimension.
             Defaults to ``None``.
+        strict_shape (bool, optional): if ``True``, every tensordict's shapes must match.
+            Defaults to ``False``.
 
     Examples:
         >>> from tensordict import TensorDict
@@ -231,6 +233,7 @@ class LazyStackedTensorDict(TensorDictBase):
         device: torch.device | None = None,
         names: Sequence[str] | None = None,
         stack_dim_name: str | None = None,
+        strict_shape: bool = False,
     ) -> None:
         self._is_locked = None
 
@@ -265,11 +268,17 @@ class LazyStackedTensorDict(TensorDictBase):
             if device != _device:
                 raise RuntimeError(f"devices differ, got {device} and {_device}")
             if _bs != _batch_size:
-                raise RuntimeError(
-                    f"batch sizes in tensordicts differs, StackedTensorDict "
-                    f"cannot be created. Got td[0].batch_size={_batch_size} "
-                    f"and td[i].batch_size={_bs} "
-                )
+                if strict_shape or len(_bs) != len(_batch_size):
+                    raise RuntimeError(
+                        f"batch sizes in tensordicts differs, LazyStackedTensorDict "
+                        f"cannot be created. Got td[0].batch_size={_batch_size} "
+                        f"and td[i].batch_size={_bs}. If the length match and you wish "
+                        f"to stack these tensordicts, set strict_shape to False."
+                    )
+                else:
+                    _batch_size = torch.Size(
+                        [s if _bs[i] == s else -1 for i, s in enumerate(_batch_size)]
+                    )
         self.tensordicts: list[TensorDictBase] = list(tensordicts)
         self.stack_dim = stack_dim
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, num_tds)
@@ -1070,8 +1079,25 @@ class LazyStackedTensorDict(TensorDictBase):
         device: DeviceType | None = None,
         out: T | None = None,
         stack_dim_name: str | None = None,
-    ) -> T:
-        """Stacks tensordicts in a LazyStackedTensorDict."""
+        strict_shape: bool = False,
+    ) -> T:  # noqa: D417
+        """Stacks tensordicts in a LazyStackedTensorDict.
+
+        Args:
+            items (Sequence of TensorDictBase instances): A sequence of TensorDictBase
+                instances to stack.
+            dim (int, optional): the dim along which to perform the lazy stack.
+                Defaults to 0.
+
+        Keyword Args:
+            device (torch.device, optional): a device to set in the `LazyStackedTensorDict`
+                in case it cannot be inferred from the tensordict list (e.g., the list is empty).
+            out (TensorDictBase, optional): a `LazyStackedTensorDict` where to write the data.
+            stack_dim_name (str, optional): a name for the stacked dimension.
+            strict_shape (bool, optional): if ``True``, every tensordict's shapes must match.
+                Defaults to ``False``.
+
+        """
         if not items:
             raise RuntimeError("items cannot be empty")
 
@@ -1103,13 +1129,14 @@ class LazyStackedTensorDict(TensorDictBase):
         if dim < 0:
             dim = len(batch_size) + dim + 1
 
-        for td in items[1:]:
-            if td.batch_size != items[0].batch_size:
-                raise RuntimeError(
-                    "stacking tensordicts requires them to have congruent batch sizes, "
-                    f"got td1.batch_size={td.batch_size} and td2.batch_size="
-                    f"{items[0].batch_size}"
-                )
+        if strict_shape:
+            for td in items[1:]:
+                if td.batch_size != items[0].batch_size:
+                    raise RuntimeError(
+                        "stacking tensordicts requires them to have congruent batch sizes, "
+                        f"got td1.batch_size={td.batch_size} and td2.batch_size="
+                        f"{items[0].batch_size}"
+                    )
 
         if out is None:
             # We need to handle tensordicts with exclusive keys and tensordicts with
@@ -1118,7 +1145,11 @@ class LazyStackedTensorDict(TensorDictBase):
             # don't match exactly.
             # The second requires a check over the tensor shapes.
             return LazyStackedTensorDict(
-                *items, stack_dim=dim, stack_dim_name=stack_dim_name
+                *items,
+                stack_dim=dim,
+                stack_dim_name=stack_dim_name,
+                strict_shape=strict_shape,
+                device=device,
             )
         else:
             batch_size = list(batch_size)
