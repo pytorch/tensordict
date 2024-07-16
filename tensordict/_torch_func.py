@@ -357,6 +357,8 @@ def _lazy_cat(
         out = []
         if dim == stack_dim:  # if dim is stack, just add all to the same list
             for lazy_td in list_of_tensordicts:
+                if lazy_td.batch_size[stack_dim] == 0:
+                    continue
                 out += lazy_td.tensordicts
         else:
             for i in range(len(list_of_tensordicts[0].tensordicts)):
