@@ -7199,6 +7199,14 @@ class TestLazyStackedTensorDict:
         torch.save(td_c, filename)
         assert (td == torch.load(filename, weights_only=False)).all()
 
+    def test_create_empty(self):
+        td = LazyStackedTensorDict(stack_dim=0)
+        assert td.device is None
+        assert td.shape == torch.Size([0])
+        td = LazyStackedTensorDict(stack_dim=1, batch_size=[1, 2], device="cpu")
+        assert td.device == torch.device("cpu")
+        assert td.shape == torch.Size([1, 0, 2])
+
     @pytest.mark.parametrize("pos1", range(8))
     @pytest.mark.parametrize("pos2", range(8))
     @pytest.mark.parametrize("pos3", range(8))
@@ -7225,6 +7233,41 @@ class TestLazyStackedTensorDict:
             outer_dense[index].shape,
             index,
         )
+
+    def test_lazy_mask_hetero(self):
+        td = LazyStackedTensorDict(
+            TensorDict({"a": torch.zeros(6, 3), "b": "a string!"}, batch_size=[6]),
+            TensorDict({"a": torch.ones(6, 4), "b": "another string!"}, batch_size=[6]),
+            TensorDict(
+                {"a": torch.ones(6, 5) * 2, "b": "a third string!"}, batch_size=[6]
+            ),
+            stack_dim=1,
+        )
+        mask0a = torch.zeros(6, dtype=torch.bool)
+        mask0a[:3] = 1
+        mask0b = ~mask0a
+        split0 = td[mask0a], td[mask0b]
+        assert (torch.cat(split0, dim=0) == td).all()
+
+        mask0a = torch.zeros(6, dtype=torch.bool)
+        mask0c = mask0a.clone()
+        mask0a[:3] = 1
+        mask0b = ~mask0a
+        split0 = td[mask0a], td[mask0b], td[mask0c]
+        assert (torch.cat(split0, dim=0) == td).all()
+
+        mask1a = torch.zeros(3, dtype=torch.bool)
+        mask1a[:2] = 1
+        mask1b = ~mask1a
+        split1 = td[:, mask1a], td[:, mask1b]
+        assert (torch.cat(split1, dim=1) == td).all()
+
+        mask1a = torch.zeros(3, dtype=torch.bool)
+        mask1c = mask1a.clone()
+        mask1a[:2] = 1
+        mask1b = ~mask1a
+        split1b = td[:, mask1a], td[:, mask1b], td[:, mask1c]
+        assert (torch.cat(split1b, dim=1) == td).all()
 
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize("mask_dim", [0, 1, 2])
@@ -7447,6 +7490,24 @@ class TestLazyStackedTensorDict:
         index = (slice(None),) * stack_dim + (1,)  # get the second in the stack
         assert self.recursively_check_key(res1[index], 1)  # check all 1
         assert self.recursively_check_key(res2[index], 1)  # check all 1
+
+    def test_split_lazy(self):
+        td = LazyStackedTensorDict(
+            TensorDict({"a": torch.zeros(2, 3), "b": "a string!"}, batch_size=[2]),
+            TensorDict(
+                {"a": torch.zeros(2, 4), "b": "another string!"}, batch_size=[2]
+            ),
+            TensorDict(
+                {"a": torch.zeros(2, 5), "b": "a third string!"}, batch_size=[2]
+            ),
+            stack_dim=1,
+        )
+        split0 = td.split([3, 3], 0)
+        split1 = td.split([2, 1], 1)
+        split1b = td.split([2, 0, 1], 1)
+        assert (torch.cat(split0, dim=0) == td).all()
+        assert (torch.cat(split1, dim=1) == td).all()
+        assert (torch.cat(split1b, dim=1) == td).all()
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_stack(self, device):
