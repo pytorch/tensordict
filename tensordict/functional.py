@@ -20,7 +20,14 @@ from tensordict.base import (
     T,
     TensorDictBase,
 )
-from tensordict.utils import _check_keys, _shape, DeviceType, is_non_tensor, unravel_key
+from tensordict.utils import (
+    _check_keys,
+    _shape,
+    DeviceType,
+    is_non_tensor,
+    is_tensorclass,
+    unravel_key,
+)
 
 
 def pad(tensordict: T, pad_size: Sequence[int], value: float = 0.0) -> T:
@@ -149,6 +156,13 @@ def pad_sequence(
     if not list_of_tensordicts:
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
+    if return_mask and is_tensorclass(list_of_tensordicts[0]):
+        raise RuntimeError(
+            "Expected 'return_mask=False' when list_of_tensordicts contains "
+            "tensorclasses, but got 'return_mask=True'. If you want masks, "
+            "plase convert the tensorclasses to TensorDicts first."
+        )
+
     masks_key = "masks"
     if not isinstance(return_mask, bool):
         masks_key = unravel_key(return_mask)
@@ -161,6 +175,8 @@ def pad_sequence(
     list_of_dicts = [{} for _ in range(len(list_of_tensordicts))]
     keys_copy = list(keys)
     for i, td in enumerate(list_of_tensordicts):
+        if is_tensorclass(td):
+            td = td._tensordict
 
         for key in keys:
             item = td.get(key)
