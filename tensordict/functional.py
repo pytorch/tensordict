@@ -175,10 +175,11 @@ def pad_sequence(
     list_of_dicts = [{} for _ in range(len(list_of_tensordicts))]
     keys_copy = list(keys)
     for i, td in enumerate(list_of_tensordicts):
-        is_tensorclass_ = is_tensorclass(td)
+        if is_tensorclass(td):
+            td = td._tensordict
 
         for key in keys:
-            item = td._tensordict.get(key) if is_tensorclass_ else td.get(key)
+            item = td.get(key)
             list_of_dicts[i][key] = item
             if is_non_tensor(item):
                 continue
