@@ -4338,6 +4338,69 @@ class TestTensorDicts(TestTensorDictsBase):
         # cloning is type-preserving: we can do that operation
         td_stack.clone()
 
+    def test_new_empty(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdn = td.new_empty([0])
+        assert tdn.shape == (0,)
+        tdn = td.new_empty(0)
+        assert tdn.shape == (0,)
+        tdn = td.new_empty(2, 3)
+        assert tdn.shape == (2, 3)
+        # assert (tdn != 0).any()
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
+    def test_new_full(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdn = td.new_full([0], 2)
+        assert tdn.shape == (0,)
+        tdn = td.new_full((2, 3), 2)
+        assert tdn.shape == (2, 3)
+        assert (tdn == 2).all()
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
+    def test_new_ones(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdn = td.new_ones([0])
+        assert tdn.shape == (0,)
+        tdn = td.new_ones(0)
+        assert tdn.shape == (0,)
+        tdn = td.new_ones(2, 3)
+        assert tdn.shape == (2, 3)
+        assert (tdn == 1).all()
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
+    def test_new_tensor(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        if td_name in ("td_params",):
+            td = td.data
+        tdn = td.new_tensor(torch.zeros(0, device="cpu"))
+        assert tdn.device == torch.device("cpu")
+        assert tdn.shape == (0,)
+        tdn = td.new_tensor(torch.zeros(2, device="cpu"))
+        assert tdn.device == torch.device("cpu")
+        assert tdn.shape == (2,)
+        tdn = td.new_tensor(td[0] * 0)
+        assert tdn.device == torch.device("cpu")
+        assert (tdn == 0).all()
+        assert tdn.shape == td.shape[1:]
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
+    def test_new_zeros(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdn = td.new_zeros([0])
+        assert tdn.shape == (0,)
+        tdn = td.new_zeros(0)
+        assert tdn.shape == (0,)
+        tdn = td.new_zeros(2, 3)
+        assert tdn.shape == (2, 3)
+        assert (tdn == 0).all()
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
     # This test fails on lazy tensordicts when lazy-legacy is False
     # Deprecating lazy modules will make this decorator useless (the test should
     # still run ok).
