@@ -1043,7 +1043,7 @@ Benchmarking
 
  .. code-block:: none
 
-    Execution time: 0.009660482406616211 seconds
+    Execution time: 0.009956121444702148 seconds
 
 
 
@@ -1066,7 +1066,7 @@ Benchmarking
 
  .. code-block:: none
 
-    Execution time: 0.006423234939575195 seconds
+    Execution time: 0.0068759918212890625 seconds
 
 
 
