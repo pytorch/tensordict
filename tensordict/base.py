@@ -1554,6 +1554,48 @@ class TensorDictBase(MutableMapping):
             **kwargs,
         )
 
+    def new_ones(
+        self,
+        *size: torch.Size,
+        dtype: torch.dtype = None,
+        device: DeviceType = NO_DEFAULT,
+        requires_grad: bool = False,
+        layout: torch.layout = torch.strided,
+        pin_memory: bool = None,
+    ):  # noqa: D417
+        """Returns a TensorDict of size ``size`` filled with 1.
+
+        By default, the returned TensorDict has the same ``torch.dtype`` and ``torch.device`` as this tensordict.
+
+        Args:
+            size (int...): a list, tuple, or torch.Size of integers defining the shape of the output tensor.
+
+        Keyword Args:
+            dtype (torch.dtype, optional): the desired type of returned tensordict.
+                Default: if ``None``, the `torch.dtype` will be unchanged.
+            device (torch.device, optional): the desired device of returned tensordict.
+                Default: if ``None``, the ``torch.device`` will be unchanged.
+            requires_grad (bool, optional): If autograd should record operations on the
+                returned tensors. Default: ``False``.
+            layout (torch.layout, optional): the desired layout of returned TensorDict values.
+                Default: ``torch.strided``.
+            pin_memory (bool, optional): If set, returned tensor would be allocated in the
+                pinned memory. Works only for CPU tensors. Default: ``False``.
+
+        """
+        kwargs = {}
+        if pin_memory is not None:
+            kwargs = {"pin_memory": pin_memory}
+        return self._new_impl(
+            size,
+            dtype=dtype,
+            device=device,
+            requires_grad=requires_grad,
+            layout=layout,
+            funcname="new_ones",
+            **kwargs,
+        )
+
     def _new_impl(
         self,
         size: torch.Size,

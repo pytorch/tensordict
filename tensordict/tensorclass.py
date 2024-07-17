@@ -232,6 +232,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "named_apply",
     "neg",
     "neg_",
+    "new_ones",
     "new_zeros",
     "norm",
     "permute",
