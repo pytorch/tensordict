@@ -1179,7 +1179,7 @@ class _StringKeys(KeysView):
         yield from self.keys
 
     def __repr__(self):
-        return f"{type(self)}({self.keys})"
+        return f"{type(self).__name__}({self.keys})"
 
     def __len__(self):
         return len(self.keys)
