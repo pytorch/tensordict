@@ -4383,7 +4383,7 @@ class TestTensorDicts(TestTensorDictsBase):
         assert tdn.device == torch.device("cpu")
         assert tdn.shape == (2,)
         tdn = td.new_tensor(td[0] * 0)
-        assert tdn.device == torch.device("cpu")
+        assert tdn.device == td.device
         assert (tdn == 0).all()
         assert tdn.shape == td.shape[1:]
         if td._has_non_tensor:
