@@ -4338,6 +4338,18 @@ class TestTensorDicts(TestTensorDictsBase):
         # cloning is type-preserving: we can do that operation
         td_stack.clone()
 
+    def test_new_ones(self, td_name, device):
+        td = getattr(self, td_name)(device)
+        tdn = td.new_ones([0])
+        assert tdn.shape == (0,)
+        tdn = td.new_ones(0)
+        assert tdn.shape == (0,)
+        tdn = td.new_ones(2, 3)
+        assert tdn.shape == (2, 3)
+        assert (tdn == 1).all()
+        if td._has_non_tensor:
+            assert tdn._has_non_tensor
+
     def test_new_zeros(self, td_name, device):
         td = getattr(self, td_name)(device)
         tdn = td.new_zeros([0])
