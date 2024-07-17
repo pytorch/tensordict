@@ -233,6 +233,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "neg",
     "neg_",
     "new_empty",
+    "new_full",
     "new_ones",
     "new_zeros",
     "norm",
