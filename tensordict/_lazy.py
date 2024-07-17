@@ -1302,6 +1302,8 @@ class LazyStackedTensorDict(TensorDictBase):
         self,
         key: NestedKey,
         default: Any = NO_DEFAULT,
+        *,
+        layout: torch.layout | None = None,
     ) -> CompatibleType:
         """Returns a nested tensor when stacking cannot be achieved.
 
@@ -1313,6 +1315,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 .. note:: In case the default is a tensor, this method will attempt
                   the construction of a nestedtensor with it. Otherwise, the default
                   value will be returned.
+
+        Keyword Args:
+            layout (torch.layout, optional): the layout for the nested tensor.
 
         Examples:
             >>> td0 = TensorDict({"a": torch.zeros(4), "b": torch.zeros(4)}, [])
@@ -1342,14 +1347,14 @@ class LazyStackedTensorDict(TensorDictBase):
             tensordict = self.get(subkey, default)
             if tensordict is default:
                 return default
-            return tensordict.get_nestedtensor(key[1:], default=default)
+            return tensordict.get_nestedtensor(key[1:], default=default, layout=layout)
         tensors = [td.get(subkey, default=default) for td in self.tensordicts]
         if not isinstance(default, torch.Tensor) and any(
             tensor is default for tensor in tensors
         ):
             # we don't stack but return the default
             return default
-        return torch.nested.nested_tensor(tensors)
+        return torch.nested.nested_tensor(tensors, layout=layout)
 
     def is_contiguous(self) -> bool:
         return False

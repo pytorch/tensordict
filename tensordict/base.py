@@ -2514,7 +2514,7 @@ class TensorDictBase(MutableMapping):
         else:
             return False
 
-    def refine_names(self, *names):
+    def refine_names(self, *names) -> T:
         """Refines the dimension names of self according to names.
 
         Refining is a special case of renaming that “lifts” unnamed dimensions.
