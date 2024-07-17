@@ -144,6 +144,9 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
             for tensordict in self.tensordict.tensordicts
         )
 
+    def __repr__(self):
+        return f"{type(self).__name__}({tuple(self)})"
+
 
 def _fails_exclusive_keys(func):
     @wraps(func)
