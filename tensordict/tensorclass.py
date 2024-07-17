@@ -103,6 +103,7 @@ _METHOD_FROM_TD = [
 # Methods to be executed from tensordict, any ref to self means 'self._tensordict'
 _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_check_unlock",
+    "_check_dim_name",
     "_default_get",
     "_get_at_str",
     "_get_at_tuple",
@@ -203,6 +204,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "floor_",
     "frac",
     "frac_",
+    "gather",
     "isfinite",
     "isnan",
     "isreal",
@@ -243,7 +245,9 @@ _FALLBACK_METHOD_FROM_TD = [
     "pow_",
     "reciprocal",
     "reciprocal_",
+    "refine_names",
     "rename_",  # TODO: must be specialized
+    "replace",
     "reshape",
     "round",
     "round_",
