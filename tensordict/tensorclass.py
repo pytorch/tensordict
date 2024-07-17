@@ -235,6 +235,7 @@ _FALLBACK_METHOD_FROM_TD = [
     "new_empty",
     "new_full",
     "new_ones",
+    "new_tensor",
     "new_zeros",
     "norm",
     "permute",

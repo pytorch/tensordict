@@ -1719,6 +1719,69 @@ class TensorDictBase(MutableMapping):
             func, call_on_nested=True, device=device, batch_size=size
         )
 
+    def new_tensor(
+        self,
+        data: torch.Tensor | TensorDictBase,
+        *,
+        dtype: torch.dtype = None,
+        device: DeviceType = NO_DEFAULT,
+        requires_grad: bool = False,
+        pin_memory: bool | None = None,
+    ):  # noqa: D417
+        """Returns a new TensorDict with data as the tensor ``data``.
+
+        By default, the returned TensorDict values have the same ``torch.dtype`` and ``torch.device`` as this tensor.
+
+        The ``data`` can also be a tensor collection (``TensorDict`` or ``tensorclass``), in which case
+        the ``new_tensor`` method iterates over the tensor pairs of ``self`` and ``data``.
+
+        Args:
+            data (torch.Tensor or TensorDictBase): the data to be copied.
+
+        Keyword Args:
+            dtype (torch.dtype, optional): the desired type of returned tensordict.
+                Default: if ``None``, the `torch.dtype` will be unchanged.
+            device (torch.device, optional): the desired device of returned tensordict.
+                Default: if ``None``, the ``torch.device`` will be unchanged.
+            requires_grad (bool, optional): If autograd should record operations on the
+                returned tensors. Default: ``False``.
+            pin_memory (bool, optional): If set, returned tensor would be allocated in the
+                pinned memory. Works only for CPU tensors. Default: ``False``.
+
+        """
+        kwargs = {}
+        if device is not NO_DEFAULT:
+            kwargs["device"] = device
+        else:
+            kwargs["device"] = data.device
+        if pin_memory is not None:
+            kwargs["pin_memory"] = pin_memory
+
+        def func(x, tensor_b=None):
+            if tensor_b is None:
+                tensor_b = data
+            return x.new_tensor(
+                tensor_b,
+                dtype=dtype,
+                requires_grad=requires_grad,
+                **kwargs,
+            )
+
+        if _is_tensor_collection(type(data)):
+            return self._fast_apply(
+                func,
+                data,
+                call_on_nested=True,
+                device=device,
+                batch_size=data.shape,
+            )
+        return self._fast_apply(
+            func,
+            call_on_nested=True,
+            device=device,
+            batch_size=data.shape,
+        )
+
     def unbind(self, dim: int) -> tuple[T, ...]:
         """Returns a tuple of indexed tensordicts, unbound along the indicated dimension.
 
