@@ -8548,7 +8548,7 @@ class TestLock:
     def test_nested_lock(self):
         td = TensorDict({("a", "b", "c", "d"): 1.0}, [])
         td = td.lock_()
-        td._lock_parents_weakrefs, id(td)
+        assert not td._lock_parents_weakrefs, id(td)
         a = td["a"]
         b = td["a", "b"]
         c = td["a", "b", "c"]
