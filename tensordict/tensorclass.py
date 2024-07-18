@@ -43,10 +43,10 @@ from tensordict.base import (
     CompatibleType,
 )
 from tensordict.utils import (
-    _get_repr,
     _is_json_serializable,
     _is_tensorclass,
     _LOCK_ERROR,
+    _td_fields,
     _zip_strict,
     DeviceType,
     IndexType,
@@ -1299,7 +1299,7 @@ def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
 
 def _repr(self) -> str:
     """Return a string representation of Tensor class object."""
-    fields = _all_td_fields_as_str(self._tensordict)
+    fields = _td_fields(self._tensordict, sep="=")
     field_str = [fields] if fields else []
     non_tensor_fields = _all_non_td_fields_as_str(self._non_tensordict)
     batch_size_str = indent(f"batch_size={self.batch_size}", 4 * " ")
@@ -1316,7 +1316,7 @@ def _repr(self) -> str:
         )
     else:
         string = ",\n".join(field_str + [batch_size_str, device_str, is_shared_str])
-    return f"{type(self).__name__}(\n{string})"
+    return f"{type(self).__name__}({string})"
 
 
 def _len(self) -> int:
@@ -1970,41 +1970,6 @@ def _non_tensor_items(self, include_nested=False):
 
 def _bool(self):
     raise RuntimeError("Converting a tensorclass to boolean value is not permitted")
-
-
-def _single_td_field_as_str(key, item, tensordict):
-    """Returns a string as a  key-value pair of tensordict.
-
-    Args:
-        key (str): key of tensor dict item
-        item (tensor type): value to be returned for key
-        tensordict (Tensordict): Tensordict object
-
-    Returns:
-        String representation of a key-value pair
-
-    """
-    if is_tensor_collection(type(item)):
-        return f"{key}={repr(tensordict[key])}"
-    return f"{key}={_get_repr(item)}"
-
-
-def _all_td_fields_as_str(td: TensorDictBase) -> str:
-    """Returns indented representation of tensor dict values as a key-value pairs.
-
-    Args:
-        td (TensorDict) : Tensordict object
-
-    Returns:
-        String representation of all tensor data
-
-    """
-    return indent(
-        ",\n".join(
-            sorted([_single_td_field_as_str(key, item, td) for key, item in td.items()])
-        ),
-        4 * " ",
-    )
 
 
 def _all_non_td_fields_as_str(src_dict) -> list:
