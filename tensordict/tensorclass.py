@@ -251,7 +251,6 @@ _FALLBACK_METHOD_FROM_TD = [
     "reciprocal",
     "reciprocal_",
     "refine_names",
-    "requires_grad",
     "requires_grad_",
     "rename_",  # TODO: must be specialized
     "replace",
@@ -531,6 +530,8 @@ def _tensorclass(cls: T) -> T:
         cls.batch_size = property(_batch_size, _batch_size_setter)
     if not hasattr(cls, "names"):
         cls.names = property(_names, _names_setter)
+    if not hasattr(cls, "names"):
+        cls.require = property(_names, _names_setter)
     if not hasattr(cls, "to_dict"):
         cls.to_dict = _to_dict
 
