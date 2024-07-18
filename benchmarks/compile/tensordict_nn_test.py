@@ -153,7 +153,7 @@ def test_seq_wrap(mode, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap_and_backward(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    net = mlp(device)
+    net = mlp(device, num_cells=1024, depth=5)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
 
     def delhidden(td):
