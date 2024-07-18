@@ -134,7 +134,7 @@ def test_seq_wrap(mode, benchmark):
             Mod(
                 layer,
                 in_keys=["a" if i == 0 else "hidden"],
-                out_keys=["hidden" if i < len(net) - 1 else ("c", "d")],
+                out_keys=[("c", "d") if i == len(net) - 1 else "hidden"],
             )
             for i, layer in enumerate(net)
         ],
@@ -166,7 +166,7 @@ def test_seq_wrap_and_backward(mode, benchmark):
             Mod(
                 layer,
                 in_keys=["a" if i == 0 else "hidden"],
-                out_keys=["hidden" if i < len(net) - 1 else ("c", "d")],
+                out_keys=[("c", "d") if i == len(net) - 1 else "hidden"],
             )
             for i, layer in enumerate(net)
         ],
