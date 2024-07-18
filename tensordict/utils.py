@@ -1623,15 +1623,15 @@ def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
     return f"{cls.__name__}({s})"
 
 
-def _make_repr(key: NestedKey, item, tensordict: T) -> str:
+def _make_repr(key: NestedKey, item, tensordict: T, sep) -> str:
     from tensordict.base import _is_tensor_collection
 
     if _is_tensor_collection(type(item)):
-        return f"{key}: {repr(tensordict.get(key))}"
-    return f"{key}: {_get_repr(item)}"
+        return sep.join([key, repr(tensordict.get(key))])
+    return sep.join([key, _get_repr(item)])
 
 
-def _td_fields(td: T, keys=None) -> str:
+def _td_fields(td: T, keys=None, sep=": ") -> str:
     strs = []
     if keys is None:
         keys = td.keys()
@@ -1639,7 +1639,7 @@ def _td_fields(td: T, keys=None) -> str:
         shape = td.get_item_shape(key)
         if -1 not in shape:
             item = td.get(key)
-            strs.append(_make_repr(key, item, td))
+            strs.append(_make_repr(key, item, td, sep=sep))
         else:
             # we know td is lazy stacked and the key is a leaf
             # so we can get the shape and escape the error
@@ -1667,7 +1667,7 @@ def _td_fields(td: T, keys=None) -> str:
                     dtype=tensor.dtype,
                     is_shared=is_shared,
                 )
-            strs.append(f"{key}: {substr}")
+            strs.append(sep.join([key, substr]))
 
     return indent(
         "\n" + ",\n".join(sorted(strs)),
