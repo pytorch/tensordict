@@ -27,7 +27,6 @@ compile_overhead = functools.partial(
 
 @pytest.fixture(scope="module", autouse=True)
 def reset_dynamo():
-    print('resetting')
     # Start a fresh compile for each parameter of the test case
     torch._dynamo.reset()
     yield
