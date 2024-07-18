@@ -178,7 +178,7 @@ def test_seq_wrap_and_backward(mode, benchmark):
         module = compile_overhead(module)
 
     def module_exec(td):
-        module(td)
+        td = module(td)
         td["c", "d"].mean().backward()
         return
 
