@@ -25,6 +25,11 @@ compile_overhead = functools.partial(
     torch.compile, fullgraph=True, mode="reduce-overhead"
 )
 
+@pytest.fixture(scope="module")
+def reset_dynamo():
+    # Start a fresh compile for each parameter of the test case
+    torch._dynamo.reset()
+
 
 def mlp(device, depth=2, num_cells=32, feature_dim=3):
     return torch.nn.Sequential(
@@ -43,9 +48,6 @@ def mlp(device, depth=2, num_cells=32, feature_dim=3):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_add(mode, benchmark):
-    # Start a fresh compile for each parameter of the test case
-    if mode != "eager":
-        torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     td = TensorDict({"a": 0}, device=device)
     module = Mod(lambda x: x + 1, in_keys=["a"], out_keys=[("c", "d")])
@@ -61,9 +63,6 @@ def test_mod_add(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap(mode, benchmark):
-    # Start a fresh compile for each parameter of the test case
-    if mode != "eager":
-        torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -80,9 +79,6 @@ def test_mod_wrap(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap_and_backward(mode, benchmark):
-    # Start a fresh compile for each parameter of the test case
-    if mode != "eager":
-        torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device, num_cells=1024, depth=5)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -93,6 +89,7 @@ def test_mod_wrap_and_backward(mode, benchmark):
         module = compile_overhead(module)
 
     def module_exec(td):
+        module.zero_grad()
         module(td)
         td["c", "d"].mean().backward()
 
@@ -104,9 +101,6 @@ def test_mod_wrap_and_backward(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_add(mode, benchmark):
-    # Start a fresh compile for each parameter of the test case
-    if mode != "eager":
-        torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     td = TensorDict({"a": 0}, device=device)
 
@@ -132,9 +126,6 @@ def test_seq_add(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap(mode, benchmark):
-    # Start a fresh compile for each parameter of the test case
-    if mode != "eager":
-        torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -167,9 +158,6 @@ def test_seq_wrap(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap_and_backward(mode, benchmark):
-    # Start a fresh compile for each parameter of the test case
-    if mode != "eager":
-        torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device, num_cells=1024, depth=5)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -196,6 +184,7 @@ def test_seq_wrap_and_backward(mode, benchmark):
         module = compile_overhead(module)
 
     def module_exec(td):
+        module.zero_grad()
         td = module(td.copy())
         td["c", "d"].mean().backward()
         return
@@ -209,9 +198,6 @@ def test_seq_wrap_and_backward(mode, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_runtime(mode, functional, benchmark):
-    # Start a fresh compile for each parameter of the test case
-    if mode != "eager":
-        torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
@@ -249,9 +235,6 @@ def test_func_call_runtime(mode, functional, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_runtime_and_backward(mode, functional, benchmark):
-    # Start a fresh compile for each parameter of the test case
-    if mode != "eager":
-        torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
