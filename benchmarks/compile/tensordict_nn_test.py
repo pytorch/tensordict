@@ -162,6 +162,7 @@ def test_seq_wrap(mode, benchmark):
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.slow
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap_and_backward(mode, benchmark):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -238,6 +239,7 @@ def test_func_call_runtime(mode, functional, benchmark):
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.slow
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_runtime_and_backward(mode, functional, benchmark):
