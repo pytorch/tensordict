@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import functools
+import gc
 import sys
 
 import pytest
@@ -29,6 +30,7 @@ compile_overhead = functools.partial(
 def reset_dynamo():
     # Start a fresh compile for each parameter of the test case
     torch._dynamo.reset()
+    gc.collect()
     yield
 
 
@@ -241,15 +243,14 @@ def test_func_call_runtime_and_backward(mode, functional, benchmark):
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
     if functional:
         td = TensorDict.from_module(module)
-        td = TensorDictParams(td.clone())
+        td = TensorDictParams(td.data.clone())
 
         def call(x, td):
             # with needs registering
             params = td.to_module(module, return_swap=True)
             result = module(x)
             params.to_module(module, return_swap=False)
-            result.mean().backward()
-            return result.data
+            return result
 
     else:
         call = module
@@ -259,15 +260,18 @@ def test_func_call_runtime_and_backward(mode, functional, benchmark):
     elif mode == "compile-overhead":
         call = compile_overhead(call)
 
+    def call_with_backward(*args):
+        call(*args).mean().backward()
+
     x = torch.randn(2, 2, 16)
     if functional:
-        call(x, td)
-        call(x, td)
-        benchmark(call, x, td)
+        call_with_backward(x, td)
+        call_with_backward(x, td)
+        benchmark(call_with_backward, x, td)
     else:
-        call(x)
-        call(x)
-        benchmark(call, x)
+        call_with_backward(x)
+        call_with_backward(x)
+        benchmark(call_with_backward, x)
 
 
 if __name__ == "__main__":
