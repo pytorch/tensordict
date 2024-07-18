@@ -1349,14 +1349,24 @@ class TensorDict(TensorDictBase):
     ) -> T:
         batch_size = self.batch_size
         batch_dims = len(batch_size)
-        if (
-            not batch_size
-            and index is not None
-            and (not isinstance(index, tuple) or any(idx is not None for idx in index))
-        ):
+
+        def _check_for_invalid_index(index):
+            if batch_size:
+                return
+            if index is None:
+                return
+            if (
+                isinstance(index, torch.Tensor)
+                and index.dtype == torch.bool
+                and not index.ndim
+            ):
+                return
+            if isinstance(index, tuple) and len(index) == 1:
+                return _check_for_invalid_index(index[0])
             raise RuntimeError(
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
             )
+
         if new_batch_size is not None:
             batch_size = new_batch_size
         else:
