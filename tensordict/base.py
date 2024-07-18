@@ -1753,7 +1753,7 @@ class TensorDictBase(MutableMapping):
         if device is not NO_DEFAULT:
             kwargs["device"] = device
         else:
-            kwargs["device"] = data.device
+            device = kwargs["device"] = data.device
         if pin_memory is not None:
             kwargs["pin_memory"] = pin_memory
 
