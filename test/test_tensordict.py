@@ -8959,7 +8959,7 @@ class TestFCD(TestTensorDictsBase):
             assert y._tensor.shape[0] == param_batch
 
 
-# @pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
+@pytest.mark.skipif(_IS_OSX, reason="Pool execution in osx can hang forever.")
 class TestMap:
     """Tests for TensorDict.map that are independent from tensordict's type."""
 
