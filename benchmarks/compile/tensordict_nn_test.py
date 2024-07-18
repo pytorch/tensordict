@@ -43,6 +43,7 @@ def mlp(device, depth=2, num_cells=32, feature_dim=3):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_add(mode, benchmark):
+    torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     td = TensorDict({"a": 0}, device=device)
     module = Mod(lambda x: x + 1, in_keys=["a"], out_keys=[("c", "d")])
@@ -58,6 +59,7 @@ def test_mod_add(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap(mode, benchmark):
+    torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -74,6 +76,7 @@ def test_mod_wrap(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_mod_wrap_and_backward(mode, benchmark):
+    torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device, num_cells=1024, depth=5)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -95,6 +98,7 @@ def test_mod_wrap_and_backward(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_add(mode, benchmark):
+    torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     td = TensorDict({"a": 0}, device=device)
 
@@ -120,6 +124,7 @@ def test_seq_add(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap(mode, benchmark):
+    torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -152,6 +157,7 @@ def test_seq_wrap(mode, benchmark):
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 def test_seq_wrap_and_backward(mode, benchmark):
+    torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = mlp(device, num_cells=1024, depth=5)
     td = TensorDict({"a": torch.zeros(32, 3, device=device)}, device=device)
@@ -191,6 +197,7 @@ def test_seq_wrap_and_backward(mode, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_runtime(mode, functional, benchmark):
+    torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
@@ -228,6 +235,7 @@ def test_func_call_runtime(mode, functional, benchmark):
 @pytest.mark.parametrize("mode", ["eager", "compile", "compile-overhead"])
 @pytest.mark.parametrize("functional", [False, True])
 def test_func_call_runtime_and_backward(mode, functional, benchmark):
+    torch._dynamo.reset()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     module = mlp(device=device, depth=10, num_cells=16, feature_dim=16)
     # module = torch.nn.Transformer(16, dim_feedforward=64, device=device)
