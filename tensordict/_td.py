@@ -1367,6 +1367,8 @@ class TensorDict(TensorDictBase):
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
             )
 
+        _check_for_invalid_index(self)
+
         if new_batch_size is not None:
             batch_size = new_batch_size
         else:
