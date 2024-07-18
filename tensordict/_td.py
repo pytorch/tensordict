@@ -1361,13 +1361,16 @@ class TensorDict(TensorDictBase):
                 and not index.ndim
             ):
                 return
-            if isinstance(index, tuple) and len(index) == 1:
-                return _check_for_invalid_index(index[0])
+            if isinstance(index, tuple):
+                if len(index) == 1:
+                    return _check_for_invalid_index(index[0])
+                elif all(idx is None for idx in index):
+                    return
             raise RuntimeError(
                 f"indexing a tensordict with td.batch_dims==0 is not permitted. Got index {index}."
             )
 
-        _check_for_invalid_index(self)
+        _check_for_invalid_index(index)
 
         if new_batch_size is not None:
             batch_size = new_batch_size
