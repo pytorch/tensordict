@@ -25,10 +25,12 @@ compile_overhead = functools.partial(
     torch.compile, fullgraph=True, mode="reduce-overhead"
 )
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", autouse=True)
 def reset_dynamo():
+    print('resetting')
     # Start a fresh compile for each parameter of the test case
     torch._dynamo.reset()
+    yield
 
 
 def mlp(device, depth=2, num_cells=32, feature_dim=3):
