@@ -679,19 +679,19 @@ like <a class="reference external" href="https://pytorch.org/docs/stable/generat
 </pre></div>
 </div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>index:
- tensor([[1, 0, 2, 2],
-        [2, 1, 0, 2],
-        [2, 0, 0, 3]])
+ tensor([[1, 2, 2, 0],
+        [1, 0, 3, 1],
+        [0, 3, 0, 0]])
 
 tensordict[&#39;a&#39;]:
- tensor([[0.1896, 0.0320, 0.9932, 0.5182],
-        [0.5145, 0.0135, 0.6905, 0.0643],
-        [0.3294, 0.5528, 0.0902, 0.0665]])
+ tensor([[0.1154, 0.3529, 0.6215, 0.7000],
+        [0.1108, 0.1299, 0.0701, 0.7377],
+        [0.9136, 0.2072, 0.1278, 0.6221]])
 
 gathered_tensordict[&#39;a&#39;]:
- tensor([[0.0320, 0.1896, 0.9932, 0.9932],
-        [0.6905, 0.0135, 0.5145, 0.6905],
-        [0.0902, 0.3294, 0.3294, 0.0665]])
+ tensor([[0.3529, 0.6215, 0.6215, 0.1154],
+        [0.1299, 0.1108, 0.7377, 0.1299],
+        [0.9136, 0.6221, 0.9136, 0.9136]])
 </pre></div>
 </div>
 <p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.009 seconds)</p>
