@@ -93,6 +93,8 @@ def test_mod_wrap_and_backward(mode, benchmark):
         module = compile_overhead(module)
 
     def module_exec(td):
+        if torch.cuda.is_available():
+            torch.compiler.cudagraph_mark_step_begin()
         module.zero_grad()
         module(td)
         td["c", "d"].mean().backward()
@@ -247,6 +249,8 @@ def test_func_call_runtime_and_backward(mode, functional, benchmark):
         td = TensorDictParams(td.data.clone())
 
         def call(x, td):
+            if torch.cuda.is_available():
+                torch.compiler.cudagraph_mark_step_begin()
             # with needs registering
             params = td.to_module(module, return_swap=True)
             result = module(x)
