@@ -1343,6 +1343,23 @@ class TensorDictBase(MutableMapping):
         """Returns a tensordict containing the .grad attributes of the leaf tensors."""
         return self._grad()
 
+    def zero_grad(self, set_to_none: bool = True) -> T:
+        """Zeros all the gradients of the TensorDict recursively.
+
+        Args:
+            set_to_none (bool, optional): if ``True``, tensor.grad will be ``None``,
+                otherwise ``0``.
+                Defaults to ``True``.
+
+        """
+        if set_to_none:
+            for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+                val.grad = None
+            return
+        for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            val.grad.zero_()
+        return self
+
     @cache  # noqa
     def _dtype(self):
         dtype = None
@@ -5082,7 +5099,9 @@ class TensorDictBase(MutableMapping):
 
     @cache  # noqa: B019
     def _grad(self):
-        result = self._fast_apply(lambda x: x.grad, propagate_lock=True)
+        result = self._fast_apply(
+            lambda x: x.grad, propagate_lock=True, filter_empty=True
+        )
         return result
 
     @cache  # noqa: B019
@@ -9206,6 +9225,20 @@ class TensorDictBase(MutableMapping):
     @property
     def requires_grad(self) -> bool:
         return any(v.requires_grad for v in self.values())
+
+    def requires_grad_(self, requires_grad=True) -> T:
+        """Change if autograd should record operations on this tensor: sets this tensor’s requires_grad attribute in-place.
+
+        Returns this tensordict.
+
+        Args:
+            requires_grad (bool, optional): whether or not autograd should record operations on this tensordict.
+                Defaults to ``True``.
+
+        """
+        for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            val.requires_grad_(requires_grad)
+        return self
 
     @abc.abstractmethod
     def detach_(self) -> T:
