@@ -707,6 +707,26 @@ class TestTensorClass:
         with pytest.raises(ValueError, match="Invalid indexing arguments."):
             data["X"]
 
+    def test_grad(self):
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            y: str
+            z: torch.Tensor | None = None
+
+        a = MyClass(
+            x=torch.randn(3, requires_grad=True),
+            y="a string!",
+            z=torch.randn(2),
+        )
+        assert a.requires_grad
+        b = a + 1
+        b.sum().x.backward()
+        assert (a == a.data).all()
+        assert not a.data.requires_grad
+        assert a.grad.x is not None
+        assert a.grad.z is None
+
     def test_kjt(
         self,
     ):
