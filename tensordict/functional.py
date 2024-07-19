@@ -153,7 +153,7 @@ def pad_sequence(
             category=DeprecationWarning,
         )
 
-    if not list_of_tensordicts:
+    if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
     if return_mask and is_tensorclass(list_of_tensordicts[0]):

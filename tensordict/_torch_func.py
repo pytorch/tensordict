@@ -258,7 +258,7 @@ def _cat(
     device: DeviceType | None = None,
     out: T | None = None,
 ) -> T:
-    if not list_of_tensordicts:
+    if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
     batch_size = list(list_of_tensordicts[0].batch_size)
@@ -331,7 +331,7 @@ def _lazy_cat(
     out: LazyStackedTensorDict | None = None,
 ) -> LazyStackedTensorDict:
     # why aren't they feeding you?
-    if not list_of_tensordicts:
+    if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
 
     batch_size = list(list_of_tensordicts[0].batch_size)
@@ -407,7 +407,7 @@ def _stack(
     contiguous: bool = False,
     maybe_dense_stack: bool = False,
 ) -> T:
-    if not list_of_tensordicts:
+    if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
     is_tc = any(is_tensorclass(td) for td in list_of_tensordicts)
     if all(is_non_tensor(td) for td in list_of_tensordicts):
