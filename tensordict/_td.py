@@ -24,6 +24,7 @@ import torch
 from tensordict.base import (
     _ACCEPTED_CLASSES,
     _default_is_leaf,
+    _expand_to_match_shape,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
@@ -43,7 +44,6 @@ from tensordict.utils import (
     _BatchedUninitializedParameter,
     _check_inbuild,
     _clone_value,
-    _expand_to_match_shape,
     _get_item,
     _get_leaf_tensordict,
     _get_shape_from_args,
@@ -3200,14 +3200,25 @@ class _SubTensorDict(TensorDictBase):
             validated = True
         if not inplace:
             if _is_tensor_collection(type(value)):
+                # value has the shape of subtd[idx], so we want an expanded
+                #  version value_expand such that value_expand[idx] has the
+                #  shape of value
                 value_expand = _expand_to_match_shape(
-                    parent.batch_size, value, self.batch_dims, self.device
+                    parent.batch_size,
+                    value,
+                    self.batch_dims,
+                    self.device,
+                    index=self.idx,
                 )
                 for _key, _tensor in value.items():
                     value_expand._set_str(
                         _key,
                         _expand_to_match_shape(
-                            parent.batch_size, _tensor, self.batch_dims, self.device
+                            parent.batch_size,
+                            _tensor,
+                            self.batch_dims,
+                            self.device,
+                            index=self.idx,
                         ),
                         inplace=inplace,
                         validated=validated,

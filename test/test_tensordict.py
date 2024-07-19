@@ -7382,6 +7382,25 @@ class TestLazyStackedTensorDict:
         assert tdmask["a"].shape == td["a"][index].shape
         assert (tdmask["a"] == td["a"][index]).all()
 
+    def test_lazy_mask_indexing_single(self):
+        td = LazyStackedTensorDict(
+            TensorDict({"a": torch.ones(())}),
+            TensorDict({"a": torch.zeros(())}),
+        )
+        tdi = td[torch.tensor([True, False])]
+        assert tdi.shape == (1,)
+
+        td[torch.tensor([True, False])] = TensorDict({"a": 0.0})
+        assert (td == 0).all()
+        td[torch.tensor([True, False])] = TensorDict({"b": 0.0})
+        td[torch.tensor([False, True])] = TensorDict({"b": 0.0})
+        assert (td["b"] == 0).all()
+        assert (td == 0).all()
+        td[torch.tensor([True, False])] = TensorDict({("c", "d"): 0.0})
+        td[torch.tensor([False, True])] = TensorDict({("c", "d"): 0.0})
+        assert (td["c", "d"] == 0).all()
+        assert (td == 0).all()
+
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize("mask_dim", [0, 1, 2])
     @pytest.mark.parametrize("single_mask_dim", [True, False])
