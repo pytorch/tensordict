@@ -168,6 +168,8 @@ class TensorDict(TensorDictBase):
     Args:
         source (TensorDict or Dict[NestedKey, Union[Tensor, TensorDictBase]]): a
             data source. If empty, the tensordict can be populated subsequently.
+            A ``TensorDict`` can also be built via a sequence of keyword arguments,
+            as it is the case for ``dict(...)``.
         batch_size (iterable of int, optional): a batch size for the
             tensordict. The batch size can be modified subsequently as long
             as it is compatible with its content.
@@ -226,7 +228,13 @@ class TensorDict(TensorDictBase):
         names: Sequence[str] | None = None,
         non_blocking: bool = None,
         lock: bool = False,
+        **kwargs,
     ) -> None:
+        if (source is not None) and kwargs:
+            raise ValueError(
+                "Either a dictionary or a sequence of kwargs must be provided, not both."
+            )
+        source = source if not kwargs else kwargs
         if names and torch.compiler.is_dynamo_compiling():
             graph_break()
         has_device = False
