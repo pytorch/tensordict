@@ -266,7 +266,10 @@ class TensorDictBase(MutableMapping):
 
     def __len__(self) -> int:
         """Returns the length of first dimension, if there is, otherwise 0."""
-        return self.shape[0] if self.batch_dims else 0
+        batch_size = self.batch_size
+        if not batch_size:
+            return 0
+        return batch_size[0]
 
     def __contains__(self, key: NestedKey) -> bool:
         if isinstance(key, str):
