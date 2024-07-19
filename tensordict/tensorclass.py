@@ -532,7 +532,7 @@ def _tensorclass(cls: T) -> T:
         cls.names = property(_names, _names_setter)
     if not hasattr(cls, "names"):
         cls.require = property(_names, _names_setter)
-    if not hasattr(cls, "data"):
+    if not _is_non_tensor and not hasattr(cls, "data"):
         cls.data = property(_data)
     if not hasattr(cls, "grad"):
         cls.grad = property(_grad)
