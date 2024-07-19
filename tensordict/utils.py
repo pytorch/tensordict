@@ -1715,30 +1715,6 @@ def _check_keys(
     return keys
 
 
-def _expand_to_match_shape(
-    parent_batch_size: torch.Size,
-    tensor: Tensor,
-    self_batch_dims: int,
-    self_device: DeviceType,
-) -> Tensor | TensorDictBase:
-    from tensordict.base import _is_tensor_collection
-
-    if not _is_tensor_collection(type(tensor)):
-        return torch.zeros(
-            (
-                *parent_batch_size,
-                *_shape(tensor)[self_batch_dims:],
-            ),
-            dtype=tensor.dtype,
-            device=self_device,
-        )
-    else:
-        # tensordict
-        batch_size = torch.Size([*parent_batch_size, *_shape(tensor)[self_batch_dims:]])
-        out = tensor.empty(batch_size=batch_size)
-        return out
-
-
 def _set_max_batch_size(source: T, batch_dims=None):
     """Updates a tensordict with its maximum batch size."""
     from tensordict.base import _is_tensor_collection

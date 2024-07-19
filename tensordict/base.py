@@ -1295,6 +1295,10 @@ class TensorDictBase(MutableMapping):
         """See :obj:`~tensordict.TensorDictBase.batch_size`."""
         return self.batch_size
 
+    @shape.setter
+    def shape(self, value):
+        self.batch_size = value
+
     @property
     @abc.abstractmethod
     def batch_size(self) -> torch.Size:
@@ -1302,7 +1306,12 @@ class TensorDictBase(MutableMapping):
 
         The shape of a tensordict corresponds to the common first ``N``
         dimensions of the tensors it contains, where ``N`` is an arbitrary
-        number.
+        number. The batch-size contrasts with the "feature size" which repesents
+        the semantically relevant shapes of a tensor. For instance, a batch of videos
+        may have shape ``[B, T, C, W, H]``, where ``[B, T]`` is the batch-size (batch and
+        time dimensions) and ``[C, W, H]`` are the feature dimensions (channels and spacial
+        dimensions).
+
         The ``TensorDict`` shape is controlled by the user upon
         initialization (ie, it is not inferred from the tensor shapes).
 
@@ -9443,3 +9452,36 @@ _NESTED_TENSORS_AS_LISTS = _NestedTensorsAsLists()
 
 
 _NESTED_TENSORS_AS_LISTS_NONTENSOR = _NestedTensorsAsListsNonTensor()
+
+
+def _expand_to_match_shape(
+    parent_batch_size: torch.Size,
+    data: Tensor | TensorDictBase,
+    self_batch_dims: int,
+    self_device: DeviceType,
+    index: Any = None,
+) -> Tensor | TensorDictBase:
+    """Creates and empty tensor / tensordict that can host values.
+
+    Given a tensordict with shape ``parent_batch_size``, this function creates an expanded version
+    of ``data`` such that ``data_expand[index].shape == data.shape``.
+
+    """
+    if not parent_batch_size and self_batch_dims == 1:
+        # This is what happens when indexing an empty tensor with a bool:
+        #  torch.zeros(())[True].shape == torch.Size((1,))
+        return data.new_zeros(data.shape[1:])
+    if not _is_tensor_collection(type(data)):
+        result = torch.zeros(
+            (
+                *parent_batch_size,
+                *_shape(data)[self_batch_dims:],
+            ),
+            dtype=data.dtype,
+            device=self_device,
+        )
+    else:
+        # tensordict
+        batch_size = torch.Size([*parent_batch_size, *_shape(data)[self_batch_dims:]])
+        result = data.empty(batch_size=batch_size)
+    return result

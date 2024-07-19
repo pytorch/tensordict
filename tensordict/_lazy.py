@@ -1933,6 +1933,15 @@ class LazyStackedTensorDict(TensorDictBase):
                         value_unbind,
                     ):
                         if mask.any():
+                            assert (
+                                self.tensordicts[i][_idx].shape
+                                == torch.zeros(self.tensordicts[i].shape)[_idx].shape
+                            ), (
+                                self.tensordicts[i].shape,
+                                _idx,
+                                self.tensordicts[i][_idx],
+                                torch.zeros(self.tensordicts[i].shape)[_idx].shape,
+                            )
                             self.tensordicts[i][_idx] = _value
                 else:
                     for (i, _idx), _value in _zip_strict(
