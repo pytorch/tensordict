@@ -532,6 +532,10 @@ def _tensorclass(cls: T) -> T:
         cls.names = property(_names, _names_setter)
     if not hasattr(cls, "names"):
         cls.require = property(_names, _names_setter)
+    if not hasattr(cls, "data"):
+        cls.data = property(_data)
+    if not hasattr(cls, "grad"):
+        cls.grad = property(_grad)
     if not hasattr(cls, "to_dict"):
         cls.to_dict = _to_dict
 
@@ -1712,6 +1716,17 @@ def _names(self) -> torch.Size:
 
     """
     return self._tensordict.names
+
+
+def _data(self):
+    return self._from_tensordict(self._tensordict.data, self._non_tensordict)
+
+
+def _grad(self):
+    grad = self._tensordict._grad
+    if grad is None:
+        return None
+    return self._from_tensordict(self._tensordict.grad, self._non_tensordict)
 
 
 def _names_setter(self, names: str) -> None:  # noqa: D417
