@@ -265,6 +265,9 @@ def test_compile_assign_and_add(mode, dict_type, benchmark):
 
 
 @pytest.mark.skipif(TORCH_VERSION < "2.4", reason="requires torch>2.4")
+@pytest.mark.skipif(
+    torch.cuda.is_available(), reason="max recursion depth error with cuda"
+)
 @pytest.mark.parametrize("mode", ["compile", "eager"])
 def test_compile_assign_and_add_stack(mode, benchmark):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
